@@ -1,4 +1,4 @@
-import type { DataPart } from '@mastra/react';
+import type { DataPart } from '@mastra/react/ui';
 
 import { SignalBadge } from '../signal-badge';
 import { isSignalData } from '../signal-data';

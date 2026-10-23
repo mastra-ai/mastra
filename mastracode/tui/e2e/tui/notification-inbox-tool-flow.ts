@@ -69,14 +69,14 @@ export const notificationInboxToolFlowScenario = {
     terminal.submit('Start notification inbox lifecycle host run.');
     await runtime.waitForScreenText(/Notification summary: 1 pending/i, terminal, 10_000);
     await runtime.waitForScreenText(/github: 1/i, terminal, 10_000);
-    await runtime.waitForScreenText(/Use notification_inbox to inspect pending notifications/i, terminal, 10_000);
     await runtime.waitForScreenText(/Notification signal follow-up completed/i, terminal, 10_000);
+    expect(terminal.serialize().view).not.toMatch(/Use notification_inbox to inspect pending notifications/i);
     runtime.printScreen('after notification summary', terminal);
 
     terminal.submit('Read the pending notification from the inbox.');
     await runtime.waitForScreenText(/notification from github/i, terminal, 15_000);
-    await runtime.waitForScreenText(/medium · ci-status · delivered/i, terminal, 15_000);
     await runtime.waitForScreenText(/Notification inbox e2e detail: CI is queued for review/i, terminal, 15_000);
+    expect(terminal.serialize().view).not.toMatch(/ci-status · delivered/i);
     await runtime.waitForScreenText(/Notification inbox read completed/i, terminal, 15_000);
     runtime.printScreen('after notification inbox read', terminal);
     terminal.keyCtrlC();

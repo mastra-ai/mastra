@@ -1,34 +1,12 @@
 'use client';
 
 import { useMemo } from 'react';
+import { observationPriorityByEmoji, observationPriorityTone } from '@/domains/memory/lib/observation-priority';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { cn } from '@/utils/cn';
 
-// Priority emoji to color mapping
-// P1 (🔴) = highest priority = purple theme
-// P2 (🟡) = medium priority = blue theme
-// P3 (🟢) = lower priority = green theme
-const PRIORITY_COLORS = {
-  '🔴': 'text-foreground',
-  '🟡': 'text-foreground',
-  '🟢': 'text-foreground',
-} as const;
-
-// Dark backgrounds for all priorities
-const PRIORITY_BG = {
-  '🔴': 'bg-purple-500/15',
-  '🟡': 'bg-blue-500/15',
-  '🟢': 'bg-green-500/15',
-} as const;
-
-// Full color left border accent
-const PRIORITY_BORDER = {
-  '🔴': 'border-l-purple-500',
-  '🟡': 'border-l-blue-500',
-  '🟢': 'border-l-green-500',
-} as const;
-
-type Priority = keyof typeof PRIORITY_COLORS;
+type Priority = '🔴' | '🟡' | '🟢';
 
 interface ParsedObservation {
   priority: Priority | null;
@@ -231,41 +209,50 @@ function ObservationItem({
   useInheritedTextColor?: boolean;
 }) {
   // When useInheritedTextColor is true, don't apply priority colors - inherit from parent
-  const priorityColor = useInheritedTextColor
+  const priorityColor = useInheritedTextColor ? '' : observation.priority ? 'text-foreground' : 'text-muted-foreground';
+  const bgColor = useInheritedTextColor
     ? ''
     : observation.priority
-      ? PRIORITY_COLORS[observation.priority]
-      : 'text-muted-foreground';
-  const bgColor = useInheritedTextColor ? '' : observation.priority ? PRIORITY_BG[observation.priority] : '';
+      ? observationPriorityTone[observationPriorityByEmoji[observation.priority]].fill
+      : '';
 
-  // Get a subtle left border color based on priority (using blue shades for visual hierarchy)
-  const borderColor = observation.priority ? PRIORITY_BORDER[observation.priority] : 'border-l-transparent';
+  const borderColor = observation.priority
+    ? observationPriorityTone[observationPriorityByEmoji[observation.priority]].accentBorder
+    : 'border-l-transparent';
 
   return (
-    <div className={cn('py-0.5', observation.isNested && 'border-border/50 ml-4 border-l pl-2')}>
+    <div className={cn('py-0.5', observation.isNested && 'ml-4 border-l border-border pl-2')}>
       <div
         className={cn(
-          'flex items-start gap-1.5 text-ui-sm',
+          'flex items-start gap-1.5',
           bgColor && 'rounded px-1.5 py-0.5',
           bgColor,
           !observation.isNested && observation.priority && `border-l-2 ${borderColor} pl-1.5`,
         )}
       >
         {observation.isNested && (
-          <span className={cn('shrink-0', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>→</span>
+          <Txt
+            as="span"
+            variant="caption"
+            tone={useInheritedTextColor ? undefined : 'muted'}
+            className={cn('shrink-0', useInheritedTextColor && 'opacity-60')}
+          >
+            →
+          </Txt>
         )}
-        <span className="[&_code]:text-ui-xs flex-1 [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5">
+        <span className="flex-1">
           <MarkdownRenderer className={priorityColor}>{observation.content}</MarkdownRenderer>
         </span>
         {observation.time && (
-          <span
-            className={cn(
-              'ml-2 shrink-0 font-mono text-ui-xs',
-              useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground',
-            )}
+          <Txt
+            as="span"
+            variant="meta"
+            font="mono"
+            tone={useInheritedTextColor ? undefined : 'muted'}
+            className={cn('ml-2 shrink-0', useInheritedTextColor && 'opacity-60')}
           >
             {observation.time}
-          </span>
+          </Txt>
         )}
       </div>
       {observation.children.length > 0 && (
@@ -291,13 +278,13 @@ function DateBlock({ block, useInheritedTextColor }: { block: ParsedDateBlock; u
           useInheritedTextColor ? 'bg-transparent' : 'bg-background/95',
         )}
       >
-        <span className={cn('text-ui-sm font-medium', useInheritedTextColor ? 'opacity-80' : 'text-foreground')}>
+        <Txt as="span" variant="column" tone="ink" className={useInheritedTextColor ? 'opacity-80' : undefined}>
           {block.date}
-        </span>
+        </Txt>
         {block.relativeTime && (
-          <span className={cn('text-ui-xs', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>
+          <Txt as="span" variant="meta" tone="muted" className={useInheritedTextColor ? 'opacity-60' : undefined}>
             ({block.relativeTime})
-          </span>
+          </Txt>
         )}
       </div>
       <div className="space-y-0">
@@ -324,14 +311,20 @@ function ThreadSection({
   return (
     <div className="mb-3">
       {showThreadId && thread.threadId !== 'default' && (
-        <div
+        <Txt
+          as="p"
+          variant="meta"
+          tone="muted"
           className={cn(
-            'mb-1 inline-block rounded px-1 py-0.5 font-mono text-ui-xs',
-            useInheritedTextColor ? 'bg-current/10 opacity-60' : 'text-muted-foreground bg-muted/50',
+            'mb-1 inline-block rounded px-1 py-0.5',
+            useInheritedTextColor ? 'bg-current/10 opacity-60' : 'bg-muted/50',
           )}
         >
-          Thread {thread.threadId}
-        </div>
+          Thread{' '}
+          <Txt as="span" variant="meta" font="mono">
+            {thread.threadId}
+          </Txt>
+        </Txt>
       )}
       {thread.dateBlocks.map((block, i) => (
         <DateBlock key={i} block={block} useInheritedTextColor={useInheritedTextColor} />
@@ -367,11 +360,15 @@ export function ObservationRenderer({
     parsed.threads.length > 1 || (parsed.threads.length === 1 && parsed.threads[0]?.threadId !== 'default');
 
   if (parsed.threads.length === 0 && !parsed.currentTask && !parsed.suggestedResponse) {
-    return <div className={cn('text-muted-foreground text-ui-sm italic', className)}>No observations</div>;
+    return (
+      <Txt as="p" variant="caption" tone="muted" className={cn('italic', className)}>
+        No observations
+      </Txt>
+    );
   }
 
   return (
-    <div className={cn('overflow-hidden text-ui-md', className)}>
+    <div className={cn('overflow-hidden', className)}>
       <div
         className={cn('wrap-break-word', maxHeight && 'overflow-y-auto pr-1')}
         style={maxHeight ? { maxHeight } : undefined}
@@ -387,18 +384,24 @@ export function ObservationRenderer({
       </div>
 
       {showCurrentTask && parsed.currentTask && (
-        <div className="border-border mt-2 border-t pt-2">
-          <div className="text-muted-foreground text-ui-xs mb-1 font-medium tracking-wide uppercase">Current Task</div>
-          <div className="text-foreground text-ui-sm whitespace-pre-wrap">{parsed.currentTask}</div>
+        <div className="mt-2 border-t border-border pt-2">
+          <Txt as="p" variant="meta" tone="muted" className="mb-1 uppercase">
+            Current Task
+          </Txt>
+          <Txt as="p" variant="caption" tone="ink" className="whitespace-pre-wrap">
+            {parsed.currentTask}
+          </Txt>
         </div>
       )}
 
       {showSuggestedResponse && parsed.suggestedResponse && (
-        <div className="border-border mt-2 border-t pt-2">
-          <div className="text-muted-foreground text-ui-xs mb-1 font-medium tracking-wide uppercase">
+        <div className="mt-2 border-t border-border pt-2">
+          <Txt as="p" variant="meta" tone="muted" className="mb-1 uppercase">
             Suggested Response
-          </div>
-          <div className="text-foreground/80 text-ui-sm whitespace-pre-wrap italic">{parsed.suggestedResponse}</div>
+          </Txt>
+          <Txt as="p" variant="caption" className="whitespace-pre-wrap text-foreground/80 italic">
+            {parsed.suggestedResponse}
+          </Txt>
         </div>
       )}
     </div>

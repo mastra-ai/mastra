@@ -432,53 +432,31 @@ export const myMcpServerTwo = new MCPServer({
     }),
     collectContactInfo: createTool({
       id: 'collectContactInfo',
-      description: 'Collects user contact information through elicitation.',
+      description: 'Collects user contact information by asking the caller for input.',
       inputSchema: z.object({
         reason: z.string().optional().describe('Optional reason for collecting contact info'),
       }),
+      // The suspend payload is what the tool sees again when the caller answers.
+      suspendSchema: z.object({
+        message: z.string(),
+      }),
+      // The resume schema becomes the form the caller fills in, so it stays flat.
+      resumeSchema: z.object({
+        name: z.string().describe('Your full name'),
+        email: z.string().email().describe('Your email address'),
+        phone: z.string().optional().describe('Your phone number (optional)'),
+      }),
       execute: async (inputData, context) => {
-        const { reason } = inputData;
-
-        try {
-          // Use the session-aware elicitation functionality
-          const result = await context.mcp.elicitation.sendRequest({
-            message: reason
-              ? `Please provide your contact information. ${reason}`
+        if (!context.resumeData) {
+          await context.suspend?.({
+            message: inputData.reason
+              ? `Please provide your contact information. ${inputData.reason}`
               : 'Please provide your contact information',
-            requestedSchema: {
-              type: 'object',
-              properties: {
-                name: {
-                  type: 'string',
-                  title: 'Full Name',
-                  description: 'Your full name',
-                },
-                email: {
-                  type: 'string',
-                  title: 'Email Address',
-                  description: 'Your email address',
-                  format: 'email',
-                },
-                phone: {
-                  type: 'string',
-                  title: 'Phone Number',
-                  description: 'Your phone number (optional)',
-                },
-              },
-              required: ['name', 'email'],
-            },
           });
-
-          if (result.action === 'accept') {
-            return `Thank you! Contact information collected: ${JSON.stringify(result.content, null, 2)}`;
-          } else if (result.action === 'reject') {
-            return 'Contact information collection was declined by the user.';
-          } else {
-            return 'Contact information collection was cancelled by the user.';
-          }
-        } catch (error) {
-          return `Error collecting contact information: ${error}`;
+          return;
         }
+
+        return `Thank you! Contact information collected: ${JSON.stringify(context.resumeData, null, 2)}`;
       },
     }),
   },

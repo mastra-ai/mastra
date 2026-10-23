@@ -76,8 +76,14 @@ export class MockMemory extends MastraMemory {
     workingMemoryTemplate,
     enableMessageHistory = true,
     options,
+    vector,
+    embedder,
+    embeddingDimension,
   }: {
     storage?: InMemoryStore;
+    vector?: SharedMemoryConfig['vector'];
+    embedder?: SharedMemoryConfig['embedder'];
+    embeddingDimension?: number;
     enableWorkingMemory?: boolean;
     enableMessageHistory?: boolean;
     workingMemoryTemplate?: string;
@@ -86,6 +92,9 @@ export class MockMemory extends MastraMemory {
     super({
       name: 'mock',
       storage: storage || new InMemoryStore(),
+      vector,
+      embedder,
+      embeddingDimension,
       options: {
         ...options,
         workingMemory: enableWorkingMemory
@@ -95,7 +104,11 @@ export class MockMemory extends MastraMemory {
               ...(workingMemoryTemplate !== undefined ? { template: workingMemoryTemplate } : {}),
             } as WorkingMemory)
           : options?.workingMemory,
-        lastMessages: enableMessageHistory ? (options?.lastMessages ?? 10) : options?.lastMessages,
+        lastMessages: !enableMessageHistory
+          ? false
+          : options?.messageHistory === undefined
+            ? (options?.lastMessages ?? 10)
+            : options?.lastMessages,
       },
     });
     this._hasOwnStorage = true;

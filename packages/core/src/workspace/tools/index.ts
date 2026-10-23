@@ -8,6 +8,7 @@ export { createWorkspaceTools, resolveToolConfig, type ResolvedToolConfig } from
 export { readFileTool } from './read-file';
 export { writeFileTool } from './write-file';
 export { editFileTool } from './edit-file';
+export { applyPatchTool } from './apply-patch';
 export { listFilesTool } from './list-files';
 export { deleteFileTool } from './delete-file';
 export { fileStatTool } from './file-stat';
@@ -22,7 +23,7 @@ export {
 } from './execute-command';
 export { getProcessOutputTool } from './get-process-output';
 export { killProcessTool } from './kill-process';
-export { grepTool } from './grep';
+export { grepTool, createGrepTool, type GrepToolOptions } from './grep';
 export { lspInspectTool } from './lsp-inspect';
 export { computerScreenshotTool } from './computer-screenshot';
 export { computerClickTool } from './computer-click';

@@ -5,15 +5,16 @@ export async function consumeStream({
   stream: ReadableStream;
   onError?: (error: unknown) => void;
 }) {
-  const reader = stream.getReader();
+  let reader: ReadableStreamDefaultReader | undefined;
   try {
+    reader = stream.getReader();
     while (true) {
       const { done } = await reader.read();
       if (done) break;
     }
   } catch (error) {
-    onError == null ? void 0 : onError(error);
+    onError?.(error);
   } finally {
-    reader.releaseLock();
+    reader?.releaseLock();
   }
 }

@@ -1,0 +1,145 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { AgentChat } from '../agent-chat';
+import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
+import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
+import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
+import { ThreadInputProvider } from '@/domains/conversation';
+import { emptyMcpServers, memoryDisabled, v2Agent } from '@/lib/ai-ui/__tests__/fixtures/agent';
+import { server } from '@/test/msw-server';
+
+const BASE_URL = 'http://localhost:4111';
+
+const workingMemoryResponse = () =>
+  HttpResponse.json({ workingMemory: null, source: 'thread', workingMemoryTemplate: null, threadExists: false });
+
+const baseHandlers = () => [
+  http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
+  http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+  http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
+  http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+  http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryDisabled)),
+  http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => workingMemoryResponse()),
+  http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json({ record: null })),
+  http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
+  http.get(`${BASE_URL}/api/agents/:agentId/voice/speakers`, () => HttpResponse.json([])),
+  http.get(`${BASE_URL}/api/agents/:agentId`, () => HttpResponse.json(v2Agent)),
+  http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
+    HttpResponse.json({ enabled: false, modelPolicy: { active: false } }),
+  ),
+  http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
+  http.post(
+    `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
+    () =>
+      new HttpResponse(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.close();
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      ),
+  ),
+];
+
+const Wrapper = ({ children, threadId = 'thread-1' }: { children: ReactNode; threadId?: string }) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return (
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <BrowserSessionProvider agentId="agent-1" threadId={threadId} enabled={false}>
+            <WorkingMemoryProvider agentId="agent-1" threadId={threadId} resourceId="agent-1">
+              <AgentSettingsProvider>
+                <ThreadInputProvider>{children}</ThreadInputProvider>
+              </AgentSettingsProvider>
+            </WorkingMemoryProvider>
+          </BrowserSessionProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </MastraReactProvider>
+  );
+};
+
+const userMessage = (index: number): MastraDBMessage => ({
+  id: `m-message ${index}`,
+  role: 'user',
+  createdAt: new Date(1700000000000 + index * 1000),
+  content: { format: 2, parts: [{ type: 'text', text: `message ${index}` }] },
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+describe('AgentChat history pagination', () => {
+  beforeEach(() => {
+    server.resetHandlers();
+  });
+
+  it('loads older messages above the thread when the reader scrolls to the top', async () => {
+    const newestPage = [userMessage(2), userMessage(3)];
+    const olderPage = [userMessage(0), userMessage(1)];
+
+    server.use(
+      ...baseHandlers(),
+      http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, ({ request }) => {
+        const olderThan = new URL(request.url).searchParams.get('filter');
+        return olderThan
+          ? HttpResponse.json({ messages: olderPage, hasMore: false })
+          : HttpResponse.json({ messages: newestPage, hasMore: true });
+      }),
+    );
+
+    render(
+      <Wrapper threadId="thread-1">
+        <AgentChat
+          agentId="agent-1"
+          agentName="Helper"
+          threadId="thread-1"
+          memory={true}
+          supportsMemory={true}
+          isNewThread={false}
+        />
+      </Wrapper>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('message 2')).toBeTruthy();
+      expect(screen.getByText('message 3')).toBeTruthy();
+    });
+
+    expect(screen.queryByText('message 0')).toBeNull();
+
+    const viewport = document.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
+    if (!viewport) throw new Error('message scroller viewport not rendered');
+
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1000 });
+    Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 400 });
+
+    await act(async () => {
+      viewport.scrollTop = 300;
+      fireEvent.scroll(viewport);
+      viewport.scrollTop = 0;
+      fireEvent.scroll(viewport);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('message 0')).toBeTruthy();
+      expect(screen.getByText('message 1')).toBeTruthy();
+    });
+
+    const rendered = Array.from(document.querySelectorAll('[data-slot="message-scroller-item"]')).map(item =>
+      item.getAttribute('data-message-id')?.replace('m-', ''),
+    );
+
+    expect(rendered).toEqual(['message 0', 'message 1', 'message 2', 'message 3']);
+  });
+});

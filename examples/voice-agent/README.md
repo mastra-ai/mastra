@@ -9,7 +9,7 @@ The example ships **interchangeable entrypoints**, one for each way `@mastra/liv
 - **Plugin worker** (`pnpm worker:plugin`): a **customer-owned** `voice.AgentSession` with the `MastraLLM` plugin in the `llm` slot, talking to the Mastra server over HTTP — see [Plugin worker](#plugin-worker-own-the-session-keep-mastras-brain).
 - **Regulated worker** (`pnpm worker:regulated`): every compliance control at once, answering with the `superRegulated` agent.
 
-Run one at a time — all register with LiveKit under the same agent name (`mastra-voice`).
+Run one at a time — all register with LiveKit under the same agent name (`mastra-voice` by default). Set `LIVEKIT_AGENT_NAME` to the same value in the server and worker environments to isolate a test deployment from other workers in your LiveKit project.
 
 The demo assistant "Jordan" works the front desk of **Meridian Trades**, a contractor that sends out tradespeople for plumbing, electrical work, roofing, carpentry, and painting. A site visit is when a tradesperson comes out to assess the job and give a quote. Every call follows one of four paths, which Jordan routes between by listening:
 
@@ -27,6 +27,8 @@ At the end of the call a single deterministic **reconciliation** pass (`finalize
 **Why an agent and not a workflow?** This mirrors a real customer's scenarios (lead capture, inspection intake with a service-area gate, general callback) using the **agent loop** as the per-turn engine. Determinism lives in code, not in driving the call as a workflow: tenant context is injected by an **input processor** (`src/mastra/processors/workspace-context.ts`, a stand-in for a per-tenant Firebase lookup keyed by the dialed number), the service-area gate and reconciliation are tools backed by a mock backend (`src/mastra/backend.ts`), and caller state is held in three layers of caller-scoped memory (see [Memory and latency](#memory-and-latency)) so a returning caller is recognized.
 
 The "CRM" is in-memory and seeded with three customers. Try: **Shane Thomas, 555-0142** (has a visit booked already), Sam Bhagwat (555-0177), Abhi Aiyer (555-0163). In-area zips include `94103` and `94110`; `90210` is out of area.
+
+Customer lookup results are reused throughout a call. The agent should only retry when the caller supplies new or corrected identifying information, not after an address or ZIP-code update. An unmatched caller is captured as a lead, inspection request, or callback for office follow-up: this demo has no customer-creation tool, so only a matched customer can receive a confirmed booking. The agent finishes necessary tool calls before asking its next question, then waits for the caller.
 
 ## Agent vs. workflow entrypoint
 
@@ -90,7 +92,7 @@ On a phone call latency is the product, so each layer is tuned for it:
 
    ```bash
    pnpm install
-   pnpm worker:download-files   # one-time: downloads the turn-detection and VAD models
+   pnpm worker:download-files   # one-time: downloads the configured worker's model files
    ```
 
    Use plain `pnpm install` — this example is its own pnpm workspace root. Do not pass `--ignore-workspace`: that drops the local `pnpm-workspace.yaml` overrides and installs published Mastra packages from the registry instead of the linked monorepo packages. If that happens, delete `node_modules` and `pnpm-lock.yaml`, then run `pnpm install` again and check the install output shows `<- ../../packages/core` style links.
@@ -128,7 +130,7 @@ Open Studio, point it at `http://localhost:4111`, and open the **Meridian Trades
 Things to try (the four scenarios run on the **agent worker**):
 
 - **Lead:** "Hi, I'm after a quote to repaint my hallway and stairs." — Jordan qualifies the trade and scope, then captures the lead and reads back a reference number.
-- **Roof inspection, in area:** "I'd like someone to look at my roof. The address is 12 Market Street, zip nine four one zero three." — Jordan runs the service-area check, it passes, and books the inspection.
+- **Roof inspection, in area:** "I'd like someone to look at my roof. The address is 12 Market Street, zip nine four one zero three." — Jordan checks the service area and captures an inspection request for office follow-up; a confirmed booking requires an existing customer record.
 - **Roof inspection, out of area:** give zip **90210** instead — Jordan apologizes that it's outside the service area and offers a callback.
 - **Callback:** "Can someone just call me back about a fence?" — Jordan takes a name, number, and reason.
 - **Returning caller / scheduling:** "Hi, it's Shane Thomas, five five five, zero one four two." — account lookup plus scheduling, with filler speech while tools run.
@@ -137,6 +139,101 @@ Things to try (the four scenarios run on the **agent worker**):
 - Hang up, then call again from the same caller: because all three memory layers are scoped to the caller (`resource`), Jordan greets you by name and recalls what the earlier call was about (via semantic recall) instead of starting over.
 
 The same calls work against either worker. The agent worker discovers the scenario from its instructions mid-call; the workflow worker classifies the intent in an explicit step first, then replies with the full agent. Both share the same tools, service-area gate, reconciliation, and caller-scoped memory, so cross-call recognition and the post-turn CRM log work on either path.
+
+## Record calls (optional)
+
+Recording is disabled by default. To record Meridian calls into one mixed OGG audio file, configure a writable S3 bucket and set these values in `.env`:
+
+```dotenv
+LIVEKIT_RECORDING_ENABLED=true
+LIVEKIT_RECORDING_REVIEW_LOCAL_DEMO=true
+RECORDINGS_S3_BUCKET=your-recordings-bucket
+RECORDINGS_S3_REGION=us-east-1
+RECORDINGS_S3_ACCESS_KEY=your-storage-access-key
+RECORDINGS_S3_SECRET=your-storage-secret
+```
+
+Use LiveKit Cloud or deploy LiveKit's egress service yourself. Restart the Mastra server after changing `.env`. The shared server-only configuration in `src/mastra/livekit.ts` validates the storage settings and saves files under `voice-agent/{room_name}.ogg`. Always use a unique room name so each call maps to one file. It doesn't change the recording settings inside your LiveKit Cloud project.
+
+For browser calls, start the default worker and open **Meridian Trades Front Desk** in Studio. The connection route applies recording only when `agentId` is `callCenter` or `call-center`, `LIVEKIT_RECORDING_REVIEW_LOCAL_DEMO=true`, and `NODE_ENV` is not `production`. Without that local-demo opt-in, browser calls remain unrecorded even when `LIVEKIT_RECORDING_ENABLED=true`. It creates a fresh room, configures recording, and dispatches the agent before returning connection details. Storage credentials aren't included in the participant token or dispatch metadata. The frontend request and response formats stay unchanged.
+
+For a server-initiated session, run:
+
+```bash
+pnpm recording:dispatch
+```
+
+This calls `dispatchVoiceSession({ recording })` with a unique room name and prints the room and dispatch IDs. It doesn't dial anyone. In your phone integration, await this step before adding a SIP participant to that room. The script starts the agent and recording even if no caller joins, so close the test room in LiveKit when finished.
+
+### What enabling recording changes
+
+- **Recording starts at room creation.** Requesting browser connection details starts it, even if the browser never connects. Recording and storage usage can therefore begin before a call is answered.
+- **Consent tools don't control recording.** `createConsentTool()` and `configuration.consentPolicy` don't start, pause, or stop egress. This example excludes the regulated agent from automatic recording; keep the flag off when running `worker:regulated`. If consent must be obtained during the call before capturing audio, use LiveKit's explicit egress APIs after consent instead of this option.
+- **Every recorded session needs a fresh room.** Existing rooms are rejected. Coordinate room creation in your application; the existence check isn't an atomic reservation. Reuse an existing room's join token flow for reconnects, rather than requesting a new recorded session with that name.
+- **Setup errors stop the request.** Missing settings fail before room creation. LiveKit room or dispatch failures prevent the route from issuing a token. A room created before a later failure can remain active; inspect and close failed test rooms rather than retrying the same name.
+- **A successful dispatch isn't a completed file.** Egress follows the room lifecycle and finishes asynchronously. Disconnecting only the agent doesn't prove the recording has ended. Check the `egress_ended` event, a successful egress status, and its file results before offering a recording to an end user.
+- **Audio storage is separate from Mastra memory.** Deleting a memory thread or running `pnpm clean` doesn't delete S3 recordings. Your application owns bucket access, retention, and any authenticated download links.
+
+To verify a recording, make a short test call with speech from both sides, end the room, and inspect its egress job in LiveKit. Wait for completion, then download the OGG file from your S3 bucket and listen for both the caller and Jordan. A joined agent, a returned token, or an active egress job alone doesn't verify the final audio file.
+
+See the [recording guide](https://mastra.ai/integrations/voice/livekit#record-calls) for other storage providers and per-session configuration callbacks.
+
+### Review a call in Studio
+
+For a browser-call test with real AWS S3 credentials, follow [Test recording with AWS S3](#test-recording-with-aws-s3) below.
+
+For local playback, set `LIVEKIT_RECORDING_REVIEW_LOCAL_DEMO=true` in `.env` and restart `pnpm dev`. The example denies recording access by default; this explicit demo policy permits browser recording and playback of all traces, and disables both when `NODE_ENV=production`. Recording creation also requires `LIVEKIT_RECORDING_ENABLED=true`.
+
+Open a `voice call` trace under **Observability → Traces**, then select **Review Audio** in the trace panel. The player supports playback, pause, and seeking. If the upload is still finishing, select **Refresh recording** when the file is ready. Closing the dialog stops playback; reopening it requests a new link.
+
+The registered `liveKitRecordingRoute()` reads the room name from the stored trace. `src/mastra/recording-playback.ts` checks for `voice-agent/<room-name>.ogg` in S3 and creates a playback URL that expires after 15 minutes. The browser receives the signed URL, never the S3 secret. Historical recordings remain reviewable when `LIVEKIT_RECORDING_ENABLED` is set back to `false`, provided the storage settings and objects remain available.
+
+The configured S3 credentials now need `s3:GetObject` for playback as well as upload permissions. `s3:ListBucket` allows S3 to report a missing file as `404`; without it, missing files may appear as access errors. You can use separate read credentials in the playback resolver. For S3-compatible storage, set `RECORDINGS_S3_ENDPOINT` to an endpoint reachable by the recording service, the Mastra server, and the browser.
+
+This example disables authentication on both custom routes for local development. Before deployment, restore `requiresAuth: true`, configure server authentication, and replace the local-demo recording gate with an application policy that limits who can start recordings. Apply per-user rate limits or session quotas. Replace the demo `authorize({ traceId, context })` callback with a check of the authenticated user's access to the requested trace. The callback is required even when authentication is disabled. Returning anything other than `true` denies access before trace lookup or URL signing. Signed URLs grant temporary access to an individual file and must not be logged or stored in trace metadata. Existing timestamped recordings need a room-to-object mapping in the resolver; this example looks up the exact filename shown above.
+
+### Test recording with AWS S3
+
+Use a private bucket with Block Public Access enabled. For a production bucket, use a dedicated test credential scoped to `voice-agent/`. The example passes the upload credential to LiveKit and uses it on the Mastra server to sign playback links. The following same-account identity policy grants access to recording objects without administrator permissions. Replace `YOUR_BUCKET_NAME` in both resources:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RecordingObjects",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:AbortMultipartUpload"],
+      "Resource": "arn:aws:s3:::YOUR_BUCKET_NAME/voice-agent/*"
+    },
+    {
+      "Sid": "RecognizeMissingRecordings",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::YOUR_BUCKET_NAME"
+    }
+  ]
+}
+```
+
+- `s3:PutObject` lets LiveKit upload the file, including multipart upload parts and completion.
+- `s3:GetObject` covers the server's `HeadObject` check and playback through a signed URL.
+- `s3:AbortMultipartUpload` lets the uploader clean up an unfinished multipart upload.
+- `s3:ListBucket` lets the existence check distinguish a missing object from denied access. It also permits listing object names in this bucket. Omit it if that access is prohibited; existing files still play, but missing files can show a load error instead of an unavailable message.
+
+This policy doesn't grant deletion. Bucket policies and organization restrictions still apply. A customer-managed KMS key also requires `kms:GenerateDataKey` for uploads and `kms:Decrypt` for multipart uploads and playback, with the appropriate key policy. See [AWS object permissions](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html), [multipart permissions](https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html), and [KMS permissions](https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html).
+
+The example uses an explicit access-key/secret pair. It doesn't read an AWS CLI profile or forward `AWS_SESSION_TOKEN`. Temporary STS credentials require adding session-token support to both upload and playback configuration before use. Both LiveKit Cloud and the browser must be able to reach S3; a bucket restricted exclusively to a private VPC endpoint won't work with this path.
+
+1. Configure the recording variables above in `.env`, along with the LiveKit and model credentials from Setup. Set `LIVEKIT_AGENT_NAME=mastra-recording-review-test` in both server and worker environments. For AWS S3, remove `RECORDINGS_S3_ENDPOINT` entirely; an empty value fails URL validation, and a leftover local endpoint prevents Cloud uploads.
+2. Start the Mastra server, the default `pnpm worker`, and Studio as described in Setup. Use only one worker with this agent name. Keep the unauthenticated demo server local. In Studio, verify that **Observability → Traces** loads before placing a call. The server and worker must share a trace store that supports Studio's trace queries; use a shared PostgreSQL observability store if your installed LibSQL version doesn't support them. Don't share a DuckDB file between these separate processes.
+3. Open **Meridian Trades Front Desk**, select the voice control, and allow microphone access. Say “This is recording test alpha” and ask Jordan a question. Let both speakers finish at least one turn. Use fictional details; recording starts before any in-call consent conversation and incurs provider and storage usage.
+4. Note the room name from the worker or LiveKit room list. End the call and ensure no participants remain in the room. Wait for its egress job to complete successfully in LiveKit, then confirm that `voice-agent/<room-name>.ogg` exists in S3 and has a nonzero size.
+5. Open the call's **voice call** trace and confirm that `metadata.roomName` matches the room and object. Select **Review Audio** and play it. Check both speakers, pause, seeking, and that closing the dialog stops playback. Reopening requests a new signed URL; **Refresh recording** retries after upload completion or URL expiry.
+6. Make a second call saying “recording test beta”. Its trace must play beta, while reopening the first trace must still play alpha. This verifies the trace-to-room-to-object mapping.
+7. Set `LIVEKIT_RECORDING_ENABLED=false`, restart the server, and make a fresh call. It must not create a new recording. Existing recordings remain reviewable while their objects and storage credentials are available.
+
+For a phone test, dispatch into a fresh room with `pnpm recording:dispatch`, then use your existing SIP integration to add an authorized test destination to that exact room. Dispatch doesn't dial the phone. After speaking in both directions and ending the room, repeat the egress, S3, and trace playback checks above. Delete test objects according to your bucket's retention process; cleaning the local example database doesn't remove them.
 
 ## Traces
 
@@ -147,7 +244,8 @@ Everything (memory, threads, traces) lives in one `voice-agent.db` file at the p
 ## Troubleshooting
 
 - **"LiveKit is not configured" toast in Studio**: the Mastra server can't see your `.env` — restart `pnpm dev` after editing it.
-- **Worker connects but never joins a call**: the `agentName` in the worker file and `liveKitConnectionRoute()` must match (both `mastra-voice` here). Make sure only one worker is running.
+- **Worker connects but never joins a call**: the server and worker must use the same `LIVEKIT_AGENT_NAME` (defaults to `mastra-voice`). Make sure only one worker is running for that name.
+- **Recording is enabled but no file appears**: check the egress job's final status and error in LiveKit, bucket permissions, and the configured region. A local filepath alone isn't a downloadable recording on LiveKit Cloud.
 - **Connected but silent**: check the worker terminal — STT/TTS model errors (for example, exhausted inference credit) appear there.
 - **"Required model files not found locally" on worker start**: the turn-detection model cache is tied to the installed dependency tree, so reinstalling dependencies can orphan it. Run `pnpm worker:download-files` again.
 - **"Thread not found" in the server terminal**: the database file was recreated while the server or worker was still running — a running process keeps writing to the deleted file while a restarted one opens a fresh empty file, so they silently diverge. This happens when `pnpm clean` (which deletes `*.db`) runs while either process is up. Stop the server and the worker, then clean, then start both together. Conversations from before the clean are gone; start a new chat.

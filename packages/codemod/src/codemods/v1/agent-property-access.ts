@@ -4,7 +4,7 @@ import { trackClassInstances } from '../lib/utils';
 /**
  * Transforms Agent property access to method calls.
  * - agent.llm → agent.getLLM()
- * - agent.tools → agent.getTools()
+ * - agent.tools → agent.listTools()
  * - agent.instructions → agent.getInstructions()
  *
  * Only transforms properties on variables that were instantiated with `new Agent(...)`
@@ -15,7 +15,7 @@ export default createTransformer((_fileInfo, _api, _options, context) => {
   // Map of property names to their corresponding method names
   const propertyToMethod: Record<string, string> = {
     llm: 'getLLM',
-    tools: 'getTools',
+    tools: 'listTools',
     instructions: 'getInstructions',
   };
 

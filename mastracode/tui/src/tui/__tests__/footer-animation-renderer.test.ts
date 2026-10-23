@@ -20,6 +20,8 @@ function createHarness(initialFooterLines = ['old footer']) {
     previousWidth: 80,
     previousHeight: 24,
     previousViewportTop: chatLines.length + footerLines.length - terminal.rows,
+    // Hardware cursor parked in the editor, two rows above the footer.
+    hardwareCursorRow: chatLines.length - 2,
     renderRequested: false,
     stopped: false,
     hasOverlay: vi.fn(() => false),
@@ -56,7 +58,7 @@ describe('FooterAnimationRenderer', () => {
 
     expect(harness.fullRender).toHaveBeenCalledOnce();
     expect(harness.terminal.write).toHaveBeenCalledWith(
-      '\x1b[?2026h\x1b7\x1b[24;1H\x1b[2Knew footer<reset>\x1b8\x1b[?2026l',
+      '\x1b[?2026h\x1b7\x1b[2B\r\x1b[2Knew footer<reset>\x1b8\x1b[?2026l',
     );
     expect(harness.ui.previousLines.at(-1)).toBe('new footer<reset>');
   });
@@ -70,7 +72,7 @@ describe('FooterAnimationRenderer', () => {
 
     expect(harness.fullRender).toHaveBeenCalledOnce();
     expect(harness.terminal.write).toHaveBeenCalledWith(
-      '\x1b[?2026h\x1b7\x1b[23;1H\x1b[2Knew status<reset>\x1b[24;1H\x1b[2Knew memory<reset>\x1b8\x1b[?2026l',
+      '\x1b[?2026h\x1b7\x1b[2B\r\x1b[2Knew status<reset>\x1b[1B\r\x1b[2Knew memory<reset>\x1b8\x1b[?2026l',
     );
     expect(harness.ui.previousLines.slice(-2)).toEqual(['new status<reset>', 'new memory<reset>']);
   });

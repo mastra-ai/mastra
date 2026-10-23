@@ -28,8 +28,8 @@ export async function installPluginDependencies(
   const packageManager = Object.hasOwn(packageJson, 'packageManager')
     ? packageJson.packageManager
     : commandPackageJson.packageManager;
-  const pnpmVersion = getPnpmVersion(pluginRoot, packageManager);
-  const installCommand = getInstallCommand(pluginRoot, pnpmVersion);
+  const pnpmSpec = getPnpmSpec(pluginRoot, packageManager);
+  const installCommand = getInstallCommand(pluginRoot, pnpmSpec);
 
   const child = execa(installCommand.command, installCommand.args, {
     cwd: pluginRoot,
@@ -100,30 +100,26 @@ function isInsideDirectory(targetPath: string, root: string): boolean {
   return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(resolvedRoot + path.sep);
 }
 
-function getPnpmVersion(pluginRoot: string, packageManager: unknown): string {
-  if (typeof packageManager !== 'string') {
-    throw new Error(
-      `Plugin at ${pluginRoot} must declare an exact pnpm version in package.json using "packageManager": "pnpm@x.y.z".`,
-    );
-  }
+// Accepts the optional Corepack integrity suffix (e.g. `+sha512.<hex>`) written by `corepack use`.
+const PNPM_SPEC_PATTERN = /^pnpm@\d+\.\d+\.\d+(?:\+sha(?:1|224|256|384|512)\.[0-9a-f]+)?$/;
 
-  const match = /^pnpm@(\d+\.\d+\.\d+)$/.exec(packageManager);
-  if (!match?.[1]) {
+function getPnpmSpec(pluginRoot: string, packageManager: unknown): string {
+  if (typeof packageManager !== 'string' || !PNPM_SPEC_PATTERN.test(packageManager)) {
     throw new Error(
       `Plugin at ${pluginRoot} must declare an exact pnpm version in package.json using "packageManager": "pnpm@x.y.z".`,
     );
   }
-  return match[1];
+  return packageManager;
 }
 
-function getInstallCommand(pluginRoot: string, pnpmVersion: string): InstallCommand {
+function getInstallCommand(pluginRoot: string, pnpmSpec: string): InstallCommand {
   const installArgs = ['install', '--ignore-workspace'];
   if (hasFile(pluginRoot, 'pnpm-lock.yaml')) installArgs.push('--frozen-lockfile');
   installArgs.push('--ignore-scripts');
 
   return {
     command: 'corepack',
-    args: [`pnpm@${pnpmVersion}`, ...installArgs],
+    args: [pnpmSpec, ...installArgs],
   };
 }
 

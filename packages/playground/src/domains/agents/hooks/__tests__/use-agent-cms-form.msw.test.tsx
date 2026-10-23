@@ -1,5 +1,6 @@
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { MastraReactProvider } from '@mastra/react';
+import { useAgentVersions } from '@mastra/react/hooks/agents';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -17,10 +18,18 @@ import {
   createInstructionBlock,
   createRefInstructionBlock,
 } from '../../components/agent-edit-page/utils/form-validation';
+import { isCodeBackedAgent } from '../../utils/agent-source';
+import { mapAgentResponseToDataSource } from '../../utils/compute-agent-initial-values';
 import type { AgentDataSource } from '../../utils/compute-agent-initial-values';
 import { useAgentCmsForm } from '../use-agent-cms-form';
-import { useAgentVersions } from '../use-agent-versions';
-import { createdCodeAgent, noAgentVersions, oneUnpublishedAgentVersion } from './fixtures/use-agent-cms-form';
+import {
+  createdCodeAgent,
+  fsAgent,
+  fsAgentOverride,
+  noAgentVersions,
+  oneUnpublishedAgentVersion,
+  storedAgentWithMemoryRef,
+} from './fixtures/use-agent-cms-form';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -543,7 +552,11 @@ describe('useAgentCmsForm', () => {
             hasStoredOverride: false,
             onSuccess: () => {},
           }),
-          versions: useAgentVersions({ agentId: AGENT_ID, params: { orderBy: { direction: 'DESC' } } }),
+          versions: useAgentVersions({
+            agentId: AGENT_ID,
+            params: { orderBy: { direction: 'DESC' } },
+            queryOptions: { enabled: Boolean(AGENT_ID) },
+          }),
         }),
         { wrapper: makeWrapper() },
       );
@@ -598,6 +611,234 @@ describe('useAgentCmsForm', () => {
 
       await waitFor(() => expect(sink.body).not.toBeNull());
       expect(sink.body?.autoPublish).toBe(false);
+    });
+  });
+});
+
+// A stored agent can point its memory at a Memory instance registered on the Mastra
+// instance. Studio can't edit that instance, so saving must keep the reference instead
+// of rebuilding an inline config from the (empty) memory form fields.
+describe('useAgentCmsForm — registered memory reference', () => {
+  describe('when a stored agent that references registered memory is saved', () => {
+    it('sends the memory reference unchanged', async () => {
+      const sink: { body: Record<string, unknown> | null } = { body: null };
+      server.use(
+        http.patch(`${BASE_URL}/api/stored/agents/${storedAgentWithMemoryRef.id}`, async ({ request }) => {
+          const body: unknown = await request.json();
+          if (!isRecord(body)) throw new Error('Expected update-stored-agent request body to be an object');
+          sink.body = body;
+          return HttpResponse.json(storedAgentWithMemoryRef);
+        }),
+      );
+
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: storedAgentWithMemoryRef.id,
+            dataSource: storedAgentWithMemoryRef,
+            hasStoredOverride: true,
+            onSuccess: () => {},
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      act(() => {
+        result.current.form.setValue('instructionBlocks', [createInstructionBlock('Help customers kindly.')], {
+          shouldDirty: true,
+        });
+      });
+
+      await act(async () => {
+        await result.current.handleSaveDraft();
+      });
+
+      await waitFor(() => expect(sink.body).not.toBeNull());
+      expect(sink.body?.memory).toEqual({ type: 'id', memoryId: 'support-memory' });
+    });
+  });
+});
+
+// Regression coverage for https://github.com/mastra-ai/mastra/issues/26274 — a file-based
+// (`source: 'fs'`) agent is code-backed. Its first Studio save must create the stored override
+// instead of PATCHing a record that does not exist yet, and later saves update that override.
+describe('useAgentCmsForm — file-based agent', () => {
+  const fsDataSource = mapAgentResponseToDataSource(fsAgent);
+
+  const captureFsAgentSaves = () => {
+    const saves: Array<{ method: string; body: Record<string, unknown> }> = [];
+    const record = async (request: Request) => {
+      const body: unknown = await request.json();
+      if (!isRecord(body)) throw new Error('Expected stored-agent request body to be an object');
+      saves.push({ method: request.method, body });
+      return HttpResponse.json(fsAgentOverride);
+    };
+    server.use(
+      http.post(`${BASE_URL}/api/stored/agents`, ({ request }) => record(request)),
+      http.patch(`${BASE_URL}/api/stored/agents/${fsAgent.id}`, ({ request }) => record(request)),
+      http.get(`${BASE_URL}/api/stored/agents/${fsAgent.id}/versions`, () => HttpResponse.json(noAgentVersions)),
+    );
+    return saves;
+  };
+
+  const editInstructions = (form: ReturnType<typeof useAgentCmsForm>['form'], text: string) => {
+    act(() => {
+      form.setValue('instructionBlocks', [createInstructionBlock(text)], { shouldDirty: true });
+    });
+  };
+
+  describe('when the first override is saved', () => {
+    it('creates the stored override', async () => {
+      const saves = captureFsAgentSaves();
+
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: fsAgent.id,
+            dataSource: fsDataSource,
+            isCodeAgentOverride: isCodeBackedAgent(fsAgent),
+            hasStoredOverride: false,
+            editorConfig: fsAgent.editor,
+            onSuccess: () => {},
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      editInstructions(result.current.form, 'First Studio draft');
+      await act(async () => {
+        await result.current.handleSaveDraft();
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      expect(saves[0]).toMatchObject({
+        method: 'POST',
+        body: {
+          id: fsAgent.id,
+          autoPublish: false,
+          instructions: [{ type: 'prompt_block', content: 'First Studio draft' }],
+        },
+      });
+    });
+
+    it('updates the override on the next save', async () => {
+      const saves = captureFsAgentSaves();
+
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: fsAgent.id,
+            dataSource: fsDataSource,
+            isCodeAgentOverride: isCodeBackedAgent(fsAgent),
+            hasStoredOverride: false,
+            editorConfig: fsAgent.editor,
+            onSuccess: () => {},
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      editInstructions(result.current.form, 'First Studio draft');
+      await act(async () => {
+        await result.current.handleSaveDraft();
+      });
+      editInstructions(result.current.form, 'Second Studio draft');
+      await act(async () => {
+        await result.current.handleSaveDraft();
+      });
+
+      await waitFor(() => expect(saves).toHaveLength(2));
+      expect(saves[1]).toMatchObject({
+        method: 'PATCH',
+        body: { instructions: [{ type: 'prompt_block', content: 'Second Studio draft' }] },
+      });
+    });
+  });
+
+  describe('when the page reloads with a saved draft', () => {
+    it('loads the saved draft instructions', async () => {
+      captureFsAgentSaves();
+
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: fsAgent.id,
+            dataSource: fsAgentOverride,
+            isCodeAgentOverride: isCodeBackedAgent(fsAgent),
+            hasStoredOverride: true,
+            editorConfig: fsAgent.editor,
+            onSuccess: () => {},
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      await waitFor(() =>
+        expect(result.current.form.getValues('instructionBlocks')).toMatchObject([
+          { content: 'Saved draft instructions.' },
+        ]),
+      );
+    });
+
+    it('updates the existing override after reload', async () => {
+      const saves = captureFsAgentSaves();
+
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: fsAgent.id,
+            dataSource: fsAgentOverride,
+            isCodeAgentOverride: isCodeBackedAgent(fsAgent),
+            hasStoredOverride: true,
+            editorConfig: fsAgent.editor,
+            onSuccess: () => {},
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      editInstructions(result.current.form, 'Edited after reload');
+      await act(async () => {
+        await result.current.handleSaveDraft();
+      });
+
+      await waitFor(() => expect(saves).toHaveLength(1));
+      expect(saves[0]?.method).toBe('PATCH');
+    });
+  });
+
+  describe('when the agent folder keeps instructions and tools in code', () => {
+    it('does not send the code-owned fields', async () => {
+      const saves = captureFsAgentSaves();
+      const lockedFsAgent = { ...fsAgent, editor: { instructions: false, tools: { description: true } } };
+
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: lockedFsAgent.id,
+            dataSource: fsDataSource,
+            isCodeAgentOverride: isCodeBackedAgent(lockedFsAgent),
+            hasStoredOverride: false,
+            editorConfig: lockedFsAgent.editor,
+            onSuccess: () => {},
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      act(() => {
+        result.current.form.setValue('instructionBlocks', [createInstructionBlock('Ignored prompt edit')], {
+          shouldDirty: true,
+        });
+        result.current.form.setValue('tools', EDITED_TOOL, { shouldDirty: true });
+      });
+      await act(async () => {
+        await result.current.handleSaveDraft();
+      });
+
+      await waitFor(() => expect(saves).toHaveLength(1));
+      // Instructions stay owned by the agent folder; only tool descriptions are overridable.
+      expect(saves[0]?.body.instructions).toEqual([]);
+      expect(saves[0]?.body.tools).toEqual(EDITED_TOOL);
     });
   });
 });

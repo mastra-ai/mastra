@@ -67,8 +67,8 @@ export const Default: Story = {
       <Section.Header inset={inset}>
         <Section.Heading>Section Title</Section.Heading>
       </Section.Header>
-      <div className="border-border1 bg-surface2 rounded-md border p-4">
-        <p className="text-neutral5 text-ui-md">Section content goes here</p>
+      <div className="rounded-md border border-border bg-background p-4">
+        <p className="text-body text-foreground">Section content goes here</p>
       </div>
     </Section>
   ),
@@ -85,11 +85,11 @@ export const WithAction: Story = {
         <Section.Heading>Agents</Section.Heading>
         <Button size="md">
           <Plus className="size-4" />
-          Add Agent
+          Add agent
         </Button>
       </Section.Header>
-      <div className="border-border1 bg-surface2 rounded-md border p-4">
-        <p className="text-neutral5 text-ui-md">List of agents would go here</p>
+      <div className="rounded-md border border-border bg-background p-4">
+        <p className="text-body text-foreground">List of agents would go here</p>
       </div>
     </Section>
   ),
@@ -104,22 +104,20 @@ export const ConfigurationSection: Story = {
     <Section variant={variant} className="w-125">
       <Section.Header inset={inset}>
         <Section.Heading>Configuration</Section.Heading>
-        <Button variant="outline" size="md">
-          Edit
-        </Button>
+        <Button size="md">Edit</Button>
       </Section.Header>
-      <div className="border-border1 bg-surface2 space-y-3 rounded-md border p-4">
+      <div className="space-y-3 rounded-md border border-border bg-background p-4">
         <div className="flex justify-between">
-          <span className="text-neutral3 text-ui-md">Model</span>
-          <span className="text-neutral6 text-ui-md">GPT-4</span>
+          <span className="text-body text-muted-foreground">Model</span>
+          <span className="text-body text-foreground">GPT-4</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-neutral3 text-ui-md">Temperature</span>
-          <span className="text-neutral6 text-ui-md">0.7</span>
+          <span className="text-body text-muted-foreground">Temperature</span>
+          <span className="text-body text-foreground">0.7</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-neutral3 text-ui-md">Max Tokens</span>
-          <span className="text-neutral6 text-ui-md">4096</span>
+          <span className="text-body text-muted-foreground">Max Tokens</span>
+          <span className="text-body text-foreground">4096</span>
         </div>
       </div>
     </Section>
@@ -143,9 +141,9 @@ export const Flat: Story = {
         <Section.Row label="Two-factor authentication" description="Require a verification code when signing in.">
           <Switch aria-label="Two-factor authentication" />
         </Section.Row>
-        <Section.Row label="Session timeout" description="Sign out after a period of inactivity." htmlFor="timeout">
+        <Section.Row label="Session timeout" description="Sign out after a period of inactivity.">
           <Select defaultValue="30">
-            <SelectTrigger id="timeout" className="w-full sm:w-40">
+            <SelectTrigger className="w-full sm:w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -188,13 +186,9 @@ export const Factory: Story = {
           <Switch aria-label="Smart editing" />
         </Section.Row>
         <Section.Divider />
-        <Section.Row
-          label="Notifications"
-          description="Choose how completion alerts are delivered."
-          htmlFor="notifications"
-        >
+        <Section.Row label="Notifications" description="Choose how completion alerts are delivered.">
           <Select defaultValue="off">
-            <SelectTrigger id="notifications" className="w-full sm:w-36">
+            <SelectTrigger className="w-full sm:w-36">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -264,13 +258,9 @@ export const MultipleSections: Story = {
             <Switch aria-label="Smart editing" defaultChecked />
           </Section.Row>
           <Section.Divider />
-          <Section.Row
-            label="Notifications"
-            description="Choose how completion alerts are delivered."
-            htmlFor="multiple-notifications"
-          >
+          <Section.Row label="Notifications" description="Choose how completion alerts are delivered.">
             <Select defaultValue="off">
-              <SelectTrigger id="multiple-notifications" className="w-full sm:w-40">
+              <SelectTrigger className="w-full sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -294,13 +284,9 @@ export const MultipleSections: Story = {
           <Section.Row label="Two-factor authentication" description="Require a verification code when signing in.">
             <Switch aria-label="Two-factor authentication" />
           </Section.Row>
-          <Section.Row
-            label="Session timeout"
-            description="Sign out after a period of inactivity."
-            htmlFor="multiple-timeout"
-          >
+          <Section.Row label="Session timeout" description="Sign out after a period of inactivity.">
             <Select defaultValue="30">
-              <SelectTrigger id="multiple-timeout" className="w-full sm:w-40">
+              <SelectTrigger className="w-full sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

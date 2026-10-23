@@ -195,6 +195,14 @@ export const mastra = new Mastra({
       'How long the agentic loop waits for a background task to complete before moving on. If a task has not finished within this time, the loop proceeds without setting isContinued. Default: undefined (do not wait). Can be overridden per-agent or per-tool.',
   },
   {
+    name: 'untilIdleMaxIdleMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '300000',
+    description:
+      'Default idle timeout, in milliseconds, for `agent.stream(..., { untilIdle: true })` calls that do not set `maxIdleMs`. The stream closes when background tasks are still running but no event has arrived for this long. Set it above your longest expected background task so its completion still triggers a continuation turn. A per-call `untilIdle: { maxIdleMs }` takes precedence. Default: 5 minutes.',
+  },
+  {
     name: 'onTaskComplete',
     type: '(task: BackgroundTask) => void | Promise<void>',
     isOptional: true,
@@ -358,7 +366,7 @@ export const mastra = new Mastra({
 
 **Type:** `Record<string, MastraMemory>`
 
-A registry of memory instances that can be referenced by agents. Memory gives agents coherence across interactions by retaining relevant information from past conversations. Mastra supports message history for recent messages and working memory for persistent user-specific details. Semantic recall retrieves older messages based on relevance.
+A registry of memory instances that can be referenced by agents, including stored agents that use `{ type: 'id', memoryId: '<key>' }`. Memory gives agents coherence across interactions by retaining relevant information from past conversations. Mastra supports message history for recent messages and working memory for persistent user-specific details. Semantic recall retrieves older messages based on relevance.
 
 Visit the [Memory documentation](/docs/memory/overview) to learn more.
 
@@ -438,7 +446,7 @@ import { ModerationProcessor } from '@mastra/core/processors'
 export const mastra = new Mastra({
   processors: {
     moderation: new ModerationProcessor({
-      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      model: '__GATEWAY_OPENAI_MODEL_LUNA__',
       categories: ['hate', 'harassment', 'violence'],
     }),
   },
@@ -485,8 +493,37 @@ import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt'
 
 export const mastra = new Mastra({
   scorers: {
-    toxicity: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+    toxicity: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
   },
+})
+```
+
+### classifiers
+
+**Type:** `Record<string, Classifier>`
+
+Classifiers ask decision models fixed-option questions about application state and return typed answers. Register reusable classifiers here to retrieve them with `getClassifier()` or `getClassifierById()`. When a registered classifier is evaluated without an active trace, it starts a root `CLASSIFIER_EVALUATION` span through the `Mastra` instance's configured observability provider.
+
+Visit the [Classifier reference](/reference/classifier/classifier) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Classifier } from '@mastra/core/classifier'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
+
+const safety = new Classifier({
+  id: 'safety',
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
+  questions: {
+    unsafe: {
+      type: 'boolean',
+      criteria: { true: 'Unsafe', false: 'Safe' },
+    },
+  },
+})
+
+export const mastra = new Mastra({
+  classifiers: { safety },
 })
 ```
 
@@ -720,6 +757,34 @@ export const mastra = new Mastra({
 })
 ```
 
+### bundler.pnpmWorkspaceSettings
+
+**Type:** `Record<string, JSONValue>`\
+**Default:** `{}`
+
+Explicit settings to write to the generated `pnpm-workspace.yaml` when installing deployment dependencies with pnpm. Values can be strings, numbers, booleans, null, arrays, or nested objects. Other package managers ignore this option.
+
+Use this option for pnpm install-policy settings that your deployment install should follow:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  bundler: {
+    pnpmWorkspaceSettings: {
+      blockExoticSubdeps: false,
+      minimumReleaseAge: 0,
+    },
+  },
+})
+```
+
+Explicit values override copied source settings. Omitting this option preserves the existing workspace-copy behavior, which copies only a subset of the source workspace's settings.
+
+Only these keys are supported: `allowBuilds`, `onlyBuiltDependencies`, `ignoredBuiltDependencies`, `minimumReleaseAge`, `minimumReleaseAgeExclude`, `trustPolicy`, `trustPolicyExclude`, `trustPolicyIgnoreAfter`, and `blockExoticSubdeps`. Any other key throws an error before pnpm runs, including keys Mastra generates for deployment output (`packages`, `overrides`, `patchedDependencies`, `allowUnusedPatches`, `supportedArchitectures`, `nodeLinker`) and settings that change TLS verification, registries, network access, store integrity, dependency extensions, catalogs, or build-script permissions. `neverBuiltDependencies` is rejected because pnpm 10 runs every build script it doesn't list. This option doesn't accept command-line flags and isn't a place for secrets.
+
+Explicit `allowBuilds` and `onlyBuiltDependencies` values use the same validation as copied source build approvals.
+
 ## Server options
 
 ### server.apiRoutes
@@ -794,12 +859,13 @@ export const mastra = new Mastra({
 **Type:** `object`\
 **Default:** `undefined`
 
-MCP transport options applied to all MCP HTTP and SSE routes. Use this to enable stateless mode for serverless environments (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.) where persistent connections and in-memory session state aren't available.
+Options applied to every MCP HTTP route. MCP requests are self-contained, so no session state is kept between them and the routes run unchanged in serverless environments (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.).
 
 | Property | Type | Default | Description |
 | - | - | - | - |
-| `serverless` | `boolean` | `false` | Run MCP in stateless mode without session management |
-| `sessionIdGenerator` | `() => string` | `undefined` | Custom session ID generator function |
+| `setRequestAuth` | `(req, requestContext) => void \| Promise<void>` | `undefined` | Sets `req.auth` on the request handed to the MCP transport, which surfaces as `context.mcp.extra.authInfo` in tools. When omitted, the principal resolved by `server.auth` is bridged automatically. |
+| `serverless` | `boolean` | `false` | Accepted for compatibility. Has no effect: every MCP request is already stateless. |
+| `sessionIdGenerator` | `() => string` | `undefined` | Accepted for compatibility. Has no effect: MCP requests carry no session. |
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -807,7 +873,10 @@ import { Mastra } from '@mastra/core'
 export const mastra = new Mastra({
   server: {
     mcpOptions: {
-      serverless: true,
+      setRequestAuth: (req, requestContext) => {
+        const payload = requestContext.get('bearerPayload')
+        req.auth = { token: payload.token, clientId: payload.sub, scopes: [] }
+      },
     },
   },
 })

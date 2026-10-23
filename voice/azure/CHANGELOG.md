@@ -1,5 +1,17 @@
 # @mastra/voice-azure
 
+## 0.12.2
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 0.12.2-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 0.12.1
 
 ### Patch Changes

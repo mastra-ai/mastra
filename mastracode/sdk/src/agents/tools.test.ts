@@ -12,7 +12,8 @@ const webToolMocks = vi.hoisted(() => ({
 vi.mock('../tools/index.js', () => ({
   createWebSearchTool: () => ({ description: 'web search' }),
   createWebExtractTool: () => ({ description: 'web extract' }),
-  createConfiguredWebTools: () => webToolMocks.configuredTools,
+  createConfiguredWebTools: () =>
+    webToolMocks.configuredTools ? Promise.resolve(webToolMocks.configuredTools) : undefined,
   hasParallelKey: () => false,
   hasTavilyKey: () => false,
   requestSandboxAccessTool: { description: 'request sandbox access' },
@@ -39,7 +40,7 @@ describe('createDynamicTools', () => {
     webToolMocks.configuredTools = undefined;
   });
 
-  it('exposes the configured model-independent web provider', () => {
+  it('exposes the configured model-independent web provider', async () => {
     const parallelSearch = { description: 'parallel search' };
     const parallelExtract = { description: 'parallel extract' };
     webToolMocks.configuredTools = {
@@ -48,10 +49,23 @@ describe('createDynamicTools', () => {
     };
 
     const getDynamicTools = createDynamicTools();
-    const tools = getDynamicTools({ requestContext: createRequestContext({}) });
+    const tools = await getDynamicTools({ requestContext: createRequestContext({}) });
 
     expect(tools.web_search).toBe(parallelSearch);
     expect(tools.web_extract).toBe(parallelExtract);
+  });
+
+  it('exposes opt-in built-in tools, still subject to disabledTools', () => {
+    const scheduleList = { description: 'list schedules' };
+    const scheduleCreate = { description: 'create schedule' };
+    const getDynamicTools = createDynamicTools(undefined, undefined, ['schedule_create'], undefined, undefined, false, {
+      schedule_list: scheduleList,
+      schedule_create: scheduleCreate,
+    } as any);
+    const tools = getDynamicTools({ requestContext: createRequestContext({}) }) as Record<string, unknown>;
+
+    expect(tools.schedule_list).toBe(scheduleList);
+    expect(tools.schedule_create).toBeUndefined();
   });
 
   it('merges extra tools into the exposed tool map', async () => {

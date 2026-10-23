@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import type { PullRequestSubscription } from '../../domains/factory/services/githubSubscriptions';
 import { createAppRoutes } from '../../router';
 
@@ -118,7 +118,7 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [workspaceSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
@@ -127,7 +127,7 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
     http.post(`${AC}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: THREAD_ID }),
     ),
-    http.get(`${AC}/sessions/:resourceId`, () =>
+    http.get(`${AC}/sessions/:sessionId`, () =>
       HttpResponse.json({
         controllerId: 'code',
         resourceId: SESSION_ID,
@@ -137,18 +137,17 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
-    http.put(`${AC}/sessions/:resourceId/state`, () => HttpResponse.json({ ok: true })),
+    http.put(`${AC}/sessions/:sessionId/state`, () => HttpResponse.json({ ok: true })),
     http.get(
-      `${AC}/sessions/:resourceId/stream`,
+      `${AC}/sessions/:sessionId/stream`,
       () =>
         new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
-    http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
-    http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
-    http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
+    http.get(`${AC}/sessions/:sessionId/permissions`, () => HttpResponse.json({})),
+    http.get(`${AC}/sessions/:sessionId/threads`, () => HttpResponse.json({ threads: [] })),
+    http.get(`${AC}/sessions/:sessionId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),
@@ -172,7 +171,7 @@ describe('ThreadPage pull request link placement', () => {
       stubThreadRoute(createWireWorkItem('pull-request'), [otherPullRequestSubscription]);
       renderThreadRoute();
 
-      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const factorySession = await findPageHeader();
       const composer = await screen.findByRole('region', { name: 'Thread composer' });
       const activeReviewLink = await within(factorySession).findByRole('link', {
         name: PULL_REQUEST_ACCESSIBLE_NAME,
@@ -193,7 +192,7 @@ describe('ThreadPage pull request link placement', () => {
       stubThreadRoute(createWireWorkItem('pull-request'), [pullRequestSubscription]);
       renderThreadRoute();
 
-      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const factorySession = await findPageHeader();
       await within(factorySession).findByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME });
       const pullRequestLinks = within(factorySession)
         .getAllByRole('link')
@@ -215,7 +214,7 @@ describe('ThreadPage pull request link placement', () => {
       ]);
       renderThreadRoute();
 
-      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const factorySession = await findPageHeader();
       const validLinks = await within(factorySession).findAllByRole('link', {
         name: OTHER_PULL_REQUEST_ACCESSIBLE_NAME,
       });
@@ -239,7 +238,7 @@ describe('ThreadPage pull request link placement', () => {
       ]);
       renderThreadRoute();
 
-      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const factorySession = await findPageHeader();
       await within(factorySession).findByRole('link', { name: OTHER_PULL_REQUEST_ACCESSIBLE_NAME });
       const nonPositiveLinks = within(factorySession)
         .queryAllByRole('link')
@@ -258,7 +257,7 @@ describe('ThreadPage pull request link placement', () => {
       ]);
       renderThreadRoute();
 
-      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const factorySession = await findPageHeader();
       await within(factorySession).findByRole('link', { name: MIXED_CASE_ACCESSIBLE_NAME });
       const activeReviewLinks = within(factorySession)
         .getAllByRole('link')
@@ -273,7 +272,7 @@ describe('ThreadPage pull request link placement', () => {
       server.use(http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => new HttpResponse(null, { status: 500 })));
       renderThreadRoute();
 
-      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const factorySession = await findPageHeader();
       const activeReviewLink = await within(factorySession).findByRole('link', {
         name: PULL_REQUEST_ACCESSIBLE_NAME,
       });
@@ -290,7 +289,7 @@ describe('ThreadPage pull request link placement', () => {
       stubThreadRoute(createWireWorkItem('issue'), [pullRequestSubscription]);
       renderThreadRoute();
 
-      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const factorySession = await findPageHeader();
       const composer = await screen.findByRole('region', { name: 'Thread composer' });
       const link = await within(composer).findByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME });
 

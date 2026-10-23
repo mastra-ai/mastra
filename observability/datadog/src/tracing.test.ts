@@ -93,6 +93,7 @@ vi.mock('dd-trace', () => {
         exportSpan: (span: any) => ({ traceId: 'dd-trace-id', spanId: span?.id || 'dd-span-id' }),
       },
       _tracer: { started: false },
+      extract: (_format: string, carrier: { traceparent: string }) => ({ fromTraceparent: carrier.traceparent }),
       scope: () => ({
         activate: mockScopeActivate,
         active: mockScopeActive,
@@ -1085,7 +1086,7 @@ describe('DatadogExporter', () => {
     });
 
     it('cancels max lifetime timer when normal cleanup runs', async () => {
-      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 0 });
 
       const rootSpan = createMockSpan({
         id: 'root',
@@ -1116,7 +1117,7 @@ describe('DatadogExporter', () => {
 
   describe('shutdown', () => {
     it('flushes and disables llmobs on shutdown', async () => {
-      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 0 });
 
       await exporter.shutdown();
 
@@ -1125,7 +1126,7 @@ describe('DatadogExporter', () => {
     });
 
     it('clears traceState on shutdown', async () => {
-      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 0 });
       const span = createMockSpan({ traceId: 'trace-shutdown', isRootSpan: true });
 
       // Create some trace state
@@ -1152,8 +1153,10 @@ describe('DatadogExporter', () => {
       const state = (exporter as any).traceState.get('trace-timer');
       expect(state?.cleanupTimer).toBeDefined();
 
-      // Shutdown should cancel the timer
-      await exporter.shutdown();
+      // Shutdown should cancel the timer (shutdown itself waits flushGraceMs for dd-trace's background send)
+      const shuttingDown = exporter.shutdown();
+      await vi.advanceTimersByTimeAsync(2000);
+      await shuttingDown;
 
       // traceState should be cleared immediately, not waiting for timer
       expect((exporter as any).traceState.size).toBe(0);
@@ -1162,7 +1165,7 @@ describe('DatadogExporter', () => {
     });
 
     it('logs warning when shutdown has pending buffered spans', async () => {
-      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 0 });
       const loggerSpy = vi.spyOn((exporter as any).logger, 'warn');
 
       const parentSpan = createMockSpan({
@@ -1195,6 +1198,116 @@ describe('DatadogExporter', () => {
           pendingCount: 1,
         }),
       );
+    });
+  });
+
+  describe('flush grace wait', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function settled(promise: Promise<void>): Promise<boolean> {
+      let done = false;
+      void promise.then(() => {
+        done = true;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      return done;
+    }
+
+    it('waits the grace period after spans were handed to dd-trace', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({ traceId: 'trace-grace', isRootSpan: true });
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_STARTED, span));
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+      expect(mockTrace).toHaveBeenCalled();
+
+      const flushing = exporter.flush();
+      expect(mockFlush).toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(await settled(flushing)).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await settled(flushing)).toBe(true);
+    });
+
+    it('does not wait when nothing new was sent since the last flush', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({ traceId: 'trace-grace', isRootSpan: true });
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_STARTED, span));
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const first = exporter.flush();
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(await settled(first)).toBe(true);
+
+      expect(await settled(exporter.flush())).toBe(true);
+    });
+
+    it('honors flushGraceMs, including 0 to disable the wait', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 0 });
+      const span = createMockSpan({ traceId: 'trace-grace', isRootSpan: true });
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_STARTED, span));
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(await settled(exporter.flush())).toBe(true);
+    });
+
+    it('waits once during shutdown, before llmobs is disabled', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 500 });
+      const span = createMockSpan({ traceId: 'trace-grace', isRootSpan: true });
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_STARTED, span));
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const shuttingDown = exporter.shutdown();
+      await vi.advanceTimersByTimeAsync(499);
+      expect(await settled(shuttingDown)).toBe(false);
+      expect(mockDisable).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await settled(shuttingDown)).toBe(true);
+      expect(mockDisable).toHaveBeenCalled();
+    });
+
+    it('makes an overlapping flush join the running grace wait instead of resolving early', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 500 });
+      const span = createMockSpan({ traceId: 'trace-grace', isRootSpan: true });
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_STARTED, span));
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const first = exporter.flush();
+      await vi.advanceTimersByTimeAsync(100);
+      const second = exporter.flush();
+      await vi.advanceTimersByTimeAsync(399);
+      expect(await settled(first)).toBe(false);
+      expect(await settled(second)).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await settled(first)).toBe(true);
+      expect(await settled(second)).toBe(true);
+    });
+
+    it('does not disable llmobs when shutdown overlaps a running grace wait', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 500 });
+      const span = createMockSpan({ traceId: 'trace-grace', isRootSpan: true });
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_STARTED, span));
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const flushing = exporter.flush();
+      await vi.advanceTimersByTimeAsync(100);
+      const shuttingDown = exporter.shutdown();
+      await vi.advanceTimersByTimeAsync(399);
+      expect(await settled(shuttingDown)).toBe(false);
+      expect(mockDisable).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await settled(flushing)).toBe(true);
+      expect(await settled(shuttingDown)).toBe(true);
+      expect(mockDisable).toHaveBeenCalled();
     });
   });
 
@@ -1754,7 +1867,7 @@ describe('DatadogExporter', () => {
     let exporter: DatadogExporter;
 
     beforeEach(() => {
-      exporter = new DatadogExporter({ mlApp: 'test-app', apiKey: 'test-key' });
+      exporter = new DatadogExporter({ mlApp: 'test-app', apiKey: 'test-key', flushGraceMs: 0 });
     });
 
     afterEach(async () => {
@@ -1827,6 +1940,38 @@ describe('DatadogExporter', () => {
       } as any);
 
       expect(mockSubmitEvaluation).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('DatadogExporter span links', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('passes links to llmobs.trace as Datadog contexts resolved from W3C traceparents', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        links: [
+          { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' },
+          { traceId: 'abc', spanId: 'def' },
+        ],
+      } as Partial<AnyExportedSpan>);
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(mockTrace.mock.calls[0]![0].links).toEqual([
+        { context: { fromTraceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01' } },
+      ]);
+      await exporter.shutdown();
+    });
+
+    it('passes no links for a span without links', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, createMockSpan()));
+
+      expect(mockTrace.mock.calls[0]![0]).not.toHaveProperty('links');
+      await exporter.shutdown();
     });
   });
 });

@@ -118,9 +118,12 @@ export default defineConfig({
       '@internal/ai-sdk-v4',
       '@internal/ai-sdk-v5',
       '@internal/ai-v6',
+      '@internal/ai-v7',
       '@internal/auth',
       '@internal/core',
       '@internal/voice',
+      '@sindresorhus/slugify',
+      'tokenx',
     ],
   },
   onSuccess: async () => {
@@ -137,10 +140,14 @@ export default defineConfig({
         '@internal/external-types',
         '@internal/core',
         '@internal/voice',
-        'hono',
-        'hono-openapi',
         '@internal/auth',
+        '@sindresorhus/slugify',
       ]),
+      {
+        rollupTypes: {
+          'tools/mcp-types.d.ts': ['@modelcontextprotocol/server', '@modelcontextprotocol/core'],
+        },
+      },
     );
 
     // Copy provider-registry.json to dist folder

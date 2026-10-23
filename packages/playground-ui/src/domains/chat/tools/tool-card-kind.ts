@@ -2,16 +2,19 @@ import type { MessageMetadata, SuspendedToolMetadata, ToolApprovalMetadata } fro
 import type { ToolPartFields } from '../messages/renderers/tool-part';
 import { isRecord } from '../messages/signal-data';
 import { getCodeModeCall } from './code-mode';
+import { CONNECT_PROMPT_TOOL_NAME } from './connect-prompt-tool-id';
 import { SUBMIT_PLAN_TOOL_ID } from './submit-plan-tool-id';
 import { WORKSPACE_TOOLS } from './workspace-tool-constants';
+import { isConnectPromptPayload } from '@/domains/connect/types';
+import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { isTaskTool } from '@/ds/components/ai/tool-call';
-import type { ToolCallStatus } from '@/ds/components/ai/tool-call';
 
 /** Which card draws a call. Decided once, shared by the dispatcher and the fold. */
 export type ToolCardKind =
   | 'hidden'
   | 'observation'
   | 'ask_user'
+  | 'connect_prompt'
   | 'submit_plan'
   | 'background'
   | 'agent'
@@ -53,7 +56,7 @@ export const isSettledState = (state: string | undefined): boolean =>
   state === 'output-available' || state === 'result';
 
 /** A call neither settled nor carried by a live run reads as idle, so stale history never shimmers. */
-export function badgeStatus(state: string | undefined, chatRunning: boolean): ToolCallStatus {
+export function badgeStatus(state: string | undefined, chatRunning: boolean): ActivityStatus {
   if (state === 'output-error') return 'error';
   if (isSettledState(state) || !chatRunning) return 'idle';
   return 'running';
@@ -70,10 +73,22 @@ export function toolInteraction(
 ): ToolInteraction {
   const approvals = metadata?.requireApprovalMetadata;
   const suspensions = metadata?.suspendedTools;
+  const namedApproval = approvals?.[toolName];
   return {
-    approval: approvals?.[toolName] ?? approvals?.[toolCallId],
+    approval:
+      metadata?.mode === 'network'
+        ? namedApproval?.toolCallId === toolCallId
+          ? namedApproval
+          : approvals?.[toolCallId]
+        : (approvals?.[toolCallId] ??
+          Object.values(approvals ?? {}).find(approval => approval.toolCallId === toolCallId)),
     suspended: suspensions?.[toolName] ?? suspensions?.[toolCallId],
   };
+}
+
+/** Tools the transcript never draws: working memory updates and task tools (shown in the docked task list). */
+export function isHiddenTool(toolName: string): boolean {
+  return toolName === 'updateWorkingMemory' || isTaskTool(toolName);
 }
 
 export function toolCardKind(
@@ -81,9 +96,12 @@ export function toolCardKind(
   { metadata, mcpAppTools }: ToolCardContext,
 ): ToolCardKind {
   if (toolName === 'mastra-memory-om-observation') return 'observation';
-  if (toolName === 'updateWorkingMemory' || isTaskTool(toolName)) return 'hidden';
+  if (isHiddenTool(toolName)) return 'hidden';
   // A question read back in history draws as a plain badge, but it is still a question: never folded away.
   if (toolName === 'ask_user') return 'ask_user';
+  // Built-in `request_connection` tool from `@mastra/connect`: a settled call renders
+  // as an interactive connect card; while running it falls back to a plain badge.
+  if (toolName === CONNECT_PROMPT_TOOL_NAME && isConnectPromptPayload(output)) return 'connect_prompt';
   const { suspended } = toolInteraction(metadata, toolName, toolCallId);
   if (
     toolName === SUBMIT_PLAN_TOOL_ID ||

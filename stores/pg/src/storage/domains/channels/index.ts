@@ -5,10 +5,11 @@ import {
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type { CreateIndexOptions, ChannelInstallation, ChannelConfig } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
 
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName } from '../utils';
 
 export class ChannelsPG extends ChannelsStorage {
@@ -59,7 +60,7 @@ export class ChannelsPG extends ChannelsStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     for (const tableName of ChannelsPG.MANAGED_TABLES) {
@@ -81,7 +82,7 @@ export class ChannelsPG extends ChannelsStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return ChannelsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -137,7 +138,7 @@ export class ChannelsPG extends ChannelsStorage {
         installation.agentId,
         installation.status,
         installation.webhookId ?? null,
-        JSON.stringify(installation.data),
+        toPgJson(installation.data),
         installation.configHash ?? null,
         installation.error ?? null,
         createdAt,
@@ -200,7 +201,7 @@ export class ChannelsPG extends ChannelsStorage {
          "data" = EXCLUDED."data",
          "updatedAt" = EXCLUDED."updatedAt",
          "updatedAtZ" = EXCLUDED."updatedAtZ"`,
-      [config.platform, JSON.stringify(config.data), now, now],
+      [config.platform, toPgJson(config.data), now, now],
     );
   }
 

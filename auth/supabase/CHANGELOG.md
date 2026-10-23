@@ -1,5 +1,17 @@
 # @mastra/auth-supabase
 
+## 1.1.5
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.1.5-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 1.1.4
 
 ### Patch Changes

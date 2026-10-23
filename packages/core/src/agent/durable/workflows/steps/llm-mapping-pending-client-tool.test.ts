@@ -105,12 +105,12 @@ async function runMappingStep(
   recalled.deserialize(output.messageListState);
 
   const stored = (toolCallId: string) =>
-    recalled.get.all
-      .db()
-      .flatMap((m: MastraDBMessage) => m.content.parts ?? [])
-      .find((p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === toolCallId)?.toolInvocation as
-      | Record<string, any>
-      | undefined;
+    (
+      recalled.get.all
+        .db()
+        .flatMap((m: MastraDBMessage) => m.content.parts ?? [])
+        .find((p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === toolCallId) as any
+    )?.toolInvocation as Record<string, any> | undefined;
 
   const v6 = (toolCallId: string) =>
     recalled.get.all.aiV6
@@ -192,8 +192,13 @@ describe('issue #23295 (durable engine): mapping step stops at a client-executed
     ]);
 
     // Provider-executed calls are not answered by the client, so they must not stop the turn.
-    expect(stored(TOOL_CALL_ID)?.state).toBe('result');
     expect(output.stepResult.isContinued).toBe(true);
+    // Durable llm-mapping does not commit provider-executed results: they are committed
+    // upstream by llm-execution's buildMessagesFromChunks when the result arrives
+    // in-stream (a second commit here would clobber the providerMetadata captured from
+    // the live chunk), and a deferred provider call (result still pending) has nothing
+    // to commit. The local copy therefore stays in `call` state in this step.
+    expect(stored(TOOL_CALL_ID)?.state).toBe('call');
   });
 
   it('still records a declined approval as output-denied and keeps looping', async () => {

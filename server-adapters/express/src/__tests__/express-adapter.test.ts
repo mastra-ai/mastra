@@ -1,10 +1,9 @@
-import { request as createHttpRequest, type Server } from 'node:http';
-import type {
-  AdapterTestContext,
-  AdapterSetupOptions,
-  HttpRequest,
-  HttpResponse,
-} from '@internal/server-adapter-test-utils';
+import { request as createHttpRequest } from 'node:http';
+import type { Server } from 'node:http';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
+import { createRoute } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
@@ -14,11 +13,13 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
   createBodyLimitTestSuite,
-} from '@internal/server-adapter-test-utils';
-import { Mastra } from '@mastra/core';
-import { registerApiRoute } from '@mastra/core/server';
-import { createRoute } from '@mastra/server/server-adapter';
-import type { ServerRoute } from '@mastra/server/server-adapter';
+} from '@mastra/server-adapters-test-suite';
+import type {
+  AdapterTestContext,
+  AdapterSetupOptions,
+  HttpRequest,
+  HttpResponse,
+} from '@mastra/server-adapters-test-suite';
 import express from 'express';
 import type { Application } from 'express';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -44,6 +45,7 @@ describe('Express Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Express Adapter Integration Tests',
     emptyBodyNormalization: { withoutContentType: 'undefined', withJsonContentType: 'empty-object' },
+    supportsPostQueryRequestContext: true,
 
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create Express app
@@ -1339,6 +1341,8 @@ describe('Express Server Adapter', () => {
 
   createBodyLimitTestSuite({
     suiteName: 'Body Size Limit',
+    // The Express adapter never reads text/plain or octet-stream bodies; they are left to host-level parsers.
+    skipNonJsonStreamedBody: true,
 
     createApp: () => {
       const app = express();

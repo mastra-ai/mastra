@@ -7,7 +7,7 @@ description: "Browse MiniMax (minimax.io) model IDs, capabilities, context windo
 
 # <img src="https://models.dev/logos/minimax.svg" alt="MiniMax (minimax.io) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />MiniMax (minimax.io)
 
-Access 7 MiniMax (minimax.io) models through Mastra's model router. Authentication is handled automatically using the `MINIMAX_API_KEY` environment variable.
+Access 8 MiniMax (minimax.io) models through Mastra's model router. Authentication is handled automatically using the `MINIMAX_API_KEY` environment variable.
 
 Learn more in the [MiniMax (minimax.io) documentation](https://platform.minimax.io/docs/guides/quickstart).
 
@@ -46,88 +46,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "minimax/MiniMax-M2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
-    "model": "minimax/MiniMax-M2.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
-    "model": "minimax/MiniMax-M2.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
-    "model": "minimax/MiniMax-M2.5-highspeed",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.6,
-    "outputCost": 2.4
-  },
-  {
-    "model": "minimax/MiniMax-M2.7",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
-    "model": "minimax/MiniMax-M2.7-highspeed",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.6,
-    "outputCost": 2.4
-  },
-  {
     "model": "minimax/MiniMax-M3",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 512000,
+    "contextWindow": 1000000,
+    "maxOutput": 524288,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "minimax/MiniMax-M3.1-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 524288,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   }
 ]}
 />
@@ -162,7 +102,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "minimax/MiniMax-M3"
+      ? "minimax/MiniMax-M3.1-Flash"
       : "minimax/MiniMax-M2";
   }
 });

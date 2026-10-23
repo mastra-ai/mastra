@@ -1,10 +1,10 @@
 ---
-title: "Human-in-the-loop | Agents"
-description: "Add human-in-the-loop controls to Mastra agents with tool approval and suspended execution, so people can provide input before a run resumes or stops."
+title: 'Human-in-the-loop | Agents'
+description: 'Add human-in-the-loop controls to Mastra agents with tool approval and suspended execution, so people can provide input before a run resumes or stops.'
 packages:
-  - "@mastra/core"
-  - "@mastra/libsql"
-  - "@mastra/memory"
+  - '@mastra/core'
+  - '@mastra/libsql'
+  - '@mastra/memory'
 ---
 
 # Human-in-the-loop
@@ -41,7 +41,7 @@ const deleteTool = createTool({
 const agent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: { deleteTool },
 })
 
@@ -125,7 +125,45 @@ const stream = await agent.stream('Clean up old records', {
 })
 ```
 
-A tool's own `requireApproval` setting takes precedence over the function above. Its rule decides whether that tool needs approval. If the function throws, the call requires approval as a fail-safe.
+The function can be asynchronous. For decisions that depend on the tool name and arguments, use a [classifier](/reference/classifier/classifier) to estimate whether the call needs human review:
+
+```typescript title="src/mastra/agents/run-with-approval.ts"
+import { Classifier } from '@mastra/core/classifier'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
+import { agent } from './agent'
+
+const approvalClassifier = new Classifier({
+  id: 'tool-approval-classifier',
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
+  questions: {
+    requiresApproval: {
+      type: 'boolean',
+      instructions:
+        'Does this tool call need human approval because it is destructive, irreversible, expensive, or handles sensitive data?',
+    },
+  },
+})
+
+const stream = await agent.stream('Clean up old records', {
+  requireToolApproval: async ({ toolName, args }) => {
+    const result = await approvalClassifier.decide({
+      state: {
+        toolName,
+        argumentNames: Object.keys(args),
+      },
+    })
+
+    // A refused question has no probability, so it falls back to requiring approval.
+    return (result.answers.requiresApproval.probability ?? 1) >= 0.7
+  },
+})
+```
+
+The example sends argument names rather than values because the classifier forwards its state to the configured decision model. If the decision requires argument values, redact sensitive data first or use a decision model and provider that meet the protected tool's data-handling requirements.
+
+Returning `true` pauses the tool call for human approval. It doesn't approve or decline the call automatically. Choose a threshold that matches the risk of the tools available to the agent. If this `requireToolApproval` function throws, it defaults to requiring approval.
+
+The runtime then combines that result with the tool's `requireApproval` setting. A boolean `true` requires approval, while `false` doesn't disable approval required by `requireToolApproval`. A tool-level `requireApproval` function is authoritative and replaces the combined result for that tool.
 
 :::note
 
@@ -239,6 +277,8 @@ const weatherTool = createTool({
 `suspend()` doesn't throw, return immediately after calling it (e.g. `return await suspend({ ... })`). Code after `await suspend(...)` still runs before the tool pauses.
 
 :::
+
+Use `suspend()` instead of a tool without `execute` when the tool needs a structured answer from the user and also runs inside a subagent: subagents can't run client tools, but suspension propagates through the supervisor. To resume from AI SDK `useChat()`, see [resuming a suspended tool from `useChat()`](/integrations/agentic-ui/ai-sdk-ui#resuming-a-suspended-tool-from-usechat).
 
 ## Tool approval with `generate()`
 
@@ -389,6 +429,23 @@ const handleResume = async () => {
 }
 ```
 
+With `generate()`, the result has `finishReason: 'suspended'`. The tool's data from `suspend()` is in `suspendPayload.suspendPayload`. Call `resumeGenerate()` with the `resumeSchema` data and `runId`:
+
+```typescript
+const output = await agent.generate("What's the weather in London?")
+
+if (output.finishReason === 'suspended') {
+  console.log(output.suspendPayload.suspendPayload) // { reason: 'Approval required.' }
+
+  const resumed = await agent.resumeGenerate({ approved: true }, { runId: output.runId! })
+  console.log(resumed.text)
+}
+```
+
+When a suspended or approval-gated tool call resumes, the stream emits a `tool-call-resumed` chunk with the same `toolCallId` before the call's `tool-result`. Its `payload.kind` is `'suspension'` or `'approval'`, and the payload repeats the original `args`, `suspendPayload`, and `resumeSchema`. The chunk is only emitted when a real suspension or approval request is cleared.
+
+With `@mastra/ai-sdk`, it arrives as a `data-tool-call-suspended` part (or `data-tool-call-approval` part for approvals) with `resumed: true`, which replaces the original part and keeps its payload. Use this signal to mark a question as answered. Don't infer it from the shape of the tool output: when the suspension came from a sub-agent, the output of the delegation call is the sub-agent's result, not your answer.
+
 ## Automatic tool resumption
 
 When using tools that call `suspend()`, you can enable automatic resumption so the agent resumes suspended tools based on the user's next message. Set `autoResumeSuspendedTools` to `true` in the agent's default options or per-request:
@@ -401,7 +458,7 @@ const agent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
   instructions: 'You are a helpful assistant',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: { weatherTool },
   memory: new Memory(),
   defaultOptions: {
@@ -584,7 +641,7 @@ const dataAgent = new Agent({
   id: 'data-agent',
   name: 'Data Agent',
   description: 'Handles database queries and user data retrieval',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: { findUserTool },
 })
 

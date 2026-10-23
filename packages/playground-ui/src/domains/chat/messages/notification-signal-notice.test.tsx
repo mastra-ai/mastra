@@ -1,30 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { NotificationSignalNotice } from './notification-signal-notice';
-import { getNotificationNoticeVariant } from './notification-signal-notice-variant';
 import type { SignalData } from './signal-data';
-import type { NoticeVariant } from '@/ds/components/Notice';
 
 afterEach(() => cleanup());
-
-const priorityCases = [
-  { priority: 'urgent', variant: 'destructive' },
-  { priority: 'high', variant: 'warning' },
-  { priority: 'medium', variant: 'info' },
-  { priority: 'low', variant: 'note' },
-  { priority: 'unexpected', variant: 'note' },
-  { priority: undefined, variant: 'note' },
-] satisfies Array<{ priority: string | undefined; variant: NoticeVariant }>;
-
-describe('getNotificationNoticeVariant', () => {
-  describe.each(priorityCases)('when the priority is $priority', ({ priority, variant }) => {
-    it(`returns the ${variant} variant`, () => {
-      expect(getNotificationNoticeVariant(priority)).toBe(variant);
-    });
-  });
-});
 
 describe('NotificationSignalNotice', () => {
   describe('when the signal contains complete notification metadata', () => {
@@ -52,8 +33,9 @@ describe('NotificationSignalNotice', () => {
       expect(screen.getByText('github / issue-opened')).not.toBeNull();
     });
 
-    it('renders every text content part', () => {
+    it('renders every text content part once opened', () => {
       render(<NotificationSignalNotice signal={signal} />);
+      fireEvent.click(screen.getByRole('button', { name: /github \/ issue-opened/ }));
 
       expect(
         screen.getByText('Studio crashes when I open a workflow Opening any workflow shows a blank page.'),
@@ -182,6 +164,93 @@ describe('NotificationSignalNotice', () => {
       const { container } = render(<NotificationSignalNotice signal={signal} />);
 
       expect(container.textContent).toBe('Notification');
+    });
+  });
+  describe('when the signal is an MCP event occurrence', () => {
+    const signal = {
+      type: 'notification',
+      contents: 'tickets emitted ticket.created',
+      attributes: {
+        source: 'mcp-events',
+        kind: 'mcp-event',
+        server: 'tickets',
+        event: 'ticket.created',
+        priority: 'medium',
+        status: 'delivered',
+      },
+    } satisfies SignalData;
+
+    it('titles it with the server and event', () => {
+      render(<NotificationSignalNotice signal={signal} />);
+
+      expect(screen.getByText('tickets · ticket.created')).not.toBeNull();
+      expect(screen.queryByText('mcp-events / mcp-event')).toBeNull();
+    });
+
+    it('keeps the priority and status badges', () => {
+      render(<NotificationSignalNotice signal={signal} />);
+
+      expect(screen.getByText('medium')).not.toBeNull();
+      expect(screen.getByText('delivered')).not.toBeNull();
+    });
+
+    it('labels the opened body as untrusted', () => {
+      render(<NotificationSignalNotice signal={signal} />);
+      expect(screen.queryByText('Untrusted event data from the MCP server')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: /tickets · ticket\.created/ }));
+
+      expect(screen.getByText('Untrusted event data from the MCP server')).not.toBeNull();
+      expect(screen.getAllByText('tickets emitted ticket.created')).toHaveLength(2);
+    });
+
+    it('shows no gap badge', () => {
+      render(<NotificationSignalNotice signal={signal} />);
+
+      expect(screen.queryByText('gap')).toBeNull();
+    });
+  });
+
+  describe('when the MCP event occurrence followed a gap', () => {
+    const signal = {
+      type: 'notification',
+      contents: 'tickets emitted ticket.created',
+      attributes: {
+        source: 'mcp-events',
+        kind: 'mcp-event',
+        server: 'tickets',
+        event: 'ticket.created',
+        truncated: true,
+      },
+    } satisfies SignalData;
+
+    it('marks it with a gap badge that explains the gap', () => {
+      render(<NotificationSignalNotice signal={signal} />);
+
+      expect(screen.getByText('gap')).not.toBeNull();
+      expect(screen.getByText('Gap: events may have been skipped')).not.toBeNull();
+    });
+  });
+
+  describe('when the MCP event subscription ended', () => {
+    const signal = {
+      type: 'notification',
+      contents: 'Subscription to tickets ticket.created ended',
+      metadata: {
+        notification: {
+          signal: 'notification',
+          source: 'mcp-events',
+          kind: 'mcp-event-subscription-ended',
+          priority: 'high',
+        },
+      },
+      attributes: { server: 'tickets', event: 'ticket.created' },
+    } satisfies SignalData;
+
+    it('titles it as an ended subscription', () => {
+      render(<NotificationSignalNotice signal={signal} />);
+
+      expect(screen.getByText('tickets · ticket.created · subscription ended')).not.toBeNull();
+      expect(screen.getByText('high')).not.toBeNull();
     });
   });
 });

@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { SESSION_OWNER_SIGNAL_TAG } from '@mastra/factory/session-owner-signal';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -99,21 +100,22 @@ describe('TranscriptEntries signal rows', () => {
   it('renders a state delta signal as a collapsible row instead of raw markdown', async () => {
     renderEntries([stateSignalEntry('sig-1', 'factory-phase', 'delta', FACTORY_TEXT)]);
 
-    const row = screen.getByRole('group', { name: 'Signal: State delta: factory-phase' });
-    expect(row).toBeInTheDocument();
+    const row = screen.getByRole('group', { name: 'Signal: factory-phase' });
+    expect(within(row).getByText('delta')).toBeVisible();
     expect(row).toHaveAttribute('data-signal-kind', 'state');
     // Collapsed: only the truncated preview is shown; the tail of the raw
     // contents (beyond the 72-char preview) must not be rendered.
     expect(screen.queryByText(/expectedRevision 4/)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /State delta: factory-phase/ }));
+    await userEvent.click(screen.getByRole('button', { name: /factory-phase/ }));
     expect(screen.getByText(/expectedRevision 4 to advance/)).toBeInTheDocument();
   });
 
   it('labels state snapshots distinctly from deltas', () => {
     renderEntries([stateSignalEntry('sig-1', 'browser', 'snapshot', 'Browser state contents')]);
 
-    expect(screen.getByRole('group', { name: 'Signal: State snapshot: browser' })).toBeInTheDocument();
+    const row = screen.getByRole('group', { name: 'Signal: browser' });
+    expect(within(row).getByText('snapshot')).toBeVisible();
   });
 
   it('suppresses tasks and goal state snapshots entirely', () => {
@@ -145,14 +147,24 @@ describe('TranscriptEntries signal rows', () => {
     expect(row).toHaveAttribute('data-signal-kind', 'reminder');
   });
 
-  it('renders the contents of a live system reminder data part', async () => {
+  it('renders the contents of a live system reminder data part on its line', () => {
     renderEntries([
       streamedReactiveSignalEntry('sig-reminder', 'system-reminder', 'Remember to run the focused tests.'),
     ]);
 
+    const row = screen.getByRole('group', { name: 'Signal: System reminder' });
+    expect(row).toHaveTextContent('Remember to run the focused tests.');
+    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('folds a reminder its line cannot hold', async () => {
+    const reminder =
+      'Remember to run the focused tests before submitting, and keep every change scoped to the package you touched.';
+    renderEntries([streamedReactiveSignalEntry('sig-reminder', 'system-reminder', reminder)]);
+
     await userEvent.click(screen.getByRole('button', { name: /System reminder/ }));
 
-    expect(screen.getAllByText('Remember to run the focused tests.')).toHaveLength(2);
+    expect(screen.getByText(reminder)).toBeVisible();
   });
 
   it('renders a content-less system reminder without an empty disclosure', () => {
@@ -182,6 +194,13 @@ describe('TranscriptEntries signal rows', () => {
     expect(gap).toHaveTextContent('1 hour 58 minutes later');
     expect(gap).not.toHaveTextContent('5:21 PM');
     expect(screen.queryByRole('group', { name: 'Signal: System reminder' })).not.toBeInTheDocument();
+  });
+
+  it('draws a takeover as a divider naming the new owner', () => {
+    renderEntries([reactiveSignalEntry('sig-owner', SESSION_OWNER_SIGNAL_TAG, 'Damien took ownership')]);
+
+    expect(screen.getByRole('separator', { name: 'Damien took ownership' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: `Signal: ${SESSION_OWNER_SIGNAL_TAG}` })).not.toBeInTheDocument();
   });
 
   it('keeps rendering persisted notification signals as notification rows', () => {

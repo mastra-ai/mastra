@@ -126,6 +126,17 @@ export interface WalkOptions {
   maxDepth?: number;
   /** Include entries whose names start with "." (default: false) */
   includeHidden?: boolean;
+  /**
+   * Still return `.gitignore` files when hidden entries are excluded, so the
+   * caller can apply them. Providers that ignore this return no nested
+   * `.gitignore` files, so their rules don't apply to the listing.
+   */
+  includeGitignoreFiles?: boolean;
+  /**
+   * Directory names (e.g. `node_modules`) not to descend into or return. The
+   * caller filters the results too, so providers may ignore this.
+   */
+  skipDirectoryNames?: string[];
 }
 
 export interface FilesystemGrepOptions {
@@ -377,6 +388,14 @@ export interface WorkspaceFilesystem extends FilesystemLifecycle<FilesystemInfo>
    *   callers catch this and fall back to the host-side implementation.
    */
   grep?(options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]>;
+
+  /**
+   * Check whether a file should be treated as text based on its extension,
+   * honoring any provider-configured extra text extensions.
+   *
+   * Optional: when absent, callers fall back to the built-in text-extension set.
+   */
+  isTextFile?(filename: string): boolean;
 
   // ---------------------------------------------------------------------------
   // Path Operations

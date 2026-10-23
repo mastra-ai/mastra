@@ -22,6 +22,10 @@ const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 const experiment = await dataset.getExperiment({ experimentId: 'exp-id' })
 
+if (!experiment) {
+  throw new Error('Experiment not found')
+}
+
 console.log(`Status: ${experiment.status}`)
 console.log(`${experiment.succeededCount}/${experiment.totalItems} succeeded`)
 ```
@@ -44,8 +48,9 @@ console.log(`${experiment.succeededCount}/${experiment.totalItems} succeeded`)
   content={[
   {
     name: 'result',
-    type: 'Promise<Experiment>',
-    description: 'The experiment record. See dataset.listExperiments() for the full shape.',
+    type: 'Promise<Experiment | null>',
+    description:
+      'The experiment record, or null if no experiment with that ID exists in this dataset. See dataset.listExperiments() for the full shape.',
   },
 ]}
 />

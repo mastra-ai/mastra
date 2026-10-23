@@ -3,9 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { Event, EventCallback, SubscribeOptions } from '../events/types';
 import { Mastra } from '../mastra';
-import { MockStore } from '../storage';
+import { InMemoryStore, MockStore } from '../storage';
+import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
+import { InMemoryDB } from '../storage/domains/inmemory-db';
 import { BackgroundTaskManager } from './manager';
-import type { BackgroundTask } from './types';
+import type { BackgroundTask, UpdateBackgroundTask, UpdateBackgroundTaskOptions } from './types';
 import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
 function deferred<T = void>() {
@@ -696,6 +698,7 @@ describe('BackgroundTaskManager lifecycle', () => {
 
     expect(updateTask).toHaveBeenLastCalledWith(task.id, expect.objectContaining({ status: 'failed' }), {
       expectedStatus: 'running',
+      expectedOwnerId: (manager as any).ownerId,
     });
     expect(publish).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'task.failed' }));
     expect(ack).toHaveBeenCalledOnce();
@@ -856,6 +859,8 @@ describe('BackgroundTaskManager lifecycle', () => {
 
     expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'running', retryCount: 0 }), {
       expectedStatus: 'pending',
+      expectedOwnerId: null,
+      expectedLeaseExpiresAt: null,
     });
     expect(ack).toHaveBeenCalled();
     await manager.shutdown();
@@ -897,10 +902,106 @@ describe('BackgroundTaskManager lifecycle', () => {
 
     expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'running', retryCount: 1 }), {
       expectedStatus: 'running',
+      expectedOwnerId: null,
+      expectedLeaseExpiresAt: null,
     });
     expect(ack).toHaveBeenCalled();
     await manager.shutdown();
     await pubsub.close();
+  });
+
+  it("leaves a redelivered dispatch unacked while another worker's lease is still live", async () => {
+    const pubsub = new CapturingPubSub();
+    const manager = new BackgroundTaskManager({ enabled: true });
+    await manager.init(pubsub);
+
+    const leasedTask = makeRunningTask({
+      ownerId: 'other-worker',
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    const updateTask = vi.fn(async () => true);
+    manager.__registerMastra({
+      getStorage: () => ({
+        getStore: async () => ({
+          getTask: async () => leasedTask,
+          updateTask,
+          listTasks: async () => ({ tasks: [] }),
+        }),
+      }),
+      __getInternalWorkflow: () => ({
+        createRun: async () => ({ start: vi.fn(async () => ({ status: 'success' })) }),
+        deleteWorkflowRunById: async () => {},
+      }),
+    } as unknown as Mastra);
+    const ack = vi.fn(async () => {});
+    const event: Event = {
+      type: 'task.dispatch',
+      id: 'event-1',
+      data: { taskId: 'task-1' },
+      runId: 'task-1',
+      createdAt: new Date(),
+      deliveryAttempt: 2,
+    };
+
+    await pubsub.dispatchCallback!(event, ack);
+
+    // The lease is live and held by someone else, so this delivery neither
+    // claims the task nor acknowledges the message: it stays queued for a
+    // redelivery once the lease lapses.
+    expect(updateTask).not.toHaveBeenCalled();
+    expect(ack).not.toHaveBeenCalled();
+    await manager.shutdown();
+    await pubsub.close();
+  });
+
+  it('acks a redelivered dispatch for a live lease it already owns without reclaiming', async () => {
+    const pubsub = new CapturingPubSub();
+    const manager = new BackgroundTaskManager({ enabled: true });
+    await manager.init(pubsub);
+
+    const leasedTask = makeRunningTask({
+      ownerId: manager.ownerId,
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    const updateTask = vi.fn(async () => true);
+    manager.__registerMastra({
+      getStorage: () => ({
+        getStore: async () => ({
+          getTask: async () => leasedTask,
+          updateTask,
+          listTasks: async () => ({ tasks: [] }),
+        }),
+      }),
+      __getInternalWorkflow: () => ({
+        createRun: async () => ({ start: vi.fn(async () => ({ status: 'success' })) }),
+        deleteWorkflowRunById: async () => {},
+      }),
+    } as unknown as Mastra);
+    const ack = vi.fn(async () => {});
+    const event: Event = {
+      type: 'task.dispatch',
+      id: 'event-1',
+      data: { taskId: 'task-1' },
+      runId: 'task-1',
+      createdAt: new Date(),
+      deliveryAttempt: 2,
+    };
+
+    await pubsub.dispatchCallback!(event, ack);
+
+    // This worker already owns the live lease, so the duplicate delivery is
+    // acknowledged without another claim.
+    expect(updateTask).not.toHaveBeenCalled();
+    expect(ack).toHaveBeenCalled();
+    await manager.shutdown();
+    await pubsub.close();
+  });
+
+  it('rejects a lease duration too short to renew before it lapses', () => {
+    const message = /leaseDurationMs must be a finite number of at least 3000ms/;
+    expect(() => new BackgroundTaskManager({ enabled: true, leaseDurationMs: 1_000 })).toThrow(message);
+    expect(() => new BackgroundTaskManager({ enabled: true, leaseDurationMs: Number.NaN })).toThrow(message);
+    expect(() => new BackgroundTaskManager({ enabled: true, leaseDurationMs: 3_000 })).not.toThrow();
   });
 
   it('rejects AbortController registration after shutdown starts', async () => {
@@ -912,5 +1013,195 @@ describe('BackgroundTaskManager lifecycle', () => {
     expect(controller.signal.aborted).toBe(true);
     expect(manager.activeAbortControllers.has('task-1')).toBe(false);
     await shutdownPromise;
+  });
+});
+
+class FailOnceOnCompleteBackgroundTasks extends BackgroundTasksInMemory {
+  completedWriteFailures = 0;
+
+  override async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: UpdateBackgroundTaskOptions,
+  ): Promise<boolean> {
+    if (update.status === 'completed' && this.completedWriteFailures === 0) {
+      this.completedWriteFailures++;
+      throw new Error('storage unavailable while completing task');
+    }
+    return super.updateTask(taskId, update, options);
+  }
+}
+
+class FailOnceOnCompleteStore extends InMemoryStore {
+  readonly backgroundTasks = new FailOnceOnCompleteBackgroundTasks({ db: new InMemoryDB() });
+
+  constructor() {
+    super();
+    this.stores.backgroundTasks = this.backgroundTasks;
+  }
+}
+
+describe('BackgroundTaskManager workflow run settlement', () => {
+  async function setup(storage: InMemoryStore) {
+    const mastra = new Mastra({ logger: false, storage });
+    await mastra.startWorkers();
+    const pubsub = new EventEmitterPubSub();
+    const onTaskFailed = vi.fn();
+    const onTaskComplete = vi.fn();
+    const manager = new BackgroundTaskManager({ enabled: true, onTaskFailed, onTaskComplete });
+    manager.__registerMastra(mastra);
+    await manager.init(pubsub);
+    const publish = vi.spyOn(pubsub, 'publish');
+    return {
+      manager,
+      onTaskFailed,
+      onTaskComplete,
+      completedEvents: () => publish.mock.calls.filter(([, event]) => event.type === 'task.completed'),
+      failedEvents: () => publish.mock.calls.filter(([, event]) => event.type === 'task.failed'),
+      cleanup: async () => {
+        await manager.shutdown();
+        await pubsub.close();
+        await mastra.stopWorkers();
+      },
+    };
+  }
+
+  it('marks the task failed when the workflow run fails before a terminal status is persisted', async () => {
+    const storage = new FailOnceOnCompleteStore();
+    const { manager, onTaskFailed, failedEvents, cleanup } = await setup(storage);
+    const onFailed = vi.fn();
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1' },
+        { executor: { execute: async () => 'done' }, onFailed },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('failed'));
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+
+      expect(storage.backgroundTasks.completedWriteFailures).toBe(1);
+      const failed = await manager.getTask(task.id);
+      expect(failed?.error?.message).toBe('storage unavailable while completing task');
+      expect(failed?.completedAt).toBeInstanceOf(Date);
+      expect(onFailed).toHaveBeenCalledTimes(1);
+      expect(failedEvents()).toHaveLength(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('still publishes task.failed when a per-task failure hook throws during settlement', async () => {
+    const storage = new FailOnceOnCompleteStore();
+    const { manager, onTaskFailed, failedEvents, cleanup } = await setup(storage);
+    const onFailed = vi.fn(async () => {
+      throw new Error('onFailed hook exploded');
+    });
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1' },
+        { executor: { execute: async () => 'done' }, onFailed },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('failed'));
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+
+      expect(onFailed).toHaveBeenCalledTimes(1);
+      expect(failedEvents()).toHaveLength(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('fires failure hooks and events once when the task itself fails', async () => {
+    const { manager, onTaskFailed, failedEvents, cleanup } = await setup(new InMemoryStore());
+    const onFailed = vi.fn();
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1', maxRetries: 0 },
+        {
+          executor: {
+            execute: async () => {
+              throw new Error('tool exploded');
+            },
+          },
+          onFailed,
+        },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('failed'));
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+      // Let the workflow run settle so a duplicate settle-path publish would land.
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect((await manager.getTask(task.id))?.error?.message).toBe('tool exploded');
+      expect(onTaskFailed).toHaveBeenCalledTimes(1);
+      expect(onFailed).toHaveBeenCalledTimes(1);
+      expect(failedEvents()).toHaveLength(1);
+    } finally {
+      await cleanup();
+    }
+  });
+  it('still publishes task.failed when onFailed throws after an ordinary step failure', async () => {
+    const { manager, onTaskFailed, failedEvents, cleanup } = await setup(new InMemoryStore());
+    const onFailed = vi.fn(async () => {
+      throw new Error('onFailed hook exploded');
+    });
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1', maxRetries: 0 },
+        {
+          executor: {
+            execute: async () => {
+              throw new Error('tool exploded');
+            },
+          },
+          onFailed,
+        },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('failed'));
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+      // Let the workflow run settle so a duplicate settle-path publish would land.
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect((await manager.getTask(task.id))?.error?.message).toBe('tool exploded');
+      expect(onFailed).toHaveBeenCalledTimes(1);
+      expect(onTaskFailed).toHaveBeenCalledTimes(1);
+      expect(failedEvents()).toHaveLength(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('still publishes task.completed when onComplete throws after a successful run', async () => {
+    const { manager, onTaskComplete, onTaskFailed, completedEvents, failedEvents, cleanup } = await setup(
+      new InMemoryStore(),
+    );
+    const onComplete = vi.fn(async () => {
+      throw new Error('onComplete hook exploded');
+    });
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1' },
+        { executor: { execute: async () => 'done' }, onComplete },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('completed'));
+      await vi.waitFor(() => expect(onTaskComplete).toHaveBeenCalledTimes(1));
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect((await manager.getTask(task.id))?.status).toBe('completed');
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(completedEvents()).toHaveLength(1);
+      expect(onTaskFailed).not.toHaveBeenCalled();
+      expect(failedEvents()).toHaveLength(0);
+    } finally {
+      await cleanup();
+    }
   });
 });

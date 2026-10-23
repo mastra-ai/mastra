@@ -380,6 +380,11 @@ describe('UpstashFilterTranslator', () => {
         }),
       ).toBe("(field1 NOT CONTAINS 'a' AND field2 NOT GLOB 'b*' AND field3 NOT IN ('c', 'd'))");
     });
+
+    it('negates field-level $nin into IN', () => {
+      expect(translator.translate({ field: { $not: { $nin: [1, 2, 3] } } })).toBe('field IN (1, 2, 3)');
+      expect(translator.translate({ $not: { field: { $nin: [1, 2, 3] } } })).toBe('field IN (1, 2, 3)');
+    });
   });
 
   describe('null and undefined handling', () => {

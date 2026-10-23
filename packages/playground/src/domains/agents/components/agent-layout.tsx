@@ -1,21 +1,18 @@
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
-import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useEffect, useRef } from 'react';
-import type { Ref } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
 import { useMemoryTimeline } from '../context/memory-timeline-context';
+import { useThreadsPanel } from '../context/use-threads-panel';
 
 export interface AgentLayoutProps {
   agentId: string;
   children: React.ReactNode;
   leftSlot?: React.ReactNode;
-  /** Lets the caller collapse/expand the left panel (e.g. "Hide threads panel"). */
-  leftPanel?: Ref<CollapsiblePanelHandle>;
   rightSlot?: React.ReactNode;
   /** Accessible label for the mobile drawer that hosts the left slot */
   leftDrawerLabel?: string;
@@ -30,7 +27,6 @@ export const AgentLayout = ({
   agentId,
   children,
   leftSlot,
-  leftPanel,
   rightSlot,
   leftDrawerLabel = 'Open left panel',
   rightDrawerLabel = 'Open right panel',
@@ -38,6 +34,7 @@ export const AgentLayout = ({
 }: AgentLayoutProps) => {
   const isMobile = useIsMobile();
   const { isPanelOpen: isMemoryTimelineOpen } = useMemoryTimeline();
+  const threadsPanel = useThreadsPanel();
   const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
   const wasMemoryTimelineOpen = useRef(false);
   const sizeBeforeMemoryDetail = useRef<string | null>(null);
@@ -98,7 +95,7 @@ export const AgentLayout = ({
           <CollapsiblePanel
             id="left-slot"
             direction="left"
-            ref={leftPanel}
+            ref={handle => threadsPanel?.registerPanel(handle, Boolean(defaultLayout))}
             panelRef={leftPanelRef}
             collapsible
             collapsedSize={0}

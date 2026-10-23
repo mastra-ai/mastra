@@ -264,6 +264,32 @@ export const datasetAndItemIdPathParams = z.object({
 
 export const paginationQuerySchema = createPagePaginationSchema(10);
 
+/**
+ * Order-by query param. Arrives either as a nested object or as a JSON string
+ * (bracket notation `orderBy[field]=x&orderBy[direction]=ASC` is reconstructed
+ * into a JSON string by `normalizeQueryParams`).
+ */
+const createOrderByQuerySchema = <const T extends readonly [string, ...string[]]>(fields: T) =>
+  z
+    .preprocess(
+      val => {
+        if (typeof val !== 'string') return val;
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Let the object schema reject it so the caller gets a 400.
+          return val;
+        }
+      },
+      z
+        .object({
+          field: z.enum(fields),
+          direction: z.enum(['ASC', 'DESC']),
+        })
+        .optional(),
+    )
+    .optional();
+
 export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
   tags: z
     .preprocess(v => {
@@ -275,6 +301,7 @@ export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
       return nonBlank.length > 0 ? nonBlank : undefined;
     }, z.array(z.string()).optional())
     .describe('Only return results that have all of these tags'),
+  orderBy: createOrderByQuerySchema(['startedAt', 'createdAt']),
 });
 
 const targetTypeQuerySchema = z
@@ -293,6 +320,18 @@ export const listDatasetsQuerySchema = paginationQuerySchema.extend({
       return nonBlank.length > 0 ? nonBlank : undefined;
     }, z.array(z.string()).optional())
     .describe('Only return datasets attached to at least one of these target IDs'),
+  datasetIds: z
+    .preprocess(v => {
+      // Repeated query params arrive as arrays; a single param arrives as a string.
+      const list = typeof v === 'string' ? [v] : v;
+      if (!Array.isArray(list)) return list;
+      // Unlike targetIds, a blank list stays empty so it matches no datasets.
+      return list.filter(id => id !== '');
+    }, z.array(z.string()).max(100).optional())
+    .describe(
+      'Only return datasets with these IDs (up to 100). All matches come back on one page; page and perPage are ignored. A blank value matches no datasets.',
+    ),
+  orderBy: createOrderByQuerySchema(['createdAt', 'updatedAt', 'name']),
 });
 
 export const listExperimentsQuerySchema = paginationQuerySchema.extend({
@@ -302,6 +341,7 @@ export const listExperimentsQuerySchema = paginationQuerySchema.extend({
   trialIndex: z.coerce.number().int().min(0).optional(),
   targetType: targetTypeQuerySchema,
   targetId: z.string().optional().describe('Only return experiments run against this target ID'),
+  orderBy: createOrderByQuerySchema(['createdAt', 'status']),
 });
 
 export const tenancyQuerySchema = z.object({
@@ -312,6 +352,7 @@ export const tenancyQuerySchema = z.object({
 export const listItemsQuerySchema = createPagePaginationSchema(10).extend({
   version: z.coerce.number().int().optional(), // Optional version filter for snapshot semantics
   search: z.string().optional(),
+  orderBy: createOrderByQuerySchema(['createdAt', 'updatedAt']),
 });
 
 // ============================================================================
@@ -376,63 +417,81 @@ export const updateExperimentBodySchema = z
   })
   .strict();
 
-export const triggerExperimentBodySchema = z.object({
-  start: z
-    .boolean()
-    .optional()
-    .describe(
-      'When true (default), spawns the in-process runner. When false, creates the experiment without running it: the caller drives the loop via run-item (targeted) or result submission (target-less).',
-    ),
-  targetType: z
-    .enum(['agent', 'workflow', 'scorer'])
-    .optional()
-    .describe('Type of target to run against. Required when start is true. Optional for create-only experiments.'),
-  targetId: z.string().optional().describe('ID of the target. Required when targetType is set.'),
-  id: z
-    .string()
-    .optional()
-    .describe(
-      'Caller-supplied experiment id (e.g. a workflow run id) for idempotent create-only requests. Ignored when start is true.',
-    ),
-  name: z.string().optional().describe('Name of the experiment'),
-  description: z.string().optional().describe('Description of the experiment'),
-  metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
-  scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
-  version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
-  agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
-  maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
-  provenance: z
-    .object({
-      source: z.string().optional(),
-      sourceId: z.string().optional(),
-      sourceVersion: z.string().optional(),
-      metadata: z.record(z.string(), z.unknown()).optional(),
-    })
-    .optional()
-    .describe('Caller-provided provenance claims for the experiment execution'),
-  grouping: z
-    .object({
-      experimentSetId: z.string().optional(),
-      comparisonId: z.string().optional(),
-      variantId: z.string().optional(),
-      trialIndex: z.number().int().min(0).optional(),
-    })
-    .optional()
-    .describe('Stable grouping dimensions for comparisons and repeated trials'),
-  requestContext: z.record(z.string(), z.unknown()).optional().describe('Global request context passed to the target'),
-  versions: z
-    .object({
-      agents: z
-        .record(
-          z.string(),
-          z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
-        )
-        .optional(),
-      defaultStatus: z.enum(['draft', 'published']).optional(),
-    })
-    .optional()
-    .describe('Version overrides for sub-agent delegation during experiment execution'),
-});
+export const triggerExperimentBodySchema = z
+  .object({
+    start: z
+      .boolean()
+      .optional()
+      .describe(
+        'When true (default), spawns the in-process runner. When false, creates the experiment without running it: the caller drives the loop via run-item (targeted) or result submission (target-less).',
+      ),
+    targetType: z
+      .enum(['agent', 'workflow', 'scorer'])
+      .optional()
+      .describe('Type of target to run against. Required when start is true. Optional for create-only experiments.'),
+    targetId: z.string().optional().describe('ID of the target. Required when targetType is set.'),
+    id: z
+      .string()
+      .optional()
+      .describe(
+        'Caller-supplied experiment id (e.g. a workflow run id) for idempotent create-only requests. Ignored when start is true.',
+      ),
+    name: z.string().optional().describe('Name of the experiment'),
+    description: z.string().optional().describe('Description of the experiment'),
+    metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
+    scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
+    version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
+    agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
+    agentModel: z
+      .object({ provider: z.string().min(1), modelId: z.string().min(1) })
+      .optional()
+      .describe(
+        'Model to run an agent target on for this experiment only, instead of the model the agent is configured with. Passed per call; the agent itself is not changed and the model is not stored on the experiment.',
+      ),
+    maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
+    provenance: z
+      .object({
+        source: z.string().optional(),
+        sourceId: z.string().optional(),
+        sourceVersion: z.string().optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
+      })
+      .optional()
+      .describe('Caller-provided provenance claims for the experiment execution'),
+    grouping: z
+      .object({
+        experimentSetId: z.string().optional(),
+        comparisonId: z.string().optional(),
+        variantId: z.string().optional(),
+        trialIndex: z.number().int().min(0).optional(),
+      })
+      .optional()
+      .describe('Stable grouping dimensions for comparisons and repeated trials'),
+    requestContext: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('Global request context passed to the target'),
+    versions: z
+      .object({
+        agents: z
+          .record(
+            z.string(),
+            z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
+          )
+          .optional(),
+        defaultStatus: z.enum(['draft', 'published']).optional(),
+      })
+      .optional()
+      .describe('Version overrides for sub-agent delegation during experiment execution'),
+  })
+  .refine(body => !body.agentModel || body.targetType === 'agent', {
+    path: ['agentModel'],
+    message: 'agentModel is only supported when targetType is "agent"',
+  })
+  .refine(body => !body.agentModel || body.start !== false, {
+    path: ['agentModel'],
+    message: 'agentModel is not supported for create-only experiments (start: false)',
+  });
 
 export const runExperimentItemBodySchema = z.object({
   attempt: z.number().int().min(0).optional().describe('Zero-based repetition index. Defaults to 0.'),
@@ -474,10 +533,38 @@ export const submitExperimentResultBodySchema = z.object({
     .describe('Externally computed scores, persisted keyed by runId = experimentId'),
 });
 
-export const compareExperimentsBodySchema = z.object({
-  experimentIdA: z.string().describe('ID of baseline experiment'),
-  experimentIdB: z.string().describe('ID of candidate experiment'),
-});
+const compareExperimentIdsBodySchema = z
+  .object({
+    experimentIds: z
+      .array(z.string().min(1))
+      .min(2)
+      .max(10)
+      .describe('IDs of the experiments to compare (2 to 10). Each one gets a result entry per item.'),
+    baselineId: z
+      .string()
+      .optional()
+      .describe('Experiment the others are compared against. Must be one of experimentIds. Defaults to the first.'),
+  })
+  .refine(body => !body.baselineId || body.experimentIds.includes(body.baselineId), {
+    path: ['baselineId'],
+    message: 'baselineId must be one of experimentIds',
+  });
+
+/** Body sent by clients released before N-way comparison. Mapped to the experimentIds shape. */
+const legacyCompareExperimentsBodySchema = z
+  .object({
+    experimentIdA: z.string().min(1).describe('Deprecated: use experimentIds. Baseline experiment ID.'),
+    experimentIdB: z.string().min(1).describe('Deprecated: use experimentIds. Contender experiment ID.'),
+  })
+  .transform(({ experimentIdA, experimentIdB }) => ({
+    experimentIds: [experimentIdA, experimentIdB],
+    baselineId: experimentIdA,
+  }));
+
+export const compareExperimentsBodySchema = z.union([
+  compareExperimentIdsBodySchema,
+  legacyCompareExperimentsBodySchema,
+]);
 
 // ============================================================================
 // Response Schemas
@@ -573,14 +660,41 @@ export const scorerResultSchema = z.object({
   error: z.string().nullable(),
 });
 
+// Agent target output. Lenient: legacy rows persisted `error` as `{}` and arbitrary extra fields.
+export const agentExperimentOutputSchema = z
+  .object({
+    text: z.string().optional(),
+    reasoningText: z.string().optional(),
+    object: z.unknown().optional(),
+    toolCalls: z.array(z.record(z.string(), z.unknown())).optional(),
+    toolResults: z.array(z.record(z.string(), z.unknown())).optional(),
+    sources: z.array(z.record(z.string(), z.unknown())).optional(),
+    files: z.array(z.record(z.string(), z.unknown())).optional(),
+    usage: z.record(z.string(), z.unknown()).optional(),
+    traceId: z.string().nullable().optional(),
+    error: z
+      .object({ message: z.string().optional(), stack: z.string().optional() })
+      .passthrough()
+      .nullable()
+      .optional(),
+  })
+  .passthrough();
+
+export const scorerExperimentOutputSchema = z
+  .object({
+    score: z.number().nullable(),
+    reason: z.string().nullable(),
+    notScorable: z.unknown().optional(),
+  })
+  .passthrough();
+
 // Experiment result entity schema
-export const experimentResultResponseSchema = z.object({
+const experimentResultBaseSchema = z.object({
   id: z.string(),
   experimentId: z.string(),
   itemId: z.string(),
   itemDatasetVersion: z.number().int().nullable(),
   input: z.unknown(),
-  output: z.unknown().nullable(),
   groundTruth: z.unknown().nullable(),
   metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   expectedTrajectory: z.unknown().optional(),
@@ -603,6 +717,22 @@ export const experimentResultResponseSchema = z.object({
   createdAt: z.coerce.date(),
 });
 
+// Discriminated by the parent experiment's targetType so clients can narrow `output`.
+export const experimentResultResponseSchema = z.union([
+  experimentResultBaseSchema.extend({
+    targetType: z.literal('agent'),
+    output: agentExperimentOutputSchema.nullable(),
+  }),
+  experimentResultBaseSchema.extend({
+    targetType: z.literal('scorer'),
+    output: scorerExperimentOutputSchema.nullable(),
+  }),
+  experimentResultBaseSchema.extend({
+    targetType: z.enum(['workflow', 'processor']).nullable(),
+    output: z.unknown().nullable(),
+  }),
+]);
+
 // Returned by the run-item route: the upserted result row plus the scorer runs.
 export const runExperimentItemResponseSchema = z.object({
   result: experimentResultResponseSchema,
@@ -613,6 +743,8 @@ export const runExperimentItemResponseSchema = z.object({
       score: z.number().nullable(),
       reason: z.string().nullable(),
       error: z.string().nullable(),
+      // Set when the scorer declared the item not scorable; `score` and `error` are null.
+      notScorable: z.object({ step: z.string(), reason: z.string().optional() }).optional(),
       failedStep: z.string().optional(),
       completedSteps: z.array(z.string()).optional(),
       targetScope: z.enum(['span', 'trajectory']).optional(),

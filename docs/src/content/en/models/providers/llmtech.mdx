@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "llmtech/unsloth/Qwen3.8-27B-NVFP4"
+  model: "llmtech/nvidia/Qwen3.8-27B-NVFP4"
 });
 
 // Generate a response
@@ -46,7 +46,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "llmtech/unsloth/Qwen3.8-27B-NVFP4",
+    "model": "llmtech/nvidia/Qwen3.8-27B-NVFP4",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -72,7 +72,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.llmtech.eu/v1",
-    id: "llmtech/unsloth/Qwen3.8-27B-NVFP4",
+    id: "llmtech/nvidia/Qwen3.8-27B-NVFP4",
     apiKey: process.env.LLMTECH_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -90,8 +90,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "llmtech/unsloth/Qwen3.8-27B-NVFP4"
-      : "llmtech/unsloth/Qwen3.8-27B-NVFP4";
+      ? "llmtech/nvidia/Qwen3.8-27B-NVFP4"
+      : "llmtech/nvidia/Qwen3.8-27B-NVFP4";
   }
 });
 ```

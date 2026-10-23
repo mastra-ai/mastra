@@ -1178,3 +1178,123 @@ describe('AgentsMDInjector', () => {
     });
   });
 });
+
+describe('AgentsMDInjector getBasePath', () => {
+  function setup() {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'agents-md-base-')));
+    const host = join(root, 'host');
+    const target = join(root, 'host', 'workspaces', 'target');
+    mkdirSync(join(target, '.skills', 'demo'), { recursive: true });
+    mkdirSync(join(target, 'src'), { recursive: true });
+    writeFileSync(join(host, 'AGENTS.md'), 'host instructions');
+    writeFileSync(join(target, 'AGENTS.md'), 'target instructions');
+    writeFileSync(join(target, '.skills', 'demo', 'SKILL.md'), 'skill');
+    writeFileSync(join(target, 'src', 'index.ts'), 'export {};');
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(host);
+    return {
+      root,
+      host,
+      target,
+      cleanup: () => {
+        cwd.mockRestore();
+        rmSync(root, { recursive: true, force: true });
+      },
+    };
+  }
+
+  function withToolCall(messageList: TestMessageList, toolCallId: string, args: Record<string, unknown>) {
+    messageList.pushResponse(
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart(toolCallId, args, 'result', { ok: true })],
+      }),
+    );
+  }
+
+  it.each([
+    ['skill read', { path: '.skills/demo/SKILL.md' }],
+    ['file view', { path: 'src/index.ts' }],
+  ])('resolves a relative %s against the base path, not process.cwd()', async (_label, toolArgs) => {
+    const { target, cleanup } = setup();
+    try {
+      const messageList = new TestMessageList();
+      messageList.push(createUserMessage('go'));
+      withToolCall(messageList, 'call-1', toolArgs);
+      const processor = new AgentsMDInjector({ getBasePath: () => target });
+      await processor.processInputStep(createProcessInputStepArgs(messageList, []));
+      const reminders = extractReminderMarkup(messageList);
+      expect(reminders).toHaveLength(1);
+      expect(reminders[0]).toContain(`path="${join(target, 'AGENTS.md')}"`);
+      expect(reminders[0]).toContain('target instructions');
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('never injects host instructions on a later step that replays earlier tool calls', async () => {
+    const { target, cleanup } = setup();
+    try {
+      const messageList = new TestMessageList();
+      messageList.push(createUserMessage('go'));
+      withToolCall(messageList, 'call-1', { path: '.skills/demo/SKILL.md' });
+      const processor = new AgentsMDInjector({ getBasePath: () => target });
+      await processor.processInputStep(createProcessInputStepArgs(messageList, []));
+      withToolCall(messageList, 'call-2', { path: 'src/index.ts' });
+      await processor.processInputStep(createProcessInputStepArgs(messageList, []));
+      await processor.processInputStep(createProcessInputStepArgs(messageList, []));
+      const reminders = extractReminderMarkup(messageList);
+      expect(reminders).toHaveLength(1);
+      expect(reminders.join('\n')).not.toContain('host instructions');
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('does not walk above the base path or into paths outside it', async () => {
+    const { host, target, cleanup } = setup();
+    try {
+      rmSync(join(target, 'AGENTS.md'));
+      const messageList = new TestMessageList();
+      messageList.push(createUserMessage('go'));
+      withToolCall(messageList, 'call-1', { path: join(target, 'src', 'index.ts') });
+      withToolCall(messageList, 'call-2', { path: join(host, 'AGENTS.md') });
+      withToolCall(messageList, 'call-3', { path: '../../package.json' });
+      const processor = new AgentsMDInjector({ getBasePath: () => target });
+      await processor.processInputStep(createProcessInputStepArgs(messageList, []));
+      expect(extractReminderMarkup(messageList)).toEqual([]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('does not follow a symlinked instruction file outside the base path', async () => {
+    const { host, target, cleanup } = setup();
+    try {
+      rmSync(join(target, 'AGENTS.md'));
+      symlinkSync(join(host, 'AGENTS.md'), join(target, 'AGENTS.md'));
+      const messageList = new TestMessageList();
+      messageList.push(createUserMessage('go'));
+      withToolCall(messageList, 'call-1', { path: 'src/index.ts' });
+      const processor = new AgentsMDInjector({ getBasePath: () => target });
+      await processor.processInputStep(createProcessInputStepArgs(messageList, []));
+      expect(extractReminderMarkup(messageList)).toEqual([]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('keeps resolving relative paths against process.cwd() without a base path', async () => {
+    const { host, cleanup } = setup();
+    try {
+      const messageList = new TestMessageList();
+      messageList.push(createUserMessage('go'));
+      withToolCall(messageList, 'call-1', { path: 'workspaces/README.md' });
+      await new AgentsMDInjector({}).processInputStep(createProcessInputStepArgs(messageList, []));
+      const reminders = extractReminderMarkup(messageList);
+      expect(reminders).toHaveLength(1);
+      expect(reminders[0]).toContain(`path="${join(host, 'AGENTS.md')}"`);
+    } finally {
+      cleanup();
+    }
+  });
+});

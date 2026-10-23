@@ -6,8 +6,10 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
 const sessionId = 'sess-1';
@@ -31,15 +33,17 @@ const session: FactoryUserSession = {
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
     </MemoryRouter>,
   );
 }
 
 describe('User sessions deletion', () => {
-  it('deletes the selected session and removes it from the sidebar', async () => {
+  it.each(['dropdown', 'context'])('deletes the selected session from the %s menu', async entry => {
     let sessions = [session];
     const deletedSessions: string[] = [];
     const threadRequests: string[] = [];
@@ -66,9 +70,7 @@ describe('User sessions deletion', () => {
           ],
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
-        HttpResponse.json({ sessions }),
-      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
       http.delete(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
         deletedSessions.push(String(params.sessionId));
         sessions = sessions.filter(item => item.sessionId !== params.sessionId);
@@ -94,14 +96,18 @@ describe('User sessions deletion', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    await user.click(await screen.findByRole('button', { name: 'Session actions for my-feature' }));
+    if (entry === 'context') {
+      await user.pointer({ target: await screen.findByRole('link', { name: 'my-feature' }), keys: '[MouseRight]' });
+    } else {
+      await user.click(await screen.findByRole('button', { name: 'Session actions for my-feature' }));
+    }
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitForMutationsIdle(client);
     expect(deletedSessions).toEqual([sessionId]);
     expect(threadRequests).toEqual([]);
-    expect(screen.queryByRole('button', { name: 'my-feature' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'my-feature' })).not.toBeInTheDocument();
     expect(screen.getByText('No sessions yet')).toBeInTheDocument();
   });
 });

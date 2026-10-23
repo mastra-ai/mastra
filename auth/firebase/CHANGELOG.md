@@ -1,5 +1,29 @@
 # @mastra/auth-firebase
 
+## 1.1.4
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.1.4-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.1.3
+
+### Patch Changes
+
+- Updated `firebase-admin` to v14 and switched to its modular API (`firebase-admin/app`, `firebase-admin/auth`). v14 drops `node-forge`, which has an unfixed signature-forgery advisory (CVE-2026-85393). No change to how you configure `MastraAuthFirebase`. ([#25829](https://github.com/mastra-ai/mastra/pull/25829))
+
+## 1.1.3-alpha.0
+
+### Patch Changes
+
+- Updated `firebase-admin` to v14 and switched to its modular API (`firebase-admin/app`, `firebase-admin/auth`). v14 drops `node-forge`, which has an unfixed signature-forgery advisory (CVE-2026-85393). No change to how you configure `MastraAuthFirebase`. ([#25829](https://github.com/mastra-ai/mastra/pull/25829))
+
 ## 1.1.2
 
 ### Patch Changes

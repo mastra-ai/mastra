@@ -4,10 +4,12 @@ import {
   TABLE_BACKGROUND_TASKS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_EXPERIMENTS,
+  TABLE_MEMORY_RUN_FENCES,
   TABLE_SCHEDULE_TRIGGERS,
   TABLE_THREADS,
+  TABLE_WORKFLOW_RUN_OWNERS,
 } from '@mastra/core/storage';
-import { MongoClient } from 'mongodb';
+import { Collection, MongoClient } from 'mongodb';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MongoDBStore } from './index';
@@ -404,6 +406,171 @@ describe('MongoDB retention', () => {
     });
   });
 
+  // Ownership documents age on `updatedAt` (inactivity), fences on
+  // `retiredAt`, which stays null until the execution holding the fence
+  // settles. Both anchors are BSON dates written from `$$NOW`.
+  describe('run ownership', () => {
+    const LEASE_MS = 60_000;
+
+    beforeEach(async () => {
+      await db().collection(TABLE_WORKFLOW_RUN_OWNERS).deleteMany({});
+      await db().collection(TABLE_MEMORY_RUN_FENCES).deleteMany({});
+    });
+
+    async function claim(runId: string, ownerId = 'owner-a') {
+      const claimed = await store.stores.workflows!.claimRunOwnership({ runId, ownerId, leaseMs: LEASE_MS });
+      if (!claimed.acquired) throw new Error(`claim of ${runId} failed`);
+      return { runId, generation: claimed.record.generation, ownerId: claimed.record.ownerId };
+    }
+
+    async function backdate(collection: string, field: string, runId: string, ageDays: number) {
+      await db()
+        .collection<{ _id: string }>(collection)
+        .updateOne({ _id: runId }, { $set: { [field]: new Date(Date.now() - ageDays * DAY) } });
+    }
+
+    const backdateOwner = (runId: string, ageDays: number) =>
+      backdate(TABLE_WORKFLOW_RUN_OWNERS, 'updatedAt', runId, ageDays);
+    const backdateRetired = (runId: string, ageDays: number) =>
+      backdate(TABLE_MEMORY_RUN_FENCES, 'retiredAt', runId, ageDays);
+
+    async function runIds(collection: string): Promise<string[]> {
+      const docs = await db()
+        .collection<{ _id: string }>(collection)
+        .find({})
+        .project<{ _id: string }>({ _id: 1 })
+        .toArray();
+      return docs.map(d => d._id).sort();
+    }
+
+    const ownerRunIds = () => runIds(TABLE_WORKFLOW_RUN_OWNERS);
+    const fenceRunIds = () => runIds(TABLE_MEMORY_RUN_FENCES);
+
+    it('deletes owner documents idle longer than maxAge and keeps one that was just renewed', async () => {
+      await claim('run-idle');
+      const live = await claim('run-live');
+      await backdateOwner('run-idle', 40);
+      await backdateOwner('run-live', 40);
+
+      const renewed = await store.stores.workflows!.renewRunOwnership({ ...live, leaseMs: LEASE_MS });
+      expect(renewed.renewed).toBe(true);
+
+      const results = await store.stores.workflows!.prune({ runOwnership: { maxAge: '30d' } });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({ domain: 'workflows', table: TABLE_WORKFLOW_RUN_OWNERS, done: true });
+      expect(results[0]!.deleted).toBe(1);
+      expect(await ownerRunIds()).toEqual(['run-live']);
+    });
+
+    // The two collections are pruned independently. A claim after its owner
+    // document was pruned must still land above the surviving fence, or the
+    // execution could never raise it.
+    it('claims above a surviving fence after the owner document was pruned', async () => {
+      const first = await claim('run-reused', 'owner-a');
+      expect(await store.stores.memory!.raiseRunFence(first)).toBe(true);
+      await backdateOwner('run-reused', 40);
+
+      await store.stores.workflows!.prune({ runOwnership: { maxAge: '30d' } });
+      expect(await store.stores.workflows!.getRunOwnership({ runId: 'run-reused' })).toBeNull();
+      expect(await fenceRunIds()).toEqual(['run-reused']);
+
+      const second = await claim('run-reused', 'owner-b');
+      expect(second.generation).toBeGreaterThan(first.generation);
+      expect(await store.stores.memory!.raiseRunFence(second)).toBe(true);
+    });
+
+    it('never deletes an un-retired fence and deletes a retired one older than maxAge', async () => {
+      const running = { runId: 'run-running', generation: Date.now(), ownerId: 'owner-a' };
+      const retiredOld = { runId: 'run-retired-old', generation: Date.now(), ownerId: 'owner-a' };
+      const retiredNew = { runId: 'run-retired-new', generation: Date.now(), ownerId: 'owner-a' };
+      for (const fence of [running, retiredOld, retiredNew]) {
+        expect(await store.stores.memory!.raiseRunFence(fence)).toBe(true);
+      }
+      expect(await store.stores.memory!.retireRunFence(retiredOld)).toBe(true);
+      expect(await store.stores.memory!.retireRunFence(retiredNew)).toBe(true);
+      await backdateRetired('run-retired-old', 40);
+
+      const results = await store.stores.memory!.prune({ runFences: { maxAge: '30d' } });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({ domain: 'memory', table: TABLE_MEMORY_RUN_FENCES, done: true });
+      expect(results[0]!.deleted).toBe(1);
+      expect(await fenceRunIds()).toEqual(['run-retired-new', 'run-running']);
+    });
+
+    it('un-retires a fence when a later execution raises it, so prune keeps it', async () => {
+      const first = { runId: 'run-resumed', generation: Date.now(), ownerId: 'owner-a' };
+      expect(await store.stores.memory!.raiseRunFence(first)).toBe(true);
+      expect(await store.stores.memory!.retireRunFence(first)).toBe(true);
+      await backdateRetired('run-resumed', 40);
+
+      const next = { ...first, generation: first.generation + 1, ownerId: 'owner-b' };
+      expect(await store.stores.memory!.raiseRunFence(next)).toBe(true);
+
+      await store.stores.memory!.prune({ runFences: { maxAge: '30d' } });
+
+      expect(await fenceRunIds()).toEqual(['run-resumed']);
+    });
+
+    it('routes workflows.runOwnership and memory.runFences through the composite prune()', async () => {
+      const configured = newStore(DB, {
+        retention: { workflows: { runOwnership: { maxAge: '30d' } }, memory: { runFences: { maxAge: '30d' } } },
+      });
+      await configured.init();
+      try {
+        const fence = await claim('run-settled');
+        expect(await store.stores.memory!.raiseRunFence(fence)).toBe(true);
+        expect(await store.stores.memory!.retireRunFence(fence)).toBe(true);
+        await backdateOwner('run-settled', 40);
+        await backdateRetired('run-settled', 40);
+
+        const results = await configured.prune();
+
+        expect(results.map(r => r.table)).toEqual(
+          expect.arrayContaining([TABLE_WORKFLOW_RUN_OWNERS, TABLE_MEMORY_RUN_FENCES]),
+        );
+        expect(await ownerRunIds()).toEqual([]);
+        expect(await fenceRunIds()).toEqual([]);
+      } finally {
+        await configured.close().catch(() => {});
+      }
+    });
+
+    // Each batch finds aged _ids, then deletes them. A run renewed in between
+    // must survive, so the delete re-checks the anchor.
+    it('keeps a document renewed between the batch find and its delete', async () => {
+      const live = await claim('run-renewed-mid-prune');
+      await backdateOwner('run-renewed-mid-prune', 40);
+
+      const find = Collection.prototype.find;
+      const spy = vi.spyOn(Collection.prototype, 'find').mockImplementation(function (
+        this: Collection,
+        ...args: any[]
+      ) {
+        const cursor = (find as (...a: any[]) => ReturnType<Collection['find']>).apply(this, args);
+        if (this.collectionName !== TABLE_WORKFLOW_RUN_OWNERS) return cursor;
+        const toArray = cursor.toArray.bind(cursor);
+        cursor.toArray = async () => {
+          const docs = await toArray();
+          const renewed = await store.stores.workflows!.renewRunOwnership({ ...live, leaseMs: LEASE_MS });
+          expect(renewed.renewed).toBe(true);
+          return docs;
+        };
+        return cursor;
+      } as any);
+
+      try {
+        const results = await store.stores.workflows!.prune({ runOwnership: { maxAge: '30d' } });
+        expect(spy).toHaveBeenCalled();
+        expect(results[0]!.deleted).toBe(0);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await ownerRunIds()).toEqual(['run-renewed-mid-prune']);
+    });
+  });
+
   // Anchor indexes are created lazily on the first prune() call — never at
   // init() — so deployments that don't configure retention pay no index
   // write/disk overhead on their growth collections. Each test uses its own
@@ -469,6 +636,26 @@ describe('MongoDB retention', () => {
         await lazyStore.stores.experiments!.prune({ experiments: { maxAge: '30d' } });
 
         expect((await indexKeys(dbName, TABLE_EXPERIMENTS)).some(key => 'completedAt' in key)).toBe(true);
+      } finally {
+        await lazyStore.close().catch(() => {});
+      }
+    });
+
+    it('creates the runOwnership and runFences anchor indexes on first prune', async () => {
+      const dbName = lazyDb();
+      const lazyStore = newStore(dbName);
+      await lazyStore.init();
+      const hasIndexOn = (keys: Record<string, unknown>[], field: string) =>
+        keys.some(key => Object.keys(key).length === 1 && field in key);
+      try {
+        expect(hasIndexOn(await indexKeys(dbName, TABLE_WORKFLOW_RUN_OWNERS), 'updatedAt')).toBe(false);
+        expect(hasIndexOn(await indexKeys(dbName, TABLE_MEMORY_RUN_FENCES), 'retiredAt')).toBe(false);
+
+        await lazyStore.stores.workflows!.prune({ runOwnership: { maxAge: '30d' } });
+        await lazyStore.stores.memory!.prune({ runFences: { maxAge: '30d' } });
+
+        expect(hasIndexOn(await indexKeys(dbName, TABLE_WORKFLOW_RUN_OWNERS), 'updatedAt')).toBe(true);
+        expect(hasIndexOn(await indexKeys(dbName, TABLE_MEMORY_RUN_FENCES), 'retiredAt')).toBe(true);
       } finally {
         await lazyStore.close().catch(() => {});
       }

@@ -4,6 +4,7 @@ import { DataListNextPageLoading } from '../data-list-next-page-loading';
 import { DataListNoMatch } from '../data-list-no-match';
 import { DataListRoot } from '../data-list-root';
 import { DataListRowButton } from '../data-list-row-button';
+import { DataListSortableTopCell } from '../data-list-sortable-top-cell';
 import { DataListSpacer } from '../data-list-spacer';
 import { DataListSubheader } from '../data-list-subheader';
 import { DataListSubHeading } from '../data-list-subheading';
@@ -12,7 +13,8 @@ import { DataListTopCell, DataListTopCellWithTooltip } from '../data-list-top-ce
 import {
   TracesDataListNameCell,
   TracesDataListInputCell,
-  TracesDataListEntityCell,
+  TracesDataListOutputCell,
+  TracesDataListTypeCell,
   TracesDataListStatusCell,
 } from './traces-data-list-cells';
 
@@ -25,6 +27,7 @@ function TracesDataListRoot(props: ComponentProps<typeof DataListRoot>) {
 export const TracesDataList = Object.assign(TracesDataListRoot, {
   Top: DataListTop,
   TopCell: DataListTopCell,
+  SortableTopCell: DataListSortableTopCell,
   TopCellWithTooltip: DataListTopCellWithTooltip,
   RowButton: DataListRowButton,
   NoMatch: DataListNoMatch,
@@ -35,7 +38,8 @@ export const TracesDataList = Object.assign(TracesDataListRoot, {
   CreatedCell: DataListCreatedCell,
   NameCell: TracesDataListNameCell,
   InputCell: TracesDataListInputCell,
-  EntityCell: TracesDataListEntityCell,
+  OutputCell: TracesDataListOutputCell,
+  TypeCell: TracesDataListTypeCell,
   StatusCell: TracesDataListStatusCell,
   NextPageLoading: DataListNextPageLoading,
 });

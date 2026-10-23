@@ -12,7 +12,7 @@ import type { JWTPayload } from 'jose';
 export interface GoogleUser extends EEUser {
   /** Google Account subject identifier. */
   googleId: string;
-  /** Verified ID token expiration time, when available. */
+  /** Verified ID token expiry for bearer ID-token users, or session expiry for SSO cookie users. */
   expiresAt?: Date;
   /** Google Workspace or Cloud organization domain from the verified `hd` claim. */
   hostedDomain?: string;

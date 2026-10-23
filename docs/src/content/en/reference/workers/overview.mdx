@@ -34,6 +34,8 @@ Controls which workers start in the current process.
 
 Use this to run different worker types in separate containers from the same build artifact.
 
+Setting `MASTRA_WORKERS` to any value, including `"false"`, also makes `createWorkflow` build workflows that declare `schedule` on the evented engine. Set it on every process in a split deployment. See [Scheduled workflows](/docs/workflows/scheduled-workflows#execution-engine).
+
 ### `MASTRA_STEP_EXECUTION_URL`
 
 The base URL of the API server, used by the orchestration worker to execute workflow steps remotely. Required when the orchestration worker runs in a separate process from the API.
@@ -70,7 +72,7 @@ Processes workflow events from the PubSub `workflows` topic. Requires a pull-cap
 
 ### SchedulerWorker
 
-Polls storage for due cron schedules and publishes `workflow.start` events.
+Polls storage for due cron schedules and publishes a `workflow.start` event to the `workflows` topic for each fire. The orchestration worker runs default-engine workflows in-process and evented workflows step by step.
 
 - **Name**: `scheduler`
 - **Single instance only**: Run exactly one instance to avoid duplicate fires

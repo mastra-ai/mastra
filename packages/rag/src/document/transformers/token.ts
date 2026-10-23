@@ -59,7 +59,7 @@ export class TokenTransformer extends TextTransformer {
       try {
         this.tokenizer = modelName ? encodingForModel(modelName) : getEncoding(encodingName);
       } catch {
-        throw new Error('Could not load tiktoken encoding. ' + 'Please install it with `npm install js-tiktoken`.');
+        throw new Error('Could not load tiktoken encoding. Please install it with `npm install js-tiktoken`.');
       }
     }
 
@@ -106,7 +106,7 @@ export class TokenTransformer extends TextTransformer {
         tokenizer = getEncoding(encodingName);
       }
     } catch {
-      throw new Error('Could not load tiktoken encoding. ' + 'Please install it with `npm install js-tiktoken`.');
+      throw new Error('Could not load tiktoken encoding. Please install it with `npm install js-tiktoken`.');
     }
 
     const tikTokenEncoder = (text: string): number => {
@@ -130,8 +130,7 @@ export class TokenTransformer extends TextTransformer {
       allowedSpecial: options.allowedSpecial,
       disallowedSpecial: options.disallowedSpecial,
       options: {
-        maxSize: options.maxSize,
-        overlap: options.overlap,
+        ...options,
         lengthFunction: tikTokenEncoder,
       },
     });

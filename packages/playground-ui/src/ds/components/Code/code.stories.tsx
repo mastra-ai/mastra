@@ -7,7 +7,7 @@ const meta: Meta<typeof Code> = {
   component: Code,
   decorators: [
     Story => (
-      <div className="text-ui-sm text-neutral5 w-full p-4 font-mono">
+      <div className="w-full p-4 font-mono text-caption text-foreground">
         <Story />
       </div>
     ),
@@ -17,7 +17,7 @@ const meta: Meta<typeof Code> = {
     docs: {
       description: {
         component:
-          'Low-level shiki token renderer shared by `CodeBlock` and `MarkdownRenderer`. Renders a bare `<pre><code>` with CSS-driven dual-theme colors (`.shiki-token` + `--shiki-light`/`--shiki-dark` variables) — no chrome, no copy button. Prefer `CodeBlock` unless you are building a custom code surface.',
+          'Low-level syntax-highlighted renderer shared by `CodeBlock` and `MarkdownRenderer`. Renders a bare `<pre><code>` with CSS-driven colors (`syntax-*` role classes backed by `--syntax-*` variables, the same palette as the editors) — no chrome, no copy button. Prefer `CodeBlock` unless you are building a custom code surface.',
       },
     },
   },

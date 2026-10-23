@@ -1,3 +1,4 @@
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export interface DataDetailsPanelHeadingProps {
@@ -7,8 +8,8 @@ export interface DataDetailsPanelHeadingProps {
 
 export function DataDetailsPanelHeading({ className, children }: DataDetailsPanelHeadingProps) {
   return (
-    <h3 className={cn('flex gap-2 text-ui-md text-neutral3 [&>b]:font-normal [&>b]:text-neutral2', className)}>
+    <Txt as="h3" tone="muted" className={cn('flex gap-2 [&>b]:text-caption [&>b]:text-placeholder', className)}>
       {children}
-    </h3>
+    </Txt>
   );
 }

@@ -42,6 +42,21 @@ export function tracePayloadBytes(trace: TraceImportTrace): number {
   return EMPTY_PAYLOAD_BYTES + spanBytes.reduce((total, bytes) => total + bytes, 0) + Math.max(0, spanBytes.length - 1);
 }
 
+/** Serialize the exact collector request body represented by a prepared batch. */
+export function serializePreparedTraceBatch(batch: PreparedTraceBatch): string {
+  const spans = batch.traces.flatMap(trace => trace.spans);
+  if (spans.length !== batch.spanCount) {
+    throw new Error('Cannot upload an internally inconsistent trace batch.');
+  }
+
+  const body = JSON.stringify({ spans });
+  if (Buffer.byteLength(body) !== batch.payloadBytes) {
+    throw new Error('Prepared trace batch size does not match its upload payload.');
+  }
+
+  return body;
+}
+
 function traceBatchContribution(trace: TraceImportTrace): number {
   const spanBytes = serializedSpanBytes(trace);
   return spanBytes.reduce((total, bytes) => total + bytes, 0) + Math.max(0, spanBytes.length - 1);
@@ -107,6 +122,13 @@ export async function prepareTraceImport(options: PrepareTraceImportOptions): Pr
     acknowledgedSpans: 0,
     warnings: [],
     skippedTraceSamples: [],
+    verification: {
+      status: 'not-performed',
+      sampledTraces: 0,
+      verifiedTraces: 0,
+      queryAttempts: 0,
+      differences: [],
+    },
   };
   manifest = await writeTraceImportManifest(options.directory, manifest);
 
@@ -265,7 +287,7 @@ export async function* readPendingTraceBatches(
   if (traces.length) yield { firstTraceIndex, traces, spanCount, payloadBytes };
 }
 
-/** Remove prepared trace data only after every trace has been acknowledged. */
+/** Remove prepared trace data only after upload and read-back verification succeed. */
 export async function completeTraceImport(directory: string): Promise<TraceImportManifest> {
   const manifest = await readTraceImportManifest(directory);
   if (manifest.phase === 'preparing') {
@@ -276,6 +298,9 @@ export async function completeTraceImport(directory: string): Promise<TraceImpor
     manifest.acknowledgedSpans !== manifest.counts.preparedSpans
   ) {
     throw new Error('Cannot complete an import while prepared traces remain unacknowledged.');
+  }
+  if (manifest.verification.status !== 'verified') {
+    throw new Error('Cannot complete an import before read-back verification succeeds.');
   }
 
   const completed =

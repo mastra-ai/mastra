@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createServer } from 'node:http';
 import { createTool } from '@mastra/core/tools';
-import type { PromptMessage, Resource, ResourceTemplateType } from '@modelcontextprotocol/server';
+import type { Prompt, PromptMessage, Resource, ResourceTemplateType } from '@modelcontextprotocol/server';
 import { z } from 'zod/v3';
 import { MCPServer } from '../server/server';
-import type { MCPServerResources, MCPServerResourceContent, MCPServerPrompts, MastraPrompt } from '../server/types';
+import type { MCPServerResources, MCPServerResourceContent, MCPServerPrompts } from '../server/types';
 
 const getWeather = async (location: string) => {
   // Return mock data for testing
@@ -125,20 +125,17 @@ const weatherPromptContents: Record<string, string> = {
   historical: JSON.stringify({ location: 'Historical weather for San Francisco' }),
 };
 
-const weatherPrompts: MastraPrompt[] = [
+const weatherPrompts: Prompt[] = [
   {
     name: 'current',
-    version: '1.0',
     description: 'Get current weather for a location',
   },
   {
     name: 'forecast',
-    version: '1.0',
     description: 'Get weather forecast for a location',
   },
   {
     name: 'historical',
-    version: '1.0',
     description: 'Get historical weather data for a location',
   },
 ];
@@ -156,13 +153,7 @@ const mcpServerResources: MCPServerResources = {
 
 const mcpServerPrompts: MCPServerPrompts = {
   listPrompts: async () => weatherPrompts,
-  getPromptMessages: async ({
-    name,
-    version: _version,
-  }: {
-    name: string;
-    version?: string;
-  }): Promise<PromptMessage[]> => {
+  getPromptMessages: async ({ name }): Promise<PromptMessage[]> => {
     const content = weatherPromptContents[name];
     if (!content) {
       throw new Error(`Mock prompt not found for ${name}`);
@@ -194,10 +185,9 @@ const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse
   const connectionLogPrefix = `[${serverId}] REQ: ${req.method} ${url.pathname}`;
   console.info(connectionLogPrefix);
 
-  await mcpServer.startSSE({
+  await mcpServer.startHTTP({
     url,
-    ssePath: '/sse',
-    messagePath: '/message',
+    httpPath: '/mcp',
     req,
     res,
   });
@@ -207,7 +197,7 @@ const HOST = process.env.WEATHER_SERVER_HOST || '127.0.0.1';
 const PORT = process.env.WEATHER_SERVER_PORT || 60808;
 console.info(`[${serverId}] Starting HTTP server on ${HOST}:${PORT}`);
 httpServer.listen(Number(PORT), HOST, () => {
-  console.info(`[${serverId}] Weather server is running on SSE at http://${HOST}:${PORT}`);
+  console.info(`[${serverId}] Weather server is running at http://${HOST}:${PORT}/mcp`);
 });
 
 // --- Interval-based Notifications ---

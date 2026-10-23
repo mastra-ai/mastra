@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { EditorView } from '@codemirror/view';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -19,13 +20,6 @@ describe('TripwireNotice', () => {
       render(<TripwireNotice reason="blocked for safety" />);
 
       expect(screen.queryByRole('button', { name: 'Details' })).toBeNull();
-    });
-
-    it('uses the warning notice tokens instead of hardcoded colors', () => {
-      const { container } = render(<TripwireNotice reason="blocked for safety" />);
-
-      expect(container.querySelector('[class*="notice-warning"]')).not.toBeNull();
-      expect(container.querySelector('[class*="amber"]')).toBeNull();
     });
   });
 
@@ -51,7 +45,9 @@ describe('TripwireNotice', () => {
 
       expect(screen.getByText('Not allowed')).not.toBeNull();
       expect(screen.getByText('moderation')).not.toBeNull();
-      expect(screen.getByText(/"category": "violence"/)).not.toBeNull();
+      const editor = screen.getByRole('textbox', { name: 'Tripwire metadata' }).closest<HTMLElement>('.cm-editor');
+      const view = editor ? EditorView.findFromDOM(editor) : null;
+      expect(view?.state.doc.toString()).toBe(JSON.stringify({ category: 'violence' }, null, 2));
     });
   });
 

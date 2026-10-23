@@ -4,8 +4,10 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../../agent/types';
+import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import { modelSupportsStructuredOutput, modelSupportsTemperature } from '../../../llm/model/provider-registry';
+import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import {
   createTimeoutAbortSignal,
@@ -68,6 +70,78 @@ function isRetryableModelError(error: unknown): boolean {
   return true;
 }
 
+/**
+ * Whether a JSON schema has an object with free-form keys (e.g. `z.record()`), which OpenAI
+ * strict mode cannot express: it requires every object to list fixed keys with
+ * `additionalProperties: false`.
+ */
+export function hasFreeFormObject(schema: unknown): boolean {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return false;
+  const node = schema as Record<string, unknown>;
+  const additional = node.additionalProperties;
+  if (additional === true || (additional && typeof additional === 'object')) return true;
+  if (node.patternProperties || node.propertyNames) return true;
+
+  // Only descend into keywords that hold subschemas. Data keywords (`default`, `const`,
+  // `enum`, `examples`) and property names are not schemas and must not trigger a match.
+  const subschemas: unknown[] = [];
+  for (const key of ['properties', '$defs', 'definitions'] as const) {
+    const map = node[key];
+    if (map && typeof map === 'object' && !Array.isArray(map)) subschemas.push(...Object.values(map));
+  }
+  for (const key of ['anyOf', 'oneOf', 'allOf'] as const) {
+    const list = node[key];
+    if (Array.isArray(list)) subschemas.push(...list);
+  }
+  const items = node.items;
+  if (Array.isArray(items)) subschemas.push(...items);
+  else if (items) subschemas.push(items);
+  if (Array.isArray(node.prefixItems)) subschemas.push(...node.prefixItems);
+  return subschemas.some(hasFreeFormObject);
+}
+
+function readStrictJsonSchemaOption(options: unknown): boolean | undefined {
+  if (!options || typeof options !== 'object') return undefined;
+  const strictJsonSchema = (options as { strictJsonSchema?: unknown }).strictJsonSchema;
+  return typeof strictJsonSchema === 'boolean' ? strictJsonSchema : undefined;
+}
+
+/**
+ * Whether the model sends structured output as an OpenAI strict json_schema, which
+ * requires the schema to be prepared (all properties required, no unsupported keywords).
+ *
+ * OpenAI providers are detected by provider id. Other provider instances (for example
+ * `@ai-sdk/openai-compatible` models created with `supportsStructuredOutputs: true`) are
+ * detected by capability, honoring a `strictJsonSchema` override in their provider options.
+ * Model-router models always advertise structured output support, so they keep deciding by
+ * provider id.
+ */
+// Native @ai-sdk/openai ids are 'openai.chat', 'openai.responses', ...; 'openai-compatible.*' reads its own provider options.
+const isNativeOpenAIProvider = (provider: string) => /^openai(\.|$)/.test(provider);
+
+export function usesOpenAIStrictJsonSchema(
+  model: Pick<MastraLanguageModel, 'provider'> & { supportsStructuredOutputs?: unknown },
+  providerOptions?: SharedProviderOptions,
+): boolean {
+  if (isNativeOpenAIProvider(model.provider)) return true;
+  if (model instanceof ModelRouterLanguageModel || model.supportsStructuredOutputs !== true) return false;
+
+  const providerKey = model.provider.split('.')[0]!;
+  const camelCaseProviderKey = providerKey
+    .split(/[-_]/)
+    .map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
+    .join('');
+  const options = providerOptions as Record<string, unknown> | undefined;
+  // Highest precedence first, matching @ai-sdk/openai-compatible (the only version that sends `strict`).
+  for (const key of new Set([camelCaseProviderKey, providerKey, 'openaiCompatible', 'openai-compatible'])) {
+    const strictJsonSchema = readStrictJsonSchemaOption(options?.[key]);
+    if (strictJsonSchema !== undefined) return strictJsonSchema;
+  }
+
+  // @ai-sdk/openai-compatible sends strict json_schema by default.
+  return true;
+}
+
 export function resolveJsonPromptInjection(
   value: JsonPromptInjection,
   capability: boolean | undefined,
@@ -76,10 +150,28 @@ export function resolveJsonPromptInjection(
   return capability === true ? undefined : 'inline';
 }
 
+/**
+ * Whether a step sends a native structured-output schema (`responseFormat`) to the model.
+ * Tools are dropped under `toolChoice: 'none'` only in this case (#14459); when the schema is
+ * injected into the prompt instead, tools are kept so providers retain tool history (#25908).
+ */
+export function sendsNativeResponseFormat(
+  structuredOutput: { schema?: unknown; model?: unknown; jsonPromptInjection?: JsonPromptInjection } | undefined,
+  model: { provider: string; modelId: string },
+): boolean {
+  if (!structuredOutput?.schema || structuredOutput.model) return false;
+  const { jsonPromptInjection } = structuredOutput;
+  const modelRoute = `${model.provider.split('.')[0]}/${model.modelId}`;
+  return !resolveJsonPromptInjection(
+    jsonPromptInjection,
+    jsonPromptInjection === 'auto' ? modelSupportsStructuredOutput(modelRoute) : undefined,
+  );
+}
+
 type InjectJsonInstructionArgs = Parameters<typeof injectJsonInstructionIntoMessagesV3>[0];
 
 /**
- * Typed V2 wrapper for the provider-utils v4 helper, which only reads and rewrites the
+ * Typed V2 wrapper for the `@ai-sdk/provider-utils-v6` helper, which only reads and rewrites the
  * leading system message's string content — a shape shared by V2 and V3 prompts.
  */
 function injectJsonInstructionIntoMessages(
@@ -91,18 +183,31 @@ function injectJsonInstructionIntoMessages(
   }) as unknown as LanguageModelV2Prompt;
 }
 
-function buildJsonInstruction(schema: unknown) {
+/**
+ * Caller-supplied `structuredOutput.instructions` replace the generated schema dump only when
+ * they carry actual text. Empty / whitespace-only values fall back to the generated instruction.
+ */
+function hasCompactInstructions(instructions: string | undefined): instructions is string {
+  return typeof instructions === 'string' && instructions.trim().length > 0;
+}
+
+function buildJsonInstruction(schema: unknown, instructions?: string) {
+  if (hasCompactInstructions(instructions)) {
+    return instructions;
+  }
   return `Return your response as JSON matching this schema:\n\n${JSON.stringify(schema)}\n\nReturn only valid JSON. Do not include markdown or explanatory text.`;
 }
 
 function injectJsonInstructionIntoLatestUserMessage({
   messages,
   schema,
+  instructions,
 }: {
   messages: LanguageModelV2Prompt;
   schema: unknown;
+  instructions?: string;
 }): LanguageModelV2Prompt {
-  const instruction = buildJsonInstruction(schema);
+  const instruction = buildJsonInstruction(schema, instructions);
   const prompt = messages.map(message => ({
     ...message,
     content: Array.isArray(message.content) ? [...message.content] : message.content,
@@ -188,18 +293,19 @@ export function execute<OUTPUT = undefined>({
   const targetVersion: ModelSpecVersion =
     model.specificationVersion === 'v4' ? 'v4' : model.specificationVersion === 'v3' ? 'v3' : 'v2';
 
-  const toolsAndToolChoice = prepareToolsAndToolChoice({
-    tools,
-    toolChoice,
-    activeTools,
-    targetVersion,
-  });
-
   const structuredOutputMode = structuredOutput?.schema
     ? structuredOutput?.model
       ? 'processor'
       : 'direct'
     : undefined;
+
+  const toolsAndToolChoice = prepareToolsAndToolChoice({
+    tools,
+    toolChoice,
+    activeTools,
+    targetVersion,
+    stripToolsWhenNone: sendsNativeResponseFormat(structuredOutput, model),
+  });
 
   const responseFormat = structuredOutput?.schema
     ? getResponseFormat(structuredOutput?.schema, {
@@ -222,25 +328,36 @@ export function execute<OUTPUT = undefined>({
 
   // For direct mode (no model provided for structuring agent), inject JSON schema instruction if opting out of native response format with jsonPromptInjection
   if (structuredOutputMode === 'direct' && responseFormat?.type === 'json' && injectionMode) {
+    const compactInstructions = hasCompactInstructions(structuredOutput?.instructions)
+      ? structuredOutput.instructions
+      : undefined;
     prompt =
       injectionMode === 'inline'
         ? injectJsonInstructionIntoLatestUserMessage({
             messages: inputMessages,
             schema: responseFormat.schema,
+            instructions: compactInstructions,
           })
         : injectJsonInstructionIntoMessages({
             messages: inputMessages,
-            schema: responseFormat.schema,
+            // Compact instructions replace the schema dump entirely. Passing them in the
+            // `schemaSuffix` slot (with no schema) suppresses the AI SDK's default generic
+            // suffix, which would otherwise be appended when `schema` is nullish.
+            ...(compactInstructions
+              ? { schema: undefined, schemaPrefix: undefined, schemaSuffix: compactInstructions }
+              : { schema: responseFormat.schema }),
           });
   }
 
   // For processor mode without agent reuse, inject a custom prompt to inform the main agent
   // about the structured output schema that the structuring agent will use.
+  // An explicit `jsonPromptInjection: false` opts out of this hint.
   if (
     structuredOutputMode === 'processor' &&
     responseFormat?.type === 'json' &&
     responseFormat?.schema &&
-    !structuredOutput?.useAgent
+    !structuredOutput?.useAgent &&
+    jsonPromptInjection !== false
   ) {
     prompt = injectJsonInstructionIntoMessages({
       messages: inputMessages,
@@ -256,28 +373,44 @@ export function execute<OUTPUT = undefined>({
    * @see https://platform.openai.com/docs/guides/structured-outputs#structured-outputs-vs-json-mode
    * @see https://ai-sdk.dev/docs/ai-sdk-core/generating-structured-data#accessing-reasoning
    */
-  const isOpenAIStrictMode = model.provider.startsWith('openai') && responseFormat?.type === 'json' && !injectionMode;
+  // Strict json_schema (OpenAI, and OpenAI-compatible providers with native structured output)
+  // requires all properties to be required, additionalProperties: false, and no unsupported keywords.
+  const isOpenAIProvider = isNativeOpenAIProvider(model.provider);
+  // OpenAI rejects free-form objects in strict mode, so send those schemas non-strict instead of
+  // rewriting them into objects that can hold no keys. Mastra still validates the result against the schema.
+  const sendNonStrict =
+    isOpenAIProvider &&
+    providerOptions?.openai?.strictJsonSchema !== true &&
+    hasFreeFormObject(responseFormat?.type === 'json' ? responseFormat.schema : undefined);
+  const isStrictJsonSchemaMode =
+    responseFormat?.type === 'json' &&
+    !injectionMode &&
+    !sendNonStrict &&
+    usesOpenAIStrictJsonSchema(model, providerOptions);
 
-  // For OpenAI strict mode, ensure all properties are required and additionalProperties: false
-  if (isOpenAIStrictMode && responseFormat?.schema) {
+  if (isStrictJsonSchemaMode && responseFormat?.schema) {
     responseFormat.schema = prepareJsonSchemaForOpenAIStrictMode(responseFormat.schema);
   }
 
-  const providerOptionsToUse: SharedProviderOptions | undefined = isOpenAIStrictMode
-    ? {
-        ...(providerOptions ?? {}),
-        openai: {
-          strictJsonSchema: true,
-          ...(providerOptions?.openai ?? {}),
-        },
-      }
-    : providerOptions;
+  // Only OpenAI providers read `providerOptions.openai`; OpenAI-compatible providers send strict by default
+  // and read their own provider key.
+  const providerOptionsToUse: SharedProviderOptions | undefined =
+    (isStrictJsonSchemaMode || sendNonStrict) && isOpenAIProvider
+      ? {
+          ...(providerOptions ?? {}),
+          openai: {
+            strictJsonSchema: isStrictJsonSchemaMode,
+            ...(providerOptions?.openai ?? {}),
+          },
+        }
+      : providerOptions;
 
   const stream = v5.initialize({
     runId,
     onResult,
     createStream: async () => {
       try {
+        const timeout = validateModelTimeoutSettings(modelSettings?.timeout);
         let filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'timeout']);
 
         // Capability-gated stripping of sampling params for models that reject them
@@ -294,7 +427,7 @@ export function execute<OUTPUT = undefined>({
         // returned stream ends, so a provider that stalls mid-stream is caught too.
         const { signal: abortSignal, cleanup: cleanupStepTimeout } = createTimeoutAbortSignal({
           parentSignal: options?.abortSignal,
-          timeoutMs: modelSettings?.timeout?.stepMs,
+          timeoutMs: timeout?.stepMs,
           timeoutType: 'step',
         });
         let callAbortSignal = abortSignal;
@@ -306,7 +439,7 @@ export function execute<OUTPUT = undefined>({
             async () => {
               const firstChunkTimeout = createTimeoutAbortSignal({
                 parentSignal: abortSignal,
-                timeoutMs: methodType === 'stream' ? modelSettings?.timeout?.firstChunkMs : undefined,
+                timeoutMs: methodType === 'stream' ? timeout?.firstChunkMs : undefined,
                 timeoutType: 'firstChunk',
               });
               callAbortSignal = firstChunkTimeout.signal;

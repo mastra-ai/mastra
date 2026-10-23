@@ -1,6 +1,8 @@
 import type { EntityType } from '@mastra/core/observability';
-import type { LightSpanRecord } from '@mastra/core/storage';
+import type { LightSpanRecord } from '@mastra/react/hooks/traces';
 import type { ReactNode } from 'react';
+
+export type { LightSpanRecord, SpanRecord } from '@mastra/react/hooks/traces';
 
 /**
  * A light span carrying a precomputed haystack of everything it holds.
@@ -32,6 +34,8 @@ export type UISpan = {
    * timeline paints such a row differently since the term is nowhere on it.
    */
   matchedInPayloadOnly?: boolean;
+  /** What started an agent run when a signal (a skill, a reminder…) did, e.g. `Skill factory-triage`. */
+  signalLabel?: string;
 };
 
 export type UISpanStyle = {

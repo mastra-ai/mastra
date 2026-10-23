@@ -10,6 +10,46 @@ import type {
 import { BaseSpan } from './base';
 import { deepClean } from './serialization';
 
+/** Every AI SDK `APICallError` (v4, v5 and v6) carries this shared marker symbol. */
+const API_CALL_ERROR_MARKER = Symbol.for('vercel.ai.error.AI_APICallError');
+
+interface ApiCallErrorLike {
+  statusCode?: number;
+  url?: string;
+  isRetryable?: boolean;
+  responseBody?: string;
+}
+
+function isApiCallError(value: unknown): value is ApiCallErrorLike {
+  return (
+    typeof value === 'object' && value !== null && (value as Record<symbol, unknown>)[API_CALL_ERROR_MARKER] === true
+  );
+}
+
+/**
+ * HTTP facts of a provider call failure, read from an AI SDK `APICallError` or
+ * from the one a wrapper (MastraError, durable transport) carries as `cause`.
+ * Without them a span only says "Service Unavailable", with no status or URL.
+ */
+function apiCallErrorDetails(error: Error): Record<string, unknown> | undefined {
+  const apiError = isApiCallError(error) ? error : isApiCallError(error.cause) ? error.cause : undefined;
+  if (!apiError) return undefined;
+  const details: Record<string, unknown> = {};
+  if (apiError.statusCode !== undefined) details.statusCode = apiError.statusCode;
+  // Keep only origin and path: a custom baseURL may carry a credential in the query string.
+  if (apiError.url !== undefined) details.url = apiError.url.split('?')[0];
+  if (apiError.isRetryable !== undefined) details.isRetryable = apiError.isRetryable;
+  if (apiError.responseBody !== undefined) {
+    // Providers usually answer with JSON; keep it as an object so its keys stay readable and filterable.
+    try {
+      details.responseBody = JSON.parse(apiError.responseBody);
+    } catch {
+      details.responseBody = apiError.responseBody;
+    }
+  }
+  return details;
+}
+
 export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   public id: string;
   public traceId: string;
@@ -32,7 +72,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 
     // If bridge and not internal span, use bridge to init span
     const bridge = observabilityInstance.getBridge();
-    if (bridge && !this.isInternal) {
+    if (bridge && !this.isInternal && !this.isExcluded) {
       const bridgeIds = bridge.createSpan(options);
       if (bridgeIds) {
         this.id = bridgeIds.spanId;
@@ -129,11 +169,12 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     }
 
     if (!this.isExcluded) {
+      const apiDetails = apiCallErrorDetails(error);
       this.errorInfo = deepClean(
         error instanceof MastraError
           ? {
               id: error.id,
-              details: error.details,
+              details: apiDetails ? { ...error.details, ...apiDetails } : error.details,
               category: error.category,
               domain: error.domain,
               message: error.message,
@@ -147,6 +188,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
               message: error.message,
               name: error.name,
               stack: error.stack,
+              ...(apiDetails && { details: apiDetails }),
             },
         this.deepCleanOptions,
       );

@@ -1,10 +1,21 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { format, isThisYear, isToday } from 'date-fns';
-import { CircleSlashIcon, ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
+import { z } from 'zod';
+
+export type DatasetItemsSortKey = 'createdAt';
+
+export interface DatasetItemsColumn {
+  name: string;
+  label: string;
+  size: string;
+  sortKey?: DatasetItemsSortKey;
+}
 
 export interface DatasetItemsListProps {
   items: DatasetItem[];
@@ -16,8 +27,11 @@ export interface DatasetItemsListProps {
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
-  columns?: { name: string; label: string; size: string }[];
+  columns?: DatasetItemsColumn[];
   searchQuery?: string;
+  /** Server-side sort; a column header is sortable when it declares a `sortKey` and `onSortChange` is provided. */
+  sort?: ListSort<DatasetItemsSortKey>;
+  onSortChange?: (direction: 'asc' | 'desc', key: DatasetItemsSortKey) => void;
   // Selection props (owned by parent)
   isSelectionActive: boolean;
   selectedIds: Set<string>;
@@ -33,18 +47,19 @@ export interface DatasetItemsListProps {
 /**
  * Truncate a string to maxLength characters with ellipsis
  */
-function truncateValue(value: unknown, maxLength = 100): string {
+function truncateValue(value: DatasetItem['input'] | DatasetItem['groundTruth'], maxLength = 100): string {
   if (value === undefined || value === null) return '-';
-  const str = typeof value === 'string' ? value : JSON.stringify(value);
+  const parsedString = z.string().safeParse(value);
+  const str = parsedString.success ? parsedString.data : JSON.stringify(value);
   if (!str || str.length <= maxLength) return str || '-';
   return str.slice(0, maxLength) + '...';
 }
 
-function formatDate(date: Date): string {
-  const dayMonth = isToday(date) ? 'Today' : format(date, 'MMM dd');
-  const year = !isThisYear(date) ? format(date, 'yyyy') : '';
-  const time = format(date, "'at' h:mm aaa");
-  return `${dayMonth} ${year} ${time}`.replace(/\s+/g, ' ').trim();
+const expectedTrajectorySchema = z.object({ steps: z.array(z.unknown()) });
+
+function formatExpectedTrajectory(value: DatasetItem['expectedTrajectory']): string {
+  const result = expectedTrajectorySchema.safeParse(value);
+  return result.success ? `${result.data.steps.length} steps` : 'Yes';
 }
 
 export function DatasetItemsList({
@@ -66,6 +81,8 @@ export function DatasetItemsList({
   onAddClick,
   onImportClick,
   onImportJsonClick,
+  sort,
+  onSortChange,
 }: DatasetItemsListProps) {
   const { containerRef, getRowProps } = useDataListKeyboard({
     count: items.length,
@@ -110,6 +127,20 @@ export function DatasetItemsList({
     onToggleSelection(id, shiftKey, allIds);
   };
 
+  const renderTopCell = (col: DatasetItemsColumn) =>
+    col.sortKey && onSortChange ? (
+      <DataList.SortableTopCell
+        key={col.name}
+        sortKey={col.sortKey}
+        sort={sort?.key === col.sortKey ? sort.direction : undefined}
+        onSortChange={onSortChange}
+      >
+        {col.label || col.name}
+      </DataList.SortableTopCell>
+    ) : (
+      <DataList.TopCell key={col.name}>{col.label || col.name}</DataList.TopCell>
+    );
+
   const gridColumns = [isSelectionActive ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
 
   return (
@@ -123,13 +154,9 @@ export function DatasetItemsList({
           />
         )}
         {isSelectionActive ? (
-          <DataList.TopCells colStart={2}>
-            {columns.map(col => (
-              <DataList.TopCell key={col.name}>{col.label || col.name}</DataList.TopCell>
-            ))}
-          </DataList.TopCells>
+          <DataList.TopCells colStart={2}>{columns.map(renderTopCell)}</DataList.TopCells>
         ) : (
-          columns.map(col => <DataList.TopCell key={col.name}>{col.label || col.name}</DataList.TopCell>)
+          columns.map(renderTopCell)
         )}
       </DataList.Top>
 
@@ -150,17 +177,17 @@ export function DatasetItemsList({
                 </DataList.TextCell>
                 <DataList.Cell className="min-w-0">
                   {item.expectedTrajectory ? (
-                    <span className="text-ui-smd text-neutral3">
-                      {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
-                        ? `${((item.expectedTrajectory as Record<string, unknown>).steps as unknown[]).length} steps`
-                        : 'Yes'}
-                    </span>
+                    <Txt as="span" variant="body-sm" tone="muted">
+                      {formatExpectedTrajectory(item.expectedTrajectory)}
+                    </Txt>
                   ) : (
-                    <span className="text-neutral4">—</span>
+                    <span className="text-muted-foreground">—</span>
                   )}
                 </DataList.Cell>
                 <DataList.Cell className="min-w-0">
-                  <span className="text-ui-smd text-neutral2 block truncate">{formatDate(createdAtDate)}</span>
+                  <Txt as="span" variant="body-sm" tone="faint" className="block truncate">
+                    {formatDate(createdAtDate, 'date-time')}
+                  </Txt>
                 </DataList.Cell>
               </>
             );
@@ -217,46 +244,42 @@ interface EmptyDatasetItemListProps {
 
 function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: EmptyDatasetItemListProps) {
   return (
-    <div className="flex flex-1 items-center justify-center">
-      <EmptyState
-        iconSlot={<CircleSlashIcon />}
-        titleSlot="No items yet"
-        descriptionSlot={
-          <>
-            Add items to this dataset to use them <br />
-            in experiment runs.
-          </>
-        }
-        actionSlot={
-          <div className="flex flex-col items-center gap-2">
-            <ButtonsGroup>
-              <CreateButton variant="primary" onClick={onAddClick} tooltip="Add an item">
-                New item
-              </CreateButton>
-              {onImportClick && (
-                <Button onClick={onImportClick} icon={<Upload />}>
-                  Import CSV
-                </Button>
-              )}
-              {onImportJsonClick && (
-                <Button onClick={onImportJsonClick} icon={<FileJson />}>
-                  Import JSON
-                </Button>
-              )}
-            </ButtonsGroup>
-            <Button
-              variant="ghost"
-              as="a"
-              href="https://mastra.ai/docs/evals/datasets"
-              target="_blank"
-              rel="noopener noreferrer"
-              icon={<ExternalLinkIcon />}
-            >
-              Datasets Documentation
-            </Button>
+    <EmptyState
+      titleSlot="No items yet"
+      descriptionSlot={
+        <>
+          Add items to this dataset to use them <br />
+          in experiment runs.
+        </>
+      }
+      actionSlot={
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2">
+            <CreateButton variant="primary" onClick={onAddClick} tooltip="Add an item">
+              New item
+            </CreateButton>
+            {onImportClick && (
+              <Button onClick={onImportClick} icon={<Upload />}>
+                Import CSV
+              </Button>
+            )}
+            {onImportJsonClick && (
+              <Button onClick={onImportJsonClick} icon={<FileJson />}>
+                Import JSON
+              </Button>
+            )}
           </div>
-        }
-      />
-    </div>
+          <Button
+            variant="ghost"
+            render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}
+
+            icon={<ExternalLinkIcon />}
+          >
+            Datasets documentation
+          </Button>
+        </div>
+      }
+      variant="fill"
+    />
   );
 }

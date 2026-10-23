@@ -3,7 +3,8 @@ import type { AgentSignalType } from '../agent/signals';
 
 /*
  * Compatibility note: @mastra/memory intentionally copies the helpers in this
- * file into packages/memory/src/index.ts instead of importing them. Its peer
+ * file into packages/memory/src/index.ts and packages/memory/src/system-reminders.ts
+ * instead of importing them. Its peer
  * range permits older core versions that do not export these newer names, and
  * importing them can crash published memory builds during ESM instantiation.
  * Until v2 can tighten that peer contract, keep both sides manually in sync.

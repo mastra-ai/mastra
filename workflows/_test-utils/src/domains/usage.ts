@@ -80,7 +80,7 @@ export function createUsageTests({ createAgent }: DurableAgentTestContext) {
           },
         });
 
-        expect(result.workflowInput.options.temperature).toBe(0.7);
+        expect(result.workflowInput.options.modelSettings?.temperature).toBe(0.7);
       });
     });
 
@@ -161,7 +161,7 @@ export function createUsageTests({ createAgent }: DurableAgentTestContext) {
         modelSettings: { temperature: 0.5 },
       });
 
-      expect(result.workflowInput.options.temperature).toBe(0.5);
+      expect(result.workflowInput.options.modelSettings?.temperature).toBe(0.5);
     });
 
     it('should handle missing model settings', async () => {
@@ -176,7 +176,7 @@ export function createUsageTests({ createAgent }: DurableAgentTestContext) {
 
       const result = await agent.prepare('Test');
 
-      expect(result.workflowInput.options.temperature).toBeUndefined();
+      expect(result.workflowInput.options.modelSettings).toBeUndefined();
     });
 
     it('should serialize model config correctly', async () => {

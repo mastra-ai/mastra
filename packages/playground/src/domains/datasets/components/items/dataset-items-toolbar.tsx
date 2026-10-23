@@ -1,8 +1,13 @@
 'use client';
+
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
 
 export type DatasetItemsToolbarProps = {
@@ -11,10 +16,6 @@ export type DatasetItemsToolbarProps = {
   onImportClick: () => void;
   onImportJsonClick: () => void;
   hasItems: boolean;
-  /** Page-level content rendered before the list actions (e.g. created date). */
-  leftSlot?: React.ReactNode;
-  /** Page-level actions rendered after the list actions, on the same row. */
-  rightSlot?: React.ReactNode;
 
   // Search props
   searchQuery?: string;
@@ -32,6 +33,9 @@ export type DatasetItemsToolbarProps = {
   isViewingOldVersion?: boolean;
   activeDatasetVersion?: number | null;
   onReturnToLatestVersion?: () => void;
+
+  /** Extra actions rendered before the "New item" action. */
+  actionsSlot?: React.ReactNode;
 };
 
 export function DatasetItemsToolbar({
@@ -39,8 +43,6 @@ export function DatasetItemsToolbar({
   onImportClick,
   onImportJsonClick,
   hasItems,
-  leftSlot,
-  rightSlot,
   searchQuery,
   onSearchChange,
   selectedCount,
@@ -53,17 +55,22 @@ export function DatasetItemsToolbar({
   isViewingOldVersion,
   activeDatasetVersion,
   onReturnToLatestVersion,
+  actionsSlot,
 }: DatasetItemsToolbarProps) {
   const oldVersionNotice = isViewingOldVersion && activeDatasetVersion != null && (
-    <div className="text-accent6 text-ui-sm flex min-w-0 items-center gap-3">
-      <span className="truncate">You are seeing v{activeDatasetVersion}, which is an older version of the dataset</span>
+    <div className="flex min-w-0 items-center gap-3 text-warning-foreground">
+      <Txt as="span" variant="caption" className="truncate">
+        You are seeing v{activeDatasetVersion}, which is an older version of the dataset
+      </Txt>
       {onReturnToLatestVersion && (
         <button
           type="button"
           onClick={onReturnToLatestVersion}
-          className="text-ui-sm text-icon3 hover:text-icon6 shrink-0 underline underline-offset-2 transition-colors"
+          className={cn(quietTextHover, controlStateColorTransition, 'shrink-0 underline underline-offset-2')}
         >
-          Return to latest
+          <Txt as="span" variant="caption" className="block">
+            Return to latest
+          </Txt>
         </button>
       )}
     </div>
@@ -74,7 +81,7 @@ export function DatasetItemsToolbar({
   const showItemActions = hasItems || Boolean(searchQuery);
 
   const searchField = showItemActions && (
-    <div className="max-w-120 min-w-64 flex-1">
+    <div className="max-w-120 flex-1">
       <ListSearch
         label="Search items"
         placeholder="Search items..."
@@ -105,20 +112,20 @@ export function DatasetItemsToolbar({
         {onCreateDatasetClick && (
           <DropdownMenu.Item onSelect={onCreateDatasetClick}>
             <FolderPlus />
-            <span>Create Dataset from Items</span>
+            <span>Create dataset from items</span>
           </DropdownMenu.Item>
         )}
         {onAddToDatasetClick && (
           <DropdownMenu.Item onSelect={onAddToDatasetClick}>
             <FolderOutput />
-            <span>Copy Items to Dataset</span>
+            <span>Copy items to dataset</span>
           </DropdownMenu.Item>
         )}
         {onDeleteClick && (
           <>
             <DropdownMenu.Separator />
-            <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
-              <Trash2 /> Delete Items
+            <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
+              <Trash2 /> Delete items
             </DropdownMenu.Item>
           </>
         )}
@@ -138,17 +145,17 @@ export function DatasetItemsToolbar({
         {oldVersionNotice}
       </div>
 
-      <ButtonsGroup className="ml-auto flex-wrap justify-end">
-        {leftSlot}
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         {selectionDropdown}
+        {actionsSlot}
         {showItemActions && !isItemPanelOpen && !isViewingOldVersion && (
-          <ButtonsGroup spacing="close">
+          <ButtonsGroup>
             <CreateButton onClick={onAddClick} tooltip="Add an item">
               New item
             </CreateButton>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
-                <Button aria-label="Dataset actions menu">
+                <Button size="icon-md" aria-label="Dataset actions menu">
                   <ChevronDown />
                 </Button>
               </DropdownMenu.Trigger>
@@ -163,8 +170,7 @@ export function DatasetItemsToolbar({
             </DropdownMenu>
           </ButtonsGroup>
         )}
-        {rightSlot}
-      </ButtonsGroup>
+      </div>
     </div>
   );
 }

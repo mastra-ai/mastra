@@ -118,7 +118,13 @@ describe('api command descriptors', () => {
       factoryProjectGet: ['projectGet', ['id'], false, false, false],
       factoryProjectCreate: ['projectCreate', [], true, true, false],
       factoryProjectUpdate: ['projectUpdate', ['id'], true, true, false],
+      'factoryProjectApply-default-model': ['projectApplyDefaultModel', ['id'], false, false, false],
       factoryProjectDelete: ['projectDelete', ['id'], false, false, false],
+      factoryProjectEnvironmentGet: ['projectEnvironmentGet', ['id'], false, false, false],
+      factoryProjectEnvironmentUpdate: ['projectEnvironmentUpdate', ['id'], true, true, false],
+      factoryProjectEnvironmentBuild: ['projectEnvironmentBuild', ['id'], false, false, false],
+      factoryProjectEnvironmentBuildsList: ['projectEnvironmentBuilds', ['id'], false, false, false],
+      factoryProjectEnvironmentBuildsGet: ['projectEnvironmentBuildGet', ['id', 'buildId'], false, false, false],
       'factoryWork-itemList': ['workItemList', ['id'], false, false, false],
       'factoryWork-itemCreate': ['workItemCreate', ['id'], true, true, false],
       'factoryWork-itemUpdate': ['workItemUpdate', ['id'], true, true, false],
@@ -138,8 +144,6 @@ describe('api command descriptors', () => {
       factoryAttentionRead: ['attentionRead', ['id', 'kind', 'sourceId', 'occurrence'], false, false, false],
       factoryAttentionArchive: ['attentionArchive', ['id', 'kind', 'sourceId', 'occurrence'], false, false, false],
       factoryAttentionRestore: ['attentionRestore', ['id', 'kind', 'sourceId', 'occurrence'], false, false, false],
-      factorySupervisorSession: ['supervisorSession', ['id'], false, false, false],
-      factorySupervisorHealth: ['supervisorHealth', ['id'], false, false, false],
     } as const;
 
     const exposedRouteKeys = new Set<string>();

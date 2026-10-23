@@ -7,16 +7,23 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
+  experimentResultResponseSchema,
+  listDatasetsQuerySchema,
   listExperimentResultsQuerySchema,
   listExperimentsQuerySchema,
+  listItemsQuerySchema,
   triggerExperimentBodySchema,
 } from '../schemas/datasets';
+import { DATASETS_ROUTES } from '../server-adapter/routes/datasets';
 import {
   ADD_ITEM_ROUTE,
   BATCH_INSERT_ITEMS_ROUTE,
+  COMPARE_EXPERIMENTS_ROUTE,
   DELETE_ANY_EXPERIMENT_ROUTE,
   DELETE_DATASET_ROUTE,
   DELETE_EXPERIMENT_ROUTE,
+  EXPERIMENT_REVIEW_SUMMARY_ROUTE,
+  GET_ANY_EXPERIMENT_ROUTE,
   GET_DATASET_ROUTE,
   GET_EXPERIMENT_ROUTE,
   GET_ITEM_ROUTE,
@@ -24,6 +31,7 @@ import {
   LIST_ALL_EXPERIMENTS_ROUTE,
   LIST_DATASETS_ROUTE,
   LIST_EXPERIMENTS_ROUTE,
+  LIST_ITEMS_ROUTE,
   LIST_ITEM_VERSIONS_ROUTE,
   PURGE_ITEM_ROUTE,
   TRIGGER_EXPERIMENT_ROUTE,
@@ -231,6 +239,238 @@ describe('Datasets Handlers', () => {
         expect.objectContaining({ requestContext: { tenantId: 'tenant-1' } }),
       );
     });
+
+    it('forwards agentModel to the dataset as a provider/modelId router string', async () => {
+      const startExperimentAsync = vi.fn().mockResolvedValue({
+        experimentId: 'experiment-1',
+        status: 'pending',
+        totalItems: 1,
+      });
+      vi.spyOn(mastra.datasets, 'get').mockResolvedValue({ startExperimentAsync } as any);
+
+      const parsedBody = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
+        targetType: 'agent',
+        targetId: 'my-agent',
+        agentModel: { provider: 'openai', modelId: 'gpt-5-mini' },
+      });
+      await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: 'dataset-1',
+        ...parsedBody,
+      } as any);
+
+      expect(startExperimentAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ targetType: 'agent', targetId: 'my-agent', agentModel: 'openai/gpt-5-mini' }),
+      );
+    });
+
+    describe('agentModel validation', () => {
+      const agentModel = { provider: 'openai', modelId: 'gpt-5-mini' };
+      const parse = (body: Record<string, unknown>) => TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse(body);
+
+      it('accepts agentModel for agent targets', () => {
+        const result = parse({ targetType: 'agent', targetId: 'a', agentModel });
+        expect(result.success && result.data.agentModel).toEqual(agentModel);
+      });
+
+      it('rejects agentModel for non-agent targets', () => {
+        expect(parse({ targetType: 'workflow', targetId: 'w', agentModel }).success).toBe(false);
+      });
+
+      it('rejects agentModel on create-only experiments', () => {
+        expect(parse({ start: false, targetType: 'agent', targetId: 'a', agentModel }).success).toBe(false);
+      });
+
+      it.each([{ provider: 'openai' }, { modelId: 'gpt-5-mini' }, { provider: '', modelId: 'gpt-5-mini' }])(
+        'rejects incomplete agentModel %o',
+        partial => {
+          expect(parse({ targetType: 'agent', targetId: 'a', agentModel: partial }).success).toBe(false);
+        },
+      );
+    });
+  });
+
+  describe('COMPARE_EXPERIMENTS_ROUTE', () => {
+    async function createExperimentWithOutput(datasetId: string, itemId: string, output: string) {
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId,
+        start: false,
+      } as any)) as any;
+      await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId,
+        experimentId: created.experimentId,
+        itemId,
+        output,
+      } as any);
+      await FINALIZE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId,
+        experimentId: created.experimentId,
+      } as any);
+      return created.experimentId as string;
+    }
+
+    describe('when three experiments are compared', () => {
+      it('returns a result for every experiment on each item', async () => {
+        const dataset = await mastra.datasets.create({ name: 'Compare DS' });
+        const item = await dataset.addItem({ input: { q: 'q1' } });
+        const ids = [
+          await createExperimentWithOutput(dataset.id, item.id, 'one'),
+          await createExperimentWithOutput(dataset.id, item.id, 'two'),
+          await createExperimentWithOutput(dataset.id, item.id, 'three'),
+        ];
+
+        const body = COMPARE_EXPERIMENTS_ROUTE.bodySchema.parse({ experimentIds: ids, baselineId: ids[1] });
+        const result = (await COMPARE_EXPERIMENTS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          ...body,
+        } as any)) as any;
+
+        expect(result.baselineId).toBe(ids[1]);
+        expect(result.items).toHaveLength(1);
+        expect(Object.keys(result.items[0].results).sort()).toEqual([...ids].sort());
+        expect(ids.map(id => result.items[0].results[id].output)).toEqual(['one', 'two', 'three']);
+      });
+    });
+
+    describe('when ten experiments are compared', () => {
+      it('accepts them', () => {
+        const experimentIds = Array.from({ length: 10 }, (_, i) => `exp-${i}`);
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds }).success).toBe(true);
+      });
+    });
+
+    describe('when the body is invalid', () => {
+      it('rejects fewer than two experiment ids', () => {
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds: ['a'] }).success).toBe(false);
+      });
+
+      it('rejects more than ten experiment ids', () => {
+        const experimentIds = Array.from({ length: 11 }, (_, i) => `exp-${i}`);
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds }).success).toBe(false);
+      });
+
+      it('rejects a baselineId that is not one of experimentIds', () => {
+        expect(
+          COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds: ['a', 'b'], baselineId: 'c' }).success,
+        ).toBe(false);
+      });
+    });
+
+    describe('when an older client sends experimentIdA/experimentIdB', () => {
+      it('compares them with experimentIdA as the baseline', () => {
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.parse({ experimentIdA: 'a', experimentIdB: 'b' })).toEqual({
+          experimentIds: ['a', 'b'],
+          baselineId: 'a',
+        });
+      });
+    });
+  });
+
+  describe('Ordering', () => {
+    it('parses bracket-notation orderBy (JSON string from normalizeQueryParams) for datasets', () => {
+      const parsed = listDatasetsQuerySchema.parse({ orderBy: JSON.stringify({ field: 'name', direction: 'ASC' }) });
+      expect(parsed.orderBy).toEqual({ field: 'name', direction: 'ASC' });
+    });
+
+    it('rejects unknown orderBy fields for datasets', () => {
+      expect(() =>
+        listDatasetsQuerySchema.parse({ orderBy: JSON.stringify({ field: 'metadata', direction: 'ASC' }) }),
+      ).toThrow();
+    });
+
+    it('rejects malformed orderBy JSON instead of silently dropping it', () => {
+      expect(() => listDatasetsQuerySchema.parse({ orderBy: '{not json' })).toThrow();
+    });
+
+    it('accepts orderBy fields per list', () => {
+      expect(listItemsQuerySchema.parse({ orderBy: { field: 'updatedAt', direction: 'ASC' } }).orderBy).toEqual({
+        field: 'updatedAt',
+        direction: 'ASC',
+      });
+      expect(listExperimentsQuerySchema.parse({ orderBy: { field: 'status', direction: 'DESC' } }).orderBy).toEqual({
+        field: 'status',
+        direction: 'DESC',
+      });
+      expect(
+        listExperimentResultsQuerySchema.parse({ orderBy: { field: 'startedAt', direction: 'DESC' } }).orderBy,
+      ).toEqual({ field: 'startedAt', direction: 'DESC' });
+      expect(() => listItemsQuerySchema.parse({ orderBy: { field: 'name' } })).toThrow();
+    });
+
+    it('forwards orderBy when listing datasets', async () => {
+      const list = vi.spyOn(mastra.datasets, 'list').mockResolvedValue({
+        datasets: [],
+        pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+      } as any);
+
+      await LIST_DATASETS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        orderBy: { field: 'name', direction: 'ASC' },
+      } as any);
+
+      expect(list).toHaveBeenCalledWith({
+        page: 0,
+        perPage: 10,
+        filters: undefined,
+        orderBy: { field: 'name', direction: 'ASC' },
+      });
+    });
+
+    it('forwards orderBy when listing items, experiments and results', async () => {
+      const listItems = vi.fn().mockResolvedValue({ items: [], pagination: {} });
+      const listExperiments = vi.fn().mockResolvedValue({ experiments: [], pagination: {} });
+      const listExperimentResults = vi.fn().mockResolvedValue({ results: [], pagination: {} });
+      const getExperiment = vi.fn().mockResolvedValue({ id: 'exp-1', datasetId: 'dataset-1' });
+      vi.spyOn(mastra.datasets, 'get').mockResolvedValue({
+        listItems,
+        listExperiments,
+        listExperimentResults,
+        getExperiment,
+      } as any);
+      const ctx = createTestServerContext({ mastra });
+
+      await LIST_ITEMS_ROUTE.handler({
+        ...ctx,
+        datasetId: 'dataset-1',
+        orderBy: { field: 'updatedAt', direction: 'ASC' },
+      } as any);
+      expect(listItems).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { field: 'updatedAt', direction: 'ASC' } }),
+      );
+
+      await LIST_EXPERIMENTS_ROUTE.handler({
+        ...ctx,
+        datasetId: 'dataset-1',
+        orderBy: { field: 'status', direction: 'DESC' },
+      } as any);
+      expect(listExperiments).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { field: 'status', direction: 'DESC' } }),
+      );
+
+      await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+        ...ctx,
+        datasetId: 'dataset-1',
+        experimentId: 'exp-1',
+        orderBy: { field: 'startedAt', direction: 'DESC' },
+      } as any);
+      expect(listExperimentResults).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { field: 'startedAt', direction: 'DESC' } }),
+      );
+
+      const experimentsStore = await mockStorage.getStore('experiments');
+      const storeList = vi.spyOn(experimentsStore!, 'listExperiments');
+      await LIST_ALL_EXPERIMENTS_ROUTE.handler({
+        ...ctx,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      } as any);
+      expect(storeList).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { field: 'createdAt', direction: 'ASC' } }),
+      );
+    });
   });
 
   describe('Experiment routes', () => {
@@ -389,6 +629,71 @@ describe('Datasets Handlers', () => {
         perPage: 10,
       } as any)) as any;
       expect(listed.results).toHaveLength(2);
+    });
+
+    it('attaches the experiment targetType to returned results', async () => {
+      const { dataset, item1 } = await setupDatasetWithItems();
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+
+      const submitted = (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+        output: { a: 'ok' },
+      } as any)) as any;
+      expect(submitted.targetType).toBeNull();
+
+      const patched = (await UPDATE_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        resultId: submitted.id,
+        tags: ['a'],
+      } as any)) as any;
+      expect(patched.targetType).toBeNull();
+
+      const listed = (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        page: 0,
+        perPage: 10,
+      } as any)) as any;
+      expect(listed.results[0].targetType).toBeNull();
+      expect(listed.results[0].output).toEqual({ a: 'ok' });
+      expect(experimentResultResponseSchema.safeParse(listed.results[0]).success).toBe(true);
+    });
+
+    it('accepts agent output, including legacy empty errors, in the response schema', () => {
+      const base = {
+        id: 'r1',
+        experimentId: 'e1',
+        itemId: 'i1',
+        itemDatasetVersion: 1,
+        input: 'hi',
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+        traceId: null,
+        toolMockReport: null,
+        createdAt: new Date(),
+      };
+      const parsed = experimentResultResponseSchema.parse({
+        ...base,
+        targetType: 'agent',
+        output: { text: 'hello', toolCalls: [{ type: 'tool-call' }], usage: { inputTokens: 1 }, error: {} },
+      });
+      expect(parsed.targetType === 'agent' && parsed.output?.text).toBe('hello');
+      expect(
+        experimentResultResponseSchema.safeParse({ ...base, targetType: 'agent', output: { text: 42 } }).success,
+      ).toBe(false);
     });
 
     it('filters listed results by tags (all must match)', async () => {
@@ -584,6 +889,17 @@ describe('Datasets Handlers', () => {
       } as any)) as any;
       expect(first.result.output?.text).toBe('agent answer');
       expect(first.result.error).toBeNull();
+      expect(first.result.targetType).toBe('agent');
+
+      const listed = (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        page: 0,
+        perPage: 10,
+      } as any)) as any;
+      expect(listed.results[0].targetType).toBe('agent');
+      expect(experimentResultResponseSchema.safeParse(listed.results[0]).success).toBe(true);
 
       // A retried call converges on the same row.
       const second = (await RUN_EXPERIMENT_ITEM_ROUTE.handler({
@@ -683,6 +999,52 @@ describe('Datasets Handlers', () => {
         targetIds: ['agent-a'],
       } as any);
       expect(byTypeAndId.datasets.map((d: any) => d.name)).toEqual(['Agent A']);
+    });
+
+    describe('when datasetIds is given', () => {
+      it('returns exactly those datasets on one page, even past the default page size', async () => {
+        const created = [];
+        for (let i = 0; i < 12; i++) {
+          created.push(await mastra.datasets.create({ name: `Dataset ${i + 1}` }));
+        }
+        // The two oldest datasets are not on the default first page.
+        const oldest = [created[0]!.id, created[1]!.id];
+
+        const result = await LIST_DATASETS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          page: 3,
+          perPage: 1,
+          datasetIds: [...oldest, 'missing-id'],
+        } as any);
+
+        expect(result.datasets.map((d: any) => d.name).sort()).toEqual(['Dataset 1', 'Dataset 2']);
+        expect(result.pagination).toMatchObject({ total: 2, page: 0, perPage: false, hasMore: false });
+      });
+
+      it('accepts a single id or repeated ids from the query string', () => {
+        expect(listDatasetsQuerySchema.parse({ datasetIds: 'ds-1' }).datasetIds).toEqual(['ds-1']);
+        expect(listDatasetsQuerySchema.parse({ datasetIds: ['ds-1', 'ds-2'] }).datasetIds).toEqual(['ds-1', 'ds-2']);
+        expect(listDatasetsQuerySchema.parse({ datasetIds: [''] }).datasetIds).toEqual([]);
+        expect(listDatasetsQuerySchema.parse({}).datasetIds).toBeUndefined();
+      });
+
+      it('returns no datasets for a blank datasetIds value', async () => {
+        await mastra.datasets.create({ name: 'Dataset 1' });
+        const { datasetIds } = listDatasetsQuerySchema.parse({ datasetIds: '' });
+
+        const result = await LIST_DATASETS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetIds,
+        } as any);
+
+        expect(result.datasets).toHaveLength(0);
+        expect(result.pagination.total).toBe(0);
+      });
+
+      it('rejects more than 100 ids', () => {
+        const datasetIds = Array.from({ length: 101 }, (_, i) => `ds-${i}`);
+        expect(() => listDatasetsQuerySchema.parse({ datasetIds })).toThrow();
+      });
     });
 
     it('does not pass filters when no target params are given', async () => {
@@ -1056,6 +1418,84 @@ describe('Datasets Handlers', () => {
           experimentId: 'does-not-exist',
         } as any),
       ).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
+  describe('GET_ANY_EXPERIMENT_ROUTE', () => {
+    async function createExperiment(tenancy?: { organizationId?: string; projectId?: string }) {
+      const dataset = await mastra.datasets.create({ name: 'Get Any Experiment DS', ...tenancy });
+      await dataset.addItem({ input: { q: 'q1' } });
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+      return { dataset, experimentId: created.experimentId as string };
+    }
+
+    it('returns an experiment with its datasetId without knowing the dataset', async () => {
+      const { dataset, experimentId } = await createExperiment();
+
+      const result = (await GET_ANY_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        experimentId,
+      } as any)) as any;
+
+      expect(result.id).toBe(experimentId);
+      expect(result.datasetId).toBe(dataset.id);
+    });
+
+    it('returns an experiment orphaned by dataset deletion with a null datasetId', async () => {
+      const { dataset, experimentId } = await createExperiment();
+      await mastra.datasets.delete({ id: dataset.id });
+
+      const result = (await GET_ANY_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        experimentId,
+      } as any)) as any;
+
+      expect(result.id).toBe(experimentId);
+      expect(result.datasetId).toBeNull();
+    });
+
+    it('returns 404 for a nonexistent experiment', async () => {
+      await expect(
+        GET_ANY_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          experimentId: 'does-not-exist',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('returns the experiment when tenancy matches', async () => {
+      const { experimentId } = await createExperiment({ organizationId: 'org_a', projectId: 'proj_1' });
+
+      const result = (await GET_ANY_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        experimentId,
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      } as any)) as any;
+
+      expect(result.id).toBe(experimentId);
+    });
+
+    it('returns 404 when tenancy does not match', async () => {
+      const { experimentId } = await createExperiment({ organizationId: 'org_a', projectId: 'proj_1' });
+
+      await expect(
+        GET_ANY_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          experimentId,
+          organizationId: 'org_b',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('is registered after the review summary route so /experiments/review-summary is not shadowed', () => {
+      const routes: readonly unknown[] = DATASETS_ROUTES;
+      expect(routes.indexOf(EXPERIMENT_REVIEW_SUMMARY_ROUTE)).toBeGreaterThanOrEqual(0);
+      expect(routes.indexOf(GET_ANY_EXPERIMENT_ROUTE)).toBeGreaterThan(routes.indexOf(EXPERIMENT_REVIEW_SUMMARY_ROUTE));
     });
   });
 

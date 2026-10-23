@@ -1,6 +1,12 @@
-import { randomUUID } from 'node:crypto';
 import type { InMemoryDB } from '../inmemory-db';
-import type { Schedule, ScheduleFilter, ScheduleTrigger, ScheduleTriggerListOptions, ScheduleUpdate } from './base';
+import type {
+  Schedule,
+  ScheduleFilter,
+  ScheduleStatus,
+  ScheduleTrigger,
+  ScheduleTriggerListOptions,
+  ScheduleUpdate,
+} from './base';
 import { normalizeScheduleTarget, SchedulesStorage } from './base';
 
 function clone<T>(value: T): T {
@@ -94,6 +100,7 @@ export class InMemorySchedulesStorage extends SchedulesStorage {
     newNextFireAt: number,
     lastFireAt: number,
     lastRunId: string,
+    newStatus?: ScheduleStatus,
   ): Promise<boolean> {
     const existing = this.db.schedules.get(id);
     if (!existing) return false;
@@ -104,6 +111,7 @@ export class InMemorySchedulesStorage extends SchedulesStorage {
       nextFireAt: newNextFireAt,
       lastFireAt,
       lastRunId,
+      ...(newStatus ? { status: newStatus } : {}),
       updatedAt: Date.now(),
     };
     this.db.schedules.set(id, stored);
@@ -122,7 +130,7 @@ export class InMemorySchedulesStorage extends SchedulesStorage {
   async recordTrigger(trigger: ScheduleTrigger): Promise<void> {
     const stored: ScheduleTrigger = {
       ...trigger,
-      id: trigger.id ?? randomUUID(),
+      id: trigger.id ?? globalThis.crypto.randomUUID(),
       triggerKind: trigger.triggerKind ?? 'schedule-fire',
     };
     this.db.scheduleTriggers.push(clone(stored));

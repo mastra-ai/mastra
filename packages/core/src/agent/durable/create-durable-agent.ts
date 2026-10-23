@@ -26,6 +26,7 @@
 
 import type { MastraServerCache } from '../../cache/base';
 import type { PubSub } from '../../events/pubsub';
+import type { ShouldPersistSnapshotFn } from '../../workflows/types';
 import type { Agent } from '../agent';
 
 import { DurableAgent } from './durable-agent';
@@ -73,6 +74,16 @@ export interface CreateDurableAgentOptions<
    * Set to `0` to disable auto-cleanup. Defaults to `30_000` (30 seconds).
    */
   cleanupTimeoutMs?: number;
+
+  /**
+   * Overrides the snapshot-persistence policy for the agent's durable
+   * workflows. By default `pending | paused | suspended` snapshots are always
+   * persisted (required for human-in-the-loop `resume()`), and `running`
+   * checkpoints are persisted only when the Mastra instance sets
+   * `recovery: { durableAgents: 'auto' }`. See
+   * {@link DurableAgentConfig.shouldPersistSnapshot} for caveats.
+   */
+  shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 
   /**
    * Per-topic opt-out of the replay cache.
@@ -132,7 +143,7 @@ export function createDurableAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateDurableAgentOptions<TAgentId, TTools, TOutput>): DurableAgent<TAgentId, TTools, TOutput> {
-  const { agent, id, name, cache, pubsub, maxSteps, cleanupTimeoutMs, shouldCache } = options;
+  const { agent, id, name, cache, pubsub, maxSteps, cleanupTimeoutMs, shouldCache, shouldPersistSnapshot } = options;
 
   return new DurableAgent({
     agent,
@@ -143,6 +154,7 @@ export function createDurableAgent<
     maxSteps,
     cleanupTimeoutMs,
     shouldCache,
+    shouldPersistSnapshot,
   } as DurableAgentConfig<TAgentId, TTools, TOutput>);
 }
 

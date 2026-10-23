@@ -9,11 +9,18 @@
 
 import { LangfuseClient } from '@langfuse/client';
 import { LangfuseSpanProcessor } from '@langfuse/otel';
-import type { TracingEvent, AnyExportedSpan, InitExporterOptions, ScoreEvent } from '@mastra/core/observability';
+import type {
+  TracingEvent,
+  AnyExportedSpan,
+  InitExporterOptions,
+  ModelGenerationAttributes,
+  ScoreEvent,
+} from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanConverter } from '@mastra/otel-exporter';
+import type { OtelExporterConfig } from '@mastra/otel-exporter';
 
 const LOG_PREFIX = '[LangfuseExporter]';
 const MASTRA_METADATA_PREFIX = 'mastra.metadata.';
@@ -50,6 +57,8 @@ export interface LangfuseExporterConfig extends BaseExporterConfig {
   environment?: string;
   /** Langfuse release tag for traces */
   release?: string;
+  /** Override OpenTelemetry resource attributes, including service.version. */
+  resourceAttributes?: OtelExporterConfig['resourceAttributes'];
 }
 
 export class LangfuseExporter extends BaseExporter {
@@ -60,6 +69,7 @@ export class LangfuseExporter extends BaseExporter {
   #realtime: boolean;
   #environment: string | undefined;
   #release: string | undefined;
+  #resourceAttributes: OtelExporterConfig['resourceAttributes'];
 
   constructor(config: LangfuseExporterConfig = {}) {
     super(config);
@@ -68,6 +78,7 @@ export class LangfuseExporter extends BaseExporter {
     const secretKey = config.secretKey ?? process.env.LANGFUSE_SECRET_KEY;
     const baseUrl = stripTrailingSlashes(config.baseUrl ?? process.env.LANGFUSE_BASE_URL ?? LANGFUSE_DEFAULT_BASE_URL);
     this.#realtime = config.realtime ?? false;
+    this.#resourceAttributes = config.resourceAttributes;
 
     if (!publicKey || !secretKey) {
       const publicKeySource = config.publicKey
@@ -117,6 +128,7 @@ export class LangfuseExporter extends BaseExporter {
     this.#spanConverter = new SpanConverter({
       packageName: '@mastra/langfuse',
       serviceName: options.config?.serviceName,
+      config: { resourceAttributes: this.#resourceAttributes },
       format: 'GenAI_v1_38_0',
     });
   }
@@ -134,6 +146,7 @@ export class LangfuseExporter extends BaseExporter {
       this.#spanConverter = new SpanConverter({
         packageName: '@mastra/langfuse',
         serviceName: 'mastra-service',
+        config: { resourceAttributes: this.#resourceAttributes },
         format: 'GenAI_v1_38_0',
       });
     }
@@ -284,6 +297,17 @@ function mapMastraToLangfuseAttributes(
   environment?: string,
   release?: string,
 ): void {
+  if (attributes['gen_ai.usage.reasoning_tokens'] !== undefined) {
+    attributes['gen_ai.usage.reasoning.output_tokens'] = attributes['gen_ai.usage.reasoning_tokens'];
+    delete attributes['gen_ai.usage.reasoning_tokens'];
+  }
+
+  // A run attached under an existing span (tracingOptions.nestUnderParent) does
+  // not own the trace. Langfuse applies trace-level attributes from any span,
+  // so none of its spans may write them: they would replace the outer run's.
+  // The skipped values stay on the observation as mastra.metadata.*.
+  const nested = span.nestedUnderParent === true;
+
   // Environment and release: set directly since onStart() is not called
   if (environment) {
     attributes['langfuse.environment'] = environment;
@@ -318,7 +342,7 @@ function mapMastraToLangfuseAttributes(
         // Reserved identity keys (agentId/agentName/workflowId/workflowName) are set
         // by the root-span block below, which runs after this loop and takes precedence.
         for (const [key, value] of Object.entries(parsed)) {
-          if (key === 'prompt' || value === null || value === undefined) {
+          if (nested || key === 'prompt' || value === null || value === undefined) {
             continue;
           }
           const traceKey = `langfuse.trace.metadata.${key}`;
@@ -334,7 +358,9 @@ function mapMastraToLangfuseAttributes(
     } catch {
       // best effort — invalid JSON is silently ignored
     }
-    delete attributes['mastra.metadata.langfuse'];
+    if (!nested) {
+      delete attributes['mastra.metadata.langfuse'];
+    }
   }
 
   // TTFT: mastra.completion_start_time → langfuse.observation.completion_start_time
@@ -343,8 +369,26 @@ function mapMastraToLangfuseAttributes(
     delete attributes['mastra.completion_start_time'];
   }
 
+  // Exact provider-reported cost takes precedence over Langfuse's model-price inference.
+  // Estimated costs remain unexported so Langfuse can apply its own pricing model.
+  const costContext =
+    span.type === SpanType.MODEL_GENERATION
+      ? (span.attributes as ModelGenerationAttributes | undefined)?.costContext
+      : undefined;
+  if (
+    costContext?.costMetadata?.source === 'provider_reported' &&
+    costContext.costUnit === 'USD' &&
+    typeof costContext.estimatedCost === 'number' &&
+    Number.isFinite(costContext.estimatedCost) &&
+    costContext.estimatedCost >= 0
+  ) {
+    attributes['langfuse.observation.cost_details'] = JSON.stringify({
+      total: costContext.estimatedCost,
+    });
+  }
+
   // User ID: mastra.metadata.userId → user.id
-  if (attributes['mastra.metadata.userId']) {
+  if (!nested && attributes['mastra.metadata.userId']) {
     attributes['user.id'] = attributes['mastra.metadata.userId'];
     delete attributes['mastra.metadata.userId'];
   }
@@ -358,7 +402,7 @@ function mapMastraToLangfuseAttributes(
       ? omCallerThreadId
       : attributes['mastra.metadata.threadId']);
   delete attributes[`${MASTRA_METADATA_PREFIX}${OM_CALLER_THREAD_ID}`];
-  if (sessionId) {
+  if (!nested && sessionId) {
     attributes['session.id'] = sessionId;
     delete attributes['mastra.metadata.sessionId'];
     delete attributes['mastra.metadata.threadId'];
@@ -371,14 +415,14 @@ function mapMastraToLangfuseAttributes(
   }
 
   // Trace name: mastra.metadata.traceName → langfuse.trace.name
-  if (attributes['mastra.metadata.traceName']) {
+  if (!nested && attributes['mastra.metadata.traceName']) {
     attributes['langfuse.trace.name'] = attributes['mastra.metadata.traceName'];
     delete attributes['mastra.metadata.traceName'];
   }
 
-  // Trace version: mastra.metadata.version → langfuse.trace.version
+  // Version: mastra.metadata.version → langfuse.version
   if (attributes['mastra.metadata.version']) {
-    attributes['langfuse.trace.version'] = attributes['mastra.metadata.version'];
+    attributes['langfuse.version'] = attributes['mastra.metadata.version'];
     delete attributes['mastra.metadata.version'];
   }
 
@@ -388,14 +432,22 @@ function mapMastraToLangfuseAttributes(
   // users can scope Langfuse evaluators per agent via trace name or metadata
   // filters. User-provided traceName (set via mastra.metadata.traceName) takes
   // precedence and is preserved.
-  if (span.isRootSpan) {
+  if (span.isRootSpan && !nested) {
     // Trace input/output: mirror the root span's input/output onto the trace.
     // Without this, Langfuse traces have empty trace-level input/output (the
     // span data only reaches the root OBSERVATION), which breaks LLM-as-a-judge
     // evaluators mapped to Trace input/output and leaves the trace view without
     // the top-level request/response. Serialization failures (circular refs,
     // bigint) skip the attribute rather than failing the span export.
-    const traceInput = serializeTraceIo(span.input);
+    // A resumed run (after a suspend such as tool-call approval) continues the
+    // original trace: core marks it with parentSpanId === resumedFromSpanId.
+    // Its input is the resume payload, not the user's message, and Langfuse
+    // applies trace-level attributes from any span (last writer wins), so it
+    // must not replace the trace input the original run already set. Its
+    // output IS the turn's final reply, so trace output is still written.
+    const resumedContinuation =
+      span.parentSpanId !== undefined && span.parentSpanId === span.metadata?.resumedFromSpanId;
+    const traceInput = resumedContinuation ? undefined : serializeTraceIo(span.input);
     if (traceInput !== undefined) {
       attributes['langfuse.trace.input'] = traceInput;
     }
@@ -466,6 +518,35 @@ function mapMastraToLangfuseAttributes(
     attributes['langfuse.observation.metadata.operationName'] = attributes['gen_ai.operation.name'];
   }
 
+  // Span-type attributes (mastra.<span_type>.<snake_key>, e.g.
+  // mastra.model_step.step_index) are promoted the same way, as camelCase keys,
+  // so scalar span attributes are filterable in observation-level evaluator
+  // rules without a per-key mapping. Input/output have their own mapping below.
+  // Attributes whose raw value is an object or array (entryMetadata,
+  // truthyIndexes, ...) are already JSON strings here and make no useful
+  // filter, so they stay in the nested attributes only. Values are sent as strings.
+  if (span.type) {
+    const spanAttrPrefix = `mastra.${String(span.type).toLowerCase()}.`;
+    const rawAttributes = (span.attributes ?? {}) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(attributes)) {
+      if (!key.startsWith(spanAttrPrefix) || value === null || value === undefined) {
+        continue;
+      }
+      const name = snakeToCamel(key.slice(spanAttrPrefix.length));
+      if (name === 'input' || name === 'output') {
+        continue;
+      }
+      const raw = rawAttributes[name];
+      if (typeof raw === 'object' && raw !== null && !(raw instanceof Date)) {
+        continue;
+      }
+      const metadataKey = `langfuse.observation.metadata.${name}`;
+      if (attributes[metadataKey] === undefined) {
+        attributes[metadataKey] = typeof value === 'string' ? value : JSON.stringify(value);
+      }
+    }
+  }
+
   // Input/Output: mastra.*.input/output → langfuse.observation.input/output
   // For gen_ai spans, Langfuse reads gen_ai.input.messages natively.
   // For non-gen_ai spans, we map the first mastra.*.input/output we find.
@@ -473,6 +554,7 @@ function mapMastraToLangfuseAttributes(
     for (const key of Object.keys(attributes)) {
       if (key.startsWith('mastra.') && key.endsWith('.input')) {
         attributes['langfuse.observation.input'] = attributes[key];
+        delete attributes[key];
         break;
       }
     }
@@ -481,10 +563,15 @@ function mapMastraToLangfuseAttributes(
     for (const key of Object.keys(attributes)) {
       if (key.startsWith('mastra.') && key.endsWith('.output')) {
         attributes['langfuse.observation.output'] = attributes[key];
+        delete attributes[key];
         break;
       }
     }
   }
+}
+
+function snakeToCamel(name: string): string {
+  return name.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
 
 /**

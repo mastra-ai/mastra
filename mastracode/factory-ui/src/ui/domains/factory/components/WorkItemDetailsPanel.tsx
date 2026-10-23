@@ -1,4 +1,4 @@
-import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EllipsisVertical, Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -6,18 +6,17 @@ import { useId } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import type { BoardCardStatus } from '../boardCardStatus';
-import { externalLinkLabel } from '../boardItems';
+import type { BoardCardStatus } from '../boardCardState';
+import type { BoardLayout } from '../boardLayout';
 import type { CardAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
-import { workItemIdentifier } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { timelineEvents, workItemActivity } from '../workItemActivity';
-import { SourceIcon } from './BoardIcons';
 import { CardDetailsPanel } from './CardDetailsPanel';
 import { WorkItemCardRows } from './WorkItemCardRows';
+import { WorkItemExternalLink } from './WorkItemExternalLink';
 import { WorkItemTray } from './WorkItemTray';
 
 export function WorkItemDetailsPanel({
@@ -30,6 +29,7 @@ export function WorkItemDetailsPanel({
   status,
   actions,
   menu,
+  layout,
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
@@ -40,6 +40,7 @@ export function WorkItemDetailsPanel({
   status: BoardCardStatus;
   actions: CardAction[];
   menu: ReactNode;
+  layout: BoardLayout;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const titleId = useId();
@@ -51,11 +52,11 @@ export function WorkItemDetailsPanel({
   const activity = workItemActivity(item, activityPage);
   const events = timelineEvents(activity);
   const actors = { ...activityPage?.actors, ...activity.extraActors };
-  const identifier = workItemIdentifier(item);
 
   return (
     <CardDetailsPanel
       morph={morph}
+      layout={layout}
       labelledBy={titleId}
       header={
         <WorkItemCardRows
@@ -71,22 +72,11 @@ export function WorkItemDetailsPanel({
           open
           controls={
             <>
-              {item.url !== null && (
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={identifier === undefined ? undefined : `${externalLinkLabel(item.source)}: ${identifier}`}
-                  className={buttonVariants({ variant: 'ghost', size: 'xs' })}
-                >
-                  <SourceIcon source={item.source} />
-                  {identifier ?? externalLinkLabel(item.source)}
-                </a>
-              )}
+              <WorkItemExternalLink item={item} />
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-xs"
+                size="icon-sm"
                 aria-label={`Collapse ${item.title}`}
                 onClick={morph.closeDetails}
               >
@@ -95,7 +85,7 @@ export function WorkItemDetailsPanel({
               <DropdownMenu>
                 <DropdownMenu.Trigger
                   render={
-                    <Button type="button" variant="ghost" size="icon-xs" aria-label={`All actions for ${item.title}`}>
+                    <Button type="button" variant="ghost" size="icon-sm" aria-label={`All actions for ${item.title}`}>
                       <EllipsisVertical size={13} aria-hidden />
                     </Button>
                   }

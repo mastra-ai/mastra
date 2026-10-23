@@ -3,7 +3,7 @@ import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { canonicalizeRequestJsonSchema, createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -13,11 +13,12 @@ import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
+import { resolveToolOutputValidationSchema } from '../validation';
 import { CoreToolBuilder } from './builder';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai', 'openrouter']);
 
-const mock = createGatewayMock({ exactMatch: true });
+const mock = createGatewayMock({ exactMatch: true, transformRequest: canonicalizeRequestJsonSchema });
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
@@ -381,30 +382,24 @@ const testTools = runSchemasIndividually
     ];
 
 // Group tests by model provider for better organization
-const modelsByProviderV1 = modelsToTestV1.reduce(
-  (acc, model) => {
-    const provider = model.provider;
-    if (!acc[provider]) {
-      acc[provider] = [];
-    }
-    acc[provider].push(model);
-    return acc;
-  },
-  {} as Record<string, (typeof modelsToTestV1)[number][]>,
-);
+const modelsByProviderV1 = modelsToTestV1.reduce<Record<string, (typeof modelsToTestV1)[number][]>>((acc, model) => {
+  const provider = model.provider;
+  if (!acc[provider]) {
+    acc[provider] = [];
+  }
+  acc[provider].push(model);
+  return acc;
+}, {});
 
 // Group tests by model provider for better organization
-const modelsByProviderV2 = modelsToTestV2.reduce(
-  (acc, model) => {
-    const provider = model.provider;
-    if (!acc[provider]) {
-      acc[provider] = [];
-    }
-    acc[provider].push(model);
-    return acc;
-  },
-  {} as Record<string, (typeof modelsToTestV2)[number][]>,
-);
+const modelsByProviderV2 = modelsToTestV2.reduce<Record<string, (typeof modelsToTestV2)[number][]>>((acc, model) => {
+  const provider = model.provider;
+  if (!acc[provider]) {
+    acc[provider] = [];
+  }
+  acc[provider].push(model);
+  return acc;
+}, {});
 
 [...Object.entries(modelsByProviderV1), ...Object.entries(modelsByProviderV2)].forEach(([provider, models]) => {
   [
@@ -979,6 +974,71 @@ describe('Tool Tracing Context Injection', () => {
     expect(mockToolSpan.error).not.toHaveBeenCalled();
   });
 
+  it('should end span with failure when Mastra tool output validation fails', async () => {
+    const mastraTool = createTool({
+      id: 'mastra-output-fail-tool',
+      description: 'Mastra tool with output schema',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ count: z.number() }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => ({ count: 'not-a-number' }),
+    });
+
+    const mockToolSpan = { end: vi.fn(), error: vi.fn() };
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: mastraTool,
+      options: {
+        name: 'mastra-output-fail-tool',
+        description: 'Mastra tool with output schema',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    }).build();
+
+    const result: any = await builtTool.execute!({ input: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    expect(result).toHaveProperty('error', true);
+    expect(result.message).toContain('Tool output validation failed');
+    expect(mockToolSpan.end).toHaveBeenCalledWith({ output: result, attributes: { success: false } });
+    expect(mockToolSpan.error).not.toHaveBeenCalled();
+  });
+
+  it("should end span with success and the raw output when a Mastra tool uses outputValidation: 'warn'", async () => {
+    const mastraTool = createTool({
+      id: 'mastra-output-warn-tool',
+      description: 'Mastra tool with output schema',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ count: z.number() }),
+      outputValidation: 'warn',
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => ({ count: 'not-a-number' }),
+    });
+
+    const mockToolSpan = { end: vi.fn(), error: vi.fn() };
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: mastraTool,
+      options: {
+        name: 'mastra-output-warn-tool',
+        description: 'Mastra tool with output schema',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    }).build();
+
+    const result = await builtTool.execute!({ input: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    expect(result).toEqual({ count: 'not-a-number' });
+    expect(mockToolSpan.end).toHaveBeenCalledWith({ output: result, attributes: { success: true } });
+  });
+
   it('should create child span with correct logType attribute', async () => {
     const testTool = createTool({
       id: 'toolset-tool',
@@ -1482,6 +1542,7 @@ describe('CoreToolBuilder Output Schema', () => {
 
     const builtTool = builder.build();
     expect(builtTool.outputSchema).toBeDefined();
+    expect(resolveToolOutputValidationSchema(builtTool)).toBe(toolWithTupleOutput.outputSchema);
   });
 
   describe('agent-as-tools schema serialization (#13324)', () => {

@@ -1,0 +1,505 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
+import { describe, expect, it } from 'vitest';
+
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
+import { EnvironmentSection } from '../EnvironmentSection';
+import { customEnvironment, environmentPayload, environmentRepository, FACTORY_ID } from './fixtures/environment';
+
+const ENVIRONMENT_URL = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`;
+
+function useFactory() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme' }] }),
+    ),
+  );
+}
+
+function useEnvironment(environment: FactoryEnvironmentPayload) {
+  server.use(http.get(ENVIRONMENT_URL, () => HttpResponse.json({ environment })));
+}
+
+/** Records every PATCH body and answers with the given environment. */
+function recordPatches(environment: FactoryEnvironmentPayload) {
+  const patches: FactoryEnvironmentPatch[] = [];
+  server.use(
+    http.patch(ENVIRONMENT_URL, async ({ request }) => {
+      patches.push((await request.json()) as FactoryEnvironmentPatch);
+      return HttpResponse.json({ environment });
+    }),
+  );
+  return patches;
+}
+
+function renderEnvironmentSettings() {
+  renderWithProviders(
+    <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/environment`]}>
+      <Routes>
+        <Route path="/factories/:factoryId/settings/environment" element={<EnvironmentSection />} />
+      </Routes>
+      <Toaster position="bottom-right" />
+    </MemoryRouter>,
+  );
+}
+
+describe('Environment settings', () => {
+  it('renders Repositories, then Configuration with the working directory, the setup command and the provider settings', async () => {
+    useFactory();
+    useEnvironment(environmentPayload());
+
+    renderEnvironmentSettings();
+
+    expect(await screen.findByRole('heading', { name: 'Configuration' })).toBeInTheDocument();
+    const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
+    expect(headings).toEqual(['Repositories', 'Configuration', 'Builds']);
+    const workdir = screen.getByRole('textbox', { name: 'Working directory' });
+    const command = screen.getByRole('textbox', { name: 'Setup command' });
+    expect(workdir.closest('section')).toBe(command.closest('section'));
+    expect(workdir.closest('section')).toBe(screen.getByRole('heading', { name: 'Configuration' }).closest('section'));
+  });
+
+  it('points to Repositories when nothing is linked yet', async () => {
+    useFactory();
+    useEnvironment(environmentPayload({ repositories: [] }));
+
+    renderEnvironmentSettings();
+
+    expect(await screen.findByText(/Link a repository first/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Go to repositories' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/settings/repositories`,
+    );
+  });
+
+  it('shows the load failure instead of an empty page', async () => {
+    useFactory();
+    server.use(http.get(ENVIRONMENT_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
+
+    renderEnvironmentSettings();
+
+    expect(await screen.findByText('Failed to load environment (500)')).toBeInTheDocument();
+  });
+
+  it('shows every stored value: working directory, ordered repositories with status, workspace setup', async () => {
+    useFactory();
+    useEnvironment(
+      environmentPayload({
+        workspaceSetupCommand: 'pnpm install',
+        repositories: [
+          environmentRepository({
+            projectRepositoryId: 'link-api',
+            position: 2,
+            lastBuildStatus: 'failed',
+            lastBuildError: 'pnpm build exited with 1',
+            setupCommand: 'pnpm build',
+          }),
+          environmentRepository({ projectRepositoryId: 'link-web', position: 1, lastBuildStatus: 'configured' }),
+          environmentRepository({ projectRepositoryId: 'link-gone', slug: null, position: 3, inEnvironment: false }),
+        ],
+      }),
+    );
+
+    renderEnvironmentSettings();
+
+    expect(await screen.findByRole('textbox', { name: 'Working directory' })).toHaveValue('/workspace');
+    expect(screen.getByRole('textbox', { name: 'Setup command' })).toHaveValue('pnpm install');
+
+    // Rows follow `position`; a link whose repository is gone is not shown at all.
+    const names = screen.getAllByText(/^acme\//).map(node => node.textContent);
+    expect(names).toEqual(['acme/link-web', 'acme/link-api']);
+    expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('switch', { name: /Clone .* into every session/ })).toHaveLength(2);
+    expect(screen.queryByText('Configured')).not.toBeInTheDocument();
+    expect(screen.getByText('Last build failed')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Clone acme/link-web into every session' })).toBeChecked();
+    expect(screen.getAllByText('Included')).toHaveLength(2);
+
+    // The card header opens its commands and the last failure; the switch inside it does not.
+    const user = userEvent.setup();
+    expect(screen.queryByText('pnpm build exited with 1')).not.toBeInTheDocument();
+    await user.click(screen.getByText('acme/link-api'));
+    expect(screen.getByText('pnpm build exited with 1')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Setup command for acme/link-api' })).toHaveValue('pnpm build');
+    await user.click(screen.getByRole('switch', { name: 'Clone acme/link-api into every session' }));
+    expect(screen.getByRole('button', { name: 'Hide commands for acme/link-api' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+  });
+
+  it('offers a drag handle per live repository and none for a dead link', async () => {
+    useFactory();
+    useEnvironment(
+      environmentPayload({
+        repositories: [
+          environmentRepository({ projectRepositoryId: 'link-web', position: 1 }),
+          environmentRepository({ projectRepositoryId: 'link-api', position: 2 }),
+          environmentRepository({ projectRepositoryId: 'link-gone', slug: null, position: 3 }),
+        ],
+      }),
+    );
+
+    renderEnvironmentSettings();
+
+    // Drag and drop itself needs layout jsdom does not provide; the PATCH a drop
+    // produces is covered by `reorderPatch`'s unit test.
+    expect(await screen.findByLabelText('Drag acme/link-web')).toBeInTheDocument();
+    expect(screen.getByLabelText('Drag acme/link-api')).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/^Drag /)).toHaveLength(2);
+  });
+
+  it('toggles a repository out of the environment', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+
+    renderEnvironmentSettings();
+
+    await userEvent.setup().click(await screen.findByRole('switch', { name: 'Clone acme/api into every session' }));
+
+    await waitFor(() => expect(patches).toHaveLength(1));
+    // Only the toggled repository and field: a stale page never resends another repository's values.
+    expect(patches[0]).toEqual({ repositories: [{ projectRepositoryId: 'link-api', inEnvironment: false }] });
+  });
+
+  it('saves a setup command inside the repositories array', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    await user.click(await screen.findByRole('button', { name: 'Show commands for acme/web' }));
+    const input = screen.getByRole('textbox', { name: 'Setup command for acme/web' });
+    await user.type(input, 'pnpm i{Enter}');
+
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({ repositories: [{ projectRepositoryId: 'link-web', setupCommand: 'pnpm i' }] });
+  });
+
+  it('never overwrites a command another editor saved after this page loaded', async () => {
+    useFactory();
+    // This page loaded before someone else saved `make api` on acme/api.
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    await user.click(await screen.findByRole('button', { name: 'Show commands for acme/web' }));
+    await user.type(screen.getByRole('textbox', { name: 'Setup command for acme/web' }), 'pnpm i{Enter}');
+
+    await waitFor(() => expect(patches).toHaveLength(1));
+    const sent = patches[0]?.repositories ?? [];
+    expect(sent.map(repository => repository.projectRepositoryId)).toEqual(['link-web']);
+    expect(sent[0]).not.toHaveProperty('teardownCommand');
+  });
+
+  it('surfaces a failed save as a toast and shows the stored value again', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    server.use(http.patch(ENVIRONMENT_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })));
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    await user.click(await screen.findByRole('switch', { name: 'Clone acme/api into every session' }));
+    expect(await screen.findByText('Failed to save environment (500)')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Clone acme/api into every session' })).toBeChecked();
+
+    const workdir = screen.getByRole('textbox', { name: 'Working directory' });
+    await user.clear(workdir);
+    await user.type(workdir, '/home/user{Enter}');
+    await waitFor(() => expect(screen.getAllByText('Failed to save environment (500)').length).toBeGreaterThan(1));
+    await waitFor(() => expect(workdir).toHaveValue('/workspace'));
+  });
+
+  it('renders one row per provider setting with the stored value or the default as placeholder', async () => {
+    useFactory();
+    useEnvironment(environmentPayload());
+
+    renderEnvironmentSettings();
+
+    expect(await screen.findByText(/Sandboxes run on the Mastra platform\./)).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: 'CPU' })).toHaveValue(2);
+    expect(screen.getByText('vCPUs of the sandbox.')).toBeInTheDocument();
+    const memory = screen.getByRole('spinbutton', { name: 'Memory (MB)' });
+    expect(memory).toHaveValue(null);
+    expect(memory).toHaveAttribute('placeholder', '1024');
+    expect(screen.getByRole('spinbutton', { name: 'Idle timeout (minutes)' })).toHaveAttribute('placeholder', '5');
+    expect(screen.getAllByRole('spinbutton')).toHaveLength(3);
+  });
+
+  it('saves one setting per field and clears a setting with null', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    await user.type(await screen.findByRole('spinbutton', { name: 'Memory (MB)' }), '4096{Enter}');
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({ settings: { memoryMb: 4096 } });
+
+    const cpu = screen.getByRole('spinbutton', { name: 'CPU' });
+    await user.clear(cpu);
+    await user.tab();
+    await waitFor(() => expect(patches).toHaveLength(2));
+    expect(patches[1]).toEqual({ settings: { cpuCount: null } });
+  });
+
+  it('refuses a value outside the schema range before any request', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    await user.type(await screen.findByRole('spinbutton', { name: 'Memory (MB)' }), '256{Enter}');
+    expect(await screen.findByText('Enter a whole number between 512 and 65536')).toBeInTheDocument();
+    expect(patches).toHaveLength(0);
+  });
+
+  it('keeps the stored value when the provider rejects a setting', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    server.use(
+      http.patch(ENVIRONMENT_URL, () =>
+        HttpResponse.json(
+          { error: 'invalid_environment', issues: [{ message: 'must be <= 8', path: ['cpuCount'] }] },
+          { status: 400 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    const cpu = await screen.findByRole('spinbutton', { name: 'CPU' });
+    await user.clear(cpu);
+    await user.type(cpu, '16{Enter}');
+    expect(await screen.findByText('Failed to save environment (400)')).toBeInTheDocument();
+    await waitFor(() => expect(cpu).toHaveValue(2));
+  });
+
+  it('drops an unsaved draft when switching to another factory', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            { id: FACTORY_ID, name: 'Acme' },
+            { id: 'factory-b', name: 'Beta' },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-b/environment`, () => {
+        const other = environmentPayload();
+        return HttpResponse.json({ environment: { ...other, settings: { ...other.settings, cpuCount: 4 } } });
+      }),
+    );
+    useEnvironment(environmentPayload());
+    server.use(
+      http.patch(ENVIRONMENT_URL, () =>
+        HttpResponse.json(
+          { error: 'invalid_environment', issues: [{ message: 'must be >= 1', path: ['cpuCount'] }] },
+          { status: 400 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    function SwitchFactory() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button onClick={() => navigate(`/factories/${FACTORY_ID}/settings/environment`)}>Switch to Acme</button>
+          <button onClick={() => navigate('/factories/factory-b/settings/environment')}>Switch to Beta</button>
+        </>
+      );
+    }
+
+    // Beta is visited first, so its environment is cached and switching back renders it without a loading state.
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/factories/factory-b/settings/environment']}>
+        <SwitchFactory />
+        <Routes>
+          <Route path="/factories/:factoryId/settings/environment" element={<EnvironmentSection />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByRole('spinbutton', { name: 'CPU' })).toHaveValue(4));
+    await user.click(screen.getByRole('button', { name: 'Switch to Acme' }));
+    await waitFor(() => expect(screen.getByRole('spinbutton', { name: 'CPU' })).toHaveValue(2));
+
+    const cpu = await screen.findByRole('spinbutton', { name: 'CPU' });
+    await user.clear(cpu);
+    await user.type(cpu, '0{Enter}');
+    // The rejected draft stays in Acme's field so the user can correct it.
+    await waitFor(() => expect(cpu).toHaveValue(0));
+    await user.click(screen.getByRole('button', { name: 'Switch to Beta' }));
+
+    await waitFor(() => expect(screen.getByRole('spinbutton', { name: 'CPU' })).toHaveValue(4));
+  });
+
+  it('shows the provider line and no settings for a custom sandbox', async () => {
+    useFactory();
+    useEnvironment(customEnvironment());
+
+    renderEnvironmentSettings();
+
+    expect(await screen.findByText(/Sandboxes run on a custom sandbox\./)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Working directory' })).toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+  });
+
+  it('renders boolean and enum settings as a switch and a select, and an unsupported type as a note', async () => {
+    useFactory();
+    const environment = environmentPayload({
+      sandbox: {
+        provider: 'docker',
+        settingsSchema: {
+          type: 'object',
+          properties: {
+            privileged: { type: 'boolean', title: 'Privileged' },
+            region: { type: 'string', title: 'Region', enum: ['us', 'eu'], default: 'us' },
+            mounts: { type: 'array', title: 'Mounts' },
+          },
+        },
+        capabilities: { template: true, builds: { available: false, history: false } },
+      },
+      settings: { region: 'eu' },
+    });
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+
+    renderEnvironmentSettings();
+
+    expect(await screen.findByText(/Sandboxes run on Docker\./)).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Region' })).toHaveTextContent('eu');
+    expect(screen.getByText('Mounts')).toBeInTheDocument();
+    expect(screen.getByText('Unsupported setting type')).toBeInTheDocument();
+    const privileged = screen.getByRole('switch', { name: 'Privileged' });
+    expect(privileged).not.toBeChecked();
+    await userEvent.setup().click(privileged);
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({ settings: { privileged: true } });
+  });
+
+  it('renders a oneOf of consts as a select labelled by title and saves the numeric value', async () => {
+    useFactory();
+    const environment = environmentPayload({
+      sandbox: {
+        provider: 'platform',
+        settingsSchema: {
+          type: 'object',
+          properties: {
+            memoryMb: {
+              type: 'integer',
+              title: 'Memory',
+              default: 1024,
+              oneOf: [
+                { const: 1024, title: '1 GB' },
+                { const: 8192, title: '8 GB' },
+              ],
+            },
+          },
+        },
+        capabilities: { template: true, builds: { available: true, history: false } },
+      },
+      settings: {},
+    });
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    const memory = await screen.findByRole('combobox', { name: 'Memory' });
+    expect(memory).toHaveTextContent('1 GB (default)');
+    await user.click(memory);
+    expect(await screen.findAllByRole('option')).toHaveLength(2);
+    await user.click(screen.getByRole('option', { name: '8 GB' }));
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({ settings: { memoryMb: 8192 } });
+
+    await user.click(memory);
+    await user.click(await screen.findByRole('option', { name: '1 GB (default)' }));
+    await waitFor(() => expect(patches).toHaveLength(2));
+    expect(patches[1]).toEqual({ settings: { memoryMb: null } });
+  });
+
+  it('saves decimals for number settings, strings as typed, and clears both with null', async () => {
+    useFactory();
+    const environment = environmentPayload({
+      sandbox: {
+        provider: 'e2b',
+        settingsSchema: {
+          type: 'object',
+          properties: {
+            ratio: { type: 'number', title: 'Ratio', minimum: 0 },
+            region: { type: 'string', title: 'Region', enum: ['us', 'eu'] },
+            image: { type: 'string', title: 'Image' },
+          },
+        },
+        capabilities: { template: true, builds: { available: true, history: true } },
+      },
+      settings: { region: 'eu', image: 'node:22' },
+    });
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    const ratio = await screen.findByRole('spinbutton', { name: 'Ratio' });
+    await user.type(ratio, '-1{Enter}');
+    expect(await screen.findByText('Enter a number of at least 0')).toBeInTheDocument();
+    expect(patches).toHaveLength(0);
+    await user.clear(ratio);
+    await user.type(ratio, '0.5{Enter}');
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({ settings: { ratio: 0.5 } });
+
+    const image = screen.getByRole('textbox', { name: 'Image' });
+    await user.clear(image);
+    await user.tab();
+    await waitFor(() => expect(patches).toHaveLength(2));
+    expect(patches[1]).toEqual({ settings: { image: null } });
+
+    await user.click(screen.getByRole('combobox', { name: 'Region' }));
+    await user.click(await screen.findByRole('option', { name: 'Default' }));
+    await waitFor(() => expect(patches).toHaveLength(3));
+    expect(patches[2]).toEqual({ settings: { region: null } });
+  });
+
+  it('saves the workspace setup command', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    const input = await screen.findByRole('textbox', { name: 'Setup command' });
+    await user.type(input, 'pnpm install{Enter}');
+
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({ workspaceSetupCommand: 'pnpm install' });
+  });
+});

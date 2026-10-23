@@ -7,7 +7,10 @@ import { isRule, createDefaultRule, createDefaultRuleGroup } from '../utils';
 import { RuleRow } from './rule-row';
 import type { RuleBuilderProps, RuleGroupViewProps } from './types';
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 const DEFAULT_MAX_DEPTH = 3;
@@ -25,6 +28,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
   const handleConditionChange = (index: number, condition: Rule | RuleGroup) => {
     onChange({
       ...group,
+      // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built core declarations distinguish the recursive group's depth from its children.
       conditions: group.conditions.map((c, i) => (i === index ? (condition as Rule | RuleGroupDepth1) : c)),
     });
   };
@@ -53,11 +57,13 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
   };
 
   return (
-    <div className={cn(isRoot ? 'bg-surface2' : 'bg-surface3 pl-6')}>
+    <div className={cn(isRoot ? 'bg-background' : 'bg-card pl-6')}>
       {/* Non-root group header */}
       {!isRoot && (
-        <div className="border-border1 flex items-center justify-between border-b border-dashed py-1.5 pr-4 pl-3">
-          <span className="text-ui-xs text-neutral3">Group</span>
+        <div className="flex items-center justify-between border-b border-dashed border-border py-1.5 pr-4 pl-3">
+          <Txt as="span" variant="meta" tone="muted">
+            Group
+          </Txt>
           {onRemove && (
             <Button type="button" onClick={onRemove} tooltip="Remove group" size="icon-sm" variant="ghost">
               <X />
@@ -67,20 +73,22 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
       )}
 
       {group.conditions.map((condition, index) => (
-        <div key={index} className="border-border1 border-b border-dashed last:border-b-0">
-          <div className={cn('relative', isRule(condition) && 'border-l-4 border-border1 p-4')}>
+        <div key={index} className="border-b border-dashed border-border last:border-b-0">
+          <div className={cn('relative', isRule(condition) && 'border-l-4 border-border p-4')}>
             {index > 0 && (
               <button
                 type="button"
                 onClick={handleToggleOperator}
                 className={cn(
-                  'absolute top-0 left-1/2 z-10 -translate-1/2 cursor-pointer rounded-full px-3 py-0.5 text-ui-xs',
+                  'absolute top-0 left-1/2 z-10 -translate-1/2 cursor-pointer rounded-full px-3 py-0.5',
                   group.operator === 'OR'
-                    ? 'bg-accent6Dark text-accent6 hover:bg-accent6Dark/70'
-                    : 'bg-accent3Dark text-accent3 hover:bg-accent3Dark/70',
+                    ? 'bg-badge-amber-subtle text-badge-amber-foreground hover:bg-badge-amber-strong'
+                    : 'bg-badge-blue-subtle text-badge-blue-foreground hover:bg-badge-blue-strong',
                 )}
               >
-                {group.operator.toLowerCase()}
+                <Txt as="span" variant="meta" className="block">
+                  {group.operator.toLowerCase()}
+                </Txt>
               </button>
             )}
 
@@ -148,12 +156,18 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
       <button
         type="button"
         onClick={handleAddFirstRule}
-        className="border-border1 text-ui-sm text-neutral3 hover:text-neutral6 flex w-full items-center justify-center gap-2 rounded-md border border-dashed p-2"
+        className={cn(
+          quietTextHover,
+          controlStateColorTransition,
+          'flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border p-2',
+        )}
       >
         <Icon>
           <Plus />
         </Icon>
-        Add conditional rule
+        <Txt as="span" variant="caption" className="block">
+          Add conditional rule
+        </Txt>
       </button>
     );
   }

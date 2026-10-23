@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { useApplyProviderOMDefaults } from '../../../../hooks/use-om';
+import type { BoardCatalogResponse } from '../../../../api/types';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSaveIntakeBindingMutation, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { fetchIntakeConfig, selectIntakeSource } from '../../factory/services/intake';
@@ -20,7 +20,7 @@ export interface CreateFactoryFromDraftOptions {
 
 /**
  * The wizard's single write: create the Factory, link the repository (which
- * feeds its issue intake), route the Linear project when one was picked, and
+ * feeds its issue intake), route the selected project-management source, and
  * save the model its runs start on. Nothing before this touches the server, so
  * an abandoned wizard leaves nothing behind.
  */
@@ -30,30 +30,44 @@ export function useCreateFactoryFromDraft({
   onRepositoryLinked,
   onCreated,
 }: CreateFactoryFromDraftOptions) {
-  const { baseUrl } = useApiConfig();
+  const { baseUrl, client } = useApiConfig();
   const queryClient = useQueryClient();
   const createFactory = useCreateFactoryMutation();
   const linkRepository = useLinkRepositoryMutation();
-  const applyOMDefaults = useApplyProviderOMDefaults();
   const saveIntakeBinding = useSaveIntakeBindingMutation();
   const saveIntakeConfig = useSaveIntakeConfigMutation();
 
-  const feedLinearProject = async (linear: { sourceId: string; factoryProjectId: string }) => {
+  // Issues belong on Work. An app that replaced the built-in boards leaves the
+  // source routed but boardless, so intake settings prompt for a board instead
+  // of guessing one.
+  const resolveIntakeBoard = async (factoryProjectId: string) => {
+    const { boards } = await queryClient.fetchQuery({
+      queryKey: queryKeys.boardCatalog(factoryProjectId),
+      queryFn: () => client.get<BoardCatalogResponse>(`/web/factory/projects/${factoryProjectId}/boards`),
+    });
+    return boards.some(board => board.id === 'work') ? 'work' : null;
+  };
+
+  const feedProject = async (input: {
+    integrationId: 'linear' | 'jira';
+    sourceId: string;
+    factoryProjectId: string;
+    board: string | null;
+  }) => {
     await saveIntakeBinding.mutateAsync({
-      integrationId: 'linear',
-      sourceId: linear.sourceId,
-      factoryProjectId: linear.factoryProjectId,
-      // A fresh Factory only has its built-in boards; issues belong on Work.
-      board: 'work',
+      integrationId: input.integrationId,
+      sourceId: input.sourceId,
+      factoryProjectId: input.factoryProjectId,
+      board: input.board,
     });
     const config = await fetchIntakeConfig(baseUrl);
-    const linearSelection = selectIntakeSource(config.linear, linear.sourceId);
-    if (linearSelection === config.linear) return;
-    await saveIntakeConfig.mutateAsync({ ...config, linear: linearSelection });
+    const selection = selectIntakeSource(config[input.integrationId], input.sourceId);
+    if (selection === config[input.integrationId]) return;
+    await saveIntakeConfig.mutateAsync({ ...config, [input.integrationId]: selection });
   };
 
   return useMutation({
-    mutationFn: async ({ providerId, modelId }: { providerId: string; modelId: string }) => {
+    mutationFn: async ({ modelId }: { modelId: string }) => {
       if (!draft?.name || !draft.repository) throw new Error('Start over from the name step.');
 
       const factory = draft.factoryId
@@ -66,11 +80,19 @@ export function useCreateFactoryFromDraft({
         await onRepositoryLinked(linked.projectRepositoryId);
       }
 
+      const board = draft.linearProjectId || draft.jiraProjectId ? await resolveIntakeBoard(factory.id) : null;
       await Promise.all([
         updateFactoryDefaultModel(baseUrl, factory.id, modelId),
-        applyOMDefaults.mutateAsync({ providerId, factoryModelId: modelId, factoryId: factory.id }),
         draft.linearProjectId
-          ? feedLinearProject({ sourceId: draft.linearProjectId, factoryProjectId: factory.id })
+          ? feedProject({
+              integrationId: 'linear',
+              sourceId: draft.linearProjectId,
+              factoryProjectId: factory.id,
+              board,
+            })
+          : undefined,
+        draft.jiraProjectId
+          ? feedProject({ integrationId: 'jira', sourceId: draft.jiraProjectId, factoryProjectId: factory.id, board })
           : undefined,
       ]);
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });

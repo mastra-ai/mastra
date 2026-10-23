@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { ChevronRight, InfoIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
@@ -18,10 +19,10 @@ export function SlackNotConfigured() {
           <span className="flex items-center gap-3">
             <SlackIcon className="size-7 shrink-0 opacity-50" />
             <span className="flex flex-col gap-0.5">
-              <Txt as="span" variant="ui-md">
+              <Txt as="span" variant="body">
                 Slack
               </Txt>
-              <Txt as="span" variant="ui-sm" className="text-icon3 whitespace-nowrap">
+              <Txt tone="muted" as="span" variant="caption" className="whitespace-nowrap">
                 Not configured
               </Txt>
             </span>
@@ -29,9 +30,10 @@ export function SlackNotConfigured() {
         }
       >
         <Txt
+          tone="muted"
           as="span"
-          variant="ui-sm"
-          className="text-icon3 flex items-start gap-1.5 pl-10 text-left lg:block lg:pl-0 lg:text-right"
+          variant="caption"
+          className="flex items-start gap-1.5 pl-10 text-left lg:block lg:pl-0 lg:text-right"
         >
           <InfoIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 lg:hidden" />
           Slack is not set up for this factory.
@@ -58,7 +60,7 @@ export function ConnectedAccountsSection() {
 
   if (accountsQuery.error) {
     return (
-      <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+      <Txt as="p" variant="caption" className="text-destructive-foreground">
         {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load connected accounts'}
       </Txt>
     );
@@ -72,10 +74,15 @@ export function ConnectedAccountsSection() {
     <span className="flex items-center gap-3">
       <SlackIcon className="size-7 shrink-0" />
       <span className="flex flex-col gap-0.5">
-        <Txt as="span" variant="ui-md">
+        <Txt as="span" variant="body">
           Slack
         </Txt>
-        <Txt as="span" variant="ui-sm" className={slackAccounts.length > 0 ? 'text-positive1' : 'text-icon3'}>
+        <Txt
+          tone="muted"
+          as="span"
+          variant="caption"
+          className={slackAccounts.length > 0 ? 'text-success-indicator' : ''}
+        >
           {slackAccounts.length > 1
             ? `${slackAccounts.length} connected`
             : slackAccounts.length === 1
@@ -91,13 +98,18 @@ export function ConnectedAccountsSection() {
       {slackAccounts.length > 0 && factoryId ? (
         <Link
           to={`/factories/${factoryId}/settings/connections/slack`}
-          className="group hover:bg-surface4 focus-visible:ring-accent1 block cursor-pointer rounded-xl outline-hidden transition-colors focus-visible:ring-2"
+          className={`group hover:bg-fill block cursor-pointer rounded-xl transition-colors ${focusRing}`}
         >
           <SettingsRow label={slackLabel}>
-            <span className="text-ui-sm text-icon4 group-hover:text-icon5 flex items-center gap-2">
+            <Txt
+              as="span"
+              variant="caption"
+              tone="muted"
+              className="group-hover:text-foreground flex items-center gap-2"
+            >
               Configure
               <ChevronRight aria-hidden="true" />
-            </span>
+            </Txt>
           </SettingsRow>
         </Link>
       ) : (
@@ -105,13 +117,18 @@ export function ConnectedAccountsSection() {
           type="button"
           disabled={!canConnect}
           onClick={connectSlack}
-          className="group hover:bg-surface4 focus-visible:ring-accent1 block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+          className={`group hover:bg-fill block w-full cursor-pointer rounded-xl text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
         >
           <SettingsRow label={slackLabel}>
-            <span className="text-ui-sm text-icon4 group-hover:text-icon5 flex items-center gap-2">
+            <Txt
+              as="span"
+              variant="caption"
+              tone="muted"
+              className="group-hover:text-foreground flex items-center gap-2"
+            >
               Connect
               <ChevronRight aria-hidden="true" />
-            </span>
+            </Txt>
           </SettingsRow>
         </button>
       )}

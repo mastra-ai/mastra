@@ -7,7 +7,7 @@ description: "Browse Databricks model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/databricks.svg" alt="Databricks logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Databricks
 
-Access 30 Databricks models through Mastra's model router. Authentication is handled automatically using the `DATABRICKS_TOKEN` environment variable. Configure `DATABRICKS_HOST` as well.
+Access 31 Databricks models through Mastra's model router. Authentication is handled automatically using the `DATABRICKS_TOKEN` environment variable. Configure `DATABRICKS_HOST` as well.
 
 Learn more in the [Databricks documentation](https://docs.databricks.com/aws/en/machine-learning/foundation-models/).
 
@@ -107,18 +107,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 25
   },
   {
-    "model": "databricks/databricks-claude-sonnet-4",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
-  },
-  {
     "model": "databricks/databricks-claude-sonnet-4-5",
     "imageInput": true,
     "audioInput": false,
@@ -141,30 +129,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 64000,
     "inputCost": 3,
     "outputCost": 15
-  },
-  {
-    "model": "databricks/databricks-gemini-2-5-flash",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 0.3,
-    "outputCost": 2.5
-  },
-  {
-    "model": "databricks/databricks-gemini-2-5-pro",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 1.25,
-    "outputCost": 10
   },
   {
     "model": "databricks/databricks-gemini-3-1-flash-lite",
@@ -191,6 +155,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 12
   },
   {
+    "model": "databricks/databricks-gemini-3-5-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 1.5,
+    "outputCost": 9
+  },
+  {
     "model": "databricks/databricks-gemini-3-flash",
     "imageInput": true,
     "audioInput": true,
@@ -201,18 +177,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.5,
     "outputCost": 3
-  },
-  {
-    "model": "databricks/databricks-gemini-3-pro",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 2,
-    "outputCost": 12
   },
   {
     "model": "databricks/databricks-glm-5-2",
@@ -317,10 +281,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 400000,
+    "contextWindow": 1050000,
     "maxOutput": 128000,
-    "inputCost": 1,
-    "outputCost": 6
+    "inputCost": 0.2,
+    "outputCost": 1.2
   },
   {
     "model": "databricks/databricks-gpt-5-6-sol",
@@ -331,8 +295,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 128000,
-    "inputCost": 5,
-    "outputCost": 30
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "databricks/databricks-gpt-5-6-terra",
@@ -343,8 +307,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 128000,
-    "inputCost": 2.5,
-    "outputCost": 15
+    "inputCost": 2,
+    "outputCost": 12
   },
   {
     "model": "databricks/databricks-gpt-5-mini",
@@ -378,9 +342,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.072,
-    "outputCost": 0.28
+    "maxOutput": 25000,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "databricks/databricks-gpt-oss-20b",
@@ -390,21 +354,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.05,
-    "outputCost": 0.2
-  },
-  {
-    "model": "databricks/databricks-kimi-k2-7-code",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.95,
-    "outputCost": 4
+    "maxOutput": 25000,
+    "inputCost": 0.07,
+    "outputCost": 0.3
   }
 ]}
 />

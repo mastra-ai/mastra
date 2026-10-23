@@ -26,6 +26,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
+  SpanQueryResponse,
+  TrustedSpanQueryPlan,
   BatchCreateFeedbackArgs,
   BatchCreateLogsArgs,
   BatchCreateMetricsArgs,
@@ -99,7 +101,9 @@ import type {
   ListScoresArgs,
   ListScoresResponse,
   ListTracesArgs,
+  ListTracesLightResponse,
   ListTracesResponse,
+  GetTraceQueryValuesResponse,
   ObservabilityStorageStrategy,
   PruneOptions,
   PruneResult,
@@ -107,9 +111,16 @@ import type {
   QueryThreadsResult,
   ScoreRecord,
   TableRetentionPolicy,
+  TraceAggregateResponse,
+  TraceQueryObservedFieldsResult,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
+  TrustedTraceAggregatePlan,
+  TrustedSpanAggregatePlan,
+  SpanAggregateResponse,
+  TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
+  TrustedTraceQueryValuesPlan,
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
@@ -141,9 +152,19 @@ import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 import { deltaPollingFeatureEnabled } from './polling';
 import { prunePartitionedTable, pruneTimescaleTable, retentionCutoff } from './retention';
 import * as scoresOps from './scores';
+import * as spanQueryOps from './span-query';
+import * as threadQueryOps from './thread-query';
+import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as tracesOps from './traces';
 import * as tracingOps from './tracing';
+
+const spanQueryFeatures =
+  typeof coreStorage.planSpanQuery === 'function'
+    ? (['span-query', 'span-query-context-fields'] as const)
+    : ([] as const);
+const spanAggregateFeatures =
+  typeof coreStorage.planSpanAggregate === 'function' ? (['span-aggregate'] as const) : ([] as const);
 
 export type { PartitionMode, PartitioningOptions } from './partitioning';
 export type { DiscoveryConfig } from './discovery';
@@ -159,7 +180,13 @@ export type VNextPostgresObservabilityConfig = PgDomainConfig & {
 };
 
 function wrapError(op: string, error: unknown, details?: Record<string, unknown>): never {
-  if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+  if (
+    error instanceof MastraError ||
+    error instanceof coreStorage.TraceQueryCursorError ||
+    error instanceof coreStorage.TraceQueryExecutionError ||
+    error instanceof coreStorage.TraceQueryResourceLimitError
+  )
+    throw error;
   throw new MastraError(
     {
       id: createStorageErrorId('PG', op, 'FAILED'),
@@ -350,8 +377,57 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   }
 
   override getFeatures() {
-    if (!deltaPollingFeatureEnabled()) return ['metrics', 'logs', 'trace-query', 'thread-query'] as const;
-    return ['metrics', 'logs', 'delta-polling', 'trace-query', 'thread-query'] as const;
+    if (!deltaPollingFeatureEnabled()) {
+      return [
+        'metrics',
+        'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
+        'trace-query',
+        'trace-aggregate',
+        ...spanQueryFeatures,
+        ...spanAggregateFeatures,
+        ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
+        'trace-query-root-duration',
+        'trace-query-discovery',
+        'thread-query',
+        'trace-query-tenant-scope',
+        'feedback',
+        'trace-query-context-ids',
+        ...traceQueryOps.timeToFirstChunkFeatures,
+        'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
+      ] as const;
+    }
+    return [
+      'metrics',
+      'logs',
+      'entity-type-discovery',
+      'entity-name-discovery',
+      'service-name-discovery',
+      'environment-discovery',
+      'tag-discovery',
+      'metric-discovery',
+      'delta-polling',
+      'trace-query',
+      'trace-aggregate',
+      ...spanQueryFeatures,
+      ...spanAggregateFeatures,
+      ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
+      'trace-query-root-duration',
+      'trace-query-discovery',
+      'thread-query',
+      'trace-query-tenant-scope',
+      'feedback',
+      'trace-query-context-ids',
+      ...traceQueryOps.timeToFirstChunkFeatures,
+      'trace-query-root-span-fields',
+      'trace-query-root-entity-id',
+    ] as const;
   }
 
   async #run<T>(op: string, fn: () => Promise<T>, details?: Record<string, unknown>): Promise<T> {
@@ -418,6 +494,15 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   override async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return this.#run('LIST_TRACES', () => tracesOps.listTraces(this.#readClient, this.#schema, args));
   }
+  override async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    return this.#run('LIST_TRACES_LIGHT', () => tracesOps.listTracesLight(this.#readClient, this.#schema, args));
+  }
+
+  override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    return this.#run('QUERY_SPANS', () =>
+      spanQueryOps.querySpans(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
 
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     return this.#run('QUERY_TRACES', () =>
@@ -425,9 +510,44 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     );
   }
 
-  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+  override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    return this.#run('AGGREGATE_TRACES', () =>
+      traceAggregateOps.aggregateTraces(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async aggregateSpans(plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+    return this.#run('AGGREGATE_SPANS', () =>
+      traceAggregateOps.aggregateSpans(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async getTraceQueryObservedFields(
+    plan: TrustedTraceQueryObservedFieldsPlan,
+  ): Promise<TraceQueryObservedFieldsResult> {
+    return this.#run('GET_TRACE_QUERY_OBSERVED_FIELDS', () =>
+      traceQueryOps.getTraceQueryObservedFields(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async getTraceQueryValues(plan: TrustedTraceQueryValuesPlan): Promise<GetTraceQueryValuesResponse> {
+    return this.#run('GET_TRACE_QUERY_VALUES', () =>
+      traceQueryOps.getTraceQueryValues(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async queryThreads(plan: coreStorage.TrustedThreadRowsQueryPlan): Promise<coreStorage.ThreadQueryResponse>;
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse> {
     return this.#run('QUERY_THREADS', () =>
-      traceQueryOps.queryThreads(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+      plan.result === 'threadRows'
+        ? threadQueryOps.queryThreadRows(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs)
+        : traceQueryOps.queryThreads(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
     );
   }
 

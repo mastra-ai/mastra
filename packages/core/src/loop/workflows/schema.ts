@@ -27,6 +27,8 @@ export interface LLMIterationStepResult {
   reason: LanguageModelV2FinishReason | 'tripwire' | 'retry' | 'abort';
   warnings: LanguageModelV2CallWarning[];
   isContinued: boolean;
+  /** Private continuation: the physical attempt did not complete a logical step. */
+  signalPreempted?: boolean;
   logprobs?: LanguageModelV1LogProbs;
   totalUsage: LanguageModelUsage;
   headers?: Record<string, string>;
@@ -86,6 +88,11 @@ export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT = unde
    * Preserved across processor-triggered retries so retries resume on the same fallback model.
    */
   fallbackModelIndex?: number;
+  /**
+   * Set on the retry that follows an attachment download failure nothing else
+   * recovered. That retry replaces unavailable attachments with a placeholder.
+   */
+  skipUnavailableAttachments?: boolean;
   processorRetryFeedback?: string;
   /**
    * True when a background task result was injected and the LLM needs another
@@ -110,6 +117,7 @@ export const llmIterationStepResultSchema = z.object({
   reason: z.string(),
   warnings: z.array(z.any()),
   isContinued: z.boolean(),
+  signalPreempted: z.boolean().optional(),
   logprobs: z.any().optional(),
   totalUsage: languageModelUsageSchema.optional(),
   headers: z.record(z.string(), z.string()).optional(),
@@ -158,6 +166,7 @@ export const llmIterationOutputSchema = z.object({
   stepResult: llmIterationStepResultSchema,
   processorRetryCount: z.number().optional(),
   fallbackModelIndex: z.number().optional(),
+  skipUnavailableAttachments: z.boolean().optional(),
   processorRetryFeedback: z.string().optional(),
   isTaskCompleteCheckFailed: z.boolean().optional(), //true if the isTaskComplete check failed and LLM has to run again
   backgroundTaskPending: z.boolean().optional(), // true if a background task result was injected and LLM needs to process it
@@ -176,10 +185,11 @@ export const toolCallOutputSchema = toolCallInputSchema.extend({
   result: z.any().optional(),
   error: z.any().optional(),
   // Set when execution was interrupted by request abort (not a tool error); no result/error
-  // so downstream leaves the call incomplete. Must be declared or Zod strips it. See tool-call-step.ts.
+  // so downstream leaves the call incomplete. See tool-call-step.ts. Declared for schema
+  // honesty — no engine validates step outputs today, but Zod would strip an undeclared
+  // field if validation is ever (re-)enabled (see schema.test.ts).
   aborted: z.boolean().optional(),
   // HITL approval decision, present when the tool required approval and was resumed.
-  // Without this field Zod would strip `approval` from the step output before persistence.
   approval: z
     .object({
       id: z.string(),

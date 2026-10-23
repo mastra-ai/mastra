@@ -1,8 +1,8 @@
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
-const { renderBannerMock, updateStatusLineMock } = vi.hoisted(() => ({
-  renderBannerMock: vi.fn(),
+const { headerOptionsMock, updateStatusLineMock } = vi.hoisted(() => ({
+  headerOptionsMock: vi.fn(),
   updateStatusLineMock: vi.fn(),
 }));
 
@@ -27,6 +27,7 @@ vi.mock('@earendil-works/pi-tui', () => ({
     type = 'spacer';
     constructor(public height: number) {}
   },
+  visibleWidth: (value: string) => value.length,
   Text: class {
     type = 'text';
     constructor(
@@ -38,16 +39,20 @@ vi.mock('@earendil-works/pi-tui', () => ({
 }));
 
 vi.mock('../components/banner.js', () => ({
-  renderBanner: renderBannerMock,
+  HeaderComponent: class {
+    type = 'header';
+    constructor(public options: unknown) {
+      headerOptionsMock(options);
+    }
+  },
+}));
+
+vi.mock('../components/surface.js', () => ({
+  keyHint: (key: string, description: string) => `[${key}] ${description}`,
 }));
 
 vi.mock('../components/task-progress.js', () => ({
-  TaskProgressComponent: class {
-    quietMode: boolean | undefined;
-    setQuietMode(value: boolean) {
-      this.quietMode = value;
-    }
-  },
+  TaskProgressComponent: class {},
 }));
 
 vi.mock('../components/idle-counter.js', () => ({
@@ -58,12 +63,16 @@ vi.mock('../status-line.js', () => ({
   updateStatusLine: updateStatusLineMock,
 }));
 
-import { renderBanner } from '../components/banner.js';
+vi.mock('../model-packs/apply.js', () => ({
+  switchModeWithPack: vi.fn(),
+}));
+
 import { buildLayout, subscribeToAgentController } from '../setup.js';
 import { updateStatusLine } from '../status-line.js';
 
 function textOf(child: unknown) {
-  return stripAnsi((child as { text?: string }).text ?? '');
+  const c = child as { text?: string; render?: (width: number) => string[] };
+  return stripAnsi(c.text ?? c.render?.(200)[0] ?? '');
 }
 
 function createDeferred<T>() {
@@ -82,7 +91,7 @@ function createState(modeCount = 2) {
 
   return {
     state: {
-      options: { appName: 'Acme Code', version: '1.2.3' },
+      options: { appName: 'Acme Code', version: '1.2.3', backgroundToolsEnabled: true },
       projectInfo: {
         name: 'demo-project',
         resourceId: 'resource-123',
@@ -101,10 +110,10 @@ function createState(modeCount = 2) {
         hideOverlay: vi.fn(),
       },
       chatContainer: { type: 'chat' },
+      globalBackgroundNoticeContainer: { type: 'global-background-notice' },
       editorContainer: { type: 'editor-container', addChild: vi.fn(child => editorChildren.push(child)) },
       editor,
-      footer: { type: 'footer', addChild: vi.fn(child => footerChildren.push(child)) },
-      quietMode: true,
+      footer: { type: 'footer', addChild: vi.fn(child => footerChildren.push(child)), render: vi.fn(() => []) },
     } as any,
     uiChildren,
     editorChildren,
@@ -114,29 +123,47 @@ function createState(modeCount = 2) {
 }
 
 describe('buildLayout startup header', () => {
-  it('renders banner, project frontmatter, startup hints, containers, footer, and editor focus in order', () => {
-    renderBannerMock.mockReturnValue('BANNER v1.2.3');
+  it('shows the Factory project, repository, and branch instead of local project info in Factory mode', () => {
+    const { state } = createState();
+    state.factory = {
+      projectName: 'mastra',
+      repositorySlug: 'mastra-ai/mastra',
+      branch: 'user/session-1',
+      url: 'https://f',
+    };
+
+    buildLayout(state, vi.fn());
+
+    expect(headerOptionsMock).toHaveBeenLastCalledWith({
+      version: '1.2.3',
+      appName: 'Acme Code',
+      info: ['Factory: mastra', 'Repository: mastra-ai/mastra', 'Branch: user/session-1', 'URL: https://f'],
+    });
+  });
+
+  it('renders the header, startup hints, containers, Working row, footer, and editor focus in order', () => {
     const refreshModelAuthStatus = vi.fn();
     const { state, uiChildren, editorChildren, footerChildren, editor } = createState();
 
     buildLayout(state, refreshModelAuthStatus);
 
-    expect(renderBanner).toHaveBeenCalledWith('1.2.3', 'Acme Code');
-    expect(textOf(uiChildren[1])).toBe('BANNER v1.2.3');
-    const projectDetails = textOf(uiChildren[2]);
-    expect(projectDetails).toBe(
-      ['Project: demo-project', 'Resource ID: resource-123', 'Branch: feature/banner', 'Worktree of: /repos/main'].join(
-        '\n',
-      ),
-    );
-    expect(projectDetails).not.toContain('User:');
-    expect(projectDetails).not.toContain('@');
-    expect(textOf(uiChildren[4])).toBe('  ⇧+Tab cycle modes · /help info & shortcuts');
-    expect(uiChildren[6]).toBe(state.chatContainer);
-    expect(uiChildren[7]).toBe(state.taskProgress);
+    expect(headerOptionsMock).toHaveBeenCalledWith({
+      version: '1.2.3',
+      appName: 'Acme Code',
+      info: [
+        'Project: demo-project',
+        'Resource ID: resource-123',
+        'Branch: feature/banner',
+        'Worktree of: /repos/main',
+      ],
+    });
+    expect((uiChildren[1] as { type: string }).type).toBe('header');
+    expect(textOf(uiChildren[3])).toBe('  [shift+tab] cycle modes · [/help] info & shortcuts');
+    expect(uiChildren[5]).toBe(state.chatContainer);
+    expect(uiChildren[6]).toBe(state.taskProgress);
+    expect(uiChildren[7]).toBe(state.globalBackgroundNoticeContainer);
     expect(uiChildren[8]).toBe(state.editorContainer);
     expect(uiChildren[9]).toBe(state.footer);
-    expect(state.taskProgress.quietMode).toBe(true);
     expect(editorChildren).toEqual([state.idleCounter, editor]);
     expect(footerChildren).toEqual([state.statusLine, state.memoryStatusLine]);
     expect(updateStatusLine).toHaveBeenCalledWith(state);
@@ -144,18 +171,49 @@ describe('buildLayout startup header', () => {
     expect(state.ui.setFocus).toHaveBeenCalledWith(editor);
   });
 
+  it('omits the background notice container when background tools are disabled', () => {
+    const { state, uiChildren } = createState();
+    state.options.backgroundToolsEnabled = false;
+
+    buildLayout(state, vi.fn());
+
+    expect(uiChildren).not.toContain(state.globalBackgroundNoticeContainer);
+  });
+
   it('omits the mode-cycle startup hint when there is only one mode', () => {
-    renderBannerMock.mockReturnValue('BANNER v1.2.3');
     const { state, uiChildren } = createState(1);
 
     buildLayout(state, vi.fn());
 
-    expect(textOf(uiChildren[4])).toBe('  /help info & shortcuts');
+    expect(textOf(uiChildren[3])).toBe('  [/help] info & shortcuts');
+  });
+
+  it('drops startup hints that do not fit instead of wrapping them', () => {
+    const { state, uiChildren } = createState();
+
+    buildLayout(state, vi.fn());
+
+    const hints = uiChildren[3] as { render(width: number): string[] };
+    expect(hints.render(40)).toEqual(['  [shift+tab] cycle modes']);
+    expect(hints.render(10)).toEqual([]);
+  });
+
+  it('lays the status line out again when the footer renders at a new width', () => {
+    const { state } = createState();
+    buildLayout(state, vi.fn());
+    updateStatusLineMock.mockClear();
+
+    state.footer.render(80);
+    state.footer.render(80);
+    state.footer.render(50);
+
+    expect(updateStatusLineMock).toHaveBeenCalledTimes(2);
   });
 
   it('serializes controller event handling so abort cleanup cannot interleave with stream updates', async () => {
     let listener: ((event: { type: string }) => Promise<void>) | undefined;
     const state = {
+      options: { backgroundToolsEnabled: false },
       session: {
         subscribe: vi.fn((handler: typeof listener) => {
           listener = handler;
@@ -178,6 +236,7 @@ describe('buildLayout startup header', () => {
     const second = listener?.({ type: 'agent_end' });
     await Promise.resolve();
 
+    expect(state.waitForAgentControllerEvents).toBeUndefined();
     expect(order).toEqual(['start:message_update']);
 
     releaseFirst.resolve();
@@ -185,5 +244,84 @@ describe('buildLayout startup header', () => {
     await second;
 
     expect(order).toEqual(['start:message_update', 'end:message_update', 'start:agent_end', 'end:agent_end']);
+  });
+
+  it('does not block the finite event queue on a suspended interactive prompt when background tools are enabled', async () => {
+    let listener: ((event: { type: string }) => Promise<void>) | undefined;
+    const state = {
+      options: { backgroundToolsEnabled: true },
+      session: {
+        subscribe: vi.fn((handler: typeof listener) => {
+          listener = handler;
+          return vi.fn();
+        }),
+      },
+    } as any;
+    const answerPrompt = createDeferred<void>();
+    const order: string[] = [];
+    const handleEvent = vi.fn(async (event: { type: string }) => {
+      order.push(`start:${event.type}`);
+      if (event.type === 'tool_suspended') {
+        await answerPrompt.promise;
+      }
+      order.push(`end:${event.type}`);
+    });
+
+    subscribeToAgentController(state, handleEvent);
+    const prompt = listener?.({ type: 'tool_suspended' });
+    const threadChange = listener?.({ type: 'thread_changed' });
+    const drained = state.waitForAgentControllerEvents?.();
+    expect(drained).toBeDefined();
+    await drained;
+
+    expect(order).toEqual(['start:tool_suspended', 'start:thread_changed', 'end:thread_changed']);
+
+    answerPrompt.resolve();
+    await prompt;
+    await threadChange;
+    await vi.waitFor(() =>
+      expect(order).toEqual([
+        'start:tool_suspended',
+        'start:thread_changed',
+        'end:thread_changed',
+        'end:tool_suspended',
+      ]),
+    );
+  });
+
+  it('preserves serial event handling for suspended prompts when background tools are disabled', async () => {
+    let listener: ((event: { type: string }) => Promise<void>) | undefined;
+    const state = {
+      options: { backgroundToolsEnabled: false },
+      session: {
+        subscribe: vi.fn((handler: typeof listener) => {
+          listener = handler;
+          return vi.fn();
+        }),
+      },
+    } as any;
+    const answerPrompt = createDeferred<void>();
+    const order: string[] = [];
+    const handleEvent = vi.fn(async (event: { type: string }) => {
+      order.push(`start:${event.type}`);
+      if (event.type === 'tool_suspended') {
+        await answerPrompt.promise;
+      }
+      order.push(`end:${event.type}`);
+    });
+
+    subscribeToAgentController(state, handleEvent);
+    const prompt = listener?.({ type: 'tool_suspended' });
+    const threadChange = listener?.({ type: 'thread_changed' });
+    await Promise.resolve();
+
+    expect(state.waitForAgentControllerEvents).toBeUndefined();
+    expect(order).toEqual(['start:tool_suspended']);
+
+    answerPrompt.resolve();
+    await prompt;
+    await threadChange;
+
+    expect(order).toEqual(['start:tool_suspended', 'end:tool_suspended', 'start:thread_changed', 'end:thread_changed']);
   });
 });

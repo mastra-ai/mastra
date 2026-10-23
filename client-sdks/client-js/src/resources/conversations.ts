@@ -1,4 +1,5 @@
 import type { RequestContext } from '@mastra/core/request-context';
+import type { PathParams } from '../route-types.generated.js';
 import type {
   ClientOptions,
   Conversation,
@@ -9,12 +10,17 @@ import type {
 import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
+type ConversationId = PathParams<'GET /v1/conversations/:conversationId'>['conversationId'];
+
 export class ConversationItems extends BaseResource {
   constructor(options: ClientOptions) {
     super(options);
   }
 
-  list(conversationId: string, requestContext?: RequestContext | Record<string, any>): Promise<ConversationItemsPage> {
+  list(
+    conversationId: ConversationId,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ConversationItemsPage> {
     return this.request(
       `/v1/conversations/${encodeURIComponent(conversationId)}/items${requestContextQueryString(requestContext)}`,
     );
@@ -37,13 +43,19 @@ export class Conversations extends BaseResource {
     });
   }
 
-  retrieve(conversationId: string, requestContext?: RequestContext | Record<string, any>): Promise<Conversation> {
+  retrieve(
+    conversationId: ConversationId,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<Conversation> {
     return this.request(
       `/v1/conversations/${encodeURIComponent(conversationId)}${requestContextQueryString(requestContext)}`,
     );
   }
 
-  delete(conversationId: string, requestContext?: RequestContext | Record<string, any>): Promise<ConversationDeleted> {
+  delete(
+    conversationId: ConversationId,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ConversationDeleted> {
     return this.request(
       `/v1/conversations/${encodeURIComponent(conversationId)}${requestContextQueryString(requestContext)}`,
       {

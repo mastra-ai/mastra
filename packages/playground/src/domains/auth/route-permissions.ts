@@ -53,7 +53,8 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { route: '/metrics', permission: 'observability:read', name: 'Metrics' },
   { route: '/intelligence', permission: 'observability:read', name: 'Intelligence' },
   { route: '/traces', permission: 'observability:read', name: 'Traces' },
-  { route: '/inbox', permission: 'observability:read', name: 'Inbox' },
+  { route: '/spans', permission: 'observability:read', name: 'Spans' },
+  { route: '/threads', permission: 'observability:read', name: 'Threads' },
   { route: '/logs', permission: 'logs:read', name: 'Logs' },
 
   // Evaluation - uses 'scores' resource (not 'scorers')
@@ -70,12 +71,14 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { route: '/workspaces', permission: 'workspaces:read', name: 'Workspaces' },
 
   // Admin-only pages
-  { route: '/request-context', permission: '*', name: 'Request Context' },
 
   // UI-only pages (no corresponding API resource) - marked as public
   // These pages don't fetch protected data, so they're accessible to all authenticated users
   { route: '/settings', permission: 'public', name: 'Settings' },
   { route: '/resources', permission: 'public', name: 'Resources' },
+  // End-user connections are gated server-side on the caller's own resource
+  // key (userConnectRoutes), not on a studio RBAC resource.
+  { route: '/connections', permission: 'public', name: 'Connections' },
 ];
 
 /**

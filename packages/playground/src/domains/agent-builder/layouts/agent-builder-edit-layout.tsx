@@ -43,8 +43,8 @@ export const AgentBuilderEditLayout = ({
       {topBar}
       <div
         className={cn(
-          'flex flex-1 min-h-0 min-w-0 flex-col pt-4 pb-4 md:pb-10',
-          !isCentered && 'lg:grid lg:grid-rows-1 lg:grid-cols-[1fr_2fr]',
+          'flex min-h-0 min-w-0 flex-1 flex-col pt-4 pb-4 md:pb-10',
+          !isCentered && 'lg:grid lg:grid-cols-[1fr_2fr] lg:grid-rows-1',
         )}
       >
         <div
@@ -71,7 +71,7 @@ export const AgentBuilderEditLayout = ({
             className={cn(
               'min-w-0 overflow-hidden',
               'flex-1 px-4 md:px-10',
-              'lg:flex-none lg:h-full lg:min-h-0 lg:pl-0 lg:pr-10',
+              'lg:h-full lg:min-h-0 lg:flex-none lg:pr-10 lg:pl-0',
             )}
             data-testid="agent-builder-panel-profile"
             style={{ viewTransitionName: 'agent-builder-profile-panel' }}

@@ -12,7 +12,7 @@
 
 import type { TracingEvent, AnyExportedSpan, SpanErrorInfo } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TrackingExporter } from './tracking';
 import type { TraceData, TrackingExporterConfig } from './tracking';
 
@@ -909,6 +909,130 @@ describe('TrackingExporter', () => {
     });
   });
 
+  describe('Hard cap enforcement during flush and shutdown', () => {
+    class GatedExporter extends TestTrackingExporter {
+      public flushCalls = 0;
+      public postShutdownCalls = 0;
+      /** Settled by the test to release the TRACE_CAP_EXCEEDED abort */
+      public gate: Promise<void> = Promise.resolve();
+
+      protected override async _abortSpan(args: {
+        span: TestSpanData;
+        traceData: TestTraceData;
+        reason: SpanErrorInfo;
+      }): Promise<void> {
+        if (args.reason.id === 'TRACE_CAP_EXCEEDED') await this.gate;
+        await super._abortSpan(args);
+      }
+
+      protected override async _flush(): Promise<void> {
+        this.flushCalls++;
+      }
+
+      protected override async _postShutdown(): Promise<void> {
+        this.postShutdownCalls++;
+      }
+    }
+
+    function rootStart(i: number): TracingEvent {
+      return {
+        type: 'span_started',
+        exportedSpan: {
+          id: `root-${i}`,
+          traceId: `trace-${i}`,
+          name: `root-${i}`,
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          isEvent: false,
+          startTime: new Date(),
+        },
+      };
+    }
+
+    /** Starts two root traces under a cap of 1, so root-0 is being evicted while the gate is held. */
+    async function startEvictingTrace(): Promise<{
+      gated: GatedExporter;
+      release: () => void;
+      fail: (error: Error) => void;
+    }> {
+      const gated = new GatedExporter({ maxTotalTraces: 1, traceCleanupDelayMs: 60 * 60 * 1000 });
+      let release!: () => void;
+      let fail!: (error: Error) => void;
+      gated.gate = new Promise<void>((resolve, reject) => {
+        release = resolve;
+        fail = reject;
+      });
+      await gated.exportTracingEvent(rootStart(0));
+      await flushAsync();
+      await gated.exportTracingEvent(rootStart(1));
+      await flushAsync();
+      return { gated, release, fail };
+    }
+
+    function abortsOf(gated: GatedExporter, spanId: string): SpanErrorInfo[] {
+      return gated.calls
+        .filter(c => c.method === '_abortSpan' && c.spanId === spanId)
+        .map(c => c.args?.reason as SpanErrorInfo);
+    }
+
+    function settled(promise: Promise<void>): () => boolean {
+      let done = false;
+      promise.then(
+        () => (done = true),
+        () => (done = true),
+      );
+      return () => done;
+    }
+
+    it('flush waits for a held hard-cap abort before the vendor flush', async () => {
+      const { gated, release } = await startEvictingTrace();
+      exporter = gated;
+
+      const flush = gated.flush();
+      const isDone = settled(flush);
+      await flushAsync();
+      expect(isDone()).toBe(false);
+      expect(gated.flushCalls).toBe(0);
+
+      release();
+      await flush;
+      expect(gated.flushCalls).toBe(1);
+      expect(abortsOf(gated, 'root-0').map(r => r.id)).toEqual(['TRACE_CAP_EXCEEDED']);
+      expect(gated.getTraceMapSize()).toBe(1);
+    });
+
+    it('shutdown waits for a held hard-cap abort and does not abort the evicted span again', async () => {
+      const { gated, release } = await startEvictingTrace();
+      exporter = gated;
+
+      const shutdown = gated.shutdown();
+      const isDone = settled(shutdown);
+      await flushAsync();
+      expect(isDone()).toBe(false);
+      expect(gated.postShutdownCalls).toBe(0);
+
+      release();
+      await shutdown;
+      expect(gated.postShutdownCalls).toBe(1);
+      expect(abortsOf(gated, 'root-0').map(r => r.id)).toEqual(['TRACE_CAP_EXCEEDED']);
+      expect(abortsOf(gated, 'root-1').map(r => r.id)).toEqual(['SHUTDOWN']);
+    });
+
+    it('flush still completes when the held hard-cap abort throws', async () => {
+      const { gated, fail } = await startEvictingTrace();
+      exporter = gated;
+
+      const flush = gated.flush();
+      const isDone = settled(flush);
+      await flushAsync();
+      expect(isDone()).toBe(false);
+
+      fail(new Error('vendor rejected abort'));
+      await expect(flush).resolves.toBeUndefined();
+      expect(gated.flushCalls).toBe(1);
+    });
+  });
+
   describe('Shutdown behavior', () => {
     it('should cancel pending cleanups on shutdown', async () => {
       exporter = new TestTrackingExporter({
@@ -986,6 +1110,151 @@ describe('TrackingExporter', () => {
       // Both should now be built
       expect(exporter.builtSpans.has(rootStart.exportedSpan.id)).toBe(true);
       expect(exporter.builtSpans.has(childStarts[0].exportedSpan.id)).toBe(true);
+    });
+  });
+
+  describe('Span end before span is built', () => {
+    const t = new Date('2026-01-01T00:00:00Z');
+    let traceId: string;
+
+    function span(id: string, parentSpanId?: string, endTime?: Date): AnyExportedSpan {
+      return createExportedSpan({
+        id,
+        traceId,
+        parentSpanId,
+        name: id,
+        type: parentSpanId ? SpanType.TOOL_CALL : SpanType.AGENT_RUN,
+        isRootSpan: !parentSpanId,
+        isEvent: false,
+        startTime: t,
+        endTime,
+      });
+    }
+
+    function finishCalls(spanId: string): MethodCall[] {
+      return exporter.calls.filter(c => c.method === '_finishSpan' && c.spanId === spanId);
+    }
+
+    beforeEach(async () => {
+      exporter = new TestTrackingExporter({ traceCleanupDelayMs: 60 * 60 * 1000 });
+      traceId = generateTraceId();
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('root')));
+      await flushAsync();
+    });
+
+    it('should finish a span whose start and end are dispatched in the same tick', async () => {
+      // The bus dispatches events without awaiting the previous one
+      await Promise.all([
+        exporter.exportTracingEvent(createTracingEvent('span_started', span('tool', 'root'))),
+        exporter.exportTracingEvent(createTracingEvent('span_ended', span('tool', 'root', t))),
+      ]);
+      await flushAsync();
+
+      const buildIndex = exporter.calls.findIndex(c => c.method === '_buildSpan' && c.spanId === 'tool');
+      const finishIndex = exporter.calls.findIndex(c => c.method === '_finishSpan' && c.spanId === 'tool');
+      expect(finishCalls('tool')).toHaveLength(1);
+      expect(finishIndex).toBeGreaterThan(buildIndex);
+
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('root', undefined, t)));
+      await exporter.shutdown();
+      expect(exporter.abortedSpans.size).toBe(0);
+    });
+
+    it('should finish a span whose end arrives while its start is queued for a missing parent', async () => {
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('child', 'parent')));
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('child', 'parent', t)));
+      await flushAsync();
+      expect(finishCalls('child')).toHaveLength(0);
+
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('parent', 'root')));
+      await flushAsync();
+      expect(finishCalls('child')).toHaveLength(1);
+
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('parent', 'root', t)));
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('root', undefined, t)));
+      await exporter.shutdown();
+      expect(exporter.abortedSpans.size).toBe(0);
+    });
+
+    it('should finish a span whose start and end wait for a late root, then a late parent', async () => {
+      traceId = generateTraceId();
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('child', 'parent')));
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('child', 'parent', t)));
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('root')));
+      await flushAsync();
+      expect(finishCalls('child')).toHaveLength(0);
+
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('parent', 'root')));
+      await flushAsync();
+      expect(finishCalls('child')).toHaveLength(1);
+
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('parent', 'root', t)));
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('root', undefined, t)));
+      await exporter.shutdown();
+      expect(exporter.abortedSpans.has('child')).toBe(false);
+    });
+
+    it('should process a queued span end on flush, so shutdown right after does not abort it', async () => {
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('child', 'parent')));
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('child', 'parent', t)));
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('parent', 'root')));
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('parent', 'root', t)));
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('root', undefined, t)));
+
+      // No wait for the setImmediate replays: flush() must process them itself
+      await exporter.flush();
+      expect(finishCalls('child')).toHaveLength(1);
+
+      await exporter.shutdown();
+      expect(exporter.abortedSpans.size).toBe(0);
+    });
+
+    it('should drain a late root -> parent -> child cascade on shutdown', async () => {
+      traceId = generateTraceId();
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('child', 'parent')));
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('child', 'parent', t)));
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('parent', 'root')));
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('root')));
+
+      await exporter.shutdown();
+      expect(finishCalls('child')).toHaveLength(1);
+      // parent and root never ended, so they are the only spans shutdown aborts
+      expect([...exporter.abortedSpans.keys()].sort()).toEqual(['parent', 'root']);
+    });
+
+    it('should drain queued events on flush when timers are faked', async () => {
+      vi.useFakeTimers();
+      try {
+        await exporter.exportTracingEvent(createTracingEvent('span_started', span('child', 'parent')));
+        await exporter.exportTracingEvent(createTracingEvent('span_ended', span('child', 'parent', t)));
+        await exporter.exportTracingEvent(createTracingEvent('span_started', span('parent', 'root')));
+
+        await exporter.flush();
+        expect(finishCalls('child')).toHaveLength(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should process each queued event once when flush races a scheduled replay', async () => {
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('child', 'parent')));
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('child', 'parent', t)));
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('parent', 'root')));
+
+      await Promise.all([exporter.flush(), flushAsync(), exporter.flush()]);
+      await flushAsync();
+
+      // One failed attempt on arrival (no parent yet), then exactly one replay
+      expect(exporter.calls.filter(c => c.method === '_buildSpan' && c.spanId === 'child')).toHaveLength(2);
+      expect(finishCalls('child')).toHaveLength(1);
+    });
+
+    it('should finish an already built span immediately', async () => {
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('tool', 'root')));
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('tool', 'root', t)));
+
+      // No flush: the end must not go through the waiting queue
+      expect(finishCalls('tool')).toHaveLength(1);
     });
   });
 });

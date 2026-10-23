@@ -1,5 +1,6 @@
 import { FACTORY_ROLE_STAGES, isFactoryRole, needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
+import type { BoardCardState, BoardCardStatus } from './boardCardState';
 import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import { isTerminalStage } from './stages';
@@ -41,16 +42,23 @@ const RE_REVIEW: CardMove = { label: 'Re-review', role: 'review', stage: 'review
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
   if (item.board != null && item.board !== 'work' && item.board !== 'review') return [];
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
-  if (columnStage === 'review' && item.source !== 'github-pr') return [];
+  if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
   if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
-  if (item.source === 'linear-issue') return [INVESTIGATE, BUILD];
-  return item.source === 'github-pr' ? [REVIEW] : [];
+  if (
+    item.source === 'gitlab-issue' ||
+    item.source === 'linear-issue' ||
+    item.source === 'jira-issue' ||
+    item.source === 'incidentio-follow-up'
+  ) {
+    return [INVESTIGATE, BUILD];
+  }
+  return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [REVIEW] : [];
 }
 
 function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): boolean {
   return (
     columnStage === 'done' &&
-    item.source === 'github-pr' &&
+    (item.source === 'github-pr' || item.source === 'gitlab-pr') &&
     ['open', 'draft'].includes(pullRequestStatusForItem({ ...item, stages: item.stages ?? [] }))
   );
 }
@@ -173,59 +181,46 @@ export function sessionLink(href: string | undefined): CardAction | undefined {
 
 export function retryButton({
   decisionId,
-  retryingDecisionId,
   onRetry,
 }: {
   decisionId?: string;
-  retryingDecisionId?: string;
   onRetry: (decisionId: string) => void;
-}): CardAction | undefined {
+}): CardPrimaryAction | undefined {
   if (decisionId === undefined) return undefined;
-  const retrying = decisionId === retryingDecisionId;
-  return { label: retrying ? 'Retrying…' : 'Retry', disabled: retrying, start: () => onRetry(decisionId) };
-}
-
-export function runButton({
-  action,
-  pending,
-  suggestion,
-}: {
-  action?: CardPrimaryAction;
-  /** A session start the card is still resolving; a move needs none, it is optimistic. */
-  pending: boolean;
-  /** The waiting suggestion's label, so the button says which run it releases. */
-  suggestion?: string;
-}): CardAction | undefined {
-  if (action === undefined) return undefined;
-  return {
-    label: pending ? 'Starting…' : action.label,
-    ariaLabel: suggestion === undefined ? action.ariaLabel : `Start suggested run: ${suggestion}`,
-    disabled: pending,
-    start: action.start,
-  };
+  return { label: 'Retry', start: () => onRetry(decisionId) };
 }
 
 /** The card's buttons, the likeliest next click first; `urgent` marks the one the card waits on a person for. */
 export function cardActions({
-  running,
-  waiting,
+  state,
   session,
   retry,
   run,
 }: {
-  running: boolean;
-  /** The run is a parked suggestion or a held card's decision: it needs the user, so it lights up once nothing is running. */
-  waiting: boolean;
+  state: BoardCardState;
   session?: CardAction;
-  retry?: CardAction;
-  run?: CardAction;
+  retry?: CardPrimaryAction;
+  run?: CardPrimaryAction;
 }): CardAction[] {
-  // A running session owns the branch, so no retry, rival run, or parked suggestion can start beside it.
-  const nextRetry = running ? undefined : retry;
-  const nextRun = running ? undefined : run;
-  const main = nextRetry ?? nextRun ?? session;
+  const { owner } = state;
+  if (owner.kind === 'free') return freeCardActions(state.status, { session, retry, run });
+  if (session !== undefined) return [session];
+  if (owner.kind === 'session' || run === undefined) return [];
+  return [{ label: owner.progressLabel, start: run.start, disabled: true }];
+}
+
+function freeCardActions(
+  status: BoardCardStatus,
+  { session, retry, run }: { session?: CardAction; retry?: CardPrimaryAction; run?: CardPrimaryAction },
+): CardAction[] {
+  const namedRun =
+    run !== undefined && status.kind === 'waiting'
+      ? { ...run, ariaLabel: `Start suggested run: ${status.label}` }
+      : run;
+  const main = retry ?? namedRun ?? session;
   if (main === undefined) return [];
-  const rest = [session, nextRun].filter(action => action !== undefined).filter(action => action !== main);
-  const urgent = (action: CardAction) => action === nextRetry || (waiting && action === nextRun);
-  return [main, ...rest].map(action => ({ ...action, urgent: urgent(action) }));
+  const awaitsPerson = status.kind === 'waiting' || status.kind === 'held';
+  const isUrgent = (action: CardAction) => action === retry || (awaitsPerson && action === namedRun);
+  const rest = [session, namedRun].filter(action => action !== undefined).filter(action => action !== main);
+  return [main, ...rest].map(action => ({ ...action, urgent: isUrgent(action) }));
 }

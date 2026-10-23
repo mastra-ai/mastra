@@ -21,7 +21,9 @@ type FactorySessionControllerContext = AgentControllerRequestContext<FactorySess
 
 /** Minimal source-control session lookup used to heal recovered session state. */
 export interface FactorySessionSourceLookup {
-  getBySessionId(sessionId: string): Promise<{ orgId: string; projectRepositoryId: string; baseBranch: string } | null>;
+  getBySessionId(
+    sessionId: string,
+  ): Promise<{ orgId: string; projectRepositoryId: string | null; baseBranch: string } | null>;
 }
 
 export function getFactorySessionCoordinates(
@@ -30,12 +32,12 @@ export function getFactorySessionCoordinates(
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
   const factoryProjectId = context?.getState().factoryProjectId;
-  if (!context?.threadId || !context.resourceId || !factoryProjectId) return null;
+  if (!context?.threadId || !context.resourceId || !context.sessionId || !factoryProjectId) return null;
   return {
     factoryProjectId,
     threadId: context.threadId,
     resourceId: context.resourceId,
-    sessionId: context.resourceId,
+    sessionId: context.sessionId,
   };
 }
 
@@ -46,6 +48,52 @@ export function getFactorySessionAddress(requestContext: RequestContext | undefi
   const orgId = getFactoryAuthOrgId(user);
   if (!orgId) return null;
   return { orgId, ...coordinates };
+}
+
+/**
+ * Read the session's factory scoping off controller state: the project whose
+ * shared settings row applies to its runs, plus the org rung that row is keyed
+ * by (`factoryOrgId` is seeded at session start and is authoritative for
+ * downstream identity reads — the owner id is a user, never an org).
+ */
+export function readFactorySessionScope(
+  requestContext: RequestContext | undefined,
+): { factoryProjectId: string; factoryOrgId?: string } | null {
+  if (!requestContext || typeof requestContext.get !== 'function') return null;
+  const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
+  const state = context?.getState();
+  const factoryProjectId = state?.factoryProjectId;
+  if (typeof factoryProjectId !== 'string' || factoryProjectId.length === 0) return null;
+  const factoryOrgId = state?.factoryOrgId;
+  return {
+    factoryProjectId,
+    ...(typeof factoryOrgId === 'string' && factoryOrgId.length > 0 ? { factoryOrgId } : {}),
+  };
+}
+
+/**
+ * Read the active run binding for this session when controller state has lost
+ * `factoryProjectId` — a crash-recovered session ("Continue") is recreated with
+ * empty state, so the binding table is the only remaining source of the project
+ * whose shared settings row applies to the run. Read-only, unlike
+ * `resolveFactorySessionAddress`: it neither heals state nor touches source
+ * control, so input processors can call it before any tool has run.
+ */
+export async function findSessionRunBinding(
+  requestContext: RequestContext | undefined,
+  storage: Pick<WorkItemsStorage, 'findActiveRunBindingByThread'>,
+): Promise<FactoryRunBindingRecord | null> {
+  if (!requestContext || typeof requestContext.get !== 'function') return null;
+  const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
+  if (!context?.threadId || !context.resourceId || !context.sessionId) return null;
+  const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
+  if (!orgId) return null;
+  return storage.findActiveRunBindingByThread({
+    orgId,
+    threadId: context.threadId,
+    resourceId: context.resourceId,
+    sessionId: context.sessionId,
+  });
 }
 
 export interface FactorySessionAddressResolution {
@@ -67,14 +115,22 @@ export async function resolveFactorySessionAddress(options: {
   requestContext: RequestContext | undefined;
   storage: Pick<WorkItemsStorage, 'findActiveRunBindingByThread' | 'get'>;
   sessions?: FactorySessionSourceLookup;
+  /**
+   * Resolve through the binding table even when state already carries
+   * `factoryProjectId`, so the row heals the rest of the session state. Prompt
+   * creation uses this: a partially persisted state can keep the project id
+   * while the untrusted-checkout posture is gone, and the direct short-circuit
+   * would take that id as proof the session is intact.
+   */
+  forceBindingLookup?: boolean;
 }): Promise<FactorySessionAddressResolution | null> {
-  const direct = getFactorySessionAddress(options.requestContext);
+  const direct = options.forceBindingLookup ? null : getFactorySessionAddress(options.requestContext);
   if (direct) return { address: direct };
 
   const requestContext = options.requestContext;
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
-  if (!context?.threadId || !context.resourceId) return null;
+  if (!context?.threadId || !context.resourceId || !context.sessionId) return null;
   const user = getFactoryAuthUserFromContext(requestContext);
   const orgId = getFactoryAuthOrgId(user);
   if (!orgId) return null;
@@ -83,7 +139,7 @@ export async function resolveFactorySessionAddress(options: {
     orgId,
     threadId: context.threadId,
     resourceId: context.resourceId,
-    sessionId: context.resourceId,
+    sessionId: context.sessionId,
   });
   if (!binding) return null;
 
@@ -95,7 +151,7 @@ export async function resolveFactorySessionAddress(options: {
       factoryProjectId: binding.factoryProjectId,
       threadId: context.threadId,
       resourceId: context.resourceId,
-      sessionId: context.resourceId,
+      sessionId: context.sessionId,
     },
     binding,
   };
@@ -124,7 +180,7 @@ async function healRecoveredSessionState(options: {
     const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
     const foundSession = (await options.sessions?.getBySessionId(binding.sessionId)) ?? null;
     const sourceSession = foundSession?.orgId === binding.orgId ? foundSession : null;
-    if (sourceSession) {
+    if (sourceSession?.projectRepositoryId) {
       updates.projectRepositoryId = sourceSession.projectRepositoryId;
     }
     const untrusted = updates.untrustedCheckout === true || item?.externalSource?.type === 'pull-request';
@@ -135,6 +191,12 @@ async function healRecoveredSessionState(options: {
         sourceSession?.baseBranch ||
         (typeof metadataBaseBranch === 'string' && metadataBaseBranch ? metadataBaseBranch : undefined);
       if (baseRef) updates.baseRef = baseRef;
+    } else {
+      // Record the trusted verdict explicitly so a healed session carries every
+      // trust field; the prompt-time recovery check treats a missing flag as
+      // "not yet verified" and would otherwise re-run on every prompt. Left
+      // unset when enrichment fails so the next prompt retries the lookup.
+      updates.untrustedCheckout = false;
     }
   } catch {
     // Enrichment is best-effort; the address itself only needs the binding.

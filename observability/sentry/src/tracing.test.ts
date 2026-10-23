@@ -307,6 +307,60 @@ describe('SentryExporter', () => {
       expect(SentryMock.startInactiveSpan).not.toHaveBeenCalled();
       expect(SentryMock.addBreadcrumb).not.toHaveBeenCalled();
     });
+
+    it('should skip MODEL_INFERENCE spans so MODEL_GENERATION stays the single chat span', async () => {
+      const inferenceSpan = createMockSpan({
+        id: 'inference-span',
+        name: 'inference: 0',
+        type: SpanType.MODEL_INFERENCE,
+        isRoot: false,
+        attributes: { model: 'gpt-4', usage: { inputTokens: 10, outputTokens: 5 } },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: inferenceSpan,
+      });
+
+      expect(SentryMock.startInactiveSpan).not.toHaveBeenCalled();
+      expect(SentryMock.addBreadcrumb).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Span links', () => {
+    const startLink = { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' };
+    const lateLink = { traceId: '1af7651916cd43dd8448eb211c80319c', spanId: 'c7ad6b7169203331' };
+
+    it('starts the Sentry span with links to spans in other traces', async () => {
+      const span: any = createMockSpan({
+        id: 'request-span',
+        name: 'tools/call echo',
+        type: SpanType.GENERIC,
+        isRoot: true,
+      });
+      span.links = [startLink, { traceId: 'abc', spanId: 'def' }];
+
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+
+      expect(SentryMock.startInactiveSpan.mock.calls[0][0].links).toEqual([
+        { context: { ...startLink, traceFlags: 1 } },
+      ]);
+    });
+
+    it('adds links set after the span started before it ends', async () => {
+      mockSpan.addLinks = vi.fn();
+      const span: any = createMockSpan({ id: 'tool-span', name: 'tool', type: SpanType.GENERIC, isRoot: true });
+      span.links = [startLink];
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: { ...span, links: [startLink, lateLink], endTime: new Date() },
+      });
+
+      expect(mockSpan.addLinks).toHaveBeenCalledWith([{ context: { ...lateLink, traceFlags: 1 } }]);
+      expect(mockSpan.end).toHaveBeenCalled();
+    });
   });
 
   describe('Span Operation Types', () => {

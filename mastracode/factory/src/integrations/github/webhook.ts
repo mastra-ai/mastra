@@ -1,10 +1,11 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
-import { RequestContext } from '@mastra/core/request-context';
 import type { Context } from 'hono';
-import { hasResolvedOrg, seedSessionOrg } from '../../session/org-seed.js';
-import { GithubAppIdentity } from './app-identity.js';
+import { requestsChangesVerdict } from '../../review-verdict.js';
+import { resolveSubscriptionSession, subscriptionRunContext } from '../subscription-session.js';
+import type { FactorySessionOwner } from '../subscription-session.js';
+import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubIntegration, GithubRepositoryPermission } from './integration.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions.js';
 import type {
@@ -25,8 +26,8 @@ const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set([
   'pull_request',
   'pull_request_review',
   'pull_request_review_comment',
-  // Direct pushes to the default branch drive base-checkpoint rebuilds. The
-  // rules engine and subscription dispatcher both ignore push events.
+  // Direct pushes to the default branch drive base-checkpoint rebuilds and
+  // the environment build hand-off; the subscription dispatcher ignores them.
   'push',
 ]);
 
@@ -64,8 +65,7 @@ export interface GithubWebhookNotification {
   payload: Record<string, unknown>;
 }
 
-/** The Factory session row fields a woken session has to run as. */
-export type FactorySessionOwner = { userId: string; orgId: string };
+export type { FactorySessionOwner };
 
 /**
  * The integration surface this dispatch uses. Narrow on purpose: the GitHub App
@@ -364,89 +364,6 @@ export function classifyGithubWebhook(parsed: ParsedGithubWebhook): GithubWebhoo
   };
 }
 
-async function resolveSubscriptionSession(
-  controller: MountedMastraCode['controller'],
-  subscription: GithubSignalSubscriptionRow,
-  github?: GithubWebhookDispatchIntegration,
-) {
-  const { sessionId, resourceId, threadId } = subscription;
-  if (!sessionId || !resourceId || !threadId) {
-    throw new Error(`GitHub subscription ${subscription.id} is missing its session binding.`);
-  }
-  // Read the thread straight from storage before touching sessions. This answers
-  // two questions at once, and `queryThreadById` does it without constructing a
-  // session (so no workspace or sandbox is provisioned just to make the check).
-  //
-  // First: do we even have this thread? A pull request's events can reach a
-  // deployment that never owned the subscribed thread, and delivery must not
-  // fabricate a session for a thread that lives somewhere else.
-  //
-  // Second: which resource owns it? The subscription records the Factory project
-  // as its `resourceId`, but an unscoped session is registered under its own id,
-  // so the stored value routinely names a resource that does not own the thread.
-  // The thread row is the authoritative answer; the stored id is only a fallback.
-  const thread = await controller.queryThreadById({ threadId });
-  if (!thread) return undefined;
-  const ownerResourceId = thread.resourceId || resourceId;
-  const scope = subscription.sessionScope || undefined;
-  let session = await controller.getSessionByResource(ownerResourceId, scope);
-  if (!session) {
-    const tags = {
-      factoryProjectId: resourceId,
-      projectRepositoryId: subscription.data.projectRepositoryId,
-    };
-    // Creating the session resolves its workspace, which authorizes the caller
-    // against the Factory session row — no signed-in user, so run as its owner.
-    // The session is created under the resource that owns the thread, so the
-    // thread switch below resolves; the persisted Factory session is keyed by
-    // the subscription's session ID.
-    const sessionRow = await github?.sourceControlStorage.sessions.getBySessionId(sessionId);
-    if (!sessionRow) {
-      throw new Error(`GitHub subscription ${subscription.id} has no Factory session ${sessionId} to run as.`);
-    }
-    const requestContext = new RequestContext();
-    requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });
-    session = await controller.createSession({
-      id: sessionId,
-      ownerId: sessionRow.userId,
-      resourceId: ownerResourceId,
-      scope,
-      tags,
-      requestContext,
-    });
-    await seedSessionOrg(session, sessionRow.orgId);
-  } else if (!hasResolvedOrg(session.state?.get()?.factoryOrgId)) {
-    // A session created before the org seed existed carries the project tag and
-    // no org, so capture would refuse for the rest of its life even though the
-    // org is recoverable. Heal it — but only here, and only when it is missing:
-    // hoisting the row fetch above would make an existing-session delivery throw
-    // on a missing row where it previously succeeded, and fetching it every time
-    // would add a storage read to every delivery. A row that is missing or a
-    // lookup that throws leaves the session marked unresolved, and delivery
-    // continues either way.
-    try {
-      const sessionRow = await github?.sourceControlStorage.sessions.getBySessionId(sessionId);
-      await seedSessionOrg(session, sessionRow?.orgId);
-    } catch (error) {
-      console.warn('[GitHub webhook] Unable to resolve the session organization.', error);
-      await seedSessionOrg(session, undefined);
-    }
-  } else if (session.state?.get()?.factoryOrgUnresolved) {
-    // The org is present, so an earlier failed resolution left a stale marker
-    // behind. Clear it without a storage read — nothing else re-seeds a session
-    // once the start hook has run, so the marker would otherwise outlive its
-    // cause.
-    await seedSessionOrg(session, session.state.get()?.factoryOrgId);
-  }
-  if (session.thread.getId() !== threadId) {
-    await session.thread.switch({ threadId, emitEvent: false });
-  }
-  if (session.thread.getId() !== threadId) {
-    throw new Error(`Session ${sessionId} did not bind thread ${threadId}.`);
-  }
-  return session;
-}
-
 /**
  * Reviewer bots authorized out of the box. Deployments extend — never replace —
  * this set through the integration's `authorizedBots`.
@@ -491,11 +408,33 @@ const AUTHOR_GATED_KINDS = new Set([
  * reviewing a pull request it authored, so `factory-review` falls back to
  * posting its verdict as a comment under this login. Those comments have to
  * clear the author gate for the review handoff to reach the authoring agent;
- * the rules layer still decides which of them are worth acting on.
+ * the rules layer still decides which of them are worth acting on, and
+ * managed authoring subscriptions drop the ones that are not a request-changes
+ * verdict (see `isIgnoredFactoryAppComment`).
  */
 export function isFactoryAppSender(sender: string | undefined, slug: string | undefined): boolean {
   if (!sender || !slug) return false;
   return sender.toLowerCase() === `${slug.toLowerCase()}[bot]`;
+}
+
+/**
+ * Factory App comments on a PR the builder authored (approvals, demo links,
+ * the builder's own progress notes) are ignored by the default
+ * `pullRequestCommentCreated` rule unless they open with a request-changes
+ * verdict. Managed authoring subscriptions apply the same filter so those
+ * comments cannot wake the builder through the subscription path either.
+ */
+function isIgnoredFactoryAppComment(
+  notification: GithubWebhookNotification,
+  subscription: GithubSignalSubscriptionRow,
+  payload: Record<string, unknown>,
+  github: Pick<GithubWebhookDispatchIntegration, 'slug' | 'identity'> | undefined,
+): boolean {
+  if (notification.kind !== 'issue-comment-created') return false;
+  if (!isFactoryManagedAuthoringSubscription(subscription)) return false;
+  const sender = notification.metadata.sender;
+  if (!sender || !(github?.identity?.matches(sender) || isFactoryAppSender(sender, github?.slug))) return false;
+  return !requestsChangesVerdict(getString(getObject(payload.comment)?.body));
 }
 
 async function isAuthorizedGithubSender(
@@ -584,8 +523,15 @@ export async function dispatchGithubWebhook(
   let skipped = 0;
 
   for (const subscription of subscriptions) {
+    if (isIgnoredFactoryAppComment(notification, subscription, parsed.payload, dependencies.github)) {
+      skipped += 1;
+      continue;
+    }
     try {
-      const session = await resolveSubscriptionSession(dependencies.controller, subscription, dependencies.github);
+      const session = await resolveSubscriptionSession(dependencies.controller, subscription, {
+        label: 'GitHub',
+        sourceControl: dependencies.github?.sourceControlStorage,
+      });
       // No session means this deployment does not hold the subscribed thread.
       // That is not a delivery failure, so it must not be retried or counted as
       // one; the subscription is left untouched because the thread may exist
@@ -596,25 +542,36 @@ export async function dispatchGithubWebhook(
         continue;
       }
       const overrides = managedInlineReviewOverrides(notification, subscription);
-      const result = await session.sendNotificationSignal({
-        source: 'github',
-        kind: notification.kind,
-        summary: overrides?.summary ?? notification.summary,
-        priority: notification.priority,
-        payload: overrides?.payload ?? notification.payload,
-        sourceId: parsed.deliveryId,
-        dedupeKey: `${parsed.deliveryId}:${subscription.sessionId}:${subscription.threadId}`,
-        coalesceKey: `github:${subscription.data.repositoryExternalId}:pull-request:${subscription.data.changeRequestId}`,
-        metadata: {
-          event: notification.metadata.event,
-          action: notification.action,
-          repository: notification.metadata.repository,
-          issueNumber: notification.metadata.issueNumber,
-          pullRequestNumber: notification.metadata.pullRequestNumber,
-          targetUrl: notificationTargetUrl(parsed.event, parsed.payload),
-          deliveryId: parsed.deliveryId,
+      const runContext = await subscriptionRunContext(subscription, dependencies.github?.sourceControlStorage);
+      // Without a tenant identity the run fails closed on credential resolution
+      // after routing has accepted the signal, and a terminal notification would
+      // already have retired the subscription. Fail before sending so the target
+      // is counted as failed and the subscription stays open for redelivery.
+      if (!runContext) {
+        throw new Error(`GitHub subscription ${subscription.id} has no resolvable tenant identity; not delivered.`);
+      }
+      const result = await session.sendNotificationSignal(
+        {
+          source: 'github',
+          kind: notification.kind,
+          summary: overrides?.summary ?? notification.summary,
+          priority: notification.priority,
+          payload: overrides?.payload ?? notification.payload,
+          sourceId: parsed.deliveryId,
+          dedupeKey: `${parsed.deliveryId}:${subscription.sessionId}:${subscription.threadId}`,
+          coalesceKey: `github:${subscription.data.repositoryExternalId}:pull-request:${subscription.data.changeRequestId}`,
+          metadata: {
+            event: notification.metadata.event,
+            action: notification.action,
+            repository: notification.metadata.repository,
+            issueNumber: notification.metadata.issueNumber,
+            pullRequestNumber: notification.metadata.pullRequestNumber,
+            targetUrl: notificationTargetUrl(parsed.event, parsed.payload),
+            deliveryId: parsed.deliveryId,
+          },
         },
-      });
+        { requestContext: runContext },
+      );
       await Promise.all([result.persisted, result.accepted].filter(Boolean));
       if (notification.terminal) {
         await retireSubscription(subscription.id, notification.kind === 'pull-request-merged' ? 'merged' : 'closed');

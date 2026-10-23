@@ -5,14 +5,16 @@ import {
   EntityIcon,
   EntityName,
 } from '@mastra/playground-ui/components/Entity';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { passwordManagerOptOutProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { TryConnectMcpMutation } from '../../hooks/use-try-connect-mcp';
+import type { TryConnectMcpMutation } from '@mastra/react/hooks/mcps';
 
 interface MCPClientToolPreviewProps {
   serverType: 'stdio' | 'http';
@@ -34,9 +36,7 @@ export function MCPClientToolPreview({
   if (serverType === 'stdio') {
     return (
       <EmptyState>
-        <Txt className="text-neutral3">
-          Tool preview is available for HTTP servers. Stdio servers cannot be previewed.
-        </Txt>
+        <Txt tone="muted">Tool preview is available for HTTP servers. Stdio servers cannot be previewed.</Txt>
       </EmptyState>
     );
   }
@@ -44,9 +44,7 @@ export function MCPClientToolPreview({
   if (!url.trim()) {
     return (
       <EmptyState>
-        <Txt className="text-neutral3">
-          Enter a URL and click &quot;Try to connect&quot; to preview available tools.
-        </Txt>
+        <Txt tone="muted">Enter a URL and click &quot;Try to connect&quot; to preview available tools.</Txt>
       </EmptyState>
     );
   }
@@ -54,7 +52,7 @@ export function MCPClientToolPreview({
   if (tryConnect.isIdle) {
     return (
       <EmptyState>
-        <Txt className="text-neutral3">Click &quot;Try to connect&quot; to preview available tools.</Txt>
+        <Txt tone="muted">Click &quot;Try to connect&quot; to preview available tools.</Txt>
       </EmptyState>
     );
   }
@@ -64,18 +62,20 @@ export function MCPClientToolPreview({
       {tryConnect.isPending && (
         <div className="flex items-center gap-2">
           <Spinner className="h-3 w-3" />
-          <Txt className="text-neutral3">Connecting...</Txt>
+          <Txt tone="muted">Connecting...</Txt>
         </div>
       )}
 
       {tryConnect.isError && (
-        <Txt variant="ui-sm" className="text-accent2">
-          {tryConnect.error instanceof Error ? tryConnect.error.message : 'Connection failed'}
-        </Txt>
+        <div role="alert">
+          <Notice variant="destructive">
+            {tryConnect.error instanceof Error ? tryConnect.error.message : 'Connection failed'}
+          </Notice>
+        </div>
       )}
 
       {tryConnect.isSuccess && tryConnect.data.tools.length === 0 && (
-        <Txt className="text-neutral3">Connected successfully but no tools were found.</Txt>
+        <Txt tone="muted">Connected successfully but no tools were found.</Txt>
       )}
 
       {tryConnect.isSuccess && tryConnect.data.tools.length > 0 && (
@@ -109,11 +109,11 @@ function ToolList({
 
   return (
     <div className="overflow-y-auto p-5">
-      <div className="text-neutral6 flex items-center gap-2">
-        <Icon size="lg" className="bg-surface4 rounded-md p-1">
+      <div className="flex items-center gap-2 text-foreground">
+        <Icon size="lg" className="rounded-md bg-muted p-1">
           <McpServerIcon />
         </Icon>
-        <Txt variant="header-md" as="h2" className="font-medium">
+        <Txt variant="heading" as="h2">
           Available Tools ({selectedCount}/{tools.length} selected)
         </Txt>
       </div>
@@ -126,17 +126,18 @@ function ToolList({
           return (
             <Entity key={tool.name}>
               <EntityIcon>
-                <ToolsIcon className="group-hover/entity:text-accent6" />
+                <ToolsIcon className="group-hover/entity:text-warning-foreground" />
               </EntityIcon>
               <EntityContent>
                 <EntityName>{tool.name}</EntityName>
                 <EntityDescription>
                   <input
                     type="text"
+                    {...passwordManagerOptOutProps}
                     disabled={isDisabled}
                     className={cn(
-                      'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
-                      !isDisabled && 'border-border1 border-dashed',
+                      'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',
+                      !isDisabled && 'border-dashed border-border',
                     )}
                     value={
                       isSelected

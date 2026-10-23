@@ -118,6 +118,32 @@ describe('createWorkspaceTools', () => {
     expect(executeTool.description).not.toContain('Local command execution');
   });
 
+  it('should leave description out of execute_command unless requireDescription is set', async () => {
+    const plain = await createWorkspaceTools(
+      new Workspace({ sandbox: new LocalSandbox({ workingDirectory: tempDir }) }),
+    );
+    const plainTool = plain[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
+    const plainResult = await plainTool.inputSchema['~standard'].validate({ command: 'echo hi', description: 'x' });
+    expect(plainResult.issues).toBeUndefined();
+    expect(plainResult.value).not.toHaveProperty('description');
+
+    const described = await createWorkspaceTools(
+      new Workspace({
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+        tools: { [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { requireDescription: true } },
+      }),
+    );
+    const describedTool = described[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
+    const missing = await describedTool.inputSchema['~standard'].validate({ command: 'echo hi' });
+    expect(missing.issues?.[0]?.path).toEqual(['description']);
+    const present = await describedTool.inputSchema['~standard'].validate({
+      command: 'echo hi',
+      description: 'Saying hi',
+    });
+    expect(present.issues).toBeUndefined();
+    expect(present.value).toMatchObject({ description: 'Saying hi', command: 'echo hi' });
+  });
+
   it('should apply background eligibility without mutating the shared tool', async () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),

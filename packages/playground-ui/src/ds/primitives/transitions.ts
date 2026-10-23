@@ -1,6 +1,20 @@
-// Transition utility classes for consistent animations across components
+// Motion policy for interactive state (hover / press / open / focus)
+//
+// A control's BACKGROUND switches instantly; only its COLOUR fades, over
+// 150ms. Hover fires more than any other interaction — sweeping a cursor
+// across a nav crosses ten rows a second — and fading the fill leaves the
+// surface trailing the pointer, while the colour crossfade is what stops the
+// label from snapping. This is measured from Linear, whose rows carry exactly
+// `transition: color 0.15s` and no background transition.
+//
+// Animate what moves or arrives instead: overlays entering, panels collapsing,
+// a switch thumb travelling. Those happen once per intent, not ten times a
+// second. https://craft.gustavofior.com/hover-restraint
+export const controlStateColorTransition =
+  'transition-[color] duration-fast ease-out-custom motion-reduce:transition-none';
 
-// Base transition presets (Tailwind classes)
+export const heightTransition = 'transition-[height] duration-normal ease-out-custom motion-reduce:transition-none';
+
 export const transitions = {
   // For color changes (background, text, border)
   colors: 'transition-colors duration-normal ease-out-custom',
@@ -25,20 +39,17 @@ export const hoverEffects = {
   // Brightness increase
   brightness: 'hover:brightness-110',
   // Background lift
-  lift: 'hover:bg-surface4',
+  lift: 'hover:bg-foreground/10',
 } as const;
 
-// Focus ring styles
-export const focusRing = {
-  // Standard focus ring with glow
-  default: 'focus:outline-hidden focus:ring-1 focus:ring-accent1 focus:shadow-focus-ring',
-  // Focus ring without glow
-  simple: 'focus:outline-hidden focus:ring-1 focus:ring-accent1',
-  // Focus visible only (keyboard navigation)
-  visible:
-    'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring',
-} as const;
+// An outline, not a ring: `ring-*` rewrites box-shadow and would erase a raised surface's rim and elevation.
+const focusLine = 'focus-visible:outline-1 focus-visible:outline-solid focus-visible:outline-border-focus';
+
+export const focusRing = `${focusLine} focus-visible:outline-offset-0`;
+
+export const focusRingInset = `${focusLine} focus-visible:-outline-offset-1`;
+
+export const focusRingOffset = `${focusLine} focus-visible:outline-offset-2`;
 
 export type TransitionPreset = keyof typeof transitions;
 export type HoverEffect = keyof typeof hoverEffects;
-export type FocusRingStyle = keyof typeof focusRing;

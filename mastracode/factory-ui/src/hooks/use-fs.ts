@@ -8,7 +8,7 @@ import type {
   WorkspaceChanges,
   WorkspaceDiff,
   WorkspaceFile,
-  WorkspaceFilesListing,
+  WorkspaceTreeListing,
   WorkspaceRenderedListing,
 } from '../api/types';
 
@@ -28,13 +28,40 @@ function workspaceRenderedListingUrl(workspacePath: string | undefined, root: st
   return `/web/workspace/rendered/list?${new URLSearchParams({ workspacePath, root })}`;
 }
 
-function workspaceFileUrl(workspacePath: string | undefined, path: string | undefined, threadId: string | undefined) {
-  if (!workspacePath || !path || !threadId) return undefined;
-  return `/web/workspace/file?${new URLSearchParams({ workspacePath, path, threadId })}`;
+function workspaceFileUrl(workspacePath: string | undefined, path: string | undefined) {
+  if (!workspacePath || !path) return undefined;
+  return `/web/workspace/file?${new URLSearchParams({ workspacePath, path })}`;
 }
 
 export function isPlanReadablePath(path: string | undefined): path is string {
   return Boolean(path?.startsWith('.artifacts/'));
+}
+
+/**
+ * Resolve a submitted plan `path` to a workspace-relative `.artifacts/…` path the
+ * session file route accepts. Relative `.artifacts/*` paths pass through; an
+ * absolute path (e.g. `/leadrvision/.artifacts/plans/issue.md`) is normalized
+ * against the authoritative `rootPath` from `/web/workspace/rendered/list`
+ * (the confined absolute `.artifacts` root). Traversal, wrong-root, backslash,
+ * and NUL inputs are rejected rather than guessed — including for relative
+ * `.artifacts/*` paths — though the backend still enforces its own
+ * `assertRelativePath`/symlink guards.
+ */
+export function normalizePlanPath(path: string | undefined, rootPath: string | undefined): string | undefined {
+  if (!path) return undefined;
+  // Reject malformed inputs before any pass-through so relative and absolute
+  // paths share the same traversal/backslash/NUL guards.
+  if (path.includes('\\') || path.includes('\0')) return undefined;
+  if (path.split('/').includes('..')) return undefined;
+  if (path.startsWith('.artifacts/')) return path;
+  // Only absolute posix paths are normalization candidates.
+  if (!path.startsWith('/')) return undefined;
+  if (!rootPath) return undefined;
+  const base = rootPath.endsWith('/') ? rootPath.slice(0, -1) : rootPath;
+  if (path !== base && !path.startsWith(`${base}/`)) return undefined;
+  const remainder = path.slice(base.length).replace(/^\/+/, '');
+  const relative = remainder ? `.artifacts/${remainder}` : '.artifacts';
+  return isPlanReadablePath(relative) ? relative : undefined;
 }
 
 function planFileUrl(workspacePath: string | undefined, path: string | undefined) {
@@ -100,31 +127,34 @@ export function useWorkspaceRenderedListing(
   });
 }
 
-export function useWorkspaceFiles(
+/**
+ * One directory of a session's checkouts, read live from its sandbox (`''` is
+ * the top level). Each open folder is its own query, so a refresh or a tool
+ * call only refetches what is on screen.
+ */
+export function useWorkspaceTree(
   workspacePath: string | undefined,
-  threadId: string | undefined,
+  path: string,
   { enabled = true }: { enabled?: boolean } = {},
 ) {
   const { client } = useApiConfig();
-  const url =
-    workspacePath && threadId ? `/web/workspace/files?${new URLSearchParams({ workspacePath, threadId })}` : undefined;
-  return useQuery<WorkspaceFilesListing>({
-    queryKey: queryKeys.workspaceFiles(workspacePath, threadId),
+  const url = workspacePath ? `/web/workspace/tree?${new URLSearchParams({ workspacePath, path })}` : undefined;
+  return useQuery<WorkspaceTreeListing>({
+    queryKey: queryKeys.workspaceTree(workspacePath, path),
     enabled,
-    queryFn: url ? () => client.get<WorkspaceFilesListing>(url) : skipToken,
+    queryFn: url ? () => client.get<WorkspaceTreeListing>(url) : skipToken,
   });
 }
 
 export function useWorkspaceFile<TData = WorkspaceFile>(
   workspacePath: string | undefined,
   filePath: string | undefined,
-  threadId: string | undefined,
   { enabled = true, select }: { enabled?: boolean; select?: (file: WorkspaceFile) => TData } = {},
 ) {
   const { client } = useApiConfig();
-  const url = workspaceFileUrl(workspacePath, filePath, threadId);
+  const url = workspaceFileUrl(workspacePath, filePath);
   return useQuery<WorkspaceFile, Error, TData>({
-    queryKey: queryKeys.workspaceFile(workspacePath, filePath, threadId),
+    queryKey: queryKeys.workspaceFile(workspacePath, filePath),
     enabled,
     queryFn: url ? () => client.get<WorkspaceFile>(url) : skipToken,
     select,

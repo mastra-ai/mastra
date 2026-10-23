@@ -15,6 +15,10 @@ export interface TraceImportSpan {
   parentSpanId: string | null;
   name: string;
   spanType: TraceImportSpanType;
+  /** Mastra primitive that owns the span (`agent`, `tool`, `scorer`, ...). Platform lists and filters traces by it. */
+  entityType?: string;
+  entityId?: string;
+  entityName?: string;
   startedAt: string;
   endedAt: string;
   isEvent: boolean;
@@ -65,6 +69,8 @@ export interface TraceImportSourceIdentity {
   provider: string;
   baseUrl: string;
   projectId: string;
+  /** Display name only; not part of resume compatibility because providers allow renames. */
+  projectName?: string | null;
   idAlgorithmVersion: string;
 }
 
@@ -78,22 +84,54 @@ export interface TraceImportCounts {
   skipReasons: Record<string, number>;
 }
 
+export interface TraceImportVerificationDifference {
+  traceId: string;
+  spanId?: string;
+  fields: string[];
+}
+
+export interface TraceImportVerification {
+  status: 'not-performed' | 'verified' | 'timed-out' | 'unavailable' | 'mismatch';
+  sampledTraces: number;
+  verifiedTraces: number;
+  queryAttempts: number;
+  differences: TraceImportVerificationDifference[];
+  reason?: string;
+}
+
 export interface TraceImportManifest {
-  schemaVersion: 1;
+  schemaVersion: 2;
   importId: string;
   createdAt: string;
   updatedAt: string;
   source: TraceImportSourceIdentity;
   targetProjectId: string;
   window: TraceImportWindow;
-  phase: 'preparing' | 'prepared' | 'uploading' | 'complete';
+  phase: 'preparing' | 'prepared' | 'uploading' | 'verifying' | 'paused' | 'complete';
   counts: TraceImportCounts;
   preparedBytes: number;
   acknowledgedTraces: number;
   acknowledgedSpans: number;
   warnings: string[];
   skippedTraceSamples: SkippedTrace[];
+  verification: TraceImportVerification;
   completedAt?: string;
+}
+
+export interface TraceImportReport {
+  importId: string;
+  stateDirectory: string;
+  provider: string;
+  sourceProjectId: string;
+  targetProjectId: string;
+  window: TraceImportWindow;
+  phase: TraceImportManifest['phase'];
+  counts: TraceImportCounts;
+  acknowledgedTraces: number;
+  acknowledgedSpans: number;
+  verification: TraceImportVerification;
+  warnings: string[];
+  skippedTraceSamples: SkippedTrace[];
 }
 
 /** A batch of complete traces ready for a single upload request. */

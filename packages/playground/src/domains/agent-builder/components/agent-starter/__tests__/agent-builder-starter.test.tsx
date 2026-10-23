@@ -1,5 +1,4 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
@@ -45,7 +44,6 @@ const renderStarter = () => {
 
 describe('AgentBuilderStarter', () => {
   beforeEach(() => {
-    usePlaygroundStore.setState({ requestContext: {} });
     // The starter pulls builder settings + provider models so it can pick a
     // model that the admin policy allows. Stub the bare minimum: no policy and
     // an empty provider list, which yields the hard-coded fallback model.

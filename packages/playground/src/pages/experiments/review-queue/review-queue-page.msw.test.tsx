@@ -16,34 +16,6 @@ import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 
-// Base UI popups don't open in jsdom; a native select exposes the same contract.
-vi.mock('@mastra/playground-ui/components/Combobox', () => ({
-  Combobox: ({
-    options,
-    value,
-    onValueChange,
-    placeholder,
-  }: {
-    options: Array<{ label: string; value: string }>;
-    value?: string | string[];
-    onValueChange?: (value: string) => void;
-    placeholder?: string;
-  }) => (
-    <select
-      aria-label={placeholder}
-      value={Array.isArray(value) ? (value[0] ?? '') : (value ?? '')}
-      onChange={event => onValueChange?.(event.target.value)}
-    >
-      <option value="">{placeholder}</option>
-      {options.map(option => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  ),
-}));
-
 const OTHER_EXPERIMENT_ID = 'exp-2';
 const otherExperiment = { ...experiment, id: OTHER_EXPERIMENT_ID, name: 'entity-extraction / model-b' };
 const otherResults = [
@@ -65,6 +37,11 @@ const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototyp
 
 beforeAll(() => {
   if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
+  // jsdom ships no PointerEvent, and Base UI constructs one on press.
+  if (typeof window.PointerEvent === 'undefined') {
+    class PointerEventStub extends MouseEvent {}
+    window.PointerEvent = PointerEventStub as unknown as typeof PointerEvent;
+  }
   Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 800 });
   Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 800 });
 });
@@ -95,6 +72,23 @@ beforeEach(() => {
     }),
   );
 });
+
+const getFilterInput = () => screen.getByRole('combobox', { name: 'Add filter' }) as HTMLInputElement;
+const getChips = () => document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]');
+const typeFilter = (text: string) => fireEvent.change(getFilterInput(), { target: { value: text } });
+const pressFilterKey = (key: string) => fireEvent.keyDown(getFilterInput(), { key });
+
+/** Builds a `<field> is <value>` filter through the typeahead input. */
+const pickFilter = async (field: string, value: string) => {
+  getFilterInput().focus();
+  typeFilter(field);
+  await screen.findByRole('option', { name: field });
+  pressFilterKey('Enter');
+  typeFilter(value);
+  await screen.findByRole('option', { name: value });
+  pressFilterKey('Enter');
+};
+const pickExperiment = (name: string) => pickFilter('Experiment', name);
 
 const renderPage = (search = '') => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -130,9 +124,8 @@ describe('Review Queue page', () => {
     it('lists items awaiting review across every experiment', async () => {
       renderPage();
 
-      const select = (await screen.findByRole('combobox', { name: 'Select experiment' })) as HTMLSelectElement;
-      await screen.findByRole('option', { name: 'All experiments' });
-      expect(select.value).toBe('all');
+      await screen.findByRole('group', { name: 'Review queue filters' });
+      expect(getChips()).toHaveLength(0);
 
       await screen.findByText(/third question/);
       await screen.findByText(/other question/);
@@ -141,11 +134,10 @@ describe('Review Queue page', () => {
   });
 
   describe('when ?experiment points at a loaded experiment', () => {
-    it('preselects it in the combobox and shows only its review queue', async () => {
+    it('shows it as a filter chip and shows only its review queue', async () => {
       renderPage(`?experiment=${EXPERIMENT_ID}`);
 
-      const select = (await screen.findByRole('combobox', { name: 'Select experiment' })) as HTMLSelectElement;
-      await waitFor(() => expect(select.value).toBe(EXPERIMENT_ID));
+      await screen.findByRole('group', { name: `Experiment ${experiment.name}` });
 
       await screen.findByText(/third question/);
       expect(screen.queryByText(/other question/)).toBeNull();
@@ -178,13 +170,12 @@ describe('Review Queue page', () => {
     });
   });
 
-  describe('when the user picks "All experiments"', () => {
+  describe('when the user removes the experiment chip', () => {
     it('clears ?experiment and shows every queue', async () => {
       const { router } = renderPage(`?experiment=${EXPERIMENT_ID}`);
 
-      const select = await screen.findByRole('combobox', { name: 'Select experiment' });
-      await screen.findByRole('option', { name: 'All experiments' });
-      fireEvent.change(select, { target: { value: 'all' } });
+      await screen.findByRole('group', { name: `Experiment ${experiment.name}` });
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Experiment filter' }));
 
       await waitFor(() => expect(router.state.location.search).toBe(''));
       await screen.findByText(/third question/);
@@ -192,13 +183,77 @@ describe('Review Queue page', () => {
     });
   });
 
+  describe('when the user picks the "Completed" status', () => {
+    it('shows reviewed items instead of the queue, as a Status chip', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/:experimentId/results`, ({ params }) =>
+          HttpResponse.json({
+            results: params.experimentId === EXPERIMENT_ID ? [results[2], { ...results[0], status: 'complete' }] : [],
+            pagination: { total: 2, page: 0, perPage: 100, hasMore: false },
+          }),
+        ),
+      );
+      renderPage();
+
+      await screen.findByText(/third question/);
+      expect(screen.queryByText(/first question/)).toBeNull();
+
+      await pickFilter('Status', 'Completed');
+
+      await screen.findByRole('group', { name: 'Status Completed' });
+      await screen.findByText(/first question/);
+      expect(screen.queryByText(/third question/)).toBeNull();
+    });
+  });
+
+  describe('when the user narrows the experiment after picking a status', () => {
+    it('keeps the Status chip alongside the new Experiment chip', async () => {
+      renderPage();
+
+      await screen.findByText(/third question/);
+      await pickFilter('Status', 'Completed');
+      await screen.findByRole('group', { name: 'Status Completed' });
+
+      await pickExperiment(experiment.name);
+
+      await screen.findByRole('group', { name: `Experiment ${experiment.name}` });
+      expect(screen.getByRole('group', { name: 'Status Completed' })).toBeTruthy();
+      expect(getChips()).toHaveLength(2);
+    });
+  });
+
+  describe('when the user picks a tag', () => {
+    it('narrows the queue to items carrying that tag', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/:experimentId/results`, ({ params }) =>
+          HttpResponse.json({
+            results:
+              params.experimentId === EXPERIMENT_ID ? [results[2], { ...results[1], status: 'needs-review' }] : [],
+            pagination: { total: 2, page: 0, perPage: 100, hasMore: false },
+          }),
+        ),
+      );
+      renderPage();
+
+      await screen.findByText(/third question/);
+      await screen.findByText(/second question/);
+
+      await pickFilter('Tag', 'alpha');
+
+      await screen.findByRole('group', { name: 'Tag alpha' });
+      await waitFor(() => expect(screen.queryByText(/third question/)).toBeNull());
+      expect(screen.getByText(/second question/)).toBeTruthy();
+    });
+  });
+
   describe('when the user picks another experiment', () => {
     it('updates ?experiment and drops ?review', async () => {
       const { router } = renderPage(`?experiment=${EXPERIMENT_ID}&review=res-3`);
 
-      const select = await screen.findByRole('combobox', { name: 'Select experiment' });
-      await screen.findByRole('option', { name: 'entity-extraction / model-b' });
-      fireEvent.change(select, { target: { value: OTHER_EXPERIMENT_ID } });
+      await screen.findByRole('group', { name: `Experiment ${experiment.name}` });
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Experiment filter' }));
+      await waitFor(() => expect(router.state.location.search).toBe(''));
+      await pickExperiment(otherExperiment.name);
 
       await waitFor(() => {
         expect(router.state.location.search).toBe(`?experiment=${OTHER_EXPERIMENT_ID}`);
@@ -228,9 +283,8 @@ describe('Review Queue page', () => {
     it('keeps the target params when picking an experiment', async () => {
       const { router } = renderPage('?targetType=agent&targetId=agent-1');
 
-      const select = await screen.findByRole('combobox', { name: 'Select experiment' });
-      await screen.findByRole('option', { name: 'entity-extraction / model-b' });
-      fireEvent.change(select, { target: { value: OTHER_EXPERIMENT_ID } });
+      await screen.findByText(/third question/);
+      await pickExperiment(otherExperiment.name);
 
       await waitFor(() => {
         const params = new URLSearchParams(router.state.location.search);

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/schema-compat",
-  "version": "1.3.10",
+  "version": "1.3.16",
   "description": "Tool schema compatibility layer for Mastra.ai",
   "type": "module",
   "main": "dist/index.js",
@@ -85,8 +85,8 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "keywords": [
     "mastra",
@@ -105,9 +105,9 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/anthropic": "^3.0.103",
-    "@ai-sdk/google": "^3.0.101",
-    "@ai-sdk/openai": "^3.0.88",
+    "@ai-sdk/anthropic": "^3.0.133",
+    "@ai-sdk/google": "^3.0.135",
+    "@ai-sdk/openai": "^3.0.130",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
@@ -117,14 +117,13 @@
     "@internal/types-builder": "workspace:*",
     "@standard-schema/spec": "^1.1.0",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ajv": "^8.20.0",
     "arktype": "^2.2.0",
-    "eslint": "^10.7.0",
     "json-schema-traverse": "^1.0.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:",

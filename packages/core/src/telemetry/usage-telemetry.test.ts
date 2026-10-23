@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,11 +14,13 @@ const { capture, flush, PostHog } = vi.hoisted(() => {
 });
 
 vi.mock('posthog-node', () => ({ PostHog }));
+vi.mock('node:child_process', { spy: true });
 
 import type { Mastra } from '../mastra';
 import type { CreateMetricRecord } from '../storage/domains';
 import { InMemoryStore } from '../storage/mock';
-import { resetEETelemetryForTests } from './posthog';
+import { resetProjectId2CacheForTests } from './context';
+import { hashTelemetryValue, resetEETelemetryForTests } from './posthog';
 import { syncUsageTelemetry, USAGE_TELEMETRY_EVENT } from './usage-telemetry';
 
 const INPUT_METRIC = 'mastra_model_total_input_tokens';
@@ -43,24 +46,37 @@ describe('syncUsageTelemetry', () => {
   let cursorPath: string;
   let store: InMemoryStore;
   let originalTelemetryDisabled: string | undefined;
+  let originalProjectRoot: string | undefined;
+  let originalProjectId: string | undefined;
 
   beforeEach(() => {
     originalTelemetryDisabled = process.env['MASTRA_TELEMETRY_DISABLED'];
+    originalProjectRoot = process.env['MASTRA_PROJECT_ROOT'];
+    originalProjectId = process.env['MASTRA_PROJECT_ID'];
     delete process.env['MASTRA_TELEMETRY_DISABLED'];
     tmpDir = mkdtempSync(path.join(os.tmpdir(), 'mastra-usage-telemetry-'));
     cursorPath = path.join(tmpDir, 'cursors', 'usage-telemetry.json');
+    process.env['MASTRA_PROJECT_ROOT'] = tmpDir;
+    process.env['MASTRA_PROJECT_ID'] = '550e8400-e29b-41d4-a716-446655440000';
     store = new InMemoryStore();
+    vi.mocked(execFile).mockClear();
     capture.mockClear();
     flush.mockClear();
     PostHog.mockClear();
     resetEETelemetryForTests();
+    resetProjectId2CacheForTests();
   });
 
   afterEach(() => {
     if (originalTelemetryDisabled !== undefined) process.env['MASTRA_TELEMETRY_DISABLED'] = originalTelemetryDisabled;
     else delete process.env['MASTRA_TELEMETRY_DISABLED'];
+    if (originalProjectRoot !== undefined) process.env['MASTRA_PROJECT_ROOT'] = originalProjectRoot;
+    else delete process.env['MASTRA_PROJECT_ROOT'];
+    if (originalProjectId !== undefined) process.env['MASTRA_PROJECT_ID'] = originalProjectId;
+    else delete process.env['MASTRA_PROJECT_ID'];
     rmSync(tmpDir, { recursive: true, force: true });
     resetEETelemetryForTests();
+    resetProjectId2CacheForTests();
   });
 
   async function seedUsage() {
@@ -97,6 +113,8 @@ describe('syncUsageTelemetry', () => {
       output_tokens: 30,
       total_input_tokens: 150,
       total_output_tokens: 30,
+      project_id: hashTelemetryValue(tmpDir).slice(0, 16),
+      project_id2: 'mp_550e8400-e29b-41d4-a716-446655440000',
       is_first_sync: true,
       window_start: null,
       window_end: '2026-06-03T00:00:00.000Z',
@@ -110,9 +128,25 @@ describe('syncUsageTelemetry', () => {
       is_first_sync: true,
     });
 
-    // Cursor file written with the sync timestamp.
+    // Cursor file written with the sync timestamp, keyed solely by the
+    // path-derived project_id — never by project_id2.
     const cursors = JSON.parse(readFileSync(cursorPath, 'utf-8'));
-    expect(Object.values(cursors.projects)).toEqual(['2026-06-03T00:00:00.000Z']);
+    expect(cursors.projects).toEqual({
+      [hashTelemetryValue(tmpDir).slice(0, 16)]: '2026-06-03T00:00:00.000Z',
+    });
+  });
+
+  it('omits project_id2 when no platform id or git remote is available', async () => {
+    // The temp project root is not a git repository and no platform id is set.
+    delete process.env['MASTRA_PROJECT_ID'];
+    await seedUsage();
+
+    await syncUsageTelemetry(makeMastra(store), { cursorPath, now: new Date('2026-06-03T00:00:00Z') });
+
+    expect(capture).toHaveBeenCalledTimes(2);
+    for (const [event] of capture.mock.calls) {
+      expect(event.properties).not.toHaveProperty('project_id2');
+    }
   });
 
   it('only sends usage recorded after the last sync, with cumulative totals', async () => {
@@ -150,12 +184,14 @@ describe('syncUsageTelemetry', () => {
     expect(JSON.parse(readFileSync(cursorPath, 'utf-8')).projects).not.toEqual({});
   });
 
-  it('does nothing when telemetry is disabled', async () => {
-    process.env['MASTRA_TELEMETRY_DISABLED'] = 'true';
+  it.each(['1', 'true', 'yes'])('skips Git discovery and usage telemetry when disabled with %s', async value => {
+    process.env['MASTRA_TELEMETRY_DISABLED'] = value;
+    delete process.env['MASTRA_PROJECT_ID'];
     await seedUsage();
 
     await syncUsageTelemetry(makeMastra(store), { cursorPath, now: new Date('2026-06-03T00:00:00Z') });
 
+    expect(execFile).not.toHaveBeenCalled();
     expect(PostHog).not.toHaveBeenCalled();
     expect(capture).not.toHaveBeenCalled();
     expect(() => readFileSync(cursorPath, 'utf-8')).toThrow();

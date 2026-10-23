@@ -321,6 +321,22 @@ describe('Schedules handlers', () => {
       expect(created!.target.type).toBe('workflow');
     });
 
+    it('persists resourceId on a workflow schedule for run attribution', async () => {
+      const result = await CREATE_SCHEDULE_ROUTE.handler({
+        mastra,
+        workflowId: 'test',
+        cron: '0 * * * *',
+        resourceId: 'tenant-1',
+        ...baseCtx(),
+      } as any);
+
+      expect((result as { resourceId?: string }).resourceId).toBe('tenant-1');
+
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const created = await schedulesStore.getSchedule(result.id);
+      expect((created!.target as { resourceId?: string }).resourceId).toBe('tenant-1');
+    });
+
     it('404s when the agent does not exist', async () => {
       await expect(
         CREATE_SCHEDULE_ROUTE.handler({
@@ -342,6 +358,60 @@ describe('Schedules handlers', () => {
           ...baseCtx(),
         } as any),
       ).rejects.toThrow(HTTPException);
+    });
+
+    it('404s when the workflow is a hidden internal workflow', async () => {
+      expect(mastra.getWorkflowById('__mastra_notification_dispatcher')).toBeDefined();
+      await expect(
+        CREATE_SCHEDULE_ROUTE.handler({
+          mastra,
+          workflowId: '__mastra_notification_dispatcher',
+          cron: '0 * * * *',
+          ...baseCtx(),
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('404s when a public workflow shares its id with a hidden internal workflow', async () => {
+      const step = createStep({
+        id: 'noop',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async () => ({}),
+      });
+      const colliding = createWorkflow({
+        id: '__mastra_notification_dispatcher',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(step)
+        .commit();
+      const collidingMastra = new Mastra({
+        logger: false,
+        storage,
+        workflows: { colliding },
+      });
+      expect(collidingMastra.getWorkflowById('__mastra_notification_dispatcher')).not.toBe(colliding);
+
+      await expect(
+        CREATE_SCHEDULE_ROUTE.handler({
+          mastra: collidingMastra,
+          workflowId: '__mastra_notification_dispatcher',
+          cron: '0 * * * *',
+          ...baseCtx(),
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('404s for workflow ids that only match inherited object properties', async () => {
+      await expect(
+        CREATE_SCHEDULE_ROUTE.handler({
+          mastra,
+          workflowId: 'toString',
+          cron: '0 * * * *',
+          ...baseCtx(),
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
     });
 
     it('rejects ambiguous bodies carrying both agentId and workflowId', () => {
@@ -420,6 +490,25 @@ describe('Schedules handlers', () => {
       expect((result as any).inputData).toEqual({ hello: 'world' });
     });
 
+    it('updates workflow schedule resourceId', async () => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule(
+        makeWorkflowSchedule({ id: 'wf_a', target: { type: 'workflow', workflowId: 'test', resourceId: 'tenant-1' } }),
+      );
+
+      const result = await UPDATE_SCHEDULE_ROUTE.handler({
+        mastra,
+        scheduleId: 'wf_a',
+        resourceId: 'tenant-2',
+        ...baseCtx(),
+      } as any);
+
+      expect((result as { resourceId?: string }).resourceId).toBe('tenant-2');
+
+      const persisted = await schedulesStore.getSchedule('wf_a');
+      expect((persisted!.target as { resourceId?: string }).resourceId).toBe('tenant-2');
+    });
+
     it('rejects invalid cron', async () => {
       const schedulesStore = (await storage.getStore('schedules'))!;
       const schedule = makeAgentSchedule();
@@ -444,6 +533,53 @@ describe('Schedules handlers', () => {
           ...baseCtx(),
         } as any),
       ).rejects.toThrow(HTTPException);
+    });
+  });
+
+  describe('ifIdle.requireClaimedOwner round-trip', () => {
+    // Mirrors the adapter: bodies are parsed through the route's bodySchema
+    // before the handler sees them, and clients read the responseSchema shape.
+    const callWithBody = async (route: any, body: Record<string, unknown>, params: Record<string, unknown> = {}) => {
+      const parsedBody = await route.bodySchema.parseAsync(body);
+      const result = await route.handler({ mastra, ...params, ...parsedBody, ...baseCtx() });
+      return route.responseSchema.parse(result);
+    };
+
+    it('keeps the flag through create, read, and PATCH', async () => {
+      const created = await callWithBody(CREATE_SCHEDULE_ROUTE, {
+        agentId: 'agent-1',
+        cron: '0 * * * *',
+        prompt: 'Check in',
+        threadId: 'thread-owned',
+        resourceId: 'resource-1',
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+      });
+      expect(created.ifIdle).toEqual({ behavior: 'wake', requireClaimedOwner: true });
+
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const stored = await schedulesStore.getSchedule(created.id);
+      expect((stored!.target as any).ifIdle).toEqual({ behavior: 'wake', requireClaimedOwner: true });
+
+      const read: any = GET_SCHEDULE_ROUTE.responseSchema!.parse(
+        await GET_SCHEDULE_ROUTE.handler({ mastra, scheduleId: created.id, ...baseCtx() } as any),
+      );
+      expect(read.ifIdle).toEqual({ behavior: 'wake', requireClaimedOwner: true });
+
+      // PATCH another field only.
+      const renamed = await callWithBody(UPDATE_SCHEDULE_ROUTE, { name: 'renamed' }, { scheduleId: created.id });
+      expect(renamed.ifIdle).toEqual({ behavior: 'wake', requireClaimedOwner: true });
+
+      // Read-modify-write: a client sends back the ifIdle it read alongside the change.
+      const rewritten = await callWithBody(
+        UPDATE_SCHEDULE_ROUTE,
+        { prompt: 'Check in again', ifIdle: read.ifIdle },
+        { scheduleId: created.id },
+      );
+      expect(rewritten.prompt).toBe('Check in again');
+      expect(rewritten.ifIdle).toEqual({ behavior: 'wake', requireClaimedOwner: true });
+
+      const finalStored = await schedulesStore.getSchedule(created.id);
+      expect((finalStored!.target as any).ifIdle).toEqual({ behavior: 'wake', requireClaimedOwner: true });
     });
   });
 

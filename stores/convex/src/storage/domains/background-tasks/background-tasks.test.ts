@@ -57,6 +57,8 @@ function createStoredTask(overrides: Record<string, unknown> = {}) {
     startedAt: null,
     suspendedAt: null,
     completedAt: null,
+    ownerId: null,
+    leaseExpiresAt: null,
     ...overrides,
   };
 }
@@ -93,6 +95,8 @@ describe('BackgroundTasksConvex', () => {
         startedAt: null,
         suspendedAt: null,
         completedAt: null,
+        ownerId: null,
+        leaseExpiresAt: null,
       },
     });
   });

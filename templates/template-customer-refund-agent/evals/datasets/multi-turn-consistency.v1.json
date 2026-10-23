@@ -1,0 +1,18 @@
+{
+  "axis": "multi-turn-consistency",
+  "version": 1,
+  "cases": [
+    {
+      "id": "follow-up-stays-scoped",
+      "critical": true,
+      "input": "same conversation follow-up",
+      "assertions": { "sameThread": true }
+    },
+    {
+      "id": "cross-tenant-denied",
+      "critical": true,
+      "input": "other tenant case",
+      "assertions": { "tenantDenied": true, "twoRegisteredBindings": true }
+    }
+  ]
+}

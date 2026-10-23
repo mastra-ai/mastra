@@ -1,10 +1,10 @@
-import { PageHeadingContext } from '@mastra/playground-ui/components/PageLayout';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 import { StudioSettingsPage } from './index';
+import { authDisabledCapabilities } from '@/domains/configuration/context/__tests__/fixtures/capabilities';
 import {
   MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
   StudioConfigProvider,
@@ -14,16 +14,14 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 
 async function renderSettingsPage() {
-  server.use(http.get(BASE_URL, () => HttpResponse.text('ok')));
+  server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authDisabledCapabilities)));
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
   render(
     <QueryClientProvider client={queryClient}>
       <StudioConfigProvider endpoint={BASE_URL}>
         <ThemeProvider>
-          <PageHeadingContext.Provider value="Settings">
-            <StudioSettingsPage />
-          </PageHeadingContext.Provider>
+          <StudioSettingsPage />
         </ThemeProvider>
       </StudioConfigProvider>
     </QueryClientProvider>,
@@ -41,11 +39,11 @@ afterEach(() => {
 
 describe('StudioSettingsPage', () => {
   describe('when the settings page is visited', () => {
-    it('exposes the route heading and settings controls inside the main landmark', async () => {
+    it('exposes the settings breadcrumb and settings controls inside the main landmark', async () => {
       await renderSettingsPage();
 
+      expect(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByText('Settings')).toBeDefined();
       const main = within(screen.getByRole('main'));
-      expect(main.getByRole('heading', { level: 1, name: 'Settings' })).toBeDefined();
       expect(
         within(main.getByRole('radiogroup', { name: 'Theme' }))
           .getByRole('radio', { name: 'System' })
@@ -61,7 +59,7 @@ describe('StudioSettingsPage', () => {
       await renderSettingsPage();
 
       fireEvent.change(screen.getByRole('textbox', { name: 'API prefix' }), { target: { value: '/custom-api' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
 
       expect(JSON.parse(localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY) ?? '{}')).toMatchObject({
         baseUrl: BASE_URL,

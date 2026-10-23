@@ -258,7 +258,7 @@ Submitting to an experiment that has a target returns a `400`. Submitting after 
 
 ## finalizeExperiment()
 
-Marks a caller-driven experiment completed. The server computes per-item counts from the persisted result rows, so the caller keeps no bookkeeping: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), and `skippedCount` (never submitted). Idempotent: finalizing an already-completed experiment returns the stored record.
+Marks a caller-driven experiment completed. The server handles bookkeeping for the caller by computing per-item counts from the persisted result rows: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), and `skippedCount` (never submitted). Idempotent: finalizing an already-completed experiment returns the stored record.
 
 <PropertiesTable
   content={[
@@ -279,7 +279,7 @@ Returns `Promise<DatasetExperiment>`, the updated experiment record.
 
 ## deleteDatasetExperiment()
 
-Deletes an experiment through its dataset. The server deletes the experiment's result records and attempts to delete its observability traces, including their spans and trace-linked signals, but unsupported storage leaves the traces in place and causes the server to log a warning. If trace cleanup fails after an earlier batch succeeds, the promise rejects and preserves the experiment and result records even though some traces may already have been removed.
+Deletes an experiment through its dataset. The server deletes the experiment's observability traces, including their spans and trace-linked signals, and then deletes the experiment and its result records. Unsupported storage leaves the traces in place, and the server logs a warning. If trace deletion fails for any other reason, the promise rejects and Mastra keeps the experiment and its result records, although some traces may already have been removed.
 
 ```typescript
 await client.deleteDatasetExperiment('dataset-id', 'experiment-id', {
@@ -317,9 +317,44 @@ await client.deleteDatasetExperiment('dataset-id', 'experiment-id', {
 
 Returns `Promise<{ success: boolean }>`. A missing experiment, an experiment associated with another dataset, or a dataset outside the supplied tenancy returns a `404` response.
 
+## getExperiment()
+
+Gets an experiment by ID without requiring a dataset reference. The response includes the experiment's `datasetId`, which is `null` for experiments orphaned by dataset deletion.
+
+```typescript
+const experiment = await client.getExperiment('experiment-id', {
+  organizationId: 'organization-id',
+  projectId: 'project-id',
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of the experiment to get.',
+  },
+  {
+    name: 'options.organizationId',
+    type: 'string',
+    isOptional: true,
+    description: 'Organization ID used to scope the lookup.',
+  },
+  {
+    name: 'options.projectId',
+    type: 'string',
+    isOptional: true,
+    description: 'Project ID used to scope the lookup.',
+  },
+]}
+/>
+
+Returns the experiment. A missing experiment, or one outside the supplied tenancy, returns a `404` response.
+
 ## deleteExperiment()
 
-Deletes an experiment by ID without requiring a dataset reference. Use this method for experiments orphaned by dataset deletion. The server deletes the experiment's result records and attempts to delete its observability traces, but unsupported storage leaves the traces in place and causes the server to log a warning. If trace cleanup fails after an earlier batch succeeds, the promise rejects and preserves the experiment and result records even though some traces may already have been removed.
+Deletes an experiment by ID without requiring a dataset reference. Use this method for experiments orphaned by dataset deletion. The server deletes the experiment's observability traces and then deletes the experiment and its result records. Unsupported storage leaves the traces in place, and the server logs a warning. If trace deletion fails for any other reason, the promise rejects and Mastra keeps the experiment and its result records, although some traces may already have been removed.
 
 ```typescript
 await client.deleteExperiment('experiment-id', {
@@ -363,7 +398,7 @@ await client.purgeDatasetItem('dataset-id', 'item-id', {
 })
 ```
 
-The optional third argument scopes the purge to a tenant organization and project. The server returns `404` when the dataset doesn't belong to that scope.
+The optional third argument scopes the purge to a tenant organization and project. The server returns `404` when the dataset doesn't belong to that scope or the item has no history in the dataset.
 
 Returns `Promise<{ success: boolean }>`. The operation is idempotent and can't be undone. Purge serializes or conflicts with concurrent dataset item writers without guaranteeing which operation completes first. If a mutating item update loses the race, storage re-reads the purge marker and rejects it with `DATASET_ITEM_PURGED`. Deletes remain idempotent, and any deletion tombstone created during the race stays redacted. MongoDB storage requires a replica set or sharded deployment with transaction support. See [`dataset.purgeItem()`](/reference/datasets/purgeItem) for the complete purge behavior.
 

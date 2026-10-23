@@ -1,21 +1,31 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   ArrowLeft,
+  Eye,
+  EyeOff,
   File,
   FileCode,
   FileJson,
   FileText,
   Folder,
   FolderOpen,
+  FolderSymlink,
   Image,
   NotepadText,
   RefreshCw,
 } from 'lucide-react';
+import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+
+import { queryKeys } from '../../../../api/keys';
+import { WakeSandbox } from './WakeSandbox';
+import type { WorkspaceTreeEntry } from '../../../../api/types';
+import { useWorkspaceTree } from '../../../../hooks/use-fs';
 import { treeRowContainmentClass } from '../layout';
 
 function getFileIcon(path: string): ReactNode {
@@ -25,208 +35,246 @@ function getFileIcon(path: string): ReactNode {
     case 'tsx':
     case 'js':
     case 'jsx':
-      return <FileCode className="text-notice-info/70" />;
+      return <FileCode className="text-badge-blue-indicator" />;
     case 'json':
-      return <FileJson className="text-notice-warning/70" />;
+      return <FileJson className="text-badge-amber-indicator" />;
     case 'md':
     case 'mdx':
-      return <FileText className="text-neutral4" />;
+      return <FileText className="text-muted-foreground" />;
     case 'png':
     case 'jpg':
     case 'jpeg':
     case 'gif':
     case 'svg':
     case 'webp':
-      return <Image className="text-neutral4" />;
+      return <Image className="text-muted-foreground" />;
     default:
-      return <File className="text-neutral4" />;
+      return <File className="text-muted-foreground" />;
   }
 }
 
 function getFolderIcon(isOpen: boolean): ReactNode {
-  return isOpen ? <FolderOpen className="text-notice-warning/70" /> : <Folder className="text-notice-warning/70" />;
+  return isOpen ? (
+    <FolderOpen className="text-badge-amber-indicator" />
+  ) : (
+    <Folder className="text-badge-amber-indicator" />
+  );
 }
 
-interface WorkspaceTreeNode {
-  path: string;
-  name: string;
-  type: 'file' | 'directory';
-  children: WorkspaceTreeNode[];
+function TreeMessage({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted' | 'error' }) {
+  return (
+    <Txt
+      as="span"
+      variant="caption"
+      tone={tone === 'muted' ? 'muted' : undefined}
+      className={tone === 'error' ? 'text-destructive-foreground' : undefined}
+    >
+      {children}
+    </Txt>
+  );
 }
 
-interface WorkspaceFileEntry {
-  path: string;
+/** Tree ids for symlinked folders, which jump to their target instead of expanding. */
+const FOLDER_LINK_ID = 'folder-link:';
+
+/** `→ target` after a symlink's name. */
+function LinkTarget({ target }: { target?: string }) {
+  if (!target) return null;
+  return (
+    <Txt as="span" variant="caption" tone="muted" className="ml-1.5 truncate">
+      → {target}
+    </Txt>
+  );
 }
 
-function ensureDirectory(nodes: WorkspaceTreeNode[], path: string, name: string): WorkspaceTreeNode {
-  const existing = nodes.find(node => node.path === path);
-  if (existing) return existing;
-
-  const directory = { path, name, type: 'directory', children: [] } satisfies WorkspaceTreeNode;
-  nodes.push(directory);
-  return directory;
+/** Dotfiles and dot-folders, hidden unless the viewer asks for them. */
+function isHidden(entry: WorkspaceTreeEntry): boolean {
+  return entry.name.startsWith('.');
 }
 
-function addFile(nodes: WorkspaceTreeNode[], file: WorkspaceFileEntry) {
-  const segments = file.path.split('/').filter(Boolean);
-  let siblings = nodes;
-  let currentPath = '';
-
-  segments.forEach((segment, index) => {
-    currentPath = currentPath ? `${currentPath}/${segment}` : segment;
-    if (index === segments.length - 1) {
-      siblings.push({ path: file.path, name: segment, type: 'file', children: [] });
-      return;
-    }
-    siblings = ensureDirectory(siblings, currentPath, segment).children;
-  });
-}
-
-function sortTree(nodes: WorkspaceTreeNode[]): WorkspaceTreeNode[] {
-  return nodes
-    .map(node => ({ ...node, children: sortTree(node.children) }))
-    .sort((a, b) => {
-      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-}
-
-function buildTree(files: WorkspaceFileEntry[]): WorkspaceTreeNode[] {
-  const nodes: WorkspaceTreeNode[] = [];
-  files.forEach(file => addFile(nodes, file));
-  return sortTree(nodes);
-}
-
-function WorkspaceTreeItem({
-  node,
-  openFolders,
-  onFolderOpenChange,
-}: {
-  node: WorkspaceTreeNode;
+interface TreeLevelProps {
+  workspacePath: string;
+  showHidden: boolean;
   openFolders: Record<string, boolean>;
   onFolderOpenChange: (path: string, open: boolean) => void;
-}) {
-  if (node.type === 'directory') {
-    const isOpen = openFolders[node.path] ?? false;
+}
+
+/** The contents of one open folder: fetched only once it is open. */
+function FolderChildren({ path, ...props }: TreeLevelProps & { path: string }) {
+  const listing = useWorkspaceTree(props.workspacePath, path);
+  if (listing.isLoading) {
+    return (
+      <li className="px-2 py-1">
+        <Spinner size="sm" />
+      </li>
+    );
+  }
+  if (listing.error) {
+    return (
+      <li className="px-2 py-1">
+        <TreeMessage tone="error">{listing.error.message}</TreeMessage>
+      </li>
+    );
+  }
+  const entries = (listing.data?.entries ?? []).filter(entry => props.showHidden || !isHidden(entry));
+  if (entries.length === 0) {
+    return (
+      <li className="px-2 py-1">
+        <TreeMessage>Empty</TreeMessage>
+      </li>
+    );
+  }
+  return entries.map(entry => <WorkspaceTreeItem key={entry.path} entry={entry} {...props} />);
+}
+
+function WorkspaceTreeItem({ entry, ...props }: TreeLevelProps & { entry: WorkspaceTreeEntry }) {
+  if (entry.type === 'directory' && entry.linkedPath !== undefined) {
+    return (
+      <Tree.File id={`${FOLDER_LINK_ID}${entry.linkedPath}`} className={treeRowContainmentClass}>
+        <Tree.Icon>
+          <FolderSymlink className="text-badge-amber-indicator" />
+        </Tree.Icon>
+        <Tree.Label>
+          {entry.name}
+          <LinkTarget target={entry.symlinkTarget} />
+        </Tree.Label>
+      </Tree.File>
+    );
+  }
+  if (entry.type === 'directory') {
+    const isOpen = props.openFolders[entry.path] ?? false;
     return (
       <Tree.Folder
         className={treeRowContainmentClass}
         open={isOpen}
-        onOpenChange={(open: boolean) => onFolderOpenChange(node.path, open)}
+        onOpenChange={(open: boolean) => props.onFolderOpenChange(entry.path, open)}
       >
         <Tree.FolderTrigger>
           <Tree.Icon>{getFolderIcon(isOpen)}</Tree.Icon>
-          <Tree.Label>{node.name}</Tree.Label>
+          <Tree.Label>{entry.name}</Tree.Label>
         </Tree.FolderTrigger>
-        <Tree.FolderContent>
-          {node.children.map(child => (
-            <WorkspaceTreeItem
-              key={child.path}
-              node={child}
-              openFolders={openFolders}
-              onFolderOpenChange={onFolderOpenChange}
-            />
-          ))}
-        </Tree.FolderContent>
+        <Tree.FolderContent>{isOpen ? <FolderChildren path={entry.path} {...props} /> : null}</Tree.FolderContent>
       </Tree.Folder>
     );
   }
 
   return (
-    <Tree.File id={node.path} className={treeRowContainmentClass}>
-      <Tree.Icon>{getFileIcon(node.name)}</Tree.Icon>
-      <Tree.Label>{node.name}</Tree.Label>
+    <Tree.File id={entry.path} className={treeRowContainmentClass}>
+      <Tree.Icon>{getFileIcon(entry.name)}</Tree.Icon>
+      <Tree.Label>
+        {entry.name}
+        <LinkTarget target={entry.symlinkTarget} />
+      </Tree.Label>
     </Tree.File>
   );
 }
 
 interface WorkspaceFileBrowserProps {
-  files?: WorkspaceFileEntry[];
+  workspacePath: string;
+  visible?: boolean;
   selectedFilePath?: string;
-  isLoading: boolean;
-  isRefreshing: boolean;
-  error?: Error;
-  onRefresh: () => void;
   onFileSelect: (filePath: string) => void;
   openFolders: Record<string, boolean>;
   onFolderOpenChange: (path: string, open: boolean) => void;
+  showHidden: boolean;
+  onShowHiddenChange: (showHidden: boolean) => void;
   onBack: () => void;
 }
 
+/**
+ * The session's checkouts, read live from its sandbox one folder at a time.
+ * Refresh refetches every folder on screen.
+ */
 export function WorkspaceFileBrowser({
-  files,
+  workspacePath,
+  visible = true,
   selectedFilePath,
-  isLoading,
-  isRefreshing,
-  error,
-  onRefresh,
   onFileSelect,
   openFolders,
   onFolderOpenChange,
+  showHidden,
+  onShowHiddenChange,
   onBack,
 }: WorkspaceFileBrowserProps) {
-  const persistedFiles = files ?? [];
-  const nodes = buildTree(persistedFiles);
+  const queryClient = useQueryClient();
+  const root = useWorkspaceTree(workspacePath, '', { enabled: visible });
+  const isRefreshing = useIsFetching({ queryKey: queryKeys.workspaceTreeScope(workspacePath) }) > 0;
+  const refresh = () =>
+    void queryClient.refetchQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath), type: 'active' });
+  const entries = (root.data?.entries ?? []).filter(entry => showHidden || !isHidden(entry));
+  // A symlinked folder opens its target and every folder above it.
+  const select = (id: string) => {
+    if (!id.startsWith(FOLDER_LINK_ID)) return onFileSelect(id);
+    const segments = id.slice(FOLDER_LINK_ID.length).split('/');
+    segments.forEach((_, i) => onFolderOpenChange(segments.slice(0, i + 1).join('/'), true));
+  };
+
+  let content: ReactNode;
+  if (root.isLoading) {
+    content = <Spinner size="sm" />;
+  } else if (root.error) {
+    content = <TreeMessage tone="error">{root.error.message}</TreeMessage>;
+  } else if (root.data && !root.data.available) {
+    content = <WakeSandbox workspacePath={workspacePath} />;
+  } else if (entries.length === 0) {
+    content = <TreeMessage>No files</TreeMessage>;
+  }
 
   return (
     <aside className="flex min-h-0 w-full min-w-0 grow flex-col" aria-label="Workspace files">
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
-        <Button size="icon-xs" variant="ghost" onClick={onBack} aria-label="Back to workspace">
+        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
           <ArrowLeft />
         </Button>
-        <NotepadText className="text-icon3" size={14} />
-        <Txt as="h2" variant="ui-sm" className="text-icon6">
+        <NotepadText className="text-muted-foreground" size={14} />
+        <Txt tone="ink" as="h2" variant="column">
           Files
         </Txt>
-        {!isLoading && !error ? (
-          <Txt variant="ui-xs" className="text-icon3 ml-auto">
-            {persistedFiles.length} {persistedFiles.length === 1 ? 'file' : 'files'}
-          </Txt>
-        ) : null}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                className="ml-auto"
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => onShowHiddenChange(!showHidden)}
+                aria-pressed={showHidden}
+                aria-label={showHidden ? 'Hide hidden files' : 'Show hidden files'}
+              >
+                {showHidden ? <Eye /> : <EyeOff />}
+              </Button>
+            }
+          />
+          <TooltipContent>{showHidden ? 'Hide hidden files' : 'Show hidden files'}</TooltipContent>
+        </Tooltip>
         <Button
-          className={isLoading || error ? 'ml-auto' : undefined}
-          size="icon-xs"
+          size="icon-sm"
           variant="ghost"
-          onClick={onRefresh}
+          onClick={refresh}
           disabled={isRefreshing}
           aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
         >
           {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
         </Button>
       </div>
-      {isLoading ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center">
-          <Spinner size="sm" />
-        </div>
-      ) : null}
-      {error ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="ui-sm" className="text-error">
-            {error.message}
-          </Txt>
-        </div>
-      ) : null}
-      {!isLoading && !error && nodes.length === 0 ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt className="text-icon3" variant="ui-sm">
-            No files
-          </Txt>
-        </div>
-      ) : null}
-      {!isLoading && !error && nodes.length > 0 ? (
+      {content ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">{content}</div>
+      ) : (
         <ScrollArea className="min-h-0 flex-1">
-          <Tree className="p-1.5" selectedId={selectedFilePath} onSelect={onFileSelect}>
-            {nodes.map(node => (
+          <Tree className="p-1.5" selectedId={selectedFilePath} onSelect={select}>
+            {entries.map(entry => (
               <WorkspaceTreeItem
-                key={node.path}
-                node={node}
+                key={entry.path}
+                entry={entry}
+                workspacePath={workspacePath}
+                showHidden={showHidden}
                 openFolders={openFolders}
                 onFolderOpenChange={onFolderOpenChange}
               />
             ))}
           </Tree>
         </ScrollArea>
-      ) : null}
+      )}
     </aside>
   );
 }

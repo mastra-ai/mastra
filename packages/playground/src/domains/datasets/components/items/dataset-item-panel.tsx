@@ -1,18 +1,18 @@
 'use client';
 
-import type { DatasetItem, DatasetItemToolMock } from '@mastra/client-js';
+import type { DatasetItem, DatasetItemToolMock, UpdateDatasetItemParams } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { EllipsisVerticalIcon, History, Pencil, Trash2 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { EditModeContent } from '../dataset-detail/dataset-item-form';
 import { DatasetItemDetails } from './dataset-item-details';
-import { useLinkComponent } from '@/lib/framework';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
@@ -41,18 +41,73 @@ function parseValidationError(error: unknown): SchemaValidationError | null {
 
 export interface DatasetItemPanelProps {
   datasetId: string;
-  item: DatasetItem;
+  /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
+  item?: DatasetItem;
+  /** Item the panel is opened for while `item` is not available yet; keeps the panel open showing `fallback`. */
+  itemId?: string;
+  /** Rendered instead of the item body while `itemId` is set but `item` is missing (loading / not found). */
+  fallback?: ReactNode;
   items: DatasetItem[];
   onItemChange: (itemId: string) => void;
   onClose: () => void;
+  /**
+   * `drawer` (default) portals the panel over the app. `inline` renders it in the document flow
+   * (e.g. inside the route side panel) and renders nothing while there is no `item`/`itemId`.
+   */
+  variant?: 'drawer' | 'inline';
 }
 
 /**
- * Inline panel showing full details of a single dataset item.
+ * Full details of a single dataset item, as a drawer or an inline card.
  * Includes navigation to next/previous items and sections for Input, Ground Truth, and Metadata.
  */
-export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose }: DatasetItemPanelProps) {
-  const { Link } = useLinkComponent();
+export function DatasetItemPanel({
+  item,
+  itemId,
+  fallback,
+  onClose,
+  variant = 'drawer',
+  ...bodyProps
+}: DatasetItemPanelProps) {
+  const id = item?.id ?? itemId;
+  const title = `Dataset item ${id ?? ''}`;
+  const content = item ? (
+    // Keyed so form state never leaks between items while the panel stays mounted.
+    <DatasetItemPanelBody key={item.id} item={item} onClose={onClose} {...bodyProps} />
+  ) : itemId ? (
+    <>
+      <DataPanel.Header>
+        <DataPanel.Heading>Dataset item</DataPanel.Heading>
+        <DataPanel.HeaderActions>
+          <DataPanel.CloseButton icon="x" onClick={onClose} tooltip="Close detail panel" />
+        </DataPanel.HeaderActions>
+      </DataPanel.Header>
+      {fallback}
+    </>
+  ) : null;
+
+  if (variant === 'inline') {
+    if (!content) return null;
+    return (
+      <DataPanel variant="inline" title={title}>
+        {content}
+      </DataPanel>
+    );
+  }
+
+  return (
+    <DataPanel open={!!id} onClose={onClose} title={title}>
+      {content}
+    </DataPanel>
+  );
+}
+
+type DatasetItemPanelBodyProps = Omit<DatasetItemPanelProps, 'item' | 'itemId' | 'fallback' | 'variant'> & {
+  item: DatasetItem;
+};
+
+function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }: DatasetItemPanelBodyProps) {
+  const { navigate } = useLinkComponent();
   const { updateItem, deleteItem } = useDatasetMutations();
 
   // Edit mode state
@@ -62,8 +117,6 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
   const [metadataValue, setMetadataValue] = useState('');
   const [trajectoryValue, setTrajectoryValue] = useState('');
   const [toolMocksValue, setToolMocksValue] = useState('');
-  const [scorerOverrideEnabled, setScorerOverrideEnabled] = useState(item.scorerIds !== undefined);
-  const [selectedScorerIds, setSelectedScorerIds] = useState(item.scorerIds ?? []);
   const [requestContextValue, setRequestContextValue] = useState('');
 
   // Validation error state
@@ -80,8 +133,6 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
       setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
       setToolMocksValue(item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '');
-      setScorerOverrideEnabled(item.scorerIds !== undefined);
-      setSelectedScorerIds(item.scorerIds ?? []);
       setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
@@ -131,7 +182,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
     }
 
     // Parse expectedTrajectory: empty string means explicitly clear (null), omitted means keep existing
-    let parsedTrajectory: unknown | null = null;
+    let parsedTrajectory: UpdateDatasetItemParams['expectedTrajectory'] = null;
     if (trajectoryValue.trim()) {
       try {
         parsedTrajectory = JSON.parse(trajectoryValue);
@@ -170,15 +221,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       }
     }
 
-    let scorerIds: string[] | null | undefined;
-    if (scorerOverrideEnabled) {
-      scorerIds = selectedScorerIds;
-    } else if (item.scorerIds !== undefined) {
-      scorerIds = null;
-    }
-
     try {
-      const updatedItem = await updateItem.mutateAsync({
+      await updateItem.mutateAsync({
         datasetId,
         itemId: item.id,
         input: parsedInput,
@@ -186,13 +230,10 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
         metadata: parsedMetadata,
         expectedTrajectory: parsedTrajectory,
         toolMocks: parsedToolMocks,
-        scorerIds,
         requestContext: parsedRequestContext,
       });
 
       toast.success('Item updated successfully');
-      setScorerOverrideEnabled(updatedItem.scorerIds !== undefined);
-      setSelectedScorerIds(updatedItem.scorerIds ?? []);
       setIsEditing(false);
       setValidationErrors(null);
     } catch (error) {
@@ -213,8 +254,6 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
     setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
     setToolMocksValue(item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '');
-    setScorerOverrideEnabled(item.scorerIds !== undefined);
-    setSelectedScorerIds(item.scorerIds ?? []);
     setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
     setIsEditing(false);
     setValidationErrors(null);
@@ -248,85 +287,70 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
 
   return (
     <>
-      <DataPanel>
-        <DataPanel.Header>
-          <DataPanel.Heading>
-            Item <b># {item.id.length > 12 ? `${item.id.slice(0, 12)}…` : item.id}</b>
-          </DataPanel.Heading>
-          <ButtonsGroup className="ml-auto shrink-0">
-            <DataPanel.NextPrevNav
-              onPrevious={onPrevious}
-              onNext={onNext}
-              previousLabel="Previous item"
-              nextLabel="Next item"
-            />
-            {!isEditing && (
-              <>
-                <Button
-                  as={Link}
-                  href={`/datasets/${datasetId}/items/${item.id}/versions?version=${item.datasetVersion}`}
-                  size="md"
-                  tooltip="Go to item versions history"
-                  aria-label="Go to item versions history"
+      <DataPanel.Header>
+        <DataPanel.Heading>Dataset item</DataPanel.Heading>
+        <DataPanel.HeaderActions>
+          {!isEditing && (
+            <DropdownMenu>
+              <DropdownMenu.Trigger asChild>
+                <Button size="icon-sm" variant="ghost" tooltip="Open actions menu" aria-label="Open actions menu">
+                  <EllipsisVerticalIcon />
+                </Button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="end" className="w-48">
+                <DropdownMenu.Item
+                  onSelect={() =>
+                    navigate(`/datasets/${datasetId}/items/${item.id}/versions?version=${item.datasetVersion}`)
+                  }
                 >
                   <History />
-                </Button>
-
-                <DropdownMenu>
-                  <DropdownMenu.Trigger asChild>
-                    <Button size="md" aria-label="Actions menu">
-                      <EllipsisVerticalIcon />
-                    </Button>
-                  </DropdownMenu.Trigger>
-                  <DropdownMenu.Content align="end" className="w-48">
-                    <DropdownMenu.Item onSelect={() => setIsEditing(true)}>
-                      <Pencil />
-                      Edit
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      onSelect={() => setShowDeleteConfirm(true)}
-                      className="text-red-500 focus:text-red-400"
-                    >
-                      <Trash2 />
-                      Delete Item
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu>
-              </>
-            )}
-            <DataPanel.CloseButton onClick={onClose} tooltip="Close detail panel" />
-          </ButtonsGroup>
-        </DataPanel.Header>
-
-        <DataPanel.Content>
-          {isEditing ? (
-            <EditModeContent
-              inputValue={inputValue}
-              setInputValue={handleInputValueChange}
-              groundTruthValue={groundTruthValue}
-              setGroundTruthValue={handleGroundTruthValueChange}
-              metadataValue={metadataValue}
-              setMetadataValue={setMetadataValue}
-              trajectoryValue={trajectoryValue}
-              setTrajectoryValue={setTrajectoryValue}
-              toolMocksValue={toolMocksValue}
-              setToolMocksValue={setToolMocksValue}
-              scorerOverrideEnabled={scorerOverrideEnabled}
-              setScorerOverrideEnabled={setScorerOverrideEnabled}
-              selectedScorerIds={selectedScorerIds}
-              setSelectedScorerIds={setSelectedScorerIds}
-              requestContextValue={requestContextValue}
-              setRequestContextValue={setRequestContextValue}
-              validationErrors={validationErrors}
-              onSave={handleSave}
-              onCancel={handleCancel}
-              isSaving={updateItem.isPending}
-            />
-          ) : (
-            <DatasetItemDetails item={item} />
+                  Item versions
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => setIsEditing(true)}>
+                  <Pencil />
+                  Edit
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => setShowDeleteConfirm(true)} variant="destructive">
+                  <Trash2 />
+                  Delete item
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu>
           )}
-        </DataPanel.Content>
-      </DataPanel>
+          <DataPanel.NextPrevNav
+            onPrevious={onPrevious}
+            onNext={onNext}
+            previousLabel="Go to previous item"
+            nextLabel="Go to next item"
+          />
+          <DataPanel.CloseButton icon="x" onClick={onClose} tooltip="Close detail panel" />
+        </DataPanel.HeaderActions>
+      </DataPanel.Header>
+
+      <DataPanel.Content>
+        {isEditing ? (
+          <EditModeContent
+            inputValue={inputValue}
+            setInputValue={handleInputValueChange}
+            groundTruthValue={groundTruthValue}
+            setGroundTruthValue={handleGroundTruthValueChange}
+            metadataValue={metadataValue}
+            setMetadataValue={setMetadataValue}
+            trajectoryValue={trajectoryValue}
+            setTrajectoryValue={setTrajectoryValue}
+            toolMocksValue={toolMocksValue}
+            setToolMocksValue={setToolMocksValue}
+            requestContextValue={requestContextValue}
+            setRequestContextValue={setRequestContextValue}
+            validationErrors={validationErrors}
+            onSave={handleSave}
+            onCancel={handleCancel}
+            isSaving={updateItem.isPending}
+          />
+        ) : (
+          <DatasetItemDetails item={item} />
+        )}
+      </DataPanel.Content>
 
       {/* Delete confirmation - uses portal, renders above panel */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
@@ -340,7 +364,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
           <AlertDialog.Footer>
             <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
             <AlertDialog.Action onClick={handleDeleteConfirm}>
-              {deleteItem.isPending ? 'Deleting...' : 'Yes, Delete'}
+              {deleteItem.isPending ? 'Deleting...' : 'Yes, delete'}
             </AlertDialog.Action>
           </AlertDialog.Footer>
         </AlertDialog.Content>

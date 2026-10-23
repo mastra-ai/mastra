@@ -19,7 +19,7 @@ import type {
   SandboxStartOutcome,
   SandboxStartResult,
 } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, SandboxFailedError, SandboxNotFoundError, SandboxTimeoutError } from 'railway';
 import type { SandboxNetworkIsolation, SandboxTemplate } from 'railway';
 import { shellQuote } from '../utils/shell-quote';
@@ -73,6 +73,15 @@ export interface RailwaySandboxOptions extends Omit<MastraSandboxOptions, 'proce
    * creating a new one. When set, `start()` calls `Sandbox.connect()`.
    */
   sandboxId?: string;
+  /**
+   * What `start()` does when `sandboxId` is set but Railway reports that
+   * sandbox no longer exists.
+   *
+   * - `'best-effort'` (default): provision a replacement sandbox.
+   * - `'required'`: throw a `SandboxError` with code `SANDBOX_REATTACH_FAILED`
+   *   instead of provisioning, so the caller can surface the lost VM.
+   */
+  reattach?: 'best-effort' | 'required';
   /**
    * Reuse a saved Railway sandbox checkpoint as the baseline filesystem for
    * new sandboxes. When the named checkpoint is missing, the sandbox is created
@@ -192,6 +201,7 @@ export class RailwaySandbox extends MastraSandbox {
   private readonly _timeout?: number;
   private readonly _instructionsOverride?: InstructionsOption;
   private readonly _templateOption?: RailwaySandboxOptions['template'];
+  private readonly _reattach: 'best-effort' | 'required';
 
   constructor(options: RailwaySandboxOptions = {}) {
     super({
@@ -212,6 +222,7 @@ export class RailwaySandbox extends MastraSandbox {
     this._timeout = options.timeout;
     this._instructionsOverride = options.instructions;
     this._templateOption = options.template;
+    this._reattach = options.reattach ?? 'best-effort';
   }
 
   private generateId(): string {
@@ -228,6 +239,17 @@ export class RailwaySandbox extends MastraSandbox {
       throw new SandboxNotReadyError(this.id);
     }
     return this._sandbox;
+  }
+
+  /**
+   * The Railway provider sandbox id — the physical, reattachable VM id, as
+   * distinct from the logical `id`. Resolved after connect or create; also
+   * reflects a configured reattach id before start. Persist this to reattach
+   * deterministically later via the `sandboxId` option. Undefined until the
+   * sandbox has been started (or configured to reattach) in this process.
+   */
+  get sandboxId(): string | undefined {
+    return this._sandbox?.id ?? this._sandboxId;
   }
 
   // ---------------------------------------------------------------------------
@@ -262,6 +284,13 @@ export class RailwaySandbox extends MastraSandbox {
       } catch (error) {
         if (!(error instanceof SandboxNotFoundError)) {
           throw error;
+        }
+        if (this._reattach === 'required') {
+          throw new SandboxError(
+            `Railway sandbox ${this._sandboxId} could not be reattached (not found); refusing to provision a replacement because reattach is 'required'. Clear the persisted sandboxId to start a fresh sandbox.`,
+            'SANDBOX_REATTACH_FAILED',
+            { provider: 'railway', sandboxId: this._sandboxId, logicalId: this.id, cause: error },
+          );
         }
         this._sandbox = await this._createNewSandbox(createOptions);
         outcome = 'created';
@@ -579,6 +608,8 @@ export class RailwaySandbox extends MastraSandbox {
       ...(this._templateOption !== undefined && { template: this._templateOption }),
       ...(this._timeout !== undefined && { timeout: this._timeout }),
       ...(this._instructionsOverride !== undefined && { instructions: this._instructionsOverride }),
+      ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
+      reattach: this._reattach,
     });
   }
 

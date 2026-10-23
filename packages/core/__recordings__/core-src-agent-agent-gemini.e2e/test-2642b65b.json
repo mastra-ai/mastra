@@ -3,11 +3,12 @@
     "name": "test-2642b65b",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Tool suspension and resumption > should call findUserTool with suspend and resume via stream when autoResumeSuspendedTools is true",
-    "createdAt": "2026-07-14T17:16:36.785Z"
+    "createdAt": "2026-07-14T17:16:36.785Z",
+    "updatedAt": "2026-10-21T16:04:56.017Z"
   },
   "recordings": [
     {
-      "hash": "73599dfb5e228c6a",
+      "hash": "848b15e80840dc75",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -37,10 +38,16 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolCallId": {
+                        "description": "The toolCallId of the suspended tool to resume",
                         "type": "string"
                       },
                       "suspendedToolRunId": {
@@ -64,9 +71,30 @@
                           },
                           {
                             "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "object"
+                                }
+                              ]
+                            }
                           }
-                        ],
-                        "nullable": true
+                        ]
                       }
                     }
                   }
@@ -75,10 +103,16 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolCallId": {
+                        "description": "The toolCallId of the suspended tool to resume",
                         "type": "string"
                       },
                       "suspendedToolRunId": {
@@ -102,9 +136,30 @@
                           },
                           {
                             "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "object"
+                                }
+                              ]
+                            }
                           }
-                        ],
-                        "nullable": true
+                        ]
                       }
                     }
                   }
@@ -118,7 +173,7 @@
             }
           }
         },
-        "timestamp": 1784049391804
+        "timestamp": 1792598691579
       },
       "response": {
         "status": 200,
@@ -127,24 +182,27 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Tue, 14 Jul 2026 17:16:32 GMT",
+          "date": "Wed, 21 Oct 2026 16:04:53 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1091",
+          "server-timing": "gfet4t7; dur=1315",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"findUserTool\",\"args\": {\"name\": \"Dero Israel\"}},\"thoughtSignature\": \"CiQBEU0yD7HYriLhyWW957l+gJqmhasj7aGr0wgoTD0HoWl5orwKYgERTTIPMyK4DvcTCJKFX/zIcA9H2t1uBmu4kHmecOwdu4u4irNELVFIMz/q8qf3kvgOO0cmmWAxny74j3WzqbriK//hbnVdDX2Sb/tVfV3rbHT047lfGID3lm/YC25TqpeJCuYBARFNMg/L8Ojsaat56Q668P6uddKLMM9J43NjurI9LNRjZJdA2gXN+p6Zy9bmTzdZjllV/xLx5aizwHJpDfthbryENaG6xR4vHXWn0pEnsFrJWaadHuN5CZX/m8J7R77r3pk83ITDIzAjFvqJEDC9gmBvZNIHIt8ByI/NVXqTOjlrfJYnmvErjpjtQd7HPRBrIi1LtufMOSMTfLOiqlbsklBHdFqXLsFs/kkyjtWiZekRh2xLCVmjwaGG72Y/YZGMjqwvjqx/FMPwXWozD5fq2OEJSAjgVZRgU1ESFsqVWQqeHjYIPmkKmgEBEU0yD9gfPGNp/0vmvChJvHB5e3ZyOFsFzYYSgAm04GUbxYv+9EPYetrubvpXIa84FrDmR2nFwdlrxZmeKBFYpseodRCs2W7Om+n2mjoJU9smfQENsnWZ8vccuKoeby1Je363j65P",
-          "0ywC7iJ0AzCHGvnce6/TXGyDaawbPwXshSkYkUUyDtxFi+XTVDbxz2H/MQW4SoXmDwVs\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated function call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 246,\"candidatesTokenCount\": 17,\"totalTokenCount\": 362,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 246}],\"thoughtsTokenCount\": 99,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"725Was7dM-Hz7M8P-KzTyAk\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"findUserTool\",\"args\": {\"name\": \"Dero Israel\"}},\"thoughtSignature\": \"CiQBaRR9E8B4SaMbStmvlGZwPC+5gK7N0aR3EQ2rrqO7N/XBSRkKZAFpFH0Tzu/0bRh4mWToZNFjfsBcR/RKLmti2CisSTD33Nx615pS8db385gTMg+QDYg3yymjtltBGTGV5+P7S655scKn3AdMWNu1VzcJqf6DMoNeSk+xR6w5sJxVIprSljRj4NAK2AEBaRR9EyTCQbJrQnZmKlnipmD8eMYWb0b4LpPI64Dk22qWNIZ0OZhhsm72AYdzXIVKMF7IuGWeWgFOpFQfwIZA6ZK3DZx2rle8Scf+c5sivTKuyOAysRjq7iNpJaWdeUZMzbN4dXc06yDujpaXPe1leYEEUdJQGPpfmO3ODg2J8kH0WxePzcAQ9I3UasG6QsTqhOgmL0LzthfVac7REbaoKE79z+NWiJ0/sAE7m+NEiC/7p80UE8I9lPy8Epkkedh0+AwcEEOnjgCYBDs/wR+XWXAA73uHwUUK2wEBaRR9E87JDOWLi9WOI2iPQ+TiRhvBC34AJVSWoQnc56MrKcpXCIDryfGei0aGkSx85fQC9e6yB00oXmqa4iX+50oi2mWeTJT+LEeXGtJfOj9WVQmyVtUgxX95Dw2gp6LHnYa06K1genqA0rQI7HdCOjenspjPGRRoIdiFVXyg1ChH/fHjpLzKgiVz4HmjtVR3yiN169IOoSVJ3sBK6HRE6mMOdENjCyjz0j4W+UWNhj2fMGWRF8yWfoxxm0389jC4hZ/0v1gdiv6wE5XKnpRVRli9kwwKUmfhiS0KWgFpFH0Tlm9pFDAp59T7f3Hr2bWnRcHRIJ6YxncSKnLie4cXFzbq",
+          "4QWriGRS7ll7SmjpaAg5KJszouuvtYRoKv5oA2nfORIkuVQoHh3Nxp5fSvLPML+11anyvQ==\"},{\"functionCall\": {\"name\": \"findUserProfessionTool\",\"args\": {\"name\": \"Dero Israel\"}}}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated function call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 332,\"candidatesTokenCount\": 35,\"totalTokenCount\": 500,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 332}],\"thoughtsTokenCount\": 133,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"o-LYat3OO4LvnsEPiJXasA4\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0],
+        "chunkTimings": [
+          1,
+          0
+        ],
         "isStreaming": true
       }
     },
     {
-      "hash": "f1a1548717907f61",
+      "hash": "43a2e6042f226936",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -171,7 +229,7 @@
           "systemInstruction": {
             "parts": [
               {
-                "text": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"o94xaqsXTpODju3h\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\"},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000001\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+                "text": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"G0D9SXceSaF6uPie\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\"},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000001\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the toolCallId of the suspended tool as suspendedToolCallId to the tool call arguments/input. This identifies the exact framework-persisted suspension to resume.\n                      You may also add the runId as suspendedToolRunId for compatibility, but it does not select the suspension and must match the runId associated with suspendedToolCallId.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolCallId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data.\n                      "
               }
             ]
           },
@@ -182,10 +240,16 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolCallId": {
+                        "description": "The toolCallId of the suspended tool to resume",
                         "type": "string"
                       },
                       "suspendedToolRunId": {
@@ -209,9 +273,30 @@
                           },
                           {
                             "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "object"
+                                }
+                              ]
+                            }
                           }
-                        ],
-                        "nullable": true
+                        ]
                       }
                     }
                   }
@@ -220,10 +305,16 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolCallId": {
+                        "description": "The toolCallId of the suspended tool to resume",
                         "type": "string"
                       },
                       "suspendedToolRunId": {
@@ -247,9 +338,30 @@
                           },
                           {
                             "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "object"
+                                }
+                              ]
+                            }
                           }
-                        ],
-                        "nullable": true
+                        ]
                       }
                     }
                   }
@@ -263,7 +375,7 @@
             }
           }
         },
-        "timestamp": 1784049392915
+        "timestamp": 1792598693017
       },
       "response": {
         "status": 200,
@@ -272,25 +384,29 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Tue, 14 Jul 2026 17:16:34 GMT",
+          "date": "Wed, 21 Oct 2026 16:04:55 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=2064",
+          "server-timing": "gfet4t7; dur=2313",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"findUserTool\",\"args\": {\"name\": \"Dero Israel\",\"suspendedToolRunId\": \"00000000-0000-4000-8000-000000000001\",\"resumeData\": {\"age\": 25}}},\"thoughtSignature\": \"CiQBEU0yDwZcwOt0lzFbEQ+5uUznwC+wN3CwY8zYd3TORyrpjnQKZAERTTIP6xD0ip4CjiQEuD03WUvCEQhWN7qUsOVbl5Kf08INkJegQEb3L2p8fAx9HtG1HBz15M77xTbsbVgWAf7/JM+F0jWYy7wH8KKbCPvR9UmwCgjRg4BBfBk9G5Hab5DxHIwKiAEBEU0yD1HUa+xkI9vnFeTTZFqyO4A0kgWXkCe5j0MZcLpF5BuD7RLva+bD5U7aX0kLxzb+ZuR0Ph1oQlRrTxB7BSWfeZ3pCMRoOI2GpeH/KsRRiE+1YGO2p9pmQ1icrhNURAOeksoqyrmQ5jv6Fqoz1vGB8vCdrd560t53xNkn8S+c1174hfZLCqoBARFNMg+LVNVQz+dlMPlUaeNzbGOqiqxpaZEgG7bkPC8+qmEEBiwi/o9VuNBRjuurpipRQxphajFVaHHe3i0tEUZsqTu2xU+EKUItYlTyJdKJV5yUTZCoWRD0scR08di8qxWMsZ+8o3aW0AQam5uNyEvlq26ZBzYAw8H2nf4du6KbP",
-          "bGOTp7gFCvLFGKW10DIHbOKiKy57qZu8ttA9XvZWS1PHA457qF1hFIKwwEBEU0yD/5eSNOf+cMD9vdUQclO3XQ8ah1bE2yYOfTEnKV0W9UdEtCSFdaZq2qSw3aUwyTcerHone3qFIi9rUMS3MtV5RK31eFOm0PFbjV9rZqfTVIxLL0UL/lVqpgrNl/rNwVtmQRyppc5HidnsACp8KmffetNiM2X5dLOWI+shTlBYxUvxMdvT2Smfp3aCTtXg1mXQDf7dqGgnEnuWAjC0Zk+9zH327TMLm/jHrkSN/59LiOcVby2HVSHFhXa/CfOFkIKwwEBEU0yD0vcpdvljvYTP8YKeNAfzsRlmHAKnjfYOKbSNYlEUAQNxPBpXZXrc8vwIJspgS1gzdaslvRIPV35sUNM3zI/n8KH1IXqt1lUO+flMMnLLrgztHtEuc/p+WBm7ZUkDc3l6qImCMXvEfLFeRSyBkrYbju7i13XZ/WLkj/ze9nG2JAcbk5BvoebS1sjVpz+8mI0HrAaNJ6PjTGyIHaUjVyU11TAgyt1fABZcSO2eROHDwn5WMFncbLKng0xVQkxYxkK4gEBEU0yDwR7ImEXijlNcJr5LeVfEDlQCkr5O/oFQRyhDYk8j6Bv+WJzZMr4Y/Iy6lpskl/3QU6eyMEkIFIT56ulXeiEgmBTRge88E3ovuan1Ue8RfgXHGvFfN9r5ZyAc9IRWyf1+en+gm86LnoVjKtZI105nmlE2FOxx9o47gIIB6fVrlwG4qgUF/jWK6UOj/7C/vhp7NhGpTiH+tJzUuIc1GtlE1i5xoCIAVA4eNwK6FiPv5Jq9kcflXQdgHCVrTzGDnSGUNIw48jB3L3YZgBKTSD+wIgVv+3OBzLy5fYTDloBCmcBEU0yD1noiwGJsUI2UscttvVwGZntttPyIrNPJrxIrQIGrgEU5a6pxyTdjOIyC9NHSY0ld9FjmRSmw02T+p+eiQkcuyhfQRnprq1OKimBHDAblZCI3DnGrsG7zKp2Xh9B91hYCATD\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated function call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 628,\"candid",
-          "atesTokenCount\": 70,\"totalTokenCount\": 981,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 628}],\"thoughtsTokenCount\": 283,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"8G5WapueO8_MnsEPmo6lqAk\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"findUserTool\",\"args\": {\"suspendedToolCallId\": \"G0D9SXceSaF6uPie\",\"resumeData\": {\"age\": 25},\"name\": \"Dero Israel\",\"suspendedToolRunId\": \"00000000-0000-4000-8000-000000000001\"}},\"thoughtSignature\": \"CiQBaRR9ExtsCuHCy7Afhu/WOWnp6Tn0Ti+mUW+MU2YJLdS28rsKZAFpFH0TO70zejUPsMRhzby0HmO9gULZRH8dvjFrGtsdSxa04UmnWJyCrsA2hEn0hBCe8tZBIRXRyrn2KT10Rpm+XYxXRcc1FBUPt3+vIdeO2BQmAMQeyp81R/kvAf8p04//Fz0K0wEBaRR9E3+uDZrilh4aOJkerQBK/693sjtc4gxd6iDfIJMwWV6ipE8M3bdXK0trnngYU6VR8pQDDHJoIXhMQyOHrtD5LpKmO3F5Z8JhddsIuqIXu7KGTKcCmVROnFm9948S+NgboN81dkGd5qXWKrV/izfyKd354SifkdU3LIZTrh4MTx+D/Y+x3IZz69z+sT7fZVfRAX1vJz4fokg92GKH1WkMywSlu0X51t1HhZnl9A8XhkjoRKwMLE1YkPcPbOO3KtLQ60wbt/TyA4TuWC5zxecICrkBAWkUfRMKKomBZ/AgRAUjMJN/R9l3WvAV7/QQbC7qdVLUwX52kCFr+uiOC8KMQYg4G0WS8CDHAdpzQhv9cu9cKCdHGhvkC4Cp8JplRPH8TSgBiYWiqFmDwZXL8Fkt5JuspujJjMGJK7Rxcy9HCA4A+YrKeE+DLSDKKlkbP1UdzMJ/JatO24K8ytNeGgoMOFxL+OQUaRQxPzXp91JCHZ4DqbEAiDc2UTA",
+          "qI5hBTGGkem+TDZU51roKPJ8KywEBaRR9E+xqYIgapZ5Nljj/y23VyUHnjFoSLaOpSvISPznJKEWoGo2zIybUGuUYsx3PIx0OAZBzaK/w/qzT6haYN08xIvcc3gHSsMQm7mIiO36mI+iJ8iV1HXXL6CeIFL3+HAkEvNOL7YmrHKCdWQo9/W3idKCjBbCIyYf3DEVTdapLHDUZBq9CXumPUE2bWXJpEc8PKHISDNJWqD6fogdzxk7sEV7RgItB+PrIkB9fiSjZufAxG6gI4sCJ6wa14YZfcLNnVvNWc190cQrEAQFpFH0TOFHcbDHNQuueilrlLNgmS95rgSFSWbOQX3yXOGyFCBJ9NK+epzBDNlj5H1+QBCK/TiSXQjxHkT9q732Az2A4qbC/CzkcccGjMMSVWr2QLQwRcGS7IWQS8s8WoppROCuh0U5YZnzPmqikHvXg9x/GjAnihTmdSb1Kz3qyPcoBjmcK2jc9XyIFk7HTIU6EsmkK9H1eTHU9+etLW7paIow55xeOc36g2mUE8DJvQgjbSGkyt5LhEjYmZlcUR/GZYSkKkQEBaRR9E9c7YLFe9LSPJbPWvNWwBUgmOc/Ad67SfSrFz4LPtKgCYbLWVE34kUJFET9imPSjdL0N/fKtymH2LBqBzsOkGW9snZ/U9OG9iRD1DlOPMEO9Wvq4erkXMtBzuulW47HTB+9RBrITl0C/79peXdNBH5Qwjg2h6mqDEZxS09fNAYkkxE01Pyz35UXbB5iOCpIBAWkUfRP8x+netMG4r1tb4Ra+gBjuSPqm+uVCqCl6FJP5LiZmMG8C2w1yX95HfwPDckiX6N4Shxz+TJs86VrwyckC/GNMeMdn0q1XlmX9X238fiO7WTmR7ou56guIA4BgwO5vb5jNim02S762FAGFMcWFR1pT4Ch356j976D+VvWgM65kNgik28yKlpnjUiZ5vAgKVAFpFH0TQN6lkt7eer1OeK/+C/T9NHwFK0DyuhZMrbnTaLe3MZC9AZdFNOdwOJxH3P6hQEatzTorz7Io8JTN9D+9PTzysGBh6HwGYCGkneuH7+XjDg==\"},{\"functionCall\": {\"name\": \"findUserProfessionTool\",\"args\": {\"name\": \"Dero Israel\"}}}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated function call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 763,\"candidatesTokenCount\": 106,\"totalTokenCount\": 1192,\"promptToken",
+          "sDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 763}],\"thoughtsTokenCount\": 323,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"peLYaryYD_mjnsEPuuC8mQE\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0, 0],
+        "chunkTimings": [
+          1,
+          0,
+          0
+        ],
         "isStreaming": true
       }
     },
     {
-      "hash": "f87fe1cab03a24fd",
+      "hash": "14e486307e5380ae",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -318,234 +434,27 @@
               "parts": [
                 {
                   "functionCall": {
-                    "id": "n5siCO00v6HPzOZf",
+                    "id": "C8KFLGBKoQTjkxWX",
                     "name": "findUserTool",
                     "args": {
                       "name": "Dero Israel",
-                      "suspendedToolRunId": "00000000-0000-4000-8000-000000000001",
                       "resumeData": {
                         "age": 25
-                      }
+                      },
+                      "suspendedToolCallId": "G0D9SXceSaF6uPie",
+                      "suspendedToolRunId": "00000000-0000-4000-8000-000000000001"
                     }
                   },
-                  "thoughtSignature": "CiQBEU0yDwZcwOt0lzFbEQ+5uUznwC+wN3CwY8zYd3TORyrpjnQKZAERTTIP6xD0ip4CjiQEuD03WUvCEQhWN7qUsOVbl5Kf08INkJegQEb3L2p8fAx9HtG1HBz15M77xTbsbVgWAf7/JM+F0jWYy7wH8KKbCPvR9UmwCgjRg4BBfBk9G5Hab5DxHIwKiAEBEU0yD1HUa+xkI9vnFeTTZFqyO4A0kgWXkCe5j0MZcLpF5BuD7RLva+bD5U7aX0kLxzb+ZuR0Ph1oQlRrTxB7BSWfeZ3pCMRoOI2GpeH/KsRRiE+1YGO2p9pmQ1icrhNURAOeksoqyrmQ5jv6Fqoz1vGB8vCdrd560t53xNkn8S+c1174hfZLCqoBARFNMg+LVNVQz+dlMPlUaeNzbGOqiqxpaZEgG7bkPC8+qmEEBiwi/o9VuNBRjuurpipRQxphajFVaHHe3i0tEUZsqTu2xU+EKUItYlTyJdKJV5yUTZCoWRD0scR08di8qxWMsZ+8o3aW0AQam5uNyEvlq26ZBzYAw8H2nf4du6KbPbGOTp7gFCvLFGKW10DIHbOKiKy57qZu8ttA9XvZWS1PHA457qF1hFIKwwEBEU0yD/5eSNOf+cMD9vdUQclO3XQ8ah1bE2yYOfTEnKV0W9UdEtCSFdaZq2qSw3aUwyTcerHone3qFIi9rUMS3MtV5RK31eFOm0PFbjV9rZqfTVIxLL0UL/lVqpgrNl/rNwVtmQRyppc5HidnsACp8KmffetNiM2X5dLOWI+shTlBYxUvxMdvT2Smfp3aCTtXg1mXQDf7dqGgnEnuWAjC0Zk+9zH327TMLm/jHrkSN/59LiOcVby2HVSHFhXa/CfOFkIKwwEBEU0yD0vcpdvljvYTP8YKeNAfzsRlmHAKnjfYOKbSNYlEUAQNxPBpXZXrc8vwIJspgS1gzdaslvRIPV35sUNM3zI/n8KH1IXqt1lUO+flMMnLLrgztHtEuc/p+WBm7ZUkDc3l6qImCMXvEfLFeRSyBkrYbju7i13XZ/WLkj/ze9nG2JAcbk5BvoebS1sjVpz+8mI0HrAaNJ6PjTGyIHaUjVyU11TAgyt1fABZcSO2eROHDwn5WMFncbLKng0xVQkxYxkK4gEBEU0yDwR7ImEXijlNcJr5LeVfEDlQCkr5O/oFQRyhDYk8j6Bv+WJzZMr4Y/Iy6lpskl/3QU6eyMEkIFIT56ulXeiEgmBTRge88E3ovuan1Ue8RfgXHGvFfN9r5ZyAc9IRWyf1+en+gm86LnoVjKtZI105nmlE2FOxx9o47gIIB6fVrlwG4qgUF/jWK6UOj/7C/vhp7NhGpTiH+tJzUuIc1GtlE1i5xoCIAVA4eNwK6FiPv5Jq9kcflXQdgHCVrTzGDnSGUNIw48jB3L3YZgBKTSD+wIgVv+3OBzLy5fYTDloBCmcBEU0yD1noiwGJsUI2UscttvVwGZntttPyIrNPJrxIrQIGrgEU5a6pxyTdjOIyC9NHSY0ld9FjmRSmw02T+p+eiQkcuyhfQRnprq1OKimBHDAblZCI3DnGrsG7zKp2Xh9B91hYCATD"
-                }
-              ]
-            },
-            {
-              "role": "user",
-              "parts": [
-                {
-                  "functionResponse": {
-                    "id": "n5siCO00v6HPzOZf",
-                    "name": "findUserTool",
-                    "response": {
-                      "name": "findUserTool",
-                      "content": {
-                        "name": "Dero Israel",
-                        "age": 25,
-                        "email": "test@test.com"
-                      }
-                    }
-                  }
-                }
-              ]
-            }
-          ],
-          "systemInstruction": {
-            "parts": [
-              {
-                "text": "You are an agent that can get list of users using findUserTool."
-              }
-            ]
-          },
-          "tools": [
-            {
-              "functionDeclarations": [
-                {
-                  "name": "findUserTool",
-                  "description": "This is a test tool that returns the name, email and age",
-                  "parameters": {
-                    "required": ["name"],
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string"
-                      },
-                      "suspendedToolRunId": {
-                        "description": "The runId of the suspended tool",
-                        "type": "string"
-                      },
-                      "resumeData": {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ],
-                        "nullable": true
-                      }
-                    }
-                  }
+                  "thoughtSignature": "CiQBaRR9ExtsCuHCy7Afhu/WOWnp6Tn0Ti+mUW+MU2YJLdS28rsKZAFpFH0TO70zejUPsMRhzby0HmO9gULZRH8dvjFrGtsdSxa04UmnWJyCrsA2hEn0hBCe8tZBIRXRyrn2KT10Rpm+XYxXRcc1FBUPt3+vIdeO2BQmAMQeyp81R/kvAf8p04//Fz0K0wEBaRR9E3+uDZrilh4aOJkerQBK/693sjtc4gxd6iDfIJMwWV6ipE8M3bdXK0trnngYU6VR8pQDDHJoIXhMQyOHrtD5LpKmO3F5Z8JhddsIuqIXu7KGTKcCmVROnFm9948S+NgboN81dkGd5qXWKrV/izfyKd354SifkdU3LIZTrh4MTx+D/Y+x3IZz69z+sT7fZVfRAX1vJz4fokg92GKH1WkMywSlu0X51t1HhZnl9A8XhkjoRKwMLE1YkPcPbOO3KtLQ60wbt/TyA4TuWC5zxecICrkBAWkUfRMKKomBZ/AgRAUjMJN/R9l3WvAV7/QQbC7qdVLUwX52kCFr+uiOC8KMQYg4G0WS8CDHAdpzQhv9cu9cKCdHGhvkC4Cp8JplRPH8TSgBiYWiqFmDwZXL8Fkt5JuspujJjMGJK7Rxcy9HCA4A+YrKeE+DLSDKKlkbP1UdzMJ/JatO24K8ytNeGgoMOFxL+OQUaRQxPzXp91JCHZ4DqbEAiDc2UTAqI5hBTGGkem+TDZU51roKPJ8KywEBaRR9E+xqYIgapZ5Nljj/y23VyUHnjFoSLaOpSvISPznJKEWoGo2zIybUGuUYsx3PIx0OAZBzaK/w/qzT6haYN08xIvcc3gHSsMQm7mIiO36mI+iJ8iV1HXXL6CeIFL3+HAkEvNOL7YmrHKCdWQo9/W3idKCjBbCIyYf3DEVTdapLHDUZBq9CXumPUE2bWXJpEc8PKHISDNJWqD6fogdzxk7sEV7RgItB+PrIkB9fiSjZufAxG6gI4sCJ6wa14YZfcLNnVvNWc190cQrEAQFpFH0TOFHcbDHNQuueilrlLNgmS95rgSFSWbOQX3yXOGyFCBJ9NK+epzBDNlj5H1+QBCK/TiSXQjxHkT9q732Az2A4qbC/CzkcccGjMMSVWr2QLQwRcGS7IWQS8s8WoppROCuh0U5YZnzPmqikHvXg9x/GjAnihTmdSb1Kz3qyPcoBjmcK2jc9XyIFk7HTIU6EsmkK9H1eTHU9+etLW7paIow55xeOc36g2mUE8DJvQgjbSGkyt5LhEjYmZlcUR/GZYSkKkQEBaRR9E9c7YLFe9LSPJbPWvNWwBUgmOc/Ad67SfSrFz4LPtKgCYbLWVE34kUJFET9imPSjdL0N/fKtymH2LBqBzsOkGW9snZ/U9OG9iRD1DlOPMEO9Wvq4erkXMtBzuulW47HTB+9RBrITl0C/79peXdNBH5Qwjg2h6mqDEZxS09fNAYkkxE01Pyz35UXbB5iOCpIBAWkUfRP8x+netMG4r1tb4Ra+gBjuSPqm+uVCqCl6FJP5LiZmMG8C2w1yX95HfwPDckiX6N4Shxz+TJs86VrwyckC/GNMeMdn0q1XlmX9X238fiO7WTmR7ou56guIA4BgwO5vb5jNim02S762FAGFMcWFR1pT4Ch356j976D+VvWgM65kNgik28yKlpnjUiZ5vAgKVAFpFH0TQN6lkt7eer1OeK/+C/T9NHwFK0DyuhZMrbnTaLe3MZC9AZdFNOdwOJxH3P6hQEatzTorz7Io8JTN9D+9PTzysGBh6HwGYCGkneuH7+XjDg=="
                 },
                 {
-                  "name": "findUserProfessionTool",
-                  "description": "This is a test tool that returns the profession of the user",
-                  "parameters": {
-                    "required": ["name"],
-                    "type": "object",
-                    "properties": {
-                      "name": {
-                        "type": "string"
-                      },
-                      "suspendedToolRunId": {
-                        "description": "The runId of the suspended tool",
-                        "type": "string"
-                      },
-                      "resumeData": {
-                        "description": "The resumeData object created from the resumeSchema of suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "integer"
-                          },
-                          {
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ],
-                        "nullable": true
-                      }
-                    }
-                  }
-                }
-              ]
-            }
-          ],
-          "toolConfig": {
-            "functionCallingConfig": {
-              "mode": "AUTO"
-            }
-          }
-        },
-        "timestamp": 1784049394999
-      },
-      "response": {
-        "status": 200,
-        "statusText": "OK",
-        "headers": {
-          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
-          "content-disposition": "attachment",
-          "content-type": "text/event-stream",
-          "date": "Tue, 14 Jul 2026 17:16:35 GMT",
-          "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=759",
-          "vary": "Origin, X-Origin, Referer",
-          "x-content-type-options": "nosniff",
-          "x-frame-options": "SAMEORIGIN",
-          "x-xss-protection": "0"
-        },
-        "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"findUserProfessionTool\",\"args\": {\"name\": \"Dero Israel\"}},\"thoughtSignature\": \"CmcBEU0yD4GrEn1QIJ8d6dHRUeE6CEmvWB/nPUFY0ZFcBbKrPrSQazoqpS0EV7sK6f8rpAwVDvWgpU9M/i7TTN6deRqf74ddbRsaN6iESBZ0DQIxZqXjwXZA5il7FURnDRnypLqoB8xOCuMBARFNMg+RVLOy2vbXw+GqrjFeYyvNIOcwnVy3nFcwU+DwDWtpSIgFzZ2yurL2n9/1ff/vndSJSIhBZHqLtU7WVblcjmqjXb2F+JKPlGqiOYeVRUMYqyeR/PN9GTK/uICfLDCbVnossOJVo/vLxmRBOWej3YEdYkexUbMLskPnRgmwqOdGhC3Mw3V8gP/xW28i+/75QPxM+3IshqLSpWrZ+2wvtBBNrernxHMcsfqy1QseF8zkIU3RyisnOcYWQyhQJ+pVMFy2B86ZGGRCpTMl9upVHKPWXdgZTNMtrXRz9s4cMw0KPwERTTIPIs0Jz012xIbEe6ata3NptgnSwTXcLk/5TfwZ9X9qy+Sbc96O++ByNiueFyA3H62gk5AjeO1SZBu0pQ==\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated fu",
-          "nction call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 652,\"candidatesTokenCount\": 18,\"totalTokenCount\": 746,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 652}],\"thoughtsTokenCount\": 76,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"825WapSfA-TZkdUP3pytkQ0\"}\r\n\r\n"
-        ],
-        "chunkTimings": [0, 1],
-        "isStreaming": true
-      }
-    },
-    {
-      "hash": "a6d18ebf02a82b99",
-      "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
-        "method": "POST",
-        "body": {
-          "generationConfig": {},
-          "contents": [
-            {
-              "role": "user",
-              "parts": [
-                {
-                  "text": "Find the name, age and profession of the user - Dero Israel"
-                }
-              ]
-            },
-            {
-              "role": "user",
-              "parts": [
-                {
-                  "text": "He is 25 years old"
-                }
-              ]
-            },
-            {
-              "role": "model",
-              "parts": [
-                {
                   "functionCall": {
-                    "id": "n5siCO00v6HPzOZf",
-                    "name": "findUserTool",
-                    "args": {
-                      "name": "Dero Israel",
-                      "suspendedToolRunId": "00000000-0000-4000-8000-000000000001",
-                      "resumeData": {
-                        "age": 25
-                      }
-                    }
-                  },
-                  "thoughtSignature": "CiQBEU0yDwZcwOt0lzFbEQ+5uUznwC+wN3CwY8zYd3TORyrpjnQKZAERTTIP6xD0ip4CjiQEuD03WUvCEQhWN7qUsOVbl5Kf08INkJegQEb3L2p8fAx9HtG1HBz15M77xTbsbVgWAf7/JM+F0jWYy7wH8KKbCPvR9UmwCgjRg4BBfBk9G5Hab5DxHIwKiAEBEU0yD1HUa+xkI9vnFeTTZFqyO4A0kgWXkCe5j0MZcLpF5BuD7RLva+bD5U7aX0kLxzb+ZuR0Ph1oQlRrTxB7BSWfeZ3pCMRoOI2GpeH/KsRRiE+1YGO2p9pmQ1icrhNURAOeksoqyrmQ5jv6Fqoz1vGB8vCdrd560t53xNkn8S+c1174hfZLCqoBARFNMg+LVNVQz+dlMPlUaeNzbGOqiqxpaZEgG7bkPC8+qmEEBiwi/o9VuNBRjuurpipRQxphajFVaHHe3i0tEUZsqTu2xU+EKUItYlTyJdKJV5yUTZCoWRD0scR08di8qxWMsZ+8o3aW0AQam5uNyEvlq26ZBzYAw8H2nf4du6KbPbGOTp7gFCvLFGKW10DIHbOKiKy57qZu8ttA9XvZWS1PHA457qF1hFIKwwEBEU0yD/5eSNOf+cMD9vdUQclO3XQ8ah1bE2yYOfTEnKV0W9UdEtCSFdaZq2qSw3aUwyTcerHone3qFIi9rUMS3MtV5RK31eFOm0PFbjV9rZqfTVIxLL0UL/lVqpgrNl/rNwVtmQRyppc5HidnsACp8KmffetNiM2X5dLOWI+shTlBYxUvxMdvT2Smfp3aCTtXg1mXQDf7dqGgnEnuWAjC0Zk+9zH327TMLm/jHrkSN/59LiOcVby2HVSHFhXa/CfOFkIKwwEBEU0yD0vcpdvljvYTP8YKeNAfzsRlmHAKnjfYOKbSNYlEUAQNxPBpXZXrc8vwIJspgS1gzdaslvRIPV35sUNM3zI/n8KH1IXqt1lUO+flMMnLLrgztHtEuc/p+WBm7ZUkDc3l6qImCMXvEfLFeRSyBkrYbju7i13XZ/WLkj/ze9nG2JAcbk5BvoebS1sjVpz+8mI0HrAaNJ6PjTGyIHaUjVyU11TAgyt1fABZcSO2eROHDwn5WMFncbLKng0xVQkxYxkK4gEBEU0yDwR7ImEXijlNcJr5LeVfEDlQCkr5O/oFQRyhDYk8j6Bv+WJzZMr4Y/Iy6lpskl/3QU6eyMEkIFIT56ulXeiEgmBTRge88E3ovuan1Ue8RfgXHGvFfN9r5ZyAc9IRWyf1+en+gm86LnoVjKtZI105nmlE2FOxx9o47gIIB6fVrlwG4qgUF/jWK6UOj/7C/vhp7NhGpTiH+tJzUuIc1GtlE1i5xoCIAVA4eNwK6FiPv5Jq9kcflXQdgHCVrTzGDnSGUNIw48jB3L3YZgBKTSD+wIgVv+3OBzLy5fYTDloBCmcBEU0yD1noiwGJsUI2UscttvVwGZntttPyIrNPJrxIrQIGrgEU5a6pxyTdjOIyC9NHSY0ld9FjmRSmw02T+p+eiQkcuyhfQRnprq1OKimBHDAblZCI3DnGrsG7zKp2Xh9B91hYCATD"
-                }
-              ]
-            },
-            {
-              "role": "user",
-              "parts": [
-                {
-                  "functionResponse": {
-                    "id": "n5siCO00v6HPzOZf",
-                    "name": "findUserTool",
-                    "response": {
-                      "name": "findUserTool",
-                      "content": {
-                        "name": "Dero Israel",
-                        "age": 25,
-                        "email": "test@test.com"
-                      }
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "role": "model",
-              "parts": [
-                {
-                  "functionCall": {
-                    "id": "Ziqipmb2Aj95weh8",
+                    "id": "NODe1OxTU40A0kKE",
                     "name": "findUserProfessionTool",
                     "args": {
                       "name": "Dero Israel"
                     }
-                  },
-                  "thoughtSignature": "CmcBEU0yD4GrEn1QIJ8d6dHRUeE6CEmvWB/nPUFY0ZFcBbKrPrSQazoqpS0EV7sK6f8rpAwVDvWgpU9M/i7TTN6deRqf74ddbRsaN6iESBZ0DQIxZqXjwXZA5il7FURnDRnypLqoB8xOCuMBARFNMg+RVLOy2vbXw+GqrjFeYyvNIOcwnVy3nFcwU+DwDWtpSIgFzZ2yurL2n9/1ff/vndSJSIhBZHqLtU7WVblcjmqjXb2F+JKPlGqiOYeVRUMYqyeR/PN9GTK/uICfLDCbVnossOJVo/vLxmRBOWej3YEdYkexUbMLskPnRgmwqOdGhC3Mw3V8gP/xW28i+/75QPxM+3IshqLSpWrZ+2wvtBBNrernxHMcsfqy1QseF8zkIU3RyisnOcYWQyhQJ+pVMFy2B86ZGGRCpTMl9upVHKPWXdgZTNMtrXRz9s4cMw0KPwERTTIPIs0Jz012xIbEe6ata3NptgnSwTXcLk/5TfwZ9X9qy+Sbc96O++ByNiueFyA3H62gk5AjeO1SZBu0pQ=="
+                  }
                 }
               ]
             },
@@ -554,7 +463,21 @@
               "parts": [
                 {
                   "functionResponse": {
-                    "id": "Ziqipmb2Aj95weh8",
+                    "id": "C8KFLGBKoQTjkxWX",
+                    "name": "findUserTool",
+                    "response": {
+                      "name": "findUserTool",
+                      "content": {
+                        "age": 25,
+                        "email": "test@test.com",
+                        "name": "Dero Israel"
+                      }
+                    }
+                  }
+                },
+                {
+                  "functionResponse": {
+                    "id": "NODe1OxTU40A0kKE",
                     "name": "findUserProfessionTool",
                     "response": {
                       "name": "findUserProfessionTool",
@@ -581,10 +504,16 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolCallId": {
+                        "description": "The toolCallId of the suspended tool to resume",
                         "type": "string"
                       },
                       "suspendedToolRunId": {
@@ -608,9 +537,30 @@
                           },
                           {
                             "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "object"
+                                }
+                              ]
+                            }
                           }
-                        ],
-                        "nullable": true
+                        ]
                       }
                     }
                   }
@@ -619,10 +569,16 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "type": "object",
                     "properties": {
                       "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolCallId": {
+                        "description": "The toolCallId of the suspended tool to resume",
                         "type": "string"
                       },
                       "suspendedToolRunId": {
@@ -646,9 +602,30 @@
                           },
                           {
                             "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "object"
+                                }
+                              ]
+                            }
                           }
-                        ],
-                        "nullable": true
+                        ]
                       }
                     }
                   }
@@ -662,7 +639,7 @@
             }
           }
         },
-        "timestamp": 1784049395855
+        "timestamp": 1792598695374
       },
       "response": {
         "status": 200,
@@ -671,20 +648,24 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Tue, 14 Jul 2026 17:16:36 GMT",
+          "date": "Wed, 21 Oct 2026 16:04:55 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=881",
+          "server-timing": "gfet4t7; dur=362",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"The name\",\"thoughtSignature\": \"CmcBEU0yD/i3qNTp1+4DxSxeUy2PsMKsdDU4k0hg/y6hQQuZkDdX3+XIECjOpVRE9sLx/TtaYWJxghQ6Y4KKvLD597roePW0RkaEgy81oMSn3Yd3b88KLfL/GO98BP4JWDfAlu985wptCpgBARFNMg++dQ3Nsy+eGaMvOMNSyoI4K8EJp56Td809B9m6cgXQEldhpenIpUamZwLj8wKyzuAU4bRmjrgco7jPU20NSGdNPO9ypglbAJRo/Y0zA2fjAMwfEWbbo/FwYCjJHVOeWkewKysfZSRhSWheXTH0DDDty9l91AhqLgrQgETiv2+FwvsH4v81TTLYKQPQUrEwfyKYWM4K6QEBEU0yD3o4bEstoSqDdcx9GIpKKVvtm+VREOTQC8S3r7mp8HPRJ8J35eEAecZdA59GW7/nIamOBMFB3ZsJQkvRNZ6hPzy+Q1TpOl13GauPHexlwEYc5rvZtsORfzf4NVkbGLWZTe3ftjTLrh0HBrtjImrnggvz0TZQ8FVl/svUb43gkmuGTPwqUPw3mj+ORQ0uENjHJOa1y4B19++I2TwWWFOBkV1Uv+J1kQkIvzX0PEiEb/CW6aFN+D5pPp6SOYN9z4PA+PLyyV+fXisjPjLV52fH1VTHVDpQK+R4foJf2yz4hSuqNsR4yg==\"}],\"role\": \"model\"},\"index",
-          "\": 0}],\"usageMetadata\": {\"promptTokenCount\": 775,\"candidatesTokenCount\": 2,\"totalTokenCount\": 889,\"cachedContentTokenCount\": 649,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 775}],\"cacheTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 649}],\"thoughtsTokenCount\": 112,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"825WauCqN5r4kdUPi5LV4Ag\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" of the user is Dero Israel, his age is 25 and he is a Software Engineer.\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 775,\"candidatesTokenCount\": 23,\"totalTokenCount\": 910,\"cachedContentTokenCount\": 649,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 775}],\"cacheTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 649}],\"thoughtsTokenCount\": 112,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"825WauCqN5r4kdUPi5LV4Ag\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"D\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 841,\"candidatesTokenCount\": 1,\"totalTokenCount\": 842,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 841}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"p-LYarKnItWkkdUP3ajMSQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"ero Israel is 25 years old and works as a Software Engineer.\\n\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 841,\"candidatesTokenCount\": 16,\"totalTokenCount\": 857,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 841}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"p-LYarKnItWkkdUP3ajMSQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 841,\"candidatesTokenCount\": 16,\"totalTokenCount\": 857,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 841}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"p-LYarKnItWkkdUP3ajMSQ\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0, 0],
+        "chunkTimings": [
+          1,
+          106,
+          1
+        ],
         "isStreaming": true
       }
     }

@@ -185,10 +185,20 @@ describe('resumeStream + toAISdkStream', () => {
 
     const [rawResumeStream, aiInputStream] = resumedStream.fullStream.tee();
     const rawChunks = await collectChunks(rawResumeStream);
-    const aiChunks = await collectChunks(toAISdkStream(aiInputStream as any, { from: 'agent' }));
+    const aiChunks = await collectChunks(
+      toAISdkStream(aiInputStream as any, { from: 'agent', includeSubAgentMetadata: true }),
+    );
 
-    expect(rawChunks[0]?.type).toBe('tool-output');
-    expect(rawChunks[0]?.payload?.output?.type).toBe('tool-result');
+    // The resumed delegation acks the answered suspension before any nested output.
+    expect(rawChunks[0]?.type).toBe('tool-call-resumed');
+    expect(rawChunks.filter(chunk => chunk.type === 'tool-call-resumed')).toHaveLength(1);
+    const nestedTypes = rawChunks
+      .filter(chunk => chunk.type === 'tool-output')
+      .map(chunk => chunk.payload?.output?.type);
+    expect(nestedTypes).toContain('tool-result');
+    expect(aiChunks.some(chunk => chunk.type === 'data-tool-call-suspended' && chunk.data?.resumed === true)).toBe(
+      true,
+    );
 
     const nestedAgentChunks = aiChunks.filter(chunk => chunk.type === 'data-tool-agent');
     expect(nestedAgentChunks.length).toBeGreaterThan(0);

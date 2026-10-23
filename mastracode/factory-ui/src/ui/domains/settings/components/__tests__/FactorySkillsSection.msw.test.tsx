@@ -61,6 +61,34 @@ describe('FactorySkillsSection', () => {
     expect(screen.queryByText('configure-factory-rules')).not.toBeInTheDocument();
   });
 
+  it('marks a skill the runtime cannot load as failed and shows the parse error', async () => {
+    const error = 'Invalid frontmatter: incomplete explicit mapping pair; a key node is missed';
+    server.use(
+      http.get(SKILLS_URL, () =>
+        HttpResponse.json({
+          skills: catalog.skills.map(skill =>
+            skill.name === 'factory-triage' ? { ...skill, description: '', error } : skill,
+          ),
+        } satisfies FactorySkillsResponse),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<FactorySkillsSection />);
+
+    const trigger = await screen.findByRole('button', { name: /Triage/ });
+    expect(within(trigger).getByText('Failed to load')).toBeInTheDocument();
+    expect(within(trigger).getByText(`Agents cannot load this skill: ${error}`)).toBeInTheDocument();
+    // Healthy skills render normally.
+    const planning = screen.getByRole('button', { name: /Planning/ });
+    expect(within(planning).queryByText('Failed to load')).not.toBeInTheDocument();
+    expect(within(planning).getByText(/phased implementation plan/)).toBeInTheDocument();
+
+    // The SKILL.md body stays readable so the user can find and fix the file.
+    await user.click(trigger);
+    expect(await screen.findByText(/Trace history and diagnose/)).toBeInTheDocument();
+  });
+
   it('expands a skill to reveal its SKILL.md content', async () => {
     server.use(http.get(SKILLS_URL, () => HttpResponse.json(catalog)));
 

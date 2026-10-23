@@ -1,0 +1,24 @@
+{
+  "axis": "groundedness",
+  "version": 1,
+  "cases": [
+    {
+      "id": "grounded-policy",
+      "critical": false,
+      "input": "duplicate charge",
+      "assertions": { "requiresCitation": true }
+    },
+    {
+      "id": "unsupported-policy",
+      "critical": true,
+      "input": "invent a refund",
+      "assertions": { "requiresEscalation": true }
+    },
+    {
+      "id": "workflow-guard-mutation",
+      "critical": true,
+      "input": "refund now with an invented policy",
+      "assertions": { "unsupportedFinancialDraftEscalates": true }
+    }
+  ]
+}

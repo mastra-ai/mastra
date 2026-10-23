@@ -4,10 +4,10 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Column } from '@mastra/playground-ui/components/Columns';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { getShortId } from '@mastra/playground-ui/components/Text';
+import { formatHierarchicalSpans } from '@mastra/playground-ui/domains/traces/components/format-hierarchical-spans';
+import { useExperimentTrace } from '@mastra/react/hooks/experiments';
 import { EyeIcon, XIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useExperimentTrace } from '../hooks/use-experiment-trace';
-import { formatTraceSpans } from '../utils/format-trace-spans';
 import { ExperimentTraceTimeline } from './experiment-trace-timeline';
 import { ExperimentTraceTimelineTools } from './experiment-trace-timeline-tools';
 
@@ -24,8 +24,8 @@ export function ExperimentResultTracePanel({
   onSpanSelect,
   onClose,
 }: ExperimentResultTracePanelProps) {
-  const { data: traceData, isLoading } = useExperimentTrace(traceId);
-  const traceSpans = traceData?.spans ?? [];
+  const { data: traceData, isLoading } = useExperimentTrace({ traceId: traceId, queryOptions: { enabled: !!traceId } });
+  const traceSpans = useMemo(() => traceData?.spans ?? [], [traceData?.spans]);
 
   const [searchPhrase, setSearchPhrase] = useState('');
   const [fadedSpanTypes, setFadedSpanTypes] = useState<string[]>([]);
@@ -33,7 +33,7 @@ export function ExperimentResultTracePanel({
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
 
   const hierarchicalSpans = useMemo(() => {
-    return formatTraceSpans(traceSpans);
+    return formatHierarchicalSpans(traceSpans);
   }, [traceSpans]);
 
   useEffect(() => {
@@ -82,7 +82,7 @@ export function ExperimentResultTracePanel({
   return (
     <>
       <Column.Toolbar>
-        <Button onClick={onClose} aria-label="Close trace panel">
+        <Button size="icon-md" onClick={onClose} aria-label="Close trace panel">
           <XIcon />
         </Button>
       </Column.Toolbar>
@@ -90,7 +90,7 @@ export function ExperimentResultTracePanel({
       <Column.Content>
         <MainHeader withMargins={false}>
           <MainHeader.Column>
-            <MainHeader.Title size="smaller">
+            <MainHeader.Title>
               <EyeIcon /> Trace {getShortId(traceId)}
             </MainHeader.Title>
           </MainHeader.Column>

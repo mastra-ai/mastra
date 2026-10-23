@@ -2,7 +2,7 @@ import { javascript } from '@codemirror/lang-javascript';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { EditorView } from '@codemirror/view';
 import CodeMirror from '@uiw/react-codemirror';
-import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { codeFoldGutter, useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { CopyButton } from '@/ds/components/CopyButton';
 
 export const WorkflowCodeContent = ({
@@ -42,11 +42,16 @@ export const WorkflowCodeContent = ({
     const content = JSON.stringify(data, null, 2);
     return (
       <div className="relative overflow-auto" style={{ maxHeight: 500 }}>
-        <div className="bg-surface4 absolute top-2 right-2 z-10 rounded-full">
+        <div className="absolute top-2 right-2 z-10 rounded-full bg-muted">
           <CopyButton content={content} />
         </div>
-        <div className="bg-surface4 rounded-lg p-4">
-          <CodeMirror value={content} theme={theme} extensions={[jsonLanguage, EditorView.lineWrapping]} />
+        <div className="rounded-lg bg-muted p-4">
+          <CodeMirror
+            value={content}
+            theme={theme}
+            extensions={[jsonLanguage, EditorView.lineWrapping, codeFoldGutter]}
+            basicSetup={{ foldGutter: false }}
+          />
         </div>
       </div>
     );
@@ -62,11 +67,16 @@ export const WorkflowCodeContent = ({
 
   return (
     <div className="relative overflow-auto" style={{ maxHeight: 500 }}>
-      <div className="bg-surface4 absolute top-2 right-2 z-10 rounded-full">
+      <div className="absolute top-2 right-2 z-10 rounded-full bg-muted">
         <CopyButton content={data} />
       </div>
-      <div className="bg-surface4 rounded-lg p-4">
-        <CodeMirror value={displayContent} theme={theme} extensions={extensions} />
+      <div className="rounded-lg bg-muted p-4">
+        <CodeMirror
+          value={displayContent}
+          theme={theme}
+          extensions={[...extensions, codeFoldGutter]}
+          basicSetup={{ foldGutter: false }}
+        />
       </div>
     </div>
   );

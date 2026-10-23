@@ -31,11 +31,9 @@
     "openai/gpt-5.2",
     "qwen-vl-max-2025-01-25",
     "qwen2.5-vl-72b-instruct",
-    "qwen2.5-vl-7b-instruct",
     "qwen3-vl-30b-a3b-thinking",
     "qwen3.5-397b-a17b",
     "stepfun-ai/gelab-zero-4b-preview",
-    "stepfun/step-3.5-flash",
     "x-ai/grok-4-fast",
     "x-ai/grok-4-fast-non-reasoning",
     "x-ai/grok-4-fast-reasoning",
@@ -57,7 +55,6 @@
     "deepseek-r1",
     "deepseek-r1-0528",
     "deepseek-v3",
-    "deepseek-v3-0324",
     "deepseek-v3.1",
     "deepseek/deepseek-math-v2",
     "deepseek/deepseek-v3.1-terminus",
@@ -86,7 +83,6 @@
     "gemini-3.0-pro-preview",
     "glm-4.5",
     "glm-4.5-air",
-    "gpt-oss-120b",
     "gpt-oss-20b",
     "kimi-k2",
     "kling-v2-6",
@@ -106,7 +102,6 @@
     "qwen-turbo",
     "qwen-vl-max-2025-01-25",
     "qwen2.5-vl-72b-instruct",
-    "qwen2.5-vl-7b-instruct",
     "qwen3-235b-a22b",
     "qwen3-235b-a22b-instruct-2507",
     "qwen3-235b-a22b-thinking-2507",
@@ -130,10 +125,129 @@
     "x-ai/grok-4.1-fast-non-reasoning",
     "x-ai/grok-4.1-fast-reasoning",
     "x-ai/grok-code-fast-1",
-    "xiaomi/mimo-v2-flash",
     "z-ai/autoglm-phone-9b",
     "z-ai/glm-4.6",
     "z-ai/glm-4.7",
     "z-ai/glm-5"
-  ]
+  ],
+  "structuredOutput": [
+    "MiniMax-M1",
+    "doubao-1.5-pro-32k",
+    "doubao-1.5-thinking-pro",
+    "doubao-1.5-vision-pro",
+    "doubao-seed-1.6",
+    "doubao-seed-1.6-flash",
+    "doubao-seed-1.6-thinking",
+    "doubao-seed-2.0-code",
+    "doubao-seed-2.0-lite",
+    "doubao-seed-2.0-mini",
+    "doubao-seed-2.0-pro",
+    "kimi-k2",
+    "meituan/longcat-flash-lite",
+    "minimax/minimax-m2",
+    "minimax/minimax-m2.1",
+    "moonshotai/kimi-k2-thinking",
+    "moonshotai/kimi-k2.5",
+    "qwen-max-2025-01-25",
+    "qwen-turbo",
+    "qwen-vl-max-2025-01-25",
+    "qwen2.5-vl-72b-instruct",
+    "qwen3-235b-a22b",
+    "qwen3-235b-a22b-instruct-2507",
+    "qwen3-235b-a22b-thinking-2507",
+    "qwen3-30b-a3b",
+    "qwen3-30b-a3b-instruct-2507",
+    "qwen3-30b-a3b-thinking-2507",
+    "qwen3-32b",
+    "qwen3-coder-480b-a35b-instruct",
+    "qwen3-max",
+    "qwen3-max-preview",
+    "qwen3-next-80b-a3b-thinking",
+    "qwen3-vl-30b-a3b-thinking",
+    "z-ai/glm-4.6",
+    "z-ai/glm-4.7",
+    "z-ai/glm-5"
+  ],
+  "reasoning": {
+    "doubao-seed-2.0-lite": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-4.5-air": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-32b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-30b-a3b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-code": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-235b-a22b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-mini": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-1.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.5-397b-a17b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-1.6-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-4.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen-turbo": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai/glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai/glm-5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai/glm-4.6": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
 }

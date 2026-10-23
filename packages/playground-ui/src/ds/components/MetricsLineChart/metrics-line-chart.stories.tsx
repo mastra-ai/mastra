@@ -1,27 +1,45 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { EyeIcon, LogsIcon } from 'lucide-react';
+import { useState } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { fn } from 'storybook/test';
 
+import { Button } from '../Button/Button';
+import { MetricsCard } from '../MetricsCard';
+import {
+  count,
+  errorRateSeries,
+  ms,
+  percent,
+  percentileSeries,
+  requestsByHour,
+  requestsVsPreviousSeries,
+} from '../MetricsCard/metrics-story-data';
+import { Tab, TabContent, TabList, Tabs } from '../Tabs';
 import { MetricsLineChart } from './metrics-line-chart';
 import type { MetricsLineChartSeries } from './metrics-line-chart';
+import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 
+// Input and output tokens share a scale, so neither line is flattened against the axis.
 const data: Record<string, unknown>[] = [
-  { time: '09:00', requests: 42, errors: 2 },
-  { time: '10:00', requests: 58, errors: 4 },
-  { time: '11:00', requests: 51, errors: 1 },
-  { time: '12:00', requests: 76, errors: 6 },
-  { time: '13:00', requests: 83, errors: 3 },
-  { time: '14:00', requests: 91, errors: 5 },
-  { time: '15:00', requests: 72, errors: 2 },
+  { time: '09:00', input: 52_000, output: 18_000 },
+  { time: '10:00', input: 184_000, output: 61_000 },
+  { time: '11:00', input: 97_000, output: 40_000 },
+  { time: '12:00', input: 412_000, output: 133_000 },
+  { time: '13:00', input: 596_000, output: 201_000 },
+  { time: '14:00', input: 238_000, output: 92_000 },
+  { time: '15:00', input: 341_000, output: 120_000 },
 ];
 
 const total = (key: string) => (points: Record<string, unknown>[]) => ({
-  value: String(points.reduce((sum, point) => sum + (typeof point[key] === 'number' ? point[key] : 0), 0)),
-  suffix: 'total',
+  value: new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 2 }).format(
+    points.reduce<number>((sum, point) => sum + (typeof point[key] === 'number' ? point[key] : 0), 0),
+  ),
 });
 
 const series = [
-  { dataKey: 'requests', label: 'Requests', color: '#60a5fa', aggregate: total('requests') },
-  { dataKey: 'errors', label: 'Errors', color: '#f87171', aggregate: total('errors') },
+  { dataKey: 'input', label: 'Input tokens', color: 'var(--chart-blue)', aggregate: total('input') },
+  { dataKey: 'output', label: 'Output tokens', color: 'var(--chart-amber)', aggregate: total('output') },
 ] satisfies MetricsLineChartSeries[];
 
 const meta: Meta<typeof MetricsLineChart> = {
@@ -33,8 +51,6 @@ const meta: Meta<typeof MetricsLineChart> = {
     series,
     height: 260,
     onPointClick: fn(),
-    xAxisInterval: 'preserveStartEnd',
-    xAxisMinTickGap: 28,
   },
 };
 
@@ -52,12 +68,76 @@ export const MultipleSeries: Story = {
 export const SinglePoint: Story = {
   args: {
     data: [{ time: 'Now', requests: 42 }],
-    series: [{ dataKey: 'requests', label: 'Requests', color: '#60a5fa' }],
+    series: [{ dataKey: 'requests', label: 'Requests', color: 'var(--chart-blue)' }],
     showDots: true,
   },
   render: args => (
     <div className="w-[min(48rem,calc(100vw-3rem))]">
       <MetricsLineChart {...args} />
+    </div>
+  ),
+};
+
+// 30 daily buckets, as the latency card renders for the 30d preset.
+const latencyData: Record<string, unknown>[] = Array.from({ length: 30 }, (_, i) => ({
+  time: new Date(2026, 7, 26 + i).toLocaleDateString('en-US', { month: 'short', day: '2-digit' }),
+  p50: Math.round(130 + 25 * Math.sin(i / 2.5)),
+  p95: Math.round(550 + 160 * Math.sin(i / 3.5 + 1)),
+}));
+
+const average = (key: string) => (points: Record<string, unknown>[]) => {
+  const values = points.map(point => point[key]).filter((v): v is number => typeof v === 'number');
+  return { value: `${Math.round(values.reduce((sum, v) => sum + v, 0) / values.length)}ms` };
+};
+
+const latencySeries = [
+  { dataKey: 'p50', label: 'p50', color: 'var(--chart-sequential-1)', aggregate: average('p50') },
+  { dataKey: 'p95', label: 'p95', color: 'var(--chart-sequential-3)', aggregate: average('p95') },
+] satisfies MetricsLineChartSeries[];
+
+function TrafficCard(args: ComponentProps<typeof MetricsLineChart>) {
+  const [tab, setTab] = useState<'volume' | 'latency'>('volume');
+  const legend =
+    tab === 'volume' ? { data: args.data, series: args.series } : { data: latencyData, series: latencySeries };
+
+  return (
+    <MetricsCard>
+      <MetricsCard.TopBar>
+        <MetricsCard.TitleAndDescription title="Traffic" description="Requests, errors and latency." />
+        <MetricsCard.Actions>
+          <Button variant="ghost" size="icon-md" tooltip="View in traces" aria-label="View in traces">
+            <EyeIcon />
+          </Button>
+          <Button variant="ghost" size="icon-md" tooltip="View errors in logs" aria-label="View errors in logs">
+            <LogsIcon />
+          </Button>
+        </MetricsCard.Actions>
+      </MetricsCard.TopBar>
+      <MetricsCard.Content>
+        <Tabs defaultTab="volume" value={tab} onValueChange={setTab} className="overflow-visible">
+          <div className="flex flex-wrap items-center justify-between gap-2 [&>:first-child]:w-auto">
+            <TabList>
+              <Tab value="volume">Volume</Tab>
+              <Tab value="latency">Latency</Tab>
+            </TabList>
+            <MetricsLineChartLegend {...legend} />
+          </div>
+          <TabContent value="volume" className="pt-3">
+            <MetricsLineChart {...args} showLegend={false} />
+          </TabContent>
+          <TabContent value="latency" className="pt-3">
+            <MetricsLineChart {...args} data={latencyData} series={latencySeries} showLegend={false} />
+          </TabContent>
+        </Tabs>
+      </MetricsCard.Content>
+    </MetricsCard>
+  );
+}
+
+export const InMetricsCardWithTabs: Story = {
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <TrafficCard {...args} />
     </div>
   ),
 };
@@ -70,10 +150,159 @@ export const FixedDomain: Story = {
       { time: 'Wed', score: 0.76 },
       { time: 'Thu', score: 0.93 },
     ],
-    series: [{ dataKey: 'score', label: 'Answer relevancy', color: '#a78bfa' }],
+    series: [{ dataKey: 'score', label: 'Answer relevancy', color: 'var(--chart-purple)' }],
     yDomain: [0, 1],
     showDots: true,
   },
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <MetricsLineChart {...args} />
+    </div>
+  ),
+};
+
+/** Latency percentiles on the sequential ramp: lighter for the median, deeper for the tail. */
+export const Percentiles: Story = {
+  args: { data: requestsByHour, series: percentileSeries, valueFormatter: ms },
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <MetricsLineChart {...args} />
+    </div>
+  ),
+};
+
+/** Rates as percentages: axis ticks and tooltip values go through `valueFormatter`. */
+export const ErrorRate: Story = {
+  args: { data: requestsByHour, series: errorRateSeries, valueFormatter: percent },
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <MetricsLineChart {...args} />
+    </div>
+  ),
+};
+
+/** 30 daily points: axis labels thin out to fit instead of colliding. */
+export const LongRange: Story = {
+  args: { data: latencyData, series: latencySeries, valueFormatter: ms },
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <MetricsLineChart {...args} />
+    </div>
+  ),
+};
+
+/** `showYAxis={false}`: no value labels, the plot spans the card. Hover for exact values. */
+export const WithoutYAxis: Story = {
+  args: { data: requestsByHour, series: percentileSeries, valueFormatter: ms, showYAxis: false },
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <MetricsLineChart {...args} />
+    </div>
+  ),
+};
+
+const wide = (node: ReactNode) => <div className="w-[min(48rem,calc(100vw-3rem))]">{node}</div>;
+
+/**
+ * This period against the last: the current series solid with `emphasis`, the comparison
+ * `dashed` (a plain line, no fill). Rows carry `tsMs`, so labels sit on round clock times.
+ */
+export const VsPreviousPeriod: Story = {
+  args: { data: requestsByHour, series: requestsVsPreviousSeries, valueFormatter: count },
+  render: args => wide(<MetricsLineChart {...args} />),
+};
+
+/** `emphasis` on the series to read first (P95): half a pixel heavier than its companions. */
+export const Emphasis: Story = {
+  args: {
+    data: requestsByHour,
+    series: percentileSeries.map(s => ({ ...s, emphasis: s.dataKey === 'p95' })),
+    valueFormatter: ms,
+  },
+  render: args => wide(<MetricsLineChart {...args} />),
+};
+
+/** `xLabels="edges"`: only the first and last bucket, pinned to the plot edges, for small cards. */
+export const EdgeLabels: Story = {
+  args: { data: requestsByHour, series: errorRateSeries, valueFormatter: percent, xLabels: 'edges', showYAxis: false },
+  render: args => (
+    <div className="w-[min(24rem,calc(100vw-3rem))]">
+      <MetricsLineChart {...args} />
+    </div>
+  ),
+};
+
+function FillCard({
+  title,
+  description,
+  summary,
+  children,
+}: {
+  title: string;
+  description: string;
+  summary: string;
+  children: ReactNode;
+}) {
+  return (
+    <MetricsCard className="min-h-0! min-w-0!">
+      <MetricsCard.TopBar>
+        <MetricsCard.TitleAndDescription title={title} description={description} />
+        <MetricsCard.Summary value={summary} />
+      </MetricsCard.TopBar>
+      <MetricsCard.Content className="flex h-full flex-col">{children}</MetricsCard.Content>
+    </MetricsCard>
+  );
+}
+
+/**
+ * `height="fill"`: the chart takes the card's free height (the content must be a flex column).
+ * The left card's description wraps to more lines, yet both cards end on one line because each
+ * chart absorbs the difference.
+ */
+export const FillHeight: Story = {
+  render: () => (
+    <div className="grid w-[min(56rem,calc(100vw-3rem))] grid-cols-2 gap-4">
+      <FillCard
+        title="Requests"
+        description="Requests per hour against the same hours of the previous period, so a dip or a surge reads at a glance."
+        summary="63.9K"
+      >
+        <MetricsLineChart
+          data={requestsByHour}
+          series={requestsVsPreviousSeries}
+          valueFormatter={count}
+          height="fill"
+          xLabels="edges"
+          showYAxis={false}
+        />
+      </FillCard>
+      <FillCard title="Latency" description="Edge duration percentiles." summary="2.3s">
+        <MetricsLineChart
+          data={requestsByHour}
+          series={percentileSeries}
+          valueFormatter={ms}
+          height="fill"
+          xLabels="edges"
+          showYAxis={false}
+        />
+      </FillCard>
+    </div>
+  ),
+};
+
+/** `isLoading`: a line ghost in the chart's footprint. The legend stays, built from the series. */
+export const Loading: Story = {
+  args: { data: requestsByHour, series: requestsVsPreviousSeries, isLoading: true },
+  render: args => wide(<MetricsLineChart {...args} />),
+};
+
+/**
+ * `lineStyle="thin"` with `dots="hover"`, for small cards in a grid: 1.5px lines, a fainter fill
+ * that fades out at both ends, and a dot only on the hovered point (a short series otherwise gets
+ * one on every point).
+ */
+export const ThinLines: Story = {
+  args: { lineStyle: 'thin', dots: 'hover' },
   render: args => (
     <div className="w-[min(48rem,calc(100vw-3rem))]">
       <MetricsLineChart {...args} />

@@ -74,6 +74,21 @@ function stubPlanFile({ fail = false }: { fail?: boolean } = {}) {
   return requests;
 }
 
+/** Stubs the rendered-list route so absolute paths can be normalized against `rootPath`. */
+function stubRenderedList(rootPath: string) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      return HttpResponse.json({
+        workspacePath: params.get('workspacePath') ?? '',
+        root: params.get('root') ?? '.artifacts',
+        rootPath,
+        entries: [],
+      });
+    }),
+  );
+}
+
 function renderCard(props: Partial<Parameters<typeof SubmitPlanCard>[0]> = {}) {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/f-1/user/threads/thread-1']}>
@@ -94,12 +109,10 @@ describe('SubmitPlanCard', () => {
       const requests = stubPlanFile();
       renderCard({ onRespond: () => {} });
 
-      // The `# heading` becomes the card title, the rest the rendered body.
       expect(await screen.findByText('Ship dark mode')).toBeInTheDocument();
       expect(await screen.findByText('Add the toggle')).toBeInTheDocument();
       expect(screen.getByText('add-dark-mode.md')).toBeInTheDocument();
 
-      // The read is scoped to this session's workspace, not a raw disk path.
       expect(requests).toHaveLength(1);
       expect(requests[0].get('workspacePath')).toBe(WORKSPACE);
       expect(requests[0].get('path')).toBe(PLAN_PATH);
@@ -113,7 +126,7 @@ describe('SubmitPlanCard', () => {
       renderCard({ onRespond });
 
       await screen.findByText('Ship dark mode');
-      await user.click(screen.getByRole('button', { name: 'Approve the plan and switch to build' }));
+      await user.click(screen.getByRole('button', { name: 'Approve the plan and build it' }));
 
       expect(onRespond).toHaveBeenCalledWith({
         action: 'approved',
@@ -140,7 +153,7 @@ describe('SubmitPlanCard', () => {
 
       expect(await screen.findByLabelText('Loading plan')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Copy plan' })).toBeDisabled();
-      expect(screen.getByRole('button', { name: 'Approve the plan and switch to build' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeDisabled();
       expect(onRespond).not.toHaveBeenCalled();
 
@@ -148,11 +161,11 @@ describe('SubmitPlanCard', () => {
       releasePlan?.();
       await screen.findByText('Ship dark mode');
       expect(screen.getByRole('button', { name: 'Copy plan' })).toBeEnabled();
-      expect(screen.getByRole('button', { name: 'Approve the plan and switch to build' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeEnabled();
       expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeEnabled();
     });
 
-    it('keeps approve and reject usable when the plan file cannot be read', async () => {
+    it('disables approve but keeps reject usable when the plan file cannot be read', async () => {
       stubUserSession();
       stubPlanFile({ fail: true });
       const onRespond = vi.fn();
@@ -161,12 +174,56 @@ describe('SubmitPlanCard', () => {
 
       expect(await screen.findByRole('note')).toHaveTextContent('The plan could not be loaded');
 
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeDisabled();
+
       const reject = screen.getByRole('button', { name: 'Reject the plan' });
       expect(reject).toBeEnabled();
       await user.click(reject);
 
-      // No content to back-fill — only the action and path travel.
       expect(onRespond).toHaveBeenCalledWith({ action: 'rejected', path: PLAN_PATH });
+    });
+
+    it('normalizes an absolute artifact path against the workspace root before fetching', async () => {
+      stubUserSession();
+      stubRenderedList('/leadrvision/.artifacts');
+      const requests = stubPlanFile();
+      renderCard({
+        input: { toolId: 'submit_plan', path: '/leadrvision/.artifacts/plans/add-dark-mode.md' },
+        onRespond: () => {},
+      });
+
+      expect(await screen.findByText('Ship dark mode')).toBeInTheDocument();
+      expect(requests).toHaveLength(1);
+      expect(requests[0].get('path')).toBe('.artifacts/plans/add-dark-mode.md');
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeEnabled();
+    });
+
+    it('does not fetch an absolute path outside the workspace artifacts root', async () => {
+      stubUserSession();
+      stubRenderedList('/leadrvision/.artifacts');
+      const requests = stubPlanFile();
+      renderCard({
+        input: { toolId: 'submit_plan', path: '/leadrvision/secrets/plan.md' },
+        onRespond: () => {},
+      });
+
+      expect(await screen.findByRole('note')).toHaveTextContent('The plan could not be loaded');
+      expect(requests).toHaveLength(0);
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeEnabled();
+    });
+
+    it('disables Approve for a whitespace-only inline plan', async () => {
+      stubUserSession();
+      stubPlanFile();
+      renderCard({
+        input: { toolId: 'submit_plan', path: PLAN_PATH, title: 'Blank plan', plan: '   \n\t  ' },
+        onRespond: () => {},
+      });
+
+      await screen.findByText('Blank plan');
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeEnabled();
     });
 
     it('does not fetch paths outside the workspace artifacts root', async () => {
@@ -195,7 +252,6 @@ describe('SubmitPlanCard', () => {
       stubPlanFile();
       renderCard({
         onRespond: () => {},
-        // Inline plan: no fetch needed; the layout stub reports actual overflow.
         input: { path: PLAN_PATH, title: 'Long plan', plan: `detailed step\n`.repeat(60) },
       });
 

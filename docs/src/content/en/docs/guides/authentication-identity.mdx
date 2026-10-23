@@ -168,7 +168,7 @@ An incoming auth token and a downstream service credential solve different probl
 - **Token forwarding:** The external service trusts the same bearer token presented to Mastra.
 - **Credential selection:** The authenticated user's tenant selects a separate credential stored by the application.
 
-Use token forwarding only when the receiving service is intended to trust that token. For multi-tenant services, resolve a tenant-scoped credential in trusted tool code instead:
+Use token forwarding only when the receiving service is intended to trust that token. This covers an outbound call to a service that accepts your caller's own token. It doesn't allow an MCP server to forward the MCP token it received to another API. For multi-tenant services, resolve a tenant-scoped credential in trusted tool code instead:
 
 ```typescript title="src/mastra/tools/list-invoices.ts"
 import { createTool } from '@mastra/core/tools'
@@ -199,9 +199,11 @@ export const listInvoices = createTool({
 
 Configure the credential provider to fail closed for unknown resources and return least-privilege credentials. Keep secrets out of its errors. The model supplies only business input such as `limit`. Trusted code selects the tenant and credential.
 
-The same pattern applies to an external MCP server. Use the authenticated user's tenant to select a stored credential. If the external server trusts the incoming bearer token, read that token from `MASTRA_AUTH_TOKEN_KEY` and forward it instead. Expose only the resulting tools to the agent. See [MCP connections](/docs/connections/mcp) for client configuration.
+The same pattern applies when your application connects out to an external MCP server. Use the authenticated user's tenant to select a stored credential. When that MCP server accepts the caller's own token, read the token intended for it from `MASTRA_AUTH_TOKEN_KEY` and send that instead of a stored credential. Expose only the resulting tools to the agent. This is an outgoing credential: an MCP server must not forward the MCP token it received to another API. See [MCP connections](/docs/connections/mcp) for client configuration and [access upstream services safely](/docs/guides/mcp-authentication-authorization#access-upstream-services-safely) for the audience boundary.
 
 ## Forward identity to MCP tools
+
+For the distinction between MCP credentials, delegated access, and tool permissions, see [Authentication and authorization with MCP](/docs/guides/mcp-authentication-authorization).
 
 By default, when an `MCPServer` runs behind `server.auth`, Mastra places the authenticated caller in the MCP `authInfo` object. Server tools can use this identity without parsing the request again:
 
@@ -242,7 +244,7 @@ This example uses the default bridge. Mastra first preserves any `req.auth` valu
 
 Return only the data the model needs. Remove credentials and sensitive upstream fields before returning a tool result.
 
-`RequestContext.serializeForSpan()` redacts `MASTRA_AUTH_TOKEN_KEY` when context is attached to tracing spans. Application logs and custom telemetry must apply the same principle to other credentials and sensitive identity fields.
+Reserved Mastra keys (those starting with `mastra__` or `__mastra_`, including `MASTRA_AUTH_TOKEN_KEY`) are omitted when request context is attached to tracing spans or saved on score records. Application logs and custom telemetry must apply the same principle to other credentials and sensitive identity fields.
 
 ## Add authorization after authentication
 

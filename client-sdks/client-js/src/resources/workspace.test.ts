@@ -210,6 +210,19 @@ describe('Workspace Resource', () => {
         }),
       );
     });
+
+    it('should serialize an explicit false flag on the wire', async () => {
+      mockFetchResponse({ path: '/', entries: [] });
+
+      await workspace.listFiles('/', false);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/list?path=%2F&recursive=false`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
   });
 
   describe('delete()', () => {
@@ -244,6 +257,19 @@ describe('Workspace Resource', () => {
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/delete?path=%2Fdir&recursive=true&force=true`,
+        expect.objectContaining({
+          method: 'DELETE',
+        }),
+      );
+    });
+
+    it('should serialize explicit false flags on the wire', async () => {
+      mockFetchResponse({ success: true, path: '/dir' });
+
+      await workspace.delete('/dir', { recursive: false, force: false });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/delete?path=%2Fdir&recursive=false&force=false`,
         expect.objectContaining({
           method: 'DELETE',
         }),
@@ -509,6 +535,19 @@ describe('Workspace Resource', () => {
         }),
       );
     });
+
+    it('should serialize an explicit false includeReferences flag on the wire', async () => {
+      mockFetchResponse({ results: [], query: 'test' });
+
+      await workspace.searchSkills({ query: 'test', includeReferences: false });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills/search?query=test&includeReferences=false`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
   });
 
   describe('getSkill()', () => {
@@ -516,6 +555,69 @@ describe('Workspace Resource', () => {
       const skillResource = workspace.getSkill('my-skill');
 
       expect(skillResource).toBeInstanceOf(WorkspaceSkillResource);
+    });
+  });
+  describe('skills.sh registry', () => {
+    const skill = {
+      id: 'vercel-labs/skills/find-skills',
+      name: 'find-skills',
+      installs: 10,
+      topSource: 'vercel-labs/skills',
+    };
+
+    it('searches the registry with the query and limit', async () => {
+      const mockResponse = { query: 'react', searchType: 'fuzzy', skills: [skill], count: 1 };
+      mockFetchResponse(mockResponse);
+
+      const result = await workspace.searchSkillsSh({ q: 'react', limit: 10 });
+
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills-sh/search?q=react&limit=10`,
+        expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer test-key' }) }),
+      );
+    });
+
+    it('lists popular skills without a query string when no params are given', async () => {
+      mockFetchResponse({ skills: [skill], count: 1, limit: 10, offset: 0 });
+
+      await workspace.listPopularSkillsSh();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills-sh/popular`,
+        expect.anything(),
+      );
+    });
+
+    it('previews a skill by owner, repo and path', async () => {
+      mockFetchResponse({ content: '# Skill' });
+
+      const result = await workspace.previewSkillsSh({ owner: 'vercel-labs', repo: 'skills', path: 'find-skills' });
+
+      expect(result.content).toBe('# Skill');
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills-sh/preview?owner=vercel-labs&repo=skills&path=find-skills`,
+        expect.anything(),
+      );
+    });
+
+    it.each([
+      [
+        'install',
+        () => workspace.installSkillsSh({ owner: 'o', repo: 'r', skillName: 's' }),
+        { owner: 'o', repo: 'r', skillName: 's' },
+      ],
+      ['remove', () => workspace.removeSkillsSh({ skillName: 's' }), { skillName: 's' }],
+      ['update', () => workspace.updateSkillsSh({ skillName: 's' }), { skillName: 's' }],
+    ])('posts the %s body', async (route, call, body) => {
+      mockFetchResponse({});
+
+      await call();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills-sh/${route}`,
+        expect.objectContaining({ method: 'POST', body: JSON.stringify(body) }),
+      );
     });
   });
 });

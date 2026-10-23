@@ -45,27 +45,11 @@ function mapPreset(preset: DatePreset): TraceDatePreset | LogsDatePreset | undef
 }
 
 /** Narrow time window for a single chart node. Callers pass concrete start/end
- *  Dates (typically bucket boundaries); these bypass the preset. */
-export type DrilldownWindow = {
+ *  Dates; these bypass the preset. */
+export type TimeRange = {
   from: Date;
   to: Date;
 };
-
-/** Narrow a raw timestamp into the time-series bucket window that surrounds
- *  it. For a chart with `interval = 1h`, clicking a node at 14:37Z drills into
- *  14:00Z → 15:00Z. For `1d`, the corresponding UTC day. */
-export function narrowWindowToBucket(tsMs: number, interval: '1h' | '1d'): DrilldownWindow {
-  if (interval === '1h') {
-    const from = new Date(tsMs);
-    from.setUTCMinutes(0, 0, 0);
-    const to = new Date(from.getTime() + 60 * 60 * 1000);
-    return { from, to };
-  }
-  const from = new Date(tsMs);
-  from.setUTCHours(0, 0, 0, 0);
-  const to = new Date(from.getTime() + 24 * 60 * 60 * 1000);
-  return { from, to };
-}
 
 /** Fields a card may use to scope the drilldown. Only the pieces the caller
  *  knows are attached; everything else falls through to the current dashboard
@@ -80,8 +64,10 @@ export type DrilldownScope = {
   /** Trace-only. Valid for drill-downs from "errors" segments. */
   status?: 'running' | 'success' | 'error';
   /** Overrides date preset with explicit window bounds. */
-  window?: DrilldownWindow;
+  window?: TimeRange;
 };
+
+/** A card's navigation callback. The call site decides where a scope leads. */
 
 type BuildArgs = {
   /** Current metrics dashboard preset. */
@@ -105,7 +91,7 @@ function applyDate(
   toKey: string,
   preset: DatePreset,
   customRange: DateRange | undefined,
-  window: DrilldownWindow | undefined,
+  window: TimeRange | undefined,
 ): void {
   // A concrete window always wins — it's a precise node-level drilldown.
   if (window) {
@@ -166,7 +152,6 @@ export function buildTracesDrilldownUrl({
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.entityName, scope.entityName ?? dashboardFilter.entityName);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.threadId, scope.threadId ?? dashboardFilter.threadId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.resourceId, scope.resourceId ?? dashboardFilter.resourceId);
-  setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.entityId, dashboardFilter.entityId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.runId, dashboardFilter.runId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.sessionId, dashboardFilter.sessionId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.requestId, dashboardFilter.requestId);

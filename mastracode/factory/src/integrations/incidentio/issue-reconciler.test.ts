@@ -75,10 +75,12 @@ describe('incident.io issue reconciler', () => {
     } as unknown as IntegrationContext;
     const reconcile = attachIncidentioIssueReconciler(integration, context);
 
+    // The live incident gets a metadata refresh; the completed follow-up is
+    // replayed through the close rules instead of being patched in place.
     await expect(reconcile?.()).resolves.toMatchObject({
       projects: 1,
       checked: 2,
-      updated: 2,
+      updated: 1,
       failed: 0,
     });
     const items = await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
@@ -97,17 +99,11 @@ describe('incident.io issue reconciler', () => {
             labels: ['Major', 'Production outage', 'standard'],
           }),
         }),
+        // Close handling is a rules-ingress commit, not a metadata patch: the
+        // stale metadata stays until the dispatcher applies the transition.
         expect.objectContaining({
           externalSource: expect.objectContaining({ externalId: 'incidentio:follow-up:follow-up-1' }),
-          metadata: expect.objectContaining({
-            autoStartCandidate: false,
-            incidentioItemType: 'follow-up',
-            incidentioState: 'completed',
-            incidentioStateType: 'completed',
-            incidentioDescription: 'Page the primary on replica lag.',
-            assignee: 'Grace Hopper',
-            labels: ['reliability'],
-          }),
+          metadata: expect.objectContaining({ labels: ['stale'] }),
         }),
       ]),
     );

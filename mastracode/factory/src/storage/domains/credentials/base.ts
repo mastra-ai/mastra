@@ -11,8 +11,8 @@
  * - **org-scoped** rows (`userId` absent): shared API keys set by an org
  *   admin, inherited by every member.
  *
- * Resolution order at model-call time is user > org (the caller layers server
- * env vars underneath as a final fallback).
+ * Model calls resolve exactly one scope: user or org. Deployed tenant stores
+ * never fall back to the other scope or implicitly borrow server environment keys.
  *
  * Secrets posture: credentials are stored server-side only and never returned
  * to the client (same as `linear_connections.access_token`). Encryption at
@@ -284,16 +284,12 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     ]);
   }
 
-  /**
-   * Resolve the credential a caller should use for a provider. By default the
-   * user's own row wins over the org's shared row; `precedence: 'org'`
-   * (automated factory runs) checks the org's shared row first.
-   */
+  /** Resolve a provider credential from exactly one tenancy scope. */
   async resolveCredential(
     orgId: string,
     userId: string,
     provider: string,
-    precedence: CredentialScope = 'user',
+    scope: CredentialScope,
   ): Promise<ResolvedCredential | undefined> {
     const readUser = async (): Promise<ResolvedCredential | undefined> => {
       const row = await this.#db.findOne<CredentialDbRow>('model_provider_credentials', {
@@ -315,7 +311,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
         ? { provider: row.provider, scope: 'org', credential: await this.#decryptCredential(row.data) }
         : undefined;
     };
-    return precedence === 'org' ? ((await readOrg()) ?? (await readUser())) : ((await readUser()) ?? (await readOrg()));
+    return scope === 'org' ? readOrg() : readUser();
   }
 
   /**

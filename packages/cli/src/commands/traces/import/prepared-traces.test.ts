@@ -2,11 +2,17 @@ import { access, appendFile, mkdtemp, readFile, rm, stat } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { acknowledgeTraceBatch, initializeTraceImport, readTraceImportManifest } from './manifest.js';
+import {
+  acknowledgeTraceBatch,
+  initializeTraceImport,
+  readTraceImportManifest,
+  writeTraceImportManifest,
+} from './manifest.js';
 import {
   completeTraceImport,
   prepareTraceImport,
   readPendingTraceBatches,
+  serializePreparedTraceBatch,
   tracePayloadBytes,
 } from './prepared-traces.js';
 import type { TraceImportProvider } from './provider.js';
@@ -134,6 +140,7 @@ describe('prepared traces', () => {
     );
 
     expect(batches.map(batch => batch.traces.map(item => item.sourceTraceId))).toEqual([['source-1'], ['source-2']]);
+    expect(Buffer.byteLength(serializePreparedTraceBatch(batches[0]!))).toBe(batches[0]!.payloadBytes);
   });
 
   it('rejects a changed prepared file before yielding the first batch', async () => {
@@ -251,6 +258,17 @@ describe('prepared traces', () => {
     const replayed = await acknowledgeTraceBatch(state.directory, batch!);
 
     expect(replayed).toMatchObject({ acknowledgedTraces: 2, acknowledgedSpans: 4 });
+    await expect(completeTraceImport(state.directory)).rejects.toThrow('verification');
+    await writeTraceImportManifest(state.directory, {
+      ...replayed,
+      verification: {
+        status: 'verified',
+        sampledTraces: 2,
+        verifiedTraces: 2,
+        queryAttempts: 2,
+        differences: [],
+      },
+    });
     const completed = await completeTraceImport(state.directory);
 
     expect(completed.phase).toBe('complete');
@@ -268,6 +286,18 @@ describe('prepared traces', () => {
   it('can complete an empty prepared import', async () => {
     const state = await initialize();
     await prepareTraceImport({ directory: state.directory, provider: provider([]) });
+
+    const manifest = await readTraceImportManifest(state.directory);
+    await writeTraceImportManifest(state.directory, {
+      ...manifest,
+      verification: {
+        status: 'verified',
+        sampledTraces: 0,
+        verifiedTraces: 0,
+        queryAttempts: 0,
+        differences: [],
+      },
+    });
 
     const completed = await completeTraceImport(state.directory);
 

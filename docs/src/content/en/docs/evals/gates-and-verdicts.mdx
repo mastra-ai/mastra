@@ -7,7 +7,7 @@ packages:
 
 # Gates and verdicts
 
-Gates and verdicts add severity semantics to `runEvals`. Gates are scorers that must score 1.0, hard requirements that block a run. Thresholds are minimum acceptable scores on tracked metrics. The verdict summarizes the outcome as `passed`, `scored`, or `failed`.
+Gates and verdicts add severity semantics to `runEvals`. Gates are scorers that must score 1.0, hard requirements that block a run. Thresholds are lower and/or upper bounds on the average score of tracked metrics. The verdict summarizes the outcome as `passed`, `scored`, or `failed`.
 
 ## When to use gates and verdicts
 
@@ -49,11 +49,11 @@ The verdict is computed from gates and thresholds after all data items are proce
 - `scored`: All gates passed, but at least one threshold scorer missed its threshold
 - `passed`: All gates scored 1.0 and all thresholds were met
 
-When no gates or threshold-bearing scorers are provided, the verdict field is omitted and `runEvals` behaves exactly as before.
+The verdict field is omitted when no gates or threshold-bearing scorers are provided, and when every configured gate and threshold returned `notScorable()` (no numeric evidence). In those cases `runEvals` still returns `scores` and `summary`.
 
 ## Gates
 
-Gates are scorers passed via the `gates` field. They run before regular scorers on each data item. A gate must average a score of 1.0 across all data items to pass.
+Gates are scorers passed via the `gates` field. They run before regular scorers on each data item. A gate must average a score of 1.0 across the data items it could score to pass. Items where the gate returns `notScorable()` are excluded from the average, and a gate that throws an error counts as 0 for that item.
 
 ```typescript title="src/evals/tool-gate.ts"
 import { runEvals } from '@mastra/core/evals'
@@ -90,7 +90,7 @@ You must provide at least one scorer or gate, a run with neither throws an error
 
 ## Thresholds
 
-Wrap a scorer in `{ scorer, threshold }` to set pass/fail bounds. The threshold is compared against the scorer's average score across all data items.
+Wrap a scorer in `{ scorer, threshold }` to set pass/fail bounds. The threshold is compared against the scorer's average score across scored data items. Results that return `notScorable()` are left out of the average.
 
 A `threshold` can be:
 

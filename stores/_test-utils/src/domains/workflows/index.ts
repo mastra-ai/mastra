@@ -2,13 +2,14 @@ import type { MastraStorage, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, it, expect, beforeEach } from 'vitest';
-import { checkWorkflowSnapshot, createSampleWorkflowSnapshot } from './data';
+import { checkWorkflowSnapshot, createSampleSuspendedSnapshotWithThread, createSampleWorkflowSnapshot } from './data';
 
 export interface WorkflowsTestOptions {
   storage: MastraStorage;
+  workflowResultsNoopWhenRunMissing?: boolean;
 }
 
-export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
+export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissing }: WorkflowsTestOptions) {
   let workflowsStorage: WorkflowsStorage;
   let supportsConcurrentUpdates: boolean;
 
@@ -91,6 +92,20 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       expect(runs[0]!.workflowName).toBe(workflowName1);
       const snapshot = runs[0]!.snapshot as WorkflowRunState;
       expect(snapshot.context?.[stepId1]?.status).toBe('completed');
+    });
+
+    it('returns status and timestamp in summary mode', async () => {
+      const { snapshot, runId } = createSampleWorkflowSnapshot('success');
+      await workflowsStorage.persistWorkflowSnapshot({ workflowName: 'summary_test', runId, snapshot });
+
+      const { runs, total } = await workflowsStorage.listWorkflowRuns({ workflowName: 'summary_test', summary: true });
+      expect(total).toBe(1);
+      expect(runs[0]!.runId).toBe(runId);
+      const parsed = (
+        typeof runs[0]!.snapshot === 'string' ? JSON.parse(runs[0]!.snapshot) : runs[0]!.snapshot
+      ) as WorkflowRunState;
+      expect(parsed.status).toBe('success');
+      expect(parsed.timestamp).toBe(snapshot.timestamp);
     });
 
     it('filters by status', async () => {
@@ -349,6 +364,78 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       });
       expect(Array.isArray(runs)).toBe(true);
       expect(runs.length).toBe(0);
+    });
+  });
+
+  /**
+   * The threadId filter is best-effort: adapters MAY ignore it and return a
+   * superset (the agent re-verifies in-process), but MUST NOT exclude runs
+   * whose snapshot carries the requested thread id. These tests only assert
+   * inclusion, so both implementing and non-implementing adapters pass.
+   */
+  describe('listWorkflowRuns with threadId (best-effort filter)', () => {
+    const workflowName = 'workflow-thread-test';
+    let agenticRunIdA: string;
+    let durableRunIdA: string;
+
+    beforeEach(async () => {
+      await workflowsStorage.dangerouslyClearAll();
+
+      const agenticA = createSampleSuspendedSnapshotWithThread({
+        threadId: 'thread-a',
+        resourceId: 'resource-1',
+        layout: 'agentic-loop',
+      });
+      agenticRunIdA = agenticA.runId;
+      const durableA = createSampleSuspendedSnapshotWithThread({
+        threadId: 'thread-a',
+        resourceId: 'resource-1',
+        layout: 'durable',
+      });
+      durableRunIdA = durableA.runId;
+      const agenticB = createSampleSuspendedSnapshotWithThread({
+        threadId: 'thread-b',
+        resourceId: 'resource-1',
+        layout: 'agentic-loop',
+      });
+      const durableB = createSampleSuspendedSnapshotWithThread({
+        threadId: 'thread-b',
+        resourceId: 'resource-1',
+        layout: 'durable',
+      });
+
+      for (const { snapshot, runId } of [agenticA, durableA, agenticB, durableB]) {
+        await workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          resourceId: 'resource-1',
+          snapshot,
+        });
+      }
+    });
+
+    it('includes runs whose agentic-loop layout snapshot matches the threadId', async () => {
+      const { runs } = await workflowsStorage.listWorkflowRuns({
+        workflowName,
+        threadId: 'thread-a',
+      });
+      expect(runs.map(run => run.runId)).toContain(agenticRunIdA);
+    });
+
+    it('includes runs whose durable-layout snapshot matches the threadId', async () => {
+      const { runs } = await workflowsStorage.listWorkflowRuns({
+        workflowName,
+        threadId: 'thread-a',
+      });
+      expect(runs.map(run => run.runId)).toContain(durableRunIdA);
+    });
+
+    it('does not error when filtering by an unknown threadId', async () => {
+      const { runs } = await workflowsStorage.listWorkflowRuns({
+        workflowName,
+        threadId: 'thread-that-does-not-exist',
+      });
+      expect(Array.isArray(runs)).toBe(true);
     });
   });
 
@@ -760,6 +847,85 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
+      });
+    });
+
+    it('should not recreate a deleted workflow run from a late result update', async ctx => {
+      if (!supportsConcurrentUpdates || workflowResultsNoopWhenRunMissing === false) return ctx.skip();
+
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: {} } as any,
+      });
+      await workflowsStorage.deleteWorkflowRunById({ workflowName, runId });
+
+      const result = await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'late-step',
+        result: {
+          status: 'success',
+          output: { data: 'late' },
+          payload: {},
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
+        requestContext: {},
+      });
+
+      expect(result).toEqual({});
+      expect(await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId })).toBeNull();
+    });
+
+    it('should record workflow state together with the step result', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping workflow results with state test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: { __state: { counter: 0 } } } as any,
+      });
+
+      const stepResult = {
+        status: 'success' as const,
+        output: { data: 'test' },
+        payload: {},
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      };
+
+      const returnedContext = await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-1',
+        result: stepResult,
+        requestContext: {},
+        state: { counter: 1 },
+      });
+      expect(returnedContext).toEqual({ 'step-1': stepResult, __state: { counter: 1 } });
+
+      // Omitting state leaves the recorded state untouched.
+      await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-2',
+        result: stepResult,
+        requestContext: {},
+      });
+
+      const finalSnapshot = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      expect(finalSnapshot?.context).toEqual({
+        'step-1': stepResult,
+        'step-2': stepResult,
+        __state: { counter: 1 },
       });
     });
 

@@ -118,6 +118,25 @@ describe('modelSettings.timeout.totalMs', () => {
     expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
   });
 
+  it.each([
+    [50, '`modelSettings.timeout` must be an object'],
+    [{ totalMs: 0 }, '`modelSettings.timeout.totalMs` must be a positive, finite number'],
+  ])('rejects invalid call-level timeout settings: %j', (timeout, errorMessage) => {
+    const settings = defaultSettings();
+
+    expect(() =>
+      loop({
+        ...settings,
+        mastra: mastraRef.current as any,
+        methodType: 'stream',
+        runId: 'test-run-id',
+        messageList: createMessageListWithUserMessage(),
+        models: createTestModels(),
+        modelSettings: { ...settings.modelSettings, timeout },
+      } as any),
+    ).toThrow(errorMessage);
+  });
+
   it('still honours a caller-supplied abort signal', async () => {
     const controller = new AbortController();
     setTimeout(() => controller.abort(new Error('user cancelled')), 50);

@@ -1,9 +1,9 @@
 import type { StoredMCPServerConfig } from '@mastra/client-js';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useTryConnectMcp } from '@mastra/react/hooks/mcps';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
-import { useTryConnectMcp } from '../../hooks/use-try-connect-mcp';
 import { MCPClientEditLayout } from './mcp-client-edit-layout';
 import { MCPClientFormSidebar } from './mcp-client-form-sidebar';
 import { MCPClientToolPreview } from './mcp-client-tool-preview';
@@ -110,15 +110,12 @@ export function MCPClientCreateContent({
                 .split('\n')
                 .map(a => a.trim())
                 .filter(Boolean),
-              env: values.env.reduce(
-                (acc, { key, value }) => {
-                  if (key.trim()) {
-                    acc[key.trim()] = value;
-                  }
-                  return acc;
-                },
-                {} as Record<string, string>,
-              ),
+              env: values.env.reduce<Record<string, string>>((acc, { key, value }) => {
+                if (key.trim()) {
+                  acc[key.trim()] = value;
+                }
+                return acc;
+              }, {}),
             }),
       },
     };

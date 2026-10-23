@@ -1,85 +1,14 @@
 import { json } from '@codemirror/lang-json';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { tags as t } from '@lezer/highlight';
-import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import ReactCodeMirror from '@uiw/react-codemirror';
 import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { codeFoldGutter, useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { Section } from '@/ds/components/Section';
-import { useTheme } from '@/ds/components/ThemeProvider';
-
-/** Dark theme — matches original side-dialog draculaInit settings exactly. */
-function buildSideDialogDarkTheme(): Extension {
-  return draculaInit({
-    settings: {
-      fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--text-ui-smd)',
-      lineHighlight: 'transparent',
-      gutterBackground: 'transparent',
-      gutterForeground: '#939393',
-      background: 'transparent',
-    },
-    styles: [{ tag: [t.className, t.propertyName] }],
-  });
-}
-
-/** Light theme for side-dialog code sections. */
-function buildSideDialogLightTheme(): Extension {
-  const editorTheme = EditorView.theme({
-    '&': {
-      backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
-      fontSize: 'var(--text-ui-smd)',
-    },
-    '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--font-mono)',
-    },
-    '.cm-gutters': {
-      backgroundColor: 'transparent',
-      color: 'var(--neutral2)',
-      borderRight: 'none',
-    },
-    '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
-    },
-    '.cm-activeLine': {
-      backgroundColor: 'transparent',
-    },
-    '.cm-activeLineGutter': {
-      backgroundColor: 'transparent',
-    },
-    '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--neutral6)',
-    },
-  });
-
-  const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--accent5)' },
-    {
-      tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--accent3)',
-    },
-    { tag: [t.variableName, t.number], color: 'var(--accent5)' },
-    { tag: [t.name, t.quote], color: 'var(--accent1)' },
-  ]);
-
-  return [editorTheme, syntaxHighlighting(highlightStyle)];
-}
-
-const useCodemirrorTheme = (): Extension => {
-  const isDark = useTheme().resolvedTheme === 'dark';
-  return useMemo(() => (isDark ? buildSideDialogDarkTheme() : buildSideDialogLightTheme()), [isDark]);
-};
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 export type SideDialogCodeSectionProps = {
   title: React.ReactNode;
@@ -109,23 +38,34 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
           {icon}
           {title}
         </Section.Heading>
-        <ButtonsGroup>
+        <ButtonsGroup size="sm">
           <CopyButton content={codeStr || 'No content'} />
           {hasMultilineText && (
-            <Button onClick={() => setShowAsMultilineText(!showAsMultilineText)}>
+            <Button
+              size="icon-md"
+              aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
+              onClick={() => setShowAsMultilineText(!showAsMultilineText)}
+            >
               {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
             </Button>
           )}
         </ButtonsGroup>
       </Section.Header>
       {codeStr && (
-        <div className="border-border1 bg-surface3 text-ui-md text-neutral4 max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl border p-3 break-all dark:border-white/10 dark:bg-black/20">
+        <div
+          className={`${raisedSurfaceStyle} max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl p-3 text-body break-all text-muted-foreground`}
+        >
           {simplified ? (
-            <div className="text-neutral4 px-2 font-mono break-all">
+            <div className="px-2 font-mono break-all text-muted-foreground">
               <pre className="text-wrap">{codeStr}</pre>
             </div>
           ) : (
-            <ReactCodeMirror extensions={[json(), EditorView.lineWrapping]} theme={theme} value={finalCodeStr} />
+            <ReactCodeMirror
+              extensions={[json(), EditorView.lineWrapping, codeFoldGutter]}
+              basicSetup={{ foldGutter: false }}
+              theme={theme}
+              value={finalCodeStr}
+            />
           )}
         </div>
       )}

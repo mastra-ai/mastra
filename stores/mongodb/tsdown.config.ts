@@ -10,7 +10,11 @@ export default defineConfig({
   dts: false,
   treeshake: true,
   sourcemap: true,
+  deps: {
+    alwaysBundle: ['@internal/core'],
+    neverBundle: ['@mastra/core'],
+  },
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['bson']));
+    await generateTypes(process.cwd(), new Set(['bson', '@internal/core']));
   },
 });

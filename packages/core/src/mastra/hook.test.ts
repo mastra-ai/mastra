@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { runScorer } from '../evals/hooks';
 import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
+import { setScorerHookEntry } from '../hooks/scorer-owner';
 import { createObservabilityContext } from '../observability';
 import { wrapMastra } from '../observability/context';
 import { validateAndSaveScore, createOnScorerHook } from './hooks';
@@ -186,6 +187,89 @@ describe('createOnScorerHook', () => {
         source: 'LIVE',
       }),
     );
+  });
+
+  it('runs the scorer attached to the payload when it is registered nowhere (#27579)', async () => {
+    const callTimeScorer = { id: 'call-time', name: 'call-time', run: vi.fn().mockResolvedValue({ score: 0.5 }) };
+    mockMastra.getAgentById.mockReturnValue({ listScorers: vi.fn().mockResolvedValue({}) });
+    mockMastra.getScorerById.mockImplementation(() => {
+      throw new Error('Scorer with id call-time not found');
+    });
+    const hookData: any = {
+      runId: 'test-run',
+      scorer: { id: 'call-time' },
+      input: {},
+      output: {},
+      source: 'LIVE',
+      entity: { id: 'test-agent' },
+      entityType: 'AGENT',
+    };
+    setScorerHookEntry(hookData, { scorer: callTimeScorer as any });
+
+    await hook(hookData);
+
+    expect(callTimeScorer.run).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
+      expect.objectContaining({ scorerId: 'call-time', entityId: 'test-agent', score: 0.5 }),
+    );
+  });
+
+  it('falls back to the mastra-registered scorer when the workflow is not registered (#26790)', async () => {
+    const mockScorer = { id: 'politeness', name: 'politeness', run: vi.fn().mockResolvedValue({ score: 1 }) };
+    mockMastra.getWorkflowById.mockImplementation(() => {
+      throw new Error('Workflow with id child-workflow not found');
+    });
+    mockMastra.getScorerById.mockReturnValue(mockScorer);
+
+    await hook({
+      runId: 'test-run',
+      scorer: { id: 'politeness' },
+      input: {},
+      output: { reply: 'please' },
+      source: 'LIVE',
+      entity: { id: 'child-workflow', stepId: 'draft-reply' },
+      entityType: 'WORKFLOW',
+    });
+
+    expect(mockScorer.run).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
+      expect.objectContaining({ scorerId: 'politeness', entityId: 'child-workflow', entityType: 'WORKFLOW', score: 1 }),
+    );
+  });
+
+  it('does not save a score when the scorer declares the run not scorable', async () => {
+    const debug = vi.fn();
+    mockMastra.getLogger.mockReturnValue({ debug, error: vi.fn(), warn: vi.fn(), trackException: vi.fn() });
+
+    const hookData = {
+      runId: 'test-run',
+      scorer: { id: 'refund-judge' },
+      input: [{ message: 'test' }],
+      output: { result: 'test' },
+      source: 'LIVE' as const,
+      entity: { id: 'test-entity' },
+      entityType: 'AGENT' as const,
+    };
+
+    const mockScorer = {
+      id: 'refund-judge',
+      name: 'refund-judge',
+      run: vi.fn().mockResolvedValue({
+        runId: 'scorer-run-1',
+        notScorable: { step: 'preprocess', reason: 'refundCustomer was not called' },
+      }),
+    };
+
+    mockMastra.getAgentById.mockReturnValue({
+      listScorers: vi.fn().mockReturnValue({ 'refund-judge': { scorer: mockScorer } }),
+    });
+
+    await hook(hookData);
+
+    expect(mockScorer.run).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
+    expect(mockMastra.getLogger().trackException).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('refundCustomer was not called'));
   });
 
   it('should extract a trajectory from live agent output for trajectory scorers', async () => {
@@ -616,7 +700,7 @@ describe('createOnScorerHook owner-scoped dispatch', () => {
     return {
       runId: 'run-1',
       scorerId: 'test-scorer',
-      scorerObject: { scorer: { id: 'test-scorer', name: 'Test Scorer', description: 'test' } } as any,
+      scorerObject: { scorer: mockScorer },
       input: {},
       output: {},
       requestContext: {},

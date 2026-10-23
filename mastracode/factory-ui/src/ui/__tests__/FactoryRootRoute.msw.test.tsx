@@ -14,16 +14,35 @@ function renderFactoryRoute(initialEntry = '/factories/fp-1') {
   return router;
 }
 
+const draft = {
+  repository: {
+    id: 99,
+    fullName: 'octo/hello',
+    name: 'hello',
+    owner: 'octo',
+    defaultBranch: 'main',
+    private: false,
+    installationId: 7,
+    installationStorageId: 'inst-7',
+    sandboxProvider: 'local',
+    sandboxWorkdir: '/workspace/hello',
+  },
+  modelScope: 'factory',
+  model: { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' },
+};
+
 // Literal keys on purpose: these tests pin the sessionStorage contract the
 // guard and RootLanding rely on across full-page OAuth redirects.
-function seedOnboarding(step: string, factoryId: string, updatedAt: number | null = Date.now()) {
+function seedOnboarding(step: string, factoryId: string | null, updatedAt: number | null = Date.now()) {
   sessionStorage.setItem('mastracode.factory-onboarding.step', step);
-  sessionStorage.setItem('mastracode.factory-onboarding.factory-id', factoryId);
+  sessionStorage.setItem('mastracode.factory-onboarding.draft', JSON.stringify(draft));
+  if (factoryId !== null) sessionStorage.setItem('mastracode.factory-onboarding.factory-id', factoryId);
   if (updatedAt !== null) sessionStorage.setItem('mastracode.factory-onboarding.updated-at', String(updatedAt));
 }
 
 function clearOnboarding() {
   sessionStorage.removeItem('mastracode.factory-onboarding.step');
+  sessionStorage.removeItem('mastracode.factory-onboarding.draft');
   sessionStorage.removeItem('mastracode.factory-onboarding.factory-id');
   sessionStorage.removeItem('mastracode.factory-onboarding.updated-at');
 }
@@ -57,7 +76,7 @@ describe('Factory root route', () => {
 
     const router = renderFactoryRoute('/');
 
-    await screen.findByRole('heading', { name: 'Build software with a Factory that knows your work.' });
+    await screen.findByRole('heading', { name: 'Set up your factory.' });
     expect(router.state.location.pathname).toBe('/onboarding');
   });
 
@@ -80,8 +99,8 @@ describe('Factory root route', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/work'));
   });
 
-  it('keeps an in-progress onboarding flow open after its factory is created', async () => {
-    seedOnboarding('project-management', 'fp-1');
+  it('keeps the review open after a failed confirmation created its factory', async () => {
+    seedOnboarding('review', 'fp-1');
 
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -101,26 +120,21 @@ describe('Factory root route', () => {
     const router = renderFactoryRoute('/onboarding');
 
     try {
-      await screen.findByRole('heading', { name: 'Connect the work behind the code.' });
+      await screen.findByRole('heading', { name: 'Ready to create.' });
       expect(router.state.location.pathname).toBe('/onboarding');
     } finally {
       clearOnboarding();
     }
   });
 
-  it('continues from project management to Factory model setup', async () => {
-    seedOnboarding('project-management', 'fp-1');
+  it('continues from project management to account setup', async () => {
+    seedOnboarding('project-management', null);
 
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Pending Factory' }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-        HttpResponse.json({ connections: [] }),
-      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
       ),
@@ -133,28 +147,20 @@ describe('Factory root route', () => {
 
     try {
       await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
-      await screen.findByRole('heading', { name: 'Choose your Factory model.' });
+      await screen.findByRole('heading', { name: 'Choose your setup.' });
     } finally {
       clearOnboarding();
     }
   });
 
   it('resumes a mid-flow onboarding from the root route after an OAuth round-trip', async () => {
-    // GitHub/Linear callbacks land on `/?…=connected`; with the factory already
-    // created mid-onboarding, the root route must resume the wizard instead of
-    // landing on the factory home.
-    seedOnboarding('project-management', 'fp-1');
+    seedOnboarding('project-management', null);
 
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Pending Factory' }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-        HttpResponse.json({ connections: [] }),
-      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: true, reason: 'ready' }),
       ),
@@ -163,7 +169,7 @@ describe('Factory root route', () => {
     const router = renderFactoryRoute('/?linear=connected');
 
     try {
-      await screen.findByRole('heading', { name: 'Connect the work behind the code.' });
+      await screen.findByRole('heading', { name: 'Connect your work.' });
       expect(router.state.location.pathname).toBe('/onboarding');
     } finally {
       clearOnboarding();

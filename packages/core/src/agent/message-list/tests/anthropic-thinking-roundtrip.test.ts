@@ -178,6 +178,7 @@ describe('Anthropic signed thinking round-trip', () => {
 
   it('does not change Gemini provider metadata on non-Anthropic replay', async () => {
     const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'Draw a cat' }] },
       {
         role: 'assistant',
         content: [
@@ -204,6 +205,6 @@ describe('Anthropic signed thinking round-trip', () => {
     });
 
     expect(result).toBeUndefined();
-    expect((prompt[0]!.content as any[])[0].providerOptions.google.thoughtSignature).toBe('gemini-sig');
+    expect((prompt[1]!.content as any[])[0].providerOptions.google.thoughtSignature).toBe('gemini-sig');
   });
 });

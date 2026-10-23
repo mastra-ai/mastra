@@ -73,9 +73,11 @@ export const mastra = new Mastra({
 
 Trace deletion cascades to spans, trace roots and branches, metrics, logs, scores, and feedback linked by trace ID. Signals without a trace ID are preserved. Mastra records the deletion predicate, then waits for ClickHouse lightweight delete masks to be applied. Normal reads no longer return the rows matched by that operation when the call resolves.
 
-Lightweight deletion is a hide-only operation that marks rows with ClickHouse's `_row_exists` mask. Physical removal depends on merges and deployment-configured retention TTLs. `ObservabilityStorageClickhouseVNext` applies retention only when you provide a `RetentionConfig`; Mastra OSS doesn't configure a default retention TTL.
+Lightweight deletion is a hide-only operation that marks rows with ClickHouse's `_row_exists` mask. Physical removal depends on merges and deployment-configured retention TTLs. `ObservabilityStorageClickhouseVNext` applies retention only when you pass the `retention` option. Mastra doesn't configure a default retention TTL.
 
-Deletion requests aren't purged automatically in Mastra OSS. Automatic retirement will be introduced with future database-agnostic retention configuration.
+When all five observability signals have finite retention, Mastra also applies a TTL to deletion requests so they outlive the signal rows they protect. If any signal is unbounded, deletion requests remain unbounded. See [storage retention](/reference/storage/retention#clickhouse-native-ttl) for how the deletion-request TTL is calculated.
+
+Feedback review-status updates read the current row and insert a replacement, so they need `SELECT` and `INSERT` rather than `ALTER UPDATE`, and the insert materialized view publishes each update to delta polling. An update that re-runs a delete also needs the delete permissions listed in [initialization](#initialization). A review update that lands while a delete of the same feedback is in progress re-runs that delete and returns not found, so it can't recreate deleted feedback. A failed delete doesn't block review updates, but the next update retries it: if the retry succeeds, the update returns not found; if it fails again, the new status is saved but the update returns the delete's error. If a network error or a lagging replica lets a review row outlive a successful delete, the next review update of that feedback deletes it again and returns not found.
 
 ### Observability with the legacy domain
 
@@ -240,6 +242,19 @@ The same `client` form is accepted by `ObservabilityStorageClickhouse` and `Obse
 
 `ClickhouseStore` also accepts every option from `ClickHouseClientConfigOptions` (such as `database`, `request_timeout`, `compression`, `keep_alive`, and `max_open_connections`).
 
+`ClickhouseStore` and `ObservabilityStorageClickhouseVNext` apply `clickhouse_settings` to every query they run. On ClickHouse services that keep data in object storage, such as ClickHouse Cloud, limiting read-ahead lowers the memory each observability query uses, but queries that miss the local cache can run slower:
+
+```typescript title="src/mastra/index.ts"
+const observabilityStore = new ObservabilityStorageClickhouseVNext({
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
+  clickhouse_settings: {
+    filesystem_prefetches_limit: 8,
+  },
+})
+```
+
 ### Replicated clusters
 
 Use `replication` when Mastra writes to a multi-replica ClickHouse cluster through a load balancer.
@@ -285,7 +300,7 @@ Don't set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `Shar
 
 ### Observability domain options
 
-`ObservabilityStorageClickhouse` and `ObservabilityStorageClickhouseVNext` accept the same connection options as `ClickhouseStore` (`url`, `username`, `password`, or a pre-configured `client`).
+`ObservabilityStorageClickhouse` and `ObservabilityStorageClickhouseVNext` accept the same connection options as `ClickhouseStore` (`url`, `username`, `password`, or a pre-configured `client`). `ObservabilityStorageClickhouseVNext` also accepts `retention`, the per-signal TTL in days described in [ClickHouse native TTL](/reference/storage/retention#clickhouse-native-ttl), and `traceQuery`, the execution limits for [trace queries](/reference/observability/tracing/advanced-queries).
 
 ## Hosting options
 
@@ -380,7 +395,10 @@ const observability = new ObservabilityStorageClickhouseVNext({
 await observability.init()
 ```
 
-In CI/CD pipelines, set `disableInit: true` on `ClickhouseStore` and run `init()` from a deployment step that uses elevated credentials. Runtime application credentials can then be limited to read and insert.
+In CI/CD pipelines, set `disableInit: true` on `ClickhouseStore` and run `init()` from a deployment step that uses elevated credentials. Runtime application credentials need:
+
+- `SELECT` and `INSERT` on the Mastra tables.
+- `ALTER DELETE` on the observability tables you delete from. On ClickHouse 26.6 and earlier, lightweight deletes also require `ALTER UPDATE` on those tables; ClickHouse 26.7 removed that requirement.
 
 ## Observability
 

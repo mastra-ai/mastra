@@ -8,17 +8,17 @@ import { SignalProvider } from './signal-provider';
  * Bundles the built-in task tools and the {@link TaskStateProcessor} behind a
  * single agent registration.
  *
- * The task list is held in the thread-scoped `tasks` storage domain (the
- * TaskStore) and projected onto the agent state-signal lane by
+ * The task list is held in the thread-scoped `threadState` storage domain and
+ * projected onto the agent state-signal lane by
  * `TaskStateProcessor`. Wiring task tracking by hand means registering all four
  * task tools **and** the processor, and keeping them in sync — forget the
  * processor and the tools work for a single turn but silently lose the list
  * across turns. This provider wires both together so that cannot happen.
  *
  * Task tracking requires a memory-backed thread (`threadId` + `resourceId`) and
- * a Mastra `storage` instance (the `tasks` domain is always wired in-memory by
- * default). Without memory the tools no-op and report that task tracking
- * requires agent memory.
+ * a Mastra `storage` instance (the `threadState` domain is always wired
+ * in-memory by default). Without memory the tools no-op and report that task
+ * tracking requires agent memory.
  *
  * @example
  * ```ts
@@ -37,8 +37,6 @@ import { SignalProvider } from './signal-provider';
  * The Agent automatically merges the tools into its toolset and registers the
  * processor on its input-processor chain (which propagates the Mastra instance
  * so the processor can resolve the TaskStore).
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export class TaskSignalProvider extends SignalProvider<'task-signals'> {
   readonly id = 'task-signals';

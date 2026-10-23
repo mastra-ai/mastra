@@ -1,8 +1,39 @@
 import { writeFileSync, unlinkSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { ObservabilityStorageFeature } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GET_SYSTEM_PACKAGES_ROUTE } from './system';
+
+const NO_OBSERVABILITY_CAPABILITIES = {
+  metrics: false,
+  logs: false,
+  discovery: {
+    entityTypes: false,
+    entityNames: false,
+    serviceNames: false,
+    environments: false,
+    tags: false,
+    metrics: false,
+  },
+  deltaPolling: false,
+  traceQuery: false,
+  traceQueryRootDuration: false,
+  traceQueryContextIds: false,
+  traceQueryTimeToFirstChunk: false,
+  traceQueryRootSpanFields: false,
+  traceQueryRootEntityId: false,
+  traceQueryTimeToFirstChunkSort: false,
+  traceQueryDiscovery: false,
+  traceQueryTenantScope: false,
+  traceAggregate: false,
+  threadQuery: false,
+  threadQueryRows: false,
+  spanQuery: false,
+  spanQueryContextFields: false,
+  spanAggregate: false,
+  feedback: false,
+};
 
 type MockStorage = {
   name?: string;
@@ -10,7 +41,7 @@ type MockStorage = {
     observability?: {
       constructor?: { name?: string };
       runtimeTracingStrategy?: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced';
-      getFeatures?: () => readonly ('delta-polling' | 'metrics' | 'logs')[] | undefined;
+      getFeatures?: () => readonly ObservabilityStorageFeature[] | undefined;
     };
   };
 };
@@ -184,21 +215,23 @@ describe('System Handlers', () => {
       });
     });
 
-    it('should return cmsEnabled false when editor is not configured', async () => {
-      delete process.env.MASTRA_PACKAGES_FILE;
+    it('advertises recording review for the exact default LiveKit GET route', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, undefined, false, {
+          apiRoutes: [{ method: 'GET', path: '/voice/livekit/recordings/:traceId' }],
+        }),
+      } as any);
+      expect(result).toMatchObject({ liveKitRecordingRouteEnabled: true });
+    });
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
-
-      expect(result).toEqual({
-        packages: [],
-        isDev: false,
-        cmsEnabled: false,
-        liveKitConnectionRouteEnabled: false,
-        observabilityEnabled: false,
-        storageType: undefined,
-        observabilityStorageType: undefined,
-        observabilityRuntimeStrategy: undefined,
-      });
+    it.each([
+      { method: 'POST' as const, path: '/voice/livekit/recordings/:traceId' },
+      { method: 'GET' as const, path: '/custom/recordings/:traceId' },
+    ])('does not advertise recording review for $method $path', async route => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, undefined, false, { apiRoutes: [route] }),
+      } as any);
+      expect(result).not.toHaveProperty('liveKitRecordingRouteEnabled');
     });
 
     it('should return liveKitConnectionRouteEnabled true for the exact default LiveKit POST route', async () => {
@@ -427,6 +460,7 @@ describe('System Handlers', () => {
         observabilityEnabled: false,
         storageType: 'mock-storage',
         observabilityStorageType: 'MockObservabilityStore',
+        observabilityStorageCapabilities: NO_OBSERVABILITY_CAPABILITIES,
         observabilityRuntimeStrategy: 'realtime',
       });
     });
@@ -439,7 +473,7 @@ describe('System Handlers', () => {
             observability: {
               constructor: { name: '_ObservabilityStoragePostgresVNext' },
               runtimeTracingStrategy: 'insert-only',
-              getFeatures: () => ['metrics', 'logs'],
+              getFeatures: () => ['metrics', 'logs', 'trace-query', 'trace-query-discovery'],
             },
           },
         }),
@@ -450,7 +484,375 @@ describe('System Handlers', () => {
         observabilityStorageCapabilities: {
           metrics: true,
           logs: true,
+          traceQueryDiscovery: true,
         },
+      });
+    });
+
+    it('should not infer discovery support from trace-query support', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, {
+          name: 'mock-storage',
+          stores: {
+            observability: {
+              constructor: { name: 'MockObservabilityStore' },
+              getFeatures: () => ['metrics', 'logs', 'trace-query'],
+            },
+          },
+        }),
+      } as any);
+
+      expect(result).toMatchObject({
+        observabilityStorageCapabilities: {
+          metrics: true,
+          logs: true,
+          traceQueryDiscovery: false,
+        },
+      });
+    });
+
+    describe('observability storage capabilities', () => {
+      // Mirrors ObservabilityStorage: optional methods throw until a store overrides them.
+      class BaseObservabilityStore {
+        async getEntityNames(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getMetricAggregate(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getMetricBreakdown(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getMetricTimeSeries(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getMetricPercentiles(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async listLogs(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getTrace(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async listFeedback(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async createFeedback(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async deleteFeedback(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async updateFeedbackReviewStatus(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getFeedbackAggregate(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getFeedbackBreakdown(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getFeedbackTimeSeries(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+        async getFeedbackPercentiles(): Promise<unknown> {
+          throw new Error('not implemented');
+        }
+      }
+
+      const capabilitiesFor = async (observability: object) => {
+        const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+          mastra: createMockMastra(false, { name: 'mock-storage', stores: { observability } } as MockStorage),
+        } as any);
+        return (result as { observabilityStorageCapabilities?: unknown }).observabilityStorageCapabilities;
+      };
+
+      it('reports every optional API as unsupported for a legacy store without upgrading it', async () => {
+        class LegacyStore extends BaseObservabilityStore {
+          override async getTrace() {
+            return null;
+          }
+        }
+
+        expect(await capabilitiesFor(new LegacyStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
+      });
+
+      it('detects discovery, metrics and logs on stores that implement them without declaring features', async () => {
+        class UndeclaredAnalyticsStore extends BaseObservabilityStore {
+          override async getEntityNames() {
+            return { names: [] };
+          }
+          override async getMetricAggregate() {
+            return {};
+          }
+          override async getMetricBreakdown() {
+            return {};
+          }
+          override async getMetricTimeSeries() {
+            return {};
+          }
+          override async getMetricPercentiles() {
+            return {};
+          }
+          override async listLogs() {
+            return {};
+          }
+        }
+
+        expect(await capabilitiesFor(new UndeclaredAnalyticsStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          metrics: true,
+          logs: true,
+          discovery: { ...NO_OBSERVABILITY_CAPABILITIES.discovery, entityNames: true },
+        });
+      });
+
+      it('requires every method behind a feature on undeclared stores', async () => {
+        class PartialMetricsStore extends BaseObservabilityStore {
+          override async getMetricAggregate() {
+            return {};
+          }
+        }
+
+        expect(await capabilitiesFor(new PartialMetricsStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
+      });
+
+      it('detects overrides through intermediate subclasses', async () => {
+        class AnalyticsStore extends BaseObservabilityStore {
+          override async getEntityNames() {
+            return { names: [] };
+          }
+        }
+        class ExtendedAnalyticsStore extends AnalyticsStore {}
+
+        expect(await capabilitiesFor(new ExtendedAnalyticsStore())).toMatchObject({ discovery: { entityNames: true } });
+      });
+
+      it('uses declared features when the store provides them', async () => {
+        class DeclaredStore extends BaseObservabilityStore {
+          getFeatures() {
+            return [
+              'tag-discovery',
+              'metric-discovery',
+              'delta-polling',
+              'thread-query',
+              'span-query',
+              'trace-query-root-duration',
+              'trace-query-tenant-scope',
+            ] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new DeclaredStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          discovery: { ...NO_OBSERVABILITY_CAPABILITIES.discovery, tags: true, metrics: true },
+          deltaPolling: true,
+          traceQueryRootDuration: true,
+          traceQueryTenantScope: true,
+          threadQuery: true,
+          spanQuery: true,
+        });
+      });
+
+      it.each([
+        { features: ['span-query', 'span-query-context-fields'], supported: true },
+        { features: ['span-query'], supported: false },
+        { features: ['span-query-context-fields'], supported: false },
+      ] as const)('reports expanded span filters for $features as $supported', async ({ features, supported }) => {
+        class SpanQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return features;
+          }
+        }
+
+        expect(await capabilitiesFor(new SpanQueryStore())).toMatchObject({
+          spanQueryContextFields: supported,
+        });
+      });
+
+      it('reports time to first chunk only when the store also serves a trace, thread or span query', async () => {
+        class SpanQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query', 'trace-query-time-to-first-chunk'] as const;
+          }
+        }
+        class NoQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-query-time-to-first-chunk'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new SpanQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanQuery: true,
+          traceQueryTimeToFirstChunk: true,
+        });
+        expect(await capabilitiesFor(new NoQueryStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
+      });
+
+      it('reports the time to first chunk sort only when the store also serves a trace or span query', async () => {
+        class SpanQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query', 'trace-query-time-to-first-chunk-sort'] as const;
+          }
+        }
+        class NoQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['thread-query', 'trace-query-time-to-first-chunk-sort'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new SpanQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanQuery: true,
+          traceQueryTimeToFirstChunkSort: true,
+        });
+        expect(await capabilitiesFor(new NoQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          threadQuery: true,
+        });
+      });
+
+      it('treats a declared feature list as final even when methods are overridden', async () => {
+        // e.g. Spanner with metrics disabled: the methods exist but throw.
+        class OptOutStore extends BaseObservabilityStore {
+          getFeatures() {
+            return [] as const;
+          }
+          override async getMetricAggregate() {
+            throw new Error('metrics are disabled');
+          }
+          override async getEntityNames() {
+            throw new Error('disabled');
+          }
+        }
+
+        expect(await capabilitiesFor(new OptOutStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
+      });
+
+      it('treats trace-query as implying discovery for stores released before per-endpoint discovery features', async () => {
+        class TraceQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['metrics', 'logs', 'trace-query'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new TraceQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          metrics: true,
+          logs: true,
+          discovery: {
+            entityTypes: true,
+            entityNames: true,
+            serviceNames: true,
+            environments: true,
+            tags: true,
+            metrics: true,
+          },
+          traceQuery: true,
+        });
+      });
+
+      it('does not report feedback for stores that implement it without declaring it', async () => {
+        // Feedback is declaration-only: Studio hides the feedback UI behind
+        // this flag, so store versions that predate the declaration don't
+        // advertise it until upgraded.
+        class UndeclaredFeedbackStore extends BaseObservabilityStore {
+          override async listFeedback() {
+            return { feedback: [] };
+          }
+          override async createFeedback() {
+            return undefined;
+          }
+          override async deleteFeedback() {
+            return undefined;
+          }
+          override async updateFeedbackReviewStatus() {
+            return {};
+          }
+          override async getFeedbackAggregate() {
+            return {};
+          }
+          override async getFeedbackBreakdown() {
+            return {};
+          }
+          override async getFeedbackTimeSeries() {
+            return {};
+          }
+          override async getFeedbackPercentiles() {
+            return {};
+          }
+        }
+
+        expect(await capabilitiesFor(new UndeclaredFeedbackStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
+      });
+
+      it('reports feedback for stores that declare it', async () => {
+        class DeclaredFeedbackStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['feedback'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new DeclaredFeedbackStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          feedback: true,
+        });
+      });
+
+      it('reports trace aggregation only for stores that declare it', async () => {
+        class AggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-aggregate'] as const;
+          }
+        }
+        class UndeclaredAggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-query'] as const;
+          }
+          override async aggregateTraces() {
+            return { rows: [], truncated: false };
+          }
+        }
+
+        expect(await capabilitiesFor(new AggregateStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          traceAggregate: true,
+        });
+        expect(await capabilitiesFor(new UndeclaredAggregateStore())).toMatchObject({ traceAggregate: false });
+      });
+
+      it('reports span aggregation only for stores that declare it', async () => {
+        class AggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-aggregate'] as const;
+          }
+        }
+        class UndeclaredAggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query'] as const;
+          }
+          async aggregateSpans() {
+            return { rows: [], truncated: false };
+          }
+        }
+
+        expect(await capabilitiesFor(new AggregateStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanAggregate: true,
+        });
+        expect(await capabilitiesFor(new UndeclaredAggregateStore())).toMatchObject({ spanAggregate: false });
+      });
+
+      it('does not report query refinements for stores without trace or thread queries', async () => {
+        class RefinementsOnlyStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-query-root-duration', 'trace-query-tenant-scope'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new RefinementsOnlyStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
       });
     });
   });

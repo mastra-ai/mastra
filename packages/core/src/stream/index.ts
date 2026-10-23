@@ -12,7 +12,11 @@ export type {
 
   // Chunk Types
   AgentChunkType,
+  ThreadHistoryChunk,
+  ThreadHistoryPayload,
   DataChunkType,
+  UserMessagePendingChunk,
+  UserMessageCancelledChunk,
   NetworkChunkType,
   WorkflowStreamEvent,
   FileChunk,

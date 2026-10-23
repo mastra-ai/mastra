@@ -11,16 +11,36 @@ From the repository root:
 ```shell
 pnpm install
 pnpm --dir mastracode/web install
-pnpm --dir mastracode/web run prebuild
+pnpm factory:build
 ```
 
-`prebuild` builds the linked packages required by the host.
+`factory:build` runs this package's `prebuild`, which builds the linked monorepo packages required by the host. `pnpm factory:dev` doesn't build them, so run `pnpm factory:build` again after pulling changes to those packages.
 
 ## Development
 
-Local development uses LibSQL and local sandboxes. Onboarding requires sign-in and a GitHub App.
+### Guided setup
 
-### Configure local onboarding
+From the repository root, run the guided setup for Factory development:
+
+```shell
+pnpm factory:dev
+```
+
+On the first run, the setup prompts you to:
+
+1. Sign in to Mastra and select an organization, project, and environment.
+2. Select local LibSQL, local PostgreSQL, or a platform-managed PostgreSQL database.
+3. Select a local or platform sandbox.
+
+Selecting local PostgreSQL starts the Docker services. Docker isn't required for LibSQL or a platform-managed database.
+
+The setup stores non-secret selections in `.factory/settings.json`. It writes resolved runtime values, including an organization-scoped platform key, to `mastracode/web/.env`. Both files are ignored by Git. Later runs reuse this configuration and start the API on port `4111` and the Vite UI on port `5173`.
+
+To select different resources, delete `.factory/settings.json` and run `pnpm factory:dev` again. The setup replaces the environment values it manages and preserves unrelated values in `mastracode/web/.env`.
+
+The linked monorepo packages must already be built. Run the commands under [Setup](#setup) first after a fresh checkout.
+
+### Configure local onboarding manually
 
 Create a [GitHub App](https://github.com/settings/apps/new) with URLs matching the mode you will run:
 
@@ -148,6 +168,21 @@ Add these values to `mastracode/web/.env` and restart the server:
 DATABASE_URL=postgres://user:pass@localhost:54329/mastracode_web
 REDIS_URL=redis://localhost:63799
 ```
+
+### Amazon Bedrock
+
+Bedrock authenticates with the server's AWS credentials, not a key each account saves. With sign-in enabled, turn it on for every account by adding these values to `mastracode/web/.env`:
+
+```dotenv
+FACTORY_DEPLOYMENT_MODEL_PROVIDERS=amazon-bedrock
+AWS_REGION=us-east-1
+# A Bedrock API key, or AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY, AWS_PROFILE, an ECS task role, or EKS IRSA
+AWS_BEARER_TOKEN_BEDROCK=...
+```
+
+On EC2, an instance profile alone isn't detected. Add a profile to `~/.aws/config` with `credential_source = Ec2InstanceMetadata` and set `AWS_PROFILE` to that profile.
+
+Every signed-in account can then run Bedrock models, billed to that AWS account. Settings show Bedrock as **From deployment** and offer no key field. Without `FACTORY_DEPLOYMENT_MODEL_PROVIDERS`, Bedrock stays hidden and runs fail with a message that tells the operator what to set. Local mode without sign-in uses any AWS credentials in the environment, as before.
 
 ## Tests
 

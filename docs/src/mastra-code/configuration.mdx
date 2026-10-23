@@ -75,7 +75,15 @@ Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes
 
 ### Interactive API key prompt
 
-`/models` switches model packs. Built-in packs keep every mode on one provider. Use `/model` to override the current mode with another model from that provider. Modified built-in packs are labeled in `/models`; selecting one highlights the overridden modes and lets you activate its overrides or reset it to the original built-in models. To mix providers, create or edit a custom pack with `/models`.
+`/models` switches model packs. Built-in packs keep every mode on one provider. Use `/model` to change the active pack's model for the current mode. Modified built-in packs are labeled in `/models`; selecting one highlights the overridden modes and lets you activate its overrides or reset it to the original built-in models. To mix providers, create or edit a custom pack with `/models`.
+
+Model choices belong to the pack, not to an individual thread. Updating a pack changes that mode's model for every thread that uses the pack. Each thread remembers its active pack and current model. When you switch modes, Mastra Code applies the active pack's model for the new mode.
+
+Start Mastra Code with `--pack <id>` to begin the session on a specific pack: a built-in pack id such as `anthropic` or `openai`, `custom:<name>`, or a bare custom-pack name. This applies the pack the way **Activate** in `/models` does — it becomes the default pack and is applied to the session, including any thread resumed at startup. An unknown id fails fast and lists the valid packs. `MASTRACODE_MODEL_ID` also sets a startup model; when both are given, `--pack` wins.
+
+`/models` also configures **fallback packs**: select a pack and choose **Set fallback…** from its action menu. When every account serving the active pack's provider is unavailable, either rate-limited or down after retries, the turn hops to the fallback pack's model for that mode. Fallbacks work for built-in and custom packs, and chains are allowed (A → B → C). Cycles are capped at one revisit per cascade (A → B → A), then the error surfaces. Every hop renders a notice in the transcript and is saved in the thread history. After a hop, the thread stays on the landed pack until you switch back with `/models`. There is no automatic recovery.
+
+When the active pack sets a concrete [memory model](#om-model-settings), the same chain also covers observational memory. If that model's provider is unavailable, the role falls back to the next pack's memory model in chain order.
 
 If the selected model needs a provider key, Mastra Code prompts for the key and displays its environment variable name, such as `ANTHROPIC_API_KEY`.
 
@@ -88,15 +96,57 @@ Stored API keys persist across sessions. On the next startup, Mastra Code loads 
 
 ### OAuth login (optional)
 
-If you have an Anthropic Claude Max, OpenAI ChatGPT Plus, or Kimi For Coding subscription, run `/login` to sign in with an account. You can also run `/connect` and select **Sign in with an account**.
+If you have a supported provider account or subscription, run `/login` to sign in. You can also run `/connect` and select **Sign in with an account**.
 
 | Provider | OAuth flow | What you get |
 | - | - | - |
 | **Anthropic** | Claude Max subscription | Access to Claude models via your subscription |
 | **OpenAI** | ChatGPT Plus / Codex | Access to OpenAI models via your subscription |
+| **GitHub Copilot** | Device code | Access to models available through your Copilot subscription |
 | **Kimi For Coding** | Device code | Access to Kimi For Coding models via your subscription |
+| **xAI** | Device code | Access to Grok models via your xAI account |
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
+
+#### Multiple accounts per provider
+
+You can sign in with more than one account for the same provider — for example, two Claude Max accounts or four Kimi For Coding accounts. Run `/login` and select a provider you are already signed in to: instead of replacing your credentials, Mastra Code opens the account manager for that provider.
+
+The account manager lists every registered account with its label and marks the active one. Selecting an account opens a submenu for it:
+
+- **Set as active** — makes it the active account used for new requests (only shown for accounts that aren't active).
+- **Re-authenticate…** — refreshes the account's credentials by signing in again.
+- **Remove…** — deletes the account (after confirmation).
+
+**Add another account** runs the normal sign-in flow and appends the account, then returns to the manager. The new account is not activated — open its submenu and choose **Set as active** to switch to it.
+
+Exactly one account per provider is active at a time; the others are kept for rotation and switching. After a successful sign-in you can name the account. ChatGPT and xAI accounts pre-fill the account's email, and GitHub Copilot accounts pre-fill the GitHub login when available. `/logout` still signs out of the provider entirely, removing every registered account.
+
+#### Subscription routing by model pack
+
+A model pack can pin a different account for each model. In `/models`, select a pack, choose **Set subscription routing…**, select a model, then select an account. The picker previews the effect before you save it.
+
+A selected account is used **exclusively** for that pack and model. If it cannot serve a request, Mastra Code does not fall back to another subscription on the provider — it moves to the pack's configured fallback chain instead, if one is set. This is what keeps a heavy model from consuming the quota on every subscription you own: pin the heavy model to one account and a lighter model to another, and each subscription's usage is spent only where you intended.
+
+Select **Automatic** to leave the route unpinned — the model then rotates through the provider's accounts (see below).
+
+Preferences belong to the pack and resolved model. Two packs that use the same model can pin different accounts. When a request hops to a fallback pack, that pack's own subscription routing applies.
+
+#### Automatic account rotation
+
+For eligible failures on the active account, Mastra Code automatically rotates to the next account in the pool and retries:
+
+- **Rate limits and quota exhaustion** (HTTP 429, 402, or provider usage-limit errors) rotate immediately.
+- **Auth failures** (HTTP 401/403) first force one token refresh of the current account; if the refreshed token still fails, the pool rotates.
+- **Server errors and network outages** first exhaust the normal transient retry budget; if the provider still can't serve the request, the error surfaces without another account being activated.
+
+Rotation starts on the account the pool is currently on — the account the last rotation left active — and walks the provider's accounts in the order they were added, wrapping once. Each account is tried at most once per request. When every account in the pool has been tried, the error surfaces normally or the request moves to the configured fallback pack. Other errors — malformed requests (HTTP 400 with no provider usage-limit message) and anything unrecognized — never rotate; they surface immediately.
+
+Rotation applies to **Automatic** routes only. A model pinned to a specific account never rotates to a sibling account; its failures go to the pack's fallback chain.
+
+Rotation and transient retries share one retry budget, so after a rotation the remaining accounts may see fewer transient retries each — the next account is always preferred over further retries on a failing one.
+
+Every switch is shown in the transcript as a one-line notice (for example, `Switched Kimi account: Work → Personal (rate limit)`) and is persisted in the thread history, so it also appears when you reopen the thread later. A request that begins on a preferred account produces no separate notice; only switches and failures are announced. When a pinned account can't serve a request, the notice names that account (`Pinned Anthropic account unavailable (pool exhausted)`) rather than reporting the whole pool as unavailable.
 
 When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/connect` or during onboarding, Mastra Code asks how you want to sign in:
 
@@ -656,6 +706,28 @@ Credentials and global settings are stored alongside the database. To switch to 
 
 If a PostgreSQL connection fails on startup, Mastra Code falls back to LibSQL and shows a warning so you can fix the connection via `/settings`.
 
+### Reclaim disk space
+
+The database grows as threads, messages, and telemetry accumulate. Deleting rows doesn't shrink the file on its own, because SQLite keeps the freed pages for reuse.
+
+In a session, run `/prune` to delete data older than the retention policies. Run `/prune vacuum` to compact the files afterward and return that space to the operating system. Add `keep-memory` to keep chat history. Both forms close the session when they finish, because maintenance needs the database to itself.
+
+If a session won't start, run the same maintenance from a shell instead:
+
+```bash
+mastracode prune                 # delete rows past the retention policies
+mastracode prune --vacuum        # then compact the files to reclaim disk
+mastracode prune --keep-memory   # keep chat history
+```
+
+`--vacuum` needs enough free disk for the compacted copy before it can swap that copy into place. Compaction only applies to a local libsql database. With remote libsql or Postgres, `prune` deletes rows but doesn't compact or return space to the operating system.
+
+`mastracode prune` and `/prune` refuse to run while any other Mastra Code session is open. A session that starts while either is running waits until it finishes.
+
+The lock that coordinates this lives in the app data directory, not next to the database. Sessions that share one `MASTRA_DB_PATH` but use different `MASTRA_APP_DATA_DIR` values don't see each other, so close them all yourself before pruning.
+
+The retention defaults are 14 days for traces and logs, 30 days for scorer results and workflow snapshots, and 90 days for chat history.
+
 ## Observational memory
 
 [Observational memory](https://mastra.ai/docs/memory/observational-memory) (OM) uses background agents to maintain a dense log of observations and reflections about the conversation, providing long-term context that persists across sessions.
@@ -667,7 +739,9 @@ Control whether observations are scoped to individual threads or shared across a
 | Scope | Behavior |
 | - | - |
 | `thread` (default) | Observations are private to each conversation thread |
-| `resource` | Observations are shared across all threads for the same project |
+| `resource` (deprecated) | Observations are shared across all threads for the same project |
+
+`resource` scope is deprecated and will be removed in a future release because it works much worse than thread scope for prompt caching and agent understanding. See [resource scope (deprecated)](https://mastra.ai/docs/memory/observational-memory#resource-scope-deprecated).
 
 Configure the scope through:
 
@@ -677,7 +751,19 @@ Configure the scope through:
 
 ### OM model settings
 
-The observer and reflector models default to `google/gemini-2.5-flash`. Set them through the `/om` panel or in the controller state.
+The observer and reflector default to **Auto**. Each role follows the active main model's provider, using that provider's built-in low-cost memory model when available and otherwise using the active main model. Changing the main model changes the effective model for automatic roles without changing their saved selection.
+
+Use the `/memory` panel to select a concrete model or reset either role to **Auto** independently. Concrete selections remain pinned when the main model changes.
+
+Observer and Reflector selections saved before Auto existed stay pinned after upgrading. Choose **Auto** in `/memory` to switch a role back.
+
+Custom model packs can also set a memory model in `/models`. The pack's memory model is more specific than `/memory`, so while the pack is active it applies to both roles, including roles pinned in `/memory`. The `/memory` panel and status line show the model the pack selects:
+
+| Pack memory model | Behavior |
+| - | - |
+| Not set (default) | Each role uses its `/memory` selection |
+| **Auto** | Both roles use automatic selection |
+| Concrete model | Both roles use that model. If its provider is unavailable, the role uses the next fallback pack's memory model |
 
 ### OM thresholds
 
@@ -688,12 +774,12 @@ The observer and reflector models default to `google/gemini-2.5-flash`. Set them
 
 ## Color theme
 
-Mastra Code detects your terminal's color scheme and applies a matching dark or light theme. You can override the detected theme with the `/theme` slash command or the `MASTRA_THEME` environment variable.
+Mastra Code detects your terminal's color scheme and applies a matching dark or light theme. Pick a bundled theme, follow your terminal with a theme pair, or load your own theme JSON. See [Themes](/themes) for the bundled list and the file format.
 
 ### Detection order
 
-1. `MASTRA_THEME` environment variable: explicit `dark` or `light`
-1. Persisted setting from `/theme` command (stored in `settings.json`)
+1. `MASTRA_THEME` environment variable: `dark`, `light`, a theme name, or a `light/dark` pair
+1. Persisted setting from `/theme` (stored in `settings.json`)
 1. OSC 11 query: asks your terminal for its actual background color
 1. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
 1. Falls back to dark theme
@@ -703,12 +789,17 @@ Mastra Code detects your terminal's color scheme and applies a matching dark or 
 Use the `/theme` command to change the theme at runtime:
 
 ```
-/theme light
-/theme dark
-/theme auto
+/theme                                      # interactive picker with live preview
+/theme light                                # built-in light
+/theme dark                                 # built-in dark
+/theme auto                                 # follow the terminal with the built-in palettes
+/theme tokyo-night                          # a bundled or custom theme
+/theme catppuccin-latte/catppuccin-mocha    # follow the terminal with a light/dark pair
+/theme status                               # active mode and stored preference
+/theme list                                 # all available themes
 ```
 
-Running `/theme` with no arguments shows the current theme. The choice is persisted across sessions.
+The choice is persisted across sessions.
 
 ## macOS sleep prevention
 
@@ -729,10 +820,10 @@ MASTRACODE_DISABLE_CAFFEINATE=1 mastracode
 | `MASTRA_DB_PATH` | Override the local database file path |
 | `MASTRA_USER_ID` | Override the auto-detected user identity |
 | `MASTRA_RESOURCE_ID` | Override the auto-detected project resource ID |
-| `MASTRA_OM_SCOPE` | Observational memory scope (`thread` or `resource`) |
+| `MASTRA_OM_SCOPE` | Observational memory scope (`thread`, or deprecated `resource`) |
 | `DEFAULT_OM_MODEL_ID` | Default model for OM observer and reflector |
 | `MASTRA_PLANS_DIR` | Override the directory where approved plans are saved (default: app data directory) |
-| `MASTRA_THEME` | Color theme override (`dark` or `light`) |
+| `MASTRA_THEME` | Color theme override (`dark`, `light`, a theme name, or a `light/dark` pair) |
 | `MASTRACODE_SHELL` | Direct TUI `!` shell executable override |
 | `MASTRACODE_SHELL_MODE` | Direct TUI `!` shell mode (`default`, `path`, or `login`) |
 | `MASTRACODE_DISABLE_CAFFEINATE` | Disable active-run sleep prevention on macOS when set to `1` |
@@ -757,6 +848,71 @@ Resource IDs determine how threads are grouped. By default, Mastra Code generate
 ```
 
 You can also set `MASTRA_RESOURCE_ID` as an environment variable. Two users who set the same resource ID share threads and observations for that resource.
+
+## Cross-agent communication
+
+Cross-agent communication is experimental and off by default.
+
+### Enable cross-agent communication
+
+Enable it in Mastra Code with the `/settings` toggle "Experimental cross-agent communication" and restart. Embedded clients can set `crossAgentSignals: true` when calling `createMastraCode()`. The setting enables thread ownership advertisements and peer discovery. It also makes the agent connection tools available, and lets peer discovery reach instances in other projects on the same machine (see [Discover agents in other projects](#discover-agents-in-other-projects)).
+
+```typescript
+import { createMastraCode } from 'mastracode'
+
+const mastraCode = await createMastraCode({
+  crossAgentSignals: true,
+})
+```
+
+### Discover and connect to peers
+
+Mastra Code can use notification signals to communicate between agent threads. A peer is an exact `{ agentId, resourceId, threadId }` endpoint. Discovery is a point-in-time advertisement that the exact endpoint is available now. It isn't a durable connection or a guarantee that delivery will succeed.
+
+`agent_connections_list` returns one `peers` collection. Each peer includes:
+
+- `relationship`: `none` or `saved`. This is the authoritative durable state for the current sender thread.
+- `presence`: `advertised` or `absent`. This reflects the current discovery pass.
+- `displayStatus`: A derived, presentational value: `discovered`, `connected`, or `saved`.
+- `canAttemptSend`: `true` only when the peer is both saved and currently advertised.
+
+The displayed statuses mean:
+
+| Status | Meaning | Can attempt a send? |
+| - | - | - |
+| `[discovered]` | Advertised now, but not saved by the current sender thread. | No |
+| `[connected]` | Saved by the current sender thread and advertised now. | Yes |
+| `[saved]` | Saved by the current sender thread, but not advertised now. | No |
+
+Use the connection tools for distinct operations:
+
+- `agent_connect` saves a freshly discovered exact peer in the current sender thread.
+- `agent_disconnect` removes a saved peer from the current sender thread. The peer doesn't need to be currently advertised, and repeated disconnects are safe.
+- `agent_signal_send` requires the exact peer to remain saved and freshly advertised at send time. A previously discovered or recently seen peer that's absent from the current discovery pass isn't sendable.
+
+Saved connections remain in the sender thread until explicitly disconnected. Every send independently refreshes discovery and verifies the exact endpoint before routing begins. A saved connection therefore records collaboration intent. It doesn't indicate current presence.
+
+### Send and receive signals
+
+After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send that fails a direct delivery because no thread owner acknowledged it isn't lost: the signal stays pending in the target's notification inbox and the send reports `persist` instead of claiming delivery. The notification dispatcher retries that delivery on its own, so the sender doesn't need to resend it. The `messageId` isn't recorded in sent history and isn't rejected as a duplicate, although the pending notification still matches on it. A resend with the same `messageId` merges into that notification while it's pending, and delivers a second copy once the retry has succeeded. A send made with `expectsReply: true` returns an error there, because the reply obligation isn't established until the signal is delivered.
+
+When the delivery policy routes a signal to a notification summary rather than delivering it directly, the send records the `messageId`, so retrying with the same id reports a duplicate instead of routing again. A low-priority send always takes this route and reports `persist`. A high- or medium-priority send to an active thread takes it too, but there the summary signal is emitted immediately, so the send reports that signal's routing result (`wake`, `deliver`, or `persist`) and records the `messageId` the same way, including when `expectsReply: true`. Only when the policy schedules a summary without emitting a signal at send time does an `expectsReply: true` send fail to establish its reply obligation: it returns an error and doesn't record the send in sent history, so establishing the reply obligation takes a new signal at a priority that routes directly.
+
+### Discover agents in other projects
+
+With cross-agent communication on, `agent_connections_list` lists Mastra Code instances in every project on the same machine, including the current one. An instance can connect to and message an instance in another project, and receive its replies. This needs Unix socket pub/sub. The Mastra Code CLI turns it on by default. Embedded clients pass `unixSocketPubSub: true` alongside `crossAgentSignals: true` to `createMastraCode()`. It doesn't apply in these cases:
+
+- On Windows.
+- When you pass your own `pubsub`.
+- When the resource ID, set through `MASTRA_RESOURCE_ID` or `resourceId` in `.mastracode/database.json`, can't be used as a directory name. That covers IDs that are empty, are longer than 128 characters, contain `/`, `\` or control characters, or equal `.`, `..` or `_shared`. Mastra Code logs one warning at startup, and the instance only lists instances that share its resource ID.
+
+Mastra Code routes a thread's messages and run leases to the socket directory of the thread's project. Thread-owner lookup and peer discovery, which lists the threads you can connect to, both run in a shared `/tmp/mc/_shared` directory. Instances running versions before this change can't see or be seen by updated instances, so restart every instance after updating.
+
+### Security and socket isolation
+
+Any local process running as your user can list the threads your instances advertise and message them, so only turn on cross-agent communication on machines and accounts you trust.
+
+To isolate an instance or a test from the shared `/tmp/mc` directory, set `MASTRACODE_SIGNALS_SOCKET_ROOT` to another absolute path. Relative paths are ignored. Keep the path short, because macOS limits Unix socket paths to 104 bytes. The root also holds every thread's run and ownership leases. An instance with a different root doesn't coordinate threads with instances that use the default root.
 
 ## Telemetry
 

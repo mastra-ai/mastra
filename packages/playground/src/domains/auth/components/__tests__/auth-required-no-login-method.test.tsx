@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthenticatedCapabilities, PublicAuthCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { AuthenticatedCapabilities, PublicAuthCapabilities } from '../../types';
 import { AuthRequired } from '../auth-required';
 import { RoutePermissionsGate } from '../route-permissions-gate';
 import {
@@ -81,7 +81,10 @@ const Harness = () => {
 };
 
 const renderAuthRequiredAt = async (pathname: string) => {
-  server.use(http.get(`${BASE_URL}/`, () => HttpResponse.json({ status: 'ok' })));
+  // The instance status probe hits the capabilities route before the client renders; keep it out of handler counts.
+  server.use(
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(noLoginMethodCapabilities), { once: true }),
+  );
 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -145,10 +148,10 @@ const useHeaderGatedHandler = (authorization: string) => {
 };
 
 const saveAuthorizationHeader = (value: string) => {
-  fireEvent.click(screen.getByRole('button', { name: 'Add Header' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
   fireEvent.change(screen.getByPlaceholderText('e.g. Authorization'), { target: { value: 'Authorization' } });
   fireEvent.change(screen.getByPlaceholderText('e.g. Bearer <token>'), { target: { value } });
-  fireEvent.submit(screen.getByRole('button', { name: 'Save Headers' }).closest('form')!);
+  fireEvent.submit(screen.getByRole('button', { name: 'Save headers' }).closest('form')!);
 };
 
 afterEach(() => {
@@ -184,7 +187,7 @@ describe('AuthRequired', () => {
 
       await renderAuthRequiredAt('/agents');
 
-      expect(screen.getByRole('button', { name: 'Add Header' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Add header' })).toBeDefined();
     });
 
     // The header form has no platform carve-out: a header-only auth provider
@@ -196,7 +199,7 @@ describe('AuthRequired', () => {
 
         await renderAuthRequiredAt('/agents');
 
-        expect(screen.getByRole('button', { name: 'Add Header' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Add header' })).toBeDefined();
       });
     });
 

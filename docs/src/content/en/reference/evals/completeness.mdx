@@ -44,7 +44,7 @@ The `.run()` method returns a result in the following shape:
 ```typescript oxfmt:false
 {
   runId: string,
-  extractStepResult: {
+  preprocessStepResult: {
     inputElements: string[],
     outputElements: string[],
     missingElements: string[],
@@ -71,9 +71,9 @@ The extraction process includes:
 - Special handling of short words (3 characters or less)
 - Deduplication of elements
 
-### `extractStepResult`
+### `preprocessStepResult`
 
-From the `.run()` method, you can get the `extractStepResult` object with the following properties:
+From the `.run()` method, you can get the `preprocessStepResult` object with the following properties:
 
 - **inputElements**: Key elements found in the input (e.g., nouns, verbs, topics, terms).
 - **outputElements**: Key elements found in the output.

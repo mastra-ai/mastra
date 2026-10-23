@@ -8,6 +8,9 @@ import jsonSchemaToZodOriginal, {
   parseSchema,
 } from 'json-schema-to-zod';
 
+// Records are always emitted as `z.record(z.string(), value)`. On Zod v4 < 4.4.0 (including
+// zod@3.25.x's `zod/v4` layer), the single-arg form `z.record(value)` stores the argument as
+// `keyType` and leaves `valueType` undefined, which throws when the generated code is evaluated.
 function parseObject(objectSchema: JsonSchemaObject & { type: 'object' }, refs: Refs): string {
   let properties: string | undefined = undefined;
 
@@ -84,14 +87,14 @@ function parseObject(objectSchema: JsonSchemaObject & { type: 'object' }, refs: 
       }
     } else {
       if (additionalProperties) {
-        patternProperties += `z.record(z.union([${[
+        patternProperties += `z.record(z.string(), z.union([${[
           ...Object.values(parsedPatternProperties),
           additionalProperties,
         ].join(', ')}]))`;
       } else if (Object.keys(parsedPatternProperties).length > 1) {
-        patternProperties += `z.record(z.union([${Object.values(parsedPatternProperties).join(', ')}]))`;
+        patternProperties += `z.record(z.string(), z.union([${Object.values(parsedPatternProperties).join(', ')}]))`;
       } else {
-        patternProperties += `z.record(${Object.values(parsedPatternProperties)})`;
+        patternProperties += `z.record(z.string(), ${Object.values(parsedPatternProperties)})`;
       }
     }
 
@@ -162,8 +165,8 @@ function parseObject(objectSchema: JsonSchemaObject & { type: 'object' }, refs: 
     : patternProperties
       ? patternProperties
       : additionalProperties
-        ? `z.record(${additionalProperties})`
-        : 'z.record(z.any())';
+        ? `z.record(z.string(), ${additionalProperties})`
+        : 'z.record(z.string(), z.any())';
 
   if (its.an.anyOf(objectSchema)) {
     output += `.and(${parseAnyOf(
@@ -218,7 +221,7 @@ const parserOverride = (schema: JsonSchemaObject, refs: Refs) => {
       item => typeof item === 'object' && its.an.object(item) && item.properties !== undefined,
     );
     if (schema.anyOf.length > 1 && allObjects) {
-      const propertiesWithConst: string[][] = schema.anyOf.reduce((acc, item) => {
+      const propertiesWithConst: string[][] = schema.anyOf.reduce<string[][]>((acc, item) => {
         if (typeof item === 'object' && its.an.object(item)) {
           const propertyWithConst = Object.entries(item.properties ?? {}).filter(
             ([_, value]) => typeof value === 'object' && (value as any)?.const !== undefined,
@@ -229,7 +232,7 @@ const parserOverride = (schema: JsonSchemaObject, refs: Refs) => {
           }
         }
         return acc;
-      }, [] as string[][]);
+      }, []);
 
       if (propertiesWithConst.length === schema.anyOf.length) {
         if (seen) {

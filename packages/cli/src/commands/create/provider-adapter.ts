@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -22,20 +21,20 @@ export const MANAGED_PROVIDER_CONFIGS: Record<CreateLLMProvider, ManagedProvider
   },
   anthropic: {
     displayName: 'Anthropic',
-    primaryModel: 'anthropic/claude-sonnet-5',
-    observationalModel: 'anthropic/claude-haiku-4-5',
+    primaryModel: 'anthropic/claude-sonnet-5-5',
+    observationalModel: 'anthropic/claude-haiku-5-5',
     apiKeyEnv: 'ANTHROPIC_API_KEY',
   },
   google: {
     displayName: 'Google Gemini',
-    primaryModel: 'google/gemini-3.5-flash',
-    observationalModel: 'google/gemini-3.5-flash',
+    primaryModel: 'google/gemini-3.8-flash',
+    observationalModel: 'google/gemini-3.8-flash',
     apiKeyEnv: 'GOOGLE_GENERATIVE_AI_API_KEY',
   },
   xai: {
     displayName: 'xAI',
-    primaryModel: 'xai/grok-4.3',
-    observationalModel: 'xai/grok-4.3',
+    primaryModel: 'xai/grok-4.7',
+    observationalModel: 'xai/grok-4.7',
     apiKeyEnv: 'XAI_API_KEY',
   },
 };
@@ -177,7 +176,10 @@ function adaptReadme(
 }
 
 async function writeSecureEnv(envPath: string, content: string): Promise<boolean> {
-  const tempPath = path.join(path.dirname(envPath), `.env.mastra-create-${process.pid}-${randomUUID()}.tmp`);
+  const tempPath = path.join(
+    path.dirname(envPath),
+    `.env.mastra-create-${process.pid}-${globalThis.crypto.randomUUID()}.tmp`,
+  );
   try {
     await fs.writeFile(tempPath, content, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
     if (process.platform !== 'win32') await fs.chmod(tempPath, 0o600);

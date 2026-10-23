@@ -514,7 +514,6 @@ const results = await vectorStore.query({
 
 | Operator | Description |
 | - | - |
-| `$eq` | Equal to |
 | `$ne` | Not equal to |
 | `$gt` | Greater than |
 | `$gte` | Greater than or equal |
@@ -527,10 +526,9 @@ const results = await vectorStore.query({
 
 ## Architecture
 
-`ConvexVector` stores vectors in the `mastra_vectors` table with the following structure:
+`ConvexVector` stores each index in its own table named `mastra_vector_{indexName}`. Each record has the following structure:
 
 - `id`: Unique vector identifier
-- `indexName`: Name of the index
 - `embedding`: The vector data (array of floats)
 - `metadata`: Optional JSON metadata
 

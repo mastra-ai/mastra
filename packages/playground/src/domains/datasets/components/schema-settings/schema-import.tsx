@@ -1,9 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useWorkflowSchema } from '@mastra/react/hooks/datasets';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { Download } from 'lucide-react';
 import { useState } from 'react';
-import { useWorkflowSchema } from '../../hooks/use-workflow-schema';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 interface SchemaImportProps {
   schemaType: 'input' | 'output';
@@ -79,10 +80,11 @@ export function SchemaImport({ schemaType, onImport }: SchemaImportProps) {
   const [sourceType, setSourceType] = useState<SourceType | ''>('');
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
 
-  const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
-  const { data: workflowSchema, isLoading: schemaLoading } = useWorkflowSchema(
-    sourceType === 'workflow' ? selectedWorkflow : null,
-  );
+  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({});
+  const { data: workflowSchema, isLoading: schemaLoading } = useWorkflowSchema({
+    workflowId: sourceType === 'workflow' ? selectedWorkflow : null,
+    queryOptions: { enabled: !!(sourceType === 'workflow' ? selectedWorkflow : null) },
+  });
 
   const workflowOptions = workflows ? Object.entries(workflows) : [];
 
@@ -121,7 +123,7 @@ export function SchemaImport({ schemaType, onImport }: SchemaImportProps) {
   return (
     <div className="flex items-center gap-2">
       {/* Source type selector */}
-      <Select value={sourceType} onValueChange={v => setSourceType(v as SourceType | '')}>
+      <Select value={sourceType} onValueChange={v => setSourceType(v)}>
         <SelectTrigger size="sm" className="w-28">
           <SelectValue placeholder="Import..." />
         </SelectTrigger>
@@ -157,11 +159,15 @@ export function SchemaImport({ schemaType, onImport }: SchemaImportProps) {
         </Select>
       )}
 
-      <Button size="sm" variant="outline" onClick={handleImport} disabled={!canImport()} icon={<Download />}>
+      <Button size="sm" onClick={handleImport} disabled={!canImport()} icon={<Download />}>
         Import
       </Button>
 
-      {showNoSchemaWarning && <span className="text-neutral3 text-ui-sm">No {schemaType} schema</span>}
+      {showNoSchemaWarning && (
+        <Txt as="span" variant="caption" tone="muted">
+          No {schemaType} schema
+        </Txt>
+      )}
     </div>
   );
 }

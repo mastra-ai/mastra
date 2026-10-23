@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
+import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CodeEditor } from '../code-editor';
+import { Toaster } from '@/lib/toast';
 
 const codeMirrorProps = vi.hoisted(() => [] as Array<{ extensions: unknown[] }>);
 
@@ -65,6 +67,31 @@ describe('CodeEditor — what it shows', () => {
 
     expect(lastProps()?.['aria-label']).toBe('Code editor');
   });
+
+  it('associates validation state with the editable content', () => {
+    render(
+      <CodeEditor
+        id="input-provider-options"
+        value="{}"
+        showCopyButton={false}
+        aria-label="Provider options"
+        aria-invalid
+        aria-describedby="error-provider-options"
+      />,
+    );
+
+    const parent = document.createElement('div');
+    const view = new EditorView({
+      state: EditorState.create({ extensions: lastProps()?.extensions ?? [] }),
+      parent,
+    });
+
+    expect(view.contentDOM.id).toBe('input-provider-options');
+    expect(view.contentDOM.getAttribute('aria-label')).toBe('Provider options');
+    expect(view.contentDOM.getAttribute('aria-invalid')).toBe('true');
+    expect(view.contentDOM.getAttribute('aria-describedby')).toBe('error-provider-options');
+    view.destroy();
+  });
 });
 
 describe('CodeEditor — the copy button', () => {
@@ -78,6 +105,56 @@ describe('CodeEditor — the copy button', () => {
     render(<CodeEditor value="x" showCopyButton={false} />);
 
     expect(screen.queryByRole('button', { name: /copy/i })).toBeNull();
+  });
+});
+
+describe('CodeEditor — the format button', () => {
+  it('is left out unless the caller asks for it', () => {
+    render(<CodeEditor value="{}" onChange={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: 'Format JSON' })).toBeNull();
+  });
+
+  it('is left out when there is nothing to write the formatted JSON back to', () => {
+    render(<CodeEditor value="{}" showFormatButton />);
+    render(<CodeEditor value="{}" onChange={vi.fn()} editable={false} showFormatButton />);
+    render(<CodeEditor value="# hi" onChange={vi.fn()} language="markdown" showFormatButton />);
+
+    expect(screen.queryByRole('button', { name: 'Format JSON' })).toBeNull();
+  });
+
+  it('rewrites the JSON formatted, without a trailing newline', async () => {
+    const onChange = vi.fn();
+    render(
+      <CodeEditor
+        value='[{"toolName":"getWeather","args":{"city":"Paris"},"output":{"temp":18,"conditions":"Sunny"}}]'
+        onChange={onChange}
+        showFormatButton
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format JSON' }));
+
+    await waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith(
+        '[\n  {\n    "toolName": "getWeather",\n    "args": { "city": "Paris" },\n    "output": { "temp": 18, "conditions": "Sunny" }\n  }\n]',
+      ),
+    );
+  });
+
+  it('leaves invalid JSON untouched and says why', async () => {
+    const onChange = vi.fn();
+    render(
+      <>
+        <Toaster />
+        <CodeEditor value='{"city": ' onChange={onChange} showFormatButton />
+      </>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format JSON' }));
+
+    expect(await screen.findByText('Can’t format: the JSON is invalid')).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 
@@ -171,12 +248,12 @@ describe('CodeEditor — language extensions', () => {
 describe('CodeEditor — passing its settings through', () => {
   it('shows line numbers unless the caller turns them off', () => {
     render(<CodeEditor value="x" showCopyButton={false} />);
-    expect(lastProps()?.basicSetup).toEqual({ lineNumbers: true });
+    expect(lastProps()?.basicSetup).toEqual({ lineNumbers: true, foldGutter: false });
 
     cleanup();
 
     render(<CodeEditor value="x" showCopyButton={false} lineNumbers={false} />);
-    expect(lastProps()?.basicSetup).toEqual({ lineNumbers: false });
+    expect(lastProps()?.basicSetup).toEqual({ lineNumbers: false, foldGutter: false });
   });
 
   it('hands over the placeholder, focus and change handler it was given', () => {
@@ -195,16 +272,9 @@ describe('CodeEditor — passing its settings through', () => {
     expect(lastProps()?.style).toEqual({ height: '100%' });
   });
 
-  it('takes the frame the caller asks for', () => {
-    const { container } = render(<CodeEditor value="x" showCopyButton={false} />);
-    expect((container.firstElementChild as HTMLElement).classList.contains('border-border1')).toBe(true);
-
-    cleanup();
-
-    const embedded = render(<CodeEditor value="x" showCopyButton={false} variant="embedded" />);
-    const root = embedded.container.firstElementChild as HTMLElement;
-    expect(root.classList.contains('border-none')).toBe(true);
-    expect(root.classList.contains('border-border1')).toBe(false);
+  it('drops its border in the embedded variant', () => {
+    const { container } = render(<CodeEditor value="x" showCopyButton={false} variant="embedded" />);
+    expect((container.firstElementChild as HTMLElement).classList.contains('border-none')).toBe(true);
   });
 
   it('rebuilds its extensions when the language changes', () => {

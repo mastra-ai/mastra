@@ -16,7 +16,12 @@ import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+  isDurableEngineVariant,
+} from '../aimock-scenario';
 
 describeForAllEngines('AIMock loop scenario: input step processor (per-step)', engine => {
   const getMock = useLoopScenarioAimock();
@@ -184,7 +189,7 @@ describeForAllEngines('AIMock loop scenario: input step processor (per-step)', e
     // First call: no completed steps yet.
     expect(stepsByCall[0]).toEqual([]);
 
-    if (engine === 'durable') {
+    if (isDurableEngineVariant(engine)) {
       // The durable workflow keeps completed steps on its workflow state and
       // never forwards them to processInputStep, so there is nothing to assert
       // about step content here. Tracked separately from this fix.

@@ -1,25 +1,3 @@
-/**
- * BrowserContextProcessor
- *
- * Input processor that injects browser context into agent prompts.
- * Similar to ChatChannelProcessor for channels.
- *
- * - `processInput`: Adds a system message with stable context (provider, sessionId, headless mode).
- * - `processInputStep`: At step 0, adds a new user message with browser context as a `<system-reminder>`.
- *   This preserves prompt cache by not modifying existing messages in history.
- *
- * Reads from `requestContext.get('browser')`.
- *
- * @example
- * ```ts
- * const agent = new Agent({
- *   browser: new AgentBrowser({ ... }),
- *   inputProcessors: [new BrowserContextProcessor()],
- * });
- * ```
- */
-
-import { randomUUID } from 'node:crypto';
 import type {
   ComputeStateSignalArgs,
   ComputeStateSignalResult,
@@ -27,7 +5,7 @@ import type {
   ProcessInputResult,
 } from '../processors/index';
 
-const BROWSER_PROCESS_ID = randomUUID();
+const BROWSER_PROCESS_ID = globalThis.crypto.randomUUID();
 
 /**
  * Browser context stored in RequestContext.
@@ -87,6 +65,13 @@ export interface BrowserContext {
 export class BrowserContextProcessor {
   readonly id = 'browser-context';
   readonly stateId = 'browser';
+
+  constructor(options: { stateSignal?: boolean } = {}) {
+    // State signals are persisted per thread, so memory-less agents must not expose the hook.
+    if (options.stateSignal === false) {
+      Object.defineProperty(this, 'computeStateSignal', { value: undefined });
+    }
+  }
 
   processInput(args: ProcessInputArgs): ProcessInputResult {
     const ctx = args.requestContext?.get('browser') as BrowserContext | undefined;

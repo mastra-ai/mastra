@@ -1,23 +1,37 @@
+import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
+import { MastraFGAPermissions } from '../../auth/ee';
+import type { MastraFGAPermissionInput } from '../../auth/ee';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
+import type { MastraLanguageModel, MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } from '../../memory/types';
 import { EntityType, SpanType, createObservabilityContext, getOrCreateSpan } from '../../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
+import type {
+  InputProcessorOrWorkflow,
+  LLMRequestProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  ErrorProcessorOrWorkflow,
+} from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import {
   RequestContext,
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_INHERITED_MEMORY_KEY,
+  MASTRA_SCOPES_KEY,
   MASTRA_VERSIONS_KEY,
   mergeVersionOverrides,
 } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
+import { getRequestContextInputValues } from '../../request-context/input-source';
 import { toStandardSchema } from '../../schema';
+import { asJsonSchema } from '../../stream/base/schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
+import type { DynamicArgument } from '../../types';
 import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
@@ -26,14 +40,16 @@ import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
-import type { CreatedAgentSignal } from '../signals';
-import { mastraDBMessageToSignal } from '../signals';
+import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
+import type { AgentSignalInput, CreatedAgentSignal } from '../signals';
+import { mastraDBMessageToSignal, signalSpanAttributes } from '../signals';
 import { TripWire } from '../trip-wire';
 import type {
   AgentInstructions,
   AgentMethodType,
   AgentModelManagerConfig,
   GoalConfig,
+  ModelFallbackSettings,
   ToolsetsInput,
   ToolsInput,
 } from '../types';
@@ -41,9 +57,19 @@ import {
   applyClientToolModelOutput,
   fireClientToolOutputHooks,
 } from '../workflows/prepare-stream/client-tool-output-hooks';
+import { MASTRA_DURABLE_EXECUTIONS_KEY } from './execution-fence';
+import { authorizeDurableMemory } from './memory-fga';
+import { recordRunSavedMessages } from './run-message-refs';
+import { setRunScorerInstances } from './run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
-import { createWorkflowInput } from './utils/serialize-state';
+import {
+  createWorkflowInput,
+  serializeClientTools,
+  serializeModelConfig,
+  serializeToolsetToolNames,
+} from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
+import { isJsonSafe } from './workflows/shared/schemas';
 
 /**
  * JSON-safe snapshot of `requestContext.entries()` so durable steps (e.g.
@@ -69,6 +95,15 @@ function snapshotRequestContextEntries(
     // Never persist the framework-managed bearer token in durable workflow
     // input; a resumed authenticated request supplies its own fresh token.
     if (key === MASTRA_AUTH_TOKEN_KEY) continue;
+    // The merged version overrides (Mastra defaults < requestContext <
+    // call-site) are framework state written during prep (step 3). Persisting
+    // the merged value would freeze the preparing process's defaults over the
+    // executing worker's. The caller's own versions entry is re-added at the
+    // call site.
+    if (key === MASTRA_VERSIONS_KEY) continue;
+    // Execution ids are claimed per execution. A persisted id would be restored
+    // over a later execution's id (e.g. the recovered one) and fence it out.
+    if (key === MASTRA_DURABLE_EXECUTIONS_KEY) continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
     // the event loop on every durable step, and reading the value twice (probe
@@ -121,10 +156,16 @@ function getInitialSignalEchoes(messageList: MessageList): CreatedAgentSignal[] 
 interface DurablePreparationAgent {
   id: string;
   name?: string;
+  maxRetries?: number;
+  requestContextSchema?: StandardSchemaWithJSON<unknown>;
   getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
+  getScopes?(opts: { requestContext: RequestContext }): Promise<string[] | undefined>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
-  getModel(opts: { requestContext: RequestContext }): MastraLanguageModel | Promise<MastraLanguageModel>;
-  getModelList(requestContext: RequestContext): Promise<AgentModelManagerConfig[] | null>;
+  __getModelAndModelList(opts: { requestContext: RequestContext; model?: unknown }): Promise<{
+    model: MastraLanguageModel;
+    modelList: AgentModelManagerConfig[] | null;
+    fallbackTimeouts: Array<ModelFallbackSettings['timeout'] | undefined>;
+  }>;
   getMemory(opts: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
   getWorkspace(opts: { requestContext: RequestContext }): Promise<Workspace | undefined>;
   listScorers(opts: {
@@ -144,15 +185,30 @@ interface DurablePreparationAgent {
     methodType?: AgentMethodType;
     backgroundTaskEnabled?: boolean;
     backgroundTaskPolicy?: AgentExecutionOptions<any>['backgroundTaskPolicy'];
+    model?: MastraLanguageModel;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
-  listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]>;
+  __resolveRunErrorProcessors(
+    requestContext: RequestContext,
+    overrides?: ErrorProcessorOrWorkflow[],
+  ): Promise<{ errorProcessors: ErrorProcessorOrWorkflow[]; hasConfiguredErrorProcessors: boolean }>;
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  __getSubscribePendingSignals(): (runId: string, listener: () => void) => () => void;
+  __getEnqueuePendingSignal(): (
+    target: { runId: string; resourceId?: string; threadId?: string },
+    signalInput: AgentSignalInput,
+  ) => Promise<CreatedAgentSignal>;
   __getGoalConfig(): GoalConfig | undefined;
-  __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
+  __hasFixedMemory(): boolean;
+  __getMaxRetriesConfigured?(): boolean;
+  __getMaxProcessorRetries?(): number | undefined;
+  __listLLMRequestProcessors(
+    requestContext?: RequestContext,
+    errorProcessorOverrides?: ErrorProcessorOrWorkflow[],
+  ): Promise<LLMRequestProcessorOrWorkflow[]>;
 }
 
 /**
@@ -187,6 +243,17 @@ export interface PreparationOptions<OUTPUT = undefined> {
   options?: AgentExecutionOptions<OUTPUT>;
   /** Whether execution options already include the agent defaults. */
   optionsAreResolved?: boolean;
+  /**
+   * Whether agent scopes were already applied to `options` (DurableAgent does this itself).
+   * When false, preparation resolves scopes so wrappers that call it directly honor them.
+   */
+  scopesResolved?: boolean;
+  /**
+   * Scopes the caller passed. When the property is absent, `options.scopes`; set it (even to
+   * undefined) when `options` already include the agent defaults, so the Agent's own
+   * `defaultOptions.scopes` are not treated as caller input.
+   */
+  callScopes?: string[];
   /** Run ID (will be generated if not provided) */
   runId?: string;
   /** Request context */
@@ -234,6 +301,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     messages,
     options: rawExecOptions,
     optionsAreResolved = false,
+    scopesResolved = false,
     runId: providedRunId,
     requestContext: providedRequestContext,
     logger,
@@ -256,24 +324,77 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const messageId = crypto.randomUUID();
 
   // 2. Get request context
-  const requestContext = providedRequestContext ?? new RequestContext();
+  let requestContext = providedRequestContext ?? new RequestContext();
 
-  // 2a. Snapshot caller-provided RequestContext entries *before* preparation
-  // mutates the context (version overrides at step 3, MastraMemory at step 4).
-  // The persisted `customContext` should reflect only what the caller passed in,
-  // not internal-key state added during prep.
-  const requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
+  // 2a. Validate the request context against the agent's requestContextSchema,
+  // mirroring Agent.stream()/generate(). Without this, schema violations are
+  // silently ignored on the durable path.
+  if (typedAgent.requestContextSchema) {
+    const contextValues = getRequestContextInputValues(requestContext);
+    const validation = await typedAgent.requestContextSchema['~standard'].validate(contextValues);
 
-  // 2b. Merge the wrapped agent's defaultOptions under the per-request options,
+    if (validation.issues) {
+      const errorMessages = validation.issues
+        .map(e => {
+          const pathStr = e.path?.map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
+          return `- ${pathStr}: ${e.message}`;
+        })
+        .join('\n');
+      throw new MastraError({
+        id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Request context validation failed for agent '${publicAgentId}':\n${errorMessages}`,
+        details: {
+          agentId: publicAgentId,
+          agentName: publicAgentName,
+        },
+      });
+    }
+  }
+
+  // 2a. Merge the wrapped agent's defaultOptions under the per-request options,
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
   // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
   // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
-  const execOptions: AgentExecutionOptions<OUTPUT> = optionsAreResolved
+  let defaultOptions: AgentExecutionOptions<OUTPUT> | undefined;
+  const loadDefaultOptions = async () =>
+    (defaultOptions ??= ((await typedAgent.getDefaultOptions({ requestContext })) ??
+      {}) as AgentExecutionOptions<OUTPUT>);
+  let execOptions: AgentExecutionOptions<OUTPUT> = optionsAreResolved
     ? (rawExecOptions ?? ({} as AgentExecutionOptions<OUTPUT>))
     : (deepMerge(
-        ((await typedAgent.getDefaultOptions({ requestContext })) ?? {}) as Record<string, unknown>,
+        (await loadDefaultOptions()) as Record<string, unknown>,
         (rawExecOptions ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT>);
+
+  // An explicit `callScopes`, even undefined, means `options` already carry the Agent defaults.
+  const callScopes = 'callScopes' in options ? options.callScopes : rawExecOptions?.scopes;
+
+  // 2b. Resolve agent scopes for callers that did not (DurableAgent resolves its own).
+  // Durable runs read identity from `memory` only, so nothing changes without scopes.
+  if (!scopesResolved) {
+    const configuredScopes = (await typedAgent.getScopes?.({ requestContext })) ?? [];
+    const defaultScopes = (await loadDefaultOptions()).scopes ?? [];
+    const agentScopes = [...configuredScopes, ...defaultScopes];
+    if (agentScopes.length || callScopes?.length || requestContext.has(MASTRA_SCOPES_KEY)) {
+      const resolved = resolveAgentScopes({
+        requestContext,
+        agentScopes,
+        callScopes,
+        memory: execOptions.memory,
+        mastra,
+      });
+      execOptions = applyResolvedAgentScopes({ ...execOptions, requestContext }, resolved, requestContext);
+      requestContext = execOptions.requestContext ?? requestContext;
+    }
+  }
+
+  validateModelTimeoutSettings(execOptions.modelSettings?.timeout);
+
+  if (execOptions.eagerToolExecution) {
+    throw new Error('eagerToolExecution is not supported by durable agents');
+  }
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
@@ -283,6 +404,19 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   }
   if (mergedVersions) {
     requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
+  }
+
+  // Resolve and validate the complete model selection before durable preparation
+  // can persist a thread or run user-defined processors, tools, or hooks.
+  const { model, modelList, fallbackTimeouts } = await typedAgent.__getModelAndModelList({
+    requestContext,
+    model: (execOptions as { model?: DynamicArgument<MastraModelConfig> }).model,
+  });
+  if (!model) {
+    throw new Error('Agent model not available');
+  }
+  for (const timeout of fallbackTimeouts) {
+    validateModelTimeoutSettings(timeout);
   }
 
   // 4. Resolve thread/memory context
@@ -369,10 +503,25 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Setting the context first keeps read (inject) and write (tool) in sync.
   const memory = await typedAgent.getMemory({ requestContext });
   const memoryConfig = execOptions?.memory?.options;
+  const memoryAuthorizationChecks = new Map<MastraFGAPermissionInput, Promise<void>>();
+  const authorizeMemory = (permission: MastraFGAPermissionInput) =>
+    authorizeDurableMemory(memoryAuthorizationChecks, {
+      mastra,
+      user: requestContext.get('user'),
+      threadId: threadId!,
+      resourceId,
+      agentId: publicAgentId,
+      requestContext,
+      permission,
+      actor: execOptions?.actor,
+    });
   if (memory && threadId && resourceId) {
+    await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
     const existingThread = await memory.getThreadById({ threadId });
     if (existingThread) {
       assertThreadOwnedByResource({ thread: existingThread, resourceId, agentName: publicAgentName });
+    } else {
+      await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
     }
     threadObject =
       existingThread ??
@@ -399,24 +548,29 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Resolve input processors now that the memory context is in place.
   const processorStates = new Map<string, ProcessorState>();
   let inputProcessors: InputProcessorOrWorkflow[] = [];
-  let llmRequestInputProcessors: InputProcessorOrWorkflow[] = [];
+  let llmRequestInputProcessors: LLMRequestProcessorOrWorkflow[] = [];
   let outputProcessors: OutputProcessorOrWorkflow[] = [];
   let errorProcessors: ErrorProcessorOrWorkflow[] = [];
+  let hasConfiguredErrorProcessors = false;
 
-  try {
-    inputProcessors = await typedAgent.listInputProcessors(requestContext);
-    // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
-    // processors are skipped by ProcessorRunner.runProcessLLMRequest.
-    llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext);
-    // Call-time outputProcessors replace constructor-level ones (parity with
-    // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
-    outputProcessors = execOptions?.outputProcessors
-      ? execOptions.outputProcessors
-      : await typedAgent.listOutputProcessors(requestContext);
-    errorProcessors = await typedAgent.listErrorProcessors(requestContext);
-  } catch (error) {
-    logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
-  }
+  inputProcessors = await typedAgent.listInputProcessors(requestContext);
+  // Call-time outputProcessors replace constructor-level ones (parity with
+  // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
+  outputProcessors = execOptions?.outputProcessors
+    ? execOptions.outputProcessors
+    : await typedAgent.listOutputProcessors(requestContext);
+  // Error processors resolve after output processors. They resolve once:
+  // call-time errorProcessors replace the resolved list, including the defaults,
+  // and the request lane below reuses the result. `hasConfiguredErrorProcessors`
+  // excludes framework defaults and gates the implicit retry-cap warning, since
+  // the defaults self-limit.
+  ({ errorProcessors, hasConfiguredErrorProcessors } = await typedAgent.__resolveRunErrorProcessors(
+    requestContext,
+    execOptions?.errorProcessors,
+  ));
+  // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
+  // processors are skipped by ProcessorRunner.runProcessLLMRequest.
+  llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext, errorProcessors);
 
   // Open AGENT_RUN here so processor_run spans (and their MEMORY_OPERATION
   // children) parent to it. MODEL_GENERATION is opened later under it.
@@ -429,6 +583,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
   const agentTracingPolicy =
     typeof (agent as any).getTracingPolicy === 'function' ? (agent as any).getTracingPolicy() : undefined;
+  const startingSignal = signalSpanAttributes(messages);
   const agentSpan = getOrCreateSpan({
     type: SpanType.AGENT_RUN,
     name: `agent run: '${publicAgentId}'`,
@@ -439,6 +594,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     attributes: {
       conversationId: threadId,
       instructions: convertInstructionsToString(instructions),
+      ...(startingSignal ? { signal: startingSignal } : {}),
       // @deprecated — use entityVersionId (top-level span context field) instead.
       // Kept for backward compatibility during migration.
       ...(resolvedVersionId ? { resolvedVersionId } : {}),
@@ -493,8 +649,45 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           retry: error.options?.retry,
         });
       } else {
-        logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);
+        const inputProcessorError = new MastraError(
+          {
+            id: 'AGENT_INPUT_PROCESSOR_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `[Agent:${publicAgentName}] - Input processor error`,
+          },
+          error,
+        );
+        agentSpan?.error({ error: inputProcessorError, endTree: true });
+        throw inputProcessorError;
       }
+    }
+  }
+
+  // Snapshot the request context AFTER input processors have run so their
+  // writes reach the durable run (#23904) — cross-process engines rebuild the
+  // context from these entries via restoreRequestContext, so anything missing
+  // here is silently dropped on the worker. Framework-internal prep state
+  // (memory keys, auth token, merged versions) is excluded by key inside
+  // snapshotRequestContextEntries; the versions entry is pinned back to the
+  // caller's own value (captured at step 3, before the merge) so persisted
+  // input still reflects only caller intent.
+  let requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
+  // Persist the run's scope set unconditionally — [] included — so a cold resume can tell
+  // "held no scopes" (recorded [], re-supplied scopes are rejected) from a pre-upgrade
+  // snapshot (key absent, supplied scopes are adopted). The live run context deliberately
+  // omits the key when the run has no non-identity scopes, so only the persisted entries
+  // carry the empty marker.
+  if (!Array.isArray(requestContextEntriesSnapshot?.[MASTRA_SCOPES_KEY])) {
+    requestContextEntriesSnapshot = { ...requestContextEntriesSnapshot, [MASTRA_SCOPES_KEY]: [] };
+  }
+  if (requestVersions !== undefined) {
+    const requestVersionsJson = boundedStringify(requestVersions);
+    if (requestVersionsJson !== undefined) {
+      requestContextEntriesSnapshot = {
+        ...requestContextEntriesSnapshot,
+        [MASTRA_VERSIONS_KEY]: JSON.parse(requestVersionsJson),
+      };
     }
   }
 
@@ -523,15 +716,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       methodType,
       backgroundTaskEnabled: Boolean(backgroundTaskManager),
       backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
+      model,
     });
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
-  }
-
-  // 8. Get model (and model list if configured)
-  const model = await typedAgent.getModel({ requestContext });
-  if (!model) {
-    throw new Error('Agent model not available');
   }
 
   // Client-executed results fire only after processors accept the request and
@@ -552,8 +740,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     });
   }
 
-  const modelList = await typedAgent.getModelList(requestContext);
-
   // 8b. Get scorers configuration
   const overrideScorers = (execOptions as any)?.scorers;
   let scorers: Record<string, { scorer: any; sampling?: any }> | undefined;
@@ -570,30 +756,60 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       logger?.debug?.(`[DurableAgent] Error getting scorers: ${error}`);
     }
   }
+  if (scorers) {
+    // Workflow input carries scorers by name only; keep the instances so a
+    // scorer Mastra has never registered still runs in this process (#27579).
+    setRunScorerInstances(
+      runId,
+      Object.fromEntries(
+        Object.entries(scorers).flatMap(([key, entry]) =>
+          entry?.scorer && typeof entry.scorer === 'object' ? [[key, entry.scorer]] : [],
+        ),
+      ),
+      mastra,
+    );
+  }
 
   // 9. Create SaveQueueManager (memory + memoryConfig were resolved in step 6)
   const saveQueueManager = memory
     ? new SaveQueueManager({
         logger,
         memory,
+        onSaved: recordRunSavedMessages(runId),
       })
     : undefined;
 
   // 10. Serialize structured output if provided
   let serializedStructuredOutput: SerializableStructuredOutput | undefined;
+  const structuredOutputSchema = execOptions?.structuredOutput?.schema
+    ? toStandardSchema(execOptions.structuredOutput.schema)
+    : undefined;
   if (execOptions?.structuredOutput) {
     const so = execOptions.structuredOutput as any;
-    if (so.schema) {
+    if (structuredOutputSchema) {
       serializedStructuredOutput = {
         jsonPromptInjection: so.jsonPromptInjection,
+        // With `model` set these are structuring-agent instructions for the finish-time
+        // structuring pass; otherwise they are injected into the main model's prompt.
+        instructions: so.instructions,
         useAgent: so.useAgent,
+        hasStructuringModel: so.model ? true : undefined,
+        // Workers without the live config (remote/recovered runs) resolve the structuring
+        // model from this. Model instances persist as `provider/modelId`, like the main model.
+        structuringModelConfig:
+          typeof so.model === 'string'
+            ? { provider: so.model.split('/')[0] ?? '', modelId: so.model, originalConfig: so.model }
+            : so.model && typeof so.model.provider === 'string' && typeof so.model.modelId === 'string'
+              ? serializeModelConfig(so.model)
+              : undefined,
+        errorStrategy: so.errorStrategy,
+        // A non-JSON-safe fallback would fail options validation; in-process runs still
+        // have it through the run registry's live config.
+        fallbackValue: isJsonSafe(so.fallbackValue) ? so.fallbackValue : undefined,
+        // Always convert to plain JSON Schema: this crosses step boundaries as JSON, and a
+        // live Zod/standard-schema instance does not survive that round trip.
+        schema: asJsonSchema(structuredOutputSchema),
       };
-      // Convert Zod schema to JSON Schema if possible
-      if (typeof so.schema === 'object' && 'type' in so.schema) {
-        serializedStructuredOutput.schema = so.schema;
-      } else if (typeof so.schema === 'object' && 'jsonSchema' in so.schema) {
-        serializedStructuredOutput.schema = so.schema.jsonSchema;
-      }
     }
   }
 
@@ -636,16 +852,28 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     runId,
     agentId: publicAgentId,
     agentName: publicAgentName,
+    // Pin the exact stored version this run resolved to (if any) so a resume
+    // after a newer publish still re-resolves to the started version.
+    agentVersionId: resolvedVersionId,
     messageList,
     tools,
     model,
     modelList: modelList ?? undefined,
     scorers,
     options: {
+      clientTools: serializeClientTools(execOptions?.clientTools, tools),
+      toolsetToolNames: serializeToolsetToolNames(execOptions?.toolsets),
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
       activeTools: execOptions?.activeTools,
       modelSettings: execOptions?.modelSettings as any,
+      // Agent-level retry config for the llm-execution step's retry ladder.
+      // Single-model agents have no modelList entry to carry maxRetries, so
+      // it rides on options; the flag preserves the in-process precedence
+      // rule (an explicitly configured agent value — including 0 — beats
+      // call-time modelSettings.maxRetries).
+      agentMaxRetries: typedAgent.maxRetries,
+      agentMaxRetriesConfigured: typedAgent.__getMaxRetriesConfigured?.() ?? false,
       // Function-form approval policies are closures that can't ride on the
       // serialized workflow input — the live closure is parked on the run
       // registry below. This boolean shadow is the cross-process fallback:
@@ -656,10 +884,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         typeof execOptions?.requireToolApproval === 'function' ? true : execOptions?.requireToolApproval,
       toolCallConcurrency: execOptions?.toolCallConcurrency,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
-      maxProcessorRetries: execOptions?.maxProcessorRetries,
+      maxProcessorRetries: execOptions?.maxProcessorRetries ?? typedAgent.__getMaxProcessorRetries?.(),
       includeRawChunks: execOptions?.includeRawChunks,
       returnScorerData: execOptions?.returnScorerData,
-      hasErrorProcessors: errorProcessors.length > 0,
+      // "Configured" excludes framework default processors — the durable step
+      // uses this to gate the implicit retry-cap warning (the cap itself is
+      // driven by the resolved list from the run registry).
+      hasErrorProcessors: hasConfiguredErrorProcessors,
+      emptyErrorProcessorOverride: execOptions?.errorProcessors?.length === 0 ? true : undefined,
       providerOptions: execOptions?.providerOptions,
       structuredOutput: serializedStructuredOutput,
       skipBgTaskWait: (execOptions as any)?._skipBgTaskWait,
@@ -687,19 +919,23 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       threadExists,
       savePerStep,
       observationalMemory,
+      fixedMemory: typedAgent.__hasFixedMemory(),
     },
     messageId,
-    agentSpanData: agentSpan?.exportSpan(),
-    modelSpanData: modelSpan?.exportSpan(),
+    agentSpanData: agentSpan?.snapshot?.() ?? agentSpan?.exportSpan(),
+    modelSpanData: modelSpan?.snapshot?.() ?? modelSpan?.exportSpan(),
     requestContextEntries: requestContextEntriesSnapshot,
+    inputTripwire: tripwireData,
   });
 
   // 14. Create registry entry for non-serializable state
   const registryEntry: RunRegistryEntry = {
     mastra,
     tools,
+    requestTools: tools,
     saveQueueManager,
     memory,
+    memoryAuthorizationChecks,
     model,
     modelList: modelList
       ? modelList.map((entry: AgentModelManagerConfig) => ({
@@ -739,6 +975,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // Signal drain — the closure reads from AgentThreadStreamRuntime's queues.
     // Non-serializable; cross-process engines lose it and signals go undelivered.
     drainPendingSignals: scope => typedAgent.__getDrainPendingSignals()(runId, scope),
+    subscribePendingSignals: listener => typedAgent.__getSubscribePendingSignals()(runId, listener),
+    enqueuePendingSignal: signalInput =>
+      typedAgent.__getEnqueuePendingSignal()({ runId, resourceId, threadId }, signalInput),
     // Thread title generation — mirrors the non-durable `#executeOnFinish` branch,
     // which was never ported to the durable finish step (so `generateTitle` never
     // fired for durable/evented agents). Parked here because the agent instance is
@@ -746,6 +985,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // when the merged config has no `generateTitle` or the thread already has a
     // title. Non-serializable — cross-process engines skip title generation.
     generateThreadTitle: memory ? async args => generateDurableThreadTitle({ agent, memory, ...args }) : undefined,
+    // generate() returns JSON, so only stream() runs carry the title chunk (as in #executeOnFinish).
+    streamThreadTitle:
+      methodType === 'stream' &&
+      !!memory &&
+      !!agent.resolveTitleGenerationConfig(memory.getMergedThreadConfig(memoryConfig).generateTitle).emitEvent,
+    onTitleGenerated: execOptions?.memory?.onTitleGenerated,
     // Signal messages already in the messageList at run start (from persisted
     // history). Echoed as data-signal parts on the first LLM step so the client
     // sees them without refetching. Spliced once, never re-emitted.
@@ -762,16 +1007,20 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // workflow input so they never reach durable storage; the durable
     // llm-execution step reads them from this registry slot instead.
     callTimeHeaders: extractCallTimeHeaders(execOptions?.modelSettings),
+    // Run-level execution budget (#21724). Parked on the registry so the
+    // abort-controller install sites (stream/resume) can arm a session
+    // timer without re-deriving it from options or the snapshot.
+    timeoutTotalMs: (execOptions?.modelSettings as { timeout?: { totalMs?: number } } | undefined)?.timeout?.totalMs,
     // Call-time structured output config with the live schema. The schema is
     // non-serializable (Zod / standard-schema instance), so it lives on the
     // in-process registry. The durable stream adapter reads it to pipe LLM
     // text through `createObjectStreamTransformer`, producing `object-result`
     // chunks. Cross-process engines lose this slot and structured output
     // degrades to raw text.
-    structuredOutput: execOptions?.structuredOutput?.schema
+    structuredOutput: structuredOutputSchema
       ? {
-          ...execOptions.structuredOutput,
-          schema: toStandardSchema(execOptions.structuredOutput.schema),
+          ...execOptions!.structuredOutput,
+          schema: structuredOutputSchema,
         }
       : undefined,
     // Call-time returnScorerData flag. Also serialized into the workflow

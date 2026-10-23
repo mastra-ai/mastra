@@ -1,10 +1,10 @@
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
-import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
 import {
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_STUDIO_CLIENT_TYPE,
 } from '@mastra/server/server-adapter';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
+import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
 import type { INestApplication } from '@nestjs/common';
 import { REQUEST, ContextIdFactory } from '@nestjs/core';
 import { Test } from '@nestjs/testing';

@@ -1,4 +1,5 @@
-import type { HonoRequest } from 'hono';
+import type { Handler as HonoHandler, HonoRequest, MiddlewareHandler as HonoMiddlewareHandler } from 'hono';
+import type { DescribeRouteOptions as HonoDescribeRouteOptions } from 'hono-openapi';
 import { describe, expectTypeOf, it } from 'vitest';
 import { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
@@ -7,7 +8,7 @@ import { CompositeAuth } from './composite-auth';
 import type { MastraAuthRequest } from './request-types';
 import { SimpleAuth } from './simple-auth';
 import { registerApiRoute } from './index';
-import type { Middleware } from './index';
+import type { DescribeRouteOptions, Handler, Middleware, MiddlewareHandler } from './index';
 
 /**
  * Type tests for registerApiRoute
@@ -231,5 +232,13 @@ describe('Middleware type exports', () => {
     };
 
     expectTypeOf(middleware).toMatchTypeOf<Middleware>();
+  });
+});
+
+describe('Hono type exports', () => {
+  it('preserves Hono type identity', () => {
+    expectTypeOf<Handler>().toEqualTypeOf<HonoHandler>();
+    expectTypeOf<MiddlewareHandler>().toEqualTypeOf<HonoMiddlewareHandler>();
+    expectTypeOf<DescribeRouteOptions>().toEqualTypeOf<HonoDescribeRouteOptions>();
   });
 });

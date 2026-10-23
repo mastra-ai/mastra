@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID } from '../notifications/workflow';
 import { MockStore } from '../storage/mock';
-import { createWorkflow as createDefaultWorkflow } from '../workflows';
+import { createStep as createDefaultStep, createWorkflow as createDefaultWorkflow } from '../workflows';
 import { createStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
 import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import { Mastra } from './index';
@@ -171,32 +172,352 @@ describe('Mastra — workflow scheduler integration', () => {
     await mastra.shutdown();
   });
 
-  it('auto-promotes a default `createWorkflow` to evented when a schedule is declared', async () => {
-    const wf = createDefaultWorkflow({
-      id: 'promoted-wf',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-      schedule: { cron: '*/5 * * * *', inputData: { hello: 'world' } },
+  describe('scheduled default workflows (#18807)', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
     });
 
-    // The factory should have returned an evented-engine workflow instance.
-    expect(wf.engineType).toBe('evented');
+    const echoSchema = z.object({ hello: z.string() });
 
-    const mastra = new Mastra({
-      logger: false,
-      ...withoutNotificationDispatch,
-      storage: new MockStore(),
-      workflows: { wf: wf as any },
+    const buildScheduledDefault = (id: string, execute = vi.fn(async ({ inputData }: any) => inputData)) => {
+      const wf = createDefaultWorkflow({
+        id,
+        inputSchema: echoSchema,
+        outputSchema: echoSchema,
+        schedule: { cron: '*/5 * * * *', inputData: { hello: 'world' } },
+      })
+        .then(createDefaultStep({ id: 'echo', inputSchema: echoSchema, outputSchema: echoSchema, execute }))
+        .commit();
+      return { wf, execute };
+    };
+
+    const withTimeout = <T>(promise: Promise<T>, ms = 3000): Promise<T> =>
+      Promise.race([
+        promise,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms)),
+      ]);
+
+    const warnLogger = () => {
+      const warn = vi.fn();
+      return {
+        warn,
+        logger: { warn, info: vi.fn(), debug: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+      };
+    };
+
+    /** Make the declarative row due now and return its fire time and the run id the fire claims. */
+    const makeDue = async (storage: InstanceType<typeof MockStore>, workflowId: string) => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const due = Date.now() - 5_000;
+      await schedulesStore.updateSchedule(`wf_${workflowId}`, { nextFireAt: due });
+      return { runId: `sched_wf_${workflowId}_${due}`, due };
+    };
+
+    const stepRunPublishes = (publish: { mock: { calls: unknown[][] } }) =>
+      publish.mock.calls.filter(
+        ([topic, event]) => topic === 'workflows' && (event as any)?.type === 'workflow.step.run',
+      );
+
+    it('runs a scheduled workflow started directly (e.g. over HTTP) without any workers', async () => {
+      vi.stubEnv('MASTRA_WORKERS', undefined);
+      const { wf } = buildScheduledDefault('http-started-wf');
+      new Mastra({ logger: false, ...withoutNotificationDispatch, storage: new MockStore(), workflows: { wf } });
+
+      expect(wf.engineType).toBe('default');
+
+      // The reported hang: `start()` never resolved because nothing consumed
+      // the evented engine's `workflows` topic. The timeout turns a regression
+      // into a failure instead of a stuck test.
+      const run = await wf.createRun();
+      const result = await withTimeout(run.start({ inputData: { hello: 'http' } }));
+
+      expect(result.status).toBe('success');
+      expect((result as any).result).toEqual({ hello: 'http' });
+      expect((await wf.getWorkflowRunById(run.runId))?.status).toBe('success');
     });
 
-    await mastra.startWorkers();
-    await waitForScheduler(mastra);
-    expect(mastra.scheduler).toBeDefined();
-    const schedulesStore = await mastra.getStorage()!.getStore('schedules');
-    const schedules = await schedulesStore!.listSchedules();
-    expect(schedules.find(s => s.id === 'wf_promoted-wf')).toBeDefined();
+    it('runs scheduler fires for default-engine workflows in-process through the workflow event processor', async () => {
+      vi.stubEnv('MASTRA_WORKERS', undefined);
+      const storage = new MockStore();
+      const pubsub = new EventEmitterPubSub();
+      const { wf, execute } = buildScheduledDefault('in-process-wf');
+      const mastra = new Mastra({ logger: false, ...withoutNotificationDispatch, storage, pubsub, workflows: { wf } });
 
-    await mastra.shutdown();
+      try {
+        await mastra.startWorkers();
+        await waitForScheduler(mastra);
+
+        const publish = vi.spyOn(pubsub, 'publish');
+        const { runId, due } = await makeDue(storage, 'in-process-wf');
+        await mastra.scheduler!.tick();
+
+        await waitUntil(async () => (await wf.getWorkflowRunById(runId))?.status === 'success');
+        expect(publish).toHaveBeenCalledWith(
+          'workflows',
+          expect.objectContaining({
+            type: 'workflow.start',
+            runId,
+            data: expect.objectContaining({
+              scheduleTrigger: { scheduleId: 'wf_in-process-wf', scheduledFireAt: due, triggerKind: 'schedule-fire' },
+            }),
+          }),
+          { localOnly: true },
+        );
+        expect(stepRunPublishes(publish)).toHaveLength(0);
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(execute.mock.calls[0]![0].inputData).toEqual({ hello: 'world' });
+      } finally {
+        await mastra.shutdown();
+      }
+    });
+
+    it('delivers the boot warm-up fire in-process', async () => {
+      vi.stubEnv('MASTRA_WORKERS', undefined);
+      const storage = new MockStore();
+
+      // First boot writes the declarative row; the second boot finds it overdue.
+      const first = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        workflows: { wf: buildScheduledDefault('warm-up-wf').wf },
+      });
+      await first.startWorkers();
+      await waitForScheduler(first);
+      await first.shutdown();
+      const { runId, due } = await makeDue(storage, 'warm-up-wf');
+
+      const { wf, execute } = buildScheduledDefault('warm-up-wf');
+      const pubsub = new EventEmitterPubSub();
+      const publish = vi.spyOn(pubsub, 'publish');
+      const second = new Mastra({ logger: false, ...withoutNotificationDispatch, storage, pubsub, workflows: { wf } });
+      try {
+        await second.startWorkers();
+
+        // The warm-up tick claims the fire during startWorkers(); the
+        // orchestration worker exists from construction, so it is already
+        // consuming `workflows` when the fire is published.
+        const schedulesStore = (await storage.getStore('schedules'))!;
+        await waitUntil(async () => (await schedulesStore.getSchedule('wf_warm-up-wf'))?.lastRunId === runId);
+        await waitUntil(async () => (await wf.getWorkflowRunById(runId))?.status === 'success');
+        expect(publish).toHaveBeenCalledWith(
+          'workflows',
+          expect.objectContaining({
+            type: 'workflow.start',
+            runId,
+            data: expect.objectContaining({
+              scheduleTrigger: { scheduleId: 'wf_warm-up-wf', scheduledFireAt: due, triggerKind: 'schedule-fire' },
+            }),
+          }),
+          { localOnly: true },
+        );
+        expect(stepRunPublishes(publish)).toHaveLength(0);
+        expect(execute).toHaveBeenCalledTimes(1);
+      } finally {
+        await second.shutdown();
+      }
+    });
+
+    it('delivers the warm-up fire in-process when the scheduler starts lazily after boot', async () => {
+      vi.stubEnv('MASTRA_WORKERS', undefined);
+      const storage = new MockStore();
+      const pubsub = new EventEmitterPubSub();
+      const execute = vi.fn(async ({ inputData }: any) => inputData);
+      const wf = createDefaultWorkflow({ id: 'lazy-wf', inputSchema: echoSchema, outputSchema: echoSchema })
+        .then(createDefaultStep({ id: 'echo', inputSchema: echoSchema, outputSchema: echoSchema, execute }))
+        .commit();
+      const mastra = new Mastra({ logger: false, ...withoutNotificationDispatch, storage, pubsub, workflows: { wf } });
+
+      try {
+        // No schedule exists at boot, so startWorkers() leaves the scheduler off.
+        await mastra.startWorkers();
+        expect(mastra.scheduler).toBeUndefined();
+
+        const schedulesStore = (await storage.getStore('schedules'))!;
+        const due = Date.now() - 5_000;
+        await schedulesStore.createSchedule({
+          id: 'lazy-sched',
+          target: { type: 'workflow', workflowId: 'lazy-wf', inputData: { hello: 'lazy' } },
+          cron: '*/5 * * * *',
+          status: 'active',
+          nextFireAt: due,
+          createdAt: due,
+          updatedAt: due,
+        });
+        const runId = `sched_lazy-sched_${due}`;
+
+        const publish = vi.spyOn(pubsub, 'publish');
+        await mastra.__ensureScheduleRuntimeReady();
+
+        await waitUntil(async () => (await wf.getWorkflowRunById(runId))?.status === 'success');
+        expect(publish).toHaveBeenCalledWith(
+          'workflows',
+          expect.objectContaining({
+            type: 'workflow.start',
+            runId,
+            data: expect.objectContaining({
+              scheduleTrigger: { scheduleId: 'lazy-sched', scheduledFireAt: due, triggerKind: 'schedule-fire' },
+            }),
+          }),
+          { localOnly: true },
+        );
+        expect(stepRunPublishes(publish)).toHaveLength(0);
+        expect(execute).toHaveBeenCalledTimes(1);
+      } finally {
+        await mastra.shutdown();
+      }
+    });
+
+    it('promotes to evented when MASTRA_WORKERS is set, warns once, and fires through the workflow event processor', async () => {
+      vi.stubEnv('MASTRA_WORKERS', 'scheduler,orchestration');
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const storage = new MockStore();
+      const pubsub = new EventEmitterPubSub();
+      const { wf, execute } = buildScheduledDefault('split-wf');
+      const explicit = createEventedWorkflow({
+        id: 'explicit-evented-wf',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        schedule: { cron: '0 * * * *' },
+      });
+      explicit
+        .then(
+          createStep({
+            id: 'noop',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: async () => ({}),
+          }) as any,
+        )
+        .commit();
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        pubsub,
+        workflows: { wf, explicit } as any,
+      });
+
+      // Only the auto-promoted workflow warns; the explicit evented import does not.
+      const promotionWarnings = warn.mock.calls.filter(([message]) =>
+        String(message).includes('MASTRA_WORKERS is set'),
+      );
+      expect(wf.engineType).toBe('evented');
+      expect(promotionWarnings).toHaveLength(1);
+      expect(String(promotionWarnings[0]![0])).toContain('"split-wf"');
+      warn.mockRestore();
+
+      try {
+        await mastra.startWorkers();
+        await waitForScheduler(mastra);
+
+        const publish = vi.spyOn(pubsub, 'publish');
+        const { runId } = await makeDue(storage, 'split-wf');
+        await mastra.scheduler!.tick();
+
+        await waitUntil(async () => (await wf.getWorkflowRunById(runId))?.status === 'success');
+        expect(publish).toHaveBeenCalledWith(
+          'workflows',
+          expect.objectContaining({ type: 'workflow.start', runId }),
+          expect.anything(),
+        );
+        // Promoted workflows are evented, so the processor steps them instead of
+        // running them in-process.
+        expect(stepRunPublishes(publish).length).toBeGreaterThan(0);
+        expect(execute).toHaveBeenCalledTimes(1);
+      } finally {
+        await mastra.shutdown();
+      }
+    });
+
+    it('resumes a run suspended on the evented engine after the workflow moves to the default engine', async () => {
+      vi.stubEnv('MASTRA_WORKERS', undefined);
+      const storage = new MockStore();
+      const approvalStep = createDefaultStep({
+        id: 'approval',
+        inputSchema: echoSchema,
+        outputSchema: z.object({ approved: z.boolean() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute: async ({ resumeData, suspend }) => {
+          if (!resumeData) return suspend({});
+          return { approved: resumeData.approved };
+        },
+      });
+      const schedule = { cron: '*/5 * * * *', inputData: { hello: 'world' } };
+      const runId = 'upgrade-run';
+
+      // Before the upgrade, a scheduled `createWorkflow` ran on the evented engine.
+      const before = createEventedWorkflow({
+        id: 'upgrade-wf',
+        inputSchema: echoSchema,
+        outputSchema: z.object({ approved: z.boolean() }),
+        schedule,
+      })
+        .then(approvalStep as any)
+        .commit();
+      const oldMastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        workflows: { wf: before } as any,
+      });
+      await oldMastra.startWorkers();
+      try {
+        const run = await before.createRun({ runId });
+        const started = await withTimeout(run.start({ inputData: { hello: 'world' } }));
+        expect(started.status).toBe('suspended');
+      } finally {
+        await oldMastra.shutdown();
+      }
+
+      // After the upgrade, the same declaration builds a default-engine workflow.
+      const after = createDefaultWorkflow({
+        id: 'upgrade-wf',
+        inputSchema: echoSchema,
+        outputSchema: z.object({ approved: z.boolean() }),
+        schedule,
+      })
+        .then(approvalStep)
+        .commit();
+      expect(after.engineType).toBe('default');
+      new Mastra({ logger: false, ...withoutNotificationDispatch, storage, workflows: { wf: after } });
+
+      const resumed = await withTimeout(
+        (await after.createRun({ runId })).resume({ step: 'approval', resumeData: { approved: true } }),
+      );
+      expect(resumed.status).toBe('success');
+      expect((resumed as any).result).toEqual({ approved: true });
+    });
+
+    it('ignores `schedule` on engines the Mastra scheduler does not dispatch, with a warning', async () => {
+      vi.stubEnv('MASTRA_WORKERS', undefined);
+      const storage = new MockStore();
+      const { wf } = buildScheduledDefault('inngest-like-wf');
+      // Stand-in for an Inngest/Temporal workflow that inherited `schedule`.
+      (wf as any).engineType = 'inngest';
+      const { warn, logger } = warnLogger();
+      const mastra = new Mastra({
+        logger,
+        ...withoutNotificationDispatch,
+        storage,
+        scheduler: { enabled: true },
+        workflows: { wf } as any,
+      });
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('runs on the inngest engine'),
+        expect.objectContaining({ workflowId: 'inngest-like-wf' }),
+      );
+
+      try {
+        await mastra.startWorkers();
+        await waitForScheduler(mastra);
+        const schedules = await (await storage.getStore('schedules'))!.listSchedules();
+        expect(schedules.find(s => s.id === 'wf_inngest-like-wf')).toBeUndefined();
+      } finally {
+        await mastra.shutdown();
+      }
+    });
   });
 
   it('starts the scheduler when scheduler.enabled is true even with no scheduled workflows', async () => {
@@ -270,6 +591,43 @@ describe('Mastra — workflow scheduler integration', () => {
       // nextFireAt was anchored to the old cron; cron change must invalidate it.
       expect(updated!.nextFireAt).not.toBe(initialNextFireAt);
       await second.shutdown();
+    });
+
+    it('registers a declarative schedule whose cron has no future occurrence as completed', async () => {
+      const storage = new MockStore();
+
+      const mastra = await boot(storage, buildScheduledWorkflow({ cron: '0 0 10 23 9 * 2020' }));
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const row = await schedulesStore.getSchedule('wf_rolling-wf');
+
+      expect(row?.status).toBe('completed');
+      expect(row?.cron).toBe('0 0 10 23 9 * 2020');
+      await mastra.shutdown();
+    });
+
+    it('completes a declarative schedule when a redeploy passes an exhausted cron, and re-arms it when the cron can fire again', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+
+      const first = await boot(storage, buildScheduledWorkflow({ cron: '*/5 * * * *' }));
+      expect((await schedulesStore.getSchedule('wf_rolling-wf'))?.status).toBe('active');
+      await first.shutdown();
+
+      // Exhausted cron: the row is completed instead of skipping the write, so
+      // the rest of the patch (target payload here) still lands.
+      const second = await boot(storage, buildScheduledWorkflow({ cron: '0 0 10 23 9 * 2020', inputData: { v: 2 } }));
+      const completed = await schedulesStore.getSchedule('wf_rolling-wf');
+      expect(completed?.status).toBe('completed');
+      expect(completed?.cron).toBe('0 0 10 23 9 * 2020');
+      expect((completed!.target as any).inputData).toEqual({ v: 2 });
+      await second.shutdown();
+
+      // A cadence that can fire again reactivates the completed row.
+      const third = await boot(storage, buildScheduledWorkflow({ cron: '*/5 * * * *' }));
+      const reactivated = await schedulesStore.getSchedule('wf_rolling-wf');
+      expect(reactivated?.status).toBe('active');
+      expect(reactivated!.nextFireAt).toBeGreaterThan(Date.now());
+      await third.shutdown();
     });
 
     it('updates the target payload when inputData changes', async () => {

@@ -1,6 +1,10 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
+import { FGADeniedError } from '../../auth/ee/fga-check';
+import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
+import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 import type { SubAgent } from '../subagent';
 
@@ -70,6 +74,25 @@ function makeSupervisor(sub: Agent<any, any, any, any>, memory: MockMemory, id =
     agents: { 'sub-agent': sub },
     memory,
   });
+}
+
+function createMemoryWriteDenyProvider(deniedAgentId: string): IFGAProvider {
+  return {
+    check: vi.fn(),
+    filterAccessible: vi.fn(),
+    require: vi.fn(async (user, input) => {
+      if (input.permission === 'memory:write' && input.context?.metadata?.agentId === deniedAgentId) {
+        throw new FGADeniedError(user, input.resource, input.permission);
+      }
+    }),
+  };
+}
+
+function createActorRequestContext() {
+  const requestContext = new RequestContext();
+  requestContext.set('user', { id: 'user-1', organizationMembershipId: 'membership-1' });
+  requestContext.set('actor', { id: 'actor-1', type: 'user' });
+  return requestContext;
 }
 
 describe('delegation memory inheritance (issue #21625)', () => {
@@ -161,6 +184,116 @@ describe('delegation memory inheritance (issue #21625)', () => {
     });
 
     await expect(sub.getMemory()).resolves.toBe(ownMemory);
+  });
+
+  it('denies delegated transcript persistence before writing to sub-agent memory', async () => {
+    const subMemory = new MockMemory();
+    const saveMessages = vi.spyOn(subMemory, 'saveMessages');
+    const sub = makeSubAgent('sub-agent', subMemory);
+    const supervisor = makeSupervisor(sub, new MockMemory());
+    const fgaProvider = createMemoryWriteDenyProvider('sub-agent');
+    new Mastra({
+      agents: { supervisor, sub },
+      logger: false,
+      server: { fga: fgaProvider },
+    });
+
+    await supervisor.generate('Delegate please', {
+      maxSteps: 3,
+      memory: { thread: 'thread-1', resource: 'resource-1' },
+      requestContext: createActorRequestContext(),
+    });
+
+    expect(fgaProvider.require).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1', organizationMembershipId: 'membership-1' }),
+      expect.objectContaining({
+        permission: 'memory:write',
+        resource: { type: 'thread', id: expect.any(String) },
+        context: expect.objectContaining({ metadata: expect.objectContaining({ agentId: 'sub-agent' }) }),
+      }),
+    );
+    const authorization = vi
+      .mocked(fgaProvider.require)
+      .mock.calls.find(
+        ([, input]) => input.permission === 'memory:write' && input.context?.metadata?.agentId === 'sub-agent',
+      )?.[1];
+    expect(authorization?.context?.requestContext?.get('actor')).toEqual({ id: 'actor-1', type: 'user' });
+    expect(saveMessages).not.toHaveBeenCalled();
+  });
+
+  it('persists supervisor feedback when the write is allowed', async () => {
+    const supervisorMemory = new MockMemory();
+    const saveMessages = vi.spyOn(supervisorMemory, 'saveMessages');
+    const sub = makeSubAgent('sub-agent', new MockMemory());
+    const supervisor = makeSupervisor(sub, supervisorMemory);
+    const fgaProvider = createMemoryWriteDenyProvider('unmatched-agent');
+    new Mastra({ agents: { supervisor, sub }, logger: false, server: { fga: fgaProvider } });
+
+    await supervisor.generate('Delegate please', {
+      maxSteps: 3,
+      memory: { thread: 'thread-1', resource: 'resource-1' },
+      requestContext: createActorRequestContext(),
+      delegation: { onDelegationComplete: () => ({ feedback: 'Supervisor feedback' }) },
+    });
+
+    expect(
+      saveMessages.mock.calls.some(call =>
+        call[0].messages.some(message =>
+          message.content.parts.some(part => part.type === 'text' && part.text === 'Supervisor feedback'),
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it('denies supervisor feedback persistence before writing the feedback message', async () => {
+    const supervisorMemory = new MockMemory();
+    const saveMessages = vi.spyOn(supervisorMemory, 'saveMessages');
+    const sub = makeSubAgent('sub-agent', new MockMemory());
+    const supervisor = makeSupervisor(sub, supervisorMemory);
+    let supervisorWriteChecks = 0;
+    const fgaProvider: IFGAProvider = {
+      check: vi.fn(),
+      filterAccessible: vi.fn(),
+      require: vi.fn(async (user, input) => {
+        if (input.permission === 'memory:write' && input.context?.metadata?.agentId === 'supervisor') {
+          supervisorWriteChecks++;
+          if (supervisorWriteChecks > 1) {
+            throw new FGADeniedError(user, input.resource, input.permission);
+          }
+        }
+      }),
+    };
+    new Mastra({ agents: { supervisor, sub }, logger: false, server: { fga: fgaProvider } });
+
+    await supervisor.generate('Delegate please', {
+      maxSteps: 3,
+      memory: { thread: 'thread-1', resource: 'resource-1' },
+      requestContext: createActorRequestContext(),
+      delegation: { onDelegationComplete: () => ({ feedback: 'Supervisor feedback' }) },
+    });
+
+    expect(supervisorWriteChecks).toBeGreaterThan(1);
+    expect(fgaProvider.require).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1', organizationMembershipId: 'membership-1' }),
+      expect.objectContaining({
+        permission: 'memory:write',
+        resource: { type: 'thread', id: expect.any(String) },
+        context: expect.objectContaining({ metadata: expect.objectContaining({ agentId: 'supervisor' }) }),
+      }),
+    );
+    const authorization = vi
+      .mocked(fgaProvider.require)
+      .mock.calls.find(
+        ([, input]) => input.permission === 'memory:write' && input.context?.metadata?.agentId === 'supervisor',
+      )?.[1];
+    expect(authorization?.context?.requestContext?.get('actor')).toEqual({ id: 'actor-1', type: 'user' });
+    expect(
+      saveMessages.mock.calls.some(call =>
+        call[0].messages.some(message =>
+          message.content.parts.some(part => part.type === 'text' && part.text === 'Supervisor feedback'),
+        ),
+      ),
+    ).toBe(false);
   });
 
   it('does not pass inherited memory further down to a grandchild sub-agent', async () => {

@@ -1,20 +1,18 @@
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
-import { HomeIcon } from '@mastra/playground-ui/icons/HomeIcon';
 import { LogsIcon } from '@mastra/playground-ui/icons/LogsIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { MetricsIcon } from '@mastra/playground-ui/icons/MetricsIcon';
 import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
 import { PromptIcon } from '@mastra/playground-ui/icons/PromptIcon';
-import { RequestContextIcon } from '@mastra/playground-ui/icons/RequestContextIcon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { SettingsIcon } from '@mastra/playground-ui/icons/SettingsIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
-import { BookIcon, ClipboardCheck, Inbox, LayoutGrid } from 'lucide-react';
+import { BookIcon, CableIcon, ClipboardCheck, LayoutGrid } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -25,8 +23,8 @@ export interface NavItem {
   Icon: NavIcon;
   isOnMastraPlatform?: boolean;
   activePaths?: string[];
-  /** When true, the item stays in the registry (so breadcrumbs/routes can resolve it) but is hidden from the sidebar and command palette. */
   hidden?: boolean;
+  foldable?: boolean;
 }
 
 export interface NavSection {
@@ -36,11 +34,7 @@ export interface NavSection {
   items: NavItem[];
 }
 
-// The Intelligence sidebar link is gated behind the dedicated MASTRA_SIGNALS_UI flag
-// so the feature can be toggled independently of the platform config that the
-// Intelligence route itself consumes.
-const isSignalsEnabled =
-  typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_SIGNALS_UI === 'true';
+const isSignalsEnabled = typeof window !== 'undefined' && window.MASTRA_SIGNALS_UI === 'true';
 
 const signalsNavItem: NavItem = {
   name: 'Intelligence',
@@ -48,24 +42,10 @@ const signalsNavItem: NavItem = {
   activePaths: ['/intelligence'],
   Icon: LayoutGrid,
   isOnMastraPlatform: true,
-  // Kept in the registry so /intelligence routes and breadcrumbs always resolve, but
-  // only surfaced in the sidebar/command palette when the flag is enabled.
   hidden: !isSignalsEnabled,
 };
 
 export const mainNav: NavSection[] = [
-  {
-    key: 'inbox',
-    title: '',
-    items: [
-      {
-        name: 'Inbox',
-        url: '/inbox',
-        Icon: Inbox,
-        isOnMastraPlatform: true,
-      },
-    ],
-  },
   {
     key: 'primitives',
     title: 'Primitives',
@@ -93,30 +73,35 @@ export const mainNav: NavSection[] = [
         url: '/processors',
         Icon: ProcessorIcon,
         isOnMastraPlatform: false,
+        foldable: true,
       },
       {
         name: 'MCP Servers',
         url: '/mcps',
         Icon: McpServerIcon,
         isOnMastraPlatform: true,
+        foldable: true,
       },
       {
         name: 'Tools',
         url: '/tools',
         Icon: ToolsIcon,
         isOnMastraPlatform: true,
+        foldable: true,
+      },
+      {
+        name: 'Connections',
+        url: '/connections',
+        Icon: CableIcon,
+        isOnMastraPlatform: false,
+        foldable: true,
       },
       {
         name: 'Workspaces',
         url: '/workspaces',
         Icon: WorkspacesIcon,
         isOnMastraPlatform: true,
-      },
-      {
-        name: 'Request Context',
-        url: '/request-context',
-        Icon: RequestContextIcon,
-        isOnMastraPlatform: true,
+        foldable: true,
       },
     ],
   },
@@ -124,12 +109,6 @@ export const mainNav: NavSection[] = [
     key: 'evaluation',
     title: 'Evaluation',
     items: [
-      {
-        name: 'Overview',
-        url: '/evaluation',
-        Icon: HomeIcon,
-        isOnMastraPlatform: true,
-      },
       {
         name: 'Scorers',
         url: '/scorers',
@@ -171,6 +150,8 @@ export const mainNav: NavSection[] = [
         url: '/traces',
         Icon: TraceIcon,
         isOnMastraPlatform: true,
+        // /spans is reached through the Traces/Spans switch on the traces page.
+        activePaths: ['/spans', '/threads'],
       },
       signalsNavItem,
       {

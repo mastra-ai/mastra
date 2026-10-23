@@ -1,6 +1,7 @@
 import Ajv from 'ajv';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
+import { applyOpenAICompatTransforms } from '../standard-schema-compat';
 import type { ModelInformation } from '../types';
 import { isZodType } from '../utils';
 import { zodToJsonSchema } from '../zod-to-json';
@@ -32,6 +33,43 @@ describe('OpenAISchemaCompatLayer', () => {
   // nested subtrees copied across the containing property and anyOf branches, which
   // caused exponential schema growth with nesting depth.
   describe('optional properties from external JSON Schema', () => {
+    it('adds a null alternative to an optional typeless anyOf property (#26703)', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          value: { anyOf: [{ type: 'string' }, { type: 'number' }] },
+          already: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          needed: { anyOf: [{ type: 'string' }, { type: 'number' }] },
+        },
+        required: ['needed'],
+        additionalProperties: false,
+      } as any) as Record<string, any>;
+
+      expect(result.required).toEqual(expect.arrayContaining(['value', 'already', 'needed']));
+      expect(result.properties.value.anyOf).toEqual([{ type: 'string' }, { type: 'number' }, { type: 'null' }]);
+      expect(result.properties.already.anyOf).toEqual([{ type: 'string' }, { type: 'null' }]);
+      // A required union stays non-nullable.
+      expect(result.properties.needed.anyOf).toEqual([{ type: 'string' }, { type: 'number' }]);
+    });
+
+    it('lets an optional typeless anyOf with sibling enum/const accept null (#26703)', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          code: { anyOf: [{ type: 'string' }, { type: 'number' }], enum: ['a', 1] },
+          fixed: { anyOf: [{ type: 'string' }, { type: 'number' }], const: 'a' },
+        },
+        additionalProperties: false,
+      } as any) as Record<string, any>;
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ code: null, fixed: null })).toBe(true);
+      expect(validate({ code: 'a', fixed: 'a' })).toBe(true);
+      // Non-null values keep their constraints.
+      expect(validate({ code: 'b', fixed: null })).toBe(false);
+      expect(validate({ code: null, fixed: 1 })).toBe(false);
+    });
+
     const searchToolSchema = {
       type: 'object',
       properties: {
@@ -77,6 +115,63 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(result.required).toContain('filter');
       expect(result['x-optional']).toContain('filter');
       expect(result.additionalProperties).toBe(false);
+    });
+
+    it('keeps numeric format and range keywords only in the typed branch', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          pageSize: { type: 'integer', format: 'int32', description: 'Max files.' },
+          ratio: { type: 'number', minimum: 0, maximum: 1, multipleOf: 0.5 },
+          count: { type: ['integer', 'null'], format: 'int64', exclusiveMinimum: 0 },
+        },
+      };
+      const result = compat.processToJSONSchema(structuredClone(schema) as any) as Record<string, any>;
+      const { pageSize, ratio, count } = result.properties;
+
+      expect(pageSize).toEqual({
+        description: 'Max files.',
+        anyOf: [{ type: 'integer', format: 'int32', description: 'Max files.' }, { type: 'null' }],
+      });
+      for (const keyword of ['minimum', 'maximum', 'multipleOf', 'format']) {
+        expect(ratio).not.toHaveProperty(keyword);
+      }
+      expect(ratio.anyOf.map((b: any) => b.type)).toEqual(['number', 'null']);
+      expect(ratio.description).toContain('greater than or equal to 0');
+      expect(ratio.description).toContain('lower than or equal to 1');
+      expect(ratio.description).toContain('multiple of 0.5');
+      expect(count).toEqual({
+        description: 'constraints: greater than 0',
+        anyOf: [{ type: 'integer', format: 'int64' }, { type: 'null' }],
+      });
+    });
+
+    it('keeps a string format on the string branch of a mixed string/integer type', () => {
+      const schema = {
+        type: 'object',
+        properties: { when: { type: ['string', 'integer'], format: 'date-time' } },
+      };
+      const result = compat.processToJSONSchema(structuredClone(schema) as any) as Record<string, any>;
+      const { when } = result.properties;
+
+      expect(when).not.toHaveProperty('format');
+      const [stringBranch, integerBranch, nullBranch] = when.anyOf;
+      expect(stringBranch.type).toBe('string');
+      expect(integerBranch).toEqual({ type: 'integer' });
+      expect(nullBranch).toEqual({ type: 'null' });
+      expect(stringBranch.format ?? stringBranch.description).toContain('date-time');
+    });
+
+    it('keeps a numeric format on the integer branch of a mixed string/integer type', () => {
+      const schema = {
+        type: 'object',
+        properties: { size: { type: ['string', 'integer'], format: 'int32' } },
+      };
+      const result = compat.processToJSONSchema(structuredClone(schema) as any) as Record<string, any>;
+      const { size } = result.properties;
+
+      expect(size).not.toHaveProperty('format');
+      expect(size.anyOf).toEqual([{ type: 'string' }, { type: 'integer', format: 'int32' }, { type: 'null' }]);
     });
 
     it('still accepts an object, a string, and null through the compat validation path', async () => {
@@ -715,6 +810,107 @@ describe('OpenAISchemaCompatLayer', () => {
 
       const layer = new OpenAISchemaCompatLayer(modelInfo);
       expect(layer.shouldApply()).toBe(false);
+    });
+
+    it.each([
+      ['azure.responses', 'my-gpt5-deployment'],
+      ['azure.chat', 'gpt-4o'],
+      ['azure.chat', 'demo1-gpt'],
+      ['azure.chat', 'sales-gpt5-prod'],
+      ['azure.chat', 'chatgpt-4o-latest'],
+      ['azure.chat', 'graphic-gpt'],
+      ['azure.chat', 'sophia-gpt-4o'],
+      ['azure.responses', 'gpt-4o-telemetry'],
+      ['azure.chat', 'metadata-gpt'],
+      ['azure.chat', 'grokking-gpt-4o'],
+      ['azure.completion', 'gpt-35-turbo-instruct'],
+    ])('should apply for @ai-sdk/azure models (%s, %s)', (provider, modelId) => {
+      const layer = new OpenAISchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
+      expect(layer.shouldApply()).toBe(true);
+    });
+
+    it.each([
+      ['azure.responses', 'production'],
+      ['azure.chat', 'my-deployment'],
+      ['azure.chat', 'proto3-chat'],
+      ['azure.responses', 'solo4'],
+      ['azure.chat', 'gptzero-clone'],
+      ['azure.responses', 'claude-sonnet-4-5'],
+      ['azure.responses', 'deepseek-v3'],
+      ['azure.chat', 'meta-llama-3-70b'],
+      ['azure.responses', 'o3-mini'],
+      ['azure.chat', 'DeepSeek-V3'],
+      ['azure.chat', 'Meta-Llama-3.1-405B-Instruct'],
+      ['azure.chat', 'Llama-3.3-70B-Instruct'],
+      ['azure.chat', 'Mistral-Large-2411'],
+      ['azure.chat', 'Phi-4'],
+      ['azure.chat', 'grok-3'],
+      ['azure.chat', 'Cohere-command-r-plus'],
+      ['azure.responses', 'prod-claude-sonnet'],
+      ['azure.chat', 'llama3-70b'],
+      ['azure.chat', 'phi4-prod'],
+      ['azure.chat', 'Codestral-2501'],
+      ['azure.chat', 'Ministral-3B'],
+      ['azure.chat', 'Mixtral-8x7B-Instruct'],
+      ['azure.chat', 'CodeLlama-34b-Instruct-hf'],
+      ['azure.deepseek', 'prod-r1'],
+      ['azure.deepseek', 'my-gpt-like-deployment'],
+    ])(
+      'should not apply for @ai-sdk/azure deployments not clearly named for an OpenAI model (%s, %s)',
+      (provider, modelId) => {
+        const layer = new OpenAISchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
+        expect(layer.shouldApply()).toBe(false);
+      },
+    );
+  });
+
+  describe('@ai-sdk/azure models', () => {
+    const azureCompat = new OpenAISchemaCompatLayer({
+      provider: 'azure.responses',
+      modelId: 'my-gpt5-deployment',
+      supportsStructuredOutputs: false,
+    });
+    const schema = z.object({
+      query: z.string(),
+      outcome: z.enum(['WON', 'LOST', 'OPEN']).optional(),
+      maxDealAmount: z.number().optional(),
+    });
+
+    it('offers optional properties as required and nullable', () => {
+      const json = azureCompat.processToJSONSchema(schema) as Record<string, any>;
+      expect(allPropsRequired(json)).toEqual({ valid: true, missing: [] });
+      const validate = new Ajv({ strict: false }).compile(json);
+      expect(validate({ query: 'Acme', outcome: null, maxDealAmount: null })).toBe(true);
+    });
+
+    it('maps null back to undefined before the tool runs', async () => {
+      const compatSchema = azureCompat.processToCompatSchema(schema);
+      const result: any = await compatSchema['~standard'].validate({
+        query: 'Acme',
+        outcome: null,
+        maxDealAmount: null,
+      });
+      expect(result).not.toHaveProperty('issues');
+      expect(result.value.outcome).toBeUndefined();
+      expect(result.value.maxDealAmount).toBeUndefined();
+    });
+
+    it('is transformed by applyOpenAICompatTransforms', () => {
+      const processed = applyOpenAICompatTransforms(schema, {
+        provider: 'azure.chat',
+        modelId: 'gpt-4o',
+        supportsStructuredOutputs: false,
+      });
+      expect(processed).not.toBe(schema);
+    });
+
+    it('is transformed by applyOpenAICompatTransforms for prefixed reasoning deployments', () => {
+      const processed = applyOpenAICompatTransforms(schema, {
+        provider: 'azure.responses',
+        modelId: 'my-o3-deployment',
+        supportsStructuredOutputs: false,
+      });
+      expect(processed).not.toBe(schema);
     });
   });
 

@@ -235,6 +235,35 @@ describe('mastraStorage workflow snapshot merge operations', () => {
     expect(typeof testCtx.patches[0]?.data.updatedAt).toBe('string');
   });
 
+  it('records workflow state as context.__state in the same write as the step result', async () => {
+    const snapshot = {
+      runId: 'run-1',
+      status: 'running',
+      context: { __state: { counter: 0 } },
+      requestContext: {},
+    };
+    const testCtx = createWorkflowSnapshotCtx(JSON.stringify(snapshot));
+    const stepResult = { status: 'success', output: { ok: true }, payload: {}, startedAt: 1, endedAt: 2 };
+
+    const result = await handleTypedOperation(testCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'mergeWorkflowStepResult',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      workflowName: 'workflow-a',
+      runId: 'run-1',
+      stepId: 'step-1',
+      result: JSON.stringify(stepResult),
+      requestContext: JSON.stringify({}),
+      state: JSON.stringify({ counter: 1 }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(JSON.parse(result.result)).toEqual({ 'step-1': stepResult, __state: { counter: 1 } });
+    expect(testCtx.patch).toHaveBeenCalledTimes(1);
+    const patchedSnapshot = JSON.parse(testCtx.patches[0]?.data.snapshot as string);
+    expect(patchedSnapshot.context.__state).toEqual({ counter: 1 });
+  });
+
   it('applies pending marker resets without trusting stale sibling values or status', async () => {
     const snapshot = {
       runId: 'run-1',

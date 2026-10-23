@@ -146,6 +146,43 @@ describe('transcript reducer message entries', () => {
     ]);
   });
 
+  it('restores pending tool approvals from persisted assistant metadata', () => {
+    const args = { itemId: 'item-1', to: 'review' };
+    const message = dbMessage('assistant-approval', 'assistant', [
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'call', toolCallId: 'approve-1', toolName: 'factory_transition_work_item', args },
+      },
+    ]);
+    message.content.metadata = {
+      pendingToolApprovals: {
+        'approve-1': { toolCallId: 'approve-1', toolName: 'factory_transition_work_item', args, type: 'approval' },
+      },
+    };
+
+    let state = createInitialTranscript({ messages: [message] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'tool_approval_required',
+        toolCallId: 'approve-1',
+        toolName: 'factory_transition_work_item',
+        args,
+      },
+    });
+
+    expect(state.entries).toEqual([
+      expect.objectContaining({ kind: 'message', id: 'assistant-approval' }),
+      {
+        kind: 'approval',
+        id: 'approval-approve-1',
+        toolCallId: 'approve-1',
+        toolName: 'factory_transition_work_item',
+        args,
+      },
+    ]);
+  });
+
   it('projects persisted and live user signals to user messages without changing canonical content', () => {
     const persisted = signalMessage({
       id: 'user-signal-1',
@@ -294,6 +331,41 @@ describe('transcript reducer message entries', () => {
     });
 
     expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'After' }]);
+  });
+
+  it('drops part updates that would write past the end of the parts array', () => {
+    const message = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Before' }]);
+    let state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'message_start', message } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        id: message.id,
+        event: { type: 'part', index: 3, part: { type: 'text', text: 'Far ahead' } },
+      },
+    });
+
+    // An out-of-range write leaves a hole in `parts`; `find` and `for…of`
+    // visit that hole as an undefined part and throw on `.type`.
+    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'Before' }]);
+  });
+
+  it('appends a part that lands exactly at the end of the parts array', () => {
+    const message = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Before' }]);
+    let state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'message_start', message } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        id: message.id,
+        event: { type: 'part', index: 1, part: { type: 'text', text: 'Next' } },
+      },
+    });
+
+    expect(messageParts(state.entries[0])).toEqual([
+      { type: 'text', text: 'Before' },
+      { type: 'text', text: 'Next' },
+    ]);
   });
 
   it('keeps accumulated text when a message_start is re-delivered', () => {
@@ -1364,6 +1436,27 @@ describe('transcript reducer error notices', () => {
     return notice.text;
   }
 
+  it('offers a provider login on a missing-credential error', () => {
+    const state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'error', error: { name: 'ProviderAuthRequiredError', message: 'Not logged in to Anthropic.' } },
+    });
+    expect(state.entries.at(-1)).toMatchObject({
+      kind: 'notice',
+      level: 'error',
+      text: 'Not logged in to Anthropic.',
+      action: 'provider-login',
+    });
+  });
+
+  it('offers no action on other errors', () => {
+    const state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'error', error: { name: 'Error', message: 'boom' } },
+    });
+    expect(state.entries.at(-1)).not.toHaveProperty('action');
+  });
+
   it('renders a string error payload verbatim', () => {
     expect(errorNoticeText({ error: 'model quota exhausted' })).toBe('model quota exhausted');
   });
@@ -1758,5 +1851,38 @@ describe('live user signals sent by someone else', () => {
     );
     expect(drawable).toHaveLength(1);
     expect(drawable[0]?.id).toMatch(/^local-/);
+  });
+
+  it("draws the viewer's own message sent from another client with no optimistic echo", () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    const message = liveSignal('sig-3', 'hello from the TUI', { id: 'user_me', name: 'Me' });
+
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message }, viewerId: 'user_me' });
+
+    const entry = state.entries.find(e => 'id' in e && e.id === 'sig-3');
+    expect(messageParts(entry)).toEqual([{ type: 'text', text: 'hello from the TUI' }]);
+  });
+
+  it('draws a same-text message from another client after the composer send was echoed', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    const me = { id: 'user_me', name: 'Me' };
+    state = transcriptReducer(state, { type: 'localUser', text: 'yes' });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveSignal('sig-4', 'yes', me) },
+      viewerId: 'user_me',
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveSignal('sig-5', 'yes', me) },
+      viewerId: 'user_me',
+    });
+
+    const drawable = state.entries.filter(
+      entry => entry.kind === 'message' && messageParts(entry).some(part => (part as { text?: string }).text === 'yes'),
+    );
+    expect(drawable).toHaveLength(2);
+    expect(drawable[0]?.id).toMatch(/^local-/);
+    expect(drawable[1]?.id).toBe('sig-5');
   });
 });

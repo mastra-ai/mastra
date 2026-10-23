@@ -47,7 +47,7 @@ describe('SearchFieldBlock', () => {
 });
 
 /** The column holding the field, and whatever the caller put under it. */
-const fieldColumn = (container: HTMLElement) => container.firstElementChild?.firstElementChild;
+const fieldColumn = (container: HTMLElement) => container.firstElementChild?.firstElementChild?.firstElementChild;
 
 describe('SearchFieldBlock — the field itself', () => {
   it('invites a search unless the caller says otherwise', () => {
@@ -77,21 +77,34 @@ describe('SearchFieldBlock — the field itself', () => {
     expect(screen.getByRole<HTMLInputElement>('textbox').disabled).toBe(true);
   });
 
-  it('explains itself and its complaints', () => {
+  it('replaces its help text with a complaint', () => {
     const { container } = render(
       <SearchFieldBlock name="search" helpText="Matches names and ids" errorMsg="Too short" />,
     );
 
-    expect(screen.getByText('Matches names and ids')).toBeTruthy();
+    expect(screen.queryByText('Matches names and ids')).toBeNull();
     expect(screen.getByText('Too short')).toBeTruthy();
-    // The field, its help text and its complaint.
-    expect(fieldColumn(container)?.childElementCount).toBe(3);
+    expect(fieldColumn(container)?.childElementCount).toBe(2);
   });
 
-  it('puts nothing under the field when it has nothing to say', () => {
+  it('preserves an explicit error state without a message', () => {
+    render(<SearchFieldBlock name="search" error />);
+
+    expect(screen.getByRole('textbox').getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByRole('textbox').getAttribute('aria-describedby')).toBeNull();
+  });
+
+  it('renders no message line when it has nothing to say', () => {
     const { container } = render(<SearchFieldBlock name="search" />);
 
     expect(fieldColumn(container)?.childElementCount).toBe(1);
+  });
+
+  it('renders a message line when given help text', () => {
+    const { container } = render(<SearchFieldBlock name="search" helpText="Matches names and ids" />);
+
+    expect(fieldColumn(container)?.childElementCount).toBe(2);
+    expect(screen.getByText('Matches names and ids')).toBeTruthy();
   });
 
   it('leaves out a label it was never given', () => {
@@ -245,7 +258,6 @@ describe('SearchFieldBlock — minimizing', () => {
 
 describe('SearchFieldBlock — sizing', () => {
   it.each([
-    ['xs', 'px-7', 'size-3'],
     ['sm', 'px-8', 'size-3.5'],
     ['md', 'px-9', 'size-4'],
     ['lg', 'px-10', 'size-[1.125rem]'],
@@ -265,10 +277,9 @@ describe('SearchFieldBlock — sizing', () => {
 
   // The buttons carry the field's own height, so the row keeps one line.
   it.each([
-    ['xs', 'h-form-xs'],
-    ['sm', 'h-form-sm'],
-    ['md', 'h-form-md'],
-    ['lg', 'h-form-lg'],
+    ['sm', 'h-control-sm'],
+    ['md', 'h-control-md'],
+    ['lg', 'h-control-lg'],
   ] as const)('sizes the minimized button to a %s field', (size, height) => {
     render(<SearchFieldBlock name="search" isMinimized size={size} />);
 
@@ -278,18 +289,18 @@ describe('SearchFieldBlock — sizing', () => {
   it('keeps the minimized button compact when the field has no size', () => {
     render(<SearchFieldBlock name="search" isMinimized />);
 
-    expect(screen.getByRole('button', { name: 'Search' }).classList.contains('h-form-sm')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Search' }).classList.contains('h-control-sm')).toBe(true);
   });
 
   it('sizes the clear button to the field it sits in', () => {
     render(<SearchFieldBlock name="search" value="weather" onReset={vi.fn()} size="md" />);
 
-    expect(screen.getByRole('button', { name: 'Clear search' }).classList.contains('h-form-md')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Clear search' }).classList.contains('h-control-md')).toBe(true);
   });
 
   it('gives the clear button the medium size when the field has none', () => {
     render(<SearchFieldBlock name="search" value="weather" onReset={vi.fn()} />);
 
-    expect(screen.getByRole('button', { name: 'Clear search' }).classList.contains('h-form-md')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Clear search' }).classList.contains('h-control-md')).toBe(true);
   });
 });

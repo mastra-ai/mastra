@@ -17,6 +17,7 @@ import {
   BACKGROUND_TASK_MANAGER_KEY,
   CURRENT_DATE_KEY,
   DRAIN_PENDING_SIGNALS_KEY,
+  FIXED_MEMORY_KEY,
   GENERATE_ID_KEY,
   INITIAL_SIGNAL_ECHOES_KEY,
   MEMORY_CONFIG_KEY,
@@ -25,6 +26,7 @@ import {
   RESOURCE_ID_KEY,
   SAVE_QUEUE_MANAGER_KEY,
   SKIP_BG_TASK_WAIT_KEY,
+  SUBSCRIBE_PENDING_SIGNALS_KEY,
   THREAD_EXISTS_KEY,
   THREAD_ID_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
@@ -53,6 +55,7 @@ export function hydrateRunScopeFromInternal(mastra: Mastra, runId: string, inter
   if (internal.threadId !== undefined) scope.set(THREAD_ID_KEY, internal.threadId);
   if (internal.resourceId !== undefined) scope.set(RESOURCE_ID_KEY, internal.resourceId);
   if (internal.memory) scope.set(MEMORY_KEY, internal.memory);
+  if (internal.fixedMemory !== undefined) scope.set(FIXED_MEMORY_KEY, internal.fixedMemory);
   if (internal.threadExists !== undefined) scope.set(THREAD_EXISTS_KEY, internal.threadExists);
   if (internal.transportRef) scope.set(TRANSPORT_REF_KEY, internal.transportRef);
   if (internal.backgroundTaskManager) scope.set(BACKGROUND_TASK_MANAGER_KEY, internal.backgroundTaskManager);
@@ -61,6 +64,7 @@ export function hydrateRunScopeFromInternal(mastra: Mastra, runId: string, inter
     scope.set(BACKGROUND_TASK_MANAGER_CONFIG_KEY, internal.backgroundTaskManagerConfig);
   if (internal.skipBgTaskWait !== undefined) scope.set(SKIP_BG_TASK_WAIT_KEY, internal.skipBgTaskWait);
   if (internal.drainPendingSignals) scope.set(DRAIN_PENDING_SIGNALS_KEY, internal.drainPendingSignals);
+  if (internal.subscribePendingSignals) scope.set(SUBSCRIBE_PENDING_SIGNALS_KEY, internal.subscribePendingSignals);
   if (internal.initialSignalEchoes) scope.set(INITIAL_SIGNAL_ECHOES_KEY, internal.initialSignalEchoes);
   if (internal.toolPayloadTransform) scope.set(TOOL_PAYLOAD_TRANSFORM_KEY, internal.toolPayloadTransform);
 }

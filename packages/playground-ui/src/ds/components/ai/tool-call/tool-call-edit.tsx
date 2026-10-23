@@ -1,5 +1,5 @@
 import type { ToolEdit } from './tool-presentation';
-import { tokenStyle, useHighlight } from '@/ds/components/Code';
+import { useHighlight } from '@/ds/components/Code';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { languageForPath } from '@/ds/components/CodeEditor/highlight';
 import { truncateString } from '@/lib/truncate-string';
@@ -9,12 +9,13 @@ const DIFF_MAX_LINES = 200;
 const WRITTEN_FILE_MAX_CHARS = 2000;
 
 const DIFF_SIDES = {
-  removed: { sign: '-', row: 'bg-error/10', gutter: 'text-error' },
-  added: { sign: '+', row: 'bg-accent1/10', gutter: 'text-accent1' },
+  removed: { sign: '-', row: 'bg-destructive-subtle', gutter: 'text-destructive-subtle-foreground' },
+  added: { sign: '+', row: 'bg-success-subtle', gutter: 'text-success-subtle-foreground' },
 } as const;
 
-function boundedLines(text: string): { lines: string[]; hidden: number } {
+function boundedLines(text: string, showFullContent: boolean): { lines: string[]; hidden: number } {
   const lines = text.split('\n');
+  if (showFullContent) return { lines, hidden: 0 };
   return { lines: lines.slice(0, DIFF_MAX_LINES), hidden: Math.max(0, lines.length - DIFF_MAX_LINES) };
 }
 
@@ -29,9 +30,9 @@ function DiffSide({ lines, side, lang }: { lines: string[]; side: keyof typeof D
       {lines.map((line, index) => (
         <div key={index} className={cn('flex whitespace-pre', row)}>
           <span className={cn('w-5 shrink-0 text-center opacity-70 select-none', gutter)}>{sign}</span>
-          <span className="text-icon6 flex-1 pr-2.5">
+          <span className="flex-1 pr-2.5 text-foreground">
             {tokens?.[index]?.map((token, tokenIndex) => (
-              <span key={tokenIndex} className="shiki-token" style={tokenStyle(token)}>
+              <span key={tokenIndex} className={token.className}>
                 {token.content}
               </span>
             )) ?? line}
@@ -42,13 +43,13 @@ function DiffSide({ lines, side, lang }: { lines: string[]; side: keyof typeof D
   );
 }
 
-export function ToolCallEdit({ edit }: { edit: ToolEdit }) {
+export function ToolCallEdit({ edit, showFullContent = false }: { edit: ToolEdit; showFullContent?: boolean }) {
   const lang = languageForPath(edit.path);
 
   if ('content' in edit) {
     return (
       <CodeBlock
-        code={truncateString(edit.content, WRITTEN_FILE_MAX_CHARS)}
+        code={showFullContent ? edit.content : truncateString(edit.content, WRITTEN_FILE_MAX_CHARS)}
         lang={lang}
         fileName={edit.path ?? 'Change'}
         overflow="scroll"
@@ -56,19 +57,22 @@ export function ToolCallEdit({ edit }: { edit: ToolEdit }) {
     );
   }
 
-  const removed = boundedLines(edit.oldText);
-  const added = boundedLines(edit.newText);
+  const removed = boundedLines(edit.oldText, showFullContent);
+  const added = boundedLines(edit.newText, showFullContent);
   const hidden = removed.hidden + added.hidden;
 
   return (
     <div
-      className="border-border1 bg-neutral6/5 text-ui-sm max-w-full min-w-0 overflow-x-auto rounded-md border font-mono"
+      className={cn(
+        'max-w-full min-w-0 overflow-x-auto rounded-md border border-border bg-fill font-mono text-caption',
+        showFullContent && 'max-h-60 overflow-y-auto',
+      )}
       role="group"
       aria-label="File change"
     >
       <DiffSide lines={removed.lines} side="removed" lang={lang} />
       <DiffSide lines={added.lines} side="added" lang={lang} />
-      {hidden > 0 && <div className="text-icon3 px-2.5 py-1 select-none">… {hidden} more lines</div>}
+      {hidden > 0 && <div className="px-2.5 py-1 text-muted-foreground select-none">… {hidden} more lines</div>}
     </div>
   );
 }

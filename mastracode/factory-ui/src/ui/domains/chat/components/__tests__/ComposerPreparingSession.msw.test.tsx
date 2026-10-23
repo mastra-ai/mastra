@@ -163,7 +163,7 @@ describe('Composer while a session prepares its workspace', () => {
     const form = container.querySelector('form');
     assert(form);
     fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
-    expect(await screen.findByRole('button', { name: 'Remove image' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
 
     await user.keyboard('{Enter}');
 

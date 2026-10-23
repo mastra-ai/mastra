@@ -1,8 +1,16 @@
+import { hasPermission } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import { isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
+import { formatZodError } from '@mastra/server/handlers/error';
+import {
+  checkRouteFGA,
+  getEffectivePermission,
+  isZodError,
+  MASTRA_AUTH_MODE_KEY,
+  SERVER_ROUTES,
+} from '@mastra/server/server-adapter';
 import type { ServerRoute, ServerContext, ZodErrorLike } from '@mastra/server/server-adapter';
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 
 import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
@@ -38,6 +46,44 @@ export interface RouteHandlerResult {
   sseFlushOnConnect?: boolean;
 }
 
+type ValidationErrorContext = 'query' | 'body' | 'path';
+
+const VALIDATION_CONTEXT_LABELS: Record<ValidationErrorContext, string> = {
+  query: 'query parameters',
+  body: 'request body',
+  path: 'path parameters',
+};
+
+function getSchemaTypeName(schema: unknown): string | undefined {
+  if (!schema || typeof schema !== 'object') {
+    return undefined;
+  }
+
+  const definition = (schema as any)._def ?? (schema as any).def;
+  return definition?.typeName ?? definition?.type;
+}
+
+function unwrapOptionalNullable(schema: any): any {
+  let inner = schema;
+  let typeName = getSchemaTypeName(inner);
+
+  while (
+    typeName === 'ZodOptional' ||
+    typeName === 'optional' ||
+    typeName === 'ZodNullable' ||
+    typeName === 'nullable'
+  ) {
+    const definition = inner?._def ?? inner?.def;
+    if (!definition?.innerType) {
+      return inner;
+    }
+    inner = definition.innerType;
+    typeName = getSchemaTypeName(inner);
+  }
+
+  return inner;
+}
+
 /**
  * Service that bridges NestJS controllers to Mastra route handlers.
  * Handles parameter validation and invokes the appropriate handler.
@@ -62,9 +108,16 @@ export class RouteHandlerService {
     // Build a map of path+method to route for fast lookup
     this.routeMap = new Map();
     for (const route of SERVER_ROUTES) {
-      const key = this.getRouteKey(route.method, route.path);
-      this.routeMap.set(key, route);
+      this.registerRoute(route);
     }
+  }
+
+  /**
+   * Register a route with the catch-all NestJS controller.
+   */
+  registerRoute(route: ServerRoute): void {
+    const key = this.getRouteKey(route.method, route.path);
+    this.routeMap.set(key, route);
   }
 
   /**
@@ -97,7 +150,7 @@ export class RouteHandlerService {
       }
 
       // Then check parameterized routes
-      for (const route of SERVER_ROUTES) {
+      for (const route of this.routeMap.values()) {
         if (route.method.toUpperCase() !== checkMethod) {
           continue;
         }
@@ -116,7 +169,7 @@ export class RouteHandlerService {
    * Get all routes (for dynamic controller generation).
    */
   getAllRoutes(): readonly ServerRoute[] {
-    return SERVER_ROUTES;
+    return Array.from(this.routeMap.values());
   }
 
   /**
@@ -171,7 +224,7 @@ export class RouteHandlerService {
         validatedPathParams = (await route.pathParamSchema.parseAsync(params.pathParams)) as Record<string, string>;
       } catch (error) {
         if (isZodError(error)) {
-          throw new ValidationError('Invalid path parameters', error);
+          throw this.createValidationError(route, error, 'path');
         }
         throw error;
       }
@@ -183,23 +236,29 @@ export class RouteHandlerService {
         validatedQueryParams = (await route.queryParamSchema.parseAsync(params.queryParams)) as Record<string, unknown>;
       } catch (error) {
         if (isZodError(error)) {
-          throw new ValidationError('Invalid query parameters', error);
+          throw this.createValidationError(route, error, 'query');
         }
         throw error;
       }
     }
 
     let validatedBody = params.body;
-    if (route.bodySchema && params.body !== undefined) {
+    if (route.bodySchema) {
       try {
-        validatedBody = await route.bodySchema.parseAsync(params.body);
+        validatedBody = await this.parseBody(route, params.body);
       } catch (error) {
         if (isZodError(error)) {
-          throw new ValidationError('Invalid request body', error);
+          throw this.createValidationError(route, error, 'body');
         }
         throw error;
       }
     }
+
+    await this.authorizeRoute(route, params.requestContext, {
+      ...validatedPathParams,
+      ...validatedQueryParams,
+      ...(typeof validatedBody === 'object' && validatedBody !== null ? validatedBody : {}),
+    });
 
     const context: ServerContext = {
       mastra: this.mastra,
@@ -226,6 +285,116 @@ export class RouteHandlerService {
       streamFormat: route.streamFormat,
       sseFlushOnConnect: route.sseFlushOnConnect,
     };
+  }
+
+  /**
+   * Enforce the route's RBAC permission and FGA check, matching the other server adapters.
+   * Relies on the auth guard having stored the user, permissions, and auth mode in the request context.
+   */
+  private async authorizeRoute(
+    route: ServerRoute,
+    requestContext: RequestContext,
+    params: Record<string, unknown>,
+  ): Promise<void> {
+    await this.enforceRoutePermission(route, requestContext);
+    await this.enforceRouteFGA(route, requestContext, params);
+  }
+
+  /**
+   * Throws 403 when the user lacks the route's effective RBAC permission.
+   * Skipped when Mastra auth is explicitly disabled (`auth.enabled: false`), since no Mastra user is resolved.
+   */
+  async enforceRoutePermission(route: ServerRoute, requestContext: RequestContext): Promise<void> {
+    if (this.options.auth?.enabled === false) return;
+
+    const studio = this.mastra.getStudio?.();
+    const server = this.mastra.getServer();
+    if (!studio?.auth && !server?.auth) return;
+
+    const rbacProvider =
+      requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio' ? (studio?.rbac ?? server?.rbac) : server?.rbac;
+    const requiredPermission = rbacProvider ? getEffectivePermission(route) : null;
+    if (requiredPermission) {
+      const required = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
+      const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+      if (!userPermissions || !required.some(permission => hasPermission(userPermissions, permission))) {
+        throw new ForbiddenException(`Missing required permission: ${required.join(' or ')}`);
+      }
+    }
+  }
+
+  /**
+   * Throws when the FGA provider denies the route's resource.
+   * Skipped when Mastra auth is explicitly disabled (`auth.enabled: false`), since no Mastra user is resolved.
+   */
+  async enforceRouteFGA(
+    route: ServerRoute,
+    requestContext: RequestContext,
+    params: Record<string, unknown>,
+  ): Promise<void> {
+    if (this.options.auth?.enabled === false) return;
+
+    const fgaError = await checkRouteFGA(this.mastra, route, requestContext, params);
+    if (fgaError) {
+      throw new HttpException(fgaError.message, fgaError.status);
+    }
+  }
+
+  private async parseBody(route: ServerRoute, body: unknown): Promise<unknown> {
+    const bodySchema = route.bodySchema;
+    if (!bodySchema) {
+      return body;
+    }
+
+    if (body === undefined) {
+      const omitted = await bodySchema.safeParseAsync(undefined);
+      if (omitted.success) {
+        return omitted.data;
+      }
+
+      const schemaType = getSchemaTypeName(unwrapOptionalNullable(bodySchema));
+      if (schemaType === 'object' || schemaType === 'ZodObject') {
+        const emptyObject = await bodySchema.safeParseAsync({});
+        if (emptyObject.success) {
+          return emptyObject.data;
+        }
+      }
+
+      throw omitted.error;
+    }
+
+    return bodySchema.parseAsync(body);
+  }
+
+  private createValidationError(
+    route: ServerRoute,
+    error: ZodErrorLike,
+    context: ValidationErrorContext,
+  ): ValidationError {
+    const hook = route.onValidationError ?? this.mastra.getServer()?.onValidationError;
+
+    if (hook) {
+      try {
+        const result = hook(error as any, context);
+        if (result) {
+          return new ValidationError(
+            `Invalid ${VALIDATION_CONTEXT_LABELS[context]}`,
+            error,
+            result.status,
+            result.body,
+          );
+        }
+      } catch (hookError) {
+        this.logger.error('Error in custom onValidationError hook', hookError);
+      }
+    }
+
+    return new ValidationError(
+      `Invalid ${VALIDATION_CONTEXT_LABELS[context]}`,
+      error,
+      400,
+      formatZodError(error, VALIDATION_CONTEXT_LABELS[context]),
+    );
   }
 
   private getRouteKey(method: string, path: string): string {
@@ -263,6 +432,8 @@ export class ValidationError extends Error {
   constructor(
     message: string,
     public readonly zodError: ZodErrorLike,
+    public readonly status = 400,
+    public readonly body: unknown = formatZodError(zodError, 'request'),
   ) {
     super(message);
     this.name = 'ValidationError';

@@ -2,9 +2,10 @@ import { ReadableStream } from 'node:stream/web';
 import { coreFeatures } from '@mastra/core/features';
 import type { ObservabilityExporter, TracingEvent, ExportedSpan, MetricEvent } from '@mastra/core/observability';
 import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { DefaultObservabilityInstance } from './instances';
+import { PricingRegistry } from './metrics/pricing-registry';
 import { ModelSpanTracker } from './model-tracing';
 
 /**
@@ -87,6 +88,97 @@ describe('ModelSpanTracker', () => {
       name: 'test-instance',
       sampling: { type: SamplingStrategyType.ALWAYS },
       exporters: [testExporter],
+    });
+  });
+
+  describe('provider-reported costs', () => {
+    it('sums a BYOK upstream cost across steps, even when the OpenRouter surcharge is zero', () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'openai/gpt-5-nano', provider: 'openrouter' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.endGeneration({
+        attributes: {},
+        stepProviderMetadata: [
+          {
+            openrouter: {
+              usage: { cost: 0, isByok: true, costDetails: { upstreamInferenceCost: 0.00002615 } },
+            },
+          },
+          { openrouter: { usage: { cost: 0.000001, isByok: false } } },
+        ],
+      });
+
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext).toEqual({
+        provider: 'openrouter',
+        model: 'openai/gpt-5-nano',
+        estimatedCost: 0.00002715,
+        costUnit: 'USD',
+        costMetadata: {
+          source: 'provider_reported',
+          sdkProvider: 'openrouter',
+          sdkCostField: 'openrouter.usage.cost+openrouter.usage.costDetails.upstreamInferenceCost',
+          scope: 'query_total',
+          reportedStepCount: 2,
+        },
+      });
+    });
+
+    it('uses the exact cost from the shape published provider versions emit, without isByok', () => {
+      // Matches the recorded OpenRouter response for a non-BYOK request: cost and
+      // upstreamInferenceCost are equal and the provider drops usage.is_byok.
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'openai/gpt-4o-mini', provider: 'openrouter' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.endGeneration({
+        attributes: {},
+        providerMetadata: {
+          openrouter: { usage: { cost: 0.0000084, costDetails: { upstreamInferenceCost: 0.0000084 } } },
+        },
+      });
+
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext?.estimatedCost).toBe(0.0000084);
+      expect(span?.attributes?.costContext?.costMetadata).toMatchObject({
+        source: 'provider_reported',
+        sdkCostField: 'openrouter.usage.cost',
+      });
+    });
+
+    it('does not double-count the non-BYOK upstream cost breakdown', () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'openai/gpt-4o-mini', provider: 'openrouter' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.endGeneration({
+        attributes: {},
+        providerMetadata: {
+          openrouter: {
+            usage: {
+              cost: 0.000003,
+              isByok: false,
+              costDetails: { upstreamInferenceCost: 0.000003 },
+            },
+          },
+        },
+      });
+
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext?.estimatedCost).toBe(0.000003);
+      expect(span?.attributes?.costContext?.costMetadata).toMatchObject({
+        sdkCostField: 'openrouter.usage.cost',
+      });
     });
   });
 
@@ -1413,6 +1505,46 @@ describe('ModelSpanTracker', () => {
     });
   });
 
+  describe('step metadata cleanup', () => {
+    it('should strip the raw provider response body but keep response headers', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const headers = { 'x-request-id': 'req_1', 'x-ratelimit-remaining-tokens': '1000' };
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1', request: {} } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: {},
+            stepResult: { reason: 'stop' },
+            metadata: {
+              modelMetadata: { modelId: 'gpt-4o-mini', modelProvider: 'openai' },
+              request: { body: '{}' },
+              body: { id: 'resp_1', output: [{ type: 'message', content: 'x'.repeat(1000) }] },
+              headers,
+            },
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      const metadata = stepSpans[0]!.metadata as Record<string, unknown>;
+      expect(metadata).not.toHaveProperty('body');
+      expect(metadata).not.toHaveProperty('request');
+      expect(metadata.headers).toEqual(headers);
+      expect(metadata.modelMetadata).toEqual({ modelId: 'gpt-4o-mini', modelProvider: 'openai' });
+    });
+  });
+
   describe('tool-result preview in step input', () => {
     it('should show transformed tool-result providerOptions from final inputMessages', async () => {
       const modelSpan = tracing.startSpan({
@@ -1849,7 +1981,7 @@ describe('ModelSpanTracker', () => {
       modelSpan.end();
     });
 
-    it('applies inference context (parameters / providerOptions / availableTools / toolChoice / responseFormat) set via setInferenceContext', async () => {
+    it('applies inference context (parameters / providerOptions / availableTools / tools / toolChoice / responseFormat) set via setInferenceContext', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -1861,6 +1993,7 @@ describe('ModelSpanTracker', () => {
         parameters: { temperature: 0.7, maxOutputTokens: 1024 },
         providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
         availableTools: ['weather', 'calculator'],
+        tools: [{ type: 'function', name: 'weather', description: 'Get weather', parameters: { type: 'object' } }],
         toolChoice: 'auto',
         responseFormat: 'json_schema',
       });
@@ -1887,6 +2020,7 @@ describe('ModelSpanTracker', () => {
         parameters: { temperature: 0.7, maxOutputTokens: 1024 },
         providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
         availableTools: ['weather', 'calculator'],
+        tools: [{ type: 'function', name: 'weather', description: 'Get weather', parameters: { type: 'object' } }],
         toolChoice: 'auto',
         responseFormat: 'json_schema',
       });
@@ -1989,6 +2123,38 @@ describe('ModelSpanTracker', () => {
       expect(inferenceSpan).toBeDefined();
       expect(inferenceSpan!.attributes?.availableTools).toEqual(['searchDocs', 'lookupOrder']);
       expect(inferenceSpan!.attributes?.toolChoice).toEqual('required');
+    });
+
+    it('startInference(payload) records the prompt the call received as the span input', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+      const inputMessages = [
+        { role: 'system', content: 'Be brief.' },
+        { role: 'user', content: [{ type: 'text', text: 'Weather in Paris?' }] },
+      ];
+
+      tracker.startStep();
+      tracker.startInference({ inputMessages, messageId: 'msg-1' });
+
+      const chunks = [
+        { type: 'text-delta', payload: { text: 'ok' } },
+        {
+          type: 'step-finish',
+          payload: { output: {}, stepResult: { reason: 'stop', warnings: [] }, metadata: {} },
+        },
+      ];
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      expect(inferenceSpan!.input).toEqual([
+        { role: 'system', content: 'Be brief.' },
+        { role: 'user', content: 'Weather in Paris?' },
+      ]);
     });
 
     it('MODEL_INFERENCE.startTime excludes work between startStep and startInference', async () => {
@@ -2142,6 +2308,12 @@ describe('ModelSpanTracker', () => {
       });
 
       it('falls back to pricing estimates when the aggregate Gateway cost is non-finite', () => {
+        onTestFinished(() => vi.restoreAllMocks());
+        vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(
+          PricingRegistry.fromModelsDev({
+            vercel: { models: { 'claude-haiku-4-5': { cost: { input: 1, output: 5 } } } },
+          }),
+        );
         const span = endGeneration({
           attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
           usage: { inputTokens: 100, outputTokens: 50 },
@@ -2215,6 +2387,208 @@ describe('ModelSpanTracker', () => {
           costMetadata: { source: 'sdk_estimate' },
         });
       });
+    });
+  });
+
+  describe('time to first chunk', () => {
+    let now: number;
+
+    beforeEach(() => {
+      coreFeatures.add('model-inference-span');
+      // Fake only the clock; real timers let the stream yield between chunks.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      now = Date.parse('2026-01-01T00:00:00Z');
+      vi.setSystemTime(now);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** Each chunk arrives `gapMs` after the previous one was processed, so spans get distinct clocks. */
+    function tickingStream<T>(chunks: T[], gapMs: number): ReadableStream<T> {
+      let index = 0;
+      return new ReadableStream<T>({
+        async pull(controller) {
+          if (index < chunks.length) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+            vi.setSystemTime((now += gapMs));
+            controller.enqueue(chunks[index++]!);
+          } else {
+            controller.close();
+          }
+        },
+      });
+    }
+
+    const stepFinish = (reason: string) => ({
+      type: 'step-finish',
+      payload: { output: { usage: {} }, stepResult: { reason, warnings: [] }, metadata: {} },
+    });
+    const clockOf = (span: { attributes?: { completionStartTime?: Date } } | undefined) =>
+      span?.attributes?.completionStartTime?.getTime();
+
+    function startRun() {
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run' });
+      const modelSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+      return { agentSpan, modelSpan };
+    }
+
+    it('copies the first chunk clock to the step, generation and agent run; later steps keep their own', async () => {
+      const t0 = now;
+      const { agentSpan, modelSpan } = startRun();
+      const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+
+      await consumeStream(
+        tracker.wrapStream(
+          tickingStream(
+            [
+              { type: 'step-start', payload: {} }, // +100
+              { type: 'text-delta', payload: { text: 'a' } }, // +200 first chunk of step 0
+              { type: 'text-delta', payload: { text: 'b' } }, // +300
+              stepFinish('tool-calls'), // +400
+              { type: 'step-start', payload: {} }, // +500
+              { type: 'text-delta', payload: { text: 'c' } }, // +600 first chunk of step 1
+              stepFinish('stop'), // +700
+            ],
+            100,
+          ),
+        ),
+      );
+      tracker.endGeneration();
+      agentSpan.end();
+
+      expect(testExporter.getSpansByType(SpanType.MODEL_INFERENCE).map(clockOf)).toEqual([t0 + 200, t0 + 600]);
+      expect(testExporter.getSpansByType(SpanType.MODEL_STEP).map(clockOf)).toEqual([t0 + 200, t0 + 600]);
+      expect(clockOf(testExporter.getSpansByType(SpanType.MODEL_GENERATION)[0])).toBe(t0 + 200);
+      expect(clockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])).toBe(t0 + 200);
+    });
+
+    it('gives each step its own clock when the installed core has no inference spans', async () => {
+      coreFeatures.delete('model-inference-span');
+      const t0 = now;
+      const { agentSpan, modelSpan } = startRun();
+      const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+
+      await consumeStream(
+        tracker.wrapStream(
+          tickingStream(
+            [
+              { type: 'step-start', payload: {} }, // +100
+              { type: 'text-delta', payload: { text: 'a' } }, // +200 first chunk of step 0
+              stepFinish('tool-calls'), // +300
+              { type: 'step-start', payload: {} }, // +400
+              { type: 'text-delta', payload: { text: 'b' } }, // +500 first chunk of step 1
+              stepFinish('stop'), // +600
+            ],
+            100,
+          ),
+        ),
+      );
+      tracker.endGeneration();
+      agentSpan.end();
+
+      expect(testExporter.getSpansByType(SpanType.MODEL_INFERENCE)).toHaveLength(0);
+      expect(testExporter.getSpansByType(SpanType.MODEL_STEP).map(clockOf)).toEqual([t0 + 200, t0 + 500]);
+      expect(clockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])).toBe(t0 + 200);
+    });
+
+    it('counts a whole tool-call chunk as the first chunk', async () => {
+      const t0 = now;
+      const { agentSpan, modelSpan } = startRun();
+      const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+
+      await consumeStream(
+        tracker.wrapStream(
+          tickingStream(
+            [
+              { type: 'step-start', payload: {} },
+              { type: 'tool-call', payload: { toolCallId: 'c1', toolName: 'weather', args: {} } },
+              stepFinish('tool-calls'),
+            ],
+            100,
+          ),
+        ),
+      );
+      tracker.endGeneration();
+      agentSpan.end();
+
+      expect(clockOf(testExporter.getSpansByType(SpanType.MODEL_INFERENCE)[0])).toBe(t0 + 200);
+      expect(clockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])).toBe(t0 + 200);
+    });
+
+    it('ignores a tool-call the agent replays before the model call', async () => {
+      const t0 = now;
+      const { agentSpan, modelSpan } = startRun();
+      const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+
+      await consumeStream(
+        tracker.wrapStream(
+          tickingStream(
+            [
+              // +100 replayed background task on resume, no model call yet
+              {
+                type: 'tool-call',
+                from: 'AGENT',
+                payload: { toolCallId: 'bg-1', toolName: 'research', args: {} },
+              },
+              { type: 'step-start', payload: {} }, // +200
+              { type: 'text-delta', payload: { text: 'a' } }, // +300 first provider chunk
+              stepFinish('stop'), // +400
+            ],
+            100,
+          ),
+        ),
+      );
+      tracker.endGeneration();
+      agentSpan.end();
+
+      // The replayed chunk opens no early step, so the model call keeps one step and one inference.
+      expect(testExporter.getSpansByType(SpanType.MODEL_STEP)).toHaveLength(1);
+      expect(testExporter.getSpansByType(SpanType.MODEL_INFERENCE).map(clockOf)).toEqual([t0 + 300]);
+      expect(clockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])).toBe(t0 + 300);
+    });
+
+    it('never writes to an agent run it was not given', async () => {
+      const { agentSpan, modelSpan } = startRun();
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      await consumeStream(
+        tracker.wrapStream(
+          tickingStream(
+            [{ type: 'step-start', payload: {} }, { type: 'text-delta', payload: { text: 'a' } }, stepFinish('stop')],
+            100,
+          ),
+        ),
+      );
+      tracker.endGeneration();
+      agentSpan.end();
+
+      expect(clockOf(testExporter.getSpansByType(SpanType.MODEL_GENERATION)[0])).toBeDefined();
+      expect(testExporter.getSpansByType(SpanType.AGENT_RUN)[0]!.attributes).not.toHaveProperty('completionStartTime');
+    });
+
+    it('sets nothing when no provider chunk arrived', async () => {
+      const { agentSpan, modelSpan } = startRun();
+      const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+      await consumeStream(
+        tracker.wrapStream(tickingStream([{ type: 'step-start', payload: {} }, stepFinish('stop')], 100)),
+      );
+      tracker.endGeneration();
+      agentSpan.end();
+
+      for (const type of [
+        SpanType.MODEL_INFERENCE,
+        SpanType.MODEL_STEP,
+        SpanType.MODEL_GENERATION,
+        SpanType.AGENT_RUN,
+      ]) {
+        expect(clockOf(testExporter.getSpansByType(type)[0])).toBeUndefined();
+      }
     });
   });
 });

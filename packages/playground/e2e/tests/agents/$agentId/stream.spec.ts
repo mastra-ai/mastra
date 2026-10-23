@@ -123,11 +123,11 @@ test.describe('Agent chat streaming', () => {
       await fillAndSend(page, 'Give me the weather in Paris');
 
       // Assert partial streaming chunks
-      await expect(page.getByTestId('thread-wrapper').getByRole('button', { name: `lessComplexWorkflow` })).toBeVisible(
-        {
-          timeout: 20000,
-        },
-      );
+      await expect(
+        page.getByTestId('thread-wrapper').getByRole('button', { name: 'lessComplexWorkflow', exact: true }),
+      ).toBeVisible({
+        timeout: 20000,
+      });
 
       // Node 9 is the last step. While streaming, it transitions from "idle" to
       // "running" to "success". Depending on machine speed it may already be in

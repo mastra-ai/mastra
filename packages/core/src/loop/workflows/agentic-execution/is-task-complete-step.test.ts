@@ -42,10 +42,34 @@ describe('isTaskCompleteStep — working memory skip', () => {
   let runScorersSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     runScorersSpy = vi
       .spyOn(validation, 'runStreamCompletionScorers')
       .mockResolvedValue({ complete: true, scorers: [] } as any);
     vi.spyOn(validation, 'formatStreamCompletionFeedback').mockReturnValue('' as any);
+  });
+
+  it('does not advance scorer iterations or completion feedback for signal-discarded attempts', async () => {
+    const params = baseParams();
+    params.maxSteps = 2;
+    const step = createIsTaskCompleteStep(params as any);
+    runScorersSpy.mockResolvedValue({ complete: false, scorers: [] });
+    const feedback = vi.spyOn(validation, 'formatStreamCompletionFeedback');
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const input = { ...makeInput({ isContinued: true }), stepResult: { isContinued: true, signalPreempted: true } };
+      expect(await executeStep(step, input)).toBe(input);
+    }
+    expect(runScorersSpy).not.toHaveBeenCalled();
+    expect(params.controller.enqueue).not.toHaveBeenCalled();
+    expect(params.messageList.get.response.db()).toEqual([]);
+    await executeStep(step, makeInput());
+    await executeStep(step, makeInput());
+    expect(runScorersSpy.mock.calls.map(([, context]) => context.iteration)).toEqual([1, 2]);
+    expect(feedback.mock.calls.map(([, maxIterationReached]) => maxIterationReached)).toEqual([false, true]);
+    expect(params.controller.enqueue.mock.calls.map(([chunk]) => chunk.payload)).toEqual([
+      expect.objectContaining({ iteration: 1, maxIterationReached: false }),
+      expect.objectContaining({ iteration: 2, maxIterationReached: true }),
+    ]);
   });
 
   it('skips scorers when only tool call was updateWorkingMemory', async () => {

@@ -39,9 +39,9 @@ const items = [
 const NESTED_LEVEL_OPEN_DELAY_MS = 220;
 
 const Field = ({ label, value }: { label: string; value: string }) => (
-  <div className="text-ui-md flex justify-between gap-4">
-    <span className="text-neutral3">{label}</span>
-    <span className="text-neutral5">{value}</span>
+  <div className="flex justify-between gap-4 text-body">
+    <span className="text-muted-foreground">{label}</span>
+    <span className="text-foreground">{value}</span>
   </div>
 );
 
@@ -58,7 +58,7 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
 
   return (
     <div className="p-8">
-      <Button onClick={() => setIsOpen(true)}>Open Side Dialog</Button>
+      <Button onClick={() => setIsOpen(true)}>Open side dialog</Button>
       <SideDialog
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
@@ -76,13 +76,13 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
             onNext={index < items.length - 1 ? () => setIndex(index + 1) : undefined}
           />
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm">
+            <Button size="sm">
               <Icon>
                 <PencilIcon />
               </Icon>
               Edit
             </Button>
-            <Button variant="outline" size="sm">
+            <Button size="sm">
               <Icon>
                 <Trash2Icon />
               </Icon>
@@ -178,12 +178,8 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
   return (
     <div className="p-8">
       <div className="flex gap-2">
-        <Button onClick={() => openDepth(2)}>Open Nested Level 2</Button>
-        {depth === 3 && (
-          <Button variant="outline" onClick={() => openDepth(3)}>
-            Open Nested Level 3
-          </Button>
-        )}
+        <Button onClick={() => openDepth(2)}>Open nested level 2</Button>
+        {depth === 3 && <Button onClick={() => openDepth(3)}>Open nested level 3</Button>}
       </div>
 
       <SideDialog
@@ -198,8 +194,8 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
             <HashIcon /> item_a1b2c3
           </TextAndIcon>
           <div className="ml-auto">
-            <Button variant="outline" size="sm" onClick={() => setIsLevel2Open(true)}>
-              Open Trace
+            <Button size="sm" onClick={() => setIsLevel2Open(true)}>
+              Open trace
             </Button>
           </div>
         </SideDialog.Top>
@@ -237,7 +233,7 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
               <TextAndIcon>
                 <HashIcon /> trace_72f19
               </TextAndIcon>
-              <Button variant="outline" size="sm" onClick={() => setIsLevel2Open(true)}>
+              <Button size="sm" onClick={() => setIsLevel2Open(true)}>
                 Open
               </Button>
             </div>
@@ -256,8 +252,8 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
               </TextAndIcon>
               {depth === 3 && (
                 <div className="ml-auto">
-                  <Button variant="outline" size="sm" onClick={() => setIsLevel3Open(true)}>
-                    Open Span
+                  <Button size="sm" onClick={() => setIsLevel3Open(true)}>
+                    Open span
                   </Button>
                 </div>
               )}
@@ -295,7 +291,7 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
                     <TextAndIcon>
                       <HashIcon /> span_embed_query
                     </TextAndIcon>
-                    <Button variant="outline" size="sm" onClick={() => setIsLevel3Open(true)}>
+                    <Button size="sm" onClick={() => setIsLevel3Open(true)}>
                       Open
                     </Button>
                   </div>
@@ -364,7 +360,7 @@ const SideDialogWithCodeDemo = () => {
 
   return (
     <div className="p-8">
-      <Button onClick={() => setIsOpen(true)}>Open with Code Section</Button>
+      <Button onClick={() => setIsOpen(true)}>Open with code section</Button>
       <SideDialog
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
@@ -399,7 +395,8 @@ const SideDialogWithCodeDemo = () => {
             codeStr={`{
   "name": "customer-support",
   "model": "gpt-4",
-  "temperature": 0.7
+  "temperature": 0.7,
+  "instructions": "You are a support agent.\\nKeep answers short."
 }`}
           />
         </SideDialog.Content>
@@ -417,7 +414,7 @@ const ConfirmationDialogDemo = () => {
 
   return (
     <div className="p-8">
-      <Button onClick={() => setIsOpen(true)}>Open Confirmation</Button>
+      <Button onClick={() => setIsOpen(true)}>Open confirmation</Button>
       <SideDialog
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
@@ -427,14 +424,12 @@ const ConfirmationDialogDemo = () => {
       >
         <SideDialog.Content>
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <h3 className="text-ui-lg text-neutral6 mb-2 font-medium">Confirm deletion?</h3>
-            <p className="text-ui-md text-neutral3 mb-6">
+            <h3 className="mb-2 text-heading text-foreground">Confirm deletion?</h3>
+            <p className="mb-6 text-body text-muted-foreground">
               This action cannot be undone. The agent will be permanently deleted.
             </p>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setIsOpen(false)}>
-                Cancel
-              </Button>
+              <Button onClick={() => setIsOpen(false)}>Cancel</Button>
               <Button onClick={() => setIsOpen(false)}>Delete</Button>
             </div>
           </div>

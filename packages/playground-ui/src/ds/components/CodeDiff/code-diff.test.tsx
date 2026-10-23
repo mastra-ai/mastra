@@ -1,32 +1,73 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-
 import { CodeDiff } from './code-diff';
 
-const codeA = JSON.stringify({ input: 'hello', removed: true }, null, 2);
-const codeB = JSON.stringify({ input: 'world', added: true }, null, 2);
+Object.defineProperty(CSSStyleSheet.prototype, 'replaceSync', { value: () => {} });
+Object.defineProperty(globalThis, 'ResizeObserver', {
+  value: class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  },
+});
 
 afterEach(() => cleanup());
 
 describe('CodeDiff', () => {
-  describe('given two documents', () => {
-    it('renders a side-by-side merge view with line-number gutters', () => {
-      const { container } = render(<CodeDiff codeA={codeA} codeB={codeB} />);
+  it('shows both versions of a Playground observation', async () => {
+    const { container } = render(
+      <CodeDiff codeA={'Remember Paris'} codeB={'Remember Lyon'} filename="observations.md" />,
+    );
 
-      expect(container.querySelector('.cm-mergeView')).not.toBeNull();
-      expect(container.querySelectorAll('.cm-mergeViewEditor')).toHaveLength(2);
-      expect(container.querySelectorAll('.cm-lineNumbers').length).toBeGreaterThan(0);
+    await waitFor(() => {
+      const content = container.querySelector('diffs-container')?.shadowRoot?.textContent;
+      expect(content).toContain('Remember Paris');
+      expect(content).toContain('Remember Lyon');
     });
+  }, 15_000);
 
-    it('marks removed lines on the left and added lines on the right', () => {
-      const { container } = render(<CodeDiff codeA={codeA} codeB={codeB} />);
-      const [left, right] = Array.from(container.querySelectorAll('.cm-mergeViewEditor'));
+  it('shows a Factory Git patch', async () => {
+    const patch = [
+      'diff --git a/src/example.ts b/src/example.ts',
+      'index 1234567..abcdef0 100644',
+      '--- a/src/example.ts',
+      '+++ b/src/example.ts',
+      '@@ -1 +1 @@',
+      '-const answer = 1;',
+      '+const answer = 2;',
+    ].join('\n');
+    const { container } = render(<CodeDiff patch={patch} />);
 
-      expect(left?.querySelector('.cm-editor.cm-merge-a')).not.toBeNull();
-      expect(left?.querySelector('.cm-changedLine')).not.toBeNull();
-      expect(right?.querySelector('.cm-editor.cm-merge-b')).not.toBeNull();
-      expect(right?.querySelector('.cm-changedLine')).not.toBeNull();
+    await waitFor(() => {
+      const content = container.querySelector('diffs-container')?.shadowRoot?.textContent;
+      expect(content).toContain('const answer = 1;');
+      expect(content).toContain('const answer = 2;');
     });
+  }, 15_000);
+
+  it('keeps rename details visible when a patch has no text changes', () => {
+    const patch = [
+      'diff --git a/src/old.ts b/src/new.ts',
+      'similarity index 100%',
+      'rename from src/old.ts',
+      'rename to src/new.ts',
+    ].join('\n');
+    const { getByText } = render(<CodeDiff patch={patch} />);
+
+    expect(getByText('similarity index 100%')).not.toBeNull();
+    expect(getByText('rename from src/old.ts')).not.toBeNull();
+    expect(getByText('rename to src/new.ts')).not.toBeNull();
+  });
+
+  it('identifies a changed binary file without showing an empty diff', () => {
+    const patch = [
+      'diff --git a/logo.png b/logo.png',
+      'index 1234567..abcdef0 100644',
+      'Binary files a/logo.png and b/logo.png differ',
+    ].join('\n');
+    const { getByText } = render(<CodeDiff patch={patch} />);
+
+    expect(getByText('Binary files a/logo.png and b/logo.png differ')).not.toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from 'node:crypto';
+import { createPrivateKey, createSign, generateKeyPairSync } from 'node:crypto';
 import {
   DirectoryNotEmptyError,
   DirectoryNotFoundError,
@@ -554,6 +554,16 @@ describe('GoogleDriveFilesystem', () => {
       // If the key isn't normalized, createSign().sign() throws DECODER routines::unsupported.
       await expect(sa._init()).resolves.toBeUndefined();
       expect(tokenFetch).toHaveBeenCalledTimes(1);
+      const request = tokenFetch.mock.calls[0]?.[1] as RequestInit;
+      const assertion = new URLSearchParams(request.body as string).get('assertion')!;
+      const [encodedHeader, encodedPayload, encodedSignature] = assertion.split('.');
+      expect(encodedHeader).toBeTruthy();
+      expect(encodedPayload).toBeTruthy();
+      expect(encodedSignature).toBe(
+        createSign('RSA-SHA256')
+          .update(`${encodedHeader}.${encodedPayload}`)
+          .sign(privateKey as string, 'base64url'),
+      );
     });
 
     it.each<[string, (pem: string) => string]>([
@@ -562,6 +572,7 @@ describe('GoogleDriveFilesystem', () => {
       ['CRLF line endings', pem => pem.replace(/\n/g, '\r\n')],
       ['real newlines (unchanged)', pem => pem],
       ['no trailing newline', pem => pem.trimEnd()],
+      ['PKCS#1 PEM', pem => createPrivateKey(pem).export({ type: 'pkcs1', format: 'pem' }).toString()],
       // Happens when copy/pasting a JSON value straight into .env — outer quotes + trailing comma.
       ['JSON-style value with trailing comma', pem => `"${pem.replace(/\n/g, '\\n')}",`],
       // Doubly wrapped — JSON-encoded string pasted into a .env value that the loader

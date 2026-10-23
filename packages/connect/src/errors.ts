@@ -7,7 +7,12 @@ export type MastraConnectErrorCode =
   | 'unauthorized'
   | 'proxy_error'
   | 'unsupported_credential_type'
-  | 'platform_error';
+  | 'no_active_connection'
+  | 'platform_error'
+  // Raised at tool-execute time when the caller supplies a connection_name
+  // that does not match any active connection for the provider. Recovery is
+  // to call `<provider>__list_connections` and retry with a valid name.
+  | 'unknown_connection';
 
 const MAX_DETAIL_LENGTH = 2000;
 
@@ -15,6 +20,15 @@ export class MastraConnectError extends Error {
   readonly code: MastraConnectErrorCode;
   readonly status?: number;
   readonly detail?: string;
+  /**
+   * Axios-compatible alias for {@link status}. Generated provider tools come
+   * from upstream Nango templates whose error handlers check
+   * `error.response.status` (the axios/Nango SDK shape). Exposing the HTTP
+   * status under `response.status` as well lets that generated code work
+   * unchanged against the errors this package throws. Only set when the error
+   * carries an HTTP status.
+   */
+  readonly response?: { status: number };
 
   constructor(code: MastraConnectErrorCode, message: string, options?: { status?: number; detail?: string }) {
     super(message);
@@ -22,6 +36,24 @@ export class MastraConnectError extends Error {
     this.code = code;
     this.status = options?.status;
     this.detail = options?.detail ? truncate(options.detail) : undefined;
+    if (typeof options?.status === 'number') {
+      this.response = { status: options.status };
+    }
+  }
+}
+
+/**
+ * A caller configuration mistake (for example an unknown tool name in
+ * `requireApproval`) that must fail resolution instead of being downgraded
+ * to the resolver's warn-and-skip path, which exists for provider-side
+ * failures. Internal to the package: callers observe it as a regular
+ * `MastraConnectError` with code `invalid_options`.
+ *
+ * @internal
+ */
+export class MastraConnectConfigError extends MastraConnectError {
+  constructor(message: string) {
+    super('invalid_options', message);
   }
 }
 
@@ -29,12 +61,36 @@ function truncate(text: string): string {
   return text.length > MAX_DETAIL_LENGTH ? `${text.slice(0, MAX_DETAIL_LENGTH)}…` : text;
 }
 
+/**
+ * Pulls the first human-readable message from an array of error entries. Many
+ * providers (Clerk, Linear's GraphQL envelope, Nango v2) return
+ * `{ errors: [{ message, long_message, code }] }`; surfacing the first message
+ * is the most useful detail without echoing the whole payload.
+ */
+function extractFirstArrayMessage(errors: unknown[]): string | undefined {
+  for (const entry of errors) {
+    if (!entry || typeof entry !== 'object') continue;
+    const record = entry as { message?: unknown; long_message?: unknown };
+    const message = typeof record.long_message === 'string' ? record.long_message : record.message;
+    if (typeof message === 'string' && message) return message;
+  }
+  return undefined;
+}
+
 interface ProblemJson {
   title?: string;
   status?: number;
   detail?: string;
   code?: string;
-  error?: string;
+  error?: string | { message?: unknown };
+  // GitHub-style bodies surface a top-level `message` string.
+  message?: string;
+  // Jira surfaces human-readable messages as `errorMessages: string[]`.
+  errorMessages?: unknown;
+  // Many providers (Clerk, Nango v2, Linear's GraphQL envelope) surface
+  // errors as an array of objects with a `message` / `long_message` field.
+  // Jira instead uses an object map of `{ field: message }`.
+  errors?: unknown;
 }
 
 /**
@@ -55,11 +111,31 @@ export async function extractProblemDetail(
     const data = (await response.clone().json()) as ProblemJson;
     if (data && typeof data === 'object') {
       const code = typeof data.code === 'string' ? data.code : undefined;
-      for (const field of ['detail', 'title', 'error'] as const) {
+      for (const field of ['detail', 'title', 'error', 'message'] as const) {
         const value = data[field];
         if (typeof value === 'string' && value) {
           return { detail: truncate(value), code, isProblemJson };
         }
+        // OpenAI and similar providers nest the message: `{ "error": { "message": "..." } }`.
+        if (field === 'error' && value && typeof value === 'object') {
+          const message = value.message;
+          if (typeof message === 'string' && message) {
+            return { detail: truncate(message), code, isProblemJson };
+          }
+        }
+      }
+      // Jira: `{ errorMessages: ["..."], errors: {} }`.
+      if (Array.isArray(data.errorMessages)) {
+        const message = data.errorMessages.find(entry => typeof entry === 'string' && entry);
+        if (typeof message === 'string') return { detail: truncate(message), code, isProblemJson };
+      }
+      if (Array.isArray(data.errors)) {
+        const message = extractFirstArrayMessage(data.errors);
+        if (message) return { detail: truncate(message), code, isProblemJson };
+      } else if (data.errors && typeof data.errors === 'object') {
+        // Jira: `{ errorMessages: [], errors: { summary: "Field required" } }`.
+        const entry = Object.entries(data.errors).find(([, value]) => typeof value === 'string' && value);
+        if (entry) return { detail: truncate(`${entry[0]}: ${entry[1]}`), code, isProblemJson };
       }
       return { code, isProblemJson };
     }

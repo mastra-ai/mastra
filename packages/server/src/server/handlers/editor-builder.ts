@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core';
+import type { ChannelProvider } from '@mastra/core/channels';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -276,7 +277,15 @@ export const GET_INFRASTRUCTURE_STATUS_ROUTE = createRoute({
           .filter(([key, value]) => !omittedKeys.includes(key) && value !== undefined && value !== null)
           .map(([key, value]) => ({ key, value: formatConfigValue(value) }));
 
-      const channelProviders = mastra.getChannelProviders() ?? {};
+      // Prefer resolveChannels() so a live channels resolver (e.g. @mastra/connect's
+      // channels()) reports connections added after boot; older cores lack the method.
+      const mastraWithResolver = mastra as typeof mastra & {
+        resolveChannels?: () => Promise<Record<string, ChannelProvider>>;
+      };
+      const channelProviders =
+        typeof mastraWithResolver.resolveChannels === 'function'
+          ? await mastraWithResolver.resolveChannels()
+          : (mastra.getChannelProviders() ?? {});
       const channels: InfrastructureStatus['channels'] = {
         providers: Object.entries(channelProviders)
           .map(([id, provider]) => {

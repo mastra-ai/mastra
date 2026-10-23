@@ -11,6 +11,7 @@ import {
   buildDocsRouteSet,
   discoverPackages,
   extractLinks,
+  findPackagesMissingDocs,
   shouldCheckPackage,
   validateReadme,
 } from './check-package-readmes.mjs';
@@ -126,6 +127,43 @@ test('reports missing README and CHANGELOG files with exact diagnostics', () => 
   assert.match(result.stderr, /packages\/missing\/README\.md:/);
   assert.match(result.stderr, /packages\/missing: missing README/);
   assert.match(result.stderr, /packages\/missing: missing CHANGELOG/);
+});
+
+test('validates README content before reporting a missing CHANGELOG', () => {
+  const rootDir = createFixture();
+  addPackage(rootDir, 'packages/no-changelog', {
+    readme: '# @mastra/no-changelog\n\nMissing the required sections.\n',
+    changelog: false,
+  });
+
+  const result = runCli(rootDir);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /missing CHANGELOG/);
+  assert.ok(
+    result.stderr.indexOf('expected H2 sections') < result.stderr.indexOf('missing CHANGELOG'),
+    'README content errors are reported before the missing CHANGELOG',
+  );
+});
+
+test('findPackagesMissingDocs reports eligible packages missing required docs', () => {
+  const rootDir = createFixture();
+  addPackage(rootDir, 'packages/complete');
+  addPackage(rootDir, 'packages/missing-both', { readme: false, changelog: false });
+  addPackage(rootDir, 'packages/missing-changelog', { changelog: false });
+  addPackage(rootDir, 'packages/missing-readme', { readme: false });
+  addPackage(rootDir, 'packages/private', { private: true, readme: false, changelog: false });
+  addPackage(rootDir, 'packages/unrelated', {
+    name: 'unrelated-package',
+    readme: false,
+    changelog: false,
+  });
+
+  assert.deepEqual(findPackagesMissingDocs(rootDir), [
+    { name: '@mastra/missing-both', relativeDirectory: 'packages/missing-both', missing: ['README', 'CHANGELOG'] },
+    { name: '@mastra/missing-changelog', relativeDirectory: 'packages/missing-changelog', missing: ['CHANGELOG'] },
+    { name: '@mastra/missing-readme', relativeDirectory: 'packages/missing-readme', missing: ['README'] },
+  ]);
 });
 
 test('requires the prescribed section order and non-empty content', () => {

@@ -1,8 +1,10 @@
+import { accountSwitchNoticeText } from '@mastra/code-sdk/auth/account-rotation-processor';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it } from 'vitest';
 
 import {
+  collectCommandExits,
   getAssistantRenderParts,
   getMessageText,
   getNotificationSummaryView,
@@ -47,6 +49,171 @@ describe('getAssistantRenderParts', () => {
     expect(getAssistantRenderParts(message)).toEqual([{ kind: 'text', text: 'hi' }]);
   });
 
+  it('renders a persisted account-switch part with a malformed to endpoint as unknown, not pool exhaustion', () => {
+    const message = assistantMessage([
+      {
+        type: 'data-mastracode-account-switch',
+        data: {
+          provider: 'kimi-for-coding',
+          from: { id: 'kimi-for-coding:aaaa', label: 'Work' },
+          to: { id: 'kimi-for-coding:bbbb' }, // label lost to schema drift
+          reason: 'rate-limit',
+          at: '2026-09-17T00:00:00.000Z',
+        },
+      } as never,
+    ]);
+
+    const parts = getAssistantRenderParts(message);
+    expect(parts).toEqual([
+      {
+        kind: 'account-switch',
+        provider: 'kimi-for-coding',
+        from: { id: 'kimi-for-coding:aaaa', label: 'Work' },
+        to: { id: 'unknown', label: 'unknown' },
+        reason: 'rate-limit',
+        at: '2026-09-17T00:00:00.000Z',
+      },
+    ]);
+  });
+
+  it.each([
+    ['a string', 'kimi-for-coding:bbbb'],
+    ['a number', 7],
+    ['a boolean', true],
+  ])('renders a non-object to endpoint (%s) as unknown, not pool exhaustion', (_label, to) => {
+    const message = assistantMessage([
+      {
+        type: 'data-mastracode-account-switch',
+        data: {
+          provider: 'kimi-for-coding',
+          from: { id: 'kimi-for-coding:aaaa', label: 'Work' },
+          to,
+          reason: 'rate-limit',
+          at: '2026-09-17T00:00:00.000Z',
+        },
+      } as never,
+    ]);
+
+    const parts = getAssistantRenderParts(message);
+    expect(parts).toEqual([
+      {
+        kind: 'account-switch',
+        provider: 'kimi-for-coding',
+        from: { id: 'kimi-for-coding:aaaa', label: 'Work' },
+        to: { id: 'unknown', label: 'unknown' },
+        reason: 'rate-limit',
+        at: '2026-09-17T00:00:00.000Z',
+      },
+    ]);
+    // `null` alone means "no usable account" — an unknown endpoint must not
+    // read as pool exhaustion.
+    expect(accountSwitchNoticeText(parts[0] as never)).not.toMatch(/unavailable/);
+  });
+
+  it('re-renders a persisted pinned-account exhaustion as pinned, not the whole pool', () => {
+    const message = assistantMessage([
+      {
+        type: 'data-mastracode-account-switch',
+        data: {
+          provider: 'kimi-for-coding',
+          from: { id: 'kimi-for-coding:bbbb', label: 'Personal' },
+          to: null,
+          reason: 'pool-exhausted',
+          at: '2026-09-17T00:00:00.000Z',
+          exclusive: true,
+        },
+      } as never,
+    ]);
+
+    const parts = getAssistantRenderParts(message);
+    // The flag must survive history parsing: dropping it would re-render a
+    // route that consulted one account as if the pool had been walked (A12).
+    expect(parts).toEqual([
+      {
+        kind: 'account-switch',
+        provider: 'kimi-for-coding',
+        from: { id: 'kimi-for-coding:bbbb', label: 'Personal' },
+        to: null,
+        reason: 'pool-exhausted',
+        at: '2026-09-17T00:00:00.000Z',
+        exclusive: true,
+      },
+    ]);
+    expect(accountSwitchNoticeText(parts[0] as never)).toBe('Pinned Kimi account unavailable (pool exhausted)');
+  });
+
+  it('keeps an explicit null to endpoint rendering as pool exhaustion', () => {
+    const message = assistantMessage([
+      {
+        type: 'data-mastracode-account-switch',
+        data: {
+          provider: 'kimi-for-coding',
+          from: { id: 'kimi-for-coding:aaaa', label: 'Work' },
+          to: null,
+          reason: 'rate-limit',
+          at: '2026-09-17T00:00:00.000Z',
+        },
+      } as never,
+    ]);
+
+    const parts = getAssistantRenderParts(message);
+    expect(parts).toEqual([
+      {
+        kind: 'account-switch',
+        provider: 'kimi-for-coding',
+        from: { id: 'kimi-for-coding:aaaa', label: 'Work' },
+        to: null,
+        reason: 'rate-limit',
+        at: '2026-09-17T00:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('drops a persisted pack-fallback part whose reason is not a pack-fallback reason', () => {
+    const message = assistantMessage([
+      {
+        type: 'data-mastracode-model-fallback',
+        data: {
+          from: { entryId: 'custom:Daily', label: 'Daily' },
+          to: { entryId: 'anthropic', label: 'Anthropic' },
+          // A valid *account-switch* reason that this part must not accept —
+          // `packFallbackNoticeText` would render it as "rate limit".
+          reason: 'rate-limit',
+          at: '2026-09-17T00:00:00.000Z',
+        },
+      } as never,
+    ]);
+
+    expect(getAssistantRenderParts(message)).toEqual([]);
+  });
+
+  it.each(['pool-exhausted', 'persistent-outage'] as const)(
+    'keeps a persisted pack-fallback part with reason %s',
+    reason => {
+      const message = assistantMessage([
+        {
+          type: 'data-mastracode-model-fallback',
+          data: {
+            from: { entryId: 'custom:Daily', label: 'Daily' },
+            to: { entryId: 'anthropic', label: 'Anthropic' },
+            reason,
+            at: '2026-09-17T00:00:00.000Z',
+          },
+        } as never,
+      ]);
+
+      expect(getAssistantRenderParts(message)).toEqual([
+        {
+          kind: 'pack-fallback',
+          from: { entryId: 'custom:Daily', label: 'Daily' },
+          to: { entryId: 'anthropic', label: 'Anthropic' },
+          reason,
+          at: '2026-09-17T00:00:00.000Z',
+        },
+      ]);
+    },
+  );
+
   it('maps a reasoning part to a thinking render item', () => {
     const message = assistantMessage([{ type: 'reasoning', reasoning: 'why', details: [] } as never]);
     expect(getAssistantRenderParts(message)).toEqual([{ kind: 'thinking', text: 'why' }]);
@@ -77,6 +244,50 @@ describe('getAssistantRenderParts', () => {
         isError: false,
       },
     ]);
+  });
+
+  it('recovers tool run time from the parts around an unstamped tool invocation', () => {
+    const tool = (toolCallId: string) =>
+      ({
+        type: 'tool-invocation',
+        toolInvocation: { toolCallId, toolName: 'execute_command', args: {}, state: 'result', result: 'ok' },
+      }) as never;
+    // Shape of a real persisted shell call: tool data parts stream while it runs, the next step starts after it.
+    const message = assistantMessage([
+      tool('call-1'),
+      { type: 'data-workspace-metadata', data: {}, createdAt: 1_000 } as never,
+      { type: 'data-sandbox-exit', data: {}, createdAt: 4_028 } as never,
+      { type: 'step-start', createdAt: 4_078 } as never,
+      tool('call-2'),
+      { type: 'text', text: 'done', createdAt: 4_500 } as never,
+      tool('call-3'),
+    ]);
+
+    const tools = getAssistantRenderParts(message).filter(part => part.kind === 'tool');
+    expect(tools.map(part => [part.startedAt, part.endedAt])).toEqual([
+      [1_000, 4_078],
+      [4_078, 4_500],
+      [undefined, undefined],
+    ]);
+  });
+
+  it('collects sandbox exit records across the thread, including ones saved in a later message', () => {
+    const exit = (toolCallId: string, data: Record<string, unknown>) =>
+      ({ type: 'data-sandbox-exit', data: { toolCallId, ...data }, createdAt: 1 }) as never;
+    const exits = collectCommandExits([
+      assistantMessage([exit('call-1', { exitCode: 0, success: true, executionTimeMs: 8_746 })]),
+      assistantMessage([
+        { type: 'step-start' } as never,
+        exit('call-2', { exitCode: -1, success: false, executionTimeMs: 12 }),
+        exit('call-3', { exitCode: 2 }),
+        exit('call-4', { success: true }),
+      ]),
+    ]);
+    expect(Object.fromEntries(exits)).toEqual({
+      'call-1': { exitCode: 0, success: true, executionTimeMs: 8_746 },
+      'call-2': { exitCode: -1, success: false, executionTimeMs: 12 },
+      'call-3': { exitCode: 2, success: false },
+    });
   });
 
   it('uses canonical tool error metadata for completed tool render items', () => {

@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describeFactoryStorageContract } from '@internal/storage-test-utils';
+import { UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -158,5 +159,36 @@ describe('LibSQLFactoryStorage shared-client write lock', () => {
       pagination: { page: 0, perPage: 10 },
     });
     expect(listed.experiments.map(record => record.id)).toContain(created.id);
+  });
+});
+
+describe('LibSQLFactoryStorage unique violations', () => {
+  const claimsSchema = {
+    name: 'factory_unique_update_records',
+    columns: {
+      id: { type: 'uuid-pk' },
+      claim: { type: 'text', nullable: true },
+    },
+    uniqueIndexes: [{ name: 'factory_unique_update_records_claim', columns: ['claim'] }],
+  } satisfies CollectionSchema;
+
+  it('maps an update that lands on a unique index to UniqueViolationError', async () => {
+    const storage = new LibSQLFactoryStorage({ id: 'factory-unique-update', url: ':memory:' });
+    try {
+      await storage.ensureCollections([claimsSchema]);
+      await storage.ops.insertOne(claimsSchema.name, { claim: 'taken' });
+      const free = await storage.ops.insertOne<{ id: string; claim: string | null }>(claimsSchema.name, {
+        claim: null,
+      });
+
+      await expect(
+        storage.ops.updateMany(claimsSchema.name, { id: free.id }, { claim: 'taken' }),
+      ).rejects.toBeInstanceOf(UniqueViolationError);
+      await expect(
+        storage.ops.updateAtomic(claimsSchema.name, { id: free.id }, () => ({ claim: 'taken' })),
+      ).rejects.toBeInstanceOf(UniqueViolationError);
+    } finally {
+      await storage.close();
+    }
   });
 });

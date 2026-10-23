@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-registry-registry",
-  "version": "1.1.2",
+  "version": "1.1.6",
   "description": "MCP server for registry registry services.",
   "type": "module",
   "main": "dist/index.js",
@@ -24,14 +24,14 @@
     "build:cli": "tsdown src/stdio.ts --format esm --no-dts --treeshake=smallest --splitting && tsc -p tsconfig.build.json",
     "pretest": "pnpm turbo build --filter @mastra/mcp-registry-registry",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -40,14 +40,13 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "@wong2/mcp-cli": "^2.0.0",
     "cross-env": "^10.1.0",
-    "eslint": "^10.7.0",
-    "hono": "^4.12.8",
-    "tsdown": "0.22.9",
+    "hono": "^4.13.7",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

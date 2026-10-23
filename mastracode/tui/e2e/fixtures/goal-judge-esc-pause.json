@@ -1,0 +1,16 @@
+{
+  "fixtures": [
+    {
+      "match": { "endpoint": "chat", "model": "gpt-5.4-mini", "userMessage": "Start the thread." },
+      "response": { "content": "Thread started." }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Complete the judge Esc pause e2e objective."
+      },
+      "response": { "content": "Judge work completed." }
+    }
+  ]
+}

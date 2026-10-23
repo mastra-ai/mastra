@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "subconscious/subconscious/glm-5.2"
+  model: "subconscious/subconscious/deepseek-v4.1-flash-marathon"
 });
 
 // Generate a response
@@ -46,28 +46,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "subconscious/subconscious/glm-5.2",
+    "model": "subconscious/subconscious/deepseek-v4.1-flash-marathon",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 5000000,
+    "maxOutput": 384000,
+    "inputCost": 0.14,
+    "outputCost": 0.28
+  },
+  {
+    "model": "subconscious/subconscious/glm-5.3-marathon",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 5000000,
     "maxOutput": 131072,
     "inputCost": 1.4,
     "outputCost": 4.4
-  },
-  {
-    "model": "subconscious/subconscious/tim-qwen3.6-27b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 8192,
-    "maxOutput": 5000,
-    "inputCost": 0.3,
-    "outputCost": 3
   }
 ]}
 />
@@ -84,7 +84,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.subconscious.dev/v1",
-    id: "subconscious/subconscious/glm-5.2",
+    id: "subconscious/subconscious/deepseek-v4.1-flash-marathon",
     apiKey: process.env.SUBCONSCIOUS_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -102,8 +102,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "subconscious/subconscious/tim-qwen3.6-27b"
-      : "subconscious/subconscious/glm-5.2";
+      ? "subconscious/subconscious/glm-5.3-marathon"
+      : "subconscious/subconscious/deepseek-v4.1-flash-marathon";
   }
 });
 ```

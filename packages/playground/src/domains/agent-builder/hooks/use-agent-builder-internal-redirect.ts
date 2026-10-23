@@ -1,4 +1,4 @@
-import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
+import { useStoredAgents } from '@mastra/react/hooks/agents';
 
 export function useAgentBuilderInternalRedirect() {
   const { data: draftAgentsData, isLoading: isLoadingDraftAgents } = useStoredAgents({ status: 'draft' });

@@ -46,7 +46,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "vancine/deepseek-flash",
+    "model": "vancine/deepseek-v4.1-flash",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -104,18 +104,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 2.4,
     "outputCost": 12
-  },
-  {
-    "model": "vancine/MiniMax-M3",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 512000,
-    "inputCost": 0.24,
-    "outputCost": 0.96
   },
   {
     "model": "vancine/qwen3.8-flash",

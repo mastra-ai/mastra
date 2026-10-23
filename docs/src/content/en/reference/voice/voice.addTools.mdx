@@ -79,7 +79,7 @@ This method doesn't return a value.
 
 - Tools must follow the Mastra tool format with name, description, input schema, and execute function
 - This method is primarily used with real-time voice providers that support function calling
-- If called on a voice provider that doesn't support tools, it will log a warning and do nothing
+- If called on a voice provider that doesn't support tools, it will do nothing
 - Tools added with this method are typically combined with any tools provided by an associated Agent
 - For best results, add tools before starting a conversation (before calling `connect()`)
 - The voice provider will automatically handle the invocation of tool handlers when the model decides to use them

@@ -6,7 +6,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { Integrations } from '../integrations';
 import { server } from '@/test/msw-server';
@@ -80,8 +80,16 @@ describe('Integrations tab', () => {
     installRadixDomShims();
   });
 
+  beforeEach(() => {
+    // The connect action pre-opens a tab and navigates it when the request
+    // resolves; jsdom's window.open is unimplemented, so hand back a stub tab.
+    const tab = { opener: window as Window | null, location: { href: 'about:blank' }, close: vi.fn() };
+    vi.spyOn(window, 'open').mockImplementation(() => tab as unknown as Window);
+  });
+
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     editPageState.canPublishToChannel = false;
   });
 

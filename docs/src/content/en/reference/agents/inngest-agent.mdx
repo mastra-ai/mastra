@@ -1,8 +1,8 @@
 ---
-title: "Reference: createInngestAgent() | Agents"
-description: "createInngestAgent() wraps an existing Agent with Inngest-powered durable execution."
+title: 'Reference: createInngestAgent() | Agents'
+description: 'createInngestAgent() wraps an existing Agent with Inngest-powered durable execution.'
 packages:
-  - "@mastra/inngest"
+  - '@mastra/inngest'
 ---
 
 # `createInngestAgent()`
@@ -126,6 +126,13 @@ Returns: [`InngestAgent`](#inngestagent-interface)
     type: 'Mastra',
     isOptional: true,
     description: 'Mastra instance for observability. Set automatically when the agent is registered with Mastra.',
+  },
+  {
+    name: 'shouldPersistSnapshot',
+    type: '(params: { stepResults, workflowStatus }) => boolean',
+    isOptional: true,
+    description:
+      "Accepted for API symmetry with `createDurableAgent`, but ignored: Inngest's step memoization and replay own durability, so InngestAgent always persists `suspended` snapshots only (for human-in-the-loop resume). A warning is logged if set.",
   },
 ]}
 />
@@ -261,7 +268,7 @@ Returns: [`Promise<InngestAgentStreamResult>`](#inngestagentstreamresult)
 
 #### `generate(messages, options?)`
 
-Runs a response on Inngest's durable execution engine and resolves with a single `FullOutput`. If the run suspends, `generate()` resolves with `finishReason: 'suspended'`. The `runId` option is optional. If you omit it, `generate()` creates a run ID and returns it in `result.runId`. Continue the run with [`resumeGenerate()`](#resumegeneraterunid-resumedata-options). Use [`stream()`](#streammessages-options) with `onSuspended` when the caller needs a suspension callback.
+Runs a response on Inngest's durable execution engine and resolves with a single `FullOutput`. If the run suspends, `generate()` resolves with `finishReason: 'suspended'`. The `runId` option is optional. If you omit it, `generate()` creates a run ID and returns it in `result.runId`. Continue the run with [`resumeGenerate()`](#resumegenerateresumedata-options). Use [`stream()`](#streammessages-options) with `onSuspended` when the caller needs a suspension callback.
 
 ```typescript
 const result = await durableAgent.generate('Delete the old records', {
@@ -274,16 +281,16 @@ result.finishReason // 'suspended' when approval is required
 
 Returns: `Promise<FullOutput<TOutput>>`
 
-#### `resumeGenerate(runId, resumeData, options?)`
+#### `resumeGenerate(resumeData, options)`
 
-Resumes a suspended `generate()` run and resolves with a single `FullOutput`.
+Resumes a suspended `generate()` run and resolves with a single `FullOutput`. Pass the run ID as `options.runId`, the same as `Agent.resumeGenerate()`. The older `resumeGenerate(runId, resumeData, options?)` order still works but is deprecated.
 
 ```typescript
 if (!result.runId) {
   throw new Error('Run ID is missing')
 }
 
-const resumedResult = await durableAgent.resumeGenerate(result.runId, { approved: true })
+const resumedResult = await durableAgent.resumeGenerate({ approved: true }, { runId: result.runId })
 ```
 
 Returns: `Promise<FullOutput<TOutput>>`
@@ -398,7 +405,8 @@ Returns: `boolean`
     name: 'toolsets',
     type: 'object',
     isOptional: true,
-    description: 'Additional tool sets available for this run.',
+    description:
+      'Additional tool sets available for this run. Toolset tools contain server-side code that cannot be serialized, so they only work when the Inngest worker runs in the same process as the caller. A worker in a separate process throws an error naming the missing tools. Register these tools on the agent instead. The worker matches toolset tools by name, so if a toolset tool shares a name with an agent tool, the agent tool runs.',
   },
   {
     name: 'clientTools',
@@ -429,6 +437,14 @@ Returns: `boolean`
     type: 'boolean',
     isOptional: true,
     description: 'Automatically resume tools that suspended, instead of waiting for an external `resume()` call.',
+  },
+  {
+    name: 'closeOnSuspend',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'When `true`, close the stream when the run suspends (for example for tool approval) so `fullStream`, `text`, and `getFullOutput()` resolve at the suspension boundary instead of staying open, matching non-durable `Agent.stream()`. Useful for callers such as AG-UI or A2A that need the stream to end. Defaults to `false`, which keeps the stream open across suspension so a later resume can continue streaming on the same reader. `resume()`/`resumeStream()` always return a fresh stream.',
   },
   {
     name: 'toolCallConcurrency',
@@ -541,6 +557,32 @@ interface InngestAgentStreamResult<OUTPUT = undefined> {
   },
 ]}
 />
+
+## Event size limit
+
+Inngest Realtime caps each message at about 512 KB. The default `InngestPubSub` keeps every stream event under 480 KB:
+
+- An oversized `finish` event is sent without `output.steps`. The final text, usage, and finish reason still arrive, but `steps`, `toolCalls`, and `toolResults` on the stream result are empty for that run.
+- Any other oversized event, such as a `tool-result` chunk carrying a large tool result, is replaced with a `data-oversized-event` chunk. Its `data` holds the original `eventType`, `chunkType`, `bytes`, and `limit`. The chunk is transient, so it isn't saved to memory.
+
+Both cases log a warning. Only the live stream is reduced: messages saved to memory and the run's workflow snapshot keep the full data.
+
+To avoid the limit:
+
+- Return small tool results, such as an ID or summary, and fetch large data separately.
+- Read full results from memory or the workflow run after the stream finishes.
+- Pass a `pubsub` without the limit, such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams):
+
+```typescript title="src/mastra/index.ts"
+import { createInngestAgent } from '@mastra/inngest'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+
+const durableAgent = createInngestAgent({
+  agent,
+  inngest,
+  pubsub: new RedisStreamsPubSub({ url: 'redis://localhost:6379' }),
+})
+```
 
 ## Serving Inngest functions
 

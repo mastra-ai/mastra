@@ -6,7 +6,6 @@
  */
 
 import * as path from 'node:path';
-import { StringDecoder } from 'node:string_decoder';
 
 import type { ResultPromise, Options as ExecaOptions } from 'execa';
 
@@ -14,9 +13,16 @@ import { getExeca } from './execa';
 import type { LocalSandbox } from './local-sandbox';
 import { ProcessHandle, SandboxProcessManager } from './process-manager';
 import type { ProcessInfo, SpawnProcessOptions } from './process-manager';
+import type { ProcessManagerOptions } from './process-manager/process-manager';
 import type { CommandResult } from './types';
 
 const isWindows = process.platform === 'win32';
+
+/** How long a timed-out process tree gets to exit after SIGTERM before it is sent SIGKILL. */
+const TIMEOUT_KILL_GRACE_MS = 2_000;
+
+/** How long output may keep draining after the process exits before wait() settles without it. */
+const EXIT_OUTPUT_GRACE_MS = 2_000;
 
 // =============================================================================
 // Local Process Handle
@@ -35,7 +41,13 @@ class LocalProcessHandle extends ProcessHandle {
   private readonly waitPromise: Promise<CommandResult>;
   private readonly startTime: number;
 
-  constructor(subprocess: ResultPromise, pid: number, startTime: number, options?: SpawnProcessOptions) {
+  constructor(
+    subprocess: ResultPromise,
+    pid: number,
+    startTime: number,
+    options?: SpawnProcessOptions,
+    outputEncoding = 'utf-8',
+  ) {
     super(options);
     this.pid = String(pid);
     this._numericPid = pid;
@@ -43,6 +55,9 @@ class LocalProcessHandle extends ProcessHandle {
     this.startTime = startTime;
 
     let timedOut = false;
+    let killTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    let releaseTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    let exitGraceId: ReturnType<typeof setTimeout> | undefined;
     const timeoutId = options?.timeout
       ? setTimeout(() => {
           timedOut = true;
@@ -50,31 +65,64 @@ class LocalProcessHandle extends ProcessHandle {
           // We handle timeout ourselves rather than using execa's timeout option
           // because execa only kills the direct subprocess, not the process tree.
           void killProcessTree(this._numericPid, subprocess, 'SIGTERM');
+          // A process can ignore SIGTERM, and the shell can exit while a descendant
+          // keeps stdout open. Either way 'close' never fires, so escalate to SIGKILL.
+          killTimeoutId = setTimeout(() => {
+            void killProcessTree(this._numericPid, subprocess, 'SIGKILL');
+            // A descendant that left the process group can still hold the pipes.
+            // Stop reading them so wait() settles instead of hanging.
+            releaseTimeoutId = setTimeout(() => {
+              subprocess.stdout?.destroy();
+              subprocess.stderr?.destroy();
+            }, TIMEOUT_KILL_GRACE_MS);
+          }, TIMEOUT_KILL_GRACE_MS);
         }, options.timeout)
       : undefined;
+    const clearTimers = () => {
+      clearTimeout(timeoutId);
+      clearTimeout(killTimeoutId);
+      clearTimeout(releaseTimeoutId);
+      clearTimeout(exitGraceId);
+    };
+    const toExitCode = (code: number | null, signal: NodeJS.Signals | null) =>
+      signal && code === null ? 128 : (code ?? 0);
 
-    const stdoutDecoder = new StringDecoder();
-    const stderrDecoder = new StringDecoder();
+    const stdoutDecoder = new TextDecoder(outputEncoding);
+    const stderrDecoder = new TextDecoder(outputEncoding);
     let stdoutDecoderEnded = false;
     let stderrDecoderEnded = false;
 
     const flushStdoutDecoder = () => {
       if (stdoutDecoderEnded) return;
       stdoutDecoderEnded = true;
-      const data = stdoutDecoder.end();
+      const data = stdoutDecoder.decode();
       if (data) this.emitStdout(data);
     };
 
     const flushStderrDecoder = () => {
       if (stderrDecoderEnded) return;
       stderrDecoderEnded = true;
-      const data = stderrDecoder.end();
+      const data = stderrDecoder.decode();
       if (data) this.emitStderr(data);
     };
 
     this.waitPromise = new Promise<CommandResult>(resolve => {
+      let settled = false;
+      const settle = (exitCode: number, signal: NodeJS.Signals | null) => {
+        if (settled) return;
+        settled = true;
+        resolve({
+          success: exitCode === 0,
+          exitCode,
+          stdout: this.stdout,
+          stderr: this.stderr,
+          executionTimeMs: Date.now() - this.startTime,
+          killed: signal !== null,
+          timedOut,
+        });
+      };
       subprocess.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
-        if (timeoutId) clearTimeout(timeoutId);
+        clearTimers();
         flushStdoutDecoder();
         flushStderrDecoder();
         if (timedOut) {
@@ -82,21 +130,27 @@ class LocalProcessHandle extends ProcessHandle {
           this.emitStderr(timeoutMsg);
           this.exitCode = 124;
         } else {
-          this.exitCode = signal && code === null ? 128 : (code ?? 0);
+          this.exitCode = toExitCode(code, signal);
         }
-        resolve({
-          success: this.exitCode === 0,
-          exitCode: this.exitCode,
-          stdout: this.stdout,
-          stderr: this.stderr,
-          executionTimeMs: Date.now() - this.startTime,
-          killed: signal !== null,
-          timedOut,
-        });
+        settle(this.exitCode, signal);
+      });
+      // 'close' waits for stdout and stderr to close too, and a descendant the
+      // process left behind (`cmd &`, or one in its own process group such as
+      // `timeout`'s) can hold them open long after the process exited. wait()
+      // settles on the exit once its output has had time to drain. exitCode
+      // stays unset until 'close', so the handle still counts as running while
+      // the descendant holds its output: kill() and sandbox stop still reach it,
+      // and the process manager keeps listing it. A timed-out process is left
+      // to the timeout's own kill escalation and pipe release.
+      subprocess.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
+        exitGraceId = setTimeout(() => {
+          if (!timedOut) settle(toExitCode(code, signal), signal);
+        }, EXIT_OUTPUT_GRACE_MS);
       });
 
       subprocess.on('error', (err: Error) => {
-        if (timeoutId) clearTimeout(timeoutId);
+        settled = true;
+        clearTimers();
         flushStdoutDecoder();
         flushStderrDecoder();
         this.emitStderr(err.message);
@@ -112,13 +166,13 @@ class LocalProcessHandle extends ProcessHandle {
     });
 
     subprocess.stdout?.on('data', (data: Buffer) => {
-      const decoded = stdoutDecoder.write(data);
+      const decoded = stdoutDecoder.decode(data, { stream: true });
       if (decoded) this.emitStdout(decoded);
     });
     subprocess.stdout?.on('end', flushStdoutDecoder);
 
     subprocess.stderr?.on('data', (data: Buffer) => {
-      const decoded = stderrDecoder.write(data);
+      const decoded = stderrDecoder.decode(data, { stream: true });
       if (decoded) this.emitStderr(decoded);
     });
     subprocess.stderr?.on('end', flushStderrDecoder);
@@ -204,7 +258,21 @@ async function killProcessTree(pid: number, subprocess: ResultPromise, signal: N
  * Local implementation of SandboxProcessManager.
  * Spawns processes via execa and tracks them in-memory.
  */
+export interface LocalProcessManagerOptions extends ProcessManagerOptions {
+  /** Encoding used to decode child stdout/stderr (any WHATWG encoding label). Default: 'utf-8'. */
+  outputEncoding?: string;
+}
+
 export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
+  private readonly outputEncoding: string;
+
+  constructor({ outputEncoding = 'utf-8', ...options }: LocalProcessManagerOptions = {}) {
+    super(options);
+    // Fail fast on unsupported labels (e.g. Node builds without full ICU).
+    new TextDecoder(outputEncoding);
+    this.outputEncoding = outputEncoding;
+  }
+
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     let cwd = this.sandbox.workingDirectory;
     if (options.cwd) {
@@ -235,10 +303,17 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
     const wrapped = directShell ? invocation : this.sandbox.wrapCommandForIsolation(command);
 
     // Base options shared across all platforms.
+    //
+    // `stdinMode: 'ignore'` closes the child's stdin at spawn so it sees EOF
+    // immediately. Without it, a stdin-reading command (e.g. `rg` with no path
+    // argument) blocks forever waiting for input nothing will ever send, and the
+    // caller hangs. Callers that need to drive the process's stdin (`spawn` for
+    // an LSP server) keep the default writable pipe.
+    const stdio = options.stdinMode === 'ignore' ? (['ignore', 'pipe', 'pipe'] as const) : ('pipe' as const);
     const baseOptions = {
       cwd,
       env,
-      stdio: 'pipe' as const,
+      stdio,
       // Don't throw on non-zero exit — we handle exit codes ourselves.
       reject: false,
       // Don't buffer output — we stream it via ProcessHandle callbacks.
@@ -288,7 +363,7 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       throw new Error(result.message || 'Process failed to spawn');
     }
 
-    const handle = new LocalProcessHandle(subprocess, subprocess.pid, Date.now(), options);
+    const handle = new LocalProcessHandle(subprocess, subprocess.pid, Date.now(), options, this.outputEncoding);
     this._tracked.set(handle.pid, handle);
     return handle;
   }

@@ -1,4 +1,4 @@
-const MAX_SUGGESTED_PROMPTS = 3;
+const MAX_SUGGESTED_PROMPTS = 6;
 
 /**
  * Reads the suggested-prompt convention from free-form agent metadata.

@@ -1,0 +1,71 @@
+import { expectTypeOf } from 'vitest';
+
+import { Classifier } from '../../classifier';
+import type { BooleanAnswer, ChoiceAnswer, RefusalAnswer } from '../../classifier';
+import { ModelSelectionProcessor } from '.';
+import type { ModelSelectionInstanceOptions, ModelSelectionRegisteredOptions } from '.';
+
+declare const model: ConstructorParameters<typeof Classifier>[0]['model'];
+
+const triage = new Classifier({
+  id: 'triage',
+  model,
+  questions: {
+    complexity: { type: 'choice', criteria: { trivial: 'Trivial', complex: 'Complex' } },
+    sensitive: { type: 'boolean' },
+  },
+});
+
+// Instance: answers inferred from the classifier's questions.
+new ModelSelectionProcessor({
+  classifier: triage,
+  select: ({ complexity, sensitive }, { result }) => {
+    expectTypeOf(complexity).toEqualTypeOf<ChoiceAnswer<'trivial' | 'complex'> | RefusalAnswer>();
+    expectTypeOf(sensitive).toEqualTypeOf<BooleanAnswer | RefusalAnswer>();
+    if (result.answers.complexity.type === 'choice') {
+      expectTypeOf(result.answers.complexity.choice).toEqualTypeOf<'trivial' | 'complex'>();
+    }
+    if (sensitive.type !== 'boolean' || sensitive.probability > 0.3) return undefined;
+    return complexity.type === 'choice' && complexity.choice === 'trivial' ? 'openai/gpt-4o-mini' : undefined;
+  },
+});
+
+// A misspelled choice is a type error.
+new ModelSelectionProcessor({
+  classifier: triage,
+  select: ({ complexity }) =>
+    // @ts-expect-error 'trivail' is not a choice of this question
+    complexity.type === 'choice' && complexity.choice === 'trivail' ? 'openai/gpt-4o-mini' : undefined,
+});
+
+// Registered id: explicit questions type the answers.
+new ModelSelectionProcessor<{ complexity: { type: 'choice'; criteria: { low: string; high: string } } }>({
+  classifier: 'triage',
+  select: ({ complexity }) => {
+    if (complexity.type === 'choice') {
+      expectTypeOf(complexity.choice).toEqualTypeOf<'low' | 'high'>();
+    }
+    return undefined;
+  },
+});
+
+// Choices form.
+new ModelSelectionProcessor({
+  model,
+  choices: [
+    { model: 'openai/gpt-4o-mini', criteria: 'Simple' },
+    { model: 'openai/gpt-4o', criteria: 'Hard' },
+  ],
+});
+
+// The option types are exported and each one matches a constructor overload.
+const instanceOptions: ModelSelectionInstanceOptions<typeof triage.questions> = {
+  classifier: triage,
+  select: () => undefined,
+};
+const registeredOptions: ModelSelectionRegisteredOptions<typeof triage.questions> = {
+  classifier: 'triage',
+  select: () => undefined,
+};
+new ModelSelectionProcessor(instanceOptions);
+new ModelSelectionProcessor(registeredOptions);

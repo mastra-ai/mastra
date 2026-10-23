@@ -9,6 +9,7 @@ import type { Intake, IntakeItem } from '../capabilities/intake.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { normalizeIntakeLabel, resolveIntakeLabelRoute } from '../storage/domains/intake/base.js';
 import type { IntakeConfig, IntakeLabelRoute, IntakeStorage } from '../storage/domains/intake/base.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
@@ -39,6 +40,8 @@ export interface IntakeRoutesDeps extends RouteDependencies {
   boardRegistry?: BoardRegistry;
   /** Work items domain handle; when present, rebinding a source to another board moves its resting cards. */
   workItems?: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
+  /** GitHub repositories, used to match a card to the repository binding its source id names. */
+  githubRepositories?: Pick<SourceControlStorageHandle['repositories'], 'get'>;
 }
 
 /** Upper bound on source pages read while relocating cards, so a huge source cannot stall the request. */
@@ -76,6 +79,7 @@ async function relocateSourceCards({
   factoryProjectId,
   sourceId,
   targetBoard,
+  attributionSourceIds,
 }: {
   workItems: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
   integration: IntakeIntegration;
@@ -85,6 +89,7 @@ async function relocateSourceCards({
   factoryProjectId: string;
   sourceId: string;
   targetBoard: string;
+  attributionSourceIds: string[];
 }): Promise<{ moved: number; skipped: number }> {
   if (!boardRegistry.has(targetBoard)) return { moved: 0, skipped: 0 };
 
@@ -94,10 +99,18 @@ async function relocateSourceCards({
   for (let page = 0; page < REBIND_MAX_PAGES; page += 1) {
     const result = await withTimeout(
       integration.id,
-      () => integration.intake.listItems({ orgId, userId, sourceIds: [sourceId], cursor }),
+      () =>
+        integration.intake.listItems({
+          orgId,
+          userId,
+          sourceIds: [sourceId],
+          attributionSourceIds,
+          cursor,
+        }),
       deadline - Date.now(),
     );
     for (const item of result.items) {
+      if (item.sourceId !== sourceId) continue;
       for (const key of intakeItemSourceKeys(integration.id, item)) sourceKeys.add(key);
     }
     if (!result.nextCursor) break;
@@ -120,8 +133,8 @@ async function relocateSourceCards({
 
 /**
  * After a label route changes, every issue card in the project that carries `label` is re-routed
- * under the project's current routes: to the board its labels now select, or back to Work when none
- * of them is routed any more.
+ * under the project's current routes: to the board its labels now select, or — when none of them is
+ * routed any more — to its GitHub repository binding's board, falling back to Work.
  */
 async function relocateLabeledCards({
   workItems,
@@ -132,6 +145,8 @@ async function relocateLabeledCards({
   integrationId,
   label,
   routes,
+  intake,
+  githubRepositories,
 }: {
   workItems: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
   boardRegistry: BoardRegistry;
@@ -141,8 +156,14 @@ async function relocateLabeledCards({
   integrationId: string;
   label: string;
   routes: readonly IntakeLabelRoute[];
+  intake: Pick<IntakeStorage, 'listBindings'>;
+  githubRepositories?: Pick<SourceControlStorageHandle['repositories'], 'get'>;
 }): Promise<{ moved: number; skipped: number }> {
   const changed = normalizeIntakeLabel(label);
+  const repositoryBoards =
+    integrationId === 'github'
+      ? await githubRepositoryBoards({ intake, githubRepositories, boardRegistry, orgId, factoryProjectId })
+      : [];
   let moved = 0;
   let skipped = 0;
   for (const item of await workItems.list({ orgId, factoryProjectId })) {
@@ -150,12 +171,67 @@ async function relocateLabeledCards({
     if (!source || source.integrationId !== integrationId || source.type !== 'issue') continue;
     const labels = cardLabels(item);
     if (!labels.some(candidate => normalizeIntakeLabel(candidate) === changed)) continue;
-    const targetBoard = resolveIntakeLabelRoute(routes, labels)?.board ?? 'work';
+    const targetBoard =
+      resolveIntakeLabelRoute(routes, labels)?.board ??
+      repositoryBoards.find(candidate => cardInRepository(item, candidate))?.board ??
+      'work';
     const outcome = await moveCardToBoard({ workItems, boardRegistry, userId, item, targetBoard });
     if (outcome === 'moved') moved += 1;
     else if (outcome === 'skipped') skipped += 1;
   }
   return { moved, skipped };
+}
+
+interface GithubRepositoryBoard {
+  board: string;
+  slug: string;
+  externalId?: string;
+}
+
+/**
+ * The project's GitHub repository bindings that name an installed board. A binding's source id is
+ * the internal repository id or the repository slug, so ids are resolved to the slug and external id
+ * a card carries.
+ */
+async function githubRepositoryBoards({
+  intake,
+  githubRepositories,
+  boardRegistry,
+  orgId,
+  factoryProjectId,
+}: {
+  intake: Pick<IntakeStorage, 'listBindings'>;
+  githubRepositories?: Pick<SourceControlStorageHandle['repositories'], 'get'>;
+  boardRegistry: BoardRegistry;
+  orgId: string;
+  factoryProjectId: string;
+}): Promise<GithubRepositoryBoard[]> {
+  const boards: GithubRepositoryBoard[] = [];
+  for (const binding of await intake.listBindings({ orgId, integrationId: 'github' })) {
+    if (binding.factoryProjectId !== factoryProjectId || !binding.board || !boardRegistry.has(binding.board)) continue;
+    const repository = await githubRepositories?.get({ orgId, id: binding.sourceId });
+    boards.push(
+      repository
+        ? { board: binding.board, slug: repository.slug.toLowerCase(), externalId: repository.externalId }
+        : { board: binding.board, slug: binding.sourceId.toLowerCase() },
+    );
+  }
+  return boards;
+}
+
+function cardInRepository(
+  item: { metadata?: Record<string, unknown> | null; externalSource?: { url?: string } | null },
+  repository: GithubRepositoryBoard,
+): boolean {
+  const repositoryId = item.metadata?.githubRepositoryId;
+  if (
+    repository.externalId !== undefined &&
+    repositoryId !== undefined &&
+    String(repositoryId) === repository.externalId
+  )
+    return true;
+  const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(item.externalSource?.url ?? '');
+  return match?.[1]?.toLowerCase() === repository.slug;
 }
 
 /** One integration that failed while the rest of the aggregation succeeded. */
@@ -212,6 +288,8 @@ async function settleByIntegration<T>(
   return { pages, failures };
 }
 
+const MAX_INTAKE_SOURCE_ID_LENGTH = 1024;
+
 interface ParsedBinding {
   integrationId: string;
   sourceId: string;
@@ -225,7 +303,9 @@ export function parseIntakeBinding(body: unknown): ParsedBinding | null {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
   const { integrationId, sourceId, factoryProjectId, board } = body as Record<string, unknown>;
   const isId = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 256;
-  if (!isId(integrationId) || !isId(sourceId)) return null;
+  const isSourceId = (value: unknown) =>
+    typeof value === 'string' && value.length > 0 && value.length <= MAX_INTAKE_SOURCE_ID_LENGTH;
+  if (!isId(integrationId) || !isSourceId(sourceId)) return null;
   if (factoryProjectId !== null && !isId(factoryProjectId)) return null;
   if (board !== undefined && board !== null && !isId(board)) return null;
   return {
@@ -263,8 +343,30 @@ function loose(c: unknown): Context {
 function sanitizeIdList(value: unknown): string[] | null | undefined {
   if (value === null) return null;
   if (!Array.isArray(value) || value.length > 200) return undefined;
-  const ids = value.filter((item): item is string => typeof item === 'string' && item.length > 0 && item.length <= 256);
+  const ids = value.filter(
+    (item): item is string => typeof item === 'string' && item.length > 0 && item.length <= MAX_INTAKE_SOURCE_ID_LENGTH,
+  );
   return ids.length === value.length && new Set(ids).size === ids.length ? ids : undefined;
+}
+
+function sanitizeLinearRepositoryMap(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value);
+  if (entries.length > 200) return undefined;
+  const mapping: Record<string, string> = Object.create(null);
+  for (const [projectId, slug] of entries) {
+    if (
+      !projectId ||
+      projectId.length > MAX_INTAKE_SOURCE_ID_LENGTH ||
+      typeof slug !== 'string' ||
+      !slug.trim() ||
+      slug.length > 512
+    ) {
+      return undefined;
+    }
+    mapping[projectId] = slug;
+  }
+  return mapping;
 }
 
 /** Validate a request body into an intake config, rejecting unknown shapes. */
@@ -286,11 +388,23 @@ export function parseIntakeConfig(body: unknown): IntakeConfig | null {
     ) {
       return null;
     }
-    const selection = value as { enabled?: unknown; sourceIds?: unknown };
+    const selection = value as { enabled?: unknown; sourceIds?: unknown; repositoryByLinearProject?: unknown };
     if (typeof selection.enabled !== 'boolean') return null;
     const sourceIds = sanitizeIdList(selection.sourceIds ?? null);
     if (sourceIds === undefined) return null;
-    config[integrationId] = { enabled: selection.enabled, sourceIds };
+    const repositoryByLinearProject =
+      integrationId === 'linear' ? sanitizeLinearRepositoryMap(selection.repositoryByLinearProject) : undefined;
+    if (
+      integrationId === 'linear' &&
+      selection.repositoryByLinearProject !== undefined &&
+      repositoryByLinearProject === undefined
+    )
+      return null;
+    config[integrationId] = {
+      enabled: selection.enabled,
+      sourceIds,
+      ...(repositoryByLinearProject ? { repositoryByLinearProject } : {}),
+    };
   }
   return config;
 }
@@ -329,7 +443,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
-    const { audit, intake, projects, integrations = [], boardRegistry, workItems } = this.deps;
+    const { audit, intake, projects, integrations = [], boardRegistry, workItems, githubRepositories } = this.deps;
     const integrationIds = integrations.map(integration => integration.id);
 
     return [
@@ -340,7 +454,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
           await intake.ensureReady();
-          const config = await intake.getConfig({ ...tenant, integrationIds });
+          const config = await intake.getConfig({ orgId: tenant.orgId, integrationIds });
           return c.json({ config });
         },
       }),
@@ -374,7 +488,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           }
 
           await intake.ensureReady();
-          await intake.saveConfig({ ...tenant, config: registeredConfig });
+          await intake.saveConfig({ orgId: tenant.orgId, config: registeredConfig });
           await audit.emit({
             context: loose(c),
             input: {
@@ -465,6 +579,14 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
               previousBinding.board !== nextBoard
             ) {
               try {
+                const config = await intake.getConfig({
+                  orgId: tenant.orgId,
+                  integrationIds: [binding.integrationId],
+                });
+                const configuredSourceIds = config[binding.integrationId]?.sourceIds ?? [];
+                const attributionSourceIds = configuredSourceIds.includes(binding.sourceId)
+                  ? configuredSourceIds
+                  : [...configuredSourceIds, binding.sourceId];
                 relocated = await relocateSourceCards({
                   workItems,
                   integration,
@@ -473,6 +595,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
                   userId: tenant.userId,
                   factoryProjectId: binding.factoryProjectId,
                   sourceId: binding.sourceId,
+                  attributionSourceIds,
                   targetBoard: nextBoard,
                 });
               } catch (error) {
@@ -554,8 +677,8 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             await intake.setLabelRoute({ ...scope, label: route.label, board: route.board, userId: tenant.userId });
           }
 
-          // Cards already carrying the label follow the route: onto the new board, or back to
-          // Work when the label is no longer routed anywhere.
+          // Cards already carrying the label follow the route: onto the new board, or — when the
+          // label is no longer routed anywhere — to the repository binding's board or Work.
           let relocated: { moved: number; skipped: number } | null = null;
           if (workItems && boardRegistry && (previous?.board ?? null) !== route.board) {
             try {
@@ -568,6 +691,8 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
                 integrationId: route.integrationId,
                 label: route.label,
                 routes: await intake.listLabelRoutes(scope),
+                intake,
+                githubRepositories,
               });
             } catch (error) {
               // The route is saved; the cards can be moved by hand.
@@ -617,7 +742,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           if (!cursors) return c.json({ error: 'invalid_cursor' }, 400);
 
           await intake.ensureReady();
-          const config = await intake.getConfig({ ...tenant, integrationIds });
+          const config = await intake.getConfig({ orgId: tenant.orgId, integrationIds });
           const { pages, failures } = await settleByIntegration(
             integrations.flatMap(integration => {
               const selection = config[integration.id];

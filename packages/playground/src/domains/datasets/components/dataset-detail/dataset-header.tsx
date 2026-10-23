@@ -1,12 +1,11 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@mastra/playground-ui/components/Tooltip';
-import { format } from 'date-fns/format';
-import { MoreVertical, Pencil, Copy, Trash2, Play, DatabaseIcon, Calendar1Icon, HistoryIcon } from 'lucide-react';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { MoreVertical, Pencil, Copy, Trash2, Plus, DatabaseIcon, Calendar1Icon, HistoryIcon } from 'lucide-react';
 
 export type DatasetHeaderProps = {
   dataset?: any;
@@ -45,7 +44,7 @@ export function DatasetHeader({
         <MainHeader.Description isLoading={isLoading}>{dataset?.description}</MainHeader.Description>
         <MainHeader.Description isLoading={isLoading}>
           <TextAndIcon>
-            <Calendar1Icon /> Created at {dataset?.createdAt ? format(new Date(dataset.createdAt), 'MMM d, yyyy') : ''}
+            <Calendar1Icon /> Created at {formatDate(dataset?.createdAt, 'date-time')}
           </TextAndIcon>
           <TextAndIcon>
             <HistoryIcon /> Latest version v{dataset?.version ?? ''}
@@ -53,7 +52,7 @@ export function DatasetHeader({
         </MainHeader.Description>
       </MainHeader.Column>
       <MainHeader.Column>
-        <ButtonsGroup>
+        <div className="flex items-center gap-2">
           {experimentTriggerSlot ? (
             disableExperimentTrigger ? (
               <Tooltip>
@@ -74,38 +73,38 @@ export function DatasetHeader({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="cursor-not-allowed">
-                    <Button disabled tabIndex={-1} icon={<Play />}>
-                      Run Experiment
+                    <Button disabled tabIndex={-1} icon={<Plus />}>
+                      New experiment
                     </Button>
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
               </Tooltip>
             ) : (
-              <Button onClick={onExperimentClick} icon={<Play />}>
-                Run Experiment
+              <Button onClick={onExperimentClick} icon={<Plus />}>
+                New experiment
               </Button>
             )
           ) : null}
           <DropdownMenu>
             <DropdownMenu.Trigger asChild>
-              <Button size="lg" aria-label="Dataset actions menu">
+              <Button size="icon-lg" aria-label="Dataset actions menu">
                 <MoreVertical />
               </Button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end" className="w-48">
               <DropdownMenu.Item onSelect={onEditClick}>
-                <Pencil /> Edit Dataset
+                <Pencil /> Edit dataset
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={onDuplicateClick}>
-                <Copy /> Duplicate Dataset
+                <Copy /> Duplicate dataset
               </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
-                <Trash2 /> Delete Dataset
+              <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
+                <Trash2 /> Delete dataset
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>
-        </ButtonsGroup>
+        </div>
       </MainHeader.Column>
     </MainHeader>
   );

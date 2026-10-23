@@ -10,17 +10,16 @@ const baseProps: SpanDataPanelViewProps = {
   traceId: 'trace-1',
   spanId: 'span-1',
   span: spanFixture,
-  onClose: vi.fn(),
 };
 
 afterEach(cleanup);
 
 describe('SpanDataPanelView — header summary', () => {
-  it('shows started, ended and duration in the header, not in the details list', () => {
+  it('shows started and duration in the header (end is implied), not in the details list', () => {
     render(<SpanDataPanelView {...baseProps} />);
 
     expect(screen.getByLabelText(/^Started at/)).toBeTruthy();
-    expect(screen.getByLabelText(/^Ended at/)).toBeTruthy();
+    expect(screen.queryByLabelText(/^Ended at/)).toBeNull();
     // Same `X.XXX s` format as the timeline timing column.
     expect(screen.getByLabelText(/^Duration/).textContent).toBe('1.000 s');
     expect(screen.queryByText('Started')).toBeNull();
@@ -51,10 +50,10 @@ describe('SpanDataPanelView — header summary', () => {
 describe('SpanDataPanelView — span id in the header', () => {
   const fullId = 'span-0123456789abcdef';
 
-  it('shows the id truncated without a # prefix', () => {
+  it('shows the first 6 characters of the id, with no ellipsis and no # prefix', () => {
     render(<SpanDataPanelView {...baseProps} spanId={fullId} />);
 
-    const heading = screen.getByRole('heading', { name: /^Span span-0123456…/ });
+    const heading = screen.getByRole('heading', { name: 'Span span-0' });
     expect(heading.textContent).not.toContain('#');
     expect(screen.queryByText(fullId)).toBeNull();
   });
@@ -62,7 +61,7 @@ describe('SpanDataPanelView — span id in the header', () => {
   it('shows the copy action instead of the full id in a tooltip', async () => {
     render(<SpanDataPanelView {...baseProps} spanId={fullId} />);
 
-    fireEvent.focus(screen.getByRole('button', { name: 'span-0123456…' }));
+    fireEvent.focus(screen.getByRole('button', { name: 'span-0' }));
 
     expect((await screen.findByRole('tooltip')).textContent).toBe('Copy to clipboard');
     expect(screen.queryByText(fullId)).toBeNull();
@@ -74,12 +73,12 @@ describe('SpanDataPanelView — span id in the header', () => {
 
     render(<SpanDataPanelView {...baseProps} spanId={fullId} />);
 
-    const button = screen.getByRole('button', { name: 'span-0123456…' });
+    const button = screen.getByRole('button', { name: 'span-0' });
     fireEvent.click(button);
 
     expect(writeText).toHaveBeenCalledWith(fullId);
     expect((await screen.findByRole('tooltip')).textContent).toBe('Copied to clipboard');
-    expect(button.textContent).toBe('span-0123456…');
+    expect(button.textContent).toBe('span-0');
     expect(button.querySelector('svg')).toBeNull();
   });
 
@@ -114,5 +113,38 @@ describe('SpanDataPanelView — tabs', () => {
     render(<SpanDataPanelView {...baseProps} />);
 
     expect(screen.queryByRole('tab', { name: /details/i })).toBeNull();
+  });
+});
+
+describe('SpanDataPanelView — close', () => {
+  it('renders a close button only when onClose is provided, and calls it', () => {
+    const { rerender } = render(<SpanDataPanelView {...baseProps} />);
+    expect(screen.queryByRole('button', { name: 'Close span' })).toBeNull();
+
+    const onClose = vi.fn();
+    rerender(<SpanDataPanelView {...baseProps} onClose={onClose} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Close span' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SpanDataPanelView — go to trace', () => {
+  describe('when no onShowTrace callback is provided', () => {
+    it('does not offer to go to the trace', () => {
+      render(<SpanDataPanelView {...baseProps} />);
+
+      expect(screen.queryByRole('button', { name: 'Go to trace' })).toBeNull();
+    });
+  });
+
+  describe('when an onShowTrace callback is provided', () => {
+    it('calls it with the trace and span ids', () => {
+      const onShowTrace = vi.fn();
+      render(<SpanDataPanelView {...baseProps} onShowTrace={onShowTrace} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Go to trace' }));
+
+      expect(onShowTrace).toHaveBeenCalledWith({ traceId: 'trace-1', spanId: 'span-1' });
+    });
   });
 });

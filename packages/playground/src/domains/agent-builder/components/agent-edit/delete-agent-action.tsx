@@ -2,11 +2,11 @@ import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useStoredAgentMutations, useStoredAgentDependents } from '@mastra/react/hooks/agents';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AgentImpactWarnings } from './agent-impact-warnings';
-import { useStoredAgentMutations, useStoredAgentDependents } from '@/domains/agents/hooks/use-stored-agents';
 
 interface UseDeleteAgentActionParams {
   agentId: string;
@@ -16,7 +16,7 @@ interface UseDeleteAgentActionParams {
 const useDeleteAgentAction = ({ agentId }: UseDeleteAgentActionParams) => {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const { deleteStoredAgent } = useStoredAgentMutations(agentId);
+  const { deleteStoredAgent } = useStoredAgentMutations({ agentId: agentId });
 
   const confirm = async () => {
     try {
@@ -54,7 +54,10 @@ const DeleteAgentDialog = ({
   isPending,
   onConfirm,
 }: DeleteAgentDialogProps) => {
-  const { isLoading: isDependentsLoading } = useStoredAgentDependents(agentId, { enabled: open });
+  const { isLoading: isDependentsLoading } = useStoredAgentDependents({
+    agentId: agentId,
+    queryOptions: { enabled: Boolean(agentId) && open },
+  });
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -66,7 +69,7 @@ const DeleteAgentDialog = ({
             undone.
           </AlertDialog.Description>
         </AlertDialog.Header>
-        <AlertDialog.Body className="pt-0">
+        <AlertDialog.Body>
           <AgentImpactWarnings agentId={agentId} variant="delete" enabled={open} />
         </AlertDialog.Body>
         <AlertDialog.Footer>
@@ -75,12 +78,10 @@ const DeleteAgentDialog = ({
           </AlertDialog.Cancel>
           <Button
             icon={<Trash2 />}
-            variant="primary"
+            variant="destructive"
             data-testid="agent-builder-delete-agent-confirm"
             disabled={isPending || isDependentsLoading}
             onClick={() => {
-              // Use a plain button (not AlertDialog.Close) so the dialog stays
-              // open while the request is in flight and on error.
               onConfirm();
             }}
           >
@@ -133,7 +134,7 @@ export const DeleteAgentMenuItem = ({ agentId, agentName, disabled = false }: De
       <DropdownMenu.Item
         data-testid="agent-builder-mobile-menu-delete"
         disabled={disabled}
-        className="text-red-500 focus:text-red-400"
+        variant="destructive"
         onSelect={event => {
           event.preventDefault();
           setOpen(true);

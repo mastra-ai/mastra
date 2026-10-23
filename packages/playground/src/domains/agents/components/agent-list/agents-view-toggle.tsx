@@ -11,7 +11,7 @@ export interface AgentsViewToggleProps {
 
 export function AgentsViewToggle({ view, onViewChange }: AgentsViewToggleProps) {
   return (
-    <ButtonsGroup spacing="close" aria-label="Agents view">
+    <ButtonsGroup aria-label="Agents view">
       <Button
         type="button"
         variant={view === 'list' ? 'default' : 'ghost'}

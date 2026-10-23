@@ -1,7 +1,7 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { Lock } from 'lucide-react';
-import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
-import { isAuthenticated } from '../types';
 import { AuthHeadersForm } from './auth-headers-form';
 import { LoginButton } from './login-button';
 import { withStudioBasePath } from '@/lib/studio-base-path';
@@ -63,8 +63,10 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
         <div className="flex flex-col items-center space-y-6 text-center">
           <LogoWithoutText className="h-16 w-16 opacity-50" />
           <div className="space-y-2">
-            <h2 className="text-neutral6 text-header-sm font-semibold">Authentication Required</h2>
-            <p className="text-neutral3 max-w-sm">
+            <Txt as="h2" variant="heading" tone="ink">
+              Authentication Required
+            </Txt>
+            <p className="max-w-sm text-muted-foreground">
               Add the authorization header that Studio needs to reach your Mastra server.
             </p>
           </div>
@@ -88,22 +90,30 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
       <div className="flex flex-col items-center space-y-6 text-center">
         <LogoWithoutText className="h-16 w-16 opacity-50" />
         <div className="space-y-2">
-          <h2 className="text-neutral6 text-header-sm font-semibold">Sign in to continue</h2>
-          <p className="text-neutral3 max-w-sm">You need to sign in to access this page.</p>
+          <Txt as="h2" variant="heading" tone="ink">
+            Sign in to continue
+          </Txt>
+          <p className="max-w-sm text-muted-foreground">You need to sign in to access this page.</p>
         </div>
         {capabilities.login.description && (
-          <div className="border-border1 bg-surface2 flex items-start gap-2.5 rounded-md border p-3 text-left">
-            <Lock className="text-neutral4 mt-0.5 h-4 w-4 shrink-0" />
-            <p className="text-neutral3 text-ui-md max-w-sm">{capabilities.login.description}</p>
+          <div className="flex items-start gap-2.5 rounded-md border border-border bg-background p-3 text-left">
+            <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <Txt tone="muted" className="max-w-sm">
+              {capabilities.login.description}
+            </Txt>
           </div>
         )}
         <LoginButton config={capabilities.login} redirectUri={redirectUri} loginUrl={loginUrl} />
         {(capabilities.login.type === 'credentials' || capabilities.login.type === 'both') &&
           capabilities.login.signUpEnabled !== false && (
-            <div className="text-ui-md">
-              <span className="text-neutral3">{"Don't have an account? "}</span>
-              <button type="button" onClick={handleSignUp} className="text-neutral6 hover:underline">
-                Sign up
+            <div>
+              <Txt as="span" variant="body" tone="muted">
+                {"Don't have an account? "}
+              </Txt>
+              <button type="button" onClick={handleSignUp} className="text-foreground hover:underline">
+                <Txt as="span" variant="body" className="block">
+                  Sign up
+                </Txt>
               </button>
             </div>
           )}

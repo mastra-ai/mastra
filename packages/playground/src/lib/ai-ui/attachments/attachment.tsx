@@ -1,30 +1,30 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import {
   ImageEntry,
   TxtEntry,
   PdfEntry,
   FileChipEntry,
 } from '@mastra/playground-ui/domains/chat/attachments/attachment-preview-dialog';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { ComposerAttachment as ComposerAttachmentPreview } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment';
+import { ComposerAttachmentList } from '@mastra/playground-ui/domains/chat/attachments/composer-attachment-list';
+import type { AttachmentPreviewProps } from '@mastra/playground-ui/domains/chat/attachments/use-attachment-preview';
 import { fileToBase64, isBrowserFetchableUrl } from '@mastra/playground-ui/utils/file';
-import { TooltipProvider } from '@radix-ui/react-tooltip';
-import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useLoadBrowserFile } from '../hooks/use-load-browser-file';
 import { useComposerAttachments } from './composer-attachments';
 import type { ComposerAttachment } from './composer-attachments';
 
-const ComposerTxtAttachment = ({ file }: { file: File }) => {
+const ComposerTxtAttachment = ({ file, ...previewProps }: { file: File } & AttachmentPreviewProps) => {
   const { isLoading, text } = useLoadBrowserFile(file);
 
-  return isLoading ? <Spinner /> : <TxtEntry data={text} name={file.name} />;
+  return isLoading ? <Spinner /> : <TxtEntry data={text} name={file.name} {...previewProps} />;
 };
 
-const ComposerPdfAttachment = ({ attachment }: { attachment: ComposerAttachment }) => {
+const ComposerPdfAttachment = ({
+  attachment,
+  ...previewProps
+}: { attachment: ComposerAttachment } & AttachmentPreviewProps) => {
   const [state, setState] = useState({ isLoading: false, text: '' });
   useEffect(() => {
     let isCanceled = false;
@@ -50,13 +50,16 @@ const ComposerPdfAttachment = ({ attachment }: { attachment: ComposerAttachment 
       {state.isLoading ? (
         <Spinner />
       ) : (
-        <PdfEntry data={state.text} url={attachment.isUrl ? attachment.name : undefined} />
+        <PdfEntry data={state.text} url={attachment.isUrl ? attachment.name : undefined} {...previewProps} />
       )}
     </div>
   );
 };
 
-const ImageAttachmentThumbnail = ({ attachment }: { attachment: ComposerAttachment }) => {
+const ImageAttachmentThumbnail = ({
+  attachment,
+  ...previewProps
+}: { attachment: ComposerAttachment } & AttachmentPreviewProps) => {
   const [src, setSrc] = useState<string>(attachment.isUrl ? attachment.name : '');
 
   useEffect(() => {
@@ -69,86 +72,64 @@ const ImageAttachmentThumbnail = ({ attachment }: { attachment: ComposerAttachme
     return () => URL.revokeObjectURL(url);
   }, [attachment]);
 
-  return <ImageEntry src={src} />;
+  return <ImageEntry src={src} name={attachment.name} {...previewProps} />;
 };
 
-const AttachmentThumbnail = ({ attachment }: { attachment: ComposerAttachment }) => {
-  const { remove } = useComposerAttachments();
-
-  if (attachment.kind === 'text') {
-    return (
-      <ButtonsGroup spacing="close" className="shrink-0">
-        {attachment.isUrl ? (
-          <FileChipEntry
-            contentType={attachment.contentType}
-            name={attachment.name}
-            url={isBrowserFetchableUrl(attachment.name) ? attachment.name : undefined}
-          />
-        ) : (
-          <ComposerTxtAttachment file={attachment.file} />
-        )}
-        <Button
-          variant="outline"
-          size="icon-sm"
-          type="button"
-          tooltip="Remove file"
-          onClick={() => remove(attachment.id)}
-        >
-          <X />
-        </Button>
-      </ButtonsGroup>
-    );
-  }
+const AttachmentPreview = ({
+  attachment,
+  ...previewProps
+}: { attachment: ComposerAttachment } & AttachmentPreviewProps) => {
+  if (attachment.kind === 'image') return <ImageAttachmentThumbnail attachment={attachment} {...previewProps} />;
+  if (attachment.kind === 'pdf') return <ComposerPdfAttachment attachment={attachment} {...previewProps} />;
+  if (attachment.kind === 'text' && !attachment.isUrl)
+    return <ComposerTxtAttachment file={attachment.file} {...previewProps} />;
 
   return (
-    <div className="relative">
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="bg-surface3 border-border1 size-16 overflow-hidden rounded-lg border">
-              {attachment.kind === 'image' ? (
-                <ImageAttachmentThumbnail attachment={attachment} />
-              ) : attachment.kind === 'pdf' ? (
-                <ComposerPdfAttachment attachment={attachment} />
-              ) : (
-                <FileChipEntry
-                  name={attachment.name}
-                  url={attachment.isUrl && isBrowserFetchableUrl(attachment.name) ? attachment.name : undefined}
-                  contentType={attachment.contentType}
-                />
-              )}
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="top">{attachment.name}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-
-      <Button
-        variant="default"
-        size="icon-sm"
-        type="button"
-        tooltip="Remove file"
-        onClick={() => remove(attachment.id)}
-        className="text-neutral3 hover:text-neutral6 bg-surface1 hover:bg-surface2 absolute -top-2 -right-2"
-      >
-        <Icon>
-          <X />
-        </Icon>
-      </Button>
-    </div>
+    <FileChipEntry
+      name={attachment.name}
+      url={attachment.isUrl && isBrowserFetchableUrl(attachment.name) ? attachment.name : undefined}
+      contentType={attachment.contentType}
+    />
   );
 };
 
+function canPreviewAttachment(attachment: ComposerAttachment) {
+  if (attachment.kind === 'image') return true;
+  if (attachment.isUrl) return isBrowserFetchableUrl(attachment.name);
+  return attachment.kind === 'pdf' || attachment.kind === 'text';
+}
+
 export const ComposerAttachments = () => {
-  const { attachments } = useComposerAttachments();
+  const { attachments, remove } = useComposerAttachments();
+  const [previewId, setPreviewId] = useState<string>();
+
+  function openPreview(attachment: ComposerAttachment) {
+    if (attachment.isUrl && attachment.kind !== 'image') {
+      window.open(attachment.name, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setPreviewId(attachment.id);
+  }
 
   if (attachments.length === 0) return null;
 
   return (
-    <div className="flex flex-row items-center gap-4 overflow-x-auto px-3 pt-3 pb-1" data-testid="composer-attachments">
+    <ComposerAttachmentList data-testid="composer-attachments">
       {attachments.map(att => (
-        <AttachmentThumbnail key={att.id} attachment={att} />
+        <ComposerAttachmentPreview
+          key={att.id}
+          name={att.name}
+          onRemove={() => remove(att.id)}
+          onPreview={canPreviewAttachment(att) ? () => openPreview(att) : undefined}
+          variant={att.kind === 'text' ? 'inline' : 'thumbnail'}
+        >
+          <AttachmentPreview
+            attachment={att}
+            open={previewId === att.id}
+            onOpenChange={open => setPreviewId(open ? att.id : undefined)}
+          />
+        </ComposerAttachmentPreview>
       ))}
-    </div>
+    </ComposerAttachmentList>
   );
 };

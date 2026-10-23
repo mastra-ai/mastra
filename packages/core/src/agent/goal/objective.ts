@@ -102,6 +102,17 @@ export function resolveEffectiveGoalSettings(
   };
 }
 
+/**
+ * User-facing reason persisted (and emitted on the `goal` chunk) when an
+ * objective runs out of evaluation budget before reaching the goal. It is
+ * shown in the TUI's paused box and `/goal status`, and it is what the
+ * changeset promises, so the non-durable and durable goal steps must not
+ * drift: both call this helper.
+ */
+export function formatGoalBudgetPausedReason(maxRuns: number): string {
+  return `Ran out of evaluation budget (${maxRuns} runs) before reaching the goal — raise maxRuns to resume.`;
+}
+
 // -----------------------------------------------------------------------------
 // Thread-state store resolution
 // -----------------------------------------------------------------------------

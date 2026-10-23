@@ -16,7 +16,7 @@ export function EnvironmentVariablesEditorAddButton({
 
   return (
     <div className={cn('flex items-center gap-2', className)} {...props}>
-      <span aria-hidden="true" className="bg-border1 h-px flex-1" />
+      <span aria-hidden="true" className="h-px flex-1 bg-border" />
       <Button
         type="button"
         variant="ghost"
@@ -25,9 +25,9 @@ export function EnvironmentVariablesEditorAddButton({
         onClick={() => editor.appendRow()}
         icon={<PlusIcon />}
       >
-        {children ?? 'Add Variable'}
+        {children ?? 'Add variable'}
       </Button>
-      <span aria-hidden="true" className="bg-border1 h-px flex-1" />
+      <span aria-hidden="true" className="h-px flex-1 bg-border" />
     </div>
   );
 }

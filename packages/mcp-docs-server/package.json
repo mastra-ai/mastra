@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-docs-server",
-  "version": "1.2.26",
+  "version": "1.3.10-alpha.0",
   "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
   "type": "module",
   "main": "dist/index.js",
@@ -25,8 +25,8 @@
     "build:cli": "tsdown --silent --config tsdown.config.ts",
     "pretest": "pnpm turbo build --filter @mastra/mcp-docs-server",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "keywords": [],
   "author": "",
@@ -34,8 +34,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@modelcontextprotocol/sdk": "^1.27.1",
-    "jsdom": "^26.1.0",
+    "@mastra/mcp-legacy": "npm:@mastra/mcp@^1.18.0",
     "local-pkg": "^1.1.2",
     "zod": "catalog:"
   },
@@ -44,15 +43,14 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/jsdom": "^21.1.7",
-    "@types/node": "22.20.1",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "@wong2/mcp-cli": "^2.0.0",
     "cross-env": "^10.1.0",
-    "eslint": "^10.7.0",
-    "hono": "^4.12.8",
-    "tsdown": "0.22.9",
+    "hono": "^4.13.7",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
