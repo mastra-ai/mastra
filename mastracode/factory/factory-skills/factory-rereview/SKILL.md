@@ -183,9 +183,9 @@ Next, publish the re-review on the PR itself — this is part of every pass, not
 
 **Update your earlier verdict instead of stacking a new one.** Before posting, find your latest verdict post on this PR. List `gh api repos/<owner>/<repo>/pulls/<number>/reviews --paginate` and `gh api repos/<owner>/<repo>/issues/<number>/comments --paginate`, keep entries whose `.user.login` is `<factory-app>[bot]` and whose body (after an optional leading `> Opened by @<actor>` line) starts with `Verdict:`, drop reviews in state `DISMISSED`, and take the newest. Then:
 
+- Your verdict is request changes and the PR author (REST `.user.login`) is not `<factory-app>[bot]`: post a new verdict. Edits send no notification and do not complete a pending re-review request, so a human author would never learn the pass finished.
 - The latest is a PR comment and you are publishing as a comment (misconfiguration or fallback below): edit it with `gh api -X PATCH repos/<owner>/<repo>/issues/comments/<id> -F body=@<file>`.
 - The latest is an `APPROVED` review on an older `commit_id`: post a new review matching your current verdict (`--approve` for approve, `--request-changes` for request changes). Never edit it, because editing only changes the body and the approval would stay pinned to the old commit.
-- Your verdict is request changes and the PR author (REST `.user.login`) is not `<factory-app>[bot]`: post a new verdict. Edits send no notification and do not complete a pending re-review request, so a human author would never learn the pass finished.
 - The latest is a review in the same state as your verdict (`CHANGES_REQUESTED` for request changes, or `APPROVED` for approve when its `commit_id` equals the head you reviewed): edit it with `gh api -X PUT repos/<owner>/<repo>/pulls/<number>/reviews/<id> -F body=@<file>`.
 - Otherwise (no earlier verdict, the verdict flipped, or the form changed), post a new one as described below. GitHub cannot change the state of a submitted review, so a flipped verdict always needs a new review.
 
