@@ -189,6 +189,187 @@ describe('storageVersion per run', () => {
     expect((stored?.context as any).gate).toMatchObject({ status: 'success', output: { approved: true } });
   });
 
+  it('stores a resumed branch step when it ends, before the next step runs', async () => {
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    let storedInNextStep: Awaited<ReturnType<typeof store.loadWorkflowRun>> | undefined;
+    const workflow = createWorkflow({
+      id: 'branched',
+      inputSchema: num,
+      outputSchema: z.any(),
+      options: { storageVersion: 2 },
+    })
+      .branch([[async () => true, approveAddOne('approve')]])
+      .then(
+        createStep({
+          id: 'next',
+          inputSchema: z.any(),
+          outputSchema: z.any(),
+          execute: async ({ inputData, runId }) => {
+            storedInNextStep = await store.loadWorkflowRun({
+              workflowName: 'branched',
+              runId,
+              successfulSteps: 'full',
+            });
+            return inputData;
+          },
+        }),
+      )
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { branched: workflow } });
+    const run = await workflow.createRun();
+    expect((await run.start({ inputData: { n: 0 } })).status).toBe('suspended');
+
+    const resumed = await (
+      await workflow.createRun({ runId: run.runId })
+    ).resume({ step: 'approve', resumeData: true });
+    expect(resumed.status).toBe('success');
+    // What a restart would load if the process died in `next`.
+    expect(storedInNextStep?.steps.approve).toMatchObject({ status: 'success', output: { n: 1 } });
+  });
+
+  it('reruns the time travel target on restart when the process died right after the checkpoint', async () => {
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    let bRuns = 0;
+    const build = () =>
+      createWorkflow({ id: 'travelled', inputSchema: num, outputSchema: num, options: { storageVersion: 2 } })
+        .then(addOne('a'))
+        .then(
+          addOne('b', () => {
+            bRuns++;
+          }),
+        )
+        .then(addOne('c'))
+        .commit();
+    const first = build();
+    new Mastra({ logger: false, storage, workflows: { travelled: first } });
+    const run = await first.createRun();
+    expect((await run.start({ inputData: { n: 0 } })).status).toBe('success');
+
+    // The process dies once time travel's checkpoint is stored: no write after it completes.
+    let died = false;
+    const checkpoint = store.writeWorkflowRunCheckpoint.bind(store);
+    store.writeWorkflowRunCheckpoint = async args => {
+      const written = await checkpoint(args);
+      died = true;
+      return written;
+    };
+    const append = store.appendWorkflowRunEntries.bind(store);
+    store.appendWorkflowRunEntries = args => (died ? new Promise(() => {}) : append(args));
+    void run.timeTravel({ step: 'b' });
+    await vi.waitFor(() => expect(died).toBe(true));
+    store.writeWorkflowRunCheckpoint = checkpoint;
+    store.appendWorkflowRunEntries = append;
+
+    // The checkpoint still holds b's earlier success; a restart must run b again, not skip to c.
+    const second = build();
+    new Mastra({ logger: false, storage, workflows: { travelled: second } });
+    const restarted = await (await second.createRun({ runId: run.runId })).restart();
+    expect(restarted.status).toBe('success');
+    expect(bRuns).toBe(2);
+  });
+
+  it('makes no v1 write for a parallel step that starts after the run stopped on a failed write', async () => {
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    let checked!: () => void;
+    const checking = new Promise<void>(resolve => (checked = resolve));
+    let bRan = false;
+    const workflow = createWorkflow({
+      id: 'split',
+      inputSchema: num,
+      outputSchema: z.any(),
+      options: { storageVersion: 2 },
+    })
+      .parallel([
+        addOne('a'),
+        createStep({
+          id: 'b',
+          // Checks its input against another service, so it starts after a.
+          inputSchema: num.refine(async () => {
+            await checking;
+            return true;
+          }),
+          outputSchema: num,
+          stateSchema: marks,
+          execute: async ({ inputData }) => {
+            bRan = true;
+            return { n: inputData.n + 1 };
+          },
+        }),
+      ])
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { split: workflow } });
+    const run = await workflow.createRun();
+
+    const appended: string[][] = [];
+    const append = store.appendWorkflowRunEntries.bind(store);
+    store.appendWorkflowRunEntries = async args => {
+      appended.push(Object.keys(args.steps));
+      if ('a' in args.steps) throw new Error('store down');
+      return append(args);
+    };
+    const persistSnapshot = vi.spyOn(store, 'persistWorkflowSnapshot');
+
+    // a's start write fails, so the block's Promise.all rejects and the run stops while b checks its input.
+    await expect(run.start({ inputData: { n: 0 } })).rejects.toThrow('store down');
+    checked();
+    await vi.waitFor(() => expect(bRan).toBe(true));
+
+    expect(persistSnapshot).not.toHaveBeenCalled();
+    expect(appended).toEqual([['a']]);
+  });
+
+  it("drops a stopped run's parallel step write instead of adding it to a later execution of the run", async () => {
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    let checked!: () => void;
+    const checking = new Promise<void>(resolve => (checked = resolve));
+    const workflow = createWorkflow({
+      id: 'split',
+      inputSchema: num,
+      outputSchema: z.any(),
+      options: { storageVersion: 2 },
+    })
+      .parallel([
+        addOne('a'),
+        createStep({
+          id: 'b',
+          inputSchema: num.refine(async () => {
+            await checking;
+            return true;
+          }),
+          outputSchema: num,
+          stateSchema: marks,
+          execute: async ({ inputData }) => ({ n: inputData.n + 1 }),
+        }),
+      ])
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { split: workflow } });
+    const run = await workflow.createRun();
+
+    const started: string[] = [];
+    const append = store.appendWorkflowRunEntries.bind(store);
+    store.appendWorkflowRunEntries = async args => {
+      for (const [id, result] of Object.entries(args.steps)) {
+        if ((result as { status?: string }).status === 'running') started.push(id);
+      }
+      if (started.length === 1) throw new Error('store down');
+      return append(args);
+    };
+
+    await expect(run.start({ inputData: { n: 0 } })).rejects.toThrow('store down');
+    // Restart the run while the first execution's b still checks its input.
+    const restarted = (await workflow.createRun({ runId: run.runId })).restart();
+    await vi.waitFor(() => expect(started).toEqual(['a', 'a']));
+    checked();
+
+    expect((await restarted).status).toBe('success');
+    // Only the restarted execution's b starts in storage.
+    expect(started).toEqual(['a', 'a', 'b']);
+  });
+
   it('makes sync getStepResult throw inside v2 steps', async () => {
     const workflow = createWorkflow({
       id: 'sync-read',
@@ -292,7 +473,7 @@ describe('storage v2 write volume', () => {
     expect(result.status).toBe('success');
     expect(result.result).toEqual({ n: STEPS });
 
-    // createRun's pending write and the first running write are checkpoints; every later write is an append.
+    // createRun's pending write and the running write before the first step are checkpoints; every later write is an append.
     expect(writes.slice(0, 2).map(w => w.changes)).toEqual([undefined, undefined]);
     const appends = writes.slice(2);
     expect(appends.every(w => w.changes)).toBe(true);
@@ -323,13 +504,13 @@ describe('storage v2 write volume', () => {
     expect(result.status).toBe('success');
     expect(result.status === 'success' && result.result).toEqual({ n: STEPS });
 
+    // One append per iteration start, and one when the loop ends.
     const appends = writes.filter(w => w.changes);
     expect(appends.filter(w => w.status === 'running').map(w => w.changes)).toEqual(
-      Array.from({ length: STEPS }, () => ({ stepIds: ['count'], state: false })),
+      Array.from({ length: STEPS + 1 }, () => ({ stepIds: ['count'], state: false })),
     );
 
-    // The checkpoint holds the input, the first iteration's running result and the state;
-    // then one entry per iteration, and the state at the end.
+    // The checkpoint holds the input and the state; then one entry per append above, and the state at the end.
     const stored = entries('loop', run.runId);
     expect(stored.filter(e => e.kind === 'step')).toHaveLength(STEPS + 2);
     expect(stored.filter(e => e.kind === 'state')).toHaveLength(2);

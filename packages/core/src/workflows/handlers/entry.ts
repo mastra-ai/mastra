@@ -6,6 +6,7 @@ import { resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import { WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
+import type { RunJournal } from '../run-journal';
 import type {
   EntryExecutionResult,
   ExecutionContext,
@@ -164,6 +165,19 @@ export interface PersistStepUpdateParams {
    * Used when a resumed step starts, so its resume data survives a crash mid-step.
    */
   recordResumedStepStart?: boolean;
+  /**
+   * Storage v2: set by a step's start write, which can be in flight together with the start writes
+   * of other steps of a parallel or branch block. Only these steps' results are written, and no
+   * other write in flight may name them. Unset, the write sends every change.
+   */
+  stepIds?: string[];
+  /**
+   * Storage v2: the journal of the execution this write belongs to, set by a step's start write.
+   * The step can still be running after its run stopped (see `RunJournal.close`), when the engine
+   * no longer has the run's journal, or has the journal of a later execution of the run. Unset,
+   * the write uses the run's current journal.
+   */
+  journal?: RunJournal;
 }
 
 export async function persistStepUpdate(
@@ -184,6 +198,7 @@ export async function persistStepUpdate(
     tracingContext,
     phase,
     recordResumedStepStart,
+    stepIds,
   } = params;
 
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
@@ -241,9 +256,9 @@ export async function persistStepUpdate(
       tracingContext,
     };
 
-    const journal = engine.getRunJournal(runId);
+    const journal = params.journal ?? engine.getRunJournal(runId);
     if (journal) {
-      await journal.write({ resourceId, snapshot });
+      await journal.write({ resourceId, snapshot, stepIds });
     } else {
       const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
@@ -446,79 +461,37 @@ export async function executeEntry(
     const idx = resume.resumePath.shift();
     const branchStep = entry.steps[idx!]!;
 
-    let branchResult: EntryExecutionResult;
-
-    if (branchStep.type !== 'step') {
-      // Recurse through executeEntry for nested block types (parallel, conditional, etc.)
-      branchResult = await executeEntry(engine, {
+    // Through executeEntry, like a resumed parallel branch, so the branch's result is written
+    // when it ends.
+    const branchResult = await executeEntry(engine, {
+      workflowId,
+      runId,
+      resourceId,
+      entry: branchStep,
+      prevStep,
+      serializedStepGraph,
+      stepResults,
+      resume,
+      executionContext: {
         workflowId,
         runId,
-        resourceId,
-        entry: branchStep,
-        prevStep,
-        serializedStepGraph,
-        stepResults,
-        resume,
-        executionContext: {
-          workflowId,
-          runId,
-          executionPath: [...executionContext.executionPath, idx!],
-          stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
-          suspendedPaths: executionContext.suspendedPaths,
-          resumeLabels: executionContext.resumeLabels,
-          retryConfig: executionContext.retryConfig,
-          activeStepsPath: executionContext.activeStepsPath,
-          state: executionContext.state,
-        },
-        ...observabilityContext,
-        pubsub,
-        abortController,
-        requestContext,
-        actor,
-        outputWriter,
-        disableScorers,
-        perStep,
-      });
-    } else {
-      const resumePrevOutput = getResumeStepPrevOutput({
-        isResumedStep: true,
-        stepId: branchStep.step.id,
-        stepResults,
-        prevOutput,
-      });
-
-      branchResult = await engine.executeStep({
-        workflowId,
-        runId,
-        resourceId,
-        step: branchStep.step,
-        prevOutput: resumePrevOutput,
-        stepResults,
-        serializedStepGraph,
-        resume,
-        restart,
-        timeTravel,
-        executionContext: {
-          workflowId,
-          runId,
-          executionPath: [...executionContext.executionPath, idx!],
-          stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
-          suspendedPaths: executionContext.suspendedPaths,
-          resumeLabels: executionContext.resumeLabels,
-          retryConfig: executionContext.retryConfig,
-          activeStepsPath: executionContext.activeStepsPath,
-          state: executionContext.state,
-        },
-        ...observabilityContext,
-        pubsub,
-        abortController,
-        requestContext,
-        actor,
-        outputWriter,
-        disableScorers,
-        perStep,
-      });
-    }
+        executionPath: [...executionContext.executionPath, idx!],
+        stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
+        suspendedPaths: executionContext.suspendedPaths,
+        resumeLabels: executionContext.resumeLabels,
+        retryConfig: executionContext.retryConfig,
+        activeStepsPath: executionContext.activeStepsPath,
+        state: executionContext.state,
+      },
+      ...observabilityContext,
+      pubsub,
+      abortController,
+      requestContext,
+      actor,
+      outputWriter,
+      disableScorers,
+      perStep,
+    });
 
     // Apply context changes from resumed step
     engine.applyMutableContext(executionContext, branchResult.mutableContext);

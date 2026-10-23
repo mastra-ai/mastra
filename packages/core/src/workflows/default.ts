@@ -822,12 +822,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     let journal: RunJournal | undefined;
     if (params.storageVersion === 2) {
-      // Resume continues from the stored snapshot; start, restart and time travel write a checkpoint first.
+      // Resume and restart continue from the stored snapshot; start and time travel write a checkpoint first.
       let seed: Record<string, unknown> | undefined;
       if (resume) {
         seed = { ...resume.stepResults };
         // A retried nested resume replaces `input` before it gets here, so write it again.
         delete seed.input;
+      } else if (restart) {
+        seed = restart.stepResults;
       }
       journal = new RunJournal({
         store: await this.mastra?.getStorage()?.getStore('workflows'),
@@ -867,6 +869,41 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       let lastState: Record<string, any> = timeTravel?.state ?? restart?.state ?? initialState ?? {};
       let lastExecutionContext: ExecutionContext | undefined;
       let currentRequestContext = params.requestContext;
+
+      if (journal && !resume && !restart) {
+        // The checkpoint replaces everything stored for the run, so it's written before any step
+        // starts: the start writes of a block's steps are in flight together and only append.
+        // A run suspended earlier in this process would block it as a `running` write over a
+        // suspend, but it replaces that run (time travel), so the earlier status no longer applies.
+        this.clearLastPersistedStatus(runId);
+        await this.persistStepUpdate({
+          workflowId,
+          runId,
+          resourceId,
+          stepResults,
+          serializedStepGraph: params.serializedStepGraph,
+          executionContext: {
+            workflowId,
+            runId,
+            parentWorkflow: params.parentWorkflow,
+            executionPath: [startIdx],
+            stepExecutionPath,
+            // Time travel's target keeps its earlier result until it runs again, so it's marked
+            // as running: a restart from this checkpoint reruns it instead of skipping it.
+            activeStepsPath: timeTravel ? { [timeTravel.steps[0]!]: [startIdx, ...timeTravel.executionPath] } : {},
+            suspendedPaths: {},
+            resumeLabels: {},
+            retryConfig: { attempts, delay },
+            format: params.format,
+            state: lastState,
+            tracingIds: params.tracingIds,
+          },
+          workflowStatus: 'running',
+          requestContext: currentRequestContext,
+          phase: 'checkpoint',
+        });
+      }
+
       for (let i = startIdx; i < steps.length; i++) {
         if (params.abortController.signal.aborted) {
           if (params.abortController.signal.reason !== WORKFLOW_CANCELLED_SYMBOL) {
@@ -1304,6 +1341,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
       return { ...result, runId };
     } finally {
+      journal?.close();
       this.#journals.delete(runId);
     }
   }

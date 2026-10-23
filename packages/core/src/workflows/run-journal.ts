@@ -43,6 +43,14 @@ export function isStepResultStub(value: unknown): boolean {
  * differs from the one last written. State is edited in place, so changes are marked
  * through `markStateChanged()` where they are merged into the run.
  *
+ * The start writes of a parallel or branch block's steps are in flight at the same time, and
+ * the store can commit them in any order. If two of them carried the same step, the older value
+ * could commit last while the journal believes storage holds the newer one, and it never resends
+ * what it believes is stored. So a write that can overlap others names its steps (`stepIds`) and
+ * sends only those, and overlapping writes name different steps. Everything else (other steps'
+ * changes, the state, the checkpoint) goes out with boundary writes, which the engine makes only
+ * when no other write of the run is in flight. `write` throws when a write breaks that.
+ *
  * @internal
  */
 export class RunJournal {
@@ -54,10 +62,14 @@ export class RunJournal {
   #written: Map<string, unknown>;
   #stateDirty = false;
   #needsCheckpoint: boolean;
+  /** Store writes sent and not yet settled, and whether one of them is a boundary write. */
+  #inFlight = 0;
+  #boundaryInFlight = false;
+  #closed = false;
 
   /**
-   * @param seed The step results already in storage (a resume's loaded snapshot context).
-   * Without it, the first write is a checkpoint that stores the whole snapshot.
+   * @param seed The step results already in storage (a resumed or restarted run's loaded snapshot
+   * context). Without it, the first boundary write is a checkpoint that replaces whatever is stored.
    */
   constructor({
     store,
@@ -81,20 +93,50 @@ export class RunJournal {
     this.#stateDirty = true;
   }
 
-  async write({ resourceId, snapshot }: { resourceId?: string; snapshot: WorkflowRunState }): Promise<void> {
+  /**
+   * Called when the run's execution ends. A step of a parallel or branch block can still be
+   * running then (the block's `Promise.all` rejects on the first failure), and its write is dropped.
+   */
+  close(): void {
+    this.#closed = true;
+  }
+
+  /**
+   * @param stepIds Set by a write that can be in flight together with other writes of the run (a
+   * step's start write): only these steps are sent, never the state, and no other write in flight
+   * may name them. Leave it unset for a boundary write, made when no other write of the run is in
+   * flight (an entry's end, sleeps, the run stopping): it sends every step result that changed
+   * since it was last written, the state when it changed or the run stops, and the checkpoint
+   * when that is still to do.
+   */
+  async write({
+    resourceId,
+    snapshot,
+    stepIds,
+  }: {
+    resourceId?: string;
+    snapshot: WorkflowRunState;
+    stepIds?: readonly string[];
+  }): Promise<void> {
     const store = this.store;
-    if (!store) return;
+    if (!store || this.#closed) return;
+
+    const boundary = stepIds === undefined;
+    // The checkpoint replaces every stored entry, so no other write may be in flight with it. The
+    // writes dropped here don't need resending: the checkpoint sends the whole run.
+    if (!boundary && this.#needsCheckpoint) return;
 
     const { context, value, ...header } = snapshot;
     const results = context as Record<string, unknown>;
     const checkpoint = this.#needsCheckpoint;
     const stateDirty = this.#stateDirty;
 
-    let stepIds = Object.keys(results);
+    let sent: string[];
     if (checkpoint) {
+      sent = Object.keys(results);
       // A checkpoint replaces every entry, so a stub would replace a stored result with its summary.
       // Stubs only replace written results and the first write is the checkpoint, so this can't happen.
-      const stubbed = stepIds.filter(stepId => isStepResultStub(results[stepId]));
+      const stubbed = sent.filter(stepId => isStepResultStub(results[stepId]));
       if (stubbed.length) {
         throw new MastraError({
           id: 'WORKFLOW_STORAGE_V2_CHECKPOINT_STUB',
@@ -105,17 +147,32 @@ export class RunJournal {
       }
     } else {
       // Every stub stands for a result that is already stored. A stub can still differ from the
-      // last written object: a copy of the step results (a step's `running` write) taken before
-      // a hydrate holds the stub the hydrate replaced. Sending it would overwrite the stored result.
-      stepIds = stepIds.filter(
-        stepId => results[stepId] !== this.#written.get(stepId) && !isStepResultStub(results[stepId]),
+      // last written object: a copy of the step results taken before a hydrate holds the stub the
+      // hydrate replaced. Sending it would overwrite the stored result.
+      sent = (stepIds ?? Object.keys(results)).filter(
+        stepId =>
+          stepId in results && results[stepId] !== this.#written.get(stepId) && !isStepResultStub(results[stepId]),
       );
+      if (!boundary && !sent.length) return;
     }
     const steps: StepResults = {};
-    for (const stepId of stepIds) steps[stepId] = results[stepId] as StepResult<any, any, any, any>;
+    for (const stepId of sent) steps[stepId] = results[stepId] as StepResult<any, any, any, any>;
+
+    // The engine makes boundary writes only where nothing else of the run is running. Failing here
+    // finds an engine path that breaks that before it loses a write.
+    if (this.#boundaryInFlight || (boundary && this.#inFlight > 0)) {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_OVERLAPPING_WRITE',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.SYSTEM,
+        text: `Storage v2 run ${this.runId} started a write while ${boundary ? 'another write' : 'a boundary write'} was in flight.`,
+      });
+    }
 
     this.#needsCheckpoint = false;
-    this.#stateDirty = false;
+    if (boundary) this.#stateDirty = false;
+    this.#inFlight++;
+    if (boundary) this.#boundaryInFlight = true;
     try {
       // Stubs only replace successful results other than `input`, and the thread comes from a
       // suspended result or `input`, so the snapshot still holds the whole run's thread.
@@ -124,18 +181,20 @@ export class RunJournal {
       if (checkpoint) {
         await store.writeWorkflowRunCheckpoint({ ...run, state: value });
       } else {
-        // Concurrent writes can commit in any order, so stored state may briefly lag memory.
-        // Including state whenever the run stops (suspend, terminal, waiting, paused) makes
-        // storage match memory where state is read back.
-        const writeState = stateDirty || snapshot.status !== 'running';
+        // Writing the state whenever the run stops (suspend, terminal, waiting, paused) keeps
+        // storage matching memory where the state is read back.
+        const writeState = boundary && (stateDirty || snapshot.status !== 'running');
         await store.appendWorkflowRunEntries({ ...run, state: writeState ? value : undefined });
       }
     } catch (error) {
       if (checkpoint) this.#needsCheckpoint = true;
       if (stateDirty) this.#stateDirty = true;
       throw error;
+    } finally {
+      this.#inFlight--;
+      if (boundary) this.#boundaryInFlight = false;
     }
-    for (const stepId of stepIds) {
+    for (const stepId of sent) {
       this.#written.set(stepId, steps[stepId]);
     }
   }

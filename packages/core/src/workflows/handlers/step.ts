@@ -104,6 +104,9 @@ export async function executeStep(
   const skipEmits = skipEmitsParam || engine.options.emitStepEvents === false;
   const observabilityContext = resolveObservabilityContext(rest);
 
+  // Read before the first await, while the run executes: the step can outlive its run.
+  const journal = engine.getRunJournal(runId);
+
   const stepCallId = globalThis.crypto.randomUUID();
   const persistedNestedRunId =
     executionContext.foreachIndex !== undefined
@@ -240,6 +243,10 @@ export async function executeStep(
     requestContext,
     phase: 'start',
     recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
+    // A foreach's iterations all run this step, so their writes would name the same step at the
+    // same time. Its result is written when the foreach ends.
+    stepIds: executionContext.foreachIndex === undefined ? [step.id] : [],
+    journal,
   });
 
   // Check if this is a nested workflow that requires special handling

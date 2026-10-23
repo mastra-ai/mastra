@@ -82,6 +82,41 @@ describe('RunJournal writes', () => {
     expect(appended(appendWorkflowRunEntries, 0)).toEqual({ stepIds: ['gate'], state: false });
   });
 
+  it('sends only the named steps on an overlapping write, never the state, and the rest on the next boundary', async () => {
+    const { store, appendWorkflowRunEntries } = fakeStore();
+    const journal = journalFor(store, {});
+    const context: Record<string, unknown> = { a: ok(1), b: ok(2) };
+
+    journal.markStateChanged();
+    await journal.write({ snapshot: snapshot(context), stepIds: ['a'] });
+    expect(appended(appendWorkflowRunEntries, 0)).toEqual({ stepIds: ['a'], state: false });
+
+    // Nothing named changed: no call at all.
+    await journal.write({ snapshot: snapshot(context), stepIds: ['a'] });
+    await journal.write({ snapshot: snapshot(context), stepIds: [] });
+    expect(appendWorkflowRunEntries).toHaveBeenCalledTimes(1);
+
+    await journal.write({ snapshot: snapshot(context) });
+    expect(appended(appendWorkflowRunEntries, 1)).toEqual({ stepIds: ['b'], state: true });
+  });
+
+  it('drops overlapping writes until a boundary write has written the checkpoint', async () => {
+    const { store, writeWorkflowRunCheckpoint, appendWorkflowRunEntries } = fakeStore();
+    const journal = journalFor(store);
+    const context: Record<string, unknown> = { input: {}, a: ok(1) };
+
+    await journal.write({ snapshot: snapshot(context), stepIds: ['a'] });
+    expect(writeWorkflowRunCheckpoint).not.toHaveBeenCalled();
+    expect(appendWorkflowRunEntries).not.toHaveBeenCalled();
+
+    await journal.write({ snapshot: snapshot(context) });
+    expect(writeWorkflowRunCheckpoint.mock.calls[0]![0].steps).toEqual(context);
+
+    context.b = ok(2);
+    await journal.write({ snapshot: snapshot(context), stepIds: ['b'] });
+    expect(appended(appendWorkflowRunEntries, 0)).toEqual({ stepIds: ['b'], state: false });
+  });
+
   it('writes state only after it was marked, and clears the mark', async () => {
     const { store, appendWorkflowRunEntries } = fakeStore();
     const journal = journalFor(store, {});
@@ -141,6 +176,42 @@ describe('RunJournal writes', () => {
       id: 'WORKFLOW_STORAGE_V2_CHECKPOINT_STUB',
     });
     expect(writeWorkflowRunCheckpoint).not.toHaveBeenCalled();
+  });
+
+  it('throws on a write that overlaps a boundary write, and lets named writes overlap each other', async () => {
+    const { store, appendWorkflowRunEntries } = fakeStore();
+    const journal = journalFor(store, {});
+    let release!: () => void;
+    appendWorkflowRunEntries.mockImplementation(() => new Promise<void>(resolve => (release = resolve)));
+    const context: Record<string, unknown> = { a: ok(1), b: ok(2) };
+
+    // Two start writes in flight together.
+    const a = journal.write({ snapshot: snapshot(context), stepIds: ['a'] });
+    const releaseA = release;
+    const b = journal.write({ snapshot: snapshot(context), stepIds: ['b'] });
+    const releaseB = release;
+    await expect(journal.write({ snapshot: snapshot(context) })).rejects.toMatchObject({
+      id: 'WORKFLOW_STORAGE_V2_OVERLAPPING_WRITE',
+    });
+    releaseA();
+    releaseB();
+    await Promise.all([a, b]);
+
+    context.c = ok(3);
+    const boundary = journal.write({ snapshot: snapshot(context) });
+    context.d = ok(4);
+    await expect(journal.write({ snapshot: snapshot(context), stepIds: ['d'] })).rejects.toMatchObject({
+      id: 'WORKFLOW_STORAGE_V2_OVERLAPPING_WRITE',
+    });
+    release();
+    await boundary;
+
+    // Settled writes, failed ones included, no longer count.
+    appendWorkflowRunEntries.mockRejectedValueOnce(new Error('down'));
+    await expect(journal.write({ snapshot: snapshot(context), stepIds: ['d'] })).rejects.toThrow('down');
+    appendWorkflowRunEntries.mockImplementation(async () => {});
+    await journal.write({ snapshot: snapshot(context) });
+    expect(appended(appendWorkflowRunEntries, 4)).toEqual({ stepIds: ['d'], state: false });
   });
 });
 
