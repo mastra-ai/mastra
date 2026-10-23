@@ -967,13 +967,13 @@ export class AgentThreadStreamRuntime {
             // A renewal that settles after the run ended or re-registered speaks for no live run, and must not
             // leave a rejecting fence behind for a later run with this id.
             if (state.leaseRenewalTimers.get(runId) !== timer) return;
-            // Sent after the lease had already run out by this process's own clock, the renewal found the lease
-            // lapsed because this process was late (a stall under load); it can take it back if nobody else did.
-            // Sent while the lease should still have been live, it means the backend lost or gave away a live
-            // lease, and another process may already own the thread: stop this run instead of letting it keep
-            // calling the model and tools beside its successor.
+            // Answered after the lease had already run out by this process's own clock, the renewal may have found the
+            // lease lapsed only because this process was late (a stall under load, even one that began after the
+            // renewal went out); it can take it back if nobody else did. Answered while the lease should still have
+            // been live, it means the backend lost or gave away a live lease, and another process may already own the
+            // thread: stop this run instead of letting it keep calling the model and tools beside its successor.
             const confirmed = state.leaseDeadlines.get(runId)?.confirmedSentAt;
-            const lapsedHere = confirmed === undefined || sentAt >= confirmed + AGENT_THREAD_LEASE_TTL_MS;
+            const lapsedHere = confirmed === undefined || Date.now() >= confirmed + AGENT_THREAD_LEASE_TTL_MS;
             const retaken = lapsedHere ? this.#retakeLease(pubsub, key, runId, timer) : Promise.resolve(false);
             void retaken.then(kept => {
               if (kept || state.leaseRenewalTimers.get(runId) !== timer) return;
