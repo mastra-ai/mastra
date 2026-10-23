@@ -490,7 +490,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
     _showDownloadProgress: boolean = true,
   ): Promise<PathLike> {
     if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { mode: 0o755 });
+      fs.mkdirSync(cacheDir, { recursive: true, mode: 0o755 });
     }
 
     const modelDir = path.join(cacheDir.toString(), model.replace('/', '_'));
