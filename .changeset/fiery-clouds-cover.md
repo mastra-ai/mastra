@@ -12,6 +12,6 @@ The panel header is now one line: the scope picker, the panel's total `+N −N`,
 - **… → Diff layout** picks **Unified** (default) or **Split**. The choice is remembered in this browser.
 - **… → Refresh** reloads the diffs, for edits made outside an agent run. Diffs already reload when a run ends.
 
-A file whose diff is over 512 KB, or that comes after 8 MB of diffs in the same repository, shows its header with "Diff too large to show".
+A file without a diff says why in its header: "Diff too large to show" when its own diff is over 512 KB, "Too many changes to show" once its repository's diffs pass 8 MB, and "Diff unavailable" when git could not diff it, for example in a repository without a commit yet. The file list stays visible in every case.
 
-`GET /web/workspace/changes/diff` is replaced by `GET /web/workspace/changes/patches?workspacePath=…&scope=branch|uncommitted`, which returns the change list and every file's diff in one response.
+`GET /web/workspace/changes/diff` is replaced by `GET /web/workspace/changes/patches?workspacePath=…&scope=branch|uncommitted`, which returns the change list, every file's diff, and `omittedPatches`, the reason for each diff left out.

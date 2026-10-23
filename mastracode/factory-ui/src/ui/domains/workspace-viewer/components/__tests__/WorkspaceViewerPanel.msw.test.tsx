@@ -67,6 +67,7 @@ function installHandlers() {
         changes: [],
         scope: 'branch',
         patches: {},
+        omittedPatches: {},
       }),
     ),
   );
@@ -106,13 +107,14 @@ function pendingChangesHandler() {
   );
 }
 
-type ScopedChanges = Pick<WorkspaceChangePatches, 'changes' | 'patches'>;
+type ScopedChanges = Pick<WorkspaceChangePatches, 'changes' | 'patches'> &
+  Partial<Pick<WorkspaceChangePatches, 'omittedPatches'>>;
 
 /** Answers the Changes panel with the files and diffs of the scope it asks for. */
 function patchesHandler(byScope: Record<WorkspaceChangesScope, ScopedChanges>) {
   return http.get(PATCHES_URL, ({ request }) => {
     const scope = new URL(request.url).searchParams.get('scope') === 'uncommitted' ? 'uncommitted' : 'branch';
-    const { changes, patches } = byScope[scope];
+    const { changes, patches, omittedPatches = {} } = byScope[scope];
     return HttpResponse.json({
       workspacePath: WORKSPACE,
       available: true,
@@ -121,6 +123,7 @@ function patchesHandler(byScope: Record<WorkspaceChangesScope, ScopedChanges>) {
       changes,
       scope,
       patches,
+      omittedPatches,
     } satisfies WorkspaceChangePatches);
   });
 }
@@ -424,13 +427,19 @@ describe('WorkspaceViewerPanel', () => {
   });
 
   describe('when the workspace has pending changes', () => {
-    it('stacks the diff of every changed file and names the ones too large to show', async () => {
+    it('stacks the diff of every changed file and says why a file has none', async () => {
       installHandlers();
       const generated = { path: 'src/generated.json', status: 'untracked', additions: 90_000, deletions: 0 } as const;
+      const vendored = { path: 'vendor/bundle.js', status: 'untracked', additions: 12, deletions: 0 } as const;
+      const conflicted = { path: 'src/merge.ts', status: 'conflicted' } as const;
       server.use(
         pendingChangesHandler(),
         patchesHandler({
-          branch: { changes: [AGENT_CHANGE, generated], patches: { [AGENT_CHANGE.path]: AGENT_PATCH } },
+          branch: {
+            changes: [AGENT_CHANGE, generated, vendored, conflicted],
+            patches: { [AGENT_CHANGE.path]: AGENT_PATCH },
+            omittedPatches: { [generated.path]: 'file-too-large', [vendored.path]: 'total-too-large' },
+          },
           uncommitted: { changes: [], patches: {} },
         }),
       );
@@ -446,7 +455,9 @@ describe('WorkspaceViewerPanel', () => {
       const changesPanel = await screen.findByTestId('workspace-changes-panel');
       await waitFor(() => expect(diffText(changesPanel)).toContain('export const agent = {};'));
       expect(within(changesPanel).getByText('Diff too large to show')).toBeInTheDocument();
-      expect(within(changesPanel).getByRole('button', { name: 'Jump to file, 2 files' })).toBeInTheDocument();
+      expect(within(changesPanel).getByText('Too many changes to show')).toBeInTheDocument();
+      expect(within(changesPanel).getByText('Diff unavailable')).toBeInTheDocument();
+      expect(within(changesPanel).getByRole('button', { name: 'Jump to file, 4 files' })).toBeInTheDocument();
     });
 
     it('shows a moved file with where it came from instead of an empty diff', async () => {
@@ -587,7 +598,14 @@ describe('WorkspaceViewerPanel', () => {
       server.use(
         http.get(CHANGES_URL, () => HttpResponse.json({ workspacePath: WORKSPACE, available: false, changes: [] })),
         http.get(PATCHES_URL, () =>
-          HttpResponse.json({ workspacePath: WORKSPACE, available: false, changes: [], scope: 'branch', patches: {} }),
+          HttpResponse.json({
+            workspacePath: WORKSPACE,
+            available: false,
+            changes: [],
+            scope: 'branch',
+            patches: {},
+            omittedPatches: {},
+          }),
         ),
       );
       const user = userEvent.setup();

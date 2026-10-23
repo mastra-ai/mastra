@@ -25,7 +25,9 @@ function treeItemIds(container: HTMLElement) {
 
 /** Opens the Changes panel on `changes` and returns its jump-to-file tree. */
 async function openFileTree(changes: WorkspaceChanges) {
-  server.use(http.get(PATCHES_URL, () => HttpResponse.json({ ...changes, scope: 'branch', patches: {} })));
+  server.use(
+    http.get(PATCHES_URL, () => HttpResponse.json({ ...changes, scope: 'branch', patches: {}, omittedPatches: {} })),
+  );
   const user = userEvent.setup();
   renderWithProviders(
     <WorkspaceChangesPanel

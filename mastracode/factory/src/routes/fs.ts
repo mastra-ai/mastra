@@ -147,13 +147,15 @@ export interface WorkspaceChanges {
 /** What the changes are measured against: the base branch the session forked from, or its last commit. */
 export type WorkspaceChangesScope = 'branch' | 'uncommitted';
 
+/** Why a change has no diff: its own diff passes 512 KB, or the diffs before it already filled 8 MB. */
+export type WorkspacePatchOmission = 'file-too-large' | 'total-too-large';
+
 export interface WorkspaceChangePatches extends WorkspaceChanges {
   scope: WorkspaceChangesScope;
-  /**
-   * Each change's unified diff, keyed by its `path` in `changes`. A change has
-   * none when its diff alone passes 512 KB or all diffs together pass 8 MB.
-   */
+  /** Each change's unified diff, keyed by its `path` in `changes`. */
   patches: Record<string, string>;
+  /** Why a change has no entry in `patches`; a change in neither map is one git could not diff. */
+  omittedPatches: Record<string, WorkspacePatchOmission>;
 }
 
 export type ArtifactEntry = WorkspaceRenderedEntry;
@@ -1097,29 +1099,48 @@ function gitHeaderPath(path: string): string {
   return quoted ? `"${escaped}"` : path;
 }
 
+interface KeyedPatches {
+  patches: Map<string, string>;
+  omitted: Map<string, WorkspacePatchOmission>;
+}
+
 /**
  * Each change's section of one checkout's patch, matched by its `diff --git`
- * header. A section cut by the size budget, or larger than one file's limit,
- * is left out.
+ * header. A section larger than one file's limit, or cut by the size budget,
+ * is left out with the reason.
  */
-function keyWorkspacePatches(patch: string, changes: readonly WorkspaceChange[]): Map<string, string> {
+function keyWorkspacePatches(patch: string, changes: readonly WorkspaceChange[]): KeyedPatches {
   const sections = patch.split(/^(?=diff --git )/m);
-  if (Buffer.byteLength(patch) > MAX_PATCH_SET_BYTES) sections.pop();
+  const budgetSpent = Buffer.byteLength(patch) > MAX_PATCH_SET_BYTES;
+  if (budgetSpent) sections.pop();
 
   const sectionsByHeader = new Map<string, string>();
   for (const section of sections) {
     const headerEnd = section.indexOf('\n');
-    if (headerEnd < 0 || Buffer.byteLength(section) > MAX_DIFF_BYTES) continue;
-    sectionsByHeader.set(section.slice(0, headerEnd), section);
+    if (headerEnd >= 0) sectionsByHeader.set(section.slice(0, headerEnd), section);
   }
 
-  const patches = new Map<string, string>();
+  const keyed: KeyedPatches = { patches: new Map(), omitted: new Map() };
   for (const change of changes) {
     const header = `diff --git ${gitHeaderPath(`a/${change.previousPath ?? change.path}`)} ${gitHeaderPath(`b/${change.path}`)}`;
     const section = sectionsByHeader.get(header);
-    if (section) patches.set(change.path, section);
+    if (section === undefined) {
+      if (budgetSpent) keyed.omitted.set(change.path, 'total-too-large');
+    } else if (Buffer.byteLength(section) > MAX_DIFF_BYTES) {
+      keyed.omitted.set(change.path, 'file-too-large');
+    } else {
+      keyed.patches.set(change.path, section);
+    }
   }
-  return patches;
+  return keyed;
+}
+
+function prefixedEntries<T>(prefix: string, entries: Map<string, T>): [string, T][] {
+  return Array.from(entries, ([path, value]): [string, T] => [`${prefix}${path}`, value]);
+}
+
+function unavailableWorkspacePatches(workspacePath: string, scope: WorkspaceChangesScope): WorkspaceChangePatches {
+  return { ...unavailableWorkspaceChanges(workspacePath), scope, patches: {}, omittedPatches: {} };
 }
 
 export async function listSessionWorkspacePatches(
@@ -1127,7 +1148,7 @@ export async function listSessionWorkspacePatches(
   scope: WorkspaceChangesScope,
 ): Promise<WorkspaceChangePatches> {
   const handle = await sessionSandbox(session);
-  if (!handle) return { ...unavailableWorkspaceChanges(session.sessionId), scope, patches: {} };
+  if (!handle) return unavailableWorkspacePatches(session.sessionId, scope);
   const { sandbox, layout, baseBranches } = handle;
 
   const inspected = await Promise.all(
@@ -1158,19 +1179,20 @@ export async function listSessionWorkspacePatches(
           { timeout: 30_000, maxRetainedBytes: Infinity },
         ),
       ]);
-      if (patch.exitCode !== 0) {
-        return { repo, changes: { available: false, changes: [] }, patches: new Map<string, string>() };
-      }
-      return { repo, changes, patches: keyWorkspacePatches(patch.stdout, changes.changes) };
+      const keyed: KeyedPatches =
+        patch.exitCode === 0
+          ? keyWorkspacePatches(patch.stdout, changes.changes)
+          : { patches: new Map(), omitted: new Map() };
+      return { repo, changes, keyed };
     }),
-  );
-  const patches = inspected.flatMap(({ repo, patches: repoPatches }) =>
-    Array.from(repoPatches, ([path, patch]): [string, string] => [`${repo.prefix}${path}`, patch]),
   );
   return {
     ...assembleWorkspaceChanges(session.sessionId, inspected),
     scope,
-    patches: Object.fromEntries(patches),
+    patches: Object.fromEntries(inspected.flatMap(({ repo, keyed }) => prefixedEntries(repo.prefix, keyed.patches))),
+    omittedPatches: Object.fromEntries(
+      inspected.flatMap(({ repo, keyed }) => prefixedEntries(repo.prefix, keyed.omitted)),
+    ),
   };
 }
 
@@ -1299,9 +1321,7 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         if (!isWorkspaceChangesScope(scope)) return c.json({ error: 'scope must be branch or uncommitted' }, 400);
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
-          if (!session || !sessionFs) {
-            return c.json({ ...unavailableWorkspaceChanges(workspacePath), scope, patches: {} });
-          }
+          if (!session || !sessionFs) return c.json(unavailableWorkspacePatches(workspacePath, scope));
           return c.json(await listSessionWorkspacePatches(session, scope));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);

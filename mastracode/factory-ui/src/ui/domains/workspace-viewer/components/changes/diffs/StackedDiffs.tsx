@@ -40,6 +40,7 @@ export function StackedDiffs({ changes, layout, className, ref }: StackedDiffsPr
           ref={trackCard(change.path)}
           change={change}
           patch={changes.patches[change.path]}
+          omission={changes.omittedPatches[change.path]}
           layout={layout}
         />
       ))}

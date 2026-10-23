@@ -1034,6 +1034,7 @@ describe('workspace patches', () => {
     expect(result.changes).toHaveLength(24);
     expect(result.patches['small.txt']).toContain('-one\n+two\n');
     expect(result.patches['big.txt']).toBeUndefined();
+    expect(result.omittedPatches['big.txt']).toBe('file-too-large');
     const shown = bulkFiles.filter(file => result.patches[file] !== undefined);
     expect(shown.length).toBeGreaterThan(0);
     expect(shown.length).toBeLessThan(bulkFiles.length);
@@ -1042,6 +1043,21 @@ describe('workspace patches', () => {
       const added = result.patches[file]!.split('\n').filter(patchLine => /^\+x/.test(patchLine));
       expect(added).toHaveLength(bulkLines);
     }
+    const skipped = bulkFiles.slice(shown.length);
+    expect(skipped.map(file => result.omittedPatches[file])).toEqual(skipped.map(() => 'total-too-large'));
+    expect(result.omittedPatches['small.txt']).toBeUndefined();
+  });
+
+  it('keeps listing the changes when git cannot diff them, as in a repository without a commit yet', async () => {
+    const [dir] = await seedRepositories();
+    await writeFile(join(dir!, 'first.txt'), 'hello\n');
+
+    const result = await listSessionWorkspacePatches(makeSession(), 'branch');
+
+    expect(result.available).toBe(true);
+    expect(result.changes.map(change => [change.path, change.status])).toEqual([['first.txt', 'untracked']]);
+    expect(result.patches).toEqual({});
+    expect(result.omittedPatches).toEqual({});
   });
 
   it('keys each repository’s diffs by its prefixed path', async () => {
