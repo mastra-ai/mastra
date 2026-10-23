@@ -1184,11 +1184,13 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     /** The handoff answers only after the retake gave up, and then installs the run id on a lease nobody renews. */
     class LateHandoffPubSub extends ReplicaPubSub {
       cut = false;
+      transfers: Array<{ from: string; to: string }> = [];
       override async renewLease(k: string, owner: string, ttlMs: number) {
         if (this.cut && k === key) await new Promise(() => {});
         return super.renewLease(k, owner, ttlMs);
       }
       override async transferLease(k: string, from: string, to: string) {
+        if (k === key) this.transfers.push({ from, to });
         if (k === key && from.includes('\u0000retake\u0000')) {
           handoverStarted?.();
           await new Promise<void>(resolve => (releaseHandoff = resolve));
@@ -1223,6 +1225,13 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     });
     const done = drain().catch(() => undefined);
     await vi.waitFor(() => expect(ticking).toBe(true), { timeout: 15_000 });
+    const queuedMarker = `queued input during abandoned handoff ${engine}`;
+    llm.on({ userMessage: queuedMarker }, { content: 'queued input ran here' });
+    const queued = agent.sendSignal(
+      { type: 'user-message', contents: queuedMarker },
+      { resourceId: RESOURCE, threadId: thread },
+    );
+    expect(await queued.accepted).toMatchObject({ action: 'deliver', runId });
 
     pubsub.cut = true;
     shared.drop(key);
@@ -1234,6 +1243,8 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     releaseHandoff?.();
     // The abandoned handoff lands after the give-up and installs the run id on a lease nothing renews here.
     await vi.waitFor(() => expect(shared.owner(key)).toBe(runId), { timeout: 2_000 });
+    const remote = new ReplicaPubSub(shared);
+    expect(await remote.acquireLease(key, runId, 60_000)).toMatchObject({ acquired: true });
     const releasedBefore = released.length;
     releaseTool();
     await done;
@@ -1242,6 +1253,11 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     // Ending under that run id must leave the lease to expire: whatever runs next under the same id owns it.
     await new Promise(resolve => setTimeout(resolve, 200));
     expect(released.slice(releasedBefore)).not.toContain(runId);
+    expect(
+      pubsub.transfers.filter(transfer => transfer.from === runId),
+      'marked record must not transfer a same-id successor lease to a local drain',
+    ).toEqual([]);
+    expect(shared.owner(key)).toBe(runId);
 
     // The marker belongs to this record, so a later execution that reuses the id on the same thread still frees
     // the lease it acquires. Checking a different thread would pass without ever consulting the marker.
