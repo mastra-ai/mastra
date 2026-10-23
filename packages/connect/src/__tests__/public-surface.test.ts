@@ -6,6 +6,7 @@ describe('@mastra/connect root exports', () => {
   it('exposes the provider-neutral client surface and nothing importer-specific', () => {
     expect(Object.keys(connect).sort()).toEqual([
       'CHANNELS',
+      'CONNECT_PROMPT_TOOL_KEY',
       'MastraConnectError',
       'PROVIDERS',
       'channels',
