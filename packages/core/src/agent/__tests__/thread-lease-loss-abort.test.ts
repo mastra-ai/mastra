@@ -408,6 +408,41 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
   );
 
   it.skipIf(!isDurableEngineVariant(engine))(
+    'clears input queued on the owner when a cold replica aborts with clearPendingSignals',
+    async () => {
+      const thread = 'cold-abort-clear';
+      const { ownerReplica, coldReplica, counter } = coldReplicaSetup(thread, 'cold abort clear');
+      llm.on({ userMessage: 'queued before cold abort' }, { content: 'should never run' });
+      const { output: run, drain } = await startStream(ownerReplica, 'cold abort clear', {
+        maxSteps: 200,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      await vi.waitFor(() => expect(counter.ticks).toBeGreaterThanOrEqual(3), { timeout: 5_000 });
+      const queued = ownerReplica.queueMessage('queued before cold abort', { resourceId: RESOURCE, threadId: thread });
+      await queued.accepted;
+
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({
+          resourceId: RESOURCE,
+          threadId: thread,
+          clearPendingSignals: true,
+        }),
+      ).resolves.toBe(true);
+      await done;
+      expect(await run.finishReason).toBe('aborted');
+
+      // Give a follow-up run that drains the queued input time to reach the model.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const queuedRequests = llm
+        .getRequests()
+        .filter(request => JSON.stringify(request.body?.messages ?? []).includes('queued before cold abort'));
+      expect(queuedRequests).toHaveLength(0);
+    },
+    20_000,
+  );
+
+  it.skipIf(!isDurableEngineVariant(engine))(
     'leaves the run alone when a cold replica aborts a run id that no longer holds the thread',
     async () => {
       const thread = 'cold-abort-expected-run';

@@ -2802,7 +2802,13 @@ export class DurableAgent<
     if (!runId) return false;
     // Never stop a successor run the caller didn't mean (#24422).
     if (options.expectedRunId !== undefined && options.expectedRunId !== runId) return false;
-    this.#abortDurableRun(runId);
+    if (options.clearPendingSignals) {
+      // Queued input lives on the owner, which must clear it before the run ends and
+      // drains it; the thread-topic request does both there, in that order.
+      agentThreadStreamRuntime.requestThreadRunAbort(this.getPubSub(), options, runId);
+    } else {
+      this.#abortDurableRun(runId);
+    }
     return true;
   }
 

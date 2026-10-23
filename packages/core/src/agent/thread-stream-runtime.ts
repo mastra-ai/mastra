@@ -713,7 +713,8 @@ type AgentThreadStreamRuntimeEvent =
     }
   | { type: 'run-suspended'; runId: string; streamId?: string }
   | { type: 'run-discarded'; runId: string; streamId: string }
-  | { type: 'run-abort-requested'; runId: string; streamId: string; clearPendingSignals?: boolean }
+  // Without a streamId the sender found the run through the thread lease, not a stream it watches.
+  | { type: 'run-abort-requested'; runId: string; streamId?: string; clearPendingSignals?: boolean }
   | { type: 'signals-cancelled'; signalIds: string[] }
   | { type: 'user-message-presentation'; chunk: UserMessagePendingChunk | UserMessageCancelledChunk }
   | { type: 'user-message-delivered'; signalId: string }
@@ -919,6 +920,23 @@ export class AgentThreadStreamRuntime {
       .catch(() => undefined);
     // A run retaking its lease holds it under a token prefixed with its run id.
     return owner?.split(RETAKE_LEASE_MARKER)[0] || undefined;
+  }
+
+  /**
+   * Ask whichever process runs `runId` on the thread to stop it, clearing the
+   * thread's queued input there when requested. For a run found through the
+   * thread lease: the owner clears input only while that run still holds it.
+   */
+  requestThreadRunAbort(
+    pubsub: PubSub | undefined,
+    options: AgentThreadIdentityOptions & { clearPendingSignals?: boolean },
+    runId: string,
+  ): void {
+    this.#publish(this.#getPubSub(pubsub), this.#threadKey(options.resourceId, options.threadId), {
+      type: 'run-abort-requested',
+      runId,
+      ...(options.clearPendingSignals ? { clearPendingSignals: true } : {}),
+    });
   }
 
   /** How long a thread lease outlives the process that stopped renewing it. */
@@ -1442,7 +1460,7 @@ export class AgentThreadStreamRuntime {
           (state.preparedRunsById.has(data.runId) || state.threadRunsById.has(data.runId)) &&
           state.threadKeysByRunId.get(data.runId) === key &&
           state.activeThreadRunIds.get(key) === data.runId &&
-          state.activeThreadStreamIds.get(key) === data.streamId;
+          (data.streamId === undefined || state.activeThreadStreamIds.get(key) === data.streamId);
         // Queued input is cleared only while this run still holds the lease: after a
         // handover it may belong to the successor. The run itself is stopped either way,
         // since one that lost its lease keeps running until its renewal or deadline notices.
