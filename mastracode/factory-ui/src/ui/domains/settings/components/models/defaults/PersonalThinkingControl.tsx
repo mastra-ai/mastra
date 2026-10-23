@@ -6,7 +6,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useSetDefaultThinkingLevel } from '../../../../../../hooks/use-default-model';
 import { useFactoryThinkingDefaultQuery } from '../../../../../../hooks/use-thinking';
-import { ALL_THINKING_LEVEL_OPTIONS, THINKING_DEFAULT_SOURCE_LABELS } from '../../../../chat/services/thinkingLevels';
+import {
+  ALL_THINKING_LEVEL_OPTIONS,
+  routedThinkingDefault,
+  THINKING_DEFAULT_SOURCE_LABELS,
+} from '../../../../chat/services/thinkingLevels';
 
 interface PersonalThinkingControlProps {
   factoryId: string;
@@ -30,8 +34,8 @@ export function PersonalThinkingControl({
 
   if (!savedModelId) return unavailable('Pick a personal default model first.');
   if (saving) return unavailable('Saving your personal defaults…');
-  const level = savedThinkingLevel ?? factoryLevelQuery.data;
-  if (level === undefined) {
+  const thinkingDefault = routedThinkingDefault(savedThinkingLevel, factoryLevelQuery.data);
+  if (!thinkingDefault) {
     return unavailable(
       factoryLevelQuery.isError
         ? "The Factory thinking level couldn't be loaded."
@@ -44,17 +48,15 @@ export function PersonalThinkingControl({
       .mutateAsync(next)
       .catch(error => toast.error(error instanceof Error ? error.message : 'Failed to change thinking level'));
 
+  const followsFactory = thinkingDefault.origin === 'factory';
   return (
     <ThinkingLevelPicker
       options={ALL_THINKING_LEVEL_OPTIONS}
-      value={level}
+      value={thinkingDefault.level}
       label="Thinking"
-      origin={savedThinkingLevel === null ? THINKING_DEFAULT_SOURCE_LABELS.factory : undefined}
+      origin={followsFactory ? THINKING_DEFAULT_SOURCE_LABELS.factory : undefined}
       footer={
-        <PersonalThinkingOriginNote
-          followsFactory={savedThinkingLevel === null}
-          onUseFactoryDefault={() => saveLevel(null)}
-        />
+        <PersonalThinkingOriginNote followsFactory={followsFactory} onUseFactoryDefault={() => saveLevel(null)} />
       }
       onChange={saveLevel}
     />
@@ -70,7 +72,7 @@ function PersonalThinkingOriginNote({ followsFactory, onUseFactoryDefault }: Per
   if (followsFactory) {
     return (
       <Txt as="p" variant="caption" tone="muted">
-        Follows the Factory default.
+        Follows the {THINKING_DEFAULT_SOURCE_LABELS.factory}.
       </Txt>
     );
   }

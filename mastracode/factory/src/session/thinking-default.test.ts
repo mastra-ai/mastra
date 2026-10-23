@@ -6,8 +6,9 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createSourceControlSessionLookup } from './factory-session.js';
 import { resolveFactoryThinkingLevel } from './thinking-default.js';
 
-function contextFor(controller: Record<string, unknown> | undefined) {
+function contextFor(controller: Record<string, unknown> | undefined, userId: string | null = 'owner') {
   const requestContext = new RequestContext();
+  if (userId) requestContext.set('user', { workosId: userId, organizationId: 'org-1' });
   if (controller) requestContext.set('controller', controller);
   return requestContext;
 }
@@ -130,24 +131,33 @@ describe('resolveFactoryThinkingLevel', () => {
     expect(await resolve('chat-thread')).toBe('low');
   });
 
-  it('reads the Factory from session state when no source-control session exists', async () => {
+  it("starts a session under the user's own resource at their level, else at its Factory's", async () => {
     const { project, deps } = await setup('hybrid', { withSourceSession: false });
-    const level = await resolveFactoryThinkingLevel(
-      contextFor({
-        sessionId: 'session-2',
-        resourceId: 'user-1',
-        getState: () => ({ factoryProjectId: project.id }),
-      }),
-      deps,
-    );
-    expect(level).toBe('low');
+    const ownResource = (userId: string) =>
+      contextFor(
+        { sessionId: 'session-2', resourceId: userId, getState: () => ({ factoryProjectId: project.id }) },
+        userId,
+      );
+    expect(await resolveFactoryThinkingLevel(ownResource('viewer'), deps)).toBe('max');
+    expect(await resolveFactoryThinkingLevel(ownResource('user-1'), deps)).toBe('low');
   });
 
-  it('resolves Factory-page requests by their resource id', async () => {
+  it("starts a Factory-page chat at the viewer's level on personal routing", async () => {
     const { project, deps } = await setup('hybrid', { withSourceSession: false });
-    expect(await resolveFactoryThinkingLevel(contextFor({ sessionId: project.id, resourceId: project.id }), deps)).toBe(
-      'low',
-    );
+    const page = contextFor({ sessionId: project.id, resourceId: project.id }, 'viewer');
+    expect(await resolveFactoryThinkingLevel(page, deps)).toBe('max');
+  });
+
+  it('starts a Factory-page chat at the Factory level on Factory routing', async () => {
+    const { project, deps } = await setup('factory', { withSourceSession: false });
+    const page = contextFor({ sessionId: project.id, resourceId: project.id }, 'viewer');
+    expect(await resolveFactoryThinkingLevel(page, deps)).toBe('low');
+  });
+
+  it('uses the Factory level when no user is signed in', async () => {
+    const { deps } = await setup('hybrid');
+    const unsigned = contextFor({ sessionId: 'session-1', resourceId: 'session-1', threadId: 'chat-thread' }, null);
+    expect(await resolveFactoryThinkingLevel(unsigned, deps)).toBe('low');
   });
 
   it('uses medium outside any Factory and when the lookup fails', async () => {

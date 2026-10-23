@@ -15,7 +15,7 @@ import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { resolveFactoryModelPolicy } from '../session/credential-policy.js';
+import { resolveFactoryModelPolicy, routedPersonalDefaults } from '../session/credential-policy.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {
   CredentialRecord,
@@ -1087,7 +1087,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 if (modelScope === 'user') {
                   if (!options.modelDefaults) return c.json({ error: 'model_defaults_unavailable' }, 503);
                   await options.modelDefaults.ensureReady();
-                  const ownerDefaults = await options.modelDefaults.get({ orgId, userId: policy.tenant.userId });
+                  const ownerDefaults = await routedPersonalDefaults(policy.tenant, options.modelDefaults);
                   defaultModelId = ownerDefaults?.modelId ?? null;
                   personalThinkingLevel = ownerDefaults?.thinkingLevel ?? null;
                 }

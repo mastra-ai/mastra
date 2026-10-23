@@ -3,15 +3,11 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useChatModelScope } from './useChatModelScope';
 
-import type { DefaultModelResponse } from '../../../../api/types';
 import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
-import type { SessionModelCatalog } from '../../../../hooks/useSessionModelCatalog';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
-import type { FactoryModelScope } from '../../workspaces/services/github';
 import { useEffectiveThinkingLevel } from '../hooks/useEffectiveThinkingLevel';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import type { PersonalThinkingDefault } from '../services/thinkingLevels';
 import { routedPersonalThinkingLevel } from './chatDefaultModel';
 import { ChatThinkingContext } from './ChatThinkingContext';
 import type { ChatThinkingApi } from './ChatThinkingContext';
@@ -59,21 +55,10 @@ function DraftChatThinkingProvider({ children }: ChatThinkingProviderProps) {
   return <ChatThinkingContext.Provider value={value}>{children}</ChatThinkingContext.Provider>;
 }
 
-function livePersonalThinkingLevel(
-  sessionCatalog: SessionModelCatalog | undefined,
-  modelScope: FactoryModelScope | undefined,
-  personalDefaults: DefaultModelResponse | undefined,
-): PersonalThinkingDefault {
-  if (!sessionCatalog) return undefined;
-  if ('personalThinkingLevel' in sessionCatalog) return sessionCatalog.personalThinkingLevel ?? null;
-  return routedPersonalThinkingLevel(modelScope, personalDefaults);
-}
-
 function LiveChatThinkingProvider({ children }: ChatThinkingProviderProps) {
   const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
-  const { catalogTarget, modelScope, sessionModelsQuery } = useChatModelScope();
+  const { catalogTarget, sessionModelsQuery } = useChatModelScope();
   const { activeModelId } = useChatModels();
-  const defaultModelQuery = useDefaultModelQuery();
   const sessionArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     sessionId,
@@ -87,12 +72,8 @@ function LiveChatThinkingProvider({ children }: ChatThinkingProviderProps) {
     modelId: activeModelId,
     override,
     catalogTarget,
-    personalDefault: livePersonalThinkingLevel(
-      sessionModelsQuery.isSuccess ? sessionModelsQuery.data : undefined,
-      modelScope,
-      defaultModelQuery.data,
-    ),
-    personalDefaultError: sessionModelsQuery.error ?? defaultModelQuery.error,
+    personalDefault: sessionModelsQuery.isSuccess ? (sessionModelsQuery.data.personalThinkingLevel ?? null) : undefined,
+    personalDefaultError: sessionModelsQuery.error,
   });
   const settingsLoaded = settingsQuery.data !== undefined;
   const settingsLoadError = settingsQuery.error ?? undefined;
