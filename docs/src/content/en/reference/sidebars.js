@@ -684,6 +684,7 @@ const sidebars = {
       label: 'Server',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'server/adonisjs-adapter', label: 'AdonisJS Adapter' },
         { type: 'doc', id: 'server/create-route', label: 'createRoute()' },
         { type: 'doc', id: 'server/elysia-adapter', label: 'Elysia Adapter' },
         { type: 'doc', id: 'server/express-adapter', label: 'Express Adapter' },

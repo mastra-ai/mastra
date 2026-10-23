@@ -1,0 +1,226 @@
+---
+title: "Reference: AdonisJS adapter | Server"
+description: "The @mastra/adonisjs package provides a server adapter for running Mastra inside an AdonisJS v6 application. For general adapter concepts (constructor options, initialization flow, etc.), see Server Adapters."
+packages:
+  - "@mastra/adonisjs"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# AdonisJS adapter
+
+The `@mastra/adonisjs` package provides a server adapter for running Mastra inside an [AdonisJS](https://adonisjs.com) v6 application. For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/server/server-adapters).
+
+The adapter registers every Mastra route as a regular AdonisJS route on your app's router, so Mastra endpoints show up in `node ace list:routes` and run through your router middleware such as the body parser.
+
+## Installation
+
+Install the adapter in an existing AdonisJS v6 app:
+
+```bash npm2yarn
+npm install @mastra/adonisjs@latest
+```
+
+## Usage example
+
+Register Mastra's routes from `start/routes.ts` or another preload file. AdonisJS commits the router after preload files finish, so `await server.init()` at the top level of the file registers the routes before the server starts accepting requests:
+
+```typescript title="start/routes.ts"
+import app from '@adonisjs/core/services/app'
+import router from '@adonisjs/core/services/router'
+import { MastraServer } from '@mastra/adonisjs'
+import { mastra } from '#mastra/index'
+
+const server = new MastraServer({ app: router, mastra })
+
+await server.init()
+
+app.terminating(() => mastra.shutdown())
+```
+
+Mastra's API is now served under `/api`, for example `GET /api/agents`. Routes registered after the router is committed (for example from a provider's `ready()` hook) aren't served, so call `init()` from a preload file.
+
+`init()` doesn't start Mastra's background workers. To run [scheduled workflows](/docs/workflows/scheduled-workflows), agent schedules, or event listeners, call `await mastra.startWorkers()` once the app is ready. See [Start background workers](/docs/server/server-adapters#start-background-workers).
+
+## Shutdown
+
+The adapter doesn't own the HTTP server, so it has no shutdown method of its own. Register `mastra.shutdown()` with `app.terminating()` in `start/routes.ts`. AdonisJS calls it during graceful shutdown (for example on `SIGTERM`), which drains in-flight workflow runs and stops Mastra's workers.
+
+## Body parsing
+
+The adapter works with the AdonisJS body parser (`@adonisjs/core/bodyparser_middleware` in `start/kernel.ts`) and without it:
+
+- When the body parser has already read the request, the adapter reuses the parsed body, including uploaded files from multipart requests.
+- Otherwise the adapter reads the raw request stream itself and parses JSON and multipart bodies.
+
+Mastra's route body limits (`bodyLimitOptions` and per-route `maxBodySize`) return `413` in both cases. Keep in mind:
+
+- When the body parser reads the request, it buffers up to its own limits (`json.limit`, `form.limit`, `multipart.limit` in `config/bodyparser.ts`) before Mastra checks its limit. Keep those limits at or below `bodyLimitOptions.maxSize` to cap buffering at Mastra's limit. Requests over the body parser limit get the body parser's own `413` response.
+- The AdonisJS v6 body parser rejects chunked JSON and form requests (no `Content-Length`) with `400`. Mastra applies its limits to chunked requests only when the body parser doesn't process them, for example for content types it doesn't parse.
+- In strict mode (`json.strict: true`, the default) the body parser rejects JSON bodies that aren't objects or arrays. Set `json.strict` to `false` in `config/bodyparser.ts` if you call Mastra routes with scalar JSON bodies.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'app',
+    type: 'Router',
+    description: 'AdonisJS router, usually `router` from `@adonisjs/core/services/router`',
+    isOptional: false,
+  },
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'Mastra instance',
+    isOptional: false,
+  },
+  {
+    name: 'prefix',
+    type: 'string',
+    description: 'Route path prefix (e.g., `/api/v2`)',
+    isOptional: true,
+    defaultValue: "'/api'",
+  },
+  {
+    name: 'routeMiddleware',
+    type: 'MiddlewareFn | ParsedNamedMiddleware | Array',
+    description:
+      "AdonisJS route middleware applied to every route Mastra registers, including custom API routes. Runs before Mastra's own auth checks, e.g. `middleware.auth()`.",
+    isOptional: true,
+  },
+  {
+    name: 'openapiPath',
+    type: 'string',
+    description: 'Path to serve OpenAPI spec (e.g., `/openapi.json`)',
+    isOptional: true,
+    defaultValue: "''",
+  },
+  {
+    name: 'bodyLimitOptions',
+    type: 'BodyLimitOptions',
+    typeDescription: '{ maxSize: number, onError: (error: unknown) => unknown }',
+    description: 'Request body size limits',
+    isOptional: true,
+  },
+  {
+    name: 'streamOptions',
+    type: 'StreamOptions',
+    typeDescription: '{ redact?: boolean }',
+    description:
+      'Stream redaction config. When true (default), redacts sensitive data (system prompts, tool definitions, API keys) from stream chunks before sending to clients.',
+    isOptional: true,
+    defaultValue: '{ redact: true }',
+  },
+  {
+    name: 'customRouteAuthConfig',
+    type: 'Map<string, boolean>',
+    description:
+      'Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.',
+    isOptional: true,
+  },
+  {
+    name: 'tools',
+    type: 'ToolsInput',
+    typeDescription: 'Record<string, ToolAction | VercelTool>',
+    description: 'Available tools for the server',
+    isOptional: true,
+  },
+  {
+    name: 'taskStore',
+    type: 'InMemoryTaskStore',
+    description: 'Task store for A2A (Agent-to-Agent) operations',
+    isOptional: true,
+  },
+  {
+    name: 'mcpOptions',
+    type: 'MCPOptions',
+    typeDescription:
+      '{ setRequestAuth?: (req, requestContext) => void | Promise<void>, serverless?: boolean, sessionIdGenerator?: () => string }',
+    description:
+      'MCP transport options, such as `setRequestAuth` to control what tools see as `context.mcp.extra.authInfo`.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Auth and middleware
+
+Mastra auth (`server.auth` and Studio auth), RBAC, and FGA run inside each Mastra route, the same as with the other adapters. AdonisJS middleware composes with them in two ways:
+
+- Router middleware in `start/kernel.ts` runs for Mastra routes like any other route.
+- `routeMiddleware` applies route middleware only to Mastra's routes. It runs before Mastra's auth checks, so it can reject a request or attach data to the `HttpContext`.
+
+```typescript title="start/routes.ts"
+import router from '@adonisjs/core/services/router'
+import { middleware } from '#start/kernel'
+import { MastraServer } from '@mastra/adonisjs'
+import { mastra } from '#mastra/index'
+
+await new MastraServer({
+  app: router,
+  mastra,
+  routeMiddleware: [middleware.auth()],
+}).init()
+```
+
+Mastra's [`server.middleware`](/docs/server/middleware) uses Hono's signature and doesn't run on this adapter. The adapter logs a warning at startup when it's configured. Use AdonisJS middleware instead.
+
+### Accessing the HttpContext
+
+The adapter keeps the AdonisJS `HttpContext` out of Mastra's request context, because the request context can be serialized into workflow snapshots and traces. Use `getHttpContext()` to reach it from tools, workflow steps, or custom API route handlers:
+
+```typescript title="src/mastra/tools/whoami.ts"
+import { createTool } from '@mastra/core/tools'
+import { getHttpContext } from '@mastra/adonisjs'
+
+export const whoami = createTool({
+  id: 'whoami',
+  description: 'Returns the signed-in user',
+  execute: async (_input, { requestContext }) => {
+    const ctx = getHttpContext(requestContext)
+    return { userId: ctx?.auth?.user?.id }
+  },
+})
+```
+
+`ctx.auth` exists only when the app registers the AdonisJS auth initialize middleware (`@adonisjs/auth`). `getHttpContext()` returns `undefined` outside an HTTP request, for example in a resumed workflow run.
+
+### Protecting your own routes
+
+For AdonisJS routes that Mastra doesn't register, use `createAuthMiddleware()` to apply Mastra's `server.auth` config. Prefer [`registerApiRoute()`](/reference/server/register-api-route) when you want Mastra-managed route metadata such as `requiresAuth` and `requiresPermission`.
+
+```typescript title="start/routes.ts"
+import router from '@adonisjs/core/services/router'
+import { createAuthMiddleware } from '@mastra/adonisjs'
+import { mastra } from '#mastra/index'
+
+router
+  .get('/reports', ({ response }) => response.json({ ok: true }))
+  .use(createAuthMiddleware({ mastra }))
+```
+
+## Error handling
+
+The adapter turns errors from Mastra route handlers into JSON responses with the matching status code, so they don't reach the AdonisJS exception handler. The [`server.onError`](/reference/configuration#serveronerror) hook is supported. When configured, its response is used directly:
+
+```typescript title="src/mastra/index.ts"
+const mastra = new Mastra({
+  server: {
+    onError: (err, c) => {
+      console.error('Unhandled error:', err)
+      return c.json({ error: err.message }, 500)
+    },
+  },
+})
+```
+
+## Manual initialization
+
+For custom ordering, call each method separately instead of `init()`. See [manual initialization](/docs/server/server-adapters#manual-initialization) for details.
+
+## Related
+
+- [Server Adapters](/docs/server/server-adapters): Shared adapter concepts
+- [MastraServer Reference](/reference/server/mastra-server): Full API reference
+- [createRoute() Reference](/reference/server/create-route): Creating type-safe custom routes
