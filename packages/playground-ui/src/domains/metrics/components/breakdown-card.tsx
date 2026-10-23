@@ -97,7 +97,7 @@ export function BreakdownCard({ onRowClick }: BreakdownCardProps) {
   if (traceGate.status === 'unavailable' || spanGate.status === 'unavailable') return null;
   if (traceGate.status === 'loading' || spanGate.status === 'loading') {
     return (
-      <ChartCard title={TITLE}>
+      <ChartCard title={TITLE} bodyHeight="fit">
         <MetricsCard.Loading />
       </ChartCard>
     );
@@ -354,6 +354,7 @@ function BreakdownFrame({
       title={TITLE}
       description={DESCRIPTION[tab]}
       isUpdating={isUpdating}
+      bodyHeight="fit"
       toolbar={
         <MetricsCard.Toolbar>
           <MetricsCard.Tabs<BreakdownTab> value={tab} onValueChange={onTabChange}>

@@ -27,6 +27,11 @@ export type ChartCardProps = {
   toolbar?: ReactNode;
   /** Previous data stays on screen, dimmed, while a new range or filter loads. */
   isUpdating?: boolean;
+  /**
+   * `fixed` (default): the body is one chart high in every state. `fit`: at least that high, and
+   * taller when the content needs it, for lists that grow with "Show more".
+   */
+  bodyHeight?: 'fixed' | 'fit';
   className?: string;
   children: ReactNode;
 };
@@ -46,6 +51,7 @@ export function ChartCard({
   actions,
   toolbar,
   isUpdating = false,
+  bodyHeight = 'fixed',
   className,
   children,
 }: ChartCardProps) {
@@ -61,7 +67,13 @@ export function ChartCard({
       </MetricsCard.TopBar>
       <MetricsCard.Content className={cn('flex flex-col gap-4 overflow-visible', compact && 'min-h-0')}>
         {toolbar}
-        <div className={cn('relative flex min-h-0 min-w-0 flex-col', compact ? 'flex-1' : 'h-60', fade)}>
+        <div
+          className={cn(
+            'relative flex min-h-0 min-w-0 flex-col',
+            compact ? 'flex-1' : bodyHeight === 'fit' ? 'min-h-60' : 'h-60',
+            fade,
+          )}
+        >
           {children}
         </div>
       </MetricsCard.Content>
