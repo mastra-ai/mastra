@@ -10,9 +10,9 @@ export const knowledgeBrowserScenario: McE2eScenario = {
   name: 'knowledge-browser',
   projectFixture: 'long-branch',
   description: 'Seed scoped knowledge and traverse scopes, nodes, relations, content, activity, and a thread switch.',
-  testName: 'browses scoped Subconscious knowledge through the real TUI',
+  testName: 'browses scoped knowledge through the real TUI',
   disableMemory: false,
-  env: () => ({ MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS: '1' }),
+  env: () => ({ MASTRACODE_EXPERIMENTAL_KNOWLEDGE: '1' }),
   async inProcessApp({ startMastraCodeApp }) {
     const app = await startMastraCodeApp({
       config: {
@@ -29,7 +29,7 @@ export const knowledgeBrowserScenario: McE2eScenario = {
         const knowledge = await result.storage.getStore('knowledge');
         if (!knowledge) throw new Error('Knowledge storage unavailable in knowledge-browser E2E scenario.');
 
-        // The inspector reads the rung the Subconscious writes under, not the session owner id.
+        // The inspector reads the rung Knowledge writes under, not the session owner id.
         const orgScope = [`org:${LOCAL_KNOWLEDGE_ORG_ID}`];
         const resourceScope = [...orgScope, `resource:${resourceId}`];
         const primaryScope = [...resourceScope, `thread:${primary.id}`];

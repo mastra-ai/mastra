@@ -196,7 +196,7 @@ export interface MastraTUIBaseOptions {
   /** Process-wide memory diagnostics handle for /profile. */
   processMemoryDiagnostics?: ProcessMemoryDiagnostics;
 
-  /** Session-scoped, read-only Subconscious knowledge inspection capability. */
+  /** Session-scoped, read-only knowledge inspection capability. */
   knowledgeInspector?: KnowledgeInspector;
   /** Why `knowledgeInspector` is absent, as reported by startup. */
   knowledgeInspectorUnavailableReason?: string;
