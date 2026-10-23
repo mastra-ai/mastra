@@ -130,12 +130,13 @@ At the rebase, #28318's `canonicalizeKnowledgeScope` conflicts with the alpha's 
 - All three are rewritten to subset containment, with a Factory route test that uses a project tag.
 
 **What Mastra Code passes.** The API is `createMastraCode({ knowledge: { instance, scopes? } })`. The `key` goes away with Memory's `knowledge` option (D4), and so do v4's `organizationId`/`resourceId` overrides.
-- The SDK sets the agent's `scopes` to the caller's `scopes` plus the session's own tags.
-- Local TUI/studio sessions add `org:local`, so existing local Knowledge stays visible.
-- Factory sessions add `org:<factoryOrg>` and `project:<projectId>`. The project used to sit in the resource slot through `knowledgeResourceId`. A `resource:` tag must equal the Memory resource (`resolveAgentScopes` throws otherwise), so the project becomes its own tag.
+- The SDK sets the agent's `scopes` to the caller's `scopes` plus the session's own tags. A session tag is a default: it is added only when the caller supplies no tag of that type, so a run never ends up with two entries of one type through the SDK.
+- Local TUI/studio sessions add `org:local` when the caller passes no `org:` tag, so existing local Knowledge stays visible. A caller passing `org:self` gets exactly `org:self`.
+- Factory sessions add `org:<factoryOrg>` and `project:<projectId>`. Here a caller-supplied `org:` or `project:` tag that differs from the session's is refused rather than taking precedence, because it would cross tenants. The project used to sit in the resource slot through `knowledgeResourceId`. A `resource:` tag must equal the Memory resource (`resolveAgentScopes` throws otherwise), so the project becomes its own tag.
 - Factory Knowledge already written under `resource:<projectId>` will no longer be visible. It was only written with the experimental Subconscious flag on (D9).
 - A Factory session whose org can't be resolved still gets no Knowledge, as today.
 - The Director dogfood passes `scopes: ['team:director', 'agent:<name>', 'request:r25', …]`. Per-request scopes therefore work in the alpha, without Wave 2.
+- Writes default to every tag the run holds. A session mixing its own tags with agents tagged differently (a director session and its members) must have the model name a subset to share, e.g. `['org:self', 'team:director']`; the default write is private to runs holding all the writer's tags. The instructions' write part says so.
 
 **Pins stay a state signal, so pins need Memory.**
 - The pins processor stays `PinnedStateProcessor` on the state-signal lane: a snapshot first, then deltas, and nothing when the pins are unchanged. That keeps the prompt cacheable, as it is today. v4's system-prompt block is gone.
@@ -221,7 +222,7 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 - Tagged scopes: a run with `scopes: ['org:acme', 'team:a']` writes at those tags plus its resource and thread. A run tagged `team:b` can't see it. A run tagged `org:acme` only sees what was written with the `team` tag dropped.
 - Tags set in `mastra__scopes` by the caller, without the run's WeakSet mark, are ignored by `getRunAgentScopes`.
 - The store accepts `request:r25`-style tags on InMemory, LibSQL and PG. Scope keys already written for `org`/`resource`/`thread` are byte-identical before and after. A run with 9 tags is refused.
-- Mastra Code: a local session reads Knowledge it wrote before the change under `org:local`. A Factory session writes under `org:<org>` + `project:<id>`.
+- Mastra Code: a local session reads Knowledge it wrote before the change under `org:local`. A local session passed `scopes: ['org:self', …]` holds exactly one `org` entry (`org:self`) and gets its tools. A Factory session passed a different `org:` or `project:` is refused. A Factory session writes under `org:<org>` + `project:<id>`.
 - Pins: with Knowledge `pins` and Memory, the state signal sends a snapshot, then deltas, and nothing when unchanged. One user's pin shows in their other threads and never in another user's. Without Memory, no pin tools and no processor. Pin limits are enforced in tokens.
 - Limit checks run at the new token bounds in the shared store contract (InMemory, LibSQL, PG).
 - OM still strips old Subconscious signals from observer input, and `deleteThread` still removes owned remind threads.
