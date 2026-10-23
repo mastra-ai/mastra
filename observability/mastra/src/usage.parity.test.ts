@@ -21,8 +21,8 @@ describe('extractUsageMetrics parity with @mastra/core', () => {
       usage: {
         inputTokens: 1000,
         outputTokens: 20,
-        inputTokenDetails: { cacheReadInputTokens: 600, cacheWriteInputTokens: 100, noCacheInputTokens: 300 },
-        outputTokenDetails: { reasoningTokens: 5, textTokens: 15 },
+        inputTokenDetails: { cacheReadTokens: 600, cacheWriteTokens: 100 },
+        reasoningTokens: 5,
       } as LanguageModelUsage,
     },
     {
