@@ -117,7 +117,6 @@ import { createEventedAgent } from '../../../agent/durable/create-evented-agent'
 import type { DurableAgent, DurableAgentStreamOptions } from '../../../agent/durable/durable-agent';
 import type { MessageListInput } from '../../../agent/message-list/types';
 import type { BackgroundTaskManagerConfig } from '../../../background-tasks/types';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import type { MastraCompositeStore } from '../../../storage/base';
@@ -949,7 +948,7 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
 
   let wrapper: DurableAgent<string, any, any> | undefined;
   if (engine === 'durable') {
-    wrapper = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    wrapper = createDurableAgent({ agent });
   } else if (engine === 'evented') {
     wrapper = createEventedAgent({ agent });
   }

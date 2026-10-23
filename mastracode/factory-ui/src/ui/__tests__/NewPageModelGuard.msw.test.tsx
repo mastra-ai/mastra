@@ -22,6 +22,7 @@ function stubFactoryShell() {
       HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/fp-1/permissions`, () =>
       HttpResponse.json({ categories: {}, tools: {} }),
     ),
@@ -41,7 +42,7 @@ function stubFactory(project: Record<string, unknown> | null) {
 
 describe('NewPage default-model guard', () => {
   it('replaces the composer with an empty state linking to Model settings when no default model is set', async () => {
-    stubFactory({ id: 'fp-1', name: 'Mastra', defaultModelId: null });
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: null });
 
     renderNewPage();
 
@@ -50,7 +51,7 @@ describe('NewPage default-model guard', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/models',
+      '/factories/fp-1/settings/models#factory-defaults',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'What do you want to work on?' })).not.toBeInTheDocument();
@@ -105,8 +106,34 @@ describe('NewPage default-model guard', () => {
 });
 
 describe('NewPage credential guard', () => {
-  it('replaces the composer with an actionable empty state when the caller has no credential for the default model provider', async () => {
-    stubFactory({ id: 'fp-1', name: 'Mastra', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+  it('asks for a personal key when a chat that runs on personal credentials is missing one, since an org key cannot unblock it', async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'hybrid', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({
+          providers: [{ provider: 'anthropic', source: 'stored-org', orgKey: true, orgCredential: 'api_key' }],
+        }),
+      ),
+    );
+
+    renderNewPage();
+
+    expect(await screen.findByRole('heading', { name: "You don't have access to Anthropic" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The default model (anthropic/claude-sonnet-4-5) needs a credential for Anthropic. Add your own key for Anthropic under Personal defaults in Models settings.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/org admin/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/models#personal-defaults',
+    );
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+  });
+
+  it('asks an org admin for a Factory-defaults key when chats in a Factory-routed Factory are missing a credential', async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: 'anthropic/claude-sonnet-4-5' });
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
         HttpResponse.json({ providers: [{ provider: 'anthropic', source: 'none', orgKey: false }] }),
@@ -115,20 +142,25 @@ describe('NewPage credential guard', () => {
 
     renderNewPage();
 
-    expect(await screen.findByRole('heading', { name: "You don't have access to Anthropic" })).toBeInTheDocument();
-    expect(screen.getByText(/ask an org admin to share an org-wide key/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/personal-models',
+      '/factories/fp-1/settings/models#factory-defaults',
     );
-    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The default model (anthropic/claude-sonnet-4-5) needs a credential for Anthropic. Ask an org admin to add one under Factory defaults in Models settings.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Add your own key/)).not.toBeInTheDocument();
   });
 
-  it('renders the composer when the caller has a shared org credential for the default model provider', async () => {
-    stubFactory({ id: 'fp-1', name: 'Mastra', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+  it('renders the composer when a Factory-routed chat has a shared org credential for its model provider', async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: 'anthropic/claude-sonnet-4-5' });
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
-        HttpResponse.json({ providers: [{ provider: 'anthropic', source: 'stored-org', orgKey: true }] }),
+        HttpResponse.json({
+          providers: [{ provider: 'anthropic', source: 'stored-org', orgKey: true, orgCredential: 'api_key' }],
+        }),
       ),
     );
 
@@ -149,5 +181,24 @@ describe('NewPage credential guard', () => {
     renderNewPage();
 
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();
+  });
+});
+
+describe('NewPage on a server without auth', () => {
+  it('shows the auth setup screen instead of the Factory-routed credential guard, so its org-admin message never reaches a single-user server', async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () => HttpResponse.json(null, { status: 404 })),
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({ providers: [{ provider: 'anthropic', source: 'none' }] }),
+      ),
+    );
+
+    renderNewPage();
+
+    expect(
+      await screen.findByRole('heading', { name: 'This MastraCode server has no authentication provider configured' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: "You don't have access to Anthropic" })).not.toBeInTheDocument();
   });
 });

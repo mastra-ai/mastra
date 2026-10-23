@@ -11,6 +11,7 @@ export { createMCPTransportTestSuite, type MCPTransportTestConfig } from './mcp-
 export { createMultipartTestSuite, type MultipartTestSuiteConfig } from './multipart-test-suite';
 export { createHttpLoggingTestSuite, type HttpLoggingTestSuiteConfig } from './http-logging-test-suite';
 export { createBodyLimitTestSuite, type BodyLimitTestSuiteConfig } from './body-limit-test-suite';
+export { createCustomRouteFGATestSuite, type CustomRouteFGATestSuiteConfig } from './custom-route-fga-test-suite';
 
 export {
   createDefaultTestContext,

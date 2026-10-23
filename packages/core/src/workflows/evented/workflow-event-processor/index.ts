@@ -33,7 +33,7 @@ import {
   omitPriorCompletionFields,
   validateStepResumeData,
 } from '../../utils';
-import { resolveCurrentState, withoutAuthToken } from '../helpers';
+import { isNonRedeliverable, resolveCurrentState, withoutAuthToken } from '../helpers';
 import { StepExecutor } from '../step-executor';
 import { isQueuedForeachIteration, processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
@@ -3739,7 +3739,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     } catch (err) {
       const attempts = (this.deliveryAttempts.get(eventKey) ?? 0) + 1;
       this.#setDeliveryAttempts(eventKey, attempts);
-      const exhausted = attempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS;
+      // Deterministic failures (e.g. a throwing user callback) would fail the
+      // same way on every redelivery, so fail them on the first attempt.
+      const exhausted = attempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS || isNonRedeliverable(err);
 
       this.mastra.getLogger()?.error('WorkflowEventProcessor.handle: error processing event', {
         type: event.type,

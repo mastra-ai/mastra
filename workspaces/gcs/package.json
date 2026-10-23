@@ -33,7 +33,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@google-cloud/storage": "^7.21.0"
+    "@google-cloud/storage": "^7.22.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
