@@ -126,21 +126,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         // Default error handling
         const error = err instanceof Error ? err : new Error(String(err));
-        let status = 500;
-        if (err && typeof err === 'object') {
-          if ('status' in err) {
-            status = (err as any).status;
-          } else if (
-            'details' in err &&
-            (err as any).details &&
-            typeof (err as any).details === 'object' &&
-            'status' in (err as any).details
-          ) {
-            status = (err as any).details.status;
-          }
-        }
-        // Format the original throwable so status or code fields on non-Error values survive.
-        const { body } = formatErrorResponse(err);
+        const routeErrorResponse = (ctx as any)._mastraRouteErrorResponse;
+        const { status, body } =
+          routeErrorResponse?.error === err ? routeErrorResponse.response : formatErrorResponse(err);
         ctx.status = status;
         ctx.body = { ...body, error: error.message || 'Unknown error' };
 
@@ -274,9 +262,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
       // Create abort controller for request cancellation
       const controller = new AbortController();
-      ctx.req.on('close', () => {
+      // Listen on the response, not the request: once a body parser has consumed the request,
+      // `ctx.req` is already closed, so its 'close' event never reports a client disconnect.
+      ctx.res.on('close', () => {
         // Only abort if the response wasn't successfully completed
-        if (!ctx.res.writableEnded) {
+        if (!ctx.res.writableFinished) {
           controller.abort();
         }
       });
@@ -554,6 +544,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         ctx.body = Buffer.from(await customResponse.arrayBuffer());
         return;
       }
+
+      // Computed before the status is copied onto the error below, so a MastraError's
+      // details.status keeps its message-only body when it reaches the error boundary.
+      (ctx as any)._mastraRouteErrorResponse = { error, response: formatErrorResponse(error) };
 
       // Attach status code to the error for upstream middleware
       if (error && typeof error === 'object') {
@@ -1018,12 +1012,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           }
 
           // Check FGA authorization (EE feature)
+          // Path params last: the custom handler reads them from the URL, so query/body
+          // values must not be able to change which resource FGA checks.
           const fgaError = await checkRouteFGA(server.mastra, serverRoute, ctx.state.requestContext, {
-            ...(matchedRoute?.params ?? {}),
             ...(ctx.query as Record<string, string>),
             ...(typeof ctx.request.body === 'object' && ctx.request.body !== null
               ? (ctx.request.body as Record<string, unknown>)
               : {}),
+            ...(matchedRoute?.params ?? {}),
           });
           if (fgaError) {
             ctx.status = fgaError.status;

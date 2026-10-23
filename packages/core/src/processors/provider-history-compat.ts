@@ -57,6 +57,8 @@ export interface CompatRule {
   applyToPrompt?: (args: {
     prompt: LanguageModelV2Prompt;
     model: unknown;
+    /** Provider id of the API the prompt is sent to (see `ProcessLLMRequestArgs.apiProviderId`). */
+    apiProviderId?: string;
     messageList?: MessageList;
   }) => LanguageModelV2Prompt | undefined;
 }
@@ -1128,6 +1130,47 @@ export const anthropicOrphanedThinkingStep: CompatRule = {
 };
 
 // ---------------------------------------------------------------------------
+// Built-in rule: single leading system message for Chat Completions
+// ---------------------------------------------------------------------------
+
+/**
+ * Merges the leading system messages of a Chat Completions request into one.
+ *
+ * Whether a server accepts several system messages depends on the host's chat template, not the
+ * model or provider: the same Qwen3.5 weights are accepted by some hosts and rejected with
+ * `System message must be at the beginning` by others. One leading system message is valid
+ * everywhere.
+ *
+ * Applies when the API provider id ends in `.chat` (`openai.chat`, `groq.chat`, `<name>.chat`
+ * from `createOpenAICompatible`, ...). Native APIs with a dedicated system field (`anthropic`,
+ * `google.generative-ai`, `bedrock`) and Responses APIs never do. Prompts are left unchanged when
+ * any merged message other than the last carries `providerOptions` (e.g. a cache breakpoint),
+ * since merging would drop it.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/25435
+ */
+export const chatCompletionsSingleSystemMessage: CompatRule = {
+  name: 'chat-completions-single-system-message',
+  applyToPrompt({ prompt, model, apiProviderId }) {
+    if (!(apiProviderId ?? getModelProviderId(model))?.endsWith('.chat')) return undefined;
+
+    let leading = 0;
+    while (leading < prompt.length && prompt[leading]!.role === 'system') leading++;
+    if (leading < 2) return undefined;
+
+    const leadingMessages = prompt.slice(0, leading) as Extract<LanguageModelV2Prompt[number], { role: 'system' }>[];
+    if (leadingMessages.slice(0, -1).some(m => m.providerOptions)) return undefined;
+
+    const content = leadingMessages
+      .map(m => m.content)
+      .filter(text => text.length > 0)
+      .join('\n\n');
+    const { providerOptions } = leadingMessages[leading - 1]!;
+    return [{ role: 'system', content, ...(providerOptions ? { providerOptions } : {}) }, ...prompt.slice(leading)];
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Default rule set
 // ---------------------------------------------------------------------------
 
@@ -1145,6 +1188,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   azureSystemReminderTransform,
   openaiOrphanItemId,
   anthropicOrphanedThinkingStep,
+  chatCompletionsSingleSystemMessage,
   // Last, so it sees the prompt after other rules have dropped emptied turns.
   ensureUserFirstTurn,
 ];
@@ -1198,6 +1242,11 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   see that thinking merged into the next step. Reactive (matches the
  *   "thinking blocks ... cannot be modified" 400); a recovery seatbelt for
  *   already-corrupted history.
+ * - **chat-completions-single-system-message** — merges the leading system
+ *   messages into one for Chat Completions providers (API provider id ending
+ *   in `.chat`), whose hosted chat templates often reject a second system
+ *   message. Skipped when an earlier one carries its own `providerOptions`.
+ *   Preemptive.
  * - **ensure-user-first-turn** — inserts a `.` user turn ahead of a leading
  *   assistant turn for Amazon Bedrock and Google/Vertex, which reject
  *   assistant-first conversations. Preemptive; the turn is never persisted.
@@ -1219,12 +1268,12 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
     this.rules = [...DEFAULT_COMPAT_RULES, ...(opts?.additionalRules ?? [])];
   }
 
-  processLLMRequest({ prompt, model, messageList }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
+  processLLMRequest({ prompt, model, apiProviderId, messageList }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
     let current = prompt;
     let mutated = false;
     for (const rule of this.rules) {
       if (!rule.applyToPrompt) continue;
-      const next = rule.applyToPrompt({ prompt: current, model, messageList });
+      const next = rule.applyToPrompt({ prompt: current, model, apiProviderId, messageList });
       if (next) {
         current = next;
         mutated = true;

@@ -47,19 +47,21 @@ describe('Factory work item service boundary', () => {
     });
   });
 
+  const factorySessionLink = 'https://factory.example.com/factories/project-1/workspaces/repo/threads/thread-1';
+
   it.each([
-    [
-      'a saved permalink',
-      { workspaceId: 'T-1', externalId: 'slack:C-1:1700.42', url: 'https://acme.slack.com/archives/C-1/p170042' },
-      'https://acme.slack.com/archives/C-1/p170042',
-    ],
     [
       'a thread',
       { workspaceId: 'T-1', externalId: 'slack:C-1:1700.42' },
       'https://app.slack.com/client/T-1/C-1/thread/C-1-1700.42',
     ],
+    [
+      'a thread that saved its Factory session link',
+      { workspaceId: 'T-1', externalId: 'slack:C-1:1700.42', url: factorySessionLink },
+      'https://app.slack.com/client/T-1/C-1/thread/C-1-1700.42',
+    ],
     ['a direct message', { workspaceId: 'T-1', externalId: 'slack:D-1:' }, 'https://app.slack.com/client/T-1/D-1'],
-    ['a card keyed before workspaces were stored', { externalId: 'slack:C-1:1700.42' }, null],
+    ['a card keyed before workspaces were stored', { externalId: 'slack:C-1:1700.42', url: factorySessionLink }, null],
   ])('links a Slack card from %s', async (_case, slackSource, url) => {
     const externalSource = { integrationId: 'slack', type: 'slack-thread', ...slackSource };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [{ ...wireItem, externalSource }] })));

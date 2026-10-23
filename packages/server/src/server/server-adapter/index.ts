@@ -37,6 +37,7 @@ import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 export * from './routes';
 export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-auth';
 export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
+export { propagateRequestAbort } from './mcp-disconnect';
 export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
@@ -104,30 +105,75 @@ export async function getCustomHTTPExceptionResponseWithCode(error: unknown): Pr
   });
 }
 
-/** JSON error body every adapter sends for a failed route. */
-export type ErrorResponseBody = ServerErrorBody & { cause?: { failingItems: unknown[] } };
+/**
+ * Response for an error with an HTTP status thrown from a `registerApiRoute` handler, or
+ * undefined for any other error (which callers keep behind a generic 500). An `HTTPException`
+ * with a custom `res` returns that response; Mastra's own also gets its `code` added to JSON
+ * bodies. Duck-typed so an `HTTPException` from `hono/http-exception`, possibly a separate
+ * Hono install, keeps its custom response too.
+ */
+export async function getCustomRouteErrorResponse(error: unknown): Promise<Response | undefined> {
+  const status = getExplicitErrorStatus(error);
+  if (status === undefined) return undefined;
+  if (error instanceof HTTPException) {
+    const response = await getCustomHTTPExceptionResponseWithCode(error);
+    if (response) return response;
+  } else {
+    const httpError = error as { res?: unknown; getResponse?: unknown };
+    if (httpError.res && typeof httpError.getResponse === 'function') {
+      return (httpError.getResponse as () => Response).call(error);
+    }
+  }
+  return Response.json(formatErrorResponse(error).body, { status });
+}
 
-function getSafeFailingItems(error: unknown): unknown[] | undefined {
+type SafeErrorCause = { failingItems: unknown[] } | { field: string; errors: Array<{ path: string; message: string }> };
+
+/** JSON error body every adapter sends for a failed route. */
+export type ErrorResponseBody = ServerErrorBody & { cause?: SafeErrorCause };
+
+/**
+ * Only allowlisted causes are exposed to clients; any other cause stays server-side:
+ * - `cause.failingItems` (dataset schema-update rejections)
+ * - `cause.field` + `cause.errors` (schema validation failures), reduced to each error's path and message
+ */
+function getSafeErrorCause(error: unknown): SafeErrorCause | undefined {
   try {
     const raw = error instanceof Error ? error.cause : undefined;
-    if (raw && typeof raw === 'object' && !Array.isArray(raw) && 'failingItems' in raw) {
-      const failingItems = (raw as { failingItems?: unknown }).failingItems;
-      return Array.isArray(failingItems) ? failingItems : undefined;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+    if (Array.isArray((raw as any).failingItems)) {
+      return { failingItems: (raw as any).failingItems };
+    }
+    const { field, errors } = raw as { field?: unknown; errors?: unknown };
+    if (typeof field === 'string' && Array.isArray(errors)) {
+      return {
+        field,
+        errors: errors.flatMap(e =>
+          e && typeof e.path === 'string' && typeof e.message === 'string'
+            ? [{ path: e.path, message: e.message }]
+            : [],
+        ),
+      };
     }
   } catch {
-    // access error — omit failing items
+    // property access threw (e.g. a getter) — omit cause
   }
   return undefined;
 }
 
+function isHTTPErrorStatus(status: unknown): status is number {
+  return typeof status === 'number' && Number.isInteger(status) && status >= 400 && status <= 599;
+}
+
+/** `error.status` (HTTPException) first, then `error.details.status` (MastraError); only 4xx/5xx count. */
 function getExplicitErrorStatus(error: unknown): number | undefined {
   if (error && typeof error === 'object') {
     const status = (error as { status?: unknown }).status;
-    if (typeof status === 'number') return status;
+    if (isHTTPErrorStatus(status)) return status;
     const details = (error as { details?: unknown }).details;
     if (details && typeof details === 'object') {
       const detailsStatus = (details as { status?: unknown }).status;
-      if (typeof detailsStatus === 'number') return detailsStatus;
+      if (isHTTPErrorStatus(detailsStatus)) return detailsStatus;
     }
   }
   return undefined;
@@ -154,14 +200,17 @@ export function formatErrorResponse(error: unknown): { status: number; body: Err
   // HTTPException and other errors carrying a catalog `code` (such as voice route errors) keep it.
   let errorInfo: ServerErrorInfo = getServerErrorInfo(error) ?? { code: getFallbackErrorCode(error, explicitStatus) };
 
-  const failingItems = getSafeFailingItems(error);
-  if (failingItems) {
-    errorInfo = { ...errorInfo, metadata: { ...errorInfo.metadata, failingItems } };
+  // Only errors with a direct `status` (HTTPException-style) expose a cause; a MastraError's
+  // `details.status` keeps a message-only body.
+  const hasDirectStatus = isHTTPErrorStatus((error as { status?: unknown } | null | undefined)?.status);
+  const cause = hasDirectStatus ? getSafeErrorCause(error) : undefined;
+  if (cause && 'failingItems' in cause) {
+    errorInfo = { ...errorInfo, metadata: { ...errorInfo.metadata, failingItems: cause.failingItems } };
   }
 
   return {
     status,
-    body: { error: message, ...errorInfo, ...(failingItems ? { cause: { failingItems } } : {}) },
+    body: { error: message, ...errorInfo, ...(cause ? { cause } : {}) },
   };
 }
 
@@ -904,11 +953,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     route: ServerRoute,
     userPermissions: string[] | undefined,
     hasPermissionFn: (userPerms: string[], required: string) => boolean,
-    requestContext?: RequestContext,
+    requestContext: RequestContext,
   ): ({ status: number; error: string; message: string } & ServerErrorInfo) | null {
     // If RBAC is not configured, skip permission checks entirely
     // Auth-only mode = authenticated users get full access
-    const rbacProvider = requestContext ? this.getEffectiveRBACProvider(requestContext) : this.mastra.getServer()?.rbac;
+    const rbacProvider = this.getEffectiveRBACProvider(requestContext);
 
     if (!rbacProvider) {
       return null;
@@ -1244,28 +1293,23 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Propagate the server's onError handler so errors from custom route handlers
     // are caught here (not swallowed by Hono's default plain-text 500).
     const serverOnError = this.mastra.getServer()?.onError;
-    app.onError((err, c) => {
+    app.onError(async (err, c) => {
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
-      const explicitStatus = getExplicitErrorStatus(err);
+      // An error thrown with an HTTP status (Mastra's or Hono's HTTPException) is
+      // deliberate: keep its status, message and code.
+      const response = await getCustomRouteErrorResponse(err);
       // Log everything except 4xx client conditions, the same rule built-in routes use,
       // so server faults stay visible even when the client gets a meaningful status.
-      const isClientError = explicitStatus !== undefined && explicitStatus >= 400 && explicitStatus < 500;
-      if (!isClientError) {
+      if (!response || response.status >= 500) {
         this.mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
           method: c.req.method,
           path: c.req.path,
           error: err instanceof Error ? (err.stack ?? err.message) : String(err),
         });
       }
-      // An error thrown with an HTTP status (Mastra's or Hono's HTTPException) is
-      // deliberate: keep its status, message and code.
-      if (explicitStatus !== undefined) {
-        const { status, body } = formatErrorResponse(err);
-        return c.json(body, status as ContentfulStatusCode);
-      }
-      return c.json({ error: 'Internal Server Error', code: SERVER_ERROR_CODES.UNEXPECTED_ERROR }, 500);
+      return response ?? c.json({ error: 'Internal Server Error', code: SERVER_ERROR_CODES.UNEXPECTED_ERROR }, 500);
     });
 
     // Register each custom route

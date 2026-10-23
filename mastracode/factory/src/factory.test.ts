@@ -45,8 +45,8 @@ import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
 import type * as transitionServiceModule from './rules/transition-service.js';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
-import { FactoryChannelReplyProcessor } from './session/channel-reply-processor.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
+import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import type * as resourceMigrationModule from './session/resource-migration.js';
 import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
@@ -391,10 +391,9 @@ describe('MastraFactory.prepare', () => {
     const requestContext = new RequestContext();
 
     const first = await inputProcessors({ requestContext });
-    expect(first).toHaveLength(4);
-    expect(first[0]).toBeInstanceOf(FactoryChannelReplyProcessor);
-    expect(first[1]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
-    expect(first[2]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(first).toHaveLength(3);
+    expect(first[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(first[1]).toBeInstanceOf(FactorySessionsStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -410,6 +409,29 @@ describe('MastraFactory.prepare', () => {
     });
   });
 
+  it("runs an integration's processors ahead of Factory's own, in the order integrations are listed", async () => {
+    const processor = (id: string) => ({ id, processInputStep: () => undefined, processOutputStep: () => undefined });
+    const first = processor('first');
+    const second = processor('second');
+    const out = processor('out');
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: null,
+      integrations: [
+        fakeIntegration({ id: 'one', processors: { input: [first], output: [out] } }),
+        fakeIntegration({ id: 'two', processors: { input: [second] } }),
+      ],
+    });
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+
+    const input = await inputProcessors({ requestContext: new RequestContext() });
+    expect(input.slice(0, 3)).toEqual([first, second, expect.any(FactoryEnvironmentStateProcessor)]);
+    const output = config.outputProcessors as unknown[];
+    expect(output).toHaveLength(2);
+    expect(output[0]).toBe(out);
+    expect(output[1]).toBeInstanceOf(FactoryReplyCredentialProcessor);
+  });
+
   it('still loads the saved memory settings when work items are unavailable', async () => {
     const storage = fakeStorage();
     vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
@@ -423,10 +445,9 @@ describe('MastraFactory.prepare', () => {
     const requestContext = new RequestContext();
 
     const processors = await inputProcessors({ requestContext });
-    expect(processors).toHaveLength(3);
-    expect(processors[0]).toBeInstanceOf(FactoryChannelReplyProcessor);
-    expect(processors[1]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
-    expect(processors[2]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(processors).toHaveLength(2);
+    expect(processors[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(processors[1]).toBeInstanceOf(FactorySessionsStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -446,10 +467,9 @@ describe('MastraFactory.prepare', () => {
     requestContext.set('controller', { getState: () => ({}), emitEvent });
 
     const processors = await inputProcessors({ requestContext });
-    expect(processors).toHaveLength(3);
-    expect(processors[0]).toBeInstanceOf(FactoryChannelReplyProcessor);
-    expect(processors[1]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
-    expect(processors[2]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(processors).toHaveLength(2);
+    expect(processors[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(processors[1]).toBeInstanceOf(FactorySessionsStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toEqual({
       status: 'unavailable',
       reason: 'storage unavailable',
@@ -2087,15 +2107,28 @@ describe('MastraFactory.prepare', () => {
     return lastStudioProvider()?.getSessionHeaders?.({ id: 'test-token', userId: 'u_1' })?.['Set-Cookie'];
   }
 
-  it('derives the default Studio cookie domain from publicUrl for subdomain deploys', async () => {
-    // A `<sub>.mastra.cloud` deploy should mint cookies with
-    // `Domain=.mastra.cloud` so the browser sends them back to sibling
-    // subdomains — no `MASTRA_COOKIE_DOMAIN` env wiring required.
+  it('never scopes the default Studio cookie to the shared parent domain (SP-5)', async () => {
+    // A parent-domain cookie (`Domain=.mastra.cloud`) is sent by the browser to
+    // every tenant deployment under that domain, so the default must be host-only.
     await withCleanCookieEnv(async () => {
       await prepareFactory({ storage: fakeStorage(), publicUrl: 'https://studio-abc.mastra.cloud' });
       const setCookie = seededSetCookie();
       expect(setCookie).toBeDefined();
-      expect(setCookie).toContain('Domain=.mastra.cloud');
+      expect(setCookie).not.toContain('Domain=');
+    });
+  });
+
+  it('issues a host-only __Host- cookie on a platform-deployed factory', async () => {
+    // The platform injects MASTRA_COOKIE_DOMAIN (the factory's own host) and a
+    // mastra.ai shared API; neither may become a cookie Domain.
+    await withCleanCookieEnv(async () => {
+      process.env.MASTRA_COOKIE_DOMAIN = 'acme.factory.mastra.cloud';
+      process.env.MASTRA_SHARED_API_URL = 'https://platform.mastra.ai/v1';
+      await prepareFactory({ storage: fakeStorage(), publicUrl: 'https://acme.factory.mastra.cloud' });
+      const setCookie = seededSetCookie();
+      expect(setCookie).toMatch(/^__Host-wos-session=test-token;/);
+      expect(setCookie).toContain('Secure');
+      expect(setCookie).not.toContain('Domain=');
     });
   });
 

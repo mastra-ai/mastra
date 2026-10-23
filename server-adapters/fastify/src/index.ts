@@ -873,12 +873,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
 
         // Check FGA authorization (EE feature)
+        // Path params last: the custom handler reads them from the URL, so query/body
+        // values must not be able to change which resource FGA checks.
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, requestContext, {
-          ...(request.params as Record<string, string>),
           ...(request.query as Record<string, string>),
           ...(typeof request.body === 'object' && request.body !== null
             ? (request.body as Record<string, unknown>)
             : {}),
+          ...(request.params as Record<string, string>),
         });
         if (fgaError) {
           return reply.status(fgaError.status).send({

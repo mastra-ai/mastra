@@ -2,6 +2,7 @@ import type { MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/age
 import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ChunkType } from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 import { accumulateChunk, finishStreamingAssistantMessage, mapWorkflowStreamChunkToWatchResult } from './accumulator';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
@@ -1476,6 +1477,141 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     const userMessages = out.filter(m => m.role === 'user');
     expect(userMessages).toHaveLength(1);
     expect(userMessages[0].id).toBe('sig-1');
+  });
+
+  describe('accept-time pending steer chunk', () => {
+    const pendingSteerChunk = (id: string, contents: string, clientMessageId?: string): ChunkType => ({
+      type: 'data-user-message-pending',
+      runId: RUN_ID,
+      from: ChunkFrom.AGENT,
+      transient: true,
+      data: {
+        type: 'user',
+        id,
+        contents,
+        createdAt: new Date(0).toISOString(),
+        metadata: { status: 'pending', ...(clientMessageId ? { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } : {}) },
+      },
+    });
+
+    it('shows a pending bubble without closing the streaming assistant, then the drain echo settles it as one bubble', () => {
+      const running = reduce([startChunk('asst-1'), toolCallChunk('call-1', 'slowResearch', {})]);
+
+      const afterPending = reduce([pendingSteerChunk('sig-1', 'also include pricing')], streamMeta(), running);
+      expect(afterPending.map(message => message.role)).toEqual(['assistant', 'user']);
+      expect(afterPending[1]).toMatchObject({
+        id: 'sig-1',
+        content: { parts: [{ type: 'text', text: 'also include pricing' }], metadata: { status: 'pending' } },
+      });
+
+      // The tool returns while the bubble is pending: the result still lands on its assistant message.
+      const afterResult = reduce([toolResultChunk('call-1', { ok: true })], streamMeta(), afterPending);
+      const toolPart = afterResult[0].content.parts.find(part => part.type === 'tool-invocation') as any;
+      expect(toolPart.toolInvocation.state).toBe('result');
+
+      const afterEcho = reduce([dataUserMessageChunk('sig-1', 'also include pricing')], streamMeta(), afterResult);
+      const users = afterEcho.filter(message => message.role === 'user');
+      expect(users).toHaveLength(1);
+      expect(users[0].id).toBe('sig-1');
+      expect(users[0].content.metadata?.status).toBeUndefined();
+
+      // The reply after the steer goes into a new assistant message, below the bubble.
+      const afterReply = reduce(
+        [stepStartChunk('asst-2'), textStartChunk('t1'), textDeltaChunk('t1', 'ok')],
+        streamMeta(),
+        afterEcho,
+      );
+      expect(afterReply.map(message => message.role)).toEqual(['assistant', 'user', 'assistant']);
+    });
+
+    it('ignores a pending chunk for a bubble that is already shown', () => {
+      const shown = reduce([pendingSteerChunk('sig-1', 'hi')]);
+      expect(reduce([pendingSteerChunk('sig-1', 'hi')], streamMeta(), shown)).toHaveLength(1);
+
+      const optimistic = pendingUserMessage('client-1', 'hi', 'corr-1');
+      const out = reduce([pendingSteerChunk('sig-2', 'hi', 'corr-1')], streamMeta(), [optimistic]);
+      expect(out).toHaveLength(1);
+      expect(out[0]).toMatchObject({
+        id: 'sig-2',
+        content: { metadata: { status: 'pending', clientMessageId: 'corr-1' } },
+      });
+    });
+
+    it('never downgrades a delivered bubble when acceptance is delayed', () => {
+      const delivered = reduce([dataUserMessageChunk('sig-1', 'hi')]);
+      expect(reduce([pendingSteerChunk('sig-1', 'hi')], streamMeta(), delivered)).toEqual(delivered);
+    });
+  });
+
+  describe('queued follow-up chunks', () => {
+    const queuedChunk = (id: string, contents: string): ChunkType => ({
+      type: 'data-user-message-pending',
+      runId: RUN_ID,
+      from: ChunkFrom.AGENT,
+      transient: true,
+      data: { type: 'user', id, contents, createdAt: new Date(0).toISOString(), metadata: { status: 'queued' } },
+    });
+    const cancelledChunk = (id: string): ChunkType => ({
+      type: 'data-user-message-cancelled',
+      runId: RUN_ID,
+      from: ChunkFrom.AGENT,
+      transient: true,
+      data: { id },
+    });
+    const texts = (messages: MastraDBMessage[]) =>
+      messages.map(message => `${message.role}:${message.id}:${(message.content.parts[0] as any)?.text ?? ''}`);
+
+    it('shows queued bubbles below the active run output, which keeps streaming above them', () => {
+      const running = reduce([startChunk('asst-1'), textStartChunk('t1'), textDeltaChunk('t1', 'one')]);
+      const queued = reduce(
+        [queuedChunk('q-1', 'then translate'), queuedChunk('q-2', 'then summarise')],
+        streamMeta(),
+        running,
+      );
+      expect(queued.map(message => message.role)).toEqual(['assistant', 'user', 'user']);
+      expect(queued[1].content.metadata).toMatchObject({ status: 'pending', queued: true });
+
+      // The first run is still writing its answer: it lands on its own message, above the queue.
+      const streamed = reduce([textDeltaChunk('t1', ' two')], streamMeta(), queued);
+      expect(streamed.map(message => message.role)).toEqual(['assistant', 'user', 'user']);
+      expect((streamed[0].content.parts[0] as any).text).toBe('one two');
+      expect(reduce([queuedChunk('q-1', 'then translate')], streamMeta(), streamed)).toHaveLength(3);
+    });
+
+    it('keeps working when something is sent after the queued bubbles (queued bubbles no longer at the tail)', () => {
+      const queued = reduce([startChunk('asst-1'), queuedChunk('q-1', 'then translate')]);
+      const withSteer = [...queued, pendingUserMessage('client-1', 'also include pricing', 'corr-1')];
+      expect(withSteer.map(message => message.role)).toEqual(['assistant', 'user', 'user']);
+      const out = reduce([textStartChunk('t1'), textDeltaChunk('t1', 'ok')], streamMeta(), withSteer);
+      expect(out.some(message => message.id === 'q-1')).toBe(true);
+    });
+
+    it('drops a queued bubble when it is cancelled and leaves the others', () => {
+      const queued = reduce([
+        startChunk('asst-1'),
+        queuedChunk('q-1', 'then translate'),
+        queuedChunk('q-2', 'then summarise'),
+      ]);
+      const out = reduce([cancelledChunk('q-2')], streamMeta(), queued);
+      expect(texts(out)).toEqual(['assistant:asst-1:', 'user:q-1:then translate']);
+      expect(reduce([cancelledChunk('missing')], streamMeta(), out)).toEqual(out);
+    });
+
+    it('settles a queued bubble in place when its run echoes it, once, with the other queued bubble still last', () => {
+      const queued = reduce([
+        startChunk('asst-1'),
+        textStartChunk('t1'),
+        textDeltaChunk('t1', 'answer'),
+        queuedChunk('q-1', 'then translate'),
+        queuedChunk('q-2', 'then summarise'),
+      ]);
+      // Run 2 starts: its start chunk, then the echo of q-1.
+      const out = reduce([startChunk('asst-2'), dataUserMessageChunk('q-1', 'then translate')], streamMeta(), queued);
+      expect(texts(out)).toEqual(['assistant:asst-1:answer', 'user:q-1:then translate', 'user:q-2:then summarise']);
+      expect(out.filter(message => message.id === 'q-1')).toHaveLength(1);
+      expect(out.find(message => message.id === 'q-1')?.content.metadata?.status).toBeUndefined();
+      expect(out.find(message => message.id === 'q-2')?.content.metadata?.queued).toBe(true);
+    });
   });
 
   it('reconciles the optimistic message by clientMessageId even when the echoed id differs', () => {

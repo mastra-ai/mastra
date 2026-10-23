@@ -19,6 +19,7 @@ import {
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
+  propagateRequestAbort,
   redactStreamChunk,
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -440,6 +441,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         });
 
+      // Client disconnect before any response bytes: abort the in-flight MCP request.
+      propagateRequestAbort(response.req.raw.signal, res);
+
       return propagateClientDisconnect(await toFetchResponse(res), res);
     } else if (route.responseType === 'mcp-sse') {
       // MCP SSE transport
@@ -810,10 +814,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             }
           }
         }
+        // Path params last: the custom handler reads them from the URL, so query/body
+        // values must not be able to change which resource FGA checks.
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {
-          ...c.req.param(),
           ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
           ...bodyParams,
+          ...c.req.param(),
         });
         if (fgaError) {
           return c.json(
