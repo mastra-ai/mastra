@@ -156,7 +156,7 @@ describe('Settings ownership', () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => HttpResponse.json({ project })),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: personalDefaultModelId }),
+        HttpResponse.json({ modelId: personalDefaultModelId, thinkingLevel: null }),
       ),
       http.put<never, { modelId: string }>(`${TEST_BASE_URL}/web/config/default-model`, async ({ request }) => {
         personalDefaultModelId = (await request.json()).modelId;

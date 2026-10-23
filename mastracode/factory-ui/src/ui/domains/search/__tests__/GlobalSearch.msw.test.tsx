@@ -1,5 +1,5 @@
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -308,10 +308,9 @@ async function warmSessionsAndWorkItems(client: ReturnType<typeof createQueryCli
   ]);
 }
 
-async function openFromSidebar() {
-  const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' }, { timeout: 5_000 });
-  const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
-  await userEvent.click(trigger);
+async function openWithShortcut() {
+  await screen.findByRole('complementary', { name: 'Main sidebar' }, { timeout: 5_000 });
+  await userEvent.keyboard('{Control>}k{/Control}');
   return screen.findByRole('dialog', { name: 'Global search' }, { timeout: 5_000 });
 }
 
@@ -380,7 +379,7 @@ describe('Global search', () => {
         );
         const user = userEvent.setup();
         renderSearchRoute(entryPoint === 'board' ? `/factories/${ACTIVE_FACTORY_ID}/boards/release` : undefined);
-        const search = entryPoint === 'search' ? await openFromSidebar() : undefined;
+        const search = entryPoint === 'search' ? await openWithShortcut() : undefined;
         const results = search ? within(search) : screen;
         if (search) await user.click(await results.findByText(item.title));
         else await user.click(await screen.findByRole('button', { name: 'Start session' }));
@@ -413,28 +412,36 @@ describe('Global search', () => {
     });
   });
 
-  it('opens from the sidebar and Mod+K with the labeled, focused command input', async () => {
+  it('opens with Mod+K on the labeled, focused command input and hands focus back on close', async () => {
     stubSearchApi();
     const user = userEvent.setup();
     renderSearchRoute();
 
     await screen.findByRole('heading', { name: 'Preferences' });
-    await screen.findByRole('navigation', { name: 'Settings sections' });
-    const sidebar = screen.getByRole('complementary', { name: 'Main sidebar' });
-    const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
-    await user.click(trigger);
-    await screen.findByRole('dialog', { name: 'Global search' });
-
-    const input = screen.getByRole('combobox', { name: 'Search MastraCode' });
-    expect(input).toHaveFocus();
-    await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
-    await waitFor(() => expect(trigger).toHaveFocus());
+    const settingsNavigation = await screen.findByRole('navigation', { name: 'Settings sections' });
+    const focusedBeforeSearch = within(settingsNavigation).getByRole('button', { name: 'Back to app' });
+    act(() => focusedBeforeSearch.focus());
 
     await user.keyboard('{Control>}k{/Control}');
-    expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
+    await screen.findByRole('dialog', { name: 'Global search' });
     expect(screen.getByRole('combobox', { name: 'Search MastraCode' })).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
+    await waitFor(() => expect(focusedBeforeSearch).toHaveFocus());
   });
+
+  it.each(['activity', 'overview', 'attention', 'metrics', 'audit'])(
+    'opens the same Factory board from the retired %s URL',
+    async page => {
+      stubSearchApi();
+      const { router } = renderSearchRoute(`/factories/${OTHER_FACTORY_ID}/${page}?events=all`);
+
+      await screen.findByLabelText('Board stages');
+      expect(router.state.location.pathname).toBe(`/factories/${OTHER_FACTORY_ID}/work`);
+      expect(router.state.location.search).toBe('');
+    },
+  );
 
   it('opens with Ctrl+K from the Work route', async () => {
     stubSearchApi();
@@ -452,7 +459,7 @@ describe('Global search', () => {
     const requests = stubSearchApi();
     renderSearchRoute();
 
-    const dialog = await openFromSidebar();
+    const dialog = await openWithShortcut();
     const results = within(dialog).getByRole('region', { name: 'Search results' });
 
     expect(await screen.findByText('Add universal command search')).toBeInTheDocument();
@@ -466,9 +473,7 @@ describe('Global search', () => {
     for (const label of [
       'Work',
       'Review',
-      'Activity',
       'Rules',
-      'Audit log',
       'Preferences',
       'Manage Factory',
       'Connections',
@@ -480,6 +485,8 @@ describe('Global search', () => {
     ]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
     }
+    expect(within(dialog).queryByText('Activity')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('Audit log')).not.toBeInTheDocument();
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
   });
 
@@ -487,31 +494,31 @@ describe('Global search', () => {
     stubSearchApi();
     const user = userEvent.setup();
     renderSearchRoute();
-    const dialog = await openFromSidebar();
+    const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
     const rail = screen.getByRole('complementary', { name: 'Search categories' });
     const results = within(dialog).getByRole('region', { name: 'Search results' });
     expect(within(rail).getByRole('button', { name: /All/ })).toHaveAttribute('aria-pressed', 'true');
     expect(within(rail).getByRole('button', { name: /Navigation/ })).toBeInTheDocument();
-    expect(within(rail).getByRole('button', { name: /Work Sessions/ })).toBeInTheDocument();
-    expect(within(rail).getByRole('button', { name: /Review Sessions/ })).toBeInTheDocument();
-    expect(within(rail).getByRole('button', { name: /User Sessions/ })).toBeInTheDocument();
+    expect(within(rail).getByRole('button', { name: /Work sessions/ })).toBeInTheDocument();
+    expect(within(rail).getByRole('button', { name: /Review sessions/ })).toBeInTheDocument();
+    expect(within(rail).getByRole('button', { name: /User sessions/ })).toBeInTheDocument();
     expect(within(rail).getByRole('button', { name: /Factories/ })).toBeInTheDocument();
 
-    await user.click(within(rail).getByRole('button', { name: /Review Sessions/ }));
+    await user.click(within(rail).getByRole('button', { name: /Review sessions/ }));
 
     expect(screen.getByText('Review command palette PR')).toBeInTheDocument();
     expect(screen.queryByText('Add universal command search')).not.toBeInTheDocument();
     expect(within(results).queryByText('Navigation')).not.toBeInTheDocument();
-    expect(within(rail).getByRole('button', { name: /Review Sessions/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(rail).getByRole('button', { name: /Review sessions/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('filters locally across titles, branches, ids, and Factory repositories without issuing more requests', async () => {
     const requests = stubSearchApi();
     const user = userEvent.setup();
     renderSearchRoute();
-    await openFromSidebar();
+    await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
     const input = screen.getByRole('combobox', { name: 'Search MastraCode' });
@@ -549,7 +556,7 @@ describe('Global search', () => {
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
     expect(requests.workItemRequests).toBe(1);
 
-    await openFromSidebar();
+    await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
@@ -577,7 +584,7 @@ describe('Global search', () => {
     );
     const user = userEvent.setup();
     renderSearchRoute();
-    const search = await openFromSidebar();
+    const search = await openWithShortcut();
     await user.click(await within(search).findByText(item.title));
 
     const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
@@ -594,7 +601,7 @@ describe('Global search', () => {
     const requests = stubSearchApi({ failSessionAttempts: 2 });
     const user = userEvent.setup();
     renderSearchRoute();
-    await openFromSidebar();
+    await openWithShortcut();
 
     expect(await screen.findByText('Sessions could not be loaded.')).toBeInTheDocument();
     expect(screen.getByText('Mastra Factory')).toBeInTheDocument();
@@ -609,7 +616,7 @@ describe('Global search', () => {
   it('keeps branch-based review results when work-item enrichment fails', async () => {
     stubSearchApi({ failWorkItems: true });
     renderSearchRoute();
-    await openFromSidebar();
+    await openWithShortcut();
     expect(await screen.findByText('factory/pr-900')).toBeInTheDocument();
     expect(await screen.findByText(/^Board cards could not be loaded/)).toBeInTheDocument();
   });
@@ -687,7 +694,7 @@ describe('Global search', () => {
       }),
     );
     const { client } = renderSearchRoute();
-    await openFromSidebar();
+    await openWithShortcut();
 
     expect(await screen.findByText('Search GitLab issue')).toBeInTheDocument();
     const mr = await screen.findByText('Search GitLab MR');
@@ -711,7 +718,7 @@ describe('Global search', () => {
     stubSearchApi();
     const user = userEvent.setup();
     renderSearchRoute();
-    const dialog = await openFromSidebar();
+    const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), query);
@@ -725,7 +732,7 @@ describe('Global search', () => {
     stubSearchApi({ failWorkItems: true });
     const user = userEvent.setup();
     renderSearchRoute();
-    await openFromSidebar();
+    await openWithShortcut();
     await screen.findByText('factory/pr-900');
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#900');
@@ -738,11 +745,11 @@ describe('Global search', () => {
     const requests = stubSearchApi();
     const user = userEvent.setup();
     renderSearchRoute();
-    const dialog = await openFromSidebar();
+    const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
     const rail = screen.getByRole('complementary', { name: 'Search categories' });
-    expect(await within(rail).findByRole('button', { name: /^Work Items\s*4$/ })).toBeInTheDocument();
+    expect(await within(rail).findByRole('button', { name: /^Work items\s*4$/ })).toBeInTheDocument();
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
     const card = await screen.findByText('Bump the command palette dependencies');
@@ -770,7 +777,7 @@ describe('Global search', () => {
     );
     const user = userEvent.setup();
     renderSearchRoute();
-    await openFromSidebar();
+    await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
@@ -811,7 +818,7 @@ describe('Global search', () => {
     stubAutomationStartingRunOn('work-item-unstarted-review');
     const user = userEvent.setup();
     const { client } = renderSearchRoute();
-    await openFromSidebar();
+    await openWithShortcut();
     await screen.findByText('Review command palette PR');
     await waitFor(() => expect(client.isFetching()).toBe(0));
 
@@ -828,7 +835,7 @@ describe('Global search', () => {
     stubAutomationStartingRunOn(item.id);
     const user = userEvent.setup();
     const { client } = renderSearchRoute();
-    const search = await openFromSidebar();
+    const search = await openWithShortcut();
     const card = await within(search).findByText(item.title);
     await waitFor(() => expect(client.isFetching()).toBe(0));
 
@@ -859,7 +866,7 @@ describe('Global search', () => {
     const user = userEvent.setup();
     const { client } = renderSearchRoute();
     const pickCard = async () => {
-      await openFromSidebar();
+      await openWithShortcut();
       await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
       await user.click(await screen.findByText('Bump the command palette dependencies'));
     };
@@ -894,7 +901,7 @@ describe('Global search', () => {
     );
     const user = userEvent.setup();
     const { client } = renderSearchRoute();
-    const search = await openFromSidebar();
+    const search = await openWithShortcut();
     await user.click(await within(search).findByText(item.title));
     const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
     await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
@@ -913,11 +920,11 @@ describe('Global search', () => {
     stubSearchApi();
     const user = userEvent.setup();
     renderSearchRoute();
-    const dialog = await openFromSidebar();
+    const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
     const rail = screen.getByRole('complementary', { name: 'Search categories' });
-    await user.click(within(rail).getByRole('button', { name: /Work Items/ }));
+    await user.click(within(rail).getByRole('button', { name: /Work items/ }));
 
     expect(within(dialog).getByText('Bump the command palette dependencies')).toBeInTheDocument();
     expect(within(dialog).getByText('Palette keyboard traps focus on mobile')).toBeInTheDocument();
@@ -931,7 +938,7 @@ describe('Global search', () => {
     const requests = stubSearchApi();
     const user = userEvent.setup();
     const { client } = renderSearchRoute();
-    const dialog = await openFromSidebar();
+    const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#20454');
@@ -954,7 +961,7 @@ describe('Global search', () => {
     stubSearchApi();
     const user = userEvent.setup();
     renderSearchRoute();
-    const dialog = await openFromSidebar();
+    const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#900');
@@ -968,7 +975,7 @@ describe('Global search', () => {
     stubSearchApi({ failIntake: true });
     const user = userEvent.setup();
     renderSearchRoute();
-    const dialog = await openFromSidebar();
+    const dialog = await openWithShortcut();
 
     expect(await screen.findByText('Bump the command palette dependencies')).toBeInTheDocument();
     expect(await screen.findByText('Intake could not be loaded.')).toBeInTheDocument();
@@ -981,7 +988,7 @@ describe('Global search', () => {
   it('runs no session request for a Factory with no linked repository', async () => {
     const requests = stubSearchApi({ activeFactoryHasRepositories: false });
     renderSearchRoute();
-    const dialog = await openFromSidebar();
+    const dialog = await openWithShortcut();
     const results = within(dialog).getByRole('region', { name: 'Search results' });
 
     expect(within(results).getByText('Navigation')).toBeInTheDocument();
@@ -1001,7 +1008,7 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute();
 
-    await openFromSidebar();
+    await openWithShortcut();
     await waitFor(() => expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(1));
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
@@ -1013,7 +1020,7 @@ describe('Global search', () => {
     stubSearchApi();
     const user = userEvent.setup();
     renderSearchRoute();
-    const dialog = await openFromSidebar();
+    const dialog = await openWithShortcut();
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'personal memory');
 
@@ -1025,7 +1032,7 @@ describe('Global search', () => {
     const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`;
     const user = userEvent.setup();
     const { router } = renderSearchRoute(origin);
-    const dialog = await openFromSidebar();
+    const dialog = await openWithShortcut();
 
     await user.click(within(dialog).getByText('Behavior'));
 
@@ -1068,7 +1075,7 @@ describe('Global search', () => {
     const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`;
     const user = userEvent.setup();
     const { router } = renderSearchRoute(origin);
-    const dialog = await openFromSidebar();
+    const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
     await user.click(within(dialog).getByText(title));
@@ -1080,7 +1087,7 @@ describe('Global search', () => {
     expect(requests.createSessionRequests).toBe(0);
   });
 
-  it('closes from a busy chat route, restores trigger focus, and does not abort the run', async () => {
+  it('closes from a busy chat route, restores the prior focus, and does not abort the run', async () => {
     const requests = stubSearchApi({ running: true });
     const user = userEvent.setup();
     renderSearchRoute(`/factories/${ACTIVE_FACTORY_ID}/workspaces/session-work/threads/thread-work-linked`);
@@ -1090,14 +1097,15 @@ describe('Global search', () => {
     await screen.findByRole('button', { name: 'Abort' }, { timeout: 5_000 });
 
     const sidebar = screen.getByRole('complementary', { name: 'Main sidebar' });
-    const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
-    await user.click(trigger);
+    const focusedBeforeSearch = await within(sidebar).findByRole('link', { name: /^Work/ });
+    act(() => focusedBeforeSearch.focus());
+    await user.keyboard('{Control>}k{/Control}');
     expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument());
-    await waitFor(() => expect(trigger).toHaveFocus());
+    await waitFor(() => expect(focusedBeforeSearch).toHaveFocus());
     expect(requests.abortRequests).toBe(0);
   });
 

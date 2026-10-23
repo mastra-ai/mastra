@@ -2116,6 +2116,19 @@ ${workingMemory}`;
         });
   }
 
+  /** Fetch current stored copies of messages in a resumed turn, bypassing run-state history caches. */
+  public async getPersistedMessages(threadId: string, ids: string[]): Promise<MastraDBMessage[]> {
+    if (!ids.length) return [];
+    const memoryStore = await this.getMemoryStore();
+    const result = await memoryStore.listMessages({
+      threadId,
+      perPage: 0,
+      include: ids.map(id => ({ id })),
+      includeTotal: false,
+    });
+    return result.messages.filter(message => ids.includes(message.id));
+  }
+
   /**
    * Get everything needed for an LLM call in one shot.
    *
@@ -4227,12 +4240,14 @@ Notes:
     const runtimeObservationalMemory = normalizeObservationalMemoryConfig(
       runtimeMemory?.memoryConfig?.observationalMemory,
     );
-    const threadConfig = runtimeObservationalMemory
-      ? this.getMergedThreadConfig({
-          ...runtimeMemory?.memoryConfig,
-          observationalMemory: runtimeObservationalMemory,
-        } as MemoryConfigInternal)
-      : this.threadConfig;
+    // A disabled override normalizes to undefined, but must not restore instance defaults.
+    const threadConfig =
+      runtimeMemory?.memoryConfig?.observationalMemory !== undefined
+        ? this.getMergedThreadConfig({
+            ...runtimeMemory?.memoryConfig,
+            observationalMemory: runtimeObservationalMemory ?? false,
+          } as MemoryConfigInternal)
+        : this.threadConfig;
 
     const effectiveConfig = normalizeObservationalMemoryConfig(threadConfig.observationalMemory);
     if (!effectiveConfig) return null;

@@ -5,7 +5,7 @@ import { usePersonalAvailableModelsQuery } from '../../../../../../hooks/useAvai
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
 import { PersonalDefaultModelPicker } from './PersonalDefaultModelPicker';
 
-export function PersonalDefaultModel() {
+export function PersonalDefaultModel({ factoryId }: { factoryId: string }) {
   const defaultModelQuery = useDefaultModelQuery();
   const modelsQuery = usePersonalAvailableModelsQuery();
 
@@ -21,6 +21,11 @@ export function PersonalDefaultModel() {
   }
 
   return (
-    <PersonalDefaultModelPicker savedModelId={defaultModelQuery.data.modelId ?? undefined} models={modelsQuery.data} />
+    <PersonalDefaultModelPicker
+      factoryId={factoryId}
+      savedModelId={defaultModelQuery.data.modelId ?? undefined}
+      savedThinkingLevel={defaultModelQuery.data.thinkingLevel}
+      models={modelsQuery.data}
+    />
   );
 }

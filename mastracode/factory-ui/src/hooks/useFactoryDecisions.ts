@@ -31,10 +31,7 @@ export function useFactoryDecisionAction(githubProjectId: string | undefined, ac
       return actOnFactoryDecision(baseUrl, githubProjectId, decisionId, action);
     },
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(githubProjectId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(githubProjectId) }),
-      ]);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(githubProjectId) });
     },
   });
 }

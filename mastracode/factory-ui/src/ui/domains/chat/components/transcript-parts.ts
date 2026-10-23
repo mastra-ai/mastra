@@ -10,9 +10,17 @@ import { isRecord } from './transcript-shared';
 export type MessagePart = MessageEntry['message']['content']['parts'][number];
 export type ToolPart = Extract<MessagePart, { type: 'tool-invocation' }>;
 
+/**
+ * Whether text shows anything. Models told to end a turn with an empty message
+ * often send a zero-width space, which `trim()` keeps.
+ */
+export function hasVisibleText(text: string): boolean {
+  return /[^\s\u200B-\u200D\u2060\uFEFF]/.test(text);
+}
+
 export function messageText(parts: MessagePart[]): string {
   return parts
-    .flatMap(part => (isRecord(part) && part.type === 'text' ? [part.text] : []))
+    .flatMap(part => (isRecord(part) && part.type === 'text' && hasVisibleText(part.text) ? [part.text] : []))
     .join('\n\n')
     .trim();
 }
@@ -67,7 +75,7 @@ export function draws(
 
   switch (part.type) {
     case 'text':
-      return part.text.trim().length > 0;
+      return hasVisibleText(part.text);
     case 'reasoning':
       return getReasoningContent(part) !== undefined;
     case 'tool-invocation':
@@ -90,7 +98,8 @@ function awaitsPrompt(
   return tool.toolName === 'ask_user' && tool.status === 'running' && !suspensions.has(tool.toolCallId);
 }
 
-const UNGROUPABLE_TOOLS = new Set(['ask_user', 'submit_plan', 'skill']);
+// Drawn as their own messages, so never folded into a group of tool cards.
+const UNGROUPABLE_TOOLS = new Set(['ask_user', 'submit_plan', 'skill', 'reply_in_thread']);
 
 export function collectToolGroups(
   parts: readonly MessagePart[],

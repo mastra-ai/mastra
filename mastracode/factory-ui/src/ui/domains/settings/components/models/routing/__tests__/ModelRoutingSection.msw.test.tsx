@@ -16,7 +16,9 @@ function stubFactory(modelScope: FactoryModelScope, patchStatus = 200) {
   const patchedBodies: unknown[] = [];
   let saved = modelScope;
   server.use(
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+    ),
     http.get(FACTORY_URL, () => HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', modelScope: saved } })),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({
