@@ -82,7 +82,7 @@ const tools = company.createTools({ write: true }); // explicit wiring
 - Draining the outbox happens before every search (in bounded batches) and, without blocking, after each tool write.
 - **Indexing lag:** records written by anything other than a tool, such as an import or a direct API call, are indexed only when some process next runs a search. A first search after a bulk import is slower.
 - Without a vector store, search is keyword-only.
-- **The store enqueues outbox rows on every write regardless of a vector store** (e.g. `inmemory.ts:370, 479-486, 505, 557-558`; LibSQL/PG the same). The alpha keeps that: rows stay pending, one per write, and if a vector store and embedder are added later the first search back-fills the index from them. The cost is outbox growth on keyword-only instances; pruning it is left for later.
+- **The store enqueues outbox rows on every write regardless of a vector store** (e.g. `inmemory.ts:370, 479-486, 505, 557-558`; LibSQL/PG the same). The alpha keeps that: rows stay pending, one per write, and if a vector store and embedder are added later the first search back-fills the index from them. The cost is outbox growth on keyword-only instances, one row per write (the Director dogfood, ~15 writers on one graph, grows with its write count). Pruning is left for later and will live in core Knowledge, next to the moved semantic-index coordinator, as a maintenance call that drops pending rows superseded by a newer row for the same target; the stores already expose `listSemanticOutbox`/claim/complete for it.
 
 **What Memory still adds** when both are set: message history and OM. Memory no longer has a `knowledge` option (D4).
 
@@ -120,6 +120,7 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 
 - An agent with Knowledge and no Memory gets read tools only, by default. Its search is keyword-only without a vector store, and semantic with one.
 - Write tools stamp `agent:<id>` as the source, and refuse without a thread or org.
+- With no vector store, the outbox grows by exactly one row per write.
 - `createMastraCode({ knowledge: { key, instance, organizationId, resourceId } })` with no Memory, the old Subconscious flag unset and no vector store: both keys reach the tool context (`resourceId` as `knowledgeResourceId`), and a write lands at `org:<override>` / `resource:<override>`.
 - The pins processor gives a stable block from one run to the next. One user's pin shows in their other threads and never in another user's. The pin limits are enforced in tokens.
 - Limit checks run at the new token bounds in the shared store contract (InMemory, LibSQL, PG).
