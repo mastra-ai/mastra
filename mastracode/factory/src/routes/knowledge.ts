@@ -40,7 +40,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
-/** Reserved node that anchors pinned records (see subconscious/pinned.ts). */
+/** Reserved node that anchors pinned records (core Knowledge pins). */
 const PINNED_NODE_NAME = 'pinned';
 
 /** Hover-card budget for record text shipped in the graph payload. */

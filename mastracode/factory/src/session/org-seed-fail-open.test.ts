@@ -37,16 +37,16 @@ vi.mock('@mastra/code-sdk', () => ({
 }));
 
 describe('org-classification fail-open (projectless factory session, rejecting org-state write)', () => {
-  const envBefore = process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
+  const envBefore = process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE;
 
   beforeEach(() => {
     prepareMock.mockClear();
-    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE = '1';
   });
 
   afterEach(() => {
-    if (envBefore === undefined) delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
-    else process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = envBefore;
+    if (envBefore === undefined) delete process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE;
+    else process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE = envBefore;
   });
 
   it('refuses curation and never classifies as local when the org seed write rejects', async () => {
@@ -101,7 +101,7 @@ describe('org-classification fail-open (projectless factory session, rejecting o
       )({ requestContext: requestContext as never });
 
       // Curation refused: the fail-closed refusal is the ONLY path that emits
-      // this error, and it is exactly the path where Subconscious stays disabled.
+      // this error, and it is exactly the path where Knowledge stays disabled.
       expect(errorSpy).toHaveBeenCalledTimes(1);
       expect(String(errorSpy.mock.calls[0]?.[0])).toContain('Knowledge curation disabled');
       // And the session was never classified — in particular never as 'local'.

@@ -217,8 +217,8 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
                 updatedAt: '2026-08-28T10:00:00.000Z',
               },
               {
-                id: 'subconscious-scope',
-                name: 'subconscious',
+                id: 'curation-scope',
+                name: 'curation',
                 kind: 'feature',
                 scope: null,
                 rung: null,
@@ -244,9 +244,9 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
                 type: 'contains',
               },
               {
-                id: 'contains:features:subconscious',
+                id: 'contains:features:curation',
                 source: '22222222-2222-4222-8222-222222222222',
-                target: 'subconscious-scope',
+                target: 'curation-scope',
                 type: 'contains',
               },
               {
@@ -371,7 +371,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page.getByTestId('knowledge-scope-flyout')).toContainText('features');
   await expect(page.getByTestId('knowledge-scope-flyout')).toContainText('scope');
   await expect(page.getByTestId('knowledge-scope-flyout')).not.toContainText('Structural scope');
-  await expect(page.getByText('subconscious')).toBeVisible();
+  await expect(page.getByText('curation')).toBeVisible();
   const featureScopeNode = page.locator(
     '[data-testid="knowledge-node"][data-node-id="22222222-2222-4222-8222-222222222222"]',
   );
