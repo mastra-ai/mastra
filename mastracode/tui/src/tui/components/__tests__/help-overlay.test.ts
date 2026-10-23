@@ -5,11 +5,11 @@ describe('buildHelpText', () => {
   const baseOpts = { modes: 1, customSlashCommands: [] };
 
   afterEach(() => {
-    delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
+    delete process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE;
   });
 
-  it('includes experimental knowledge help when Subconscious is enabled', () => {
-    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+  it('includes experimental knowledge help when Knowledge is enabled', () => {
+    process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE = '1';
     const text = buildHelpText(baseOpts);
     expect(text).toContain('/new');
     expect(text).toMatch(/\/clone\s+Clone the current thread/);
@@ -28,7 +28,7 @@ describe('buildHelpText', () => {
     expect(text).toContain('/skill/<name>');
     expect(text).toMatch(/\/github\s+Subscribe in review\/working mode or sync GitHub PR signals/);
     expect(text).toMatch(/\/memory\s+Configure Observational Memory \(\/om alias\)/);
-    expect(text).toMatch(/\/knowledge\s+Browse scoped Subconscious knowledge/);
+    expect(text).toMatch(/\/knowledge\s+Browse scoped knowledge/);
     expect(text).not.toMatch(/^\s*\/om\s+/m);
     expect(text).not.toContain('/models:pack');
     expect(text).not.toContain('/memory-gateway');
