@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Mastra } from '../../mastra';
-import { InMemoryStore } from '../../storage/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryThreadStateStorage } from '../../storage/domains/thread-state/inmemory';
+import { InMemoryStore } from '../../storage/mock';
 
 import {
   assignTaskIds,
@@ -367,44 +367,61 @@ async function concurrentContext(store: PausedTaskStorage) {
   const context = (threadId = THREAD_ID) => ({
     mastra,
     requestContext,
-    agent: { threadId, resourceId: 'resource-1', agentId: 'test', toolCallId: 'test', messages: [], suspend: async () => {} },
+    agent: {
+      threadId,
+      resourceId: 'resource-1',
+      agentId: 'test',
+      toolCallId: 'test',
+      messages: [],
+      suspend: async () => {},
+    },
   });
   await store.setState({ threadId: THREAD_ID, type: TASK_STATE_TYPE, value: concurrentTasks });
   return { context, requestContext, events };
 }
 
 describe('concurrent task mutations (#28268)', () => {
-  it.each(['write', 'update', 'complete'] as const)('preserves %s followed by an update across separate contexts', async kind => {
-    const store = new PausedTaskStorage();
-    const { context, requestContext, events } = await concurrentContext(store);
-    store.pauseNextWrite = true;
-    const firstContext = context();
-    const secondContext = context();
-    const first = kind === 'write'
-      ? taskWriteTool.execute!({ tasks: concurrentTasks.map(t => t.id === 'a' ? { ...t, status: 'completed' } : t) }, firstContext)
-      : kind === 'update'
-        ? taskUpdateTool.execute!({ id: 'a', status: 'completed' }, firstContext)
-        : taskCompleteTool.execute!({ id: 'a' }, firstContext);
-    await store.entered.promise;
-    const second = taskUpdateTool.execute!({ id: 'b', status: 'in_progress' }, secondContext);
-    try {
-      // This must finish while the first thread's database write is blocked.
-      const independent = await taskWriteTool.execute!({ tasks: concurrentTasks }, context('other-thread'));
-      expect(independent.isError).toBe(false);
-      // A different store with the same thread id must also make progress.
-      const otherStore = new PausedTaskStorage();
-      const other = await concurrentContext(otherStore);
-      expect((await taskCompleteTool.execute!({ id: 'a' }, other.context())).isError).toBe(false);
-    } finally {
-      store.release.resolve();
-    }
-    const results = await Promise.all([first, second]);
-    expect(results.map(result => result.isError)).toEqual([false, false]);
-    const persisted = await store.getState<TaskItemSnapshot[]>({ threadId: THREAD_ID, type: TASK_STATE_TYPE });
-    expect(persisted?.map(t => [t.id, t.status])).toEqual([['a', 'completed'], ['b', 'in_progress']]);
-    expect(requestContext.get(TASKS_REQUEST_CONTEXT_KEY)).toEqual(persisted);
-    expect(events.at(-1)).toEqual(persisted);
-  });
+  it.each(['write', 'update', 'complete'] as const)(
+    'preserves %s followed by an update across separate contexts',
+    async kind => {
+      const store = new PausedTaskStorage();
+      const { context, requestContext, events } = await concurrentContext(store);
+      store.pauseNextWrite = true;
+      const firstContext = context();
+      const secondContext = context();
+      const first =
+        kind === 'write'
+          ? taskWriteTool.execute!(
+              { tasks: concurrentTasks.map(t => (t.id === 'a' ? { ...t, status: 'completed' } : t)) },
+              firstContext,
+            )
+          : kind === 'update'
+            ? taskUpdateTool.execute!({ id: 'a', status: 'completed' }, firstContext)
+            : taskCompleteTool.execute!({ id: 'a' }, firstContext);
+      await store.entered.promise;
+      const second = taskUpdateTool.execute!({ id: 'b', status: 'in_progress' }, secondContext);
+      try {
+        // This must finish while the first thread's database write is blocked.
+        const independent = await taskWriteTool.execute!({ tasks: concurrentTasks }, context('other-thread'));
+        expect(independent.isError).toBe(false);
+        // A different store with the same thread id must also make progress.
+        const otherStore = new PausedTaskStorage();
+        const other = await concurrentContext(otherStore);
+        expect((await taskCompleteTool.execute!({ id: 'a' }, other.context())).isError).toBe(false);
+      } finally {
+        store.release.resolve();
+      }
+      const results = await Promise.all([first, second]);
+      expect(results.map(result => result.isError)).toEqual([false, false]);
+      const persisted = await store.getState<TaskItemSnapshot[]>({ threadId: THREAD_ID, type: TASK_STATE_TYPE });
+      expect(persisted?.map(t => [t.id, t.status])).toEqual([
+        ['a', 'completed'],
+        ['b', 'in_progress'],
+      ]);
+      expect(requestContext.get(TASKS_REQUEST_CONTEXT_KEY)).toEqual(persisted);
+      expect(events.at(-1)).toEqual(persisted);
+    },
+  );
 
   it('runs queued mutations after a failed database write', async () => {
     const store = new PausedTaskStorage();
@@ -421,7 +438,8 @@ describe('concurrent task mutations (#28268)', () => {
     expect((await next).isError).toBe(false);
     const tasks = await store.getState<TaskItemSnapshot[]>({ threadId: THREAD_ID, type: TASK_STATE_TYPE });
     expect(tasks?.map(t => [t.id, t.content, t.status])).toEqual([
-      ['a', 'Task A', 'in_progress'], ['b', 'Updated B', 'pending'],
+      ['a', 'Task A', 'in_progress'],
+      ['b', 'Updated B', 'pending'],
     ]);
     expect((await taskCompleteTool.execute!({ id: 'a' }, context())).isError).toBe(false);
   });
