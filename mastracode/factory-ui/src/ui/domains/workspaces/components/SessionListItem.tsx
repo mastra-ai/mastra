@@ -1,3 +1,4 @@
+import type { SidebarState } from '@mastra/playground-ui/components/Sidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useLocation } from 'react-router';
 
@@ -15,12 +16,15 @@ export function SessionListItem({
   disabled,
   merged,
   onDelete,
+  state,
 }: {
   factoryId: string;
   row: SessionListRow;
   disabled: boolean;
   merged: boolean | undefined;
-  onDelete: (row: SessionListRow) => void;
+  /** Omit where deleting is out of place, such as a row inside the chat transcript. */
+  onDelete?: (row: SessionListRow) => void;
+  state?: SidebarState;
 }) {
   const location = useLocation();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
@@ -51,7 +55,7 @@ export function SessionListItem({
       pinned={row.pinned}
       preview={{ factoryId, session: row.session, owner: row.owner, item: row.item, threadId: row.threadId }}
       onPinChange={pinned => setSessionPinned(row.session.sessionId, pinned)}
-      onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
+      onDelete={row.ownedByViewer && onDelete ? () => onDelete(row) : undefined}
       onRegenerateTitle={row.canRegenerateTitle ? regenerate : undefined}
       regeneratingTitle={regenerating}
       visibility={row.origin === 'user' ? row.session.visibility : undefined}
@@ -60,6 +64,7 @@ export function SessionListItem({
         ownUserSession && !row.session.branch.startsWith('slack/') ? handleVisibilityChange : undefined
       }
       changingVisibility={changing}
+      state={state}
     />
   );
 }
