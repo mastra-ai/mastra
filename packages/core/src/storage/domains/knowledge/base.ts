@@ -244,7 +244,7 @@ export function isKnowledgeTargetImporterOwned(
 }
 
 /**
- * Version for the scope-less claim a release leaves on a node when no claim from the same importer and source
+ * Version for the scope-less claim retirement leaves on a target when no claim from the same importer and source
  * remains, or `null` when one does. While the importer still owned the node, the marker follows the node so a moved
  * or re-added binding can adopt it; after an outside edit it keeps the importer's last version, so the edit is still
  * detected and never becomes importer-owned by being released.
@@ -1093,7 +1093,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async releaseRecordClaim(_input: ReleaseKnowledgeRecordClaimInput): Promise<ReleaseKnowledgeRecordClaimResult> {
     throw new KnowledgeUnsupportedError();
   }
-  /** Drops every claim one importer binding holds, removing only what no other claim keeps. */
+  /** Retires node claims, preserving knowledge, memberships and record placement/provenance claims. */
   async releaseImportClaims(_input: { importerId: string; binding: string; importRunId?: string }): Promise<void> {
     throw new KnowledgeUnsupportedError();
   }
