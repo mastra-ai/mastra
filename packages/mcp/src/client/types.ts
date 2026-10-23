@@ -385,7 +385,41 @@ export type BaseServerOptions = {
    * ```
    */
   inputRequests?: MCPInputRequestHandler;
+  /**
+   * Lets this server answer tool calls with an MCP task (SEP-2663) instead of a result.
+   *
+   * When enabled, the client declares the `io.modelcontextprotocol/tasks` extension. A server may
+   * then turn any tool call into a task; Mastra polls it until it finishes and returns the final
+   * result, so tool calls keep their shape but may take much longer. A task asking for input is
+   * answered through `inputRequests`. Aborting the call cancels the remote task.
+   *
+   * On an agent with background tasks enabled, this server's tools run as background tasks, so
+   * the agent keeps working while a remote task runs.
+   *
+   * @experimental SEP-2663 extension; this API may change.
+   *
+   * @example
+   * ```typescript
+   * { url: new URL('https://example/mcp'), tasks: { maxWaitMs: 30 * 60_000 } }
+   * ```
+   */
+  tasks?: boolean | MCPClientTasksOptions;
 };
+
+/**
+ * Options for consuming MCP tasks from one server.
+ *
+ * @experimental SEP-2663 extension; this API may change.
+ */
+export interface MCPClientTasksOptions {
+  /** Poll interval when the server suggests none. @default 5000 */
+  pollIntervalMs?: number;
+  /**
+   * Stops waiting for a task, and cancels it, after this long. Defaults to no limit; the server's
+   * TTL still applies.
+   */
+  maxWaitMs?: number;
+}
 
 /**
  * Configuration for MCP servers using stdio (subprocess) transport.
