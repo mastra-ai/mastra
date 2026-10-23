@@ -647,6 +647,127 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
       expect(secondResume).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'tool_b' }));
       expect(JSON.stringify(llm.getRequests().at(-1)?.body.messages)).toContain('tool_b resumed');
     });
+
+    // Each case suspends on guarded_tool, resumes with hooks plus one execution
+    // option, and reads the tools the model was offered before and after the resume.
+    const resumeWithOption = async (
+      sharedOptions: Parameters<typeof createSharedAgent>[1],
+      runOptions: Partial<Parameters<typeof runLoopScenario>[0]>,
+      resumeOptions: Record<string, unknown>,
+    ) => {
+      const llm = getMock();
+      const resumeBefore = vi.fn();
+      const shared = await createSharedAgent(llm, {
+        engine,
+        ...sharedOptions,
+        tools: { guarded_tool: suspendingTool('guarded_tool'), ...sharedOptions?.tools },
+      });
+      const { output, chunks } = await runLoopScenario({
+        engine,
+        llm,
+        sharedAgent: shared,
+        prompt: 'Call the guarded tool.',
+        collectChunks: true,
+        ...runOptions,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_guarded', name: 'guarded_tool', arguments: { key: 'alpha' } }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
+        },
+      });
+      expect(chunks?.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
+
+      await drain(
+        await shared.agent.resumeStream(
+          { approved: true },
+          { runId: output.runId, ...resumeOptions, hooks: { beforeToolCall: resumeBefore } },
+        ),
+      );
+      expect(resumeBefore).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'guarded_tool' }));
+
+      const requests = llm.getRequests();
+      const toolsOf = (request: (typeof requests)[number] | undefined) =>
+        new Map<string, any>(
+          ((request?.body as any)?.tools ?? []).map((t: any) => [t.function?.name ?? t.name, t.function ?? t]),
+        );
+      return { before: toolsOf(requests[0]), after: toolsOf(requests.at(-1)) };
+    };
+
+    it('offers the client tools passed alongside resume hooks', async () => {
+      const clientPing = createTool({
+        id: 'client_ping',
+        description: 'Runs on the client.',
+        inputSchema: z.object({ text: z.string() }),
+      });
+
+      const { before, after } = await resumeWithOption({}, {}, { clientTools: { client_ping: clientPing } });
+
+      expect(before.has('client_ping')).toBe(false);
+      expect(after.has('client_ping')).toBe(true);
+    });
+
+    it('applies the memory config passed alongside resume hooks', async () => {
+      const memory = new MockMemory();
+      const threadId = 'hooks-resume-memory-config-thread';
+      const resourceId = 'hooks-resume-memory-config-resource';
+      await memory.createThread({ threadId, resourceId });
+
+      const { before, after } = await resumeWithOption(
+        { memory },
+        { memory, threadId, resourceId },
+        { memory: { thread: threadId, resource: resourceId, options: { workingMemory: { enabled: true } } } },
+      );
+
+      expect(before.has('updateWorkingMemory')).toBe(false);
+      expect(after.has('updateWorkingMemory')).toBe(true);
+    });
+
+    it('applies autoResumeSuspendedTools passed alongside resume hooks', async () => {
+      const plainTool = createTool({
+        id: 'plain_tool',
+        description: 'A tool that never suspends.',
+        inputSchema: z.object({ key: z.string() }),
+        execute: async () => ({ value: 'plain' }),
+      });
+
+      const { before, after } = await resumeWithOption(
+        { tools: { plain_tool: plainTool } },
+        {},
+        { autoResumeSuspendedTools: true },
+      );
+
+      expect(before.get('plain_tool')?.parameters?.properties).not.toHaveProperty('resumeData');
+      expect(after.get('plain_tool')?.parameters?.properties).toHaveProperty('resumeData');
+    });
+
+    it('applies the background task policy passed alongside resume hooks', async () => {
+      const llm = getMock();
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+      const worker = new Agent({
+        id: 'worker',
+        name: 'worker',
+        description: 'Does delegated work',
+        instructions: 'You do delegated work.',
+        model: openai(SCENARIO_MODEL_ID),
+      });
+
+      const { before, after } = await resumeWithOption(
+        // Background tasks are on, and only the sub-agent is eligible, so guarded_tool
+        // still suspends in the foreground while agent-worker advertises `_background`.
+        {
+          agents: { worker },
+          backgroundTasks: { enabled: true },
+          agentBackgroundTasks: { tools: { worker: true } },
+        },
+        {},
+        { backgroundTaskPolicy: { allowToolDispatch: true, allowDelegationDispatch: false } },
+      );
+
+      expect(before.get('agent-worker')?.parameters?.properties).toHaveProperty('_background');
+      expect(after.get('agent-worker')?.parameters?.properties).not.toHaveProperty('_background');
+    });
   }
 
   it('feeds the per-execution hook result back to the model through the assembled agent', async () => {
