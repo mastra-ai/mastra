@@ -85,6 +85,7 @@ export default defineConfig({
     ],
     'react/rules-of-hooks': 'error',
     'react/exhaustive-deps': 'warn',
+    'mastra/sentence-case-labels': 'error',
   },
   overrides: [
     {
@@ -94,6 +95,11 @@ export default defineConfig({
     {
       files: ['src/**/*.{test,spec}.*', 'src/**/*.stories.*', 'src/**/__tests__/**'],
       rules: { 'playground-ui/text-role': 'off', 'playground-ui/txt-tone': 'off', 'playground-ui/font-mono': 'off' },
+    },
+    {
+      // Test stubs aren't UI people see.
+      files: ['src/**/*.{test,spec}.*', 'src/**/__tests__/**'],
+      rules: { 'mastra/sentence-case-labels': 'off' },
     },
     {
       files: ['src/**/*.{test,spec}.{ts,tsx}'],
