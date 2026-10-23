@@ -27,6 +27,8 @@ const COMPAT_VALUES = [
   'KNOWLEDGE_SCHEMA_SCHEMA',
   'KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA',
   'KNOWLEDGE_SCOPE_GRANTS_SCHEMA',
+  'KNOWLEDGE_SOURCE_PROBE_LIMIT',
+  'KNOWLEDGE_VISIBILITY_PROBE_LIMIT',
 ] as const;
 
 const SCOPE_A = '0190a6a0-0000-7000-8000-00000000000a';
@@ -80,6 +82,30 @@ describe('Knowledge core compatibility', () => {
         coreStorage.isKnowledgeNodeVisible(node, nodeScopeIds, visibleScopeIds),
       );
     }
+
+    const atSourceLimit = Array.from({ length: 1000 }, () => 'source-a');
+    const overSourceLimit = [...atSourceLimit, 'source-b'];
+    expect(knowledgeCompat.assertKnowledgeSourceProbeLimit(atSourceLimit)).toBe(
+      coreStorage.assertKnowledgeSourceProbeLimit(atSourceLimit),
+    );
+    expect(() => knowledgeCompat.assertKnowledgeSourceProbeLimit(overSourceLimit)).toThrow(
+      new Error('listSourcesWithVisibleRecords accepts at most 1000 sources'),
+    );
+    expect(() => coreStorage.assertKnowledgeSourceProbeLimit(overSourceLimit)).toThrow(
+      new Error('listSourcesWithVisibleRecords accepts at most 1000 sources'),
+    );
+
+    const atVisibilityLimit = { nodeIds: Array(600).fill(NODE), recordIds: Array(400).fill(NODE) };
+    const overVisibilityLimit = { nodeIds: Array(1001).fill(NODE), recordIds: [] as string[] };
+    expect(knowledgeCompat.assertKnowledgeVisibilityProbeLimit(atVisibilityLimit)).toBe(
+      coreStorage.assertKnowledgeVisibilityProbeLimit(atVisibilityLimit),
+    );
+    expect(() => knowledgeCompat.assertKnowledgeVisibilityProbeLimit(overVisibilityLimit)).toThrow(
+      new Error('listVisibleKnowledgeIds accepts at most 1000 ids'),
+    );
+    expect(() => coreStorage.assertKnowledgeVisibilityProbeLimit(overVisibilityLimit)).toThrow(
+      new Error('listVisibleKnowledgeIds accepts at most 1000 ids'),
+    );
   });
 
   it('loads core runtime values from a core advertising the matching contract', async () => {

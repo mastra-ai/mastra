@@ -42,13 +42,13 @@ import {
   TABLE_KNOWLEDGE_SCHEMA,
   TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
   TABLE_KNOWLEDGE_SCOPE_GRANTS,
+  assertKnowledgeSourceProbeLimit,
+  assertKnowledgeVisibilityProbeLimit,
 } from '@internal/core/knowledge-compat';
 import type { KnowledgeImportClaimCompat } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import {
   createKnowledgeUlid,
-  assertKnowledgeSourceProbeLimit,
-  assertKnowledgeVisibilityProbeLimit,
   isKnowledgeScopeVisible,
   KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   KNOWLEDGE_ACTIVITY_SCHEMA,

@@ -702,3 +702,19 @@ export function isSameKnowledgeClaimant(
     canonicalizeKnowledgeImporterBindingKey(left.binding) === canonicalizeKnowledgeImporterBindingKey(right.binding)
   );
 }
+
+/** Most sources one `listSourcesWithVisibleRecords` call may ask about. Mirrors the current core export. */
+export const KNOWLEDGE_SOURCE_PROBE_LIMIT = 1000;
+
+export function assertKnowledgeSourceProbeLimit(sources: unknown[]): void {
+  if (sources.length > KNOWLEDGE_SOURCE_PROBE_LIMIT)
+    throw new Error(`listSourcesWithVisibleRecords accepts at most ${KNOWLEDGE_SOURCE_PROBE_LIMIT} sources`);
+}
+
+/** Most node plus record ids one `listVisibleKnowledgeIds` call may ask about. Mirrors the current core export. */
+export const KNOWLEDGE_VISIBILITY_PROBE_LIMIT = 1000;
+
+export function assertKnowledgeVisibilityProbeLimit(input: { nodeIds: string[]; recordIds: string[] }): void {
+  if (input.nodeIds.length + input.recordIds.length > KNOWLEDGE_VISIBILITY_PROBE_LIMIT)
+    throw new Error(`listVisibleKnowledgeIds accepts at most ${KNOWLEDGE_VISIBILITY_PROBE_LIMIT} ids`);
+}
