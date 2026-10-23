@@ -617,8 +617,9 @@ export abstract class ObservationStrategy {
 
     const entries: UnindexedObservation[] = [];
     for (const entry of [...pending.values()]) {
-      // Another cycle is already writing it; its outcome decides whether it stays queued.
-      if (entry.writing) continue;
+      // Another cycle is writing or has written it; that cycle decides whether it stays queued.
+      const isUnclaimed = () => !entry.writing && pending.get(entry.write.groupId) === entry;
+      if (!isUnclaimed()) continue;
       if (entry.record.threadId !== record.threadId || entry.record.resourceId !== record.resourceId) continue;
       // Claim each entry as soon as it is chosen; the lookup below yields to other cycles.
       if (entry.record.id === record.id) {
@@ -627,7 +628,7 @@ export abstract class ObservationStrategy {
         continue;
       }
       const lineageHead = await getLineageHead(this.storage, entry.record).catch(() => undefined);
-      if (entry.writing || pending.get(entry.write.groupId) !== entry) continue;
+      if (!isUnclaimed()) continue;
       // undefined: the lookup failed, so keep the entry for a later cycle.
       if (lineageHead) {
         entry.writing = true;
