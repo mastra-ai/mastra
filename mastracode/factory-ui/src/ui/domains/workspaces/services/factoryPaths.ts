@@ -14,6 +14,10 @@ export function createFactoryPath(factoryId: string): string {
   return `/factories/${factoryId}/new-factory`;
 }
 
+export function newUserSessionPath(factoryId: string): string {
+  return `/factories/${factoryId}/user/new/${crypto.randomUUID()}`;
+}
+
 export function factorySwitchPath(factory: FactoryProject, location: { pathname: string; hash: string }): string {
   const homePath = factoryHomePath(factory);
   const factoryRouteSuffix = /^\/factories\/[^/]+(\/.*)?$/.exec(location.pathname)?.[1] ?? '';
