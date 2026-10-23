@@ -557,8 +557,8 @@ export abstract class ObservationStrategy {
   /**
    * Index the observation groups a commit to `record` added, retrying each write. Earlier groups
    * of the same lineage whose write failed are retried too, under the generation they were
-   * committed to; those of a cleared lineage are dropped. A write that still fails is kept for a
-   * later cycle and rethrown, so the cycle reports the failure.
+   * committed to; those of a cleared lineage are dropped. A write that still fails is logged and
+   * kept for a later cycle.
    */
   protected async indexGroups(
     groups: Array<{ group: ObservationGroup; threadId: string; observedAt?: Date }>,
@@ -623,8 +623,10 @@ export abstract class ObservationStrategy {
       omDebug(`[OM:index] dropping unindexed observation group ${groupId}: retry backlog is full`);
       pending.delete(groupId);
     }
+    // The observations are committed, so a failed write must not fail the cycle: that would skip
+    // its end markers and reflection. The write stays queued for the next cycle.
     if (failure !== undefined) {
-      throw failure;
+      omError('[OM] Indexing committed observation groups failed; a later cycle retries them', failure);
     }
   }
 

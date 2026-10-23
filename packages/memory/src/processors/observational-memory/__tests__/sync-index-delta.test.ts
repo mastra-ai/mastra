@@ -207,8 +207,8 @@ describe('synchronous observation indexing delta (#27930)', () => {
   it('retries a committed group whose vector write failed on the next cycle', async () => {
     const { memory, observe, vector, headGroups } = await setup();
     vector.failNextUpsert = true;
-    // The observations committed, but the failed write still fails the cycle.
-    await expect(observe(memory, 1)).rejects.toThrow('vector store unavailable');
+    // The observations committed, so the failed write does not fail the cycle.
+    expect((await observe(memory, 1)).observed).toBe(true);
     expect((await headGroups()).groups).toHaveLength(1);
     expect(vector.writes).toHaveLength(0);
     await observe(memory, 2);
@@ -222,7 +222,7 @@ describe('synchronous observation indexing delta (#27930)', () => {
   it('retries a failed group write after a reflection rolls the generation over', async () => {
     const { memory, observe, vector, headGroups } = await setup();
     vector.failNextUpsert = true;
-    await expect(observe(memory, 1)).rejects.toThrow('vector store unavailable');
+    expect((await observe(memory, 1)).observed).toBe(true);
     const { head, store, groups } = await headGroups();
     await store.createReflectionGeneration({
       currentRecord: head,
@@ -238,7 +238,7 @@ describe('synchronous observation indexing delta (#27930)', () => {
   it('does not retry a failed group write after its observational memory was cleared', async () => {
     const { memory, observe, vector, headGroups } = await setup();
     vector.failNextUpsert = true;
-    await expect(observe(memory, 1)).rejects.toThrow('vector store unavailable');
+    expect((await observe(memory, 1)).observed).toBe(true);
     const { head, groups } = await headGroups();
     const engine = await memory.omEngine;
     await engine!.clear(head.threadId!, head.resourceId);
@@ -251,7 +251,7 @@ describe('synchronous observation indexing delta (#27930)', () => {
   it('keeps both groups indexable when the lineage check for a retried group fails once', async () => {
     const { memory, observe, vector, headGroups } = await setup();
     vector.failNextUpsert = true;
-    await expect(observe(memory, 1)).rejects.toThrow('vector store unavailable');
+    expect((await observe(memory, 1)).observed).toBe(true);
     const { head, store, groups } = await headGroups();
     await store.createReflectionGeneration({
       currentRecord: head,
