@@ -73,6 +73,18 @@ describeForAllEngines(
       expect(flaky.rejected['workflow.fail']).toBe(1);
       expect(outcome).toBe('error:injected publish failure for workflow.step.end');
     });
+
+    it('stops after 3 workflow.fail publish attempts and leaves the run to crash recovery', async () => {
+      const { outcome, flaky } = await run(3);
+      // Bounded give-up: the caller gets no result (same as main), but the
+      // processor does not keep republishing or rerunning the model step.
+      expect(outcome).toBe('HANG');
+      expect(flaky.attempts['workflow.fail']).toBe(3);
+      const requests = getMock().getRequests().length;
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      expect(flaky.attempts['workflow.fail']).toBe(3);
+      expect(getMock().getRequests().length).toBe(requests);
+    });
   },
   { skip: ['normal', 'durable', 'fs', 'inngest'] },
 );
