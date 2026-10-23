@@ -24,7 +24,7 @@ export type AnalysisInput = {
   profile: z.infer<typeof insuranceProfileSchema>;
   asOf: string;
   model: string;
-  promptVersion: 'insurance-1';
+  promptVersion: 'insurance-2';
   budget: ProcessingBudget;
 };
 export type Analysis = {

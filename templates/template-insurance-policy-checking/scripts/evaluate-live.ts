@@ -35,7 +35,7 @@ export const configurationSchema = z
     source: z
       .object({
         sha256: z.string().regex(/^[a-f0-9]{64}$/),
-        promptVersion: z.literal('insurance-1'),
+        promptVersion: z.literal('insurance-2'),
         schemaVersion: z.literal('reconciliation-1'),
       })
       .strict(),

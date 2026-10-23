@@ -30,7 +30,7 @@ export async function evaluatedSourceIdentity() {
   );
   return {
     sha256: hashBytes(canonicalJson(entries)),
-    promptVersion: 'insurance-1' as const,
+    promptVersion: 'insurance-2' as const,
     schemaVersion: 'reconciliation-1' as const,
   };
 }
