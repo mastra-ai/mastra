@@ -34,6 +34,11 @@
     "zai-org/GLM-5.2"
   ],
   "reasoning": {
+    "google/gemma-4-26B-A4B-it": [
+      {
+        "type": "toggle"
+      }
+    ],
     "zai-org/GLM-5.2": [
       {
         "type": "toggle"
@@ -57,6 +62,11 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
+    "evroc/roc": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "moonshotai/Kimi-K2.6": [
       {
         "type": "budget_tokens"
@@ -68,20 +78,10 @@
         "values": ["none", "high"]
       }
     ],
-    "evroc/roc": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "google/gemma-4-26B-A4B-it": [
-      {
-        "type": "toggle"
       }
     ]
   }
