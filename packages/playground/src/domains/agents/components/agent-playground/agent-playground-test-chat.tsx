@@ -1,7 +1,9 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { BrowserViewPanel } from '@mastra/playground-ui/domains/agents/components/browser-view/browser-view-panel';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
+import { BrowserSessionProvider } from '@mastra/playground-ui/domains/agents/context/browser-session-provider';
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { DatasetSaveProvider } from '@mastra/playground-ui/domains/chat';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
@@ -12,10 +14,8 @@ import { useFormState } from 'react-hook-form';
 
 import { AgentSettingsProvider } from '../../context/agent-context';
 import { useOptionalAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { BrowserSessionProvider } from '../../context/browser-session-provider';
 import { buildAgentDefaultSettings } from '../../utils/agent-default-settings';
 import { AgentChat } from '../agent-chat';
-import { BrowserViewPanel } from '../browser-view/browser-view-panel';
 import { ThreadInputProvider } from '@/domains/conversation';
 import { AgentRunActions } from '@/domains/run-options/components/agent-run-actions';
 

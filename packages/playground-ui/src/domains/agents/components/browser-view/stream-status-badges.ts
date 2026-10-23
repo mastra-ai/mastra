@@ -1,5 +1,5 @@
-import type { BadgeIndicator, BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
+import type { BadgeIndicator, BadgeVariant } from '@/ds/components/Badge';
 
 type StreamStatusBadge = {
   variant: BadgeVariant;

@@ -1,9 +1,9 @@
-import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { useRef, useEffect, useState } from 'react';
+import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
 import { BrowserToolCallItem } from './browser-tool-call-item';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/utils/cn';
 
 interface BrowserToolCallHistoryProps {
   className?: string;

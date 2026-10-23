@@ -1,4 +1,8 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { BrowserThumbnail } from '@mastra/playground-ui/domains/agents/components/browser-view/browser-thumbnail';
+import { BrowserViewPanel } from '@mastra/playground-ui/domains/agents/components/browser-view/browser-view-panel';
+import { BrowserSessionProvider } from '@mastra/playground-ui/domains/agents/context/browser-session-provider';
+import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
@@ -18,6 +22,7 @@ import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
+import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
 import { FactorySessionPage } from '../domains/factory/components/RelatedFactorySessions';
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
 import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
@@ -47,7 +52,16 @@ export function ThreadPage() {
         <ChatSessionBoundary threadId={threadId}>
           <PageTitle />
           <WorkspaceFilesProvider>
-            <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
+            <BrowserToolCallsProvider key={`browser-tc-${threadId}`}>
+              <BrowserSessionProvider
+                key={`browser-${threadId}`}
+                agentId={AGENT_CONTROLLER_ID}
+                threadId={threadId}
+              >
+                <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
+                <BrowserViewPanel />
+              </BrowserSessionProvider>
+            </BrowserToolCallsProvider>
           </WorkspaceFilesProvider>
         </ChatSessionBoundary>
       )}
@@ -83,7 +97,12 @@ function ThreadPageMain({
     <ThreadSessionEffects workspacePath={workspacePath} threadId={threadId}>
       <FactorySessionPage>
         <SessionChatSurface
-          secondaryBar={<GoalPanel />}
+          secondaryBar={
+            <>
+              <GoalPanel />
+              <BrowserThumbnail />
+            </>
+          }
           emptyState={<EmptyThreadState />}
           composerLabel="Thread composer"
           composerFooter={<TeammateSessionLine />}

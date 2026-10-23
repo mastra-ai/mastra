@@ -1,5 +1,5 @@
-import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { useMemo } from 'react';
+import { useBrowserToolCalls } from '../context/browser-tool-calls-context';
 
 export interface InputCoordinationState {
   /** Whether any browser tool call is currently pending */
@@ -27,7 +27,7 @@ export function useInputCoordination(): InputCoordinationState {
   return useMemo(() => {
     const pendingCalls = toolCalls.filter(tc => tc.status === 'pending');
     const isAgentBusy = pendingCalls.length > 0;
-    const activeToolName = isAgentBusy ? pendingCalls[0].toolName : null;
+    const activeToolName = isAgentBusy ? (pendingCalls[0]?.toolName ?? null) : null;
 
     return { isAgentBusy, activeToolName, pendingCount: pendingCalls.length };
   }, [toolCalls]);

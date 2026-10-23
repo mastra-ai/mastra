@@ -1,10 +1,10 @@
-import { Code } from '@mastra/playground-ui/components/Code';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import type { BrowserToolCallEntry } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { Check, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import type { BrowserToolCallEntry } from '../../context/browser-tool-calls-context';
+import { Code } from '@/ds/components/Code';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Txt } from '@/ds/components/Txt';
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   // AgentBrowser tools
@@ -125,7 +125,7 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
               </Txt>
               {typeof entry.result === 'string' ? (
                 <Code
-                  className="max-h-40 overflow-x-auto overflow-y-auto rounded-md bg-muted p-2 text-caption whitespace-pre"
+                  className="max-h-40 overflow-auto rounded-md bg-muted p-2 text-caption whitespace-pre"
                   code={entry.result}
                 />
               ) : (
@@ -145,10 +145,10 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
 function StatusDot({ status }: { status: BrowserToolCallEntry['status'] }) {
   switch (status) {
     case 'pending':
-      return <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />;
+      return <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />;
     case 'complete':
-      return <Check className="h-3 w-3 shrink-0 text-success-indicator" />;
+      return <Check className="size-3 shrink-0 text-success-indicator" />;
     case 'error':
-      return <X className="h-3 w-3 shrink-0 text-destructive-foreground" />;
+      return <X className="size-3 shrink-0 text-destructive-foreground" />;
   }
 }

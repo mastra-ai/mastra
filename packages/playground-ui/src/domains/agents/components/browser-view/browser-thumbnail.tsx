@@ -1,16 +1,16 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
-import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { controlStateColorTransition, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
-import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';
+import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
 import { BrowserToolCallItem } from './browser-tool-call-item';
 import { BrowserViewFrame } from './browser-view-frame';
+import { Badge } from '@/ds/components/Badge';
+import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { controlStateColorTransition, focusRingInset } from '@/ds/primitives/transitions';
+import { quietTextHoverInGroup } from '@/ds/primitives/typography';
+import { cn } from '@/utils/cn';
 
 interface BrowserThumbnailProps {
   agentName?: string;
@@ -107,14 +107,14 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         {/* Thumbnail preview */}
         <div className={cn(raisedSurfaceStyle, 'relative h-14 w-24 shrink-0 overflow-hidden rounded-md')}>
           {hasFrame ? (
-            <img ref={imgRef} alt="Browser preview" className="h-full w-full object-cover" />
+            <img ref={imgRef} alt="Browser preview" className="size-full object-cover" />
           ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <Monitor className="h-5 w-5 text-muted-foreground" />
+            <div className="flex size-full items-center justify-center">
+              <Monitor className="size-5 text-muted-foreground" />
             </div>
           )}
           {/* Live indicator dot */}
-          {isLive && <div className="absolute top-1 right-1 h-2 w-2 animate-pulse rounded-full bg-success-indicator" />}
+          {isLive && <div className="absolute top-1 right-1 size-2 animate-pulse rounded-full bg-success-indicator" />}
         </div>
 
         {/* Info section */}
@@ -134,7 +134,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
 
         {/* Expand/collapse indicator */}
         <div className={cn('shrink-0', quietTextHoverInGroup, controlStateColorTransition)}>
-          {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
+          {isExpanded ? <ChevronDown className="size-5" /> : <ChevronUp className="size-5" />}
         </div>
       </button>
 
@@ -154,7 +154,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                   onClick={handleOpenModal}
                   className="bg-sidebar/80 backdrop-blur-sm"
                 >
-                  <Maximize2 className="h-3.5 w-3.5" />
+                  <Maximize2 className="size-3.5" />
                 </Button>
                 <Button
                   variant="default"
@@ -163,7 +163,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                   onClick={handleClose}
                   className="bg-sidebar/80 backdrop-blur-sm"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="size-3.5" />
                 </Button>
               </div>
             </div>

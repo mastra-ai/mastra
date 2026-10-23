@@ -11,7 +11,7 @@ export * from './components/agent-entity-header';
 export * from './components/memory-sidebar/agent-memory';
 export * from './components/agent-layout';
 
-export * from './components/browser-view';
+export * from '@mastra/playground-ui/domains/agents/components/browser-view';
 export * from './components/agent-cms-blocks';
 export * from './components/agent-edit-page/utils/form-validation';
 export * from './components/agent-edit-page';

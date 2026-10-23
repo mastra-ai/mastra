@@ -1,6 +1,3 @@
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
@@ -10,6 +7,9 @@ import { useKeyboardInteraction } from '../../hooks/use-keyboard-interaction';
 import { useMouseInteraction } from '../../hooks/use-mouse-interaction';
 import { AgentBusyOverlay } from './agent-busy-overlay';
 import { ClickRippleOverlay } from './click-ripple-overlay';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/utils/cn';
 
 interface BrowserViewFrameProps {
   className?: string;
@@ -151,7 +151,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
         tabIndex={status === 'streaming' ? 0 : -1}
         role="button"
         className={cn(
-          'absolute inset-0 h-full w-full object-contain',
+          'absolute inset-0 size-full object-contain',
           hasFrame ? 'opacity-100' : 'opacity-0',
           status === 'streaming' && (isInteractive ? 'cursor-text' : 'cursor-pointer'),
         )}
@@ -170,7 +170,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
       {isReconnecting && (
         <div className="absolute inset-0 flex items-center justify-center bg-sidebar/80">
           <div className="flex flex-col items-center gap-2">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+            <div className="size-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
             <Txt as="span" tone="muted">
               Reconnecting...
             </Txt>
@@ -181,10 +181,10 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
       {/* Error overlay */}
       {hasError && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 px-4 py-4 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive-subtle">
+          <div className="flex flex-col items-center gap-3 p-4 text-center">
+            <div className="flex size-14 items-center justify-center rounded-full bg-destructive-subtle">
               <svg
-                className="h-7 w-7 text-destructive-foreground"
+                className="size-7 text-destructive-foreground"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"

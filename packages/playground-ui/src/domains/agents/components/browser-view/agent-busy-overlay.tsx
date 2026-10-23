@@ -1,5 +1,5 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Loader2 } from 'lucide-react';
+import { Txt } from '@/ds/components/Txt';
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   // AgentBrowser tools
@@ -40,7 +40,7 @@ export function AgentBusyOverlay({ toolName }: AgentBusyOverlayProps) {
   return (
     <div className="absolute inset-0 z-10 flex cursor-not-allowed items-center justify-center bg-sidebar/40">
       <div className="flex items-center gap-2 rounded-md bg-surface-panel px-3 py-1.5 shadow-overlay">
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+        <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
         <Txt as="span" variant="column" tone="muted">
           Agent: {displayName}
         </Txt>

@@ -1,4 +1,6 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { BrowserViewPanel } from '@mastra/playground-ui/domains/agents/components/browser-view';
+import { BrowserSessionProvider } from '@mastra/playground-ui/domains/agents/context/browser-session-provider';
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import type { StoredAgent } from '@mastra/react/hooks/agents';
 import { useStoredAgent } from '@mastra/react/hooks/agents';
@@ -17,8 +19,6 @@ import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channe
 import { AgentBuilderViewLayout } from '@/domains/agent-builder/layouts/agent-builder-view-layout';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored-agent-to-form-values';
-import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
-import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 
 export default function AgentBuilderAgentView() {
   const { id: agentId } = useParams<{ id: string }>();

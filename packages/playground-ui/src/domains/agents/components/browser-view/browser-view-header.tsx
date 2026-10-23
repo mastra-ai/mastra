@@ -1,11 +1,11 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, ChevronDown, ChevronUp, Minus } from 'lucide-react';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
 import { streamStatusBadges } from './stream-status-badges';
+import { Badge } from '@/ds/components/Badge';
+import { Txt } from '@/ds/components/Txt';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { cn } from '@/utils/cn';
 
 interface BrowserViewHeaderProps {
   url: string | null;
@@ -54,7 +54,7 @@ export function BrowserViewHeader({
             className={cn('rounded p-1 hover:bg-fill-subtle', quietTextHover, controlStateColorTransition)}
             title="Minimize to pill"
           >
-            <Minus className="h-4 w-4" />
+            <Minus className="size-4" />
           </button>
         )}
 
@@ -65,7 +65,7 @@ export function BrowserViewHeader({
             className={cn('rounded p-1 hover:bg-fill-subtle', quietTextHover, controlStateColorTransition)}
             title={isCollapsed ? 'Expand browser view' : 'Minimize browser view'}
           >
-            {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+            {isCollapsed ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
           </button>
         )}
 
@@ -76,7 +76,7 @@ export function BrowserViewHeader({
             className={cn('rounded p-1 hover:bg-fill-subtle', quietTextHover, controlStateColorTransition)}
             title="Close browser session"
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </button>
         )}
       </div>

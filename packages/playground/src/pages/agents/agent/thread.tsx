@@ -1,6 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
+import { BrowserSessionProvider } from '@mastra/playground-ui/domains/agents/context/browser-session-provider';
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
@@ -26,7 +27,6 @@ import { SidebarPanel } from '@/domains/agents/components/sidebar-panel';
 import { ThreadsPanelShortcuts } from '@/domains/agents/components/threads-panel-shortcuts';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
-import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
 import { ThreadPreferencesProvider } from '@/domains/agents/context/thread-preferences-provider';
 import { ThreadsPanelProvider } from '@/domains/agents/context/threads-panel-context';

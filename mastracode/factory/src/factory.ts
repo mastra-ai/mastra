@@ -22,7 +22,11 @@
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
+import type {
+  AgentControllerConfig,
+  AgentControllerRequestContext,
+  BuiltinToolId,
+} from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
@@ -249,6 +253,14 @@ export interface MastraFactoryConfig {
    * approval cannot bypass that gate.
    */
   disableBuiltinTools?: BuiltinToolId[];
+  /**
+   * Browser automation provider for the Factory agent — typically an
+   * `AgentBrowser` (`@mastra/agent-browser`) with `scope: 'thread'`, so each
+   * Factory session gets an isolated Chromium instance (and its own cookies /
+   * OAuth state) for reproducing bugs in the user's running app. Omitted →
+   * browser tools and the browser-view UI panel are off.
+   */
+  browser?: AgentControllerConfig<MastraCodeState>['browser'];
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
   /**
@@ -1144,6 +1156,7 @@ export class MastraFactory {
         controllerId: CONTROLLER_ID,
         coAuthor: { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
+        ...(this.#config.browser ? { browser: this.#config.browser } : {}),
         modes: false,
         // Thinking defaults are stored per Factory, not in the host's settings.json.
         resolveDefaultThinkingLevel: ({ requestContext }) =>
