@@ -36,7 +36,7 @@ import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 
 export function SessionsSection() {
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
-  const { baseUrl, resourceId, sessionEnabled } = useChatSessionContext();
+  const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
   const navigate = useNavigate();
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
   const catalog = useBoardCatalog(factoryId);
@@ -51,8 +51,8 @@ export function SessionsSection() {
     resetView,
   } = useSessionListView();
   const viewerUserId = useFactoryAuth().data?.user?.userId;
-  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
-  const deletion = useSessionDeletion(factoryId, resourceId);
+  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
+  const deletion = useSessionDeletion(factoryId);
 
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
   const filteredRows = filterSessionRows(sortedRows, filters, viewerUserId);
@@ -60,10 +60,9 @@ export function SessionsSection() {
   const defaultHeadings = sessionGroupHeadings(sortedRows, view.groupBy, groupContext);
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
   const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
-  const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(resourceId);
+  const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(sessionId);
   const mergedBySessionId = useWorkspacePullRequestMerges({
     baseUrl,
-    resourceId,
     targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
     enabled: chatSessionOpen,
   });
@@ -72,8 +71,6 @@ export function SessionsSection() {
     rowCount: rows.length,
     filteredCount: filteredRows.length,
     groupCount: groups.length,
-    activeFilterCount,
-    viewerKnown: Boolean(viewerUserId),
   });
 
   const nothingToList = !hasRepositories && rows.length === 0 && !loadFailed;
@@ -198,17 +195,12 @@ function emptyListMessage({
   rowCount,
   filteredCount,
   groupCount,
-  activeFilterCount,
-  viewerKnown,
 }: {
   rowCount: number;
   filteredCount: number;
   groupCount: number;
-  activeFilterCount: number;
-  viewerKnown: boolean;
 }): string | undefined {
   if (filteredCount > 0) return groupCount === 0 ? 'All groups with sessions are hidden' : undefined;
   if (rowCount === 0) return 'No sessions yet';
-  if (activeFilterCount === 0 && viewerKnown) return 'No sessions of your own.';
   return 'No sessions match these filters';
 }

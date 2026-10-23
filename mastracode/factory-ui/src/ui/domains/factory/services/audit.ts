@@ -86,10 +86,18 @@ async function throwRequestError(res: Response): Promise<never> {
 export async function fetchAuditEvents(
   baseUrl: string,
   factoryProjectId: string,
-  options: { namespaces?: string[]; actorIds?: string[]; before?: string; limit?: number; signal?: AbortSignal } = {},
+  options: {
+    namespaces?: string[];
+    actor?: string;
+    actorIds?: string[];
+    before?: string;
+    limit?: number;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<AuditEventPage> {
   const query = new URLSearchParams();
   if (options.namespaces && options.namespaces.length > 0) query.set('namespaces', options.namespaces.join(','));
+  if (options.actor) query.set('actor', options.actor);
   if (options.actorIds && options.actorIds.length > 0) query.set('actorIds', options.actorIds.join(','));
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));
@@ -104,19 +112,4 @@ export async function fetchAuditEvents(
   const data: unknown = await res.json();
   if (!isAuditEventPage(data)) throw new Error('Invalid audit event response');
   return data;
-}
-
-export async function fetchAuditPortalLink(baseUrl: string): Promise<string | null> {
-  const res = await fetch(`${baseUrl}/web/audit/portal-link`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) return throwRequestError(res);
-
-  const data: unknown = await res.json();
-  if (typeof data !== 'object' || data === null || !('url' in data) || typeof data.url !== 'string') {
-    throw new Error('Invalid audit portal response');
-  }
-  return data.url;
 }

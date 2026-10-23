@@ -1051,12 +1051,35 @@ export function extractToolResults(output: ScorerRunOutputForAgent): ToolResultI
 export { extractTrajectory } from '@mastra/core/evals';
 
 /**
+ * Returns the tool-level view of one sibling list of trajectory steps.
+ *
+ * Trace-derived trajectories (`extractTrajectoryFromTrace`) wrap tool calls in
+ * `model_generation` steps and interleave `processor_run` steps, while message-derived
+ * trajectories list tool calls flat. This drops `processor_run` steps and replaces each
+ * `model_generation` step with its (recursively flattened) children, so both shapes yield
+ * the same list. Other steps are returned as the same objects, with their children untouched.
+ */
+export function toToolLevelSteps(steps: TrajectoryStep[]): TrajectoryStep[] {
+  const result: TrajectoryStep[] = [];
+  for (const step of steps) {
+    if (step.stepType === 'processor_run') continue;
+    if (step.stepType === 'model_generation') {
+      if (step.children?.length) result.push(...toToolLevelSteps(step.children));
+      continue;
+    }
+    result.push(step);
+  }
+  return result;
+}
+
+/**
  * Compares two trajectories and returns detailed comparison results.
  *
  * This is the core comparison logic used by trajectory scorers. It supports
  * strict and non-strict ordering, optional step data comparison, and loop detection.
  *
- * @param actual - The trajectory the agent actually took
+ * @param rawActual - The trajectory the agent actually took. Trace-derived trajectories are
+ *   compared at tool level (see {@link toToolLevelSteps}).
  * @param expected - The expected trajectory to compare against
  * @param options - Comparison configuration options
  * @returns Detailed comparison results including match scores and diagnostics
@@ -1072,7 +1095,7 @@ export { extractTrajectory } from '@mastra/core/evals';
  * ```
  */
 export function compareTrajectories(
-  actual: Trajectory,
+  rawActual: Trajectory,
   expected: Trajectory | { steps: ExpectedStep[] },
   options: {
     ordering?: 'strict' | 'relaxed' | 'unordered';
@@ -1084,10 +1107,26 @@ export function compareTrajectories(
   // Normalize expected to ExpectedStep[]. TrajectoryStep and ExpectedStep share
   // the same field names, so TrajectoryStep[] can be used directly as ExpectedStep[].
   // The only structural difference is `children` (TrajectoryStep[] vs TrajectoryExpectation),
-  // but compareTrajectories doesn't recurse into children.
+  // but compareTrajectories doesn't recurse into expected children.
   const normalizedExpected: { steps: ExpectedStep[] } = {
     steps: expected.steps as ExpectedStep[],
   };
+
+  // Compare against the tool-level view so trace-derived trajectories match message-derived
+  // ones, unless the expectation targets model_generation/processor_run steps (by stepType,
+  // or by the name of such a step in the actual trajectory).
+  const containerNames = new Set(
+    rawActual.steps.filter(s => s.stepType === 'model_generation' || s.stepType === 'processor_run').map(s => s.name),
+  );
+  const expectsContainerSteps = normalizedExpected.steps.some(
+    s =>
+      s.stepType === 'model_generation' ||
+      s.stepType === 'processor_run' ||
+      (!s.stepType && containerNames.has(s.name)),
+  );
+  const actual: Trajectory = expectsContainerSteps
+    ? rawActual
+    : { ...rawActual, steps: toToolLevelSteps(rawActual.steps) };
 
   if (normalizedExpected.steps.length === 0) {
     return {
@@ -1418,7 +1457,8 @@ export function checkTrajectoryEfficiency(
     }
   }
 
-  const totalSteps = trajectory.steps.length;
+  // Count tool-level steps so trace-derived and message-derived trajectories agree.
+  const totalSteps = toToolLevelSteps(trajectory.steps).length;
 
   // Count each model generation, including nested agents, without counting container aggregates.
   let totalTokens = 0;
@@ -1463,16 +1503,15 @@ export function checkTrajectoryEfficiency(
   const redundantCalls: Array<{ name: string; index: number }> = [];
   const siblingLists: TrajectoryStep[][] = noRedundantCalls ? [trajectory.steps] : [];
   while (siblingLists.length > 0) {
-    const steps = siblingLists.pop()!;
+    // Tool-level view, so processor_run and model_generation steps interleaved in
+    // trace-derived trajectories don't break adjacency.
+    const steps = toToolLevelSteps(siblingLists.pop()!);
     for (const step of steps) {
       if (step.children?.length) siblingLists.push(step.children);
     }
-    // processor_run and model_generation steps are interleaved between tool calls in
-    // trace-derived trajectories, so they must not break adjacency.
     let prev: TrajectoryStep | undefined;
     for (let i = 0; i < steps.length; i++) {
       const curr = steps[i]!;
-      if (curr.stepType === 'processor_run' || curr.stepType === 'model_generation') continue;
       if (
         prev &&
         prev.name === curr.name &&
@@ -1558,16 +1597,24 @@ export function checkTrajectoryBlacklist(
   const violatedTools: string[] = [];
   const violatedSequences: string[][] = [];
 
-  // Collect every sibling list (top level plus each nested `children` list)
-  const siblingLists: string[][] = [];
+  // Collect every step name at any depth
   const allNames = new Set<string>();
-  const pending: TrajectoryStep[][] = [trajectory.steps];
+  const pending: TrajectoryStep[] = [...trajectory.steps];
   while (pending.length > 0) {
-    const steps = pending.pop()!;
+    const step = pending.pop()!;
+    allNames.add(step.name);
+    if (step.children?.length) pending.push(...step.children);
+  }
+
+  // Collect every tool-level sibling list (top level plus each nested `children` list), so
+  // processor_run and model_generation steps in trace-derived trajectories don't break sequences
+  const siblingLists: string[][] = [];
+  const pendingLists: TrajectoryStep[][] = [trajectory.steps];
+  while (pendingLists.length > 0) {
+    const steps = toToolLevelSteps(pendingLists.pop()!);
     siblingLists.push(steps.map(s => s.name));
     for (const step of steps) {
-      allNames.add(step.name);
-      if (step.children?.length) pending.push(step.children);
+      if (step.children?.length) pendingLists.push(step.children);
     }
   }
 
@@ -1652,59 +1699,69 @@ export function analyzeToolFailures(
   const { maxRetriesPerTool = 2 } = options;
   const patterns: ToolFailurePattern[] = [];
   let totalRetries = 0;
+  let totalToolCalls = 0;
 
-  const toolCallSteps = trajectory.steps.filter(s => s.stepType === 'tool_call' || s.stepType === 'mcp_tool_call');
+  // Walk every tool-level sibling list (top level first, then nested `children` lists). Tool calls
+  // under model_generation are hoisted into their parent list and processor_run steps are dropped,
+  // so trace-derived trajectories group retries the same way as message-derived ones.
+  const pending: TrajectoryStep[][] = [trajectory.steps];
+  while (pending.length > 0) {
+    const steps = toToolLevelSteps(pending.shift()!);
+    for (const step of steps) {
+      if (step.children?.length) pending.push(step.children);
+    }
 
-  if (toolCallSteps.length === 0) {
-    return { score: 1, patterns: [], totalRetries: 0, excessiveRetryTools: [] };
+    const toolCallSteps = steps.filter(s => s.stepType === 'tool_call' || s.stepType === 'mcp_tool_call');
+    totalToolCalls += toolCallSteps.length;
+
+    // Group consecutive calls to the same tool as potential retry sequences
+    let i = 0;
+    while (i < toolCallSteps.length) {
+      const currentTool = toolCallSteps[i]!;
+      let retryCount = 0;
+      let j = i + 1;
+
+      // Count consecutive calls to the same tool
+      // (toolCallSteps is pre-filtered to tool_call/mcp_tool_call, so no stepType checks needed)
+      while (j < toolCallSteps.length && toolCallSteps[j]!.name === currentTool.name) {
+        const prevStep = toolCallSteps[j - 1]! as TrajectoryStep & { success?: boolean };
+        if (prevStep.success === false) {
+          retryCount++;
+        }
+        j++;
+      }
+
+      if (retryCount > 0) {
+        // Check if agent fell back to a different tool after retries
+        const nextDifferentTool = j < toolCallSteps.length ? toolCallSteps[j] : undefined;
+        const lastRetry = toolCallSteps[j - 1]! as TrajectoryStep & { success?: boolean };
+        const lastSuccess = lastRetry.success !== false;
+
+        patterns.push({
+          toolName: currentTool.name,
+          retryCount,
+          fellBackToAlternative: nextDifferentTool !== undefined && !lastSuccess,
+          alternativeTool: nextDifferentTool !== undefined && !lastSuccess ? nextDifferentTool.name : undefined,
+          eventuallySucceeded: lastSuccess,
+        });
+
+        totalRetries += retryCount;
+      }
+
+      i = j;
+    }
   }
 
-  // Group consecutive calls to the same tool as potential retry sequences
-  let i = 0;
-  while (i < toolCallSteps.length) {
-    const currentTool = toolCallSteps[i]!;
-    let retryCount = 0;
-    let j = i + 1;
-
-    // Count consecutive calls to the same tool
-    // (toolCallSteps is pre-filtered to tool_call/mcp_tool_call, so no stepType checks needed)
-    while (j < toolCallSteps.length && toolCallSteps[j]!.name === currentTool.name) {
-      const prevStep = toolCallSteps[j - 1]! as TrajectoryStep & { success?: boolean };
-      if (prevStep.success === false) {
-        retryCount++;
-      }
-      j++;
-    }
-
-    if (retryCount > 0) {
-      // Check if agent fell back to a different tool after retries
-      const nextDifferentTool = j < toolCallSteps.length ? toolCallSteps[j] : undefined;
-      const lastRetry = toolCallSteps[j - 1]! as TrajectoryStep & { success?: boolean };
-      const lastSuccess = lastRetry.success !== false;
-
-      patterns.push({
-        toolName: currentTool.name,
-        retryCount,
-        fellBackToAlternative: nextDifferentTool !== undefined && !lastSuccess,
-        alternativeTool: nextDifferentTool !== undefined && !lastSuccess ? nextDifferentTool.name : undefined,
-        eventuallySucceeded: lastSuccess,
-      });
-
-      totalRetries += retryCount;
-    }
-
-    i = j;
+  if (totalToolCalls === 0) {
+    return { score: 1, patterns: [], totalRetries: 0, excessiveRetryTools: [] };
   }
 
   // Score: penalize excessive retries
   const excessiveRetryTools = patterns.filter(p => p.retryCount > maxRetriesPerTool).map(p => p.toolName);
 
-  let score = 1;
-  if (toolCallSteps.length > 0) {
-    // Each retry beyond the threshold costs more
-    const excessRetries = patterns.reduce((sum, p) => sum + Math.max(0, p.retryCount - maxRetriesPerTool), 0);
-    score = Math.max(0, 1 - excessRetries * 0.2);
-  }
+  // Each retry beyond the threshold costs more
+  const excessRetries = patterns.reduce((sum, p) => sum + Math.max(0, p.retryCount - maxRetriesPerTool), 0);
+  const score = Math.max(0, 1 - excessRetries * 0.2);
 
   return {
     score: roundToTwoDecimals(Math.max(0, Math.min(1, score))),

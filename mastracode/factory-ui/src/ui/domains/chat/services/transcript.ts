@@ -877,7 +877,7 @@ function withoutToolPartsDrawnElsewhere(
   });
   if (sourcePartIndexes.length === message.content.parts.length) return { message };
 
-  const parts = sourcePartIndexes.map(index => message.content.parts[index]!);
+  const parts = sourcePartIndexes.map(index => message.content.parts[index]);
   return { message: { ...message, content: { ...message.content, parts } }, sourcePartIndexes };
 }
 

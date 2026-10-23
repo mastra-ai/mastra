@@ -7,7 +7,8 @@ import { SpanPayloadField, SpanPayloadMarkdown } from './span-payload-primitives
 import { SpanPayloadProcessor } from './span-payload-processor';
 import { asCoreSpan, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
-import { Card, CardContent } from '@/ds/components/Card';
+import { SpanSignalInput } from './span-signal-input';
+import { getSpanSignal } from '@/domains/traces/utils/span-signal';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 
 function SpanTextRenderer({ value }: { value: string }) {
@@ -65,17 +66,16 @@ export interface SpanInputRendererProps {
   span: SpanRecord;
 }
 
-/** Renders a span's input through the registry; `null` when the span recorded none. */
+/**
+ * Renders a span's input through the registry; `null` when the span recorded none. An agent
+ * run started by a signal renders the signal, which `describeSpanInput` only knows as JSON.
+ */
 export function SpanInputRenderer({ span }: SpanInputRendererProps) {
+  const signal = getSpanSignal(span);
+  if (signal) return <SpanSignalInput signal={signal} />;
   const description = describeSpanInput(asCoreSpan(span));
   if (!description) return null;
   if (description.type === 'json') return <SpanPayloadJson value={description.value} />;
   const Renderer = pickRenderer(SPAN_INPUT_RENDERERS, description);
-  return (
-    <Card data-slot="span-input-card" className="min-w-0">
-      <CardContent>
-        <Renderer value={description.value} />
-      </CardContent>
-    </Card>
-  );
+  return <Renderer value={description.value} />;
 }

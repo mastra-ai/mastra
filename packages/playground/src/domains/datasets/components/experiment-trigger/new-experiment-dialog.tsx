@@ -14,6 +14,7 @@ import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { toast } from 'sonner';
 import { AdvancedToggle } from './advanced-toggle';
+import { AgentModelField } from './agent-model-field';
 import { DatasetField } from './dataset-field';
 import { DatasetVersionField } from './dataset-version-field';
 import { ExperimentDescriptionField } from './experiment-description-field';
@@ -23,6 +24,7 @@ import { RequestContextField } from './request-context-field';
 import { RunExperimentAction } from './run-experiment-action';
 import { ScorersField } from './scorers-field';
 import { TargetField } from './target-field';
+import { useAgentModelChoice } from './use-agent-model-choice';
 import { useDatasetChoice } from './use-dataset-choice';
 import { useExperimentName } from './use-experiment-name';
 import { useRequestContextInput } from './use-request-context-input';
@@ -63,13 +65,17 @@ export function NewExperimentDialog({
   const datasetChoice = useDatasetChoice({ initialDatasetId, initialDatasetVersion });
   const scorerChoice = useScorerChoice({ datasetId: datasetChoice.datasetId, initialScorerIds });
   const requestContextInput = useRequestContextInput(datasetChoice.datasetId);
-  const experimentName = useExperimentName({ initialName, targetLabel: targetChoice.target?.label });
+  const agentModelChoice = useAgentModelChoice();
+  const { target } = targetChoice;
+  const isAgentTarget = target?.type === 'agent';
+  const agentModel = isAgentTarget ? agentModelChoice.agentModel : undefined;
+  // Runs on different models would otherwise share a name, so the picked model joins the default one.
+  const nameLabel = agentModel && target ? `${target.label} ${agentModel.modelId}` : target?.label;
+  const experimentName = useExperimentName({ initialName, targetLabel: nameLabel });
   const [description, setDescription] = useState(initialDescription ?? '');
-  // A rerun that pins a version or carries a description opens with those fields showing.
-  const [advancedOpen, setAdvancedOpen] = useState(initialDatasetVersion !== undefined || Boolean(initialDescription));
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const { triggerExperiment } = useDatasetMutations();
 
-  const { target } = targetChoice;
   const { datasetId } = datasetChoice;
   const isRunning = triggerExperiment.isPending;
   // The schema form converts its schema once per mount, so it remounts for each dataset; the JSON editor stays.
@@ -99,6 +105,7 @@ export function NewExperimentDialog({
         description: optionalText(description),
         targetType: target.type,
         targetId: target.id,
+        agentModel,
         scorerIds: optionalList(scorerChoice.scorerIds),
         version: datasetChoice.version,
         requestContext: requestContext.requestContext,
@@ -119,7 +126,7 @@ export function NewExperimentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} onOpenChangeComplete={onOpenChangeComplete} pending={isRunning}>
-      <DialogContent ref={contentRef} size="md" onKeyDown={handleKeyDown}>
+      <DialogContent ref={contentRef} size="lg" onKeyDown={handleKeyDown}>
         <DialogHeader>
           <DialogTitle>New experiment</DialogTitle>
           <DialogDescription>Run every item in a dataset through an agent, workflow or scorer.</DialogDescription>
@@ -127,8 +134,8 @@ export function NewExperimentDialog({
 
         <DialogBody>
           {/* A plain block, so the closed Advanced panel adds no gap below the toggle. */}
-          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-            <div className="space-y-5">
+          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="py-3">
+            <div className="space-y-6">
               <TargetField
                 options={targetChoice.options}
                 isLoading={targetChoice.isLoading}
@@ -151,16 +158,26 @@ export function NewExperimentDialog({
               />
             </div>
 
-            <div className="mt-4">
+            <div className="mt-6">
               <AdvancedToggle />
             </div>
 
-            <CollapsibleContent className="space-y-4 pt-3">
+            <CollapsibleContent className="space-y-6 pt-4">
               {datasetId && (
                 <DatasetVersionField
                   datasetId={datasetId}
                   version={datasetChoice.version}
                   onVersionChange={datasetChoice.setVersion}
+                  container={contentRef}
+                />
+              )}
+              {isAgentTarget && (
+                <AgentModelField
+                  provider={agentModelChoice.provider}
+                  modelId={agentModelChoice.modelId}
+                  onProviderChange={agentModelChoice.setProvider}
+                  onModelIdChange={agentModelChoice.setModelId}
+                  onReset={agentModelChoice.reset}
                   container={contentRef}
                 />
               )}

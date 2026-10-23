@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -136,39 +136,28 @@ async function renderSection({ waitForIdle = true } = {}) {
 
 const sessionRowLabels = () =>
   screen
-    .getAllByRole('button', { name: /^(Fix authentication|Improve compiler output|Prepare release)$/ })
+    .getAllByRole('link', { name: /^(Fix authentication|Improve compiler output|Prepare release)$/ })
     .map(row => row.getAttribute('aria-label'));
 
 describe('Sessions properties', () => {
-  it("opens on the viewer's own sessions without reading as changed", async () => {
+  it("opens on every owner's sessions in one ungrouped list, with nothing changed", async () => {
     const user = userEvent.setup();
     await renderSection();
 
-    expect(await screen.findByRole('button', { name: 'Fix authentication' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
+    const all = await screen.findByRole('region', { name: 'All sessions' });
+    expect(await within(all).findByRole('link', { name: 'Fix authentication' })).toBeInTheDocument();
+    expect(within(all).getByRole('link', { name: 'Improve compiler output' })).toBeInTheDocument();
+    expect(screen.getAllByRole('region', { name: /sessions$/ })).toHaveLength(1);
     expect(sessionPropertiesTrigger()).toBeInTheDocument();
 
     await openSessionProperties(user);
-    expect(screen.getByRole('menuitem', { name: /^Owner\s*Mine$/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /^Owner\s*All owners$/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /^Group\s*None$/ })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Reset to default' })).toHaveAttribute('aria-disabled', 'true');
     await closeSessionProperties(user);
-
-    await pickSessionProperty(user, 'Owner', 'All owners');
-
-    expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
-    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
-
-    await openSessionProperties(user);
-    await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
-
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
-    });
-    expect(screen.getByRole('button', { name: 'Fix authentication' })).toBeInTheDocument();
-    expect(sessionPropertiesTrigger()).toBeInTheDocument();
   });
 
-  it('says so when the viewer owns no sessions yet', async () => {
+  it('says so when the viewer owns no sessions and picks Mine', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
         HttpResponse.json({ sessions: sessions.filter(session => session.userId !== 'user-me') }),
@@ -177,42 +166,11 @@ describe('Sessions properties', () => {
     const user = userEvent.setup();
     await renderSection();
 
-    expect(await screen.findByText('No sessions of your own.')).toHaveAttribute('role', 'status');
+    expect(await screen.findByRole('link', { name: 'Improve compiler output' })).toBeInTheDocument();
 
-    await pickSessionProperty(user, 'Owner', 'All owners');
+    await pickSessionProperty(user, 'Owner', 'Mine');
 
-    expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
-    expect(screen.queryByText('No sessions of your own.')).not.toBeInTheDocument();
-  });
-
-  it('keeps the Mine default when a control changes before the viewer is known', async () => {
-    let releaseAuth!: () => void;
-    const authGate = new Promise<void>(resolve => {
-      releaseAuth = resolve;
-    });
-    server.use(
-      http.get(`${TEST_BASE_URL}/auth/me`, async () => {
-        await authGate;
-        return HttpResponse.json({
-          authEnabled: true,
-          authenticated: true,
-          user: { userId: 'user-me', name: 'Romain', email: 'romain@example.com' },
-        });
-      }),
-    );
-    const user = userEvent.setup();
-    await renderSection({ waitForIdle: false });
-
-    expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
-    await pickSessionProperty(user, 'Status', 'Working');
-
-    releaseAuth();
-
-    expect(await screen.findByText('No sessions match these filters')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
-    await openSessionProperties(user);
-    expect(screen.getByRole('button', { name: 'Sessions properties, 1 changed' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /^Owner\s*Mine$/ })).toBeInTheDocument();
+    expect(await screen.findByText('No sessions match these filters')).toHaveAttribute('role', 'status');
   });
 
   it('filters by a specific owner and deduplicates owner choices', async () => {
@@ -221,9 +179,9 @@ describe('Sessions properties', () => {
 
     await pickSessionProperty(user, 'Owner', 'Grace Hopper');
 
-    expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Improve compiler output' })).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Fix authentication' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Fix authentication' })).not.toBeInTheDocument();
     });
 
     await openSessionProperty(user, 'Owner');
@@ -235,11 +193,10 @@ describe('Sessions properties', () => {
     const user = userEvent.setup();
     await renderSection();
 
-    await pickSessionProperty(user, 'Owner', 'All owners');
     await pickSessionProperty(user, 'Status', 'Initializing');
 
-    expect(await screen.findByRole('button', { name: 'Prepare release' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Prepare release' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Improve compiler output' })).not.toBeInTheDocument();
 
     await pickSessionProperty(user, 'Owner', 'Mine');
 
@@ -251,20 +208,18 @@ describe('Sessions properties', () => {
     const user = userEvent.setup();
     await renderSection();
 
-    await pickSessionProperty(user, 'Owner', 'All owners');
-    await screen.findByRole('button', { name: 'Improve compiler output' });
+    await screen.findByRole('link', { name: 'Improve compiler output' });
     expect(sessionRowLabels()).toEqual(['Improve compiler output', 'Prepare release', 'Fix authentication']);
 
     await pickSessionProperty(user, 'Sort', 'Last updated');
 
     expect(sessionRowLabels()).toEqual(['Improve compiler output', 'Fix authentication', 'Prepare release']);
-    expect(sessionPropertiesTrigger(2)).toBeInTheDocument();
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
 
     await openSessionProperties(user);
     await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
 
     await waitFor(() => expect(sessionPropertiesTrigger()).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: 'Fix authentication' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
+    expect(sessionRowLabels()).toEqual(['Improve compiler output', 'Prepare release', 'Fix authentication']);
   });
 });

@@ -6,7 +6,7 @@ import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
-import { calculateObservedUsage, isUsageIncomplete } from '../../observability/usage';
+import { calculateObservedUsage, isUsageIncomplete, subtractReportedUsage } from '../../observability/usage';
 import { executeWithContextSync } from '../../observability/utils';
 import { getToolDefinitionsForTracing } from '../../stream/aisdk/v5/compat/prepare-tools';
 import { sendsNativeResponseFormat } from '../../stream/aisdk/v5/execute';
@@ -364,13 +364,14 @@ export class MastraLLMVNext extends MastraBase {
                 // response to the model that actually generated it.
                 responseModel: resolveResponseModelId(props?.providerMetadata, props?.response.modelId),
               },
-              usage: observedUsage,
+              usage: subtractReportedUsage(observedUsage, props?.generationReportedUsage),
               providerMetadata: props?.providerMetadata,
               stepProviderMetadata: props?.steps.map(step => step.providerMetadata),
             });
 
             try {
-              await options?.onFinish?.({ ...props, runId: runId! }, context);
+              const { generationReportedUsage: _generationReportedUsage, ...userProps } = props;
+              await options?.onFinish?.({ ...userProps, runId: runId! }, context);
             } catch (e: unknown) {
               const mastraError = new MastraError(
                 {

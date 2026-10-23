@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Icon, type IconSize } from './Icon';
+import { Bell, Check, ChevronDown, Copy, Folder, Play, Plus, Search, Settings, Trash2, X } from 'lucide-react';
+import { Icon } from './Icon';
+import type { IconSize } from './Icon';
 import {
   AgentIcon,
   AgentCoinIcon,
@@ -8,17 +10,20 @@ import {
   ApiIcon,
   BranchIcon,
   CheckIcon,
+  ClaudeIcon,
   ChevronIcon,
   CommitIcon,
   CrossIcon,
   DbIcon,
   DebugIcon,
+  DeepSeekIcon,
   DeploymentIcon,
   DividerIcon,
   DocsIcon,
   EnvIcon,
   FiltersIcon,
   FolderIcon,
+  GeminiIcon,
   GithubCoinIcon,
   GithubIcon,
   GoogleIcon,
@@ -29,9 +34,16 @@ import {
   LogsIcon,
   McpCoinIcon,
   McpServerIcon,
+  MetaIcon,
   MemoryIcon,
+  MinimaxIcon,
+  MistralIcon,
+  MoonshotIcon,
+  NvidiaIcon,
   OpenAIIcon,
+  OpenRouterIcon,
   PromptIcon,
+  QwenIcon,
   RepoIcon,
   SettingsIcon,
   SlashIcon,
@@ -42,7 +54,10 @@ import {
   VariablesIcon,
   WorkflowCoinIcon,
   WorkflowIcon,
+  XaiIcon,
+  ZaiIcon,
 } from './index';
+import { Button } from '@/ds/components/Button';
 import { Sizes } from '@/ds/tokens/sizes';
 
 const meta: Meta<typeof Icon> = {
@@ -242,32 +257,86 @@ export const ToolIcons: Story = {
   ),
 };
 
+const brandIcons = [
+  { name: 'Github', component: GithubIcon },
+  { name: 'GithubCoin', component: GithubCoinIcon },
+  { name: 'Google', component: GoogleIcon },
+  { name: 'OpenAI', component: OpenAIIcon },
+  { name: 'Claude', component: ClaudeIcon },
+  { name: 'Gemini', component: GeminiIcon },
+  { name: 'DeepSeek', component: DeepSeekIcon },
+  { name: 'OpenRouter', component: OpenRouterIcon },
+  { name: 'Qwen', component: QwenIcon },
+  { name: 'Mistral', component: MistralIcon },
+  { name: 'Z.ai', component: ZaiIcon },
+  { name: 'NVIDIA', component: NvidiaIcon },
+  { name: 'MiniMax', component: MinimaxIcon },
+  { name: 'Meta', component: MetaIcon },
+  { name: 'Moonshot', component: MoonshotIcon },
+  { name: 'xAI', component: XaiIcon },
+];
+
 export const BrandIcons: Story = {
   render: () => (
-    <div className="flex gap-4">
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <GithubIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">Github</span>
+    <div className="grid w-200 grid-cols-6 gap-4">
+      {brandIcons.map(({ name, component: BrandIcon }) => (
+        <div key={name} className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+          <Icon size="lg" className="text-foreground">
+            <BrandIcon />
+          </Icon>
+          <span className="text-caption text-muted-foreground">{name}</span>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
+const strokeGlyphs = [Plus, Search, Settings, ChevronDown, Trash2, Copy, X, Check, Folder, Bell];
+
+// Every lucide icon draws its line from `--icon-stroke-width`, however it is sized.
+// Use this story for before/after shots of a stroke change.
+export const Stroke: Story = {
+  render: () => (
+    <div className="flex flex-col gap-6">
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+        <div key={size} className="flex items-center gap-6">
+          <span className="w-16 text-caption text-muted-foreground">
+            {size} · {Sizes[`icon-${size}`]}
+          </span>
+          {['text-foreground', 'text-muted-foreground'].map(tone => (
+            <div key={tone} className={`flex items-center gap-3 ${tone}`}>
+              {strokeGlyphs.map(Glyph => (
+                <Icon key={Glyph.displayName} size={size}>
+                  <Glyph />
+                </Icon>
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
+      <div className="flex items-center gap-3">
+        <Button size="sm" icon={<Plus />}>
+          Add header
+        </Button>
+        <Button size="md" icon={<Plus />}>
+          Add header
+        </Button>
+        <Button size="lg" icon={<Play />}>
+          Run
+        </Button>
+        <Button size="icon-md" tooltip="Copy">
+          <Copy />
+        </Button>
       </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <GithubCoinIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">GithubCoin</span>
-      </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <GoogleIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">Google</span>
-      </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <OpenAIIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">OpenAI</span>
+      <div className="flex items-center gap-3 text-muted-foreground">
+        <span className="w-16 text-caption">Unwrapped</span>
+        <Search className="size-3" />
+        <Search className="size-3.5" />
+        <Search className="size-4" />
+        <Search className="size-5" />
+        <span className="flex items-center [&>svg]:size-3.5">
+          <Folder />
+        </span>
       </div>
     </div>
   ),

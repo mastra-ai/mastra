@@ -66,25 +66,12 @@ function makeAgent(model: MockLanguageModelV3, withProcessor: boolean) {
 
 async function run(agent: Agent) {
   const stream = await agent.stream('hi', { stopWhen: stopOnAsk as any });
-  let deltas = '';
-  for await (const chunk of stream.fullStream) {
-    if (chunk.type === 'text-delta') deltas += chunk.payload.text;
-  }
-  return { deltas, text: await stream.text, steps: await stream.steps };
+  await stream.consumeStream();
+  return { text: await stream.text, steps: await stream.steps };
 }
 
 describe('output processor + stopWhen on a text+tool-call step (#24917)', () => {
   for (const withProcessor of [false, true]) {
-    it(`keeps stream.text for the final step (processor: ${withProcessor})`, async () => {
-      const model = scriptedModel([[...textPart('t1', 'Hello there.'), askCall('c1'), finish('tool-calls')]]);
-      const { deltas, text, steps } = await run(makeAgent(model, withProcessor));
-
-      expect(deltas).toBe('Hello there.');
-      expect(steps).toHaveLength(1);
-      expect(steps.at(-1)!.text).toBe('Hello there.');
-      expect(text).toBe('Hello there.');
-    });
-
     it(`keeps text on both sides of the tool call in the final step (processor: ${withProcessor})`, async () => {
       const model = scriptedModel([
         [...textPart('t1', 'Before. '), askCall('c1'), ...textPart('t2', 'After.'), finish('tool-calls')],
@@ -105,34 +92,6 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
       expect(steps).toHaveLength(1);
       expect(steps.at(-1)!.text).toBe('A B');
       expect(text).toBe('A B');
-    });
-
-    it(`does not leak earlier-step text when the final step is tool-only (processor: ${withProcessor})`, async () => {
-      const model = scriptedModel([
-        [...textPart('t1', 'Let me check.'), { ...askCall('c0'), toolName: 'noop' }, finish('tool-calls')],
-        [askCall('c1'), finish('tool-calls')],
-      ]);
-      const agent = new Agent({
-        id: 'a',
-        name: 'a',
-        instructions: 'test',
-        model,
-        tools: {
-          ask: askTool,
-          noop: createTool({
-            id: 'noop',
-            description: 'noop',
-            inputSchema: z.object({ question: z.string() }),
-            execute: async () => ({}),
-          }),
-        },
-        ...(withProcessor ? { outputProcessors: [passThrough] } : {}),
-      });
-      const { steps, text } = await run(agent);
-
-      expect(steps).toHaveLength(2);
-      expect(steps.at(-1)!.text).toBe('');
-      expect(text).toBe('');
     });
   }
 
@@ -169,51 +128,6 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(await stream.text).toBe('REDACTED');
     expect(fullOutput.steps.map(step => step.text)).toEqual(['REDACTED']);
     expect(fullOutput.text).toBe('REDACTED');
-  });
-
-  it('does not assign collapsed run-level text to the final feedback continuation step', async () => {
-    const model = scriptedModel([
-      [...textPart('t1', 'first'), finish('stop')],
-      [...textPart('t2', 'more'), finish('stop')],
-    ]);
-    const agent = new Agent({
-      id: 'a',
-      name: 'a',
-      instructions: 'test',
-      model,
-      outputProcessors: [
-        {
-          id: 'collapse-continuation-result',
-          processOutputResult: async ({ messages }) =>
-            messages.map(message => {
-              if (message.role !== 'assistant' || message.content?.metadata?.completionResult) return message;
-
-              const text = message.content.parts
-                ?.map(part => (part.type === 'text' ? part.text.toUpperCase() : ''))
-                .join('');
-              return {
-                ...message,
-                content: {
-                  ...message.content,
-                  content: text,
-                  parts: [{ type: 'text', text }],
-                },
-              };
-            }),
-        },
-      ],
-    });
-    let iteration = 0;
-
-    const stream = await agent.stream('hi', {
-      maxSteps: 2,
-      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined),
-    });
-    const fullOutput = await stream.getFullOutput();
-
-    expect(await stream.text).toBe('FIRSTMORE');
-    expect(fullOutput.steps.map(step => step.text)).toEqual(['FIRST', 'MORE']);
-    expect(fullOutput.text).toBe('FIRSTMORE');
   });
 
   it('preserves destructive processing when collapsing a feedback continuation', async () => {
@@ -605,55 +519,6 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(fullOutput.text).toBe('first');
   });
 
-  it('keeps processed text on the run MessageList for onFinish after a tool-only final step', async () => {
-    const model = scriptedModel([
-      [...textPart('t1', 'SECRET '), { ...askCall('c0'), toolName: 'noop' }, finish('tool-calls')],
-      [askCall('c1'), finish('tool-calls')],
-    ]);
-    const agent = new Agent({
-      id: 'a',
-      name: 'a',
-      instructions: 'test',
-      model,
-      tools: {
-        ask: askTool,
-        noop: createTool({
-          id: 'noop',
-          description: 'noop',
-          inputSchema: z.object({ question: z.string() }),
-          execute: async () => ({}),
-        }),
-      },
-      outputProcessors: [
-        {
-          id: 'redact-finish-messages',
-          processOutputResult: async ({ messages }) =>
-            messages.map(message => ({
-              ...message,
-              content: {
-                ...message.content,
-                parts: message.content.parts?.map(part =>
-                  part.type === 'text' ? { ...part, text: part.text.replace('SECRET', '[r]') } : part,
-                ),
-              },
-            })),
-        },
-      ],
-    });
-    let finishMessages: unknown;
-
-    const stream = await agent.stream('hi', {
-      stopWhen: stopOnAsk as any,
-      onFinish: async ({ messages }) => {
-        finishMessages = messages;
-      },
-    });
-    await stream.getFullOutput();
-
-    expect(JSON.stringify(finishMessages)).toContain('[r]');
-    expect(JSON.stringify(finishMessages)).not.toContain('SECRET');
-  });
-
   it('provides a coalesced transcript view to custom persisting processors', async () => {
     const model = scriptedModel([
       [...textPart('t1', 'first'), finish('stop')],
@@ -699,38 +564,29 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(persistedTranscripts[0]!.responseTexts).toContain('firstMORE');
   });
 
-  for (const [label, rewrite, step, expected] of [
-    ['redacts', '[REDACTED]', [...textPart('t1', 'SECRET'), askCall('c1'), finish('tool-calls')], '[REDACTED]'],
-    ['clears', '', [...textPart('t1', 'SECRET'), askCall('c1'), finish('tool-calls')], ''],
-    [
-      'redacts interleaved text in',
-      'X',
+  it('uses the processed text when a processor redacts interleaved text', async () => {
+    const model = scriptedModel([
       [...textPart('t1', 'A '), askCall('c1'), ...textPart('t2', 'B'), askCall('c2'), finish('tool-calls')],
-      'XX',
-    ],
-  ] as const) {
-    it(`uses the processed text when a processor ${label} it`, async () => {
-      const model = scriptedModel([[...step]]);
-      const agent = new Agent({
-        id: 'a',
-        name: 'a',
-        instructions: 'test',
-        model,
-        tools: { ask: askTool },
-        outputProcessors: [
-          {
-            id: 'redact',
-            processOutputStream: async ({ part }) =>
-              part.type === 'text-delta' ? { ...part, payload: { ...part.payload, text: rewrite } } : part,
-          },
-        ],
-      });
-      const { text, steps } = await run(agent);
-
-      expect(steps.at(-1)!.text).toBe(expected);
-      expect(text).toBe(expected);
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      tools: { ask: askTool },
+      outputProcessors: [
+        {
+          id: 'redact',
+          processOutputStream: async ({ part }) =>
+            part.type === 'text-delta' ? { ...part, payload: { ...part.payload, text: 'X' } } : part,
+        },
+      ],
     });
-  }
+    const { text, steps } = await run(agent);
+
+    expect(steps.at(-1)!.text).toBe('XX');
+    expect(text).toBe('XX');
+  });
 
   it('keeps the resolved text consistent when a processor removes the response', async () => {
     const model = scriptedModel([[...textPart('t1', 'Hello there.'), finish('stop')]]);

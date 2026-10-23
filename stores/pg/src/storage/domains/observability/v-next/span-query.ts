@@ -9,7 +9,12 @@ import type {
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
 import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
-import { compileSpanQueryPredicate, runWithPostgresTraceQueryTimeout } from './trace-query';
+import {
+  compileSpanQueryPredicate,
+  keysetSortBounds,
+  timeToFirstChunkSupported,
+  runWithPostgresTraceQueryTimeout,
+} from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
 const fields = [
@@ -38,6 +43,7 @@ const fields = [
   'experimentId',
   'environment',
   'executionSource',
+  'timeToFirstChunkMs',
 ];
 const identities = identityFields.map(field => `"${field}"`).join(', ');
 const identityOrder = identityFields.map(field => `"${field}" COLLATE "C" ASC NULLS LAST`).join(', ');
@@ -60,11 +66,13 @@ function selectedKeys(rows: SpanQueryIdentity[], values: unknown[]): string {
 function afterCursor(plan: TrustedSpanQueryPlan, values: unknown[]): string {
   if (!plan.cursor) return 'TRUE';
   const cursor = plan.cursor;
-  values.push(cursor.sortValue);
-  const timestamp = `$${values.length}::timestamptz`;
-  const field = `s."${plan.orderBy.field}"`;
-  const terms = [`${field} ${plan.orderBy.direction === 'asc' ? '>' : '<'} ${timestamp}`];
-  const equal = [`${field} = ${timestamp}`];
+  const { past: terms, level } = keysetSortBounds(
+    `s."${plan.orderBy.field}"`,
+    plan.orderBy.direction,
+    cursor.sortValue,
+    values,
+  );
+  const equal = [level];
   for (const key of identityFields) {
     const ref = `s."${key}" COLLATE "C"`;
     const value = cursor[key];
@@ -80,7 +88,15 @@ function afterCursor(plan: TrustedSpanQueryPlan, values: unknown[]): string {
   return `(${terms.join(' OR ')})`;
 }
 
-export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryPlan) {
+/**
+ * The spans `querySpans()` pages through, as a `selected` CTE: the latest completed copy of each
+ * span that starts in the window and matches `where`. `aggregateSpans()` groups the same CTE.
+ * `values` holds the CTEs' parameters; callers append their own.
+ */
+export function compilePostgresSpanSelection(
+  schema: string,
+  plan: Pick<TrustedSpanQueryPlan, 'timeRange' | 'scope' | 'where'>,
+): { ctes: string[]; values: unknown[] } {
   const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
   const scope: string[] = [];
   if (plan.scope) {
@@ -93,8 +109,6 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
   }
   const predicate = plan.where ? compileSpanQueryPredicate(plan.where, values.length + 1) : { sql: 'TRUE', values: [] };
   values.push(...predicate.values);
-  const after = afterCursor(plan, values);
-  values.push(plan.limit + 1);
   const table = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   // Older core still accepts model/provider predicates. Keep their source fields available
   // for that contract; newer core rejects them and only extracts values for the selected page.
@@ -105,11 +119,13 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
   // Completed records win; the greatest end time follows existing getSpan semantics.
   // Payload columns are read only after page selection, inside the same snapshot.
   // A completed span ends at or after it starts, so the end-time bound only prunes partitions.
-  const text = `WITH candidate_ids AS MATERIALIZED (
+  const ctes = [
+    `candidate_ids AS MATERIALIZED (
     SELECT DISTINCT ${identities} FROM ${table}
     WHERE "startedAt" >= $1 AND "startedAt" < $2 AND "endedAt" >= $1 AND NOT "isPending"
       ${scope.length ? `AND ${scope.join(' AND ')}` : ''}
-  ), current_spans AS MATERIALIZED (
+  )`,
+    `current_spans AS MATERIALIZED (
     SELECT DISTINCT ON (${identities})
       ${fields.map(field => `"${field}"`).join(', ')}, "startedAt", "endedAt", "cursorId"::text AS version,
       ${legacyModelFields}
@@ -123,12 +139,25 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
       SELECT "organizationId" IS NULL, COALESCE("organizationId", ''), "resourceId" IS NULL, COALESCE("resourceId", ''), "traceId", "spanId" FROM candidate_ids
     ) ${scope.length ? `AND ${scope.join(' AND ')}` : ''}
     ORDER BY ${identities}, "endedAt" DESC, "cursorId" DESC
-  ), candidates AS (
+  )`,
+    `candidates AS (
     SELECT *, CASE WHEN "hasError" THEN 'error' ELSE NULL END AS error FROM current_spans
-  )
+  )`,
+    `selected AS (
+    SELECT * FROM candidates s WHERE s."startedAt" >= $1 AND s."startedAt" < $2 AND (${predicate.sql})
+  )`,
+  ];
+  return { ctes, values };
+}
+
+export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryPlan) {
+  const { ctes, values } = compilePostgresSpanSelection(schema, plan);
+  const after = afterCursor(plan, values);
+  values.push(plan.limit + 1);
+  const text = `WITH ${ctes.join(', ')}
   SELECT ${[...fields, 'startedAt', 'endedAt', 'durationMs', 'status', 'version'].map(field => `s."${field}"`).join(', ')}
-  FROM candidates s WHERE s."startedAt" >= $1 AND s."startedAt" < $2 AND (${predicate.sql}) AND ${after}
-  ORDER BY s."${plan.orderBy.field}" ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'}, ${identityOrder}
+  FROM selected s WHERE ${after}
+  ORDER BY s."${plan.orderBy.field}" ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${identityOrder}
   LIMIT $${values.length}`;
   return { text, values };
 }
@@ -174,8 +203,9 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
     async tx => {
       const query = compilePostgresSpanQuery(schema, plan);
       const rows = await tx.any<Selected>(query.text, query.values);
-      const selected = rows.map(({ version: _version, startedAt, endedAt, ...row }) => ({
+      const selected = rows.map(({ version: _version, startedAt, endedAt, timeToFirstChunkMs, ...row }) => ({
         ...row,
+        ...(timeToFirstChunkSupported && { timeToFirstChunkMs }),
         startedAt: startedAt.toISOString(),
         endedAt: endedAt.toISOString(),
       }));

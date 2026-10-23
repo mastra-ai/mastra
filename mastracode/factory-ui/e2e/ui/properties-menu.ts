@@ -30,7 +30,12 @@ export async function pickPropertyOption(user: UserEvent, menuLabel: string, pro
   await closePropertiesMenus(user);
 }
 
-export async function togglePropertyOption(user: UserEvent, menuLabel: string, property: string, option: string) {
+export async function togglePropertyOption(
+  user: UserEvent,
+  menuLabel: string,
+  property: string,
+  option: string | RegExp,
+) {
   await openPropertySubmenu(user, menuLabel, property);
   await user.click(await screen.findByRole('menuitemcheckbox', { name: option }));
   await closePropertiesMenus(user);

@@ -938,7 +938,7 @@ const stream = await agent.stream('message for agent')
                     isOptional: true,
                     defaultValue: '300000',
                     description:
-                      'Closes the outer stream after this many ms of idleness between turns. The timer only runs while the wrapper is between turns. Default: 5 minutes.',
+                      'Closes the outer stream after this many ms of idleness between turns. The timer only runs while the wrapper is between turns. Default: `backgroundTasks.untilIdleMaxIdleMs` from the Mastra config, or 5 minutes.',
                   },
                 ],
               },
@@ -1011,7 +1011,7 @@ for await (const chunk of stream.fullStream) {
 
 Set `hideSignals: true` to hide all recognized signal types, or `hideSignals: false` to show all signals. An array selects individual types.
 
-The array accepts `user`, `state`, `reactive`, `notification`, and the legacy aliases `user-message` and `system-reminder`. An omitted option, `false`, or `[]` excludes nothing. Streaming normalizes `system-reminder` to `reactive` and `user-message` to `user`, then matches the encoded signal type in `data-signal` or `data-user-message` chunks. Unknown or malformed signal chunks pass through, as do text, errors, and completion events.
+The array accepts `user`, `state`, `reactive`, `notification`, and the legacy aliases `user-message` and `system-reminder`. An omitted option, `false`, or `[]` excludes nothing. Streaming normalizes `system-reminder` to `reactive` and `user-message` to `user`, then matches the encoded signal type in `data-signal`, `data-user-message`, or `data-user-message-pending` chunks. Unknown or malformed signal chunks pass through, as do text, errors, and completion events.
 
 Exclusions apply after `experimentalTransform`, so transforms still receive the unfiltered input. Adapters consuming `fullStream` inherit the filter, but aggregate `content`, `getFullOutput()`, response messages, callbacks, model context, and saved messages remain unchanged.
 

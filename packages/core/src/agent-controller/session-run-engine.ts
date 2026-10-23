@@ -1007,58 +1007,97 @@ export class SessionRunEngine {
           }
         }
 
-        const approvalPromise = this.#session.approval.arm({
-          toolName,
-          toolCallId,
-          threadId: binding.threadId,
-          runId: binding.runId,
-        });
-        this.#session.emit({
-          type: 'tool_approval_required',
-          threadId: state.threadId,
-          toolCallId,
-          toolName,
-          args: toolArgs,
-        });
-
-        const approval = await approvalPromise;
-
-        // A gated `session.abort()` releases a parked gate as a decline and
-        // defers the stream/signal teardown to us, so the decline can still be
-        // driven through the (live) agent run and persist an `output-denied`
-        // result. Claim that captured origin to detect it: the session's abort
-        // flag is not a usable proxy for "this run was aborted while parked",
-        // because it is shared across run generations and threads — a successor
-        // run's abort (or one scoped to another thread) would otherwise cancel
-        // this parked gate's continuation.
-        const deferredAbortOrigin = this.#session.takeDeferredAbortOrigin();
-        const deferredAbort = deferredAbortOrigin !== undefined;
-
-        if (!deferredAbort && approval.decision === 'approve') {
-          await this.#session.approveToolCall({
+        const armApproval = () => {
+          const promise = this.#session.approval.arm({
+            toolName,
             toolCallId,
-            requestContext: approval.requestContext ?? requestContext,
-            ...binding,
+            threadId: binding.threadId,
+            runId: binding.runId,
           });
-        } else {
-          await this.#session.declineToolCall({
+          this.#session.emit({
+            type: 'tool_approval_required',
+            threadId: state.threadId,
             toolCallId,
-            requestContext: approval.requestContext ?? requestContext,
-            ...binding,
-            declineContext: deferredAbort
-              ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
-              : approval.declineContext,
+            toolName,
+            args: toolArgs,
           });
-        }
+          return promise;
+        };
+        const armedBindingGeneration = this.#session.run.bindingGeneration();
+        let approvalPromise = armApproval();
 
-        if (deferredAbort) {
-          // The denial chunk the agent emits for this decline can never reach
-          // us: we are blocking the consumer loop that would read it, and the
-          // teardown below ends the loop. Settle the call locally so the
-          // display state shows the denied result instead of a call stuck
-          // mid-flight.
-          this.settleToolCallAsDenied(state, { toolCallId, toolName, args: toolArgs });
-          this.#session.completeDeferredAbort(deferredAbortOrigin);
+        while (true) {
+          const approval = await approvalPromise;
+
+          // Detaching the host releases the gate without a decision: the run
+          // stays parked in storage, so there is nothing to resume or settle.
+          if (approval.decision === 'detached') break;
+
+          // A gated `session.abort()` releases a parked gate as a decline and
+          // defers the stream/signal teardown to us, so the decline can still be
+          // driven through the (live) agent run and persist an `output-denied`
+          // result. Claim that captured origin to detect it: the session's abort
+          // flag is not a usable proxy for "this run was aborted while parked",
+          // because it is shared across run generations and threads — a successor
+          // run's abort (or one scoped to another thread) would otherwise cancel
+          // this parked gate's continuation.
+          const deferredAbortOrigin = this.#session.takeDeferredAbortOrigin();
+          const deferredAbort = deferredAbortOrigin !== undefined;
+
+          let dispatchAttempted = false;
+          const onDispatch = () => {
+            dispatchAttempted = true;
+          };
+          try {
+            if (!deferredAbort && approval.decision === 'approve') {
+              await this.#session.approveToolCall(
+                {
+                  toolCallId,
+                  requestContext: approval.requestContext ?? requestContext,
+                  ...binding,
+                },
+                onDispatch,
+              );
+            } else {
+              await this.#session.declineToolCall(
+                {
+                  toolCallId,
+                  requestContext: approval.requestContext ?? requestContext,
+                  ...binding,
+                  declineContext: deferredAbort
+                    ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
+                    : approval.declineContext,
+                },
+                onDispatch,
+              );
+            }
+          } catch (error) {
+            // The gate was released when the answer was accepted. If the resume
+            // failed while the run is still parked on this call, re-arm the gate
+            // so the answer can be retried instead of being lost.
+            if (
+              deferredAbort ||
+              binding.abortSignal?.aborted ||
+              this.#session.run.bindingGeneration() !== armedBindingGeneration ||
+              (dispatchAttempted && !(await this.#isAwaitingApproval(agent, binding, toolCallId)))
+            ) {
+              throw error;
+            }
+            this.#session.emit({ type: 'error', error: getErrorFromUnknown(error) });
+            approvalPromise = armApproval();
+            continue;
+          }
+
+          if (deferredAbort) {
+            // The denial chunk the agent emits for this decline can never reach
+            // us: we are blocking the consumer loop that would read it, and the
+            // teardown below ends the loop. Settle the call locally so the
+            // display state shows the denied result instead of a call stuck
+            // mid-flight.
+            this.settleToolCallAsDenied(state, { toolCallId, toolName, args: toolArgs });
+            this.#session.completeDeferredAbort(deferredAbortOrigin);
+          }
+          break;
         }
         break;
       }
@@ -1439,16 +1478,8 @@ export class SessionRunEngine {
             operationType,
             error,
           });
-
-          if (
-            !Object.hasOwn(payload, 'failurePolicy') ||
-            !Object.hasOwn(payload, 'failureKind') ||
-            payload.failurePolicy !== 'continue' ||
-            payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model')
-          ) {
-            this.abortForOmFailure({ operationType, stage: 'buffering', error });
-            return { message: state.currentMessage };
-          }
+          // Buffering is background work: memory keeps the failed input pending and the
+          // synchronous threshold observation enforces failurePolicy, so the turn continues.
         }
         break;
       }
@@ -1712,6 +1743,29 @@ export class SessionRunEngine {
     });
   }
 
+  /**
+   * Whether storage still lists `toolCallId` as awaiting approval on the run
+   * that parked it. A resume that failed after dispatch may or may not have
+   * consumed the snapshot; only a confirmed pending call is safe to re-arm.
+   */
+  async #isAwaitingApproval(
+    agent: Agent,
+    binding: { threadId?: string; runId?: string; resourceId?: string },
+    toolCallId: string,
+  ): Promise<boolean> {
+    if (!binding.runId || typeof agent.listSuspendedRuns !== 'function') return false;
+    try {
+      const result = await agent.listSuspendedRuns({ threadId: binding.threadId, resourceId: binding.resourceId });
+      return (
+        result?.runs
+          .find(run => run.runId === binding.runId)
+          ?.toolCalls.find(toolCall => toolCall.toolCallId === toolCallId)?.requiresApproval === true
+      );
+    } catch {
+      return false;
+    }
+  }
+
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {
     if (this.hasCurrentMessageContent(state) || !state.lastFinishedMessage) {
       this.finishCurrentMessage(state);
@@ -1727,12 +1781,16 @@ export class SessionRunEngine {
     aborted,
     resourceId,
     threadId,
+    terminalError,
+    abortReason,
   }: {
     suspended?: boolean;
     error?: boolean;
     aborted?: boolean;
     resourceId?: string;
     threadId?: string;
+    terminalError?: string;
+    abortReason?: string;
   }): Promise<void> {
     const reason = error
       ? 'error'
@@ -1743,8 +1801,10 @@ export class SessionRunEngine {
           : 'complete';
     // A follower Session mirrors suspensions from runs it does not own. Once
     // such a run completes (it was resumed elsewhere), its parked calls were
-    // answered, so drop them without a cancellation event. Error and tripwire
-    // finishes retract in their chunk handlers; lease loss keeps them parked.
+    // answered, so drop them without a cancellation event. An aborted run or a
+    // non-success finish (e.g. content-filter) ends the call for good, so
+    // retract it with a cancellation event. Error chunks and tripwires retract
+    // in their chunk handlers; lease loss keeps them parked.
     const runId = this.#session.run.getRunId();
     if (reason === 'complete' && resourceId && threadId && runId) {
       for (const s of this.#session.suspensions.deleteForRun({ resourceId, threadId, runId })) {
@@ -1755,8 +1815,12 @@ export class SessionRunEngine {
           toolCallId: s.toolCallId,
         });
       }
+    } else if (reason === 'aborted') {
+      this.retractFailedRunSuspensions({ resourceId, threadId, runId, reason: ABORTED_BY_USER_REASON });
+    } else if (reason === 'error' && terminalError) {
+      this.retractFailedRunSuspensions({ resourceId, threadId, runId, reason: terminalError });
     }
-    await this.#session.finishAgentRun(reason);
+    await this.#session.finishAgentRun(reason, reason === 'aborted' ? { abortReason } : undefined);
     this.#session.run.reset();
   }
 
@@ -1814,7 +1878,6 @@ export class SessionRunEngine {
     let currentRun: StreamState | undefined;
     let requestContext!: RequestContext;
     let bailed = false;
-    let abortedRunId: string | undefined;
 
     const consume = async (): Promise<void> => {
       for await (const chunk of subscription.stream) {
@@ -1827,8 +1890,9 @@ export class SessionRunEngine {
         if (chunk.type === 'thread-history') continue;
 
         const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
+        const abortedRunId = this.#session.stream.abortedRunId({ subscription });
         if (runId && runId === abortedRunId) continue;
-        if (runId && abortedRunId) abortedRunId = undefined;
+        if (runId && abortedRunId) this.#session.stream.clearAbortedRun();
 
         if (!currentRun) {
           currentRun = this.createStreamState(threadId, resourceId);
@@ -1869,6 +1933,7 @@ export class SessionRunEngine {
             // content-filter refusal) becomes an explicit error so the
             // run never silently stops without a visible terminal state.
             let isError = chunk.type === 'error';
+            let terminalError: string | undefined;
             if (
               currentRun.terminalError &&
               !isError &&
@@ -1877,6 +1942,7 @@ export class SessionRunEngine {
               !suspended
             ) {
               isError = true;
+              terminalError = currentRun.terminalError;
               this.#session.emit({
                 type: 'error',
                 error: new Error(currentRun.terminalError),
@@ -1889,13 +1955,15 @@ export class SessionRunEngine {
               aborted,
               resourceId: currentRun.resourceId,
               threadId: currentRun.threadId,
+              terminalError,
+              abortReason: aborted ? getString(getRecord(chunk.payload)?.reason) : undefined,
             });
             currentRun = undefined;
             if (aborted) {
               // The thread subscription remains live across runs. Ignore any
               // trailing chunks from the aborted run while continuing to drain
               // later signals on this same subscription.
-              abortedRunId = runId ?? undefined;
+              this.#session.stream.markAbortedRun({ subscription, runId: runId ?? null });
             }
           }
         } catch (error) {
@@ -1931,7 +1999,10 @@ export class SessionRunEngine {
       // A closed or hung subscription cannot observe later runs. Detach it so
       // the next message creates a fresh consumer. A persistent subscription
       // stays attached after an abort and continues draining later signals.
-      if ((bailed || abortedRunId) && this.#session.stream.isCurrent({ subscription })) {
+      if (
+        (bailed || this.#session.stream.abortedRunId({ subscription })) &&
+        this.#session.stream.isCurrent({ subscription })
+      ) {
         this.#session.stream.detach();
       }
     } catch (error) {

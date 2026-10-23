@@ -1,9 +1,5 @@
-import {
-  isAppendOnlySince,
-  isBufferedChunkCoveredByCursor,
-  maxObservationCursor,
-  type UpdateBufferedObservationsResult,
-} from '@internal/core/memory';
+import { isAppendOnlySince, isBufferedChunkCoveredByCursor, maxObservationCursor } from '@internal/core/memory';
+import type { UpdateBufferedObservationsResult } from '@internal/core/memory';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
 import type {

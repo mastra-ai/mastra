@@ -52,7 +52,7 @@ function setup({
       listSessionSubscriptions: async () => (follows ? [{ workItemId: ITEM }] : []) as never,
     },
     auditRecorder: { record } as never,
-    messaging: async () => ({ controller: { getSessionByResource: async () => (live ? session : null) } }) as never,
+    messaging: async () => ({ controller: { getSession: async () => (live ? session : null) } }) as never,
   });
   const answer = (input: Record<string, unknown>) =>
     (

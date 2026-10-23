@@ -254,4 +254,131 @@ describe('MCP Server Registry Client Methods', () => {
       });
     });
   });
+
+  describe('MCP server events', () => {
+    const occurrence = {
+      eventId: 'evt-1',
+      name: 'ticket.created',
+      timestamp: '2026-01-01T00:00:00.000Z',
+      data: { id: '1' },
+      cursor: 'c1',
+    };
+    const lastCall = () => (global.fetch as any).mock.calls.at(-1) as [string, RequestInit];
+
+    /** Responds with an SSE body whose chunks are split at arbitrary points. */
+    const mockSse = (chunks: string[], extra: { onCancel?: () => void; keepOpen?: boolean } = {}) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk));
+          if (!extra.keepOpen) controller.close();
+        },
+        cancel: extra.onCancel,
+      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+      );
+    };
+
+    it('lists events with getMcpServerEvents()', async () => {
+      const listed = { events: [], testEmit: false };
+      mockFetchResponse(listed);
+
+      expect(await client.getMcpServerEvents('my server')).toEqual(listed);
+      expect(lastCall()[0]).toBe(`${clientOptions.baseUrl}/api/mcp/my%20server/events`);
+    });
+
+    it('polls with pollMcpServerEvent()', async () => {
+      const polled = { events: [occurrence], cursor: 'c1' };
+      mockFetchResponse(polled);
+
+      const result = await client.pollMcpServerEvent('tickets', 'ticket/created', {
+        arguments: { project: 'web' },
+        cursor: 'c0',
+        maxEvents: 10,
+      });
+
+      expect(result).toEqual(polled);
+      const [url, init] = lastCall();
+      expect(url).toBe(`${clientOptions.baseUrl}/api/mcp/tickets/events/ticket%2Fcreated/poll`);
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body as string)).toEqual({ arguments: { project: 'web' }, cursor: 'c0', maxEvents: 10 });
+    });
+
+    it('emits with emitMcpServerEvent()', async () => {
+      mockFetchResponse({ occurrence: { ...occurrence, eventId: 'mastra-test-1' } });
+
+      const result = await client.emitMcpServerEvent('tickets', 'ticket.created', { id: '9' });
+
+      expect(result.occurrence.eventId).toBe('mastra-test-1');
+      const [url, init] = lastCall();
+      expect(url).toBe(`${clientOptions.baseUrl}/api/mcp/tickets/events/ticket.created/emit`);
+      expect(JSON.parse(init.body as string)).toEqual({ data: { id: '9' } });
+    });
+
+    it('streams frames split across chunks, skips comments and ends on [DONE]', async () => {
+      const event = JSON.stringify({ type: 'event', occurrence });
+      mockSse([
+        'data: {"type":"active","cursor":"c0",',
+        '"truncated":false}\n\n: heartbeat\n\ndata: ',
+        `${event}\n\n`,
+        'data: [DONE]\n\n',
+      ]);
+
+      const frames = [];
+      for await (const frame of client.streamMcpServerEvent('tickets', 'ticket.created', { cursor: null })) {
+        frames.push(frame);
+      }
+
+      expect(frames).toEqual([
+        { type: 'active', cursor: 'c0', truncated: false },
+        { type: 'event', occurrence },
+      ]);
+      const [url, init] = lastCall();
+      expect(url).toBe(`${clientOptions.baseUrl}/api/mcp/tickets/events/ticket.created/stream`);
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body as string)).toEqual({ cursor: null });
+    });
+
+    it('cancels the response body when the signal aborts', async () => {
+      const onCancel = vi.fn();
+      mockSse(['data: {"type":"active","cursor":null,"truncated":false}\n\n'], { onCancel, keepOpen: true });
+      const controller = new AbortController();
+
+      const frames = [];
+      for await (const frame of client.streamMcpServerEvent('tickets', 'ticket.created', {}, controller)) {
+        frames.push(frame);
+        controller.abort();
+      }
+
+      expect(frames).toHaveLength(1);
+      expect(onCancel).toHaveBeenCalled();
+      expect(lastCall()[1].signal?.aborted).toBe(true);
+    });
+
+    it('cancels the response body when the consumer breaks', async () => {
+      const onCancel = vi.fn();
+      mockSse(['data: {"type":"active","cursor":null,"truncated":false}\n\n'], { onCancel, keepOpen: true });
+
+      for await (const _frame of client.streamMcpServerEvent('tickets', 'ticket.created')) {
+        break;
+      }
+
+      expect(onCancel).toHaveBeenCalled();
+    });
+
+    it('rejects on an HTTP error without retrying', async () => {
+      (global.fetch as any).mockResolvedValue(
+        new Response(JSON.stringify({ error: 'This event does not support streaming; poll it instead' }), {
+          status: 400,
+          statusText: 'Bad Request',
+        }),
+      );
+
+      const stream = client.streamMcpServerEvent('tickets', 'build.finished');
+
+      await expect(stream.next()).rejects.toMatchObject({ status: 400 });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      (global.fetch as any).mockReset();
+    });
+  });
 });

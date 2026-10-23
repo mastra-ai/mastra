@@ -4,7 +4,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { OMConfigInfo } from '../../../../../api/types';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { OMSection } from '../OMSection';
@@ -86,8 +86,8 @@ describe('OMSection', () => {
     expect(screen.getByText(/model calls may fail until credentials are configured/)).toBeInTheDocument();
     expect(screen.queryByText('Enabled')).not.toBeInTheDocument();
     // A configured model that is no longer in the catalog still shows, by name.
-    expect(screen.getByRole('combobox', { name: 'Observer model' })).toHaveTextContent('Observer X');
-    expect(screen.getByRole('combobox', { name: 'Reflector model' })).toHaveTextContent('Gemini 3.5 Flash');
+    expect(screen.getByRole('combobox', { name: 'Observer model' })).toHaveValue('Observer X');
+    expect(screen.getByRole('combobox', { name: 'Reflector model' })).toHaveValue('Gemini 3.5 Flash');
   });
 
   it('displays auto intent with its effective model and resets one role independently', async () => {
@@ -128,14 +128,14 @@ describe('OMSection', () => {
     await screen.findByDisplayValue('1,000');
     const observerTrigger = screen.getByRole('combobox', { name: 'Observer model' });
     const reflectorTrigger = screen.getByRole('combobox', { name: 'Reflector model' });
-    expect(observerTrigger).toHaveTextContent('Auto · GPT-5.4 Mini');
-    expect(reflectorTrigger).toHaveTextContent('Reflector X');
+    expect(observerTrigger).toHaveValue('Auto · GPT-5.4 Mini');
+    expect(reflectorTrigger).toHaveValue('Reflector X');
 
     await pickOption(user, reflectorTrigger, /^Auto/);
 
     await waitFor(() => expect(requestBody).toEqual({ modelId: 'auto' }));
-    await waitFor(() => expect(reflectorTrigger).toHaveTextContent('Auto · GPT-5.4 Mini'));
-    expect(observerTrigger).toHaveTextContent('Auto · GPT-5.4 Mini');
+    await waitFor(() => expect(reflectorTrigger).toHaveValue('Auto · GPT-5.4 Mini'));
+    expect(observerTrigger).toHaveValue('Auto · GPT-5.4 Mini');
   });
 
   it('finds a model by its provider and raw id as well as its name', async () => {
@@ -151,9 +151,9 @@ describe('OMSection', () => {
       />,
     );
 
-    await user.click(await screen.findByRole('combobox', { name: 'Observer model' }));
-    const search = await screen.findByPlaceholderText('Search models…');
-
+    // The field itself is the search box: it holds the selected model's name until cleared.
+    const search = await screen.findByRole('combobox', { name: 'Observer model' });
+    await user.clear(search);
     await user.type(search, 'anthropic');
     // The custom-value row stays first; the only catalog match is the Anthropic model.
     await waitFor(() =>
@@ -181,8 +181,8 @@ describe('OMSection', () => {
     expect(await screen.findByRole('status', { name: 'Loading observational-memory settings' })).toBeInTheDocument();
     expect(await screen.findByDisplayValue('1,000')).toBeInTheDocument();
     expect(screen.getByDisplayValue('2,000')).toBeInTheDocument();
-    expect(screen.getByText('Observer model')).toBeInTheDocument();
-    expect(screen.getByText('Reflector model')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Observer model' })).toHaveValue('Observer X');
+    expect(screen.getByRole('combobox', { name: 'Reflector model' })).toHaveValue('Reflector X');
     expect(screen.getByRole('radio', { name: 'Auto' })).toHaveAttribute('aria-checked', 'true');
   });
 
@@ -199,7 +199,7 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Messages before observation' });
+    const input = await screen.findByRole('textbox', { name: 'Observe after' });
     expect(input).toHaveValue('1,000');
     await user.clear(input);
     await user.type(input, '5000');
@@ -223,7 +223,7 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Observations before reflection' });
+    const input = await screen.findByRole('textbox', { name: 'Reflect after' });
     expect(input).toHaveValue('2,000');
     const row = input.closest<HTMLElement>('[data-slot=input-number-group]');
     if (!row) throw new Error('Expected the threshold stepper group');
@@ -252,7 +252,7 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Messages before observation' });
+    const input = await screen.findByRole('textbox', { name: 'Observe after' });
     await user.clear(input);
     await user.type(input, '2000');
     await user.tab();
@@ -285,7 +285,7 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Messages before observation' });
+    const input = await screen.findByRole('textbox', { name: 'Observe after' });
     await user.clear(input);
     await user.tab();
 
@@ -318,7 +318,7 @@ describe('OMSection', () => {
     renderWithProviders(<OMSection models={models} />);
 
     const observerTrigger = await screen.findByRole('combobox', { name: 'Observer model' });
-    expect(observerTrigger).toHaveTextContent('Observer X');
+    expect(observerTrigger).toHaveValue('Observer X');
     await pickOption(user, observerTrigger, /openai\/reflector-x/);
 
     await waitFor(() => expect(requestBody).toEqual({ modelId: 'openai/reflector-x' }));
@@ -342,5 +342,26 @@ describe('OMSection', () => {
 
     await waitFor(() => expect(requestBody).toEqual({ value: true }));
     await waitFor(() => expect(screen.getByRole('radio', { name: 'On' })).toHaveAttribute('aria-checked', 'true'));
+  });
+
+  it('keeps the attachment setting when the Attachments label is clicked', async () => {
+    let attachmentWrites = 0;
+    server.use(
+      http.get(OM_URL, () => HttpResponse.json({ config: { ...baseConfig, observeAttachments: false } })),
+      http.put(`${OM_URL}/observe-attachments`, () => {
+        attachmentWrites += 1;
+        return HttpResponse.json({ ok: true, config: { ...baseConfig, observeAttachments: 'auto' } });
+      }),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(<OMSection models={models} />);
+
+    await screen.findByDisplayValue('1,000');
+    await user.click(screen.getByText('Attachments'));
+    await waitForMutationsIdle(client);
+
+    expect(attachmentWrites).toBe(0);
+    expect(screen.getByRole('radio', { name: 'Off' })).toHaveAttribute('aria-checked', 'true');
   });
 });

@@ -13,6 +13,7 @@ import { safeClose, safeEnqueue } from '../../stream/base';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom, isDataChunk } from '../../stream/types';
+import { rebindProcessorTools } from '../../utils';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
 import { REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
@@ -37,8 +38,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
   toolCallConcurrency,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
-  return new ReadableStream<ChunkType<OUTPUT>>({
-    start: async streamController => {
+  const loopSource = {
+    start: async (streamController: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
       // Stamp chunks when the loop produces them; consumers may read them much later.
       const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
         enqueue: chunk => {
@@ -333,12 +334,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // which close over that request's requestContext. Let the tools built for this call
         // replace the ones the previous request configured, but keep the ones a processor added
         // or swapped in, since the suspended call may be one of them and the processors do not
-        // run again before it resumes.
+        // run again before it resumes. Processor-added tools are rebuilt for this call's
+        // requestContext instead, so an approved one runs with the approver's context (#27544).
         const runScope = rest.mastra.__getRunScope(runId);
         const previousStepTools = resumeContext ? runScope?.get(STEP_TOOLS_KEY) : undefined;
         if (previousStepTools) {
           const previousRequestTools = runScope!.get(REQUEST_TOOLS_KEY);
-          const stepTools = { ...previousStepTools };
+          const stepTools = rebindProcessorTools({ ...previousStepTools }, requestContext);
           for (const [name, tool] of Object.entries(rest.tools ?? {})) {
             // A name the previous request configured but the step tools lack was withheld by a processor.
             const refresh =
@@ -556,6 +558,23 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           rest.mastra?.__unregisterInternalWorkflow(agenticLoopWorkflow.id, runId);
         }
       }
+    },
+  };
+
+  // A rejected `start` would error the stream at once, and erroring a ReadableStream discards every
+  // chunk still queued for a reader that has not caught up (e.g. one that began reading late). Hold
+  // the failure until `pull` runs, which only happens once the queue is empty.
+  let failure: { error: unknown } | undefined;
+  return new ReadableStream<ChunkType<OUTPUT>>({
+    start: async streamController => {
+      try {
+        await loopSource.start(streamController);
+      } catch (error) {
+        failure = { error };
+      }
+    },
+    pull: streamController => {
+      if (failure) streamController.error(failure.error);
     },
   });
 }

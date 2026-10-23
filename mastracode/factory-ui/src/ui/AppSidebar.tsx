@@ -1,10 +1,9 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
-import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 
 import { SidebarUserMenu } from './domains/auth/components/SidebarUserMenu';
 import { FactorySection } from './domains/factory/components/FactorySection';
-import { SidebarActivityLink } from './domains/factory/components/SidebarActivityLink';
 import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
 import { useSettingsOpen } from './domains/settings/hooks/useSettingsOpen';
@@ -49,6 +48,7 @@ function BetaBadge() {
  */
 export function AppSidebar() {
   const settingsOpen = useSettingsOpen();
+  const { desktopState } = useSidebar();
 
   return (
     <Sidebar aria-label="Main sidebar" className="h-full">
@@ -58,6 +58,8 @@ export function AppSidebar() {
           title={<BetaBadge />}
         />
         <SidebarGlobalSearchButton />
+        {/* Collapsed, the sidebar is hidden and the page header carries the toggle (useSidebarHeaderSlots) */}
+        {desktopState !== 'collapsed' && <Sidebar.Trigger />}
       </Sidebar.CommandHeader>
       <Sidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
         {settingsOpen ? (
@@ -74,9 +76,8 @@ export function AppSidebar() {
           </div>
         )}
       </Sidebar.Nav>
-      <Sidebar.Footer aria-label="Activity, account, and settings">
+      <Sidebar.Footer aria-label="Account and settings">
         <Sidebar.NavList>
-          <SidebarActivityLink />
           <SidebarUserMenu />
         </Sidebar.NavList>
       </Sidebar.Footer>

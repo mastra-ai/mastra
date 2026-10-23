@@ -91,6 +91,7 @@ interface ExternalWorkItemSource {
   integrationId: string;
   type: string;
   externalId: string;
+  workspaceId?: string;
   url?: string;
 }
 
@@ -171,6 +172,21 @@ function toWireCreateInput(input: CreateWorkItemInput): WireCreateWorkItemInput 
   return { ...rest, ...(externalSource ? { externalSource } : {}) };
 }
 
+function slackThreadUrl({ workspaceId, externalId }: ExternalWorkItemSource): string | null {
+  if (!workspaceId) return null;
+  const [, channelId, threadTs] = /^slack:([^:]+):(\d+\.\d+)?$/.exec(externalId) ?? [];
+  if (!channelId) return null;
+  const channelUrl = `https://app.slack.com/client/${encodeURIComponent(workspaceId)}/${encodeURIComponent(channelId)}`;
+  return threadTs ? `${channelUrl}/thread/${encodeURIComponent(`${channelId}-${threadTs}`)}` : channelUrl;
+}
+
+function externalSourceUrl(source: ExternalWorkItemSource | null): string | null {
+  if (!source) return null;
+  // A Slack card's saved `url` is the Factory session it started, never the Slack thread.
+  if (sourceFromExternalSource(source) === 'slack-thread') return slackThreadUrl(source);
+  return source.url ?? null;
+}
+
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
   const { factoryProjectId, externalSource, metadata, commentCount, feedActivityAt, triageType, acceptedAt, ...rest } =
     item;
@@ -179,7 +195,7 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
     githubProjectId: factoryProjectId,
     source: sourceFromExternalSource(externalSource),
     sourceKey: externalSource?.externalId ?? null,
-    url: externalSource?.url ?? null,
+    url: externalSourceUrl(externalSource),
     metadata: metadata ?? {},
     commentCount: commentCount ?? 0,
     feedActivityAt: feedActivityAt ?? null,

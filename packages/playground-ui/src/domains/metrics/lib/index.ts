@@ -3,6 +3,7 @@ export { CHART_COLORS } from './chart-colors';
 export {
   formatAxisCount,
   formatAxisDuration,
+  formatAxisUsd,
   formatCount,
   formatDuration,
   formatPercent,

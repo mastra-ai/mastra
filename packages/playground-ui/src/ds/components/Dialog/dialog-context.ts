@@ -5,11 +5,13 @@ export type DialogIntent = 'default' | 'destructive';
 export type DialogContextValue = {
   intent: DialogIntent;
   pending: boolean;
+  isDrawer: boolean;
 };
 
 export const DialogContext = createContext<DialogContextValue>({
   intent: 'default',
   pending: false,
+  isDrawer: false,
 });
 
 export function useDialogContext() {

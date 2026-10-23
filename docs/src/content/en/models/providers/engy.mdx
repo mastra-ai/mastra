@@ -7,7 +7,7 @@ description: "Browse engy model IDs, capabilities, context windows, and pricing.
 
 # <img src="https://models.dev/logos/engy.svg" alt="engy logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />engy
 
-Access 8 engy models through Mastra's model router. Authentication is handled automatically using the `ENGY_API_KEY` environment variable.
+Access 9 engy models through Mastra's model router. Authentication is handled automatically using the `ENGY_API_KEY` environment variable.
 
 Learn more in the [engy documentation](https://engy.ai/pricing).
 
@@ -59,15 +59,27 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "engy/deepseek-v4.1-flash",
-    "imageInput": true,
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
-    "inputCost": 0.04,
-    "outputCost": 0.08
+    "inputCost": 0.03,
+    "outputCost": 0.12
+  },
+  {
+    "model": "engy/deepseek-v4.1-flash-1017",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.03,
+    "outputCost": 0.12
   },
   {
     "model": "engy/glm-5.2",

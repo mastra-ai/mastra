@@ -27,15 +27,15 @@ describe('TokenUsageCard', () => {
     expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
   });
 
-  it('only offers "View in Traces" with a handler, and calls it', async () => {
+  it('only offers "View in traces" with a handler, and calls it', async () => {
     seedMetrics();
     const onViewTraces = vi.fn();
     const { unmount } = renderInMetrics(<TokenUsageCard />);
     await screen.findByText('1.30K');
-    expect(screen.queryByRole('button', { name: 'View in Traces' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'View in traces' })).toBeNull();
     unmount();
     renderInMetrics(<TokenUsageCard onViewTraces={onViewTraces} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'View in Traces' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View in traces' }));
     expect(onViewTraces).toHaveBeenCalledOnce();
   });
 });

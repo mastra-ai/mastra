@@ -148,18 +148,6 @@ for await (const chunk of stream) {
     "outputCost": null
   },
   {
-    "model": "xai/grok-imagine-image-quality",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 16000,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "xai/grok-imagine-video",
     "imageInput": true,
     "audioInput": false,
@@ -253,7 +241,13 @@ const response = await agent.generate("Hello!", {
   content={[
     {
         "name": "reasoningEffort",
-        "type": "\"none\" | \"low\" | \"medium\" | \"high\" | undefined",
+        "type": "\"low\" | \"high\" | \"none\" | \"medium\" | \"xhigh\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "reasoningSummary",
+        "type": "\"auto\" | \"concise\" | \"detailed\" | undefined",
         "description": "",
         "isOptional": true
     },
@@ -270,14 +264,62 @@ const response = await agent.generate("Hello!", {
         "isOptional": true
     },
     {
-        "name": "parallel_function_calling",
+        "name": "minP",
+        "type": "number | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "maxTurns",
+        "type": "number | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "parallelToolCalls",
         "type": "boolean | undefined",
         "description": "",
         "isOptional": true
     },
     {
-        "name": "searchParameters",
-        "type": "{ mode: \"off\" | \"auto\" | \"on\"; returnCitations?: boolean | undefined; fromDate?: string | undefined; toDate?: string | undefined; maxSearchResults?: number | undefined; sources?: ({ ...; } | ... 2 more ... | { ...; })[] | undefined; } | undefined",
+        "name": "promptCacheKey",
+        "type": "string | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "safetyIdentifier",
+        "type": "string | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "serviceTier",
+        "type": "\"default\" | \"priority\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "store",
+        "type": "boolean | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "previousResponseId",
+        "type": "string | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "user",
+        "type": "string | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "include",
+        "type": "(\"file_search_call.results\" | \"web_search_call.action.sources\" | \"code_interpreter_call.outputs\" | \"reasoning.encrypted_content\" | \"no_inline_citations\")[] | null | undefined",
         "description": "",
         "isOptional": true
     }

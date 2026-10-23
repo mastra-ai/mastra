@@ -1,5 +1,448 @@
 # @mastra/server
 
+## 1.80.0-alpha.0
+
+### Minor Changes
+
+- Added `POST /observability/spans/aggregate`, which groups and measures individual spans (counts, durations, error rates, tokens, cost) over a time window. `GET /observability/capabilities` now reports `spanAggregate`; the route returns 501 when the configured observability store does not support span aggregation. ([#27827](https://github.com/mastra-ai/mastra/pull/27827))
+
+  `POST /observability/traces/aggregate` and `POST /observability/spans/aggregate` now return a structured 503 (`TRACE_QUERY_RESOURCE_LIMIT`) when a query exceeds a database resource limit, matching `/spans/query`. Previously the trace aggregate route returned a 500.
+
+  `POST /api/observability/spans/aggregate`:
+
+  ```json
+  {
+    "timeRange": { "from": "2026-10-01T00:00:00Z", "to": "2026-10-08T00:00:00Z" },
+    "where": { "op": "eq", "left": { "path": "spanType" }, "right": { "literal": "agent_run" } },
+    "groupBy": ["status"],
+    "interval": "1d",
+    "measures": ["count"]
+  }
+  ```
+
+### Patch Changes
+
+- Custom routes registered with `registerApiRoute` now keep the status and message of an `HTTPException` they throw, on every server adapter (Hono, Express, Fastify, Koa, Elysia and NestJS). Before this fix, the client got a generic `500 Internal Server Error` instead. ([#28216](https://github.com/mastra-ai/mastra/pull/28216))
+
+  ```ts
+  import { HTTPException } from 'hono/http-exception';
+
+  registerApiRoute('/widgets/:id', {
+    method: 'GET',
+    handler: async c => {
+      throw new HTTPException(404, { message: 'Widget not found' }); // client gets 404 { "error": "Widget not found" }
+    },
+  });
+  ```
+
+  An `HTTPException` with a custom `res` returns that response, headers included. Other errors still return a generic 500 and are logged on the server.
+
+- Fixed dataset schema updates showing "0 items fail validation" in Studio on Express, Fastify, Koa, Elysia and NestJS servers. When existing items no longer match a new dataset schema, every server adapter now returns those items in the `400` response body under `cause.failingItems`. Before this fix, only Hono did. No other error `cause` is sent to clients. ([#28202](https://github.com/mastra-ai/mastra/pull/28202))
+
+- Fixed Studio overrides for file-based agents to store and export only fields allowed by the agent's `editor` ownership settings. Description-only tool edits cannot change tool selection or rules. Conditional description overrides are rejected when project-owned variant rules are unavailable. ([#28159](https://github.com/mastra-ai/mastra/pull/28159))
+
+- Fixed MCP tool calls continuing to run after the client disconnects on the Hono, Elysia and Next adapters. Closing the connection during an in-flight `tools/call` over Streamable HTTP now fires the tool's `abortSignal` right away, matching Express, Fastify, Koa and NestJS. Previously the signal only fired after the tool had finished. ([#28217](https://github.com/mastra-ai/mastra/pull/28217))
+
+- Dataset item schema validation errors now tell you which fields failed, on every server adapter (Hono, Express, Fastify, Koa, Elysia, NestJS). Adding or updating an item whose `input` or `groundTruth` doesn't match the dataset schema now returns a `400` whose `cause` lists the failing field paths and their messages. Submitted values are never included. ([#28211](https://github.com/mastra-ai/mastra/pull/28211))
+
+  ```json
+  {
+    "error": "Validation failed for input: Invalid input: expected string, received number",
+    "cause": {
+      "field": "input",
+      "errors": [{ "path": "/question", "message": "Invalid input: expected string, received number" }]
+    }
+  }
+  ```
+
+- Studio session cookies are now host-only, so a session is never sent to other deployments on a shared domain. ([#28168](https://github.com/mastra-ai/mastra/pull/28168))
+
+  `@mastra/auth-studio`: on secure deployments `MastraAuthStudio` issues `__Host-wos-session` (`Secure`, `Path=/`, no `Domain`). `MASTRA_COOKIE_DOMAIN` is no longer used as the cookie `Domain`. A legacy `wos-session` cookie is still accepted on read, but only so it can be re-issued as `__Host-wos-session`. The new `getLegacySessionClearCookies()` expires the legacy `wos-session` on the current host, on `MASTRA_COOKIE_DOMAIN`, and on each domain in `MASTRA_LEGACY_COOKIE_DOMAINS` (or the `legacyCookieDomains` option). Plain-http `localhost` dev keeps an unprefixed host-only cookie; use `secureCookies` to override. An explicit `cookieDomain` option still issues a `wos-session` cookie with that `Domain`.
+
+  `@mastra/server`: the SSO callback, `POST /auth/refresh` and `POST /auth/logout` responses now also send the provider's `getLegacySessionClearCookies()`.
+
+  `@mastra/factory`: the default Studio provider no longer derives `Domain=.mastra.cloud` from `publicUrl`. Its sign-in and sign-out responses also expire legacy session cookies.
+
+  `@mastra/core`: `ISessionProvider` gains the optional `getLegacySessionClearCookies()`.
+
+- Fixed route permission checks being skipped for Studio requests on the Express and Elysia adapters when RBAC is configured only under `studio`. Authenticated Studio users without a route's required permission now get a 403 instead of being allowed through. Also fixed the default-deny check for auth configs without `authorize` or `rules` so it uses Studio RBAC for Studio requests. ([#28199](https://github.com/mastra-ai/mastra/pull/28199))
+
+- Updated dependencies [[`a15ea70`](https://github.com/mastra-ai/mastra/commit/a15ea70e71ca57242fa61b23e7f0178d77f9af4b), [`c253e13`](https://github.com/mastra-ai/mastra/commit/c253e13ac627d0325f8665004f7af8a49805a9a4), [`c8f8e41`](https://github.com/mastra-ai/mastra/commit/c8f8e410d39a29b8b69cb7bf90cc9a774cb956f5), [`08640de`](https://github.com/mastra-ai/mastra/commit/08640de350ff9183c1d9ef568fde4c6ccdf181e4), [`a1e248b`](https://github.com/mastra-ai/mastra/commit/a1e248bfe0776ab6ca2a55fed3c423b08fb5ae03), [`0afde2c`](https://github.com/mastra-ai/mastra/commit/0afde2c114aa02b0186ae963c8c83796f8801b60), [`a5a9179`](https://github.com/mastra-ai/mastra/commit/a5a9179daa5ac1ed49447265038208c9f96cd0f8), [`8e1247c`](https://github.com/mastra-ai/mastra/commit/8e1247cb26fc1a3cd1c2ac6edaf34fddad897852), [`ed76bdc`](https://github.com/mastra-ai/mastra/commit/ed76bdcc88e09c0f7f0da14ffadca62b1b4a2409), [`2f655e5`](https://github.com/mastra-ai/mastra/commit/2f655e53fcae10a2423e0194a113ce52e70580fe), [`be5c929`](https://github.com/mastra-ai/mastra/commit/be5c9292ac6d4beb7f1020d0dc745edd18842f3d), [`e39aa42`](https://github.com/mastra-ai/mastra/commit/e39aa4237c81a2eb546a899c9739c96d6359737f), [`e20bbd0`](https://github.com/mastra-ai/mastra/commit/e20bbd0ef40475bda611ddfd8ea2721ddac3642c), [`c9ff73d`](https://github.com/mastra-ai/mastra/commit/c9ff73dd24e9473cb0008857105367c99ba839cb), [`7d58088`](https://github.com/mastra-ai/mastra/commit/7d580884fbf1fb5d90e0761272e2480ed01da70f), [`db2a1a6`](https://github.com/mastra-ai/mastra/commit/db2a1a659ecb057ae9ff6798a501ed33dd38b7c7), [`6a4a607`](https://github.com/mastra-ai/mastra/commit/6a4a607e710000e46790e20f28c2355af9ca2a05), [`de53c27`](https://github.com/mastra-ai/mastra/commit/de53c27a70dbd0c362384691459648043edbee72), [`d3f5000`](https://github.com/mastra-ai/mastra/commit/d3f500024f7b0c107c3786757b3f5481f029d061), [`8ae87fa`](https://github.com/mastra-ai/mastra/commit/8ae87fadd01daa128086e015473881bf55d6e47b), [`20f40eb`](https://github.com/mastra-ai/mastra/commit/20f40ebf5623b059336f4c3000d47755941b4451), [`35806cb`](https://github.com/mastra-ai/mastra/commit/35806cb9b62dfed212b238d00148341d8b2f68ac), [`2fed0ad`](https://github.com/mastra-ai/mastra/commit/2fed0ad258322811ea7f2107f1121c6d5dee1c59), [`6fea510`](https://github.com/mastra-ai/mastra/commit/6fea51000dfc4f249993a7d3959ad41ca6c422ca), [`bfce5b6`](https://github.com/mastra-ai/mastra/commit/bfce5b6982dc17a6944484b1ee9b333f6f5023d6), [`95c6e7c`](https://github.com/mastra-ai/mastra/commit/95c6e7caf4929d941f958e3f146b551e25eaeef3), [`2829b0e`](https://github.com/mastra-ai/mastra/commit/2829b0eae687d36c8f864eba4051225ae3b82343), [`e053569`](https://github.com/mastra-ai/mastra/commit/e05356995ee8c807516d8aff836a8363dba7eee6), [`a9ad47d`](https://github.com/mastra-ai/mastra/commit/a9ad47d8c3186e51142b9c1a3ed1e8e29ade2338), [`cf0ca8b`](https://github.com/mastra-ai/mastra/commit/cf0ca8b55d67a3ccf6ee7835e4dd2addea0c82a8), [`875a657`](https://github.com/mastra-ai/mastra/commit/875a65748d5e03b436bab01d7f9fe782fa2941e7), [`d3e8ec7`](https://github.com/mastra-ai/mastra/commit/d3e8ec74e90bedefc28414e459ec9c5d52c97ccc), [`d58fe2a`](https://github.com/mastra-ai/mastra/commit/d58fe2ac5cd64a96dca05657f07df18f23db14e1), [`bd508a2`](https://github.com/mastra-ai/mastra/commit/bd508a2dec8c550baec245bfffc2d0853386e2eb), [`578cb67`](https://github.com/mastra-ai/mastra/commit/578cb670bd8621538eda4afc1f25139e5903aab9), [`2ac8cf1`](https://github.com/mastra-ai/mastra/commit/2ac8cf1435ba3abae9dba7b6c34f1c02f75eab21), [`875a657`](https://github.com/mastra-ai/mastra/commit/875a65748d5e03b436bab01d7f9fe782fa2941e7), [`307b711`](https://github.com/mastra-ai/mastra/commit/307b711bbe73132f1f319c3326333d49bc23b79d), [`dc10589`](https://github.com/mastra-ai/mastra/commit/dc1058900dd9be01638d43491ddfd2037da12bac), [`339da0b`](https://github.com/mastra-ai/mastra/commit/339da0bef7e2e5570f533f6b41abbd746190bffb), [`8c61247`](https://github.com/mastra-ai/mastra/commit/8c6124708341d699c3b1f3bb19f19be468923483), [`5c56910`](https://github.com/mastra-ai/mastra/commit/5c56910b2647e11cbb6880431e556471b25ba949), [`17444a7`](https://github.com/mastra-ai/mastra/commit/17444a7e46b656b3877faad6e61d5637f435b291), [`f156ad0`](https://github.com/mastra-ai/mastra/commit/f156ad0b7ed6b0ba286efd9040c061c9240d55c3)]:
+  - @mastra/core@1.80.0-alpha.0
+
+## 1.79.0
+
+### Minor Changes
+
+- **Breaking:** Agent controller session routes are addressed by session id: `/agent-controller/:controllerId/sessions/:sessionId/...`. The `sessionScope` param is removed; requests that still send it, in the query or the create body, get a 400 that names `sessionId`. ([#27336](https://github.com/mastra-ai/mastra/pull/27336))
+
+  `POST /agent-controller/:controllerId/sessions` takes `resourceId` plus an optional `sessionId` (and `threadId`). `resourceId` may be omitted when `sessionId` is sent; the session then resumes on the resource it already has. Without a `sessionId` the session id is the `resourceId`, so callers that never passed one reach the same URLs as before. Thread listing returns every thread of the session's resource. When a session is no longer live (for example after a restart), the routes recreate it on the resource of the thread with the session's id, falling back to the session id itself.
+
+  ```http
+  # Before
+  POST /agent-controller/code/sessions        { "resourceId": "repo-1", "sessionScope": "run-a" }
+  POST /agent-controller/code/sessions/repo-1/messages?sessionScope=run-a
+
+  # After
+  POST /agent-controller/code/sessions        { "resourceId": "repo-1", "sessionId": "run-a" }
+  POST /agent-controller/code/sessions/run-a/messages
+  ```
+
+- Trace and span queries can now sort by `timeToFirstChunkMs`. The new `traceQueryTimeToFirstChunkSort` capability tells you whether the configured observability store supports it. When it doesn't, the sort returns `501` with a clear message before the store runs. ([#27473](https://github.com/mastra-ai/mastra/pull/27473))
+
+- Added a route to take ownership of an agent controller thread. The new owner is the authenticated user from the request context, so clients cannot assign ownership to someone else. Requests without an authenticated user id are rejected with 401. The thread must belong to the session's resource (otherwise 404), and when fine-grained authorization is configured the caller needs `memory:write` on the thread. ([#27043](https://github.com/mastra-ai/mastra/pull/27043))
+
+  ```http
+  POST /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner
+  → { "ok": true, "ownerId": "user-123" }
+  ```
+
+- Added thread rows to `POST /observability/threads/query` and the `threadQueryRows` capability. ([#27652](https://github.com/mastra-ai/mastra/pull/27652))
+
+  **Breaking contract change:** Use a top-level time selector for thread rows. Legacy identity requests remain supported. Unsupported thread-row requests return a structured `501` error.
+
+  ```ts
+  // Before
+  const before = { traces: { timeRange: { from, to } } };
+  // After
+  const after = { timeRange: { traces: { from, to } } };
+  ```
+
+- Added `spanQueryContextFields` to observability capabilities so clients can check support for expanded `querySpans()` filters. ([#27807](https://github.com/mastra-ai/mastra/pull/27807))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  const supportsContextFilters = capabilities.spanQueryContextFields === true;
+  ```
+
+- Added experimental routes for inspecting MCP server events: ([#27674](https://github.com/mastra-ai/mastra/pull/27674))
+
+  - `GET /mcp/:serverId/events` lists the server's event types.
+  - `POST /mcp/:serverId/events/:eventName/poll` polls an event type.
+  - `POST /mcp/:serverId/events/:eventName/stream` streams occurrences as server-sent events until the client disconnects.
+  - `POST /mcp/:serverId/events/:eventName/emit` sends a test event. It only exists under `mastra dev`; elsewhere it returns 404.
+
+  MCP server list and detail responses include `events_capability: true` when the server declares events. Errors return generic messages; details are logged on the server. Opening a stream past the MCP server's `maxStreams` limit returns 429. Poll and stream run the event's `authorize` hook with the caller's request context and return 403 when it denies the caller.
+
+- Added a `datasetIds` filter to dataset listing, so you can fetch specific datasets by ID in one request. All matches come back on one page, up to 100 IDs. ([#27255](https://github.com/mastra-ai/mastra/pull/27255))
+
+  ```ts
+  const { datasets } = await client.listDatasets({ datasetIds: ['dataset-1', 'dataset-2'] });
+  ```
+
+- Trace queries, trace aggregates, and thread queries now return a 422 when they use the root span's `entityId` at trace scope and the configured observability store does not support it, instead of failing with a 500. For those stores, trace-query field discovery also omits trace-scope `entityId` from its field list and `aggregate.dimensions`. A new `traceQueryRootEntityId` capability reports whether the store supports it. Span-scope `entityId` inside `spans.some` keeps working on every store. ([#27684](https://github.com/mastra-ai/mastra/pull/27684))
+
+  ```ts
+  const { capabilities } = await mastraClient.getObservabilityCapabilities();
+  if (capabilities.traceQueryRootEntityId) {
+    await mastraClient.aggregateTraces({ timeRange, groupBy: ['entityId'], measures: ['count'] });
+  }
+  ```
+
+- Trace queries, trace aggregates, and thread queries now return a 422 when they use the root span's `name` or `spanType` and the configured observability store does not support them, instead of failing with a 500. For those stores, trace-query field discovery also omits both fields from its field list and `aggregate.dimensions`. A new `traceQueryRootSpanFields` capability reports whether the store supports them. ([#27321](https://github.com/mastra-ai/mastra/pull/27321))
+
+  ```ts
+  const { capabilities } = await mastraClient.getObservabilityCapabilities();
+  if (capabilities.traceQueryRootSpanFields) {
+    await mastraClient.aggregateTraces({ timeRange, groupBy: ['name'], measures: ['count'] });
+  }
+  ```
+
+- Added context and parent/root entity fields to `querySpans()`. ([#27272](https://github.com/mastra-ai/mastra/pull/27272))
+
+  **Breaking:** `querySpans()` no longer accepts `model` and `provider` filters or returns `cost`, `inputTruncated`, `outputTruncated` and `errorTruncated`.
+
+- Agent controller session routes no longer start a session as a side effect. Only `POST /agent-controller/:controllerId/sessions` starts one. Before, a message, model switch or state write that reached the server first created the session on a new random thread. The write then landed on a thread the client never read, so it looked lost. ([#27474](https://github.com/mastra-ai/mastra/pull/27474))
+
+  Every other session route now acts on a started session. After a server restart it rebuilds the session from its stored thread. If the session was never started, the route returns `404` and creates nothing.
+
+  ```ts
+  const session = client.getAgentController('code').session(resourceId);
+  await session.create({ threadId }); // start first
+  await session.sendMessage('Hello'); // 404 if the session was never started
+  ```
+
+  `AgentController.createSession` accepts `resumeOnly: true` to get this behavior. It throws `SessionNotStartedError` when no stored thread matches. Factory now starts the session on its own thread when the session is created, so the first prompt can be sent right away.
+
+### Patch Changes
+
+- Fixed client tools failing with `ToolNotFoundError` after a tool approval. `approveToolCall`, `declineToolCall`, `approveToolCallGenerate` and `declineToolCallGenerate` now accept `clientTools` (and `clientToolsResolver`) and send them to the server, so the model can call a client tool after the approval decision. `approveToolCall` and `declineToolCall` also accept `memory`; pass the same thread and resource as the original call so client-tool results and the final answer are saved to that thread. ([#27744](https://github.com/mastra-ai/mastra/pull/27744))
+
+  ```ts
+  const stream = await agent.approveToolCall({
+    runId,
+    toolCallId,
+    clientTools,
+    memory: { thread: threadId, resource: resourceId },
+  });
+  ```
+
+- Trace, thread, and span queries can now filter on `timeToFirstChunkMs`. The new `traceQueryTimeToFirstChunk` capability tells you whether the configured observability store supports it. When it doesn't, a query that filters on `timeToFirstChunkMs` returns `501` with a clear message instead of failing with a `500`, and field discovery leaves the field out. ([#27277](https://github.com/mastra-ai/mastra/pull/27277))
+
+- Fixed run resume and time-travel conflict responses to include a machine-readable code alongside the existing error message across server adapters. HTTP status remains 409, with a JSON body such as: ([#27706](https://github.com/mastra-ai/mastra/pull/27706))
+
+  ```json
+  {
+    "error": "Run conflict",
+    "code": "AGENT_RESUME_ALREADY_CLAIMED"
+  }
+  ```
+
+  The shared handler exposes these conflict codes: `AGENT_RESUME_ALREADY_CLAIMED`, `WORKFLOW_RESUME_ALREADY_CLAIMED`, `AGENT_RESUME_RUN_NOT_SUSPENDED`, `WORKFLOW_RUN_NOT_SUSPENDED`, `WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED`, and `WORKFLOW_TIME_TRAVEL_RUN_RUNNING`.
+
+- Fixed agent observation streams to close on completion and wrapped terminal events, and release subscriptions when replay or cancellation ends the stream during setup. ([#27358](https://github.com/mastra-ai/mastra/pull/27358))
+
+- Fixed the Studio Models panel reporting success when edits were silently dropped. The model list reorder and update routes now return 409 when the agent's `model` is a function (dynamic lists cannot be edited), and 400/404 when an edit cannot be applied, instead of always returning 200. ([#27192](https://github.com/mastra-ai/mastra/pull/27192))
+
+- Fixed `/api/openapi.json` containing `$ref`s that point nowhere. Recursive (`z.lazy`) schemas and schemas tagged with `.meta({ id })` used to emit `#/definitions/...` or `#/$defs/...` refs that broke once inlined into the document. Those definitions now go into `components.schemas` and the refs point there, so tools like Swagger UI, swagger-parser, and OpenAPI client generators can load the spec. This covers both built-in and custom routes. When two different schemas share an id, the second one gets a suffixed name (for example `Invoice_2`) and neither overwrites the other. ([#27745](https://github.com/mastra-ai/mastra/pull/27745))
+
+- Added `modelListEditable` to agent details so clients can disable model-list editing when an agent resolves its models dynamically. Studio now shows function-valued model lists as read-only while keeping static model lists editable. ([#27192](https://github.com/mastra-ai/mastra/pull/27192))
+
+  ```ts
+  const agent = client.getAgent('weather-agent');
+  const details = await agent.details();
+
+  if (details.modelListEditable === false) {
+    // Hide or disable model-list editing controls.
+  }
+  ```
+
+- Exported `RESERVED_REQUEST_CONTEXT_KEYS` from `@mastra/server/server-adapter`: the read-only list of request context keys a request body can never set. `isReservedRequestContextKey` now checks against this same list, so server adapters and their tests can verify every reserved key without keeping their own copy. ([#26950](https://github.com/mastra-ai/mastra/pull/26950))
+
+  ```ts
+  import { RESERVED_REQUEST_CONTEXT_KEYS } from '@mastra/server/server-adapter';
+
+  for (const key of RESERVED_REQUEST_CONTEXT_KEYS) {
+    console.log(`Request bodies cannot set ${key}`);
+  }
+  ```
+
+- The schedules HTTP API now accepts and returns `ifIdle.requireClaimedOwner` on agent schedules. Before this, `POST /schedules` and `PATCH /schedules/:scheduleId` dropped the flag, so a client that read a schedule and sent its `ifIdle` back cleared it. ([#27896](https://github.com/mastra-ai/mastra/pull/27896))
+
+  ```ts
+  await client.createSchedule({
+    agentId: 'support',
+    cron: '0 9 * * *',
+    prompt: 'Morning check-in',
+    threadId: 'thread-1',
+    resourceId: 'user-1',
+    ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+  });
+  ```
+
+- Fixed server agent routes dropping `memory.thread` fields such as `metadata` and `title`. Passing `memory: { thread: { id, metadata }, resource }` to the generate, stream, stream-until-idle, resume, and workflow-builder routes now creates threads with that metadata, matching in-process `agent.generate()`. Fixes #27471. ([#27486](https://github.com/mastra-ai/mastra/pull/27486))
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- The Agent Controller tool-approval endpoint now accepts `alwaysAllowCategory: true`, which approves the call and grants its tool category to the call's thread, the same way "always allow" works in an in-process session. Pass it from `@mastra/client-js` with `session.approveTool(toolCallId, true, { alwaysAllowCategory: true })`. ([#27222](https://github.com/mastra-ai/mastra/pull/27222))
+
+- Fixed `timeTravel()` running the same steps twice when called concurrently on one run. `timeTravel()` now atomically claims the run before executing, like `resume()` does. A losing call throws `WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED` (or `WORKFLOW_TIME_TRAVEL_RUN_RUNNING` if the run is already executing) and `POST /api/workflows/:workflowId/time-travel-async` returns `409 Conflict`. The claim isn't enforced with storage adapters that don't support concurrent updates, when `shouldPersistSnapshot` excludes the `running` status, or in the Inngest runner; concurrent calls there can still run steps twice. Fixes #27279. ([#27313](https://github.com/mastra-ai/mastra/pull/27313))
+
+- Updated dependencies [[`dbde4bf`](https://github.com/mastra-ai/mastra/commit/dbde4bf36ac016abcda61868cc6f792f9d07abee), [`3af753f`](https://github.com/mastra-ai/mastra/commit/3af753fb40a2b8f7ab17b1cf16cd4da7e1b020a6), [`ec84d93`](https://github.com/mastra-ai/mastra/commit/ec84d93cda24d56a0812086fcaace9e68ce8e089), [`6362d32`](https://github.com/mastra-ai/mastra/commit/6362d32a905d32820dcab3b9a039ebc1cec4f444), [`1c9fd9b`](https://github.com/mastra-ai/mastra/commit/1c9fd9bbdd4258c0d86c89cac6ae68c5023a2590), [`59c02f5`](https://github.com/mastra-ai/mastra/commit/59c02f53955dde397f343f2107060ed70bbe63c5), [`e3678a5`](https://github.com/mastra-ai/mastra/commit/e3678a564cf3bb5922112b4dca65973c5fdc0a92), [`934ec13`](https://github.com/mastra-ai/mastra/commit/934ec1315e8ee4b73067864f56a9fcc8105e8512), [`9b60f12`](https://github.com/mastra-ai/mastra/commit/9b60f12b13b28c9664a839aef435e6d10898644d), [`14f17b8`](https://github.com/mastra-ai/mastra/commit/14f17b86e2b162623bb22942c7930c2113a6d8a1), [`9c4d65f`](https://github.com/mastra-ai/mastra/commit/9c4d65f41ee21e407f0015b0e745881288f69d05), [`48bee02`](https://github.com/mastra-ai/mastra/commit/48bee02e1a5cef20f4da67720191d5e85cdca13c), [`f885386`](https://github.com/mastra-ai/mastra/commit/f885386b79be0e4d784067b0e26608971e0cc788), [`915fbe6`](https://github.com/mastra-ai/mastra/commit/915fbe67e974edbeba4dbd3afeaec4d68b34b118), [`f1b596e`](https://github.com/mastra-ai/mastra/commit/f1b596e3219bd8721079611c62b92b8f0f6c12d9), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`871f3c8`](https://github.com/mastra-ai/mastra/commit/871f3c801640148cffa09474fc9f9032495ddccf), [`44e35e4`](https://github.com/mastra-ai/mastra/commit/44e35e47491ad5fd9f771526d5d8c312644000ec), [`336692a`](https://github.com/mastra-ai/mastra/commit/336692a646e28d24b303eefdb8fdbe64e4b4e801), [`41b7f34`](https://github.com/mastra-ai/mastra/commit/41b7f3422a97f1385a285002b7e6f898eb5c7b06), [`f1c68eb`](https://github.com/mastra-ai/mastra/commit/f1c68eb4ae080d8cbbc694ae580850d8fa94dece), [`97f78c3`](https://github.com/mastra-ai/mastra/commit/97f78c3cf104600887e08e94cc073c973bb53c3b), [`e13dddd`](https://github.com/mastra-ai/mastra/commit/e13dddd4f5ac10448cd37009c31efedbf4c40ff4), [`9c66073`](https://github.com/mastra-ai/mastra/commit/9c66073db33749ab622d54db7e8885f183451ca4), [`6bfe708`](https://github.com/mastra-ai/mastra/commit/6bfe7087fcc27a08c8cba95a45c5da353188bb9c), [`3624981`](https://github.com/mastra-ai/mastra/commit/36249818e7cd0b2904142c6b133cc1ceb756ba68), [`aaedaa6`](https://github.com/mastra-ai/mastra/commit/aaedaa634aa7394789952d4f9fe04b1aec8619a1), [`a92384b`](https://github.com/mastra-ai/mastra/commit/a92384bf9093beb9071953292a936ca722370ce5), [`a8f9157`](https://github.com/mastra-ai/mastra/commit/a8f9157fafe38f5acf68e37c8874ebd192ef8e10), [`79fd3b0`](https://github.com/mastra-ai/mastra/commit/79fd3b06a7cf59f7acb4591b9ba0f388d548fd17), [`04ded0b`](https://github.com/mastra-ai/mastra/commit/04ded0b7409b39008a1e4611c412ee80ee20993d), [`f28b72f`](https://github.com/mastra-ai/mastra/commit/f28b72f255a460746f08c73b2a1d336bfc57757b), [`90dca88`](https://github.com/mastra-ai/mastra/commit/90dca88f44f31428a0e585584114b56f0bec477b), [`1874bf2`](https://github.com/mastra-ai/mastra/commit/1874bf2a5ba304f22ffb93f9ec5a9afea000a5a1), [`4e6701a`](https://github.com/mastra-ai/mastra/commit/4e6701a8534e29fad29c7fe4c6787dc1ed56b419), [`a3f8ac0`](https://github.com/mastra-ai/mastra/commit/a3f8ac03c7526248e585f3e4e87b349566dd4797), [`022e6cf`](https://github.com/mastra-ai/mastra/commit/022e6cf06fdc891a6318f16db304be8fe75b7f72), [`d8fb857`](https://github.com/mastra-ai/mastra/commit/d8fb857bda2c23a08e535291a638fbc6e3a4e073), [`6c67158`](https://github.com/mastra-ai/mastra/commit/6c67158a10406adae195887167862d632bb54d64), [`26e684b`](https://github.com/mastra-ai/mastra/commit/26e684b1f152d341c2dca01c5347fea7e8762188), [`d8bfd3d`](https://github.com/mastra-ai/mastra/commit/d8bfd3d502dd9952db66f0c4f53cd04f5c8e71ef), [`ace1e35`](https://github.com/mastra-ai/mastra/commit/ace1e35d5762f96976a2cba958283edda71fcc3b), [`f905746`](https://github.com/mastra-ai/mastra/commit/f905746159def2d386dca516657123f43ef90e24), [`b77f59c`](https://github.com/mastra-ai/mastra/commit/b77f59cc5407b1158a271d579b55514f2ba79145), [`776bb6e`](https://github.com/mastra-ai/mastra/commit/776bb6e2b3ed9ec32e5430332ee756185fcebb68), [`2d0a3b0`](https://github.com/mastra-ai/mastra/commit/2d0a3b06d0880036c0dbd4b1fcf782d1f5115a56), [`ad8e752`](https://github.com/mastra-ai/mastra/commit/ad8e75217bcbb12986e7e77a30cb4af1be93c0fd), [`ba744e5`](https://github.com/mastra-ai/mastra/commit/ba744e5347d7d373b89233f1b8beddb5bdf5b2c3), [`4471372`](https://github.com/mastra-ai/mastra/commit/4471372b0338523a2f57407a90b1d913e68f17cc), [`5131dad`](https://github.com/mastra-ai/mastra/commit/5131dadf8c2db8641030111203db6c16fe3240f2), [`58db748`](https://github.com/mastra-ai/mastra/commit/58db74858beae6ff20ff22786c968386b9d3edcc), [`8c2d516`](https://github.com/mastra-ai/mastra/commit/8c2d5164714a27e720d898da612da6054a88ef91), [`7425858`](https://github.com/mastra-ai/mastra/commit/74258589417e9e91114c64571a67702d2e352b3f), [`0e9a577`](https://github.com/mastra-ai/mastra/commit/0e9a5774151385c93524883e2b1bea40e2a644de), [`fd98055`](https://github.com/mastra-ai/mastra/commit/fd98055302882876b8dc5ae03649a89a72e2ac6c), [`b2c91db`](https://github.com/mastra-ai/mastra/commit/b2c91dbd2d32e18cd114d87301fc3b8182fddb10), [`c111a5b`](https://github.com/mastra-ai/mastra/commit/c111a5bfa2a7a197f30700ce238c84ee799df140), [`a97ba85`](https://github.com/mastra-ai/mastra/commit/a97ba8578a2dc91a16d945276ca8c7a4ad32e38a), [`f6a9762`](https://github.com/mastra-ai/mastra/commit/f6a9762b12ae9dad6a154f73ed3099a2ee472d0c), [`14b2a7c`](https://github.com/mastra-ai/mastra/commit/14b2a7c56da4329f7fd17738056a081663deed46), [`750a4ed`](https://github.com/mastra-ai/mastra/commit/750a4edf7826da9ba7321682912504c60f29712d), [`e5b6877`](https://github.com/mastra-ai/mastra/commit/e5b6877fbdb471485b99019eb50046b44e778aae), [`c236d64`](https://github.com/mastra-ai/mastra/commit/c236d64974c68e6c0f9bf6e3d6442e0184c5f49e), [`fc96794`](https://github.com/mastra-ai/mastra/commit/fc9679466bede4ca3e014aea48a72fd950a13d2a), [`e5b6877`](https://github.com/mastra-ai/mastra/commit/e5b6877fbdb471485b99019eb50046b44e778aae), [`85a26af`](https://github.com/mastra-ai/mastra/commit/85a26af75fe62b7f2d8ac0b56d322798e5ae0616), [`5758ba0`](https://github.com/mastra-ai/mastra/commit/5758ba045b01c407a7414b32dbbdf5480596b31d), [`8271439`](https://github.com/mastra-ai/mastra/commit/8271439b491f5f777590abfda9a0ac7f1e3212c2), [`44e35e4`](https://github.com/mastra-ai/mastra/commit/44e35e47491ad5fd9f771526d5d8c312644000ec), [`7337dac`](https://github.com/mastra-ai/mastra/commit/7337dac8aad8d70e98a4b0c7caa677c01966b53b), [`f51c0af`](https://github.com/mastra-ai/mastra/commit/f51c0afdd1b181b84e294f8613185494a8aaec3c), [`5f70db1`](https://github.com/mastra-ai/mastra/commit/5f70db1f3b5b38a27438d1c153db352d2bc8de30), [`179964b`](https://github.com/mastra-ai/mastra/commit/179964b95aacac31763a4a1aa2f2d1c652aa529d), [`7afee18`](https://github.com/mastra-ai/mastra/commit/7afee18a3d91ce125f08ffd6e2724695e8a68652), [`ca1b2f2`](https://github.com/mastra-ai/mastra/commit/ca1b2f25d7c69c6e90b719baef32ffb1db6c5681), [`12991bd`](https://github.com/mastra-ai/mastra/commit/12991bd0945ca36e13b213ebcbfaf0880d04d44d), [`0ac6a2a`](https://github.com/mastra-ai/mastra/commit/0ac6a2a4ab19f294b5362bcdf9c8ae9e3d8a3ede), [`b8fe2ae`](https://github.com/mastra-ai/mastra/commit/b8fe2aec651efeaad6d607d816565453a341cdef), [`22df9d7`](https://github.com/mastra-ai/mastra/commit/22df9d76651b3b4d513388a7eae8e51dbfb36a1b), [`f54f8b2`](https://github.com/mastra-ai/mastra/commit/f54f8b2df2aa24e1ef4d171c733576e7c62bb1b0), [`9cb6843`](https://github.com/mastra-ai/mastra/commit/9cb6843a8a39ab2e12498b0c08c9f4cdcefd9cea), [`0971298`](https://github.com/mastra-ai/mastra/commit/0971298317be971ae1c3f0c1d949a31df7d71c7f), [`72cb1e2`](https://github.com/mastra-ai/mastra/commit/72cb1e2b9453f7bb1bd08e4f9aa54da56fa20600), [`a3be51b`](https://github.com/mastra-ai/mastra/commit/a3be51b1a545b45bfb04377699edecbb8a8d79d6), [`bcfb6af`](https://github.com/mastra-ai/mastra/commit/bcfb6af5a61d79f6902e87d3a8fa70283f48705d), [`03868f8`](https://github.com/mastra-ai/mastra/commit/03868f840401865af433040ba7ff90f585dea2e1), [`368149c`](https://github.com/mastra-ai/mastra/commit/368149c27954f6d578d3561cc1801cb415b78aa7), [`fdf475d`](https://github.com/mastra-ai/mastra/commit/fdf475dbc8974e1ae21966e5e96e316a7beebdf7), [`2725bd7`](https://github.com/mastra-ai/mastra/commit/2725bd73fa27f231e30bce7c6a03c651bc15b408), [`9277d8e`](https://github.com/mastra-ai/mastra/commit/9277d8ef26ad2f08bfbae89d78d409fb91c95c8d), [`0611d4a`](https://github.com/mastra-ai/mastra/commit/0611d4a060696da5c3c550b07451d870d4af0f58), [`eb0b702`](https://github.com/mastra-ai/mastra/commit/eb0b702e9939f02073fb1c4dfd7eaa51fde59e0b), [`e41478c`](https://github.com/mastra-ai/mastra/commit/e41478cbb7ab108cf7f704a6f0f4092ec4374e21), [`323b021`](https://github.com/mastra-ai/mastra/commit/323b0212bc57c2b9acaed2716812a873c0fa43ee), [`78b3ef7`](https://github.com/mastra-ai/mastra/commit/78b3ef7cb120f2b366a39d7095ece5f0ec7d3f71), [`0eb8311`](https://github.com/mastra-ai/mastra/commit/0eb8311f9ecf254c96179e99dc145d6df3cccd07), [`ba7b0ea`](https://github.com/mastra-ai/mastra/commit/ba7b0eac045755d39d20dcf3a943ea5f8270b009), [`9b546e2`](https://github.com/mastra-ai/mastra/commit/9b546e2b9dba91d51769a73ce1a0b34d775b144a), [`e8d7f8e`](https://github.com/mastra-ai/mastra/commit/e8d7f8e52da32b05f2e8501c1127128ae1a5d450), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`0e5d045`](https://github.com/mastra-ai/mastra/commit/0e5d045be4ab67d1fba5eeb8125bc2ec43aa9519), [`0e4fa4f`](https://github.com/mastra-ai/mastra/commit/0e4fa4f0604bb2e6e63e5d1d203b2dcadd646a81), [`c397dff`](https://github.com/mastra-ai/mastra/commit/c397dff0ee0662b56f348852ad08aff820239d66), [`92034fa`](https://github.com/mastra-ai/mastra/commit/92034fa2a46a4f45af416c3201752342ead71d89), [`e4cd1d1`](https://github.com/mastra-ai/mastra/commit/e4cd1d13de8bcb14d8d0a8531f7b96fcbb138217), [`4e44e7f`](https://github.com/mastra-ai/mastra/commit/4e44e7f518debb3b0aebc5ad71ea3e4a3902d8c9), [`b03ee08`](https://github.com/mastra-ai/mastra/commit/b03ee089c70c087cdc9d1d0a85aa749621ad5a3c), [`0f1d83f`](https://github.com/mastra-ai/mastra/commit/0f1d83fed073613869d6283adb198b934ef80093), [`7aa0361`](https://github.com/mastra-ai/mastra/commit/7aa036142ca476b1f1e18a220f826e73ca58c38a), [`cd864ca`](https://github.com/mastra-ai/mastra/commit/cd864ca5d1fa6cb3477cb8a87b79070febbb3b6b), [`d95a821`](https://github.com/mastra-ai/mastra/commit/d95a821e903f7883b5fadfee5c7f59809d66cfb8), [`98c7e10`](https://github.com/mastra-ai/mastra/commit/98c7e109fca4995d19d7eb132fdb8411c860b151), [`e35e335`](https://github.com/mastra-ai/mastra/commit/e35e335f19ee0c7c1e03bf247aebd24c3e041459), [`e3678a5`](https://github.com/mastra-ai/mastra/commit/e3678a564cf3bb5922112b4dca65973c5fdc0a92), [`3c2c033`](https://github.com/mastra-ai/mastra/commit/3c2c033aa68cd8cd7e4c630abd7f1bfeb440f457), [`425d383`](https://github.com/mastra-ai/mastra/commit/425d383d4fb15e55e9491b6bdaebb57f2de7cdc8), [`5d8f8b7`](https://github.com/mastra-ai/mastra/commit/5d8f8b78460350d581e8a92412cdfe88b4ce76bc), [`5d5ea03`](https://github.com/mastra-ai/mastra/commit/5d5ea032a4c64cefe5bc217f4cc761a9364ccbf4), [`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a), [`b0f7f91`](https://github.com/mastra-ai/mastra/commit/b0f7f91eb667f15e188b861759b4c4a5761ec233), [`958d170`](https://github.com/mastra-ai/mastra/commit/958d170c218a0e050c0c4807a94ce1f67f00e570), [`ba7d4e5`](https://github.com/mastra-ai/mastra/commit/ba7d4e5c9759a164279c7ebdbe2b7a32ae94b4ce), [`8b36444`](https://github.com/mastra-ai/mastra/commit/8b36444dbbc6916d298015c2586fbbde2e9b265f), [`3f68324`](https://github.com/mastra-ai/mastra/commit/3f68324e72f03bbc7d918d23013f550527f59c40), [`bfd35f6`](https://github.com/mastra-ai/mastra/commit/bfd35f64178f06774c95dabec4a796245cf8a401), [`0b5eaa0`](https://github.com/mastra-ai/mastra/commit/0b5eaa07445a6551481ab6ceadef603b020a099b), [`12407df`](https://github.com/mastra-ai/mastra/commit/12407df9e6bd2f82cd27533bd4a9aa8057b97f2e), [`8c05e78`](https://github.com/mastra-ai/mastra/commit/8c05e78b099b26daf4bfa9b229190201c8bf581d), [`9620613`](https://github.com/mastra-ai/mastra/commit/96206136bcc184e6238bd6dd5627fe28254eec0b), [`cc977b4`](https://github.com/mastra-ai/mastra/commit/cc977b4ce7def6727cdd63af3478d2b8b83daf07), [`c36b9e7`](https://github.com/mastra-ai/mastra/commit/c36b9e7129b355211ed9e7a3b7df2d7b81c01c05), [`c82558f`](https://github.com/mastra-ai/mastra/commit/c82558f2e5eedb493afff46f940ab7f3c085d57f), [`100431b`](https://github.com/mastra-ai/mastra/commit/100431b965dba5d32d282cfcd3c0415013cc0eed), [`7a0aea2`](https://github.com/mastra-ai/mastra/commit/7a0aea28af3bcf879a75b5bcdbfc3d471f63c565), [`a0471fe`](https://github.com/mastra-ai/mastra/commit/a0471fefaf92a44b44f5fb23e607fdad087e51f2), [`3012dd4`](https://github.com/mastra-ai/mastra/commit/3012dd424b2329eda78381688f1f48244173e6a2), [`e0077c3`](https://github.com/mastra-ai/mastra/commit/e0077c34070037ac77c264a9d5000a69c0dd2095), [`f9e22cc`](https://github.com/mastra-ai/mastra/commit/f9e22cc6fa264ded4a95ab34dab84b6ce12c2597), [`fed802d`](https://github.com/mastra-ai/mastra/commit/fed802d6e4e395d9ba42a1122c2468a072407b1c), [`6889aa2`](https://github.com/mastra-ai/mastra/commit/6889aa29d661a8892f503e37bc3d8ffe18aa7e37), [`bde069a`](https://github.com/mastra-ai/mastra/commit/bde069ac2f610abd5a09bcdb511ed04f5f01437e), [`7f4a1ca`](https://github.com/mastra-ai/mastra/commit/7f4a1ca724829e0a732eea6afb285f15908df8e9), [`680d914`](https://github.com/mastra-ai/mastra/commit/680d9141c851e8eb6fcd2d3c3fbadf05a0f1011d), [`ae74f81`](https://github.com/mastra-ai/mastra/commit/ae74f812d75034a90d647739062b9c2ca84b4ed6), [`b23b87b`](https://github.com/mastra-ai/mastra/commit/b23b87b8ab849cdc9f58b297d667c0bbaed0b62f), [`8c90438`](https://github.com/mastra-ai/mastra/commit/8c90438b404d27593927eccc47616aab4a35006e), [`a7bfa1f`](https://github.com/mastra-ai/mastra/commit/a7bfa1ff7c592f368cf34be472c7d89e03b0098b), [`f42951a`](https://github.com/mastra-ai/mastra/commit/f42951afb1d2c2a2148100a54b6ec10d473c9591), [`c8035a4`](https://github.com/mastra-ai/mastra/commit/c8035a49ae2af692d812dace394ac64635f5fd1d), [`1980959`](https://github.com/mastra-ai/mastra/commit/1980959335396f8ee72558689623abf3e205b31b), [`fa409d4`](https://github.com/mastra-ai/mastra/commit/fa409d430b879e45d433497439c0c11d2a3fafd6), [`0876fa8`](https://github.com/mastra-ai/mastra/commit/0876fa827a9685022fb0dc1606cbb673dffcaf95), [`f81d7cb`](https://github.com/mastra-ai/mastra/commit/f81d7cb89f122e1c01729a917c70ca62d6c51216), [`78cbed0`](https://github.com/mastra-ai/mastra/commit/78cbed0e0ed27b74d9b3b767566b21d513cddd53), [`beb81d3`](https://github.com/mastra-ai/mastra/commit/beb81d355b4a8e472ac411f33aa0d4854cb8662b), [`f99e0e5`](https://github.com/mastra-ai/mastra/commit/f99e0e5db6012fbdcd8eac8a32d762b2a1d56b5e), [`16d8f44`](https://github.com/mastra-ai/mastra/commit/16d8f44e3a1486d7319c1baeca6115d37f6c4cea)]:
+  - @mastra/core@1.79.0
+
+## 1.79.0-alpha.12
+
+### Minor Changes
+
+- Added experimental routes for inspecting MCP server events: ([#27674](https://github.com/mastra-ai/mastra/pull/27674))
+
+  - `GET /mcp/:serverId/events` lists the server's event types.
+  - `POST /mcp/:serverId/events/:eventName/poll` polls an event type.
+  - `POST /mcp/:serverId/events/:eventName/stream` streams occurrences as server-sent events until the client disconnects.
+  - `POST /mcp/:serverId/events/:eventName/emit` sends a test event. It only exists under `mastra dev`; elsewhere it returns 404.
+
+  MCP server list and detail responses include `events_capability: true` when the server declares events. Errors return generic messages; details are logged on the server. Opening a stream past the MCP server's `maxStreams` limit returns 429. Poll and stream run the event's `authorize` hook with the caller's request context and return 403 when it denies the caller.
+
+### Patch Changes
+
+- The schedules HTTP API now accepts and returns `ifIdle.requireClaimedOwner` on agent schedules. Before this, `POST /schedules` and `PATCH /schedules/:scheduleId` dropped the flag, so a client that read a schedule and sent its `ifIdle` back cleared it. ([#27896](https://github.com/mastra-ai/mastra/pull/27896))
+
+  ```ts
+  await client.createSchedule({
+    agentId: 'support',
+    cron: '0 9 * * *',
+    prompt: 'Morning check-in',
+    threadId: 'thread-1',
+    resourceId: 'user-1',
+    ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+  });
+  ```
+
+- Updated dependencies [[`a92384b`](https://github.com/mastra-ai/mastra/commit/a92384bf9093beb9071953292a936ca722370ce5), [`a8f9157`](https://github.com/mastra-ai/mastra/commit/a8f9157fafe38f5acf68e37c8874ebd192ef8e10), [`4471372`](https://github.com/mastra-ai/mastra/commit/4471372b0338523a2f57407a90b1d913e68f17cc), [`0e9a577`](https://github.com/mastra-ai/mastra/commit/0e9a5774151385c93524883e2b1bea40e2a644de), [`b8fe2ae`](https://github.com/mastra-ai/mastra/commit/b8fe2aec651efeaad6d607d816565453a341cdef), [`f54f8b2`](https://github.com/mastra-ai/mastra/commit/f54f8b2df2aa24e1ef4d171c733576e7c62bb1b0), [`03868f8`](https://github.com/mastra-ai/mastra/commit/03868f840401865af433040ba7ff90f585dea2e1), [`e35e335`](https://github.com/mastra-ai/mastra/commit/e35e335f19ee0c7c1e03bf247aebd24c3e041459), [`cc977b4`](https://github.com/mastra-ai/mastra/commit/cc977b4ce7def6727cdd63af3478d2b8b83daf07), [`16d8f44`](https://github.com/mastra-ai/mastra/commit/16d8f44e3a1486d7319c1baeca6115d37f6c4cea)]:
+  - @mastra/core@1.79.0-alpha.12
+
+## 1.79.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`f1b596e`](https://github.com/mastra-ai/mastra/commit/f1b596e3219bd8721079611c62b92b8f0f6c12d9), [`4e6701a`](https://github.com/mastra-ai/mastra/commit/4e6701a8534e29fad29c7fe4c6787dc1ed56b419), [`f905746`](https://github.com/mastra-ai/mastra/commit/f905746159def2d386dca516657123f43ef90e24), [`72cb1e2`](https://github.com/mastra-ai/mastra/commit/72cb1e2b9453f7bb1bd08e4f9aa54da56fa20600), [`0e5d045`](https://github.com/mastra-ai/mastra/commit/0e5d045be4ab67d1fba5eeb8125bc2ec43aa9519), [`0e4fa4f`](https://github.com/mastra-ai/mastra/commit/0e4fa4f0604bb2e6e63e5d1d203b2dcadd646a81), [`a7bfa1f`](https://github.com/mastra-ai/mastra/commit/a7bfa1ff7c592f368cf34be472c7d89e03b0098b)]:
+  - @mastra/core@1.79.0-alpha.11
+
+## 1.79.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`59c02f5`](https://github.com/mastra-ai/mastra/commit/59c02f53955dde397f343f2107060ed70bbe63c5), [`9c66073`](https://github.com/mastra-ai/mastra/commit/9c66073db33749ab622d54db7e8885f183451ca4), [`e5b6877`](https://github.com/mastra-ai/mastra/commit/e5b6877fbdb471485b99019eb50046b44e778aae), [`e5b6877`](https://github.com/mastra-ai/mastra/commit/e5b6877fbdb471485b99019eb50046b44e778aae), [`8c05e78`](https://github.com/mastra-ai/mastra/commit/8c05e78b099b26daf4bfa9b229190201c8bf581d)]:
+  - @mastra/core@1.79.0-alpha.10
+
+## 1.79.0-alpha.9
+
+### Minor Changes
+
+- **Breaking:** Agent controller session routes are addressed by session id: `/agent-controller/:controllerId/sessions/:sessionId/...`. The `sessionScope` param is removed; requests that still send it, in the query or the create body, get a 400 that names `sessionId`. ([#27336](https://github.com/mastra-ai/mastra/pull/27336))
+
+  `POST /agent-controller/:controllerId/sessions` takes `resourceId` plus an optional `sessionId` (and `threadId`). `resourceId` may be omitted when `sessionId` is sent; the session then resumes on the resource it already has. Without a `sessionId` the session id is the `resourceId`, so callers that never passed one reach the same URLs as before. Thread listing returns every thread of the session's resource. When a session is no longer live (for example after a restart), the routes recreate it on the resource of the thread with the session's id, falling back to the session id itself.
+
+  ```http
+  # Before
+  POST /agent-controller/code/sessions        { "resourceId": "repo-1", "sessionScope": "run-a" }
+  POST /agent-controller/code/sessions/repo-1/messages?sessionScope=run-a
+
+  # After
+  POST /agent-controller/code/sessions        { "resourceId": "repo-1", "sessionId": "run-a" }
+  POST /agent-controller/code/sessions/run-a/messages
+  ```
+
+- Added `spanQueryContextFields` to observability capabilities so clients can check support for expanded `querySpans()` filters. ([#27807](https://github.com/mastra-ai/mastra/pull/27807))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  const supportsContextFilters = capabilities.spanQueryContextFields === true;
+  ```
+
+- Trace queries, trace aggregates, and thread queries now return a 422 when they use the root span's `entityId` at trace scope and the configured observability store does not support it, instead of failing with a 500. For those stores, trace-query field discovery also omits trace-scope `entityId` from its field list and `aggregate.dimensions`. A new `traceQueryRootEntityId` capability reports whether the store supports it. Span-scope `entityId` inside `spans.some` keeps working on every store. ([#27684](https://github.com/mastra-ai/mastra/pull/27684))
+
+  ```ts
+  const { capabilities } = await mastraClient.getObservabilityCapabilities();
+  if (capabilities.traceQueryRootEntityId) {
+    await mastraClient.aggregateTraces({ timeRange, groupBy: ['entityId'], measures: ['count'] });
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`6362d32`](https://github.com/mastra-ai/mastra/commit/6362d32a905d32820dcab3b9a039ebc1cec4f444), [`e3678a5`](https://github.com/mastra-ai/mastra/commit/e3678a564cf3bb5922112b4dca65973c5fdc0a92), [`9c4d65f`](https://github.com/mastra-ai/mastra/commit/9c4d65f41ee21e407f0015b0e745881288f69d05), [`7425858`](https://github.com/mastra-ai/mastra/commit/74258589417e9e91114c64571a67702d2e352b3f), [`a97ba85`](https://github.com/mastra-ai/mastra/commit/a97ba8578a2dc91a16d945276ca8c7a4ad32e38a), [`750a4ed`](https://github.com/mastra-ai/mastra/commit/750a4edf7826da9ba7321682912504c60f29712d), [`c236d64`](https://github.com/mastra-ai/mastra/commit/c236d64974c68e6c0f9bf6e3d6442e0184c5f49e), [`22df9d7`](https://github.com/mastra-ai/mastra/commit/22df9d76651b3b4d513388a7eae8e51dbfb36a1b), [`0971298`](https://github.com/mastra-ai/mastra/commit/0971298317be971ae1c3f0c1d949a31df7d71c7f), [`98c7e10`](https://github.com/mastra-ai/mastra/commit/98c7e109fca4995d19d7eb132fdb8411c860b151), [`e3678a5`](https://github.com/mastra-ai/mastra/commit/e3678a564cf3bb5922112b4dca65973c5fdc0a92), [`5d5ea03`](https://github.com/mastra-ai/mastra/commit/5d5ea032a4c64cefe5bc217f4cc761a9364ccbf4)]:
+  - @mastra/core@1.79.0-alpha.9
+
+## 1.79.0-alpha.8
+
+### Minor Changes
+
+- Trace and span queries can now sort by `timeToFirstChunkMs`. The new `traceQueryTimeToFirstChunkSort` capability tells you whether the configured observability store supports it. When it doesn't, the sort returns `501` with a clear message before the store runs. ([#27473](https://github.com/mastra-ai/mastra/pull/27473))
+
+### Patch Changes
+
+- Updated dependencies [[`78b3ef7`](https://github.com/mastra-ai/mastra/commit/78b3ef7cb120f2b366a39d7095ece5f0ec7d3f71), [`3012dd4`](https://github.com/mastra-ai/mastra/commit/3012dd424b2329eda78381688f1f48244173e6a2), [`f9e22cc`](https://github.com/mastra-ai/mastra/commit/f9e22cc6fa264ded4a95ab34dab84b6ce12c2597), [`fed802d`](https://github.com/mastra-ai/mastra/commit/fed802d6e4e395d9ba42a1122c2468a072407b1c)]:
+  - @mastra/core@1.79.0-alpha.8
+
+## 1.79.0-alpha.7
+
+### Patch Changes
+
+- Fixed client tools failing with `ToolNotFoundError` after a tool approval. `approveToolCall`, `declineToolCall`, `approveToolCallGenerate` and `declineToolCallGenerate` now accept `clientTools` (and `clientToolsResolver`) and send them to the server, so the model can call a client tool after the approval decision. `approveToolCall` and `declineToolCall` also accept `memory`; pass the same thread and resource as the original call so client-tool results and the final answer are saved to that thread. ([#27744](https://github.com/mastra-ai/mastra/pull/27744))
+
+  ```ts
+  const stream = await agent.approveToolCall({
+    runId,
+    toolCallId,
+    clientTools,
+    memory: { thread: threadId, resource: resourceId },
+  });
+  ```
+
+- Fixed agent observation streams to close on completion and wrapped terminal events, and release subscriptions when replay or cancellation ends the stream during setup. ([#27358](https://github.com/mastra-ai/mastra/pull/27358))
+
+- Fixed `/api/openapi.json` containing `$ref`s that point nowhere. Recursive (`z.lazy`) schemas and schemas tagged with `.meta({ id })` used to emit `#/definitions/...` or `#/$defs/...` refs that broke once inlined into the document. Those definitions now go into `components.schemas` and the refs point there, so tools like Swagger UI, swagger-parser, and OpenAPI client generators can load the spec. This covers both built-in and custom routes. When two different schemas share an id, the second one gets a suffixed name (for example `Invoice_2`) and neither overwrites the other. ([#27745](https://github.com/mastra-ai/mastra/pull/27745))
+
+- Updated dependencies [[`dbde4bf`](https://github.com/mastra-ai/mastra/commit/dbde4bf36ac016abcda61868cc6f792f9d07abee), [`3af753f`](https://github.com/mastra-ai/mastra/commit/3af753fb40a2b8f7ab17b1cf16cd4da7e1b020a6), [`e13dddd`](https://github.com/mastra-ai/mastra/commit/e13dddd4f5ac10448cd37009c31efedbf4c40ff4), [`3624981`](https://github.com/mastra-ai/mastra/commit/36249818e7cd0b2904142c6b133cc1ceb756ba68), [`04ded0b`](https://github.com/mastra-ai/mastra/commit/04ded0b7409b39008a1e4611c412ee80ee20993d), [`022e6cf`](https://github.com/mastra-ai/mastra/commit/022e6cf06fdc891a6318f16db304be8fe75b7f72), [`d8fb857`](https://github.com/mastra-ai/mastra/commit/d8fb857bda2c23a08e535291a638fbc6e3a4e073), [`ace1e35`](https://github.com/mastra-ai/mastra/commit/ace1e35d5762f96976a2cba958283edda71fcc3b), [`ba744e5`](https://github.com/mastra-ai/mastra/commit/ba744e5347d7d373b89233f1b8beddb5bdf5b2c3), [`5758ba0`](https://github.com/mastra-ai/mastra/commit/5758ba045b01c407a7414b32dbbdf5480596b31d), [`8271439`](https://github.com/mastra-ai/mastra/commit/8271439b491f5f777590abfda9a0ac7f1e3212c2), [`0ac6a2a`](https://github.com/mastra-ai/mastra/commit/0ac6a2a4ab19f294b5362bcdf9c8ae9e3d8a3ede), [`e4cd1d1`](https://github.com/mastra-ai/mastra/commit/e4cd1d13de8bcb14d8d0a8531f7b96fcbb138217), [`7aa0361`](https://github.com/mastra-ai/mastra/commit/7aa036142ca476b1f1e18a220f826e73ca58c38a), [`3f68324`](https://github.com/mastra-ai/mastra/commit/3f68324e72f03bbc7d918d23013f550527f59c40), [`100431b`](https://github.com/mastra-ai/mastra/commit/100431b965dba5d32d282cfcd3c0415013cc0eed), [`f42951a`](https://github.com/mastra-ai/mastra/commit/f42951afb1d2c2a2148100a54b6ec10d473c9591), [`0876fa8`](https://github.com/mastra-ai/mastra/commit/0876fa827a9685022fb0dc1606cbb673dffcaf95), [`f81d7cb`](https://github.com/mastra-ai/mastra/commit/f81d7cb89f122e1c01729a917c70ca62d6c51216)]:
+  - @mastra/core@1.79.0-alpha.7
+
+## 1.79.0-alpha.6
+
+### Patch Changes
+
+- Fixed run resume and time-travel conflict responses to include a machine-readable code alongside the existing error message across server adapters. HTTP status remains 409, with a JSON body such as: ([#27706](https://github.com/mastra-ai/mastra/pull/27706))
+
+  ```json
+  {
+    "error": "Run conflict",
+    "code": "AGENT_RESUME_ALREADY_CLAIMED"
+  }
+  ```
+
+  The shared handler exposes these conflict codes: `AGENT_RESUME_ALREADY_CLAIMED`, `WORKFLOW_RESUME_ALREADY_CLAIMED`, `AGENT_RESUME_RUN_NOT_SUSPENDED`, `WORKFLOW_RUN_NOT_SUSPENDED`, `WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED`, and `WORKFLOW_TIME_TRAVEL_RUN_RUNNING`.
+
+- Updated dependencies [[`41b7f34`](https://github.com/mastra-ai/mastra/commit/41b7f3422a97f1385a285002b7e6f898eb5c7b06), [`179964b`](https://github.com/mastra-ai/mastra/commit/179964b95aacac31763a4a1aa2f2d1c652aa529d), [`ba7b0ea`](https://github.com/mastra-ai/mastra/commit/ba7b0eac045755d39d20dcf3a943ea5f8270b009), [`e8d7f8e`](https://github.com/mastra-ai/mastra/commit/e8d7f8e52da32b05f2e8501c1127128ae1a5d450), [`92034fa`](https://github.com/mastra-ai/mastra/commit/92034fa2a46a4f45af416c3201752342ead71d89)]:
+  - @mastra/core@1.79.0-alpha.6
+
+## 1.79.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`ec84d93`](https://github.com/mastra-ai/mastra/commit/ec84d93cda24d56a0812086fcaace9e68ce8e089), [`79fd3b0`](https://github.com/mastra-ai/mastra/commit/79fd3b06a7cf59f7acb4591b9ba0f388d548fd17), [`f28b72f`](https://github.com/mastra-ai/mastra/commit/f28b72f255a460746f08c73b2a1d336bfc57757b), [`6c67158`](https://github.com/mastra-ai/mastra/commit/6c67158a10406adae195887167862d632bb54d64), [`ad8e752`](https://github.com/mastra-ai/mastra/commit/ad8e75217bcbb12986e7e77a30cb4af1be93c0fd), [`85a26af`](https://github.com/mastra-ai/mastra/commit/85a26af75fe62b7f2d8ac0b56d322798e5ae0616), [`e0077c3`](https://github.com/mastra-ai/mastra/commit/e0077c34070037ac77c264a9d5000a69c0dd2095)]:
+  - @mastra/core@1.79.0-alpha.5
+
+## 1.79.0-alpha.4
+
+### Minor Changes
+
+- Added thread rows to `POST /observability/threads/query` and the `threadQueryRows` capability. ([#27652](https://github.com/mastra-ai/mastra/pull/27652))
+
+  **Breaking contract change:** Use a top-level time selector for thread rows. Legacy identity requests remain supported. Unsupported thread-row requests return a structured `501` error.
+
+  ```ts
+  // Before
+  const before = { traces: { timeRange: { from, to } } };
+  // After
+  const after = { timeRange: { traces: { from, to } } };
+  ```
+
+- Trace queries, trace aggregates, and thread queries now return a 422 when they use the root span's `name` or `spanType` and the configured observability store does not support them, instead of failing with a 500. For those stores, trace-query field discovery also omits both fields from its field list and `aggregate.dimensions`. A new `traceQueryRootSpanFields` capability reports whether the store supports them. ([#27321](https://github.com/mastra-ai/mastra/pull/27321))
+
+  ```ts
+  const { capabilities } = await mastraClient.getObservabilityCapabilities();
+  if (capabilities.traceQueryRootSpanFields) {
+    await mastraClient.aggregateTraces({ timeRange, groupBy: ['name'], measures: ['count'] });
+  }
+  ```
+
+- Agent controller session routes no longer start a session as a side effect. Only `POST /agent-controller/:controllerId/sessions` starts one. Before, a message, model switch or state write that reached the server first created the session on a new random thread. The write then landed on a thread the client never read, so it looked lost. ([#27474](https://github.com/mastra-ai/mastra/pull/27474))
+
+  Every other session route now acts on a started session. After a server restart it rebuilds the session from its stored thread. If the session was never started, the route returns `404` and creates nothing.
+
+  ```ts
+  const session = client.getAgentController('code').session(resourceId);
+  await session.create({ threadId }); // start first
+  await session.sendMessage('Hello'); // 404 if the session was never started
+  ```
+
+  `AgentController.createSession` accepts `resumeOnly: true` to get this behavior. It throws `SessionNotStartedError` when no stored thread matches. Factory now starts the session on its own thread when the session is created, so the first prompt can be sent right away.
+
+### Patch Changes
+
+- Trace, thread, and span queries can now filter on `timeToFirstChunkMs`. The new `traceQueryTimeToFirstChunk` capability tells you whether the configured observability store supports it. When it doesn't, a query that filters on `timeToFirstChunkMs` returns `501` with a clear message instead of failing with a `500`, and field discovery leaves the field out. ([#27277](https://github.com/mastra-ai/mastra/pull/27277))
+
+- Fixed the Studio Models panel reporting success when edits were silently dropped. The model list reorder and update routes now return 409 when the agent's `model` is a function (dynamic lists cannot be edited), and 400/404 when an edit cannot be applied, instead of always returning 200. ([#27192](https://github.com/mastra-ai/mastra/pull/27192))
+
+- Added `modelListEditable` to agent details so clients can disable model-list editing when an agent resolves its models dynamically. Studio now shows function-valued model lists as read-only while keeping static model lists editable. ([#27192](https://github.com/mastra-ai/mastra/pull/27192))
+
+  ```ts
+  const agent = client.getAgent('weather-agent');
+  const details = await agent.details();
+
+  if (details.modelListEditable === false) {
+    // Hide or disable model-list editing controls.
+  }
+  ```
+
+- Fixed server agent routes dropping `memory.thread` fields such as `metadata` and `title`. Passing `memory: { thread: { id, metadata }, resource }` to the generate, stream, stream-until-idle, resume, and workflow-builder routes now creates threads with that metadata, matching in-process `agent.generate()`. Fixes #27471. ([#27486](https://github.com/mastra-ai/mastra/pull/27486))
+
+- Fixed `timeTravel()` running the same steps twice when called concurrently on one run. `timeTravel()` now atomically claims the run before executing, like `resume()` does. A losing call throws `WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED` (or `WORKFLOW_TIME_TRAVEL_RUN_RUNNING` if the run is already executing) and `POST /api/workflows/:workflowId/time-travel-async` returns `409 Conflict`. The claim isn't enforced with storage adapters that don't support concurrent updates, when `shouldPersistSnapshot` excludes the `running` status, or in the Inngest runner; concurrent calls there can still run steps twice. Fixes #27279. ([#27313](https://github.com/mastra-ai/mastra/pull/27313))
+
+- Updated dependencies [[`1c9fd9b`](https://github.com/mastra-ai/mastra/commit/1c9fd9bbdd4258c0d86c89cac6ae68c5023a2590), [`934ec13`](https://github.com/mastra-ai/mastra/commit/934ec1315e8ee4b73067864f56a9fcc8105e8512), [`14f17b8`](https://github.com/mastra-ai/mastra/commit/14f17b86e2b162623bb22942c7930c2113a6d8a1), [`915fbe6`](https://github.com/mastra-ai/mastra/commit/915fbe67e974edbeba4dbd3afeaec4d68b34b118), [`44e35e4`](https://github.com/mastra-ai/mastra/commit/44e35e47491ad5fd9f771526d5d8c312644000ec), [`336692a`](https://github.com/mastra-ai/mastra/commit/336692a646e28d24b303eefdb8fdbe64e4b4e801), [`f1c68eb`](https://github.com/mastra-ai/mastra/commit/f1c68eb4ae080d8cbbc694ae580850d8fa94dece), [`97f78c3`](https://github.com/mastra-ai/mastra/commit/97f78c3cf104600887e08e94cc073c973bb53c3b), [`6bfe708`](https://github.com/mastra-ai/mastra/commit/6bfe7087fcc27a08c8cba95a45c5da353188bb9c), [`a3f8ac0`](https://github.com/mastra-ai/mastra/commit/a3f8ac03c7526248e585f3e4e87b349566dd4797), [`26e684b`](https://github.com/mastra-ai/mastra/commit/26e684b1f152d341c2dca01c5347fea7e8762188), [`b77f59c`](https://github.com/mastra-ai/mastra/commit/b77f59cc5407b1158a271d579b55514f2ba79145), [`776bb6e`](https://github.com/mastra-ai/mastra/commit/776bb6e2b3ed9ec32e5430332ee756185fcebb68), [`2d0a3b0`](https://github.com/mastra-ai/mastra/commit/2d0a3b06d0880036c0dbd4b1fcf782d1f5115a56), [`5131dad`](https://github.com/mastra-ai/mastra/commit/5131dadf8c2db8641030111203db6c16fe3240f2), [`58db748`](https://github.com/mastra-ai/mastra/commit/58db74858beae6ff20ff22786c968386b9d3edcc), [`fd98055`](https://github.com/mastra-ai/mastra/commit/fd98055302882876b8dc5ae03649a89a72e2ac6c), [`b2c91db`](https://github.com/mastra-ai/mastra/commit/b2c91dbd2d32e18cd114d87301fc3b8182fddb10), [`c111a5b`](https://github.com/mastra-ai/mastra/commit/c111a5bfa2a7a197f30700ce238c84ee799df140), [`fc96794`](https://github.com/mastra-ai/mastra/commit/fc9679466bede4ca3e014aea48a72fd950a13d2a), [`44e35e4`](https://github.com/mastra-ai/mastra/commit/44e35e47491ad5fd9f771526d5d8c312644000ec), [`7337dac`](https://github.com/mastra-ai/mastra/commit/7337dac8aad8d70e98a4b0c7caa677c01966b53b), [`f51c0af`](https://github.com/mastra-ai/mastra/commit/f51c0afdd1b181b84e294f8613185494a8aaec3c), [`5f70db1`](https://github.com/mastra-ai/mastra/commit/5f70db1f3b5b38a27438d1c153db352d2bc8de30), [`7afee18`](https://github.com/mastra-ai/mastra/commit/7afee18a3d91ce125f08ffd6e2724695e8a68652), [`ca1b2f2`](https://github.com/mastra-ai/mastra/commit/ca1b2f25d7c69c6e90b719baef32ffb1db6c5681), [`a3be51b`](https://github.com/mastra-ai/mastra/commit/a3be51b1a545b45bfb04377699edecbb8a8d79d6), [`bcfb6af`](https://github.com/mastra-ai/mastra/commit/bcfb6af5a61d79f6902e87d3a8fa70283f48705d), [`368149c`](https://github.com/mastra-ai/mastra/commit/368149c27954f6d578d3561cc1801cb415b78aa7), [`fdf475d`](https://github.com/mastra-ai/mastra/commit/fdf475dbc8974e1ae21966e5e96e316a7beebdf7), [`2725bd7`](https://github.com/mastra-ai/mastra/commit/2725bd73fa27f231e30bce7c6a03c651bc15b408), [`0611d4a`](https://github.com/mastra-ai/mastra/commit/0611d4a060696da5c3c550b07451d870d4af0f58), [`0eb8311`](https://github.com/mastra-ai/mastra/commit/0eb8311f9ecf254c96179e99dc145d6df3cccd07), [`9b546e2`](https://github.com/mastra-ai/mastra/commit/9b546e2b9dba91d51769a73ce1a0b34d775b144a), [`c397dff`](https://github.com/mastra-ai/mastra/commit/c397dff0ee0662b56f348852ad08aff820239d66), [`b03ee08`](https://github.com/mastra-ai/mastra/commit/b03ee089c70c087cdc9d1d0a85aa749621ad5a3c), [`0f1d83f`](https://github.com/mastra-ai/mastra/commit/0f1d83fed073613869d6283adb198b934ef80093), [`cd864ca`](https://github.com/mastra-ai/mastra/commit/cd864ca5d1fa6cb3477cb8a87b79070febbb3b6b), [`d95a821`](https://github.com/mastra-ai/mastra/commit/d95a821e903f7883b5fadfee5c7f59809d66cfb8), [`b0f7f91`](https://github.com/mastra-ai/mastra/commit/b0f7f91eb667f15e188b861759b4c4a5761ec233), [`958d170`](https://github.com/mastra-ai/mastra/commit/958d170c218a0e050c0c4807a94ce1f67f00e570), [`ba7d4e5`](https://github.com/mastra-ai/mastra/commit/ba7d4e5c9759a164279c7ebdbe2b7a32ae94b4ce), [`8b36444`](https://github.com/mastra-ai/mastra/commit/8b36444dbbc6916d298015c2586fbbde2e9b265f), [`bfd35f6`](https://github.com/mastra-ai/mastra/commit/bfd35f64178f06774c95dabec4a796245cf8a401), [`0b5eaa0`](https://github.com/mastra-ai/mastra/commit/0b5eaa07445a6551481ab6ceadef603b020a099b), [`9620613`](https://github.com/mastra-ai/mastra/commit/96206136bcc184e6238bd6dd5627fe28254eec0b), [`c36b9e7`](https://github.com/mastra-ai/mastra/commit/c36b9e7129b355211ed9e7a3b7df2d7b81c01c05), [`c82558f`](https://github.com/mastra-ai/mastra/commit/c82558f2e5eedb493afff46f940ab7f3c085d57f), [`7a0aea2`](https://github.com/mastra-ai/mastra/commit/7a0aea28af3bcf879a75b5bcdbfc3d471f63c565), [`a0471fe`](https://github.com/mastra-ai/mastra/commit/a0471fefaf92a44b44f5fb23e607fdad087e51f2), [`bde069a`](https://github.com/mastra-ai/mastra/commit/bde069ac2f610abd5a09bcdb511ed04f5f01437e), [`7f4a1ca`](https://github.com/mastra-ai/mastra/commit/7f4a1ca724829e0a732eea6afb285f15908df8e9), [`ae74f81`](https://github.com/mastra-ai/mastra/commit/ae74f812d75034a90d647739062b9c2ca84b4ed6), [`b23b87b`](https://github.com/mastra-ai/mastra/commit/b23b87b8ab849cdc9f58b297d667c0bbaed0b62f), [`c8035a4`](https://github.com/mastra-ai/mastra/commit/c8035a49ae2af692d812dace394ac64635f5fd1d), [`1980959`](https://github.com/mastra-ai/mastra/commit/1980959335396f8ee72558689623abf3e205b31b), [`fa409d4`](https://github.com/mastra-ai/mastra/commit/fa409d430b879e45d433497439c0c11d2a3fafd6), [`78cbed0`](https://github.com/mastra-ai/mastra/commit/78cbed0e0ed27b74d9b3b767566b21d513cddd53), [`f99e0e5`](https://github.com/mastra-ai/mastra/commit/f99e0e5db6012fbdcd8eac8a32d762b2a1d56b5e)]:
+  - @mastra/core@1.79.0-alpha.4
+
 ## 1.79.0-alpha.3
 
 ### Patch Changes

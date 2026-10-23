@@ -12,13 +12,17 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../../workflows/types';
 import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 import type { DurableAgent } from '../durable-agent';
+import { EventedAgent } from '../evented-agent';
+import { ExecutionFence } from '../execution-fence';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 
@@ -64,7 +68,10 @@ function makeMockModel(): LanguageModelV2 {
   }) as unknown as LanguageModelV2;
 }
 
-function createDurableWithStore(agentId: string): {
+function createWithStore(
+  agentId: string,
+  engine: 'default' | 'evented',
+): {
   agent: DurableAgent;
   store: InMemoryStore;
   mastra: Mastra;
@@ -76,7 +83,8 @@ function createDurableWithStore(agentId: string): {
     model: makeMockModel(),
   });
   const store = new InMemoryStore();
-  const agent = createDurableAgent({ agent: baseAgent });
+  const agent =
+    engine === 'evented' ? createEventedAgent({ agent: baseAgent }) : createDurableAgent({ agent: baseAgent });
   const mastra = new Mastra({
     agents: { [agentId]: agent as any },
     storage: store,
@@ -121,7 +129,8 @@ function stubWorkflow(
   return { restartedRunIds };
 }
 
-describe('DurableAgent.recoverActiveRuns', () => {
+describe.each(['default', 'evented'] as const)('DurableAgent.recoverActiveRuns (%s)', engine => {
+  const createDurableWithStore = (agentId: string) => createWithStore(agentId, engine);
   let agent: DurableAgent;
   let store: InMemoryStore;
   let mastra: Mastra;
@@ -135,7 +144,7 @@ describe('DurableAgent.recoverActiveRuns', () => {
     vi.useRealTimers();
   });
 
-  it.each(['resolve', 'reject'] as const)(
+  it.each(['resolve', 'reject', 'transient-reject'] as const)(
     'bounds setup and preserves the returned result after late %s',
     async late => {
       vi.useFakeTimers();
@@ -153,7 +162,8 @@ describe('DurableAgent.recoverActiveRuns', () => {
       });
       try {
         await vi.advanceTimersByTimeAsync(29_999);
-        expect(recover).toHaveBeenCalledTimes(1);
+        expect(recover).toHaveBeenCalledTimes(2);
+        expect(recover.mock.calls.map(([runId]) => runId)).toEqual(['stalled', 'later']);
         await vi.advanceTimersByTimeAsync(1);
         expect(settled).toBe(true);
         expect(recover).toHaveBeenCalledTimes(2);
@@ -161,14 +171,14 @@ describe('DurableAgent.recoverActiveRuns', () => {
         const snapshot = structuredClone(result);
         expect(result).toEqual({
           recovered: [
-            { runId: 'stalled', status: 'skipped', reason: 'recovery-timeout' },
+            { runId: 'stalled', status: 'skipped', reason: 'recovery-timeout', retryAt: Date.now() + 30_000 },
             { runId: 'later', status: 'success' },
           ],
           succeeded: 1,
           failed: 0,
         });
         if (late === 'resolve') gate.resolve();
-        else gate.reject(new Error('late setup failure'));
+        else gate.reject(new Error(late === 'transient-reject' ? 'LOADING Redis is loading' : 'late setup failure'));
         await vi.advanceTimersByTimeAsync(0);
         expect(result).toEqual(snapshot);
       } finally {
@@ -178,6 +188,128 @@ describe('DurableAgent.recoverActiveRuns', () => {
       }
     },
   );
+
+  it('reaches a healthy run behind ten stalled setups after two bounded batches', async () => {
+    vi.useFakeTimers();
+    const runIds = [...Array.from({ length: 10 }, (_, i) => `stalled-${i}`), 'healthy'];
+    for (const runId of runIds) await seed(store, makeSnapshot(runId, 'running', { agentId: agent.id }));
+    const gate = Promise.withResolvers<void>();
+    const recover = vi.spyOn(agent, 'recover').mockImplementation(async runId => {
+      if (runId !== 'healthy') await gate.promise;
+      return { cleanup: vi.fn() } as Awaited<ReturnType<DurableAgent['recover']>>;
+    });
+    const recovery = agent.recoverActiveRuns();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(recover).toHaveBeenCalledTimes(5);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(recover).toHaveBeenCalledTimes(10);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(recover).toHaveBeenCalledTimes(11);
+      const result = await recovery;
+      expect(result.recovered.map(run => run.runId)).toEqual(runIds);
+      expect(result).toMatchObject({ succeeded: 1, failed: 0 });
+    } finally {
+      gate.resolve();
+      await recovery;
+      await mastra.shutdown({ drainTimeout: 0 });
+    }
+  });
+
+  it('does not redispatch pending setups on overlapping calls or timeout rechecks, but retries after settlement', async () => {
+    vi.useFakeTimers();
+    await seed(store, makeSnapshot('stalled', 'running', { agentId: agent.id }));
+    const gate = Promise.withResolvers<void>();
+    const recover = vi.spyOn(agent, 'recover').mockImplementation(async () => {
+      await gate.promise;
+      throw new Error('late failure');
+    });
+    const first = agent.recoverActiveRuns();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      const assertPending = async () => {
+        expect(await agent.recoverActiveRuns({ runId: 'stalled' })).toEqual({
+          recovered: [
+            { runId: 'stalled', status: 'skipped', reason: 'recovery-timeout', retryAt: Date.now() + 30_000 },
+          ],
+          succeeded: 0,
+          failed: 0,
+        });
+        expect(recover).toHaveBeenCalledTimes(1);
+      };
+      await assertPending();
+      await vi.advanceTimersByTimeAsync(30_000);
+      const result = await first;
+      const snapshot = structuredClone(result);
+      await assertPending();
+      await vi.advanceTimersByTimeAsync(30_000);
+      await assertPending();
+      gate.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      stubWorkflow(agent);
+      recover.mockRestore();
+      const retried = vi.spyOn(agent, 'recover');
+      expect(await agent.recoverActiveRuns({ runId: 'stalled' })).toMatchObject({ succeeded: 1, failed: 0 });
+      expect(retried).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(snapshot);
+    } finally {
+      gate.resolve();
+      await first;
+      await mastra.shutdown({ drainTimeout: 0 });
+    }
+  });
+
+  it('does not restart a timed-out attempt whose persisted snapshot becomes terminal after settlement', async () => {
+    vi.useFakeTimers();
+    await seed(store, makeSnapshot('stalled', 'running', { agentId: agent.id }));
+    const gate = Promise.withResolvers<void>();
+    const recover = vi.spyOn(agent, 'recover').mockImplementation(async () => {
+      await gate.promise;
+      return { cleanup: vi.fn() } as Awaited<ReturnType<DurableAgent['recover']>>;
+    });
+    const recovery = agent.recoverActiveRuns();
+    try {
+      await vi.advanceTimersByTimeAsync(30_000);
+      const result = await recovery;
+      const snapshot = structuredClone(result);
+      await seed(store, makeSnapshot('stalled', 'success', { agentId: agent.id }));
+      gate.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await agent.recoverActiveRuns({ runId: 'stalled' })).toEqual({ recovered: [], succeeded: 0, failed: 0 });
+      expect(recover).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(snapshot);
+    } finally {
+      gate.resolve();
+      await recovery;
+      await mastra.shutdown({ drainTimeout: 0 });
+    }
+  });
+
+  it('does not dispatch queued runs when shutdown starts with all five slots pending', async () => {
+    vi.useFakeTimers();
+    for (let i = 0; i < 7; i++) await seed(store, makeSnapshot(`run-${i}`, 'running', { agentId: agent.id }));
+    const gate = Promise.withResolvers<void>();
+    const recover = vi.spyOn(agent, 'recover').mockImplementation(async () => {
+      await gate.promise;
+      return { cleanup: vi.fn() } as Awaited<ReturnType<DurableAgent['recover']>>;
+    });
+    const recovery = agent.recoverActiveRuns();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(recover).toHaveBeenCalledTimes(5);
+      const shutdown = mastra.shutdown({ drainTimeout: 100 });
+      await vi.advanceTimersByTimeAsync(100);
+      await shutdown;
+      gate.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      expect((await recovery).recovered).toHaveLength(5);
+      expect(recover).toHaveBeenCalledTimes(5);
+    } finally {
+      gate.resolve();
+      await recovery;
+      await mastra.shutdown({ drainTimeout: 0 });
+    }
+  });
 
   it('bounds workflow settlement without releasing ownership, then fences it on shutdown', async () => {
     vi.useFakeTimers();
@@ -193,6 +325,9 @@ describe('DurableAgent.recoverActiveRuns', () => {
       return result;
     });
     try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(restartedRunIds).toEqual(['stalled', 'later']);
+      expect(settled).toBe(false);
       await vi.advanceTimersByTimeAsync(30_000);
       expect(settled).toBe(true);
       expect(restartedRunIds).toEqual(['stalled', 'later']);
@@ -215,6 +350,22 @@ describe('DurableAgent.recoverActiveRuns', () => {
     }
   });
 
+  it.each(['DURABLE_AGENT_RECOVER_SHUTDOWN', 'DURABLE_AGENT_EXECUTION_ABANDONED'])(
+    'does not retry %s even when its cause is transient',
+    async id => {
+      await seed(store, makeSnapshot('shutdown-transient', 'running', { agentId: agent.id }));
+      vi.spyOn(agent, 'recover').mockRejectedValueOnce(
+        Object.assign(new Error('recovery interrupted', { cause: new Error('LOADING Redis is loading') }), { id }),
+      );
+
+      expect(await agent.recoverActiveRuns()).toEqual({
+        recovered: [{ runId: 'shutdown-transient', status: 'skipped' }],
+        succeeded: 0,
+        failed: 0,
+      });
+    },
+  );
+
   it('does not dispatch after shutdown during discovery or at entry', async () => {
     const gate = Promise.withResolvers<void>();
     const list = vi.spyOn(agent, 'listActiveRuns').mockImplementation(async () => {
@@ -229,25 +380,6 @@ describe('DurableAgent.recoverActiveRuns', () => {
     expect(recover).not.toHaveBeenCalled();
     await agent.recoverActiveRuns();
     expect(list).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not start another run after shutdown during setup', async () => {
-    vi.useFakeTimers();
-    await seed(store, makeSnapshot('stalled', 'running', { agentId: agent.id }));
-    await seed(store, makeSnapshot('later', 'running', { agentId: agent.id }));
-    const gate = Promise.withResolvers<void>();
-    const recover = vi.spyOn(agent, 'recover').mockImplementation(async () => {
-      await gate.promise;
-      return { cleanup: vi.fn() } as Awaited<ReturnType<DurableAgent['recover']>>;
-    });
-    const recovery = agent.recoverActiveRuns();
-    await vi.advanceTimersByTimeAsync(0);
-    const shutdown = mastra.shutdown({ drainTimeout: 0 });
-    await vi.advanceTimersByTimeAsync(0);
-    await shutdown;
-    gate.resolve();
-    await recovery;
-    expect(recover).toHaveBeenCalledTimes(1);
   });
 
   it('releases a late ownership claim without restarting or deleting its snapshot after shutdown', async () => {
@@ -393,6 +525,112 @@ describe('DurableAgent.recoverActiveRuns', () => {
     }
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    new Error('LOADING Redis is loading the dataset in memory'),
+    ...['LOADING', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ESOCKETTIMEDOUT'].map(code =>
+      Object.assign(new Error('storage unavailable'), { code }),
+    ),
+    new Error('wrapped storage error', { cause: Object.assign(new Error('reset'), { code: 'ECONNRESET' }) }),
+    new MastraError(
+      { id: 'STORAGE_TEST', domain: ErrorDomain.STORAGE, category: ErrorCategory.THIRD_PARTY },
+      Object.assign(new Error('reset'), { code: 'ECONNRESET' }),
+    ),
+  ])('defers a transient pre-start recovery failure: %s', async error => {
+    const runId = 'transient-run';
+    await seed(store, makeSnapshot(runId, 'running', { agentId: agent.id }));
+    vi.spyOn(agent, 'recover').mockRejectedValueOnce(error);
+    const before = Date.now();
+
+    const result = await agent.recoverActiveRuns();
+
+    expect(result).toEqual({
+      recovered: [{ runId, status: 'skipped', reason: 'transient-error', retryAt: expect.any(Number) }],
+      succeeded: 0,
+      failed: 0,
+    });
+    expect(result.recovered[0]!.retryAt).toBeGreaterThanOrEqual(before + 30_000);
+    expect(result.recovered[0]!.retryAt).toBeLessThanOrEqual(Date.now() + 30_000);
+  });
+
+  it.each([
+    new Error('invalid agent configuration'),
+    new Error('invalid LOADING configuration'),
+    new Error('LOADING_CONFIG is invalid'),
+    new Error('request timeout'),
+    Object.assign(new Error('aborted'), { name: 'AbortError' }),
+    Object.assign(new Error('aborted', { cause: Object.assign(new Error('reset'), { code: 'ECONNRESET' }) }), {
+      name: 'AbortError',
+    }),
+    Object.assign(
+      new Error('transport timeout', { cause: Object.assign(new Error('aborted'), { name: 'AbortError' }) }),
+      {
+        code: 'ETIMEDOUT',
+      },
+    ),
+    Object.assign(new Error('cyclic cause'), { cause: undefined as unknown }),
+  ])('keeps a non-transient pre-start failure terminal: %s', async error => {
+    if (error.message === 'cyclic cause') error.cause = error;
+    await seed(store, makeSnapshot('permanent-run', 'running', { agentId: agent.id }));
+    vi.spyOn(agent, 'recover').mockRejectedValueOnce(error);
+
+    await expect(agent.recoverActiveRuns()).resolves.toEqual({
+      recovered: [{ runId: 'permanent-run', status: 'failed', error }],
+      succeeded: 0,
+      failed: 1,
+    });
+  });
+
+  it('does not retry transient errors after recovery starts', async () => {
+    const runId = 'started-run';
+    const error = Object.assign(new Error('reset after start'), { code: 'ECONNRESET' });
+    await seed(store, makeSnapshot(runId, 'running', { agentId: agent.id }));
+    stubWorkflow(agent);
+    const recover = agent.recover.bind(agent);
+    vi.spyOn(agent, 'recover').mockImplementationOnce(async (id, options) => {
+      const result = await recover(id, options);
+      await options?.onError?.({ error });
+      return result;
+    });
+
+    const result = await agent.recoverActiveRuns();
+    expect(result).toEqual({ recovered: [{ runId, status: 'failed', error }], succeeded: 0, failed: 1 });
+    globalRunRegistry.delete(runId);
+  });
+
+  it('releases ownership and keeps the snapshot after a transient post-claim reload failure', async () => {
+    const runId = 'transient-reload';
+    await seed(store, makeSnapshot(runId, 'running', { agentId: agent.id }));
+    const workflows = (await store.getStore('workflows'))!;
+    const getSnapshot = workflows.getWorkflowRunById.bind(workflows);
+    const snapshotSpy = vi.spyOn(workflows, 'getWorkflowRunById').mockImplementation(async args => {
+      if (ExecutionFence.getLocalActive(runId)) {
+        throw new Error('LOADING Redis is loading the dataset in memory');
+      }
+      return getSnapshot(args);
+    });
+    const { restartedRunIds } = stubWorkflow(agent);
+
+    const result = await agent.recoverActiveRuns();
+    expect(result.recovered).toEqual([
+      { runId, status: 'skipped', reason: 'transient-error', retryAt: expect.any(Number) },
+    ]);
+    expect(restartedRunIds).toEqual([]);
+    expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
+    expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false);
+    expect((await getSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId }))?.snapshot).toMatchObject({
+      status: 'running',
+    });
+
+    snapshotSpy.mockRestore();
+    await expect(agent.recoverActiveRuns({ runId })).resolves.toMatchObject({ succeeded: 1, failed: 0 });
+    expect(restartedRunIds).toEqual([runId]);
+    globalRunRegistry.delete(runId);
+  });
+
   it('returns an empty result when no runs are active', async () => {
     stubWorkflow(agent);
     const result = await agent.recoverActiveRuns();
@@ -462,7 +700,10 @@ describe('DurableAgent.recoverActiveRuns', () => {
   it('cleans up a finished recovered run when cleanupTimeoutMs is 0 (#25891)', async () => {
     const baseAgent = new Agent({ id: 'agent-Z', name: 'agent-Z', instructions: 'x', model: makeMockModel() });
     const zeroStore = new InMemoryStore();
-    const zeroAgent = createDurableAgent({ agent: baseAgent, cleanupTimeoutMs: 0 });
+    const zeroAgent =
+      engine === 'evented'
+        ? new EventedAgent({ agent: baseAgent, cleanupTimeoutMs: 0 })
+        : createDurableAgent({ agent: baseAgent, cleanupTimeoutMs: 0 });
     void new Mastra({ agents: { 'agent-Z': zeroAgent as any }, storage: zeroStore });
     await seed(
       zeroStore,

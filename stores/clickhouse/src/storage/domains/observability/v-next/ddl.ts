@@ -1285,6 +1285,12 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_SPAN_EVENTS, 'inputPreview', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'outputPreview', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'errorPreview', 'Nullable(String)'),
+  // Trace branches, before span_events: its view copies span_events with SELECT *, so the target
+  // needs each column first. CREATE has always included these; listed so a table lacking them
+  // still gains them.
+  addColumn(TABLE_TRACE_BRANCHES, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'rootEntityVersionId', 'Nullable(String)'),
   // Span events
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),

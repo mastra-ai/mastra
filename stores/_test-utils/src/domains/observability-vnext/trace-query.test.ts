@@ -247,6 +247,7 @@ describe('trace-query reference evaluator', () => {
           entityType: 'agent',
           environment: 'production',
           status: 'success',
+          timeToFirstChunkMs: null,
         },
       ],
       page: { next: null },

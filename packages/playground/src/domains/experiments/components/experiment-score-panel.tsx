@@ -59,7 +59,7 @@ function ExperimentScorePanelBody({
         </DataPanel.Heading>
         <DataPanel.HeaderActions>
           {onShowTrace && score.traceId && (
-            <Button size="sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+            <Button size="icon-sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
               <TraceIcon />
             </Button>
           )}

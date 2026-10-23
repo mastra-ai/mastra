@@ -9,6 +9,7 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { z } from 'zod';
 import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
 
@@ -33,7 +34,8 @@ import type {
   WorkspaceChangeStatus,
   WorkspaceDiff,
   WorkspaceFile,
-  WorkspaceFilesListing,
+  WorkspaceTreeEntry,
+  WorkspaceTreeListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 } from '@mastra/factory/routes/fs';
@@ -50,7 +52,8 @@ export type {
   WorkspaceChangeStatus,
   WorkspaceDiff,
   WorkspaceFile,
-  WorkspaceFilesListing,
+  WorkspaceTreeEntry,
+  WorkspaceTreeListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 };
@@ -69,6 +72,7 @@ export interface CustomProvidersResponse {
 
 export interface DefaultModelResponse {
   modelId: string | null;
+  thinkingLevel: ThinkingLevelSetting | null;
 }
 
 export interface OMResponse {

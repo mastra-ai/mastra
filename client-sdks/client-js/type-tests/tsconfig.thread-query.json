@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "noEmit": true, "incremental": false },
+  "include": ["../src/**/*.ts", "./thread-query.test-d.ts"],
+  "exclude": ["../src/**/*.test.ts", "../src/**/*.mock.ts"]
+}

@@ -2,6 +2,7 @@ import { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu
 import type { ContextMenuPopupProps, ContextMenuPositionerProps } from '@base-ui/react/context-menu';
 import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
+import { allowNativeMenuAfterRightPressOutside } from './native-context-menu';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import {
@@ -29,6 +30,10 @@ const ContextMenuRadioGroup = ContextMenuPrimitive.RadioGroup;
 
 const ContextMenuTrigger = ContextMenuPrimitive.Trigger;
 
+const ContextMenuActionsContext = React.createContext<React.RefObject<ContextMenuPrimitive.Root.Actions | null> | null>(
+  null,
+);
+
 type ContextMenuContentPositionerProps = Omit<ContextMenuPositionerProps, keyof ContextMenuPopupProps>;
 
 type ContextMenuContentProps = ContextMenuPopupProps &
@@ -54,6 +59,7 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
       disableAnchorTracking,
       collisionAvoidance,
       children,
+      onContextMenu,
       ...props
     },
     ref,
@@ -76,7 +82,8 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
     // Why: same stacking as DropdownMenu (z-50). Inside a modal Dialog/Drawer the popup must
     // portal into the trap container to stay clickable and above it; explicit `container` wins.
     const resolvedContainer = usePortalContainer(container);
-    const menu = useFluidMenu<HTMLDivElement>();
+    const menu = useFluidMenu();
+    const actions = React.useContext(ContextMenuActionsContext);
 
     return (
       <ContextMenuPrimitive.Portal container={resolvedContainer}>
@@ -86,6 +93,11 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
             data-slot="context-menu-content"
             className={cn(menuPopupClass, menuScrollPopupClass, className)}
             {...props}
+            onContextMenu={event => {
+              onContextMenu?.(event);
+              // Base UI leaves the native menu to popup items; ours must not linger behind it.
+              actions?.current?.close();
+            }}
           >
             <MenuScrollArea menu={menu}>{children}</MenuScrollArea>
           </ContextMenuPrimitive.Popup>
@@ -180,11 +192,11 @@ const ContextMenuSubTrigger = React.forwardRef<HTMLDivElement, ContextMenuSubTri
   ({ className, inset, children, ...props }, ref) => (
     <ContextMenuPrimitive.SubmenuTrigger
       ref={useFluidMenuItemRef(ref)}
-      className={cn(menuItemClass, 'data-[popup-open]:text-foreground', inset && menuItemInsetClass, className)}
+      className={cn(menuItemClass, inset && menuItemInsetClass, className)}
       {...props}
     >
       {children}
-      <span className={cn(menuItemTrailingIconClass, 'opacity-50')}>
+      <span className={menuItemTrailingIconClass}>
         <ChevronDown className="-rotate-90" />
       </span>
     </ContextMenuPrimitive.SubmenuTrigger>
@@ -231,7 +243,7 @@ const ContextMenuSubContent = React.forwardRef<HTMLDivElement, ContextMenuSubCon
     };
 
     const resolvedContainer = usePortalContainer();
-    const menu = useFluidMenu<HTMLDivElement>();
+    const menu = useFluidMenu();
 
     return (
       <ContextMenuPrimitive.Portal container={resolvedContainer}>
@@ -262,10 +274,22 @@ function ContextMenu({
   onOpenChange?: ContextMenuPrimitive.Root.Props['onOpenChange'];
   children: React.ReactNode;
 }) {
+  const actions = React.useRef<ContextMenuPrimitive.Root.Actions | null>(null);
+
   return (
-    <ContextMenuRoot open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
-      {children}
-    </ContextMenuRoot>
+    <ContextMenuActionsContext.Provider value={actions}>
+      <ContextMenuRoot
+        open={open}
+        defaultOpen={defaultOpen}
+        actionsRef={actions}
+        onOpenChange={(nextOpen, details) => {
+          onOpenChange?.(nextOpen, details);
+          allowNativeMenuAfterRightPressOutside(details);
+        }}
+      >
+        {children}
+      </ContextMenuRoot>
+    </ContextMenuActionsContext.Provider>
   );
 }
 
