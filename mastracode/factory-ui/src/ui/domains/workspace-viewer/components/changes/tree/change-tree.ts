@@ -20,10 +20,10 @@ function ensureChangeDirectory(nodes: ChangeTreeNode[], path: string, name: stri
   return directory;
 }
 
-function addChange(nodes: ChangeTreeNode[], change: WorkspaceChange, prefix: string) {
-  const segments = change.path.slice(prefix.length).split('/').filter(Boolean);
+function addChange(nodes: ChangeTreeNode[], change: WorkspaceChange, repositoryPrefix: string) {
+  const segments = change.path.slice(repositoryPrefix.length).split('/').filter(Boolean);
   let siblings = nodes;
-  let currentPath = prefix;
+  let currentPath = repositoryPrefix;
 
   segments.forEach((segment, index) => {
     currentPath = currentPath && !currentPath.endsWith('/') ? `${currentPath}/${segment}` : `${currentPath}${segment}`;
@@ -57,9 +57,9 @@ function sortChangeTree(nodes: ChangeTreeNode[]): ChangeTreeNode[] {
   });
 }
 
-export function buildChangeTree(changes: WorkspaceChange[], prefix = ''): ChangeTreeNode[] {
+export function buildChangeTree(changes: WorkspaceChange[], repositoryPrefix = ''): ChangeTreeNode[] {
   const nodes: ChangeTreeNode[] = [];
-  changes.forEach(change => addChange(nodes, change, prefix));
+  changes.forEach(change => addChange(nodes, change, repositoryPrefix));
   return sortChangeTree(nodes);
 }
 
