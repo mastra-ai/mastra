@@ -8,7 +8,7 @@ Brought Inngest durable agents (`createInngestAgent`) in line with core's durabl
 - `modelSettings.timeout.totalMs` now stops the run at the deadline instead of waiting for a stuck tool.
 - Output processors (`processOutputStream`, `processOutputResult`, output step processors) now run on Inngest agent streams, including a resumed stream in the process that started the run. A resume in a process that never ran the stream (cold resume) still runs without them. Processors that hold parts, such as `BatchPartsProcessor`, keep the step text intact.
 - `isTaskComplete` scorers and agent goals are now checked on each iteration.
-- Calling `abort()` (on the stream or on an `observe()` handle) on a run parked on a tool approval or suspension now releases it, so a later resume is rejected.
+- Calling `abort()` on an `observe()` handle for a run parked on a tool approval or suspension now releases it, like the stream `abort()` does, so a later resume is rejected.
 - Reserved request-context memory keys now take priority over the `memory` option, as on `DurableAgent`.
 - `approveToolCall` and `resumeStream` now run the tool, and the resumed stream's output processors, with the request context you pass, not the one the run suspended with.
 - `stopWhen` now gets the same step content as `stream.steps`.

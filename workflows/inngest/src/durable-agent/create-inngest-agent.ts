@@ -1365,9 +1365,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }
         // The step worker is a different process — see `requestRemoteAbort`.
         await requestRemoteAbort(runId);
-        // A run parked on a suspension has no steps left to stop; release it so
-        // it is no longer listed as suspended (as core does).
-        if (agentThreadStreamRuntime.isRunParked(runId, agent.getPubSub())) agent.abortRunStream(runId);
       };
       const result = {
         output,
@@ -1818,9 +1815,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }
         // The step worker is a different process — see `requestRemoteAbort`.
         await requestRemoteAbort(runId);
-        // A run parked on a suspension has no steps left to stop; release it so
-        // it is no longer listed as suspended (as core does).
-        if (agentThreadStreamRuntime.isRunParked(runId, agent.getPubSub())) agent.abortRunStream(runId);
       };
 
       const cleanup = () => {
