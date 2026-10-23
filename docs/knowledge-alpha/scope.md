@@ -99,7 +99,7 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
   ```
 - **The check** (new, in core Knowledge, about 30 lines): a run may use scope `S` if it holds `S`, or it holds a tag that matches an `access` principal on `S`'s type, with `$params` bound from `S`'s own address. `org:acme` owns `team:acme:director` but not `team:other:director`. Reads need any role; writes need `append` or more; remove, rescope and merge need `edit` or more.
 - **Binding rules**, so a named scope can't manufacture ownership:
-  - `$…` is refused as a whole segment in any run tag or `scope` value (shape check in canonicalize and in the tools' `scope` validator), so a named scope can't look like a pattern.
+  - Any segment that **starts with** `$` (`$x`, `$x-y`) is refused in any run tag or `scope` value (shape check in canonicalize and in the tools' `scope` validator), because `matchPattern` treats any `$`-leading segment as a capture (`expected.startsWith('$')`); a named scope can't look like a pattern.
   - After `$params` are bound from `S`, the principal is compared to the held tag by **exact string equality**. With no wildcard, a principal that binds to `org:acme` is owned only by a run holding exactly `org:acme`.
   - `validateKnowledgeScopeTypes` refuses, at construction, a principal that uses a `$param` absent from its type's pattern, so `substituteParameters` (`reconcile.ts`) can't throw at call time.
   - The `self` and `parent` principals resolve against materialization input (`resolvePrincipal`), which the call-time check doesn't have. The check ignores them: holding the scope already covers `self`, and `parent` stays a materialization-only notion.
@@ -288,6 +288,7 @@ For each, a red control showing the test fails without the change.
 - A store built from an injected `{ client }` is flagged by the test as having no busy timeout; the Director builds from the URL.
 
 **Structure and ownership**
+- A run tag or `scope` value with a `$`-leading segment (`team:$org:director`, `team:acme:$x-y`) is refused at canonicalize and by the tools' `scope` validator.
 - An undeclared type (`request:r25`, no structure entry) can be read and written by a run holding it, and can't be named through ownership.
 - No `org` is built in: a structure without `org:` types still accepts `org:x` tags (as `custom`), and `materializeKnowledgeScopePlan` accepts an `org:` child template.
 - Ownership: with `'team:$orgId:$teamId'` owned by `org:$orgId`, a run holding `org:acme` reads and writes `team:acme:director` through `scope`, and is refused `team:other:director`. With `'project:$orgId:$projectId'` owned by `org:$orgId` at role `edit`, a run holding `org:acme` can rescope a `project:acme:p` record; with role `readonly` it can read but its write is refused.
