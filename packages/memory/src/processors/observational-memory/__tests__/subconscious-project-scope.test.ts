@@ -1,4 +1,5 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent, setRunAgentScopes } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
 import type { ComputeStateSignalArgs } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -8,9 +9,39 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Memory } from '../../../index';
 import { createPinnedTools, PinnedStateProcessor, Subconscious } from '../subconscious';
 import { SubconsciousCurateExtractor } from '../subconscious/curate';
+import { resolveRunKnowledgeScopes } from '../subconscious/knowledge-tools';
 import { SubconsciousRemindExtractor } from '../subconscious/remind';
 
-const PROJECT_SCOPE = ['org:acme', 'resource:project-1'];
+/** A Factory-style host: org → project → thread, where every session of a project shares the project scope. */
+const projectScopeTypes = {
+  'org:$orgId': { identity: true, access: [{ principal: 'self', role: 'owner' as const }] },
+  'project:$projectId': {
+    identity: true,
+    parent: 'org:$orgId',
+    access: [{ principal: 'self', role: 'owner' as const }],
+  },
+  'thread:$threadId': {
+    identity: true,
+    parent: 'project:$projectId',
+    access: [{ principal: 'self', role: 'owner' as const }],
+  },
+};
+
+function createMemory() {
+  const storage = new InMemoryStore();
+  return new Memory({
+    storage,
+    knowledge: new Knowledge({ id: 'default', storage, scopes: projectScopeTypes }),
+    ...semanticInfrastructure,
+  });
+}
+
+function runScopesFor(memory: Memory, requestContext: RequestContext, threadId = 'thread-a') {
+  return resolveRunKnowledgeScopes(memory, {
+    agent: { threadId, resourceId: 'session-a' },
+    requestContext,
+  });
+}
 const semanticInfrastructure = {
   vector: {
     indexSeparator: '_',
@@ -25,10 +56,10 @@ const semanticInfrastructure = {
   } as unknown as MastraEmbeddingModel<string>,
 };
 
-function requestContextWith(overrides: Record<string, unknown> = {}) {
+/** A run's request context with the trusted agent scopes the host stamped on it. */
+function requestContextFor(projectId?: string) {
   const requestContext = new RequestContext();
-  requestContext.set('organizationId', 'acme');
-  for (const [key, value] of Object.entries(overrides)) requestContext.set(key, value);
+  setRunAgentScopes(requestContext, projectId ? ['org:acme', `project:${projectId}`] : ['org:acme']);
   return requestContext;
 }
 
@@ -51,69 +82,75 @@ function makeSignalArgs(
 
 afterEach(() => vi.restoreAllMocks());
 
-describe('Subconscious project scope override', () => {
+describe('Subconscious on a host-configured project scope', () => {
   it('the pinned state processor surfaces a pin written under the project scope to a different session', async () => {
-    const storage = new InMemoryStore();
-    const memory = { storage } as unknown as Parameters<typeof createPinnedTools>[0];
+    const memory = createMemory();
+    const { scopeIds, levels } = await runScopesFor(memory, requestContextFor('project-1'));
+    expect(levels.map(level => level.address)).toEqual(['org:acme', 'project:project-1', 'thread:thread-a']);
     const tools = createPinnedTools(memory, {
-      scope: [...PROJECT_SCOPE, 'thread:thread-a'],
+      scopeIds,
+      levels,
       sourceThreadId: 'thread-a',
-      defaultScope: 'resource',
       maxPins: 20,
       maxCharacters: 2_000,
     });
     const pinned = (await tools.knowledge_pin!.execute!({ text: 'Always answer in French.' } as any, {} as any)) as any;
 
     const processor = new PinnedStateProcessor({
-      getKnowledgeStore: async () => (storage as any).getStore('knowledge'),
+      getKnowledgeInstance: () => memory.getKnowledgeInstance(),
+      getKnowledgeStore: () => memory.getKnowledgeStore(),
     });
 
-    // Session B with the override sees the pin.
-    const withOverride = await processor.computeStateSignal(
-      makeSignalArgs(requestContextWith({ knowledgeResourceId: 'project-1' })),
-    );
-    expect(withOverride).toMatchObject({ mode: 'snapshot' });
-    expect(withOverride!.contents).toContain(pinned.id);
+    // Session B in the same project sees the pin.
+    const sameProject = await processor.computeStateSignal(makeSignalArgs(requestContextFor('project-1')));
+    expect(sameProject).toMatchObject({ mode: 'snapshot' });
+    expect(sameProject!.contents).toContain(pinned.id);
 
-    // Session B without the override sees nothing.
-    const withoutOverride = await processor.computeStateSignal(makeSignalArgs(requestContextWith()));
-    expect(withoutOverride).toBeUndefined();
+    // Session B in another project sees nothing.
+    const otherProject = await processor.computeStateSignal(
+      makeSignalArgs(requestContextFor('project-2'), { threadId: 'thread-c' }),
+    );
+    expect(otherProject).toBeUndefined();
   });
 
-  it('a changed override on the same request context reads fresh instead of serving the memo', async () => {
-    const storage = new InMemoryStore();
-    const memory = { storage } as unknown as Parameters<typeof createPinnedTools>[0];
+  it('a changed project on the same request context reads fresh instead of serving the memo', async () => {
+    const memory = createMemory();
+    const { scopeIds, levels } = await runScopesFor(memory, requestContextFor('project-1'));
     const tools = createPinnedTools(memory, {
-      scope: [...PROJECT_SCOPE, 'thread:thread-a'],
+      scopeIds,
+      levels,
       sourceThreadId: 'thread-a',
-      defaultScope: 'resource',
       maxPins: 20,
       maxCharacters: 2_000,
     });
     await tools.knowledge_pin!.execute!({ text: 'Project one pin.' } as any, {} as any);
 
     const processor = new PinnedStateProcessor({
-      getKnowledgeStore: async () => (storage as any).getStore('knowledge'),
+      getKnowledgeInstance: () => memory.getKnowledgeInstance(),
+      getKnowledgeStore: () => memory.getKnowledgeStore(),
     });
-    const requestContext = requestContextWith({ knowledgeResourceId: 'project-1' });
+    const requestContext = requestContextFor('project-1');
 
     const first = await processor.computeStateSignal(makeSignalArgs(requestContext));
     expect(first).toMatchObject({ mode: 'snapshot' });
 
-    // Same request context, later step, but the override moved to another project:
-    // the scope key differs, so the memo must not be served.
-    requestContext.set('knowledgeResourceId', 'project-2');
-    const second = await processor.computeStateSignal(makeSignalArgs(requestContext, { stepNumber: 1 }));
+    // Same request context, later step, but the run is now in another project (a thread's project
+    // is fixed when it is created, so this is another thread): the memo must not be served.
+    setRunAgentScopes(requestContext, ['org:acme', 'project:project-2']);
+    const second = await processor.computeStateSignal(
+      makeSignalArgs(requestContext, { stepNumber: 1, threadId: 'thread-c' }),
+    );
     expect(second).toBeUndefined();
   });
 
-  it('curate and remind resolve search scope from the override', async () => {
-    const memory = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
+  it('curate and remind search the run’s project scope, not another project’s', async () => {
+    const memory = createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
     const search = vi.spyOn(store, 'search');
+    const projectScopeIds = (await runScopesFor(memory, requestContextFor('project-1'))).scopeIds;
+    const otherScopeIds = (await runScopesFor(memory, requestContextFor('project-2'), 'thread-c')).scopeIds;
     const subconscious = new Subconscious({
       observation: [{ name: 'curate', model: 'mock/model', maxSteps: 5 }],
-      defaultScope: 'resource',
     });
     let curatorAgent: Agent | undefined;
     vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent) {
@@ -131,7 +168,7 @@ describe('Subconscious project scope override', () => {
       current: 'Project Atlas launches soon.',
       rawObservations: 'Project Atlas launches soon.',
       memory,
-      requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
+      requestContext: requestContextFor('project-1'),
       observationCommitted: Promise.resolve(true),
     });
     await vi.waitFor(() => expect(curatorAgent).toBeDefined());
@@ -139,8 +176,8 @@ describe('Subconscious project scope override', () => {
     await (tools.knowledge_search as any).execute({ query: 'Project Atlas' }, {});
     expect(search).toHaveBeenCalled();
     for (const call of search.mock.calls) {
-      expect(call[0]!.scope).toContain('resource:project-1');
-      expect(call[0]!.scope).not.toContain('resource:session-a');
+      expect(call[0]!.scopeIds).toContain(projectScopeIds[1]);
+      expect(call[0]!.scopeIds).not.toContain(otherScopeIds[1]);
     }
 
     const remind = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true } as any);
@@ -150,20 +187,20 @@ describe('Subconscious project scope override', () => {
         threadId: 'thread-a',
         resourceId: 'session-a',
         rawObservations: 'The user is scheduling Project Atlas.',
-        memory: { storage: memory.storage, getKnowledgeSemanticIndex: vi.fn() },
+        memory,
         mainAgent: {
           getModel: vi.fn(async () => {
             throw new Error('stop before the agent runs');
           }),
         },
         sendSignal: vi.fn(async () => undefined),
-        requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
+        requestContext: requestContextFor('project-1'),
       } as any),
     ).catch(() => undefined);
     expect(search).toHaveBeenCalled();
     for (const call of search.mock.calls) {
-      expect(call[0]!.scope).toContain('resource:project-1');
-      expect(call[0]!.scope).not.toContain('resource:session-a');
+      expect(call[0]!.scopeIds).toContain(projectScopeIds[1]);
+      expect(call[0]!.scopeIds).not.toContain(otherScopeIds[1]);
     }
   });
 });

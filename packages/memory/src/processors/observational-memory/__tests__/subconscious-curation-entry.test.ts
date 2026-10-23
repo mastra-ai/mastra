@@ -1,6 +1,7 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { Agent } from '@mastra/core/agent';
+import { Agent, setRunAgentScopes } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -44,14 +45,16 @@ function createMockObserverModel(observations = 'User confirmed Project Atlas la
 }
 
 function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) {
+  const storage = new InMemoryStore();
   return new Memory({
-    storage: new InMemoryStore(),
+    storage,
+    knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
     ...semanticInfrastructure,
     options: {
       observationalMemory: {
         ...(options?.omModel === false ? {} : { model: options?.omModel ?? 'openai/om-model' }),
         observation: { messageTokens: 1, bufferTokens: false },
-        experimental_subconscious: new Subconscious({ defaultScope: 'resource' }),
+        experimental_subconscious: new Subconscious(),
       },
     },
   });
@@ -60,6 +63,7 @@ function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) 
 function requestContext() {
   const context = new RequestContext();
   context.set('organizationId', 'acme');
+  setRunAgentScopes(context, [`org:${'acme'}`]);
   return context;
 }
 
@@ -113,6 +117,7 @@ describe('direct observation curation', () => {
     });
 
     expect(result.observed).toBe(true);
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalled(), { timeout: 3000 });
     expect(sendMessage).toHaveBeenCalledWith(
       { contents: expect.stringContaining(observation) },
       expect.objectContaining({ threadId: 'subconscious:alpha:curate' }),

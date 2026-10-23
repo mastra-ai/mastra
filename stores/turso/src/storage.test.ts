@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   createClientAcceptanceTests,
+  createKnowledgeImporterMultiBindingTests,
   createConfigValidationTests,
   createDomainDirectTests,
   createMastraStorageTests,
@@ -48,6 +49,13 @@ function registerNativeStorageTests() {
 
   const turso = trackStore({ id: 'turso-test-store', path: path.join(testDirectory, 'suite.db') });
   createTestSuite(turso);
+
+  describe('Turso', () => {
+    let knowledgeStores = 0;
+    createKnowledgeImporterMultiBindingTests(() =>
+      trackStore({ id: 'turso-fact-471', path: path.join(testDirectory, `knowledge-${knowledgeStores++}.db`) }),
+    );
+  });
 
   createConfigValidationTests({
     storeName: 'TursoStore',

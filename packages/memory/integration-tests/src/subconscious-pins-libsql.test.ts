@@ -2,13 +2,20 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setRunAgentScopes } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore } from '@mastra/libsql';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { resolveRunKnowledgeScopes } from '../../src/processors/observational-memory/subconscious/knowledge-tools';
 import { createPinnedTools, listPinnedKnowledge } from '../../src/processors/observational-memory/subconscious/pinned';
 import { PinnedStateProcessor } from '../../src/processors/observational-memory/subconscious/pinned-state-processor';
 
-const threadScope = ['org:acme', 'resource:user-42', 'thread:alpha'];
+function orgContext() {
+  const requestContext = new RequestContext();
+  setRunAgentScopes(requestContext, ['org:acme']);
+  return requestContext;
+}
 
 describe('Subconscious pinned facts against LibSQL', () => {
   const directories: string[] = [];
@@ -23,26 +30,26 @@ describe('Subconscious pinned facts against LibSQL', () => {
     const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'pins.db')}` });
     await storage.init();
     const memory = { storage } as unknown as Parameters<typeof createPinnedTools>[0];
+    const { scopeIds, levels } = await resolveRunKnowledgeScopes(memory, {
+      agent: { threadId: 'alpha', resourceId: 'user-42' },
+      requestContext: orgContext(),
+    });
     const tools = createPinnedTools(memory, {
-      scope: threadScope,
+      scopeIds,
+      levels,
       sourceThreadId: 'alpha',
-      defaultScope: 'resource',
       maxPins: 20,
       maxCharacters: 2_000,
     });
     const store = (await storage.getStore('knowledge'))!;
-    return { tools, store, storage };
+    return { tools, store, storage, scopeIds };
   }
 
   function makeArgs(overrides: Record<string, unknown> = {}) {
-    const context = new Map<string, unknown>([['organizationId', 'acme']]);
     return {
       threadId: 'alpha',
       resourceId: 'user-42',
-      requestContext: {
-        get: (key: string) => context.get(key),
-        set: (key: string, value: unknown) => void context.set(key, value),
-      },
+      requestContext: orgContext(),
       contextWindow: { hasSnapshot: false },
       lastSnapshot: undefined,
       deltasSinceSnapshot: [],
@@ -52,10 +59,10 @@ describe('Subconscious pinned facts against LibSQL', () => {
   }
 
   it('pins, edits and unpins facts durably, keeping deleted facts out of the set', async () => {
-    const { tools, store } = await createHarness();
+    const { tools, store, scopeIds } = await createHarness();
 
     const pinned = await tools.knowledge_pin!.execute!({ text: 'Always answer in French.' } as any, {} as any);
-    let { pins } = await listPinnedKnowledge({ store, scope: threadScope });
+    let { pins } = await listPinnedKnowledge({ store, scopeIds });
     expect(pins.map(pin => pin.text)).toEqual(['Always answer in French.']);
 
     const edited = await tools.knowledge_edit_pin!.execute!(
@@ -63,20 +70,21 @@ describe('Subconscious pinned facts against LibSQL', () => {
       {} as any,
     );
     expect(edited.id).not.toBe(pinned.id);
-    ({ pins } = await listPinnedKnowledge({ store, scope: threadScope }));
+    ({ pins } = await listPinnedKnowledge({ store, scopeIds }));
     expect(pins.map(pin => pin.id)).toEqual([edited.id]);
 
     await tools.knowledge_unpin!.execute!({ recordId: edited.id } as any, {} as any);
-    ({ pins } = await listPinnedKnowledge({ store, scope: threadScope }));
+    ({ pins } = await listPinnedKnowledge({ store, scopeIds }));
     expect(pins).toHaveLength(0);
 
-    const rawDeleted = await store.getKnowledge({ id: edited.id, includeDeleted: true });
+    const rawDeleted = await store.getRecord({ id: edited.id, includeDeleted: true });
     expect(rawDeleted?.deletedAt).toBeTruthy();
   });
 
   it('drives the processor end to end: snapshot, delta, and lane clear on unpin', async () => {
     const { tools, storage } = await createHarness();
     const processor = new PinnedStateProcessor({
+      getKnowledgeInstance: () => undefined,
       getKnowledgeStore: () => (storage as any).getStore('knowledge'),
     });
 

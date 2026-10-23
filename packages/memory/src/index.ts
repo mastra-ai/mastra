@@ -53,7 +53,7 @@ import type {
   ObservationalMemoryRecord,
   BufferedObservationChunk,
   KnowledgeStorage,
-  KnowledgeScope,
+  KnowledgeScopeIds,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -104,6 +104,7 @@ export {
 } from './processors/observational-memory/subconscious';
 export type {
   KnowledgeSemanticIndexCoordinatorConfig,
+  KnowledgeSemanticSearchResult,
   ResolvedSubconsciousAgent,
   ResolvedSubconsciousConfig,
   SubconsciousBuiltInObservationAgent,
@@ -149,7 +150,7 @@ type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
   /**
    * Selects the experimental Knowledge runtime used by Subconscious observation ingestion, tools, pinning,
    * curation, and semantic indexing. A string resolves a keyed instance from the owning Mastra;
-   * a Knowledge instance supports standalone wiring. Omit to use the `knowledge` domain of this Memory's own storage.
+   * a Knowledge instance supports standalone wiring. Omit when these features do not use Knowledge.
    */
   knowledge?: string | Knowledge | false;
 };
@@ -676,7 +677,7 @@ export class Memory extends MastraMemory {
     }
   }
 
-  /** Returns the configured Knowledge v2 instance, or undefined when Knowledge comes from this Memory's own storage. */
+  /** Returns the configured Knowledge instance. */
   public getKnowledgeInstance(): Knowledge | undefined {
     if (this._knowledge === false || this._knowledge === undefined) return undefined;
     if (typeof this._knowledge !== 'string') return this._knowledge;
@@ -688,12 +689,9 @@ export class Memory extends MastraMemory {
     return this._mastraInstance.getKnowledge(this._knowledge);
   }
 
-  /**
-   * Resolves the one Knowledge storage domain used by every Subconscious path on this Memory.
-   * Configured v2 runtimes never fall back to Memory storage, preventing split-brain state.
-   */
+  /** Resolves the configured Knowledge storage domain used by every Subconscious path on this Memory. */
   public async getKnowledgeStore(): Promise<KnowledgeStorage> {
-    if (this._knowledge === undefined) return this.resolveStorageKnowledgeStore();
+    if (this._knowledge === undefined) return this.resolveLegacyKnowledgeStore();
     if (this._knowledge === false) throw new Error('Knowledge is disabled for this Memory instance.');
     if (!this._knowledgeStore) {
       const promise = this.getKnowledgeInstance()!
@@ -707,7 +705,8 @@ export class Memory extends MastraMemory {
     return this._knowledgeStore;
   }
 
-  private async resolveStorageKnowledgeStore(): Promise<KnowledgeStorage> {
+  /** Bare-storage fallback: the Knowledge storage domain on the configured storage, when no Knowledge instance is set. */
+  private async resolveLegacyKnowledgeStore(): Promise<KnowledgeStorage> {
     const store = await this.storage.getStore('knowledge');
     if (!store) {
       throw new Error(`Knowledge storage domain is not available on ${this.storage.constructor.name}`);
@@ -726,6 +725,7 @@ export class Memory extends MastraMemory {
               vector: this.vector!,
               embedder: this.embedder!,
               embedderOptions: this.embedderOptions,
+              getLogger: () => this.logger,
             }),
         )
         .catch(error => {
@@ -737,8 +737,8 @@ export class Memory extends MastraMemory {
     return this._knowledgeSemanticIndex;
   }
 
-  public async drainKnowledgeSemanticIndex(scope?: KnowledgeScope): Promise<number> {
-    return (await this.getKnowledgeSemanticIndex())?.drain(scope) ?? 0;
+  public async drainKnowledgeSemanticIndex(scopeIds?: KnowledgeScopeIds): Promise<number> {
+    return (await this.getKnowledgeSemanticIndex())?.drain(scopeIds) ?? 0;
   }
 
   /**
@@ -4313,7 +4313,10 @@ Notes:
     const alreadyConfigured = configuredProcessors.some(p => !('workflow' in p) && p.id === SUBCONSCIOUS_PINS_STATE_ID);
     if (alreadyConfigured) return null;
 
-    return new PinnedStateProcessor({ getKnowledgeStore: () => this.getKnowledgeStore() });
+    return new PinnedStateProcessor({
+      getKnowledgeInstance: () => this.getKnowledgeInstance(),
+      getKnowledgeStore: () => this.getKnowledgeStore(),
+    });
   }
 }
 

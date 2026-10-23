@@ -24,7 +24,7 @@ type InputShared_Auxiliary_116 = {
   parentWorkflow?: InputShared_Auxiliary_116 | undefined;
 };
 
-type InputShared_Auxiliary_208 =
+type InputShared_Auxiliary_210 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -73,41 +73,41 @@ type InputShared_Auxiliary_208 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_208[];
+      args: InputShared_Auxiliary_210[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_208;
+      arg: InputShared_Auxiliary_210;
     }
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_231;
+            some: InputShared_Auxiliary_233;
           }
         | {
-            none: InputShared_Auxiliary_231;
+            none: InputShared_Auxiliary_233;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_231;
+            some: InputShared_Auxiliary_233;
           }
         | {
-            none: InputShared_Auxiliary_231;
+            none: InputShared_Auxiliary_233;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_231;
+            some: InputShared_Auxiliary_233;
           }
         | {
-            none: InputShared_Auxiliary_231;
+            none: InputShared_Auxiliary_233;
           };
     };
 
-type InputShared_Auxiliary_231 =
+type InputShared_Auxiliary_233 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -156,33 +156,33 @@ type InputShared_Auxiliary_231 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_231[];
+      args: InputShared_Auxiliary_233[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_231;
+      arg: InputShared_Auxiliary_233;
     };
 
-type InputShared_Auxiliary_278 =
+type InputShared_Auxiliary_280 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_278[];
+      args: InputShared_Auxiliary_280[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_278;
+      arg: InputShared_Auxiliary_280;
     }
   | {
       traces:
         | {
-            some: InputShared_Auxiliary_208;
+            some: InputShared_Auxiliary_210;
           }
         | {
-            none: InputShared_Auxiliary_208;
+            none: InputShared_Auxiliary_210;
           };
     };
 
-type InputShared_Auxiliary_710 =
+type InputShared_Auxiliary_712 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,27 +227,27 @@ type InputShared_Auxiliary_710 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_710[];
+      args: InputShared_Auxiliary_712[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_710;
+      arg: InputShared_Auxiliary_712;
     };
 
-type InputShared_Auxiliary_784 = {
+type InputShared_Auxiliary_786 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_784[] | undefined;
+  children?: InputShared_Auxiliary_786[] | undefined;
 };
 
-type Shared_Auxiliary_777 = {
+type Shared_Auxiliary_778 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_777[] | undefined;
+  children?: Shared_Auxiliary_778[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1833,7 +1833,7 @@ type InputShared_Type_89 = {
       }
     | undefined;
   steps: InputShared_Type_84[];
-  predicates: InputShared_Auxiliary_710[];
+  predicates: InputShared_Auxiliary_712[];
 };
 
 type InputShared_Type_90 = {
@@ -1847,7 +1847,7 @@ type InputShared_Type_90 = {
     | undefined;
   step: InputShared_Type_84;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_710;
+  predicate: InputShared_Auxiliary_712;
 };
 
 type InputShared_Type_91 =
@@ -4299,7 +4299,7 @@ type Shared_Type_84 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_777[] | undefined;
+  files?: Shared_Auxiliary_778[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -9786,6 +9786,54 @@ export interface PostMemoryNetworkMessagesDelete_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /knowledge/:instanceKey/importers/:importerId/webhook
+// ============================================================================
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams = {
+  instanceKey: string;
+  importerId: string;
+};
+
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body = {
+  payload?: unknown | undefined;
+};
+
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_Response = {
+  id: string;
+  importerId: string;
+  binding: string;
+  importKind: 'static' | 'agentic';
+  triggerKind: 'cron' | 'webhook' | 'programmatic';
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'interrupted';
+  error?: string | undefined;
+  transcriptThreadId?: string | undefined;
+  traceId?: string | undefined;
+  queuedAt: Date;
+  startedAt?: Date | undefined;
+  completedAt?: Date | undefined;
+};
+
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_Request = Simplify<
+  (PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams extends never
+    ? {}
+    : { params: PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body extends never
+      ? {}
+      : {} extends PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body
+        ? { body?: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body }
+        : { body: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body })
+>;
+
+export interface PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract {
+  pathParams: PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams;
+  queryParams: never;
+  body: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body;
+  request: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Request;
+  response: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /scores/scorers
 // ============================================================================
 export type GetScoresScorers_Response = {
@@ -10578,7 +10626,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_208 | undefined;
+  where?: InputShared_Auxiliary_210 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -10668,11 +10716,11 @@ export type PostObservabilityTracesAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_208 | undefined;
+  where?: InputShared_Auxiliary_210 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (InputShared_Type_16 | `countDistinct.${string}`)[];
-  having?: InputShared_Auxiliary_231 | undefined;
+  having?: InputShared_Auxiliary_233 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10753,11 +10801,11 @@ export type PostObservabilitySpansAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_231 | undefined;
+  where?: InputShared_Auxiliary_233 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (InputShared_Type_16 | `countDistinct.${string}`)[];
-  having?: InputShared_Auxiliary_231 | undefined;
+  having?: InputShared_Auxiliary_233 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10805,7 +10853,7 @@ export type PostObservabilityThreadsQuery_Body =
               field: 'startedAt' | 'endedAt';
             };
           };
-      where?: InputShared_Auxiliary_231 | undefined;
+      where?: InputShared_Auxiliary_233 | undefined;
       orderBy?: {
         field: 'startedAt' | 'endedAt';
         direction: 'asc' | 'desc';
@@ -10821,9 +10869,9 @@ export type PostObservabilityThreadsQuery_Body =
           from: string;
           to: string;
         };
-        where?: InputShared_Auxiliary_208 | undefined;
+        where?: InputShared_Auxiliary_210 | undefined;
       };
-      where?: InputShared_Auxiliary_278 | undefined;
+      where?: InputShared_Auxiliary_280 | undefined;
       page?: {
         limit?: number;
         after?: (string | null) | undefined;
@@ -10901,7 +10949,7 @@ export type PostObservabilitySpansQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_231 | undefined;
+  where?: InputShared_Auxiliary_233 | undefined;
   orderBy?: {
     field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs';
     direction: 'asc' | 'desc';
@@ -19011,7 +19059,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_784[] | undefined;
+  files?: InputShared_Auxiliary_786[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -19069,7 +19117,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_784[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_786[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -24712,6 +24760,7 @@ export interface RouteTypes {
   'PATCH /memory/network/threads/:threadId': PatchMemoryNetworkThreadsThreadId_RouteContract;
   'DELETE /memory/network/threads/:threadId': DeleteMemoryNetworkThreadsThreadId_RouteContract;
   'POST /memory/network/messages/delete': PostMemoryNetworkMessagesDelete_RouteContract;
+  'POST /knowledge/:instanceKey/importers/:importerId/webhook': PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract;
   'GET /scores/scorers': GetScoresScorers_RouteContract;
   'GET /scores/scorers/:scorerId': GetScoresScorersScorerId_RouteContract;
   'GET /scores/run/:runId': GetScoresRunRunId_RouteContract;
@@ -25499,6 +25548,9 @@ export interface Client {
   };
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;
+  };
+  '/knowledge/:instanceKey/importers/:importerId/webhook': {
+    POST: PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract;
   };
   '/logs': {
     GET: GetLogs_RouteContract;
