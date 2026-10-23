@@ -82,7 +82,7 @@ describe('ChatPageLayout', () => {
     );
 
     const trigger = screen.getByRole('button', { name: 'Toggle sidebar' });
-    expect(screen.getByRole('button', { name: 'Search and navigate' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Search and navigate' })).not.toBeInTheDocument();
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByTestId('desktop-sidebar-state')).toHaveTextContent('collapsed');
     expect(screen.queryByLabelText('Open navigation menu')).not.toBeInTheDocument();
