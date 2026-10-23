@@ -1,3 +1,4 @@
+import type { FinalizationRepository } from '../storage/finalizations.js';
 import { registerApiRoute, type ServerConfig } from '@mastra/core/server';
 import type { ReportRepository } from '../storage/reports.js';
 import { IntakeError, safeFailure } from '../domain/errors.js';
@@ -58,6 +59,7 @@ export function createLocalServer(
   limits: InputLimits,
   reports?: ReportRepository,
   operatorId = 'local-broker',
+  finalizations?: FinalizationRepository,
 ): ServerConfig {
   const origin = `http://127.0.0.1:${port}`;
   return {
@@ -68,11 +70,21 @@ export function createLocalServer(
             method: 'GET',
             handler: async context => {
               try {
-                const result = await reports.download(
-                  { threadId: context.req.query('threadId') ?? '', operatorId },
-                  context.req.query('caseId') ?? '',
-                  context.req.param('artifactId'),
-                );
+                const result = await reports
+                  .download(
+                    { threadId: context.req.query('threadId') ?? '', operatorId },
+                    context.req.query('caseId') ?? '',
+                    context.req.param('artifactId'),
+                  )
+                  .catch(error => {
+                    if (!finalizations || !(error instanceof IntakeError) || error.code !== 'ARTIFACT_CONTEXT')
+                      throw error;
+                    return finalizations.download(
+                      { threadId: context.req.query('threadId') ?? '', operatorId },
+                      context.req.query('caseId') ?? '',
+                      context.req.param('artifactId'),
+                    );
+                  });
                 return new Response(new Uint8Array(result.bytes), {
                   headers: {
                     'Content-Type': result.artifact.mediaType,

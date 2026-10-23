@@ -1,9 +1,8 @@
+import { artifactBytes, stageArtifact } from './artifact-files.js';
 import { randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
-import { open, unlink, realpath, lstat, link, rename } from 'node:fs/promises';
-import { resolve, sep } from 'node:path';
+import { resolve } from 'node:path';
 import { z } from 'zod';
-import { outputArtifactSchema, hashBytes, type OperationContext } from '../domain/contracts.js';
+import { outputArtifactSchema, type OperationContext } from '../domain/contracts.js';
 import { buildReport, reportSnapshotSchema, reportHash, type ReportSnapshot } from '../domain/reports.js';
 import { IntakeError, safeFailure, type Failure } from '../domain/errors.js';
 import { ensurePrivateDirectory } from '../runtime/paths.js';
@@ -28,22 +27,52 @@ export class ReportRepository {
   async initialize() {
     await ensurePrivateDirectory(this.root);
     await this.reconciliation.cases.client.executeMultiple(
-      `CREATE TABLE IF NOT EXISTS insurance_reports (id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES insurance_cases(id), analysis_id TEXT NOT NULL UNIQUE REFERENCES insurance_analysis(id), artifact_id TEXT NOT NULL UNIQUE, data TEXT NOT NULL); INSERT OR IGNORE INTO insurance_schema(version) VALUES(2);`,
+      `CREATE TABLE IF NOT EXISTS insurance_reports (id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES insurance_cases(id), analysis_id TEXT NOT NULL REFERENCES insurance_analysis(id), artifact_id TEXT NOT NULL UNIQUE, data TEXT NOT NULL); INSERT OR IGNORE INTO insurance_schema(version) VALUES(2);`,
     );
+    await this.migrateRevisions();
+  }
+  async migrateRevisions() {
+    const row = (
+      await this.reconciliation.cases.client.execute("SELECT sql FROM sqlite_master WHERE name='insurance_reports'")
+    ).rows[0];
+    if (!String(row?.sql).includes('analysis_id TEXT NOT NULL UNIQUE')) return;
+    await this.reconciliation.transaction(async transaction => {
+      await transaction.execute(
+        'CREATE TABLE insurance_reports_revision (id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES insurance_cases(id), analysis_id TEXT NOT NULL REFERENCES insurance_analysis(id), artifact_id TEXT NOT NULL UNIQUE, data TEXT NOT NULL)',
+      );
+      await transaction.execute('INSERT INTO insurance_reports_revision SELECT * FROM insurance_reports');
+      await transaction.execute('DROP TABLE insurance_reports');
+      await transaction.execute('ALTER TABLE insurance_reports_revision RENAME TO insurance_reports');
+    });
   }
   async prepare(context: OperationContext, analysisId: string, runId: string, providerId: string) {
     return this.reconciliation.transaction(async transaction => {
       const record = await this.reconciliation.cases.requireCase(context);
       const existing = (
         await transaction.execute({
-          sql: 'SELECT data FROM insurance_reports WHERE analysis_id=? AND case_id=?',
-          args: [analysisId, record.id],
+          sql: "SELECT data FROM insurance_reports WHERE json_extract(data,'$.snapshot.workflowRunId')=? AND case_id=?",
+          args: [runId, record.id],
         })
       ).rows[0];
       if (existing) return this.validate(JSON.parse(String(existing.data)) as Publication);
-      const { analyses } = await this.reconciliation.status(context);
+      if (record.state !== 'PROCESSING')
+        throw new IntakeError(
+          'REPORT_AUTHORITY',
+          'A new report requires completed processing or an explicitly requested revision bound to this workflow.',
+          'Read the current report; request a revision before creating another version.',
+          409,
+        );
+      const { analyses, attempts } = await this.reconciliation.status(context);
       const analysis = analyses.find(a => a.id === analysisId);
-      if (!analysis || record.latestAnalysisId !== analysisId)
+      if (
+        !analysis ||
+        record.latestAnalysisId !== analysisId ||
+        !(record.revisionAuthority?.kind === 'presentation'
+          ? record.revisionAuthority.runId === runId
+          : attempts.some(
+              attempt => attempt.id === analysis.attemptId && attempt.runId === runId && attempt.state === 'COMPLETED',
+            ))
+      )
         throw new IntakeError(
           'REPORT_CONTEXT',
           'The analysis is not the current case result.',
@@ -57,6 +86,16 @@ export class ReportRepository {
         })
       ).rows[0]!;
       const snapshot = buildReport(analysis, randomUUID(), Number(previous.count) + 1, runId);
+      if (record.revisionAuthority) {
+        snapshot.revisionNote = record.revisionAuthority.note;
+        const events = await transaction.execute({
+          sql: 'SELECT data FROM insurance_review_events WHERE case_id=? ORDER BY rowid',
+          args: [record.id],
+        });
+        snapshot.reviewHistory = events.rows
+          .map(row => JSON.parse(String(row.data)) as import('../domain/reviews.js').ReviewEvent)
+          .filter(e => e.disposition && snapshot.comparisons.some(f => f.id === e.disposition!.findingId));
+      }
       const publication: Publication = {
         snapshot,
         hash: reportHash(snapshot),
@@ -72,7 +111,13 @@ export class ReportRepository {
         sql: 'INSERT INTO insurance_reports(id,case_id,analysis_id,artifact_id,data) VALUES(?,?,?,?,?)',
         args: [snapshot.id, record.id, analysisId, publication.artifactId, JSON.stringify(publication)],
       });
-      const updated = { ...record, latestReportId: snapshot.id, state: 'PROCESSING', revision: record.revision + 1 };
+      const updated = {
+        ...record,
+        revisionAuthority: undefined,
+        latestReportId: snapshot.id,
+        state: 'PROCESSING',
+        revision: record.revision + 1,
+      };
       await transaction.execute({
         sql: 'UPDATE insurance_cases SET data=? WHERE id=? AND data=?',
         args: [JSON.stringify(updated), record.id, JSON.stringify(record)],
@@ -138,14 +183,19 @@ export class ReportRepository {
         sql: 'UPDATE insurance_reports SET data=? WHERE id=? AND data=?',
         args: [JSON.stringify(updated), p.snapshot.id, JSON.stringify(current)],
       });
-      await transaction.execute({
-        sql: 'UPDATE insurance_cases SET data=? WHERE id=? AND data=?',
-        args: [
-          JSON.stringify({ ...record, state: artifact ? 'AWAITING_REVIEW' : 'FAILED', revision: record.revision + 1 }),
-          record.id,
-          JSON.stringify(record),
-        ],
-      });
+      if (record.latestReportId === p.snapshot.id && ['PROCESSING', 'FAILED'].includes(record.state))
+        await transaction.execute({
+          sql: 'UPDATE insurance_cases SET data=? WHERE id=? AND data=?',
+          args: [
+            JSON.stringify({
+              ...record,
+              state: artifact ? 'AWAITING_REVIEW' : 'FAILED',
+              revision: record.revision + 1,
+            }),
+            record.id,
+            JSON.stringify(record),
+          ],
+        });
       return updated;
     });
   }
@@ -169,62 +219,23 @@ export class ReportRepository {
   }
   async stage(p: Publication, descriptor: z.infer<typeof outputArtifactSchema>, bytes: Uint8Array) {
     const artifact = this.verifyBinding(p, descriptor);
-    const path = resolve(this.root, p.artifactId + '-' + artifact.hash);
-    const temporary = path + '.staging-' + randomUUID();
-    // Only complete, synced byte sets acquire the immutable destination name.
-    // Interrupted temporary files remain private recovery evidence.
-    const file = await open(temporary, 'wx', 0o600);
-    try {
-      await file.writeFile(bytes);
-      await file.sync();
-    } finally {
-      await file.close();
-    }
-    const syncDirectory = async () => {
-      const directory = await open(this.root, 'r');
-      try {
-        await directory.sync();
-      } finally {
-        await directory.close();
+    await this.reconciliation.transaction(async () => {
+      const current = await this.get(p.context, p.snapshot.id);
+      if (!current)
+        throw new IntakeError('REPORT_CONTEXT', 'The report publication is unavailable.', 'Read case status.', 409);
+      if (current.state === 'PUBLISHED') {
+        await this.bytes(current);
+        if (current.artifact?.hash !== artifact.hash)
+          throw new IntakeError(
+            'ARTIFACT_BINDING',
+            'This report already has different published bytes.',
+            'Retrieve the existing immutable draft.',
+            409,
+          );
+        return;
       }
-    };
-    try {
-      await this.reconciliation.transaction(async () => {
-        const current = await this.get(p.context, p.snapshot.id);
-        if (!current)
-          throw new IntakeError('REPORT_CONTEXT', 'The report publication is unavailable.', 'Read case status.', 409);
-        if (current.state === 'PUBLISHED') {
-          await this.bytes(current);
-          if (current.artifact?.hash !== artifact.hash)
-            throw new IntakeError(
-              'ARTIFACT_BINDING',
-              'This report already has different published bytes.',
-              'Retrieve the existing immutable draft.',
-              409,
-            );
-          return;
-        }
-        try {
-          await link(temporary, path);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-          try {
-            await this.bytes(p, descriptor);
-            await syncDirectory();
-            return;
-          } catch {
-            // The database write lock excludes publication while repairing a legacy
-            // incomplete destination. Retain its bytes instead of erasing history.
-            await rename(path, path + '.interrupted-' + randomUUID());
-            await link(temporary, path);
-          }
-        }
-        await syncDirectory();
-      });
-    } finally {
-      await unlink(temporary);
-      await syncDirectory();
-    }
+      await stageArtifact(this.root, p.artifactId, artifact.hash, bytes);
+    });
   }
   async bytes(p: Publication, descriptor = p.artifact) {
     if (!descriptor)
@@ -234,29 +245,8 @@ export class ReportRepository {
         'Retry publication of the saved report.',
         409,
       );
-    const a = this.verifyBinding(p, descriptor);
-    try {
-      const root = await realpath(this.root);
-      const path = resolve(root, p.artifactId + '-' + a.hash);
-      if (!path.startsWith(root + sep) || !z.uuid().safeParse(p.artifactId).success) throw Error('Invalid location');
-      const entry = await lstat(path);
-      if (!entry.isFile() || entry.isSymbolicLink() || (await realpath(path)) !== path) throw Error('Invalid file');
-      const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-      try {
-        const bytes = await file.readFile();
-        if (hashBytes(bytes) !== a.hash || !bytes.length) throw Error('Invalid checksum');
-        return bytes;
-      } finally {
-        await file.close();
-      }
-    } catch {
-      throw new IntakeError(
-        'ARTIFACT_UNAVAILABLE',
-        'The saved draft is missing, incomplete or no longer matches its checksum.',
-        'Check private storage and restore the paired database and files before retrying.',
-        409,
-      );
-    }
+    const artifact = this.verifyBinding(p, descriptor);
+    return artifactBytes(this.root, p.artifactId, artifact.hash);
   }
   async download(context: OperationContext, caseId: string, artifactId: string) {
     z.uuid().parse(caseId);

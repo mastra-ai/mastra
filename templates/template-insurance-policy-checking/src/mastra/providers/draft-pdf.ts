@@ -8,9 +8,25 @@ import { reportSnapshotSchema, type ReportSnapshot } from '../domain/reports.js'
 import { reportLabels, termValue } from '../domain/report-presentation.js';
 import { projectRoot } from '../runtime/paths.js';
 import { IntakeError } from '../domain/errors.js';
+import {
+  approvalSchema,
+  latestDispositions,
+  actionableFindings,
+  dispositionLabels,
+  type Approval,
+} from '../domain/reviews.js';
 
-export async function renderDraftPdf(report: ReportSnapshot): Promise<Buffer> {
+export async function renderDraftPdf(report: ReportSnapshot, approved?: Approval): Promise<Buffer> {
   const r = reportSnapshotSchema.parse(report);
+  const approval = approved ? approvalSchema.parse(approved) : undefined;
+  const dispositions = latestDispositions({ events: approval?.events ?? r.reviewHistory ?? [] });
+  const reviewed = (id: string) => {
+    const event = dispositions.get(id);
+    return event?.disposition
+      ? dispositionLabels[event.disposition.disposition as keyof typeof dispositionLabels]
+      : 'Not confirmed by the broker';
+  };
+  const corrections = approval ? actionableFindings(r, approval) : [];
   const doc = new PDFDocument({
     size: 'LETTER',
     margin: 47,
@@ -19,8 +35,10 @@ export async function renderDraftPdf(report: ReportSnapshot): Promise<Buffer> {
     info: {
       Title: 'Policy Checking Report',
       Author: 'Policy Checking',
-      Subject: `Draft report ${r.id}, version ${r.version}`,
-      Keywords: 'Insurance, policy checking, draft, pending broker review',
+      Subject: `${approval ? 'Final' : 'Draft'} report ${r.id}, version ${r.version}`,
+      Keywords: approval
+        ? 'Insurance, policy checking, approved report'
+        : 'Insurance, policy checking, draft, pending broker review',
       CreationDate: new Date(r.createdAt),
     },
   });
@@ -57,7 +75,14 @@ export async function renderDraftPdf(report: ReportSnapshot): Promise<Buffer> {
     while (doc.widthOfString(runningPolicy) > 210) runningPolicy = runningPolicy.slice(0, -2) + '…';
     draw(runningPolicy, 350, 25, 8.5, false, '#64748B');
     doc.moveTo(47, 44).lineTo(565, 44).strokeColor('#CBD5E1').stroke();
-    draw('Draft — pending broker review', 47, 55, 9, true, '#2563EB');
+    draw(
+      approval ? 'Final report — approved by the broker' : 'Draft — pending broker review',
+      47,
+      55,
+      9,
+      true,
+      '#2563EB',
+    );
     y = 86;
     if (repeated) {
       draw(fitLine(repeated, 9, 450) + ' (continued)', 47, y, 9, true);
@@ -174,7 +199,8 @@ export async function renderDraftPdf(report: ReportSnapshot): Promise<Buffer> {
         termValue(f.actual?.value),
         reportLabels.classification[f.classification] +
           (f.severity ? '\n' + f.severity.level + ' severity' : '') +
-          '\nAwaiting broker review',
+          '\n' +
+          (approval || dispositions.has(f.id) ? reviewed(f.id) : 'Awaiting broker review'),
       ];
       const lines = values.map((v, i) => wrap(v, 8.5, false, columns[i]!.width - 10));
       let row = 0;
@@ -219,7 +245,7 @@ export async function renderDraftPdf(report: ReportSnapshot): Promise<Buffer> {
   page();
   section('A. Identification');
   text('Policy Checking Report', 23, true);
-  text('Draft — pending broker review', 11, true, '#2563EB');
+  text(approval ? 'Final report — approved by the broker' : 'Draft — pending broker review', 11, true, '#2563EB');
   for (const [label, value] of [
     ['Report identifier', r.id],
     ['Report version', String(r.version)],
@@ -242,6 +268,7 @@ export async function renderDraftPdf(report: ReportSnapshot): Promise<Buffer> {
     false,
     '#64748B',
   );
+  if (r.revisionNote) field('Broker-requested revision', r.revisionNote);
   section('B. Executive summary', 340);
   text(reportLabels.status[r.status], 13, true);
   ensure(70);
@@ -310,7 +337,7 @@ export async function renderDraftPdf(report: ReportSnapshot): Promise<Buffer> {
     );
     field('Assessment', reportLabels.classification[f.classification]);
     field('Severity', f.severity ? reportLabels.severity[f.severity.level] : 'Not available');
-    field('Review status', 'Awaiting broker review');
+    field('Review status', approval || dispositions.has(f.id) ? reviewed(f.id) : 'Awaiting broker review');
     field('Expected terms', termValue(f.baseline?.value));
     field('Issued or target terms', termValue(f.actual?.value));
     field('Observation', f.observation);
@@ -325,7 +352,14 @@ export async function renderDraftPdf(report: ReportSnapshot): Promise<Buffer> {
           8.5,
         );
     for (const u of f.uncertainty) field('Uncertainty', u);
-    field('Reviewer comments', 'Not yet recorded');
+    field('Reviewer comments', dispositions.get(f.id)?.disposition?.reason ?? 'Not yet recorded');
+    if (!approval && dispositions.has(f.id))
+      field(
+        'Previous review provenance',
+        `Report ${dispositions.get(f.id)!.reportId}, reviewed at ${dispositions.get(f.id)!.at}. This revised report still requires fresh approval.`,
+      );
+    const override = dispositions.get(f.id)?.disposition?.severityOverride;
+    if (override) field('Broker severity override', override);
     y += 10;
   }
   repeated = '';
@@ -396,14 +430,59 @@ export async function renderDraftPdf(report: ReportSnapshot): Promise<Buffer> {
   }
   repeated = '';
   section('I. Broker review', 200);
-  field('Review status', 'Awaiting broker review');
-  field('Reviewer', 'Not yet recorded');
-  field('Review time', 'Not yet recorded');
-  field('Approved version', 'Not yet recorded');
-  field('Finding disposition', 'Not yet recorded');
-  text(
-    'Approval must identify the exact report version. It accepts the reviewed report, not insurer terms or coverage certification. No final report or correction request has been issued.',
-  );
+  field('Review status', approval ? 'Approved by the broker' : 'Awaiting broker review');
+  field('Reviewer', approval?.reviewerId ?? 'Not yet recorded');
+  field('Review time (UTC)', approval?.approvedAt ?? 'Not yet recorded');
+  field('Approved version', approval ? String(approval.version) : 'Not yet recorded');
+  field('Approved snapshot checksum', approval?.snapshotHash ?? 'Not yet recorded');
+  if (approval) {
+    text(
+      'Report approval accepts this exact reviewed report. It does not confirm findings unless the broker recorded an explicit finding disposition. Original observations and unresolved evidence remain unchanged.',
+    );
+    for (const f of r.comparisons) {
+      field(findingName(f.id), reviewed(f.id));
+      const d = dispositions.get(f.id)?.disposition;
+      if (d?.reason) field('Broker reason', d.reason);
+      if (d?.severityOverride) field('Broker severity override', d.severityOverride);
+    }
+    if (corrections.length) {
+      section('J. Proposed correction request — not sent');
+      field('To', '[Insurer or responsible team]');
+      field('Policy', r.identity.policyNumber);
+      field('Subject', 'Request to correct confirmed policy discrepancies');
+      text(
+        'Please review the following confirmed discrepancies against the agreed terms and provide the requested correction or clarification.',
+      );
+      for (const f of corrections) {
+        repeated = '';
+        ensure(80);
+        text(findingName(f.id) + ' • ' + f.label, 11, true);
+        repeated = findingName(f.id);
+        field('Expected terms', termValue(f.baseline?.value));
+        field('Issued terms', termValue(f.actual?.value));
+        field('Requested correction or clarification', f.action);
+        for (const e of f.evidence) evidence(e);
+      }
+      repeated = '';
+      field('Broker contact', '[Broker name and contact details]');
+      text('Proposed correction request — not sent. Review and edit before any separate delivery.');
+    }
+  } else {
+    if (r.reviewHistory?.length) {
+      for (const event of r.reviewHistory) {
+        field(findingName(event.disposition!.findingId), dispositionLabels[event.disposition!.disposition]);
+        field('Original review report', event.reportId);
+        field('Original review time (UTC)', event.at);
+        field('Broker reason', event.disposition!.reason ?? 'Not recorded');
+      }
+      text(
+        'Previous dispositions relate only to retained immutable machine findings. This revised report has not been approved.',
+      );
+    } else field('Finding disposition', 'Not yet recorded');
+    text(
+      'Approval must identify the exact report version. It accepts the reviewed report, not insurer terms or coverage certification. No final report or correction request has been issued.',
+    );
+  }
   const range = doc.bufferedPageRange();
   for (let i = 0; i < range.count; i++) {
     doc.switchToPage(i);

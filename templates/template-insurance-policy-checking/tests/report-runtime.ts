@@ -1,3 +1,7 @@
+import { ReviewRepository } from '../src/mastra/storage/reviews.js';
+import { FinalizationRepository } from '../src/mastra/storage/finalizations.js';
+import { createReviewService } from '../src/mastra/services/review-service.js';
+import { createApprovedOutputProvider } from '../src/mastra/providers/approved-output.js';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Mastra } from '@mastra/core/mastra';
@@ -40,6 +44,8 @@ export async function reportRuntime(
   endpoint?: string,
   output: OutputProvider<'draftOutput'> = createDraftPdfProvider(),
   input: InputProvider = createPdfProvider(inputLimits),
+  final: OutputProvider<'reportOutput'> = createApprovedOutputProvider('reportOutput'),
+  correction: OutputProvider<'correctionOutput'> = createApprovedOutputProvider('correctionOutput'),
 ) {
   const cases = new CaseRepository(root);
   await cases.initialize();
@@ -53,7 +59,12 @@ export async function reportRuntime(
     { model: 'gpt-6.1-sol', budget: reportTestBudget },
     insuranceConfiguration,
   );
-  const reports = createReportService(reportRepository, output);
+  const reviewRepository = new ReviewRepository(reportRepository);
+  await reviewRepository.initialize();
+  const finalizations = new FinalizationRepository(reviewRepository);
+  await finalizations.initialize();
+  const review = createReviewService(reviewRepository, finalizations, final, correction);
+  const reports = createReportService(reportRepository, output, review);
   const caseService = createCaseService(cases, input, inputLimits, reconciliation.status, async context => {
     const record = await cases.active(context);
     return record?.latestReportId ? reports.current(context, { caseId: record.id }) : null;
@@ -76,6 +87,7 @@ export async function reportRuntime(
     undefined,
     comparison.runner,
     comparison.report,
+    comparison.review,
   );
   const mastra = new Mastra({
     storage,
@@ -88,6 +100,9 @@ export async function reportRuntime(
     reconciliationRepository,
     reportRepository,
     reports,
+    review,
+    reviewRepository,
+    finalizations,
     caseService,
     comparison,
     storage,

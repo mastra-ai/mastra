@@ -67,7 +67,22 @@ export type Clarification = z.infer<typeof clarifySchema>;
 export type CaseRecord = {
   id: string;
   revision: number;
-  state: 'CREATED' | 'PROCESSING' | 'FAILED' | 'AWAITING_REVIEW';
+  state:
+    | 'CREATED'
+    | 'PROCESSING'
+    | 'FAILED'
+    | 'AWAITING_REVIEW'
+    | 'REVISION_REQUESTED'
+    | 'APPROVED'
+    | 'REJECTED'
+    | 'FINALIZED';
+  revisionAuthority?: {
+    reportId: string;
+    eventId: string;
+    kind: 'presentation' | 'evidence';
+    note: string;
+    runId?: string;
+  };
   latestReportId?: string;
   latestAnalysisId?: string;
   createdAt: string;

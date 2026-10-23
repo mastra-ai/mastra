@@ -19,7 +19,8 @@
     "test:integration": "vitest run tests/intake.integration.test.ts",
     "test:reconciliation": "vitest run tests/reconciliation.integration.test.ts",
     "test:reports": "vitest run tests/reports.integration.test.ts",
-    "test:studio": "playwright test"
+    "test:studio": "playwright test",
+    "test:review": "vitest run tests/review.integration.test.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "3.0.130",

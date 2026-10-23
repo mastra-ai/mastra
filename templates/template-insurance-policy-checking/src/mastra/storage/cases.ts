@@ -120,7 +120,11 @@ export class CaseRepository {
           'Wait for processing to finish before changing the case.',
           409,
         );
-      if (!newCase && active?.latestReportId)
+      if (
+        !newCase &&
+        active?.latestReportId &&
+        !(active.state === 'REVISION_REQUESTED' && active.revisionAuthority?.kind === 'evidence')
+      )
         throw new IntakeError(
           'CASE_REVIEW_PENDING',
           'This case has an immutable draft awaiting broker review.',
@@ -187,7 +191,10 @@ export class CaseRepository {
       const record: CaseRecord = {
         id,
         revision: existing ? existing.revision + (additions.length ? 1 : 0) : 1,
-        state: 'CREATED',
+        state: existing?.revisionAuthority ? 'REVISION_REQUESTED' : 'CREATED',
+        ...(existing?.revisionAuthority
+          ? { revisionAuthority: existing.revisionAuthority, latestReportId: existing.latestReportId }
+          : {}),
         createdAt: existing?.createdAt ?? new Date().toISOString(),
         identity: existing?.identity ?? { policyNumber: null, insuredName: null, insuranceProduct: null },
         clarification: additions.length ? null : (existing?.clarification ?? null),
@@ -310,7 +317,11 @@ export class CaseRepository {
     const request = clarifySchema.parse(input);
     return this.serial(async () => {
       const record = await this.requireCase(context, request.caseId);
-      if (record.state === 'PROCESSING' || record.latestReportId)
+      if (
+        record.state === 'PROCESSING' ||
+        (record.latestReportId &&
+          !(record.state === 'REVISION_REQUESTED' && record.revisionAuthority?.kind === 'evidence'))
+      )
         throw new IntakeError(
           'CASE_PROCESSING',
           'The case is being compared.',
@@ -345,7 +356,7 @@ export class CaseRepository {
         );
       const updated = {
         ...record,
-        state: 'CREATED' as const,
+        state: record.revisionAuthority ? ('REVISION_REQUESTED' as const) : ('CREATED' as const),
         latestAnalysisId: undefined,
         revision: record.revision + 1,
         identity: request.identity,

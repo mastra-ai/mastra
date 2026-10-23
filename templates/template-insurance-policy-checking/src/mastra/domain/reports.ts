@@ -1,3 +1,4 @@
+import { reviewEventSchema } from './reviews.js';
 import { z } from 'zod';
 import { failureSchema } from './errors.js';
 import { identitySchema, hashBytes, canonicalJson, roleSchema } from './contracts.js';
@@ -65,6 +66,8 @@ export const reportSnapshotSchema = z
     profile: z.object({ id: z.string().min(1), version: z.string().min(1), name: z.string().min(1) }).strict(),
     status: analyticalStatusSchema,
     reviewStatus: z.literal('AWAITING_REVIEW'),
+    revisionNote: z.string().min(1).optional(),
+    reviewHistory: z.array(reviewEventSchema).optional(),
     counts: z
       .object({ checked: count, matches: count, discrepancies: count, authorized: count, unresolved: count })
       .strict(),
@@ -95,6 +98,15 @@ export const reportSnapshotSchema = z
   })
   .strict()
   .superRefine((r, c) => {
+    if (
+      r.reviewHistory?.some(
+        e => e.caseId !== r.caseId || !e.disposition || !r.comparisons.some(f => f.id === e.disposition!.findingId),
+      )
+    )
+      c.addIssue({
+        code: 'custom',
+        message: 'Historical dispositions must identify retained findings and their originating report.',
+      });
     const expected = reportCounts(r.comparisons);
     if (canonicalJson(r.counts) !== canonicalJson(expected))
       c.addIssue({ code: 'custom', message: 'Report counts must match the exact finding set.' });

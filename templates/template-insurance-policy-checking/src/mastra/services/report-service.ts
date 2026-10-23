@@ -1,10 +1,15 @@
+import type { ReviewService } from './review-service.js';
 import { outputArtifactSchema, hashBytes, type OperationContext, type OutputProvider } from '../domain/contracts.js';
 import { draftOutputRequestSchema } from '../domain/output-contracts.js';
 import { reportRequestSchema } from '../domain/reports.js';
 import { IntakeError, safeFailure } from '../domain/errors.js';
 import type { ReportRepository, Publication } from '../storage/reports.js';
 
-export function createReportService(repository: ReportRepository, provider: OutputProvider<'draftOutput'>) {
+export function createReportService(
+  repository: ReportRepository,
+  provider: OutputProvider<'draftOutput'>,
+  review?: ReviewService,
+) {
   async function publish(publication: Publication) {
     if (publication.state === 'PUBLISHED') {
       await repository.bytes(publication);
@@ -65,6 +70,8 @@ export function createReportService(repository: ReportRepository, provider: Outp
         'Complete the evidence-backed comparison before requesting a report.',
         404,
       );
+    const record = await repository.reconciliation.cases.requireCase(context);
+    const reviewData = review ? await review.status(context, p.snapshot.id) : undefined;
     let failure = p.failure;
     if (p.state === 'PUBLISHED')
       try {
@@ -79,7 +86,14 @@ export function createReportService(repository: ReportRepository, provider: Outp
       providerId: p.providerId,
       publicationState: p.state,
       workflowRunId: p.snapshot.workflowRunId,
-      reviewStatus: available ? 'AWAITING_REVIEW' : 'PUBLICATION_FAILED',
+      reviewStatus: available
+        ? record.latestReportId === p.snapshot.id
+          ? record.state
+          : 'SUPERSEDED'
+        : 'PUBLICATION_FAILED',
+      caseRevision: record.revision,
+      current: record.latestReportId === p.snapshot.id,
+      ...(reviewData ?? {}),
       available,
       ...(available
         ? {
@@ -94,12 +108,25 @@ export function createReportService(repository: ReportRepository, provider: Outp
         : {}),
       ...(failure ? { failure } : {}),
       message: available
-        ? 'Draft available. Broker review of this exact version is still required. No approval or final report has been issued.'
+        ? record.latestReportId !== p.snapshot.id
+          ? 'This historical draft has been superseded and cannot be approved.'
+          : record.state === 'FINALIZED'
+            ? reviewData?.finalization?.available
+              ? 'The reviewed report and all applicable final artifacts are available.'
+              : 'The report was finalized, but an artifact is unavailable. Restore the paired database and files; no new approval was inferred.'
+            : record.state === 'APPROVED'
+              ? 'Broker approval is saved. Final publication is incomplete; retry /report with retryPublication true.'
+              : record.state === 'REJECTED'
+                ? 'The report was rejected. Its draft and audit remain available; start a new case for further work.'
+                : record.state === 'REVISION_REQUESTED'
+                  ? 'Revisions were requested. This draft cannot be approved; complete the requested revision first.'
+                  : 'Draft available. Broker review of this exact version is still required. No approval or final report has been issued.'
         : 'The saved draft is not available for review. Retry publication after resolving the recorded storage or provider error.',
     };
   }
   return {
     repository,
+    review,
     publish,
     current,
     async status(context: OperationContext) {

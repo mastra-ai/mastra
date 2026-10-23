@@ -1,3 +1,6 @@
+import { ReviewRepository } from './storage/reviews.js';
+import { FinalizationRepository } from './storage/finalizations.js';
+import { createReviewService } from './services/review-service.js';
 import { ReportRepository } from './storage/reports.js';
 import { createReportService } from './services/report-service.js';
 import { resolve } from 'node:path';
@@ -55,7 +58,21 @@ export async function createApplication() {
   const registry = createRegistry(registrations, registrations.providerDefaults);
   const reportRepository = new ReportRepository(reconciliationRepository);
   await reportRepository.initialize();
-  const reports = createReportService(reportRepository, registry.resolve('draftOutput', undefined, 'immutable-draft'));
+  const reviewRepository = new ReviewRepository(reportRepository);
+  await reviewRepository.initialize();
+  const finalizations = new FinalizationRepository(reviewRepository);
+  await finalizations.initialize();
+  const review = createReviewService(
+    reviewRepository,
+    finalizations,
+    registry.resolve('reportOutput', undefined, 'approved-output'),
+    registry.resolve('correctionOutput', undefined, 'approved-output'),
+  );
+  const reports = createReportService(
+    reportRepository,
+    registry.resolve('draftOutput', undefined, 'immutable-draft'),
+    review,
+  );
   const caseService = createCaseService(
     repository,
     registry.resolve('input', undefined, 'pdf-attachments'),
@@ -74,9 +91,10 @@ export async function createApplication() {
         testEndpoint,
         comparison.runner,
         comparison.report,
+        comparison.review,
       ),
     },
     workflows: { policyCheckingWorkflow: comparison.workflow },
-    server: createLocalServer(port, limits, reportRepository, operatorId),
+    server: createLocalServer(port, limits, reportRepository, operatorId, finalizations),
   };
 }

@@ -1,16 +1,8 @@
 import { z } from 'zod';
 import { reportSnapshotSchema, reportHash } from './reports.js';
+import { approvalSchema } from './reviews.js';
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const common = { operationId: z.uuid(), snapshotId: z.uuid(), snapshotHash: hash, snapshot: reportSnapshotSchema };
-const approvalSchema = z
-  .object({
-    id: z.uuid(),
-    snapshotId: z.uuid(),
-    snapshotHash: hash,
-    reviewerId: z.string().min(1).max(200),
-    approvedAt: z.iso.datetime(),
-  })
-  .strict();
 const binding = (request: {
   snapshotId: string;
   snapshotHash: string;
@@ -23,7 +15,10 @@ export const draftOutputRequestSchema = z
 const approvedBinding = (request: Omit<z.infer<typeof reportOutputRequestObject>, 'stage'> & { stage: string }) =>
   binding(request) &&
   request.approval.snapshotId === request.snapshotId &&
-  request.approval.snapshotHash === request.snapshotHash;
+  request.approval.snapshotHash === request.snapshotHash &&
+  request.approval.caseId === request.snapshot.caseId &&
+  request.approval.version === request.snapshot.version &&
+  request.approval.workflowRunId === request.snapshot.workflowRunId;
 const reportOutputRequestObject = z
   .object({ ...common, stage: z.literal('reportOutput'), approval: approvalSchema })
   .strict();

@@ -54,7 +54,7 @@ Interrupted work remains processing until its bounded request lease expires, the
 
 Send `/report` in the original conversation to read the saved report, version, findings and download link. A draft includes the comparison intent, profile version, exact evidence locators, checked-term counts and limitations. A general document comparison remains a comparison of the supplied documents; it does not establish accepted coverage. Source excerpts can also be read with `/evidence` or the source evidence tool. No new model call is needed for report retrieval or PDF rendering.
 
-The workflow remains suspended after a restart. Direct workflow resume cannot approve a report or create final output. Working memory shows convenience identifiers; the saved case, report snapshot and workflow remain authoritative. Broker approval, finding confirmations, revision requests and finalization are not available yet.
+The workflow remains suspended after a restart. Direct workflow resume cannot approve a report or create final output. Working memory shows convenience identifiers; the saved case, report snapshot and workflow remain authoritative. Only an explicit `/review` command can record broker decisions. Review commands are handled before conversation model dispatch; the agent has no approval tool.
 
 If rendering or saving fails, `/report` explains the error without exposing a successful download. Fix the provider or storage problem, then send `/report ` followed by:
 
@@ -67,13 +67,48 @@ If rendering or saving fails, `/report` explains the error without exposing a su
 
 Retry uses the original report, version, workflow run and selected provider. It does not repeat comparison or consume another processing budget. Restore a missing or damaged published file from the matching backup; a checksum failure never returns a successful link. A changed provider selection cannot silently redirect a saved publication.
 
-A report snapshot freezes the case input. Use `/new` with attachments to start a separate case when new evidence is needed. Existing report records and files remain immutable. Send `/case CASE_ID` in the original conversation to select a previously captured case, then `/report` to retrieve its draft. This selection cannot access cases from another conversation, and it is blocked while the active case is processing. Downloads require the original operator, conversation and selected case; copying a filename or another case's link does not select that case.
+A report snapshot freezes the case input. Request an evidence revision before adding evidence to that case, or use `/new` with attachments to start a separate case. Existing report records and files remain immutable. Send `/case CASE_ID` in the original conversation to select a previously captured case, then `/report` to retrieve its draft. This selection cannot access cases from another conversation, and it is blocked while the active case is processing. Downloads require the original operator, conversation and selected case; copying a filename or another case's link does not select that case.
+
+## Review an exact report version
+
+Read `/report`, download and inspect the draft. Copy its case/report identifiers, version, snapshot checksum and current case revision into `/review ` followed by JSON. Generate a new UUID for `operationId`; reusing it with the identical decision returns the recorded result, while a changed decision requires a new ID. The configured local operator supplies the reviewer identity; never add a `reviewerId` field.
+
+```json
+{
+  "operationId": "44444444-4444-4444-8444-444444444444",
+  "caseId": "11111111-1111-4111-8111-111111111111",
+  "reportId": "55555555-5555-4555-8555-555555555555",
+  "version": 1,
+  "snapshotHash": "COPY_THE_64_CHARACTER_CHECKSUM_FROM_REPORT",
+  "expectedRevision": 5,
+  "expectedState": "AWAITING_REVIEW",
+  "action": "approve",
+  "dispositions": [
+    {
+      "findingId": "66666666-6666-4666-8666-666666666666",
+      "disposition": "confirmed",
+      "reason": null,
+      "severityOverride": null
+    }
+  ]
+}
+```
+
+Use finding IDs from this exact report. Omit `dispositions` or use an empty array to approve the report without confirming any finding. Confirmation, dismissal and severity overrides are recorded separately from the machine observation. Dismissals and severity overrides require a nonempty `reason`. To save dispositions without approving, use `action: "disposition"`. Each saved decision changes the case revision; read `/report` again before another operation. A stale version, checksum, revision or conversation changes no authority.
+
+Approval freezes the reviewed snapshot, exact review events, reviewer and UTC time. The associated native workflow verifies that persisted approval and publishes the final PDF. The draft remains unchanged. `/report` returns final downloads only when every applicable artifact is durable. An explicitly confirmed actionable discrepancy in agreed-term checking produces the same correction content in the final PDF appendix and a separate editable Markdown file, labeled “Proposed correction request — not sent”. Approval alone, uncertain observations, authorized changes and ordinary document comparisons produce no correction request. Recipient and broker contact remain placeholders. Nothing is sent.
+
+To reject a draft, use `action: "reject"` with a nonempty `reason`. Rejected and finalized cases remain readable and cannot be reopened; start another case for further work.
+
+To revise, use `action: "revise"` and `revision: { "kind": "presentation", "note": "Explain the requested presentation change" }`. This records a request first; then send `/compare` with the current revision. Presentation revisions reuse the saved analysis without a model call and publish a new version with the request note and prior dispositions for retained findings, including their original report provenance. For new evidence or changed clarification, choose `kind: "evidence"`, attach the supporting document, repeat `/clarify` for the current sources, then `/compare`. Evidence revisions share the original processing budget and attempt limits. A `requires_evidence` disposition needs a reason and an explicit evidence revision action. Old sources, analyses, report snapshots and draft bytes remain available. New machine findings require their own dispositions. Every new report version requires fresh approval; one command cannot revise and approve unseen content.
+
+If final publication fails after approval, the case remains approved with a safe error. Resolve storage/provider configuration and send `/report` with `retryPublication: true` to resume the same approved workflow and artifact identities, without another approval or model call. Restore a missing or damaged published file from the paired backup; retries never rewrite a completed artifact or invent an approval.
 
 ## Insurance profiles and providers
 
 Register line/company profiles in `src/mastra/config/insurance.ts`. Each has an ID, version, categories, terminology and declarative rules with a category/key and `required` or `review` requirement. Profile rules appear separately from contractual comparisons and cannot create accepted terms or authorized changes. Change the profile version when its rules change; new analyses freeze the effective configuration while retaining earlier snapshots. Unknown categories use the same typed core rather than acquiring property-specific requirements.
 
-Input providers registered in `src/mastra/providers.ts` implement `InputProvider`, including a request schema and immutable captured sources. The PDF provider is wired by default. Structured-record providers preserve record/field locators and captured values; comparison verifies these against the saved records and original checksum. Consumers can add adapters through the registry without changing the tools or comparator. The `draftOutput` registration selects the PDF draft provider. Output providers receive a typed immutable snapshot with stage, operation and hash bindings. They materialize a descriptor and implement `retrieve` for its bytes; core publication verifies the binding and checksum, saves its own durable private copy, and only then makes a download available. This interface also supports consumer-owned destinations without trusting an unverified URL. Final and correction providers require approval-bound requests and are reserved for later review support.
+Input providers registered in `src/mastra/providers.ts` implement `InputProvider`, including a request schema and immutable captured sources. The PDF provider is wired by default. Structured-record providers preserve record/field locators and captured values; comparison verifies these against the saved records and original checksum. Consumers can add adapters through the registry without changing the tools or comparator. The `draftOutput` registration selects the PDF draft provider. Output providers receive a typed immutable snapshot with stage, operation and hash bindings. They materialize a descriptor and implement `retrieve` for its bytes; core publication verifies the binding and checksum, saves its own durable private copy, and only then makes a download available. This interface also supports consumer-owned destinations without trusting an unverified URL. The default `reportOutput` provider uses the same layout for an approved final PDF. The `correctionOutput` provider creates an editable Markdown draft when applicable. Both receive the stored approval envelope and exact disposition-event set. Provider IDs and final artifact identities are reserved with approval; removing a registration cannot redirect saved work.
 
 ## Local access and persistence
 

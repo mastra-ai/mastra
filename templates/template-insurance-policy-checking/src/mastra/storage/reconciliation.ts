@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { Transaction } from '@libsql/client';
 import type { z } from 'zod';
 import type { insuranceProfileSchema } from '../config/insurance.js';
@@ -53,6 +54,15 @@ export type ProcessingAttempt = {
   analysisId: string | null;
 };
 
+export function isDatabaseBusy(error: unknown) {
+  return Boolean(
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    ['SQLITE_BUSY', 'SQLITE_LOCKED'].includes(String(error.code)),
+  );
+}
+
 export class ReconciliationRepository {
   constructor(readonly cases: CaseRepository) {}
   async initialize() {
@@ -65,7 +75,17 @@ export class ReconciliationRepository {
   }
   async transaction<T>(operation: (transaction: Transaction) => Promise<T>): Promise<T> {
     return this.cases.serial(async () => {
-      const transaction = await this.cases.client.transaction('write');
+      // Competing local processes must acquire the writer before re-reading state.
+      // Retry only lock acquisition, never an operation whose effects may have run.
+      let transaction: Transaction | undefined;
+      for (let attempt = 0; !transaction; attempt++) {
+        try {
+          transaction = await this.cases.client.transaction('write');
+        } catch (error) {
+          if (!isDatabaseBusy(error) || attempt >= 6) throw error;
+          await delay(10 * 2 ** attempt);
+        }
+      }
       try {
         const result = await operation(transaction);
         await transaction.commit();
@@ -107,7 +127,8 @@ export class ReconciliationRepository {
       if (
         record.revision !== request.expectedRevision ||
         record.state === 'PROCESSING' ||
-        Boolean(record.latestReportId)
+        (Boolean(record.latestReportId) &&
+          !(record.revisionAuthority?.kind === 'evidence' && ['REVISION_REQUESTED', 'FAILED'].includes(record.state)))
       )
         throw new IntakeError(
           'STALE_CASE',
@@ -141,6 +162,34 @@ export class ReconciliationRepository {
           409,
         );
       }
+      if (!budgetKey && record.revisionAuthority?.kind === 'evidence' && record.latestReportId) {
+        const previous = (
+          await transaction.execute({
+            sql: 'SELECT analysis_id FROM insurance_reports WHERE id=?',
+            args: [record.latestReportId],
+          })
+        ).rows[0];
+        if (previous) {
+          const analysisRow = (
+            await transaction.execute({
+              sql: 'SELECT data FROM insurance_analysis WHERE id=?',
+              args: [String(previous.analysis_id)],
+            })
+          ).rows[0];
+          if (analysisRow) {
+            const previousAnalysis = JSON.parse(String(analysisRow.data)) as Analysis;
+            const previousAttempt = await this.attempt(context, previousAnalysis.attemptId);
+            if (canonicalJson(previousAttempt.input.budget) !== canonicalJson(input.budget))
+              throw new IntakeError(
+                'REVISION_BUDGET',
+                'Evidence revision cannot replace its original processing budget.',
+                'Keep the approved budget and inspect remaining reservations before retrying.',
+                409,
+              );
+            budgetKey = previousAttempt.budgetKey;
+          }
+        }
+      }
       const id = randomUUID();
       budgetKey ??= id;
       const history = await transaction.execute('SELECT data FROM insurance_processing');
@@ -167,7 +216,12 @@ export class ReconciliationRepository {
         failure: null,
         analysisId: null,
       };
-      const updated = { ...record, state: 'PROCESSING', revision: record.revision + 1 };
+      const updated = {
+        ...record,
+        state: 'PROCESSING',
+        revision: record.revision + 1,
+        ...(record.revisionAuthority ? { revisionAuthority: { ...record.revisionAuthority, runId } } : {}),
+      };
       const changed = await transaction.execute({
         sql: 'UPDATE insurance_cases SET data=? WHERE id=? AND data=?',
         args: [JSON.stringify(updated), record.id, JSON.stringify(record)],
