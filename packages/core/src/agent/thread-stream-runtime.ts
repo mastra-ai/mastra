@@ -889,6 +889,21 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
+   * Like #hasLiveThreadLease, but also counts a lease this process holds under a temporary
+   * retake token for `runId`: it waits for that retake and counts the lease only once handed
+   * back to the run. A token minted anywhere else doesn't count.
+   */
+  async #holdsThreadLeaseThroughRetake(pubsub: PubSub, key: string, runId: string): Promise<boolean> {
+    const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
+    if (isFallback) return true;
+    const owner = await provider.getLeaseOwner(key).catch(() => undefined);
+    if (owner === runId) return true;
+    if (!owner?.startsWith(`${runId}${RETAKE_LEASE_MARKER}`)) return false;
+    const retake = this.#getState(pubsub).leaseRetakes.get(runId);
+    return retake ? retake.catch(() => false) : false;
+  }
+
+  /**
    * Whether `runId` still holds its thread's lease, which it renews for as
    * long as it is live in some process. `false` without a lease backend.
    * Throws when the backend can't answer.
@@ -1473,7 +1488,9 @@ export class AgentThreadStreamRuntime {
         // handover it may belong to the successor. The run itself is stopped either way,
         // since one that lost its lease keeps running until its renewal or deadline notices.
         const clearPendingSignals =
-          ownsRun() && data.clearPendingSignals && (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId));
+          ownsRun() &&
+          data.clearPendingSignals &&
+          (await this.#holdsThreadLeaseThroughRetake(resolvedPubSub, key, data.runId));
         if (ownsRun()) {
           if (clearPendingSignals) this.#cancelPendingSignals(state, key, undefined, pubsub);
           if (state.preparedRunsById.has(data.runId) || this.#isParkedRun(state, data.runId)) {

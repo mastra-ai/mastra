@@ -2997,6 +2997,28 @@ describe('thread and run abort (#25156)', () => {
     }
   });
 
+  // The server's thread-abort route calls this entry point (#28310).
+  it('the thread-abort route entry point stops the active Inngest run and asks the worker to abort it', async () => {
+    const durableAgent = makeDurable('abort-thread-route');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const threadId = 'abort-thread-route-t';
+    const resourceId = 'abort-thread-route-r';
+    const { result, sendSpy } = await startThreadRun(durableAgent, threadId, resourceId);
+
+    try {
+      const controller = globalRunRegistry.get(result.runId)?.abortController;
+      expect(controller?.signal.aborted).toBe(false);
+
+      await expect(durableAgent.__abortThreadStreamAcrossProcesses({ threadId, resourceId })).resolves.toBe(true);
+
+      expect(controller?.signal.aborted).toBe(true);
+      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
   it('abortThreadStream publishes nothing when expectedRunId does not match the active run', async () => {
     const durableAgent = makeDurable('abort-thread-stale');
     const publish = vi.spyOn(durableAgent.pubsub, 'publish');
