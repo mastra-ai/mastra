@@ -7,9 +7,16 @@ import { runEvaluationCase } from '../scripts/evaluation-runtime.js';
 import { operation } from '../src/mastra/runtime/operations.js';
 const input = JSON.parse(process.argv[2]);
 await mkdir(input.root, { recursive: true, mode: 0o700 });
-if (input.mode === 'failure') {
+if (input.mode === 'failure' || input.mode === 'invalid-output') {
   const result = await runEvaluationCase(evaluationCases[0], input.root, input.endpoint);
-  if (result.state !== 'failed' || result.unauthorizedFinal) process.exitCode = 1;
+  if (
+    result.state !== 'failed' ||
+    result.caseState !== 'FAILED' ||
+    result.failure?.code !== (input.mode === 'failure' ? 'MODEL_UNAVAILABLE' : 'MODEL_INVALID_OUTPUT') ||
+    result.unauthorizedFinal ||
+    (input.mode === 'invalid-output' && result.extractions.length !== 2)
+  )
+    process.exitCode = 1;
 } else if (input.mode === 'create') {
   const runtime = await reportRuntime(input.root, input.endpoint);
   try {

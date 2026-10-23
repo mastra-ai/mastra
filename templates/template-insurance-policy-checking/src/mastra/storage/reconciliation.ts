@@ -406,6 +406,14 @@ export class ReconciliationRepository {
       analyses: analyses.rows.map(row => JSON.parse(String(row.data)) as Analysis),
     };
   }
+  async extractions(context: OperationContext, attemptId: string): Promise<Extraction[]> {
+    await this.attempt(context, attemptId);
+    const rows = await this.cases.client.execute({
+      sql: 'SELECT data FROM insurance_extractions WHERE attempt_id=? ORDER BY rowid',
+      args: [attemptId],
+    });
+    return rows.rows.map(row => JSON.parse(String(row.data)) as Extraction);
+  }
   async progress(context: OperationContext) {
     const record = await this.cases.active(context);
     if (!record) return [];

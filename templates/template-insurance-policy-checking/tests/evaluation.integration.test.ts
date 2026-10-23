@@ -6,6 +6,44 @@ import { evaluationCases, datasetIdentity } from './evaluation-cases.js';
 import { reportWire } from './report-provider.js';
 import { runEvaluationCase } from '../scripts/evaluation-runtime.js';
 import { evaluateCase, aggregateEvaluation, metricNames } from '../scripts/evaluation.js';
+import { reportContext, reportRuntime } from './report-runtime.js';
+
+it('failed_evaluation_retains_safe_workflow_failure_and_saved_partial_extraction', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'insurance-evaluation-failure-'));
+  const test = evaluationCases[1]!;
+  const wire = await reportWire(test.documents, 'invalid-structured-target');
+  try {
+    const actual = await runEvaluationCase(test, root, wire.endpoint);
+    expect(actual.state).toBe('failed');
+    expect(actual.caseState).toBe('FAILED');
+    expect(actual.failure).toMatchObject({ code: 'MODEL_INVALID_OUTPUT', nextAction: expect.any(String) });
+    const reopened = await reportRuntime(root, wire.endpoint);
+    try {
+      const status = await reopened.reconciliationRepository.status(reportContext);
+      expect(status.attempts).toHaveLength(1);
+      expect(status.analyses).toEqual([]);
+      expect(actual.failure).toEqual(status.attempts[0]!.failure);
+      const saved = await reopened.cases.client.execute('SELECT data FROM insurance_extractions');
+      expect(saved.rows).toHaveLength(1);
+      expect(actual.extractions).toEqual(saved.rows.map(row => JSON.parse(String(row.data))));
+      expect(actual.extractions[0]!.sourceId).toBe(actual.sources[0]!.sourceId);
+      expect(actual.extractions[0]!.terms.length).toBeGreaterThan(0);
+    } finally {
+      await reopened.close();
+    }
+    expect(wire.requests).toHaveLength(2);
+    const result = aggregateEvaluation(
+      evaluationCases.map(c => evaluateCase(c, c.id === test.id ? actual : undefined)),
+    );
+    expect(result).toMatchObject({ scheduled: 12, completed: 0, failed: 1, unknown: 11 });
+    expect(result.metrics.field_extraction).toMatchObject({ denominator: 36, failed: 1, unknown: 11 });
+    expect(evaluateCase(test, actual).measurements.field_extraction.numerator).toBeGreaterThan(0);
+    expect(result.metrics.report_completeness).toMatchObject({ numerator: 0, denominator: 96 });
+  } finally {
+    await wire.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 it('evaluation_exposes_false_assurance_and_metric_denominators', async () => {
   const root = await mkdtemp(join(tmpdir(), 'insurance-evaluation-'));

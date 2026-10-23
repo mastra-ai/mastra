@@ -8,7 +8,7 @@ import type { EvaluationCase } from './evaluation-cases.js';
 import { fixtureExtraction, type DocumentFixture } from './reconciliation-fixtures.js';
 export async function reportWire(
   documents: DocumentFixture[],
-  mode: 'normal' | 'long' | 'zero' | 'partial' | 'match' = 'normal',
+  mode: 'normal' | 'long' | 'zero' | 'partial' | 'match' | 'invalid-structured-target' = 'normal',
   evaluation?: EvaluationCase,
 ) {
   const requests: unknown[] = [];
@@ -102,6 +102,10 @@ export async function reportWire(
           result.limitations = ['The captured comparison scope was not fully evaluated.'];
         }
         if (mode === 'zero') result.terms = [];
+        if (mode === 'invalid-structured-target' && fixture.kind === 'target') {
+          result.reviewedPages.push(result.reviewedPages[0]!);
+          result.limitations.push('SENTINEL_PRIVATE_INVALID_OUTPUT');
+        }
       }
     } else
       result = {

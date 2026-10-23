@@ -13,9 +13,10 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
   documents[0]!.pages[3]!.push('SENTINEL_PRIVATE_DOCUMENT_TEXT');
   const wire = await reportWire(documents);
   const failed = await reportWire(documents, 'normal', { ...evaluationCases[0]!, documents, behavior: 'unavailable' });
+  const invalid = await reportWire(documents, 'invalid-structured-target');
   const logs: string[] = [];
   try {
-    for (const mode of ['create', 'revise', 'approve', 'failure']) {
+    for (const mode of ['create', 'revise', 'approve', 'failure', 'invalid-output']) {
       const result = await promisify(execFile)(
         process.execPath,
         [
@@ -24,8 +25,9 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
           './tests/operations-worker.mjs',
           JSON.stringify({
             mode,
-            root: join(root, mode === 'failure' ? 'failure' : 'case'),
-            endpoint: mode === 'failure' ? failed.endpoint : wire.endpoint,
+            root: join(root, ['failure', 'invalid-output'].includes(mode) ? mode : 'case'),
+            endpoint:
+              mode === 'failure' ? failed.endpoint : mode === 'invalid-output' ? invalid.endpoint : wire.endpoint,
           }),
         ],
         {
@@ -47,6 +49,11 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
     expect(captured).toContain('classifications:');
     expect(captured).toContain('costMicros: null');
     expect(captured).toContain("errorCode: 'MODEL_UNAVAILABLE'");
+    expect(captured).toContain("errorCode: 'MODEL_INVALID_OUTPUT'");
+    expect(captured).toContain("processingStage: 'extraction'");
+    expect(captured).toContain("failurePhase: 'schema_validation'");
+    expect(captured).toContain("finishReason: 'unknown'");
+    expect(captured).toContain("nativeErrorKind: 'MastraError'");
     for (const secret of [
       'SENTINEL_PRIVATE',
       'data:application/pdf',
@@ -66,6 +73,7 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
   } finally {
     await wire.close();
     await failed.close();
+    await invalid.close();
     await rm(root, { recursive: true, force: true });
   }
 });

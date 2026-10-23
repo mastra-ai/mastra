@@ -1,5 +1,5 @@
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { safeFailure } from '../src/mastra/domain/errors.js';
+import { failureSchema, safeFailure, type Failure } from '../src/mastra/domain/errors.js';
 import { reportHash } from '../src/mastra/domain/reports.js';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
@@ -29,6 +29,14 @@ export async function runEvaluationCase(
     explicitApprovalFinalized: false,
     unauthorizedFinal: false,
   };
+  async function observeSavedState(failure?: Failure) {
+    const status = await runtime.reconciliationRepository.status(reportContext);
+    const attempt = status.attempts.at(-1);
+    actual.caseState = (await runtime.cases.active(reportContext))?.state ?? null;
+    actual.failure = attempt?.failure ?? failure ?? actual.failure;
+    actual.extractions = attempt ? await runtime.reconciliationRepository.extractions(reportContext, attempt.id) : [];
+    return status;
+  }
   try {
     const captured = await runtime.caseService.capture(reportContext, await fixtureFiles(test.documents));
     const sources = await runtime.cases.sources(reportContext);
@@ -53,15 +61,15 @@ export async function runEvaluationCase(
         ? { sourceId: sources[0]!.sourceId, statement: 'The broker records acceptance of this captured proposal.' }
         : null,
     });
-    await runtime.comparison.runner.compare(reportContext, {
+    const compared = await runtime.comparison.runner.compare(reportContext, {
       caseId: captured.id,
       expectedRevision: clarified.revision,
       profileId: 'generic',
       asOf: '2026-05-01',
       retryAttemptId: null,
     });
-    const status = await runtime.reconciliationRepository.status(reportContext);
-    actual.extractions = status.analyses.flatMap(a => a.extractions);
+    const failure = failureSchema.safeParse(compared);
+    const status = await observeSavedState(failure.success ? failure.data : undefined);
     const analysis = status.analyses.at(-1);
     if (!analysis) {
       actual.state = 'failed';
@@ -158,11 +166,8 @@ export async function runEvaluationCase(
     actual.state = 'completed';
     return actual;
   } catch (error) {
-    actual.failure = safeFailure(error);
-    actual.caseState = (await runtime.cases.active(reportContext))?.state ?? null;
+    await observeSavedState(safeFailure(error));
     actual.state = 'failed';
-    const status = await runtime.reconciliationRepository.status(reportContext);
-    actual.extractions = status.analyses.flatMap(a => a.extractions);
     const failedCase = await runtime.cases.active(reportContext);
     const savedApproval = failedCase?.latestReportId
       ? await runtime.reviewRepository.approval(reportContext, failedCase.latestReportId)

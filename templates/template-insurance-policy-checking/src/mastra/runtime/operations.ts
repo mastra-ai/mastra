@@ -3,6 +3,32 @@ import { z } from 'zod';
 
 export const privateFrameworkLogger = new ConsoleLogger({ name: 'insurance-framework', filter: () => false });
 const logger = new ConsoleLogger({ name: 'insurance-policy', level: 'info' });
+export const processingFailurePhaseSchema = z.enum([
+  'native_generation',
+  'native_result_error',
+  'tripwire',
+  'finish_reason',
+  'schema_validation',
+  'deadline',
+]);
+export const finishReasonSchema = z.enum([
+  'stop',
+  'length',
+  'content-filter',
+  'tool-calls',
+  'error',
+  'other',
+  'unknown',
+]);
+export const nativeErrorKindSchema = z.enum([
+  'ZodError',
+  'AI_TypeValidationError',
+  'AI_NoObjectGeneratedError',
+  'AI_JSONParseError',
+  'MastraError',
+  'Error',
+  'unknown',
+]);
 const metadataSchema = z
   .object({
     stage: z.enum(['processing', 'draft', 'review', 'finalization', 'startup', 'provider']),
@@ -33,6 +59,10 @@ const metadataSchema = z
       .string()
       .regex(/^[A-Z_]{1,80}$/)
       .optional(),
+    processingStage: z.enum(['extraction', 'semantic']).optional(),
+    failurePhase: processingFailurePhaseSchema.optional(),
+    finishReason: finishReasonSchema.optional(),
+    nativeErrorKind: nativeErrorKindSchema.optional(),
     recovery: z.enum(['read_status', 'read_report', 'retry_publication']).optional(),
     estimatedCostMicros: z.number().int().nonnegative().nullable().optional(),
     inputTokens: z.number().int().nonnegative().nullable().optional(),

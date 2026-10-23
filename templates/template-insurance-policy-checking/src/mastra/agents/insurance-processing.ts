@@ -1,7 +1,14 @@
-import { privateFrameworkLogger } from '../runtime/operations.js';
+import {
+  privateFrameworkLogger,
+  operation,
+  processingFailurePhaseSchema,
+  finishReasonSchema,
+  nativeErrorKindSchema,
+} from '../runtime/operations.js';
 import { Agent } from '@mastra/core/agent';
+import { MastraError } from '@mastra/core/error';
 import { createOpenAI } from '@ai-sdk/openai';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { IntakeError } from '../domain/errors.js';
 import type { StructuredProcessingModel } from '../domain/reconciliation-contracts.js';
 import { createBoundedModelTransport } from '../providers/bounded-model-transport.js';
@@ -56,6 +63,8 @@ export function createInsuranceProcessingModel(
       // This internal agent is created per attempt, outside Mastra composition.
       // The inherited native logger setter applies the same private framework filter.
       agent.__setLogger(privateFrameworkLogger);
+      let failurePhase: z.infer<typeof processingFailurePhaseSchema> = 'native_generation';
+      let finishReason: z.infer<typeof finishReasonSchema> = 'unknown';
       try {
         const result = await agent.generate(
           JSON.stringify({ stage, promptVersion: attempt.input.promptVersion, data }),
@@ -72,19 +81,49 @@ export function createInsuranceProcessingModel(
           },
         );
         if (transport.failure()) throw transport.failure();
+        finishReason = finishReasonSchema.safeParse(result.finishReason).data ?? 'unknown';
+        failurePhase = 'native_result_error';
         if (result.error) throw result.error;
+        failurePhase = 'tripwire';
         if (result.tripwire) throw new Error('Processing response rejected');
+        failurePhase = 'finish_reason';
         if (result.finishReason !== 'stop') throw new Error('Incomplete native generation');
+        failurePhase = 'schema_validation';
         const output = schema.parse(result.object);
+        failurePhase = 'deadline';
         if (Date.now() - startedAt >= attempt.input.budget.timeoutMs) throw new Error('Processing deadline elapsed');
         return output;
       } catch (error) {
         if (transport.failure()) throw transport.failure();
         if (error instanceof IntakeError) throw error;
+        const nativeErrorKind =
+          nativeErrorKindSchema.safeParse(
+            error instanceof MastraError ? 'MastraError' : error instanceof Error ? error.name : undefined,
+          ).data ?? 'unknown';
+        if (
+          error instanceof z.ZodError ||
+          nativeErrorKind === 'ZodError' ||
+          (error instanceof MastraError && error.id === 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED')
+        )
+          failurePhase = 'schema_validation';
+        operation({
+          stage: 'provider',
+          outcome: 'failed',
+          caseId: attempt.caseId,
+          attemptId: attempt.id,
+          runId: attempt.runId,
+          processingStage: stage === 'semantic' ? 'semantic' : 'extraction',
+          failurePhase,
+          finishReason,
+          nativeErrorKind,
+          errorCode: 'MODEL_INVALID_OUTPUT',
+          durationMs: Date.now() - startedAt,
+          costMicros: null,
+        });
         throw new IntakeError(
           'MODEL_INVALID_OUTPUT',
           'The provider returned invalid structured output or the bounded request was interrupted.',
-          'Read the failed attempt; explicitly retry its unchanged inputs if budget remains.',
+          `Read the failed attempt (${failurePhase}; ${nativeErrorKind}; finish reason: ${finishReason}); explicitly retry its unchanged inputs if budget remains.`,
         );
       }
     },
