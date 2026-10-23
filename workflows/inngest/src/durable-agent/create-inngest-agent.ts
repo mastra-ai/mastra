@@ -2013,11 +2013,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const runId = await agentThreadStreamRuntime.getThreadLeaseOwnerRunId(threadPubSub, abortOptions);
       if (!runId) return false;
       if (abortOptions.expectedRunId !== undefined && abortOptions.expectedRunId !== runId) return false;
-      if (abortOptions.clearPendingSignals) {
-        await agentThreadStreamRuntime.requestThreadRunAbort(threadPubSub, abortOptions, runId);
-      } else {
-        await publishAbortRequest(getPubsub(), runId);
-      }
+      // Same split as DurableAgent: the thread request also releases a parked run.
+      await Promise.all([
+        agentThreadStreamRuntime.requestThreadRunAbort(threadPubSub, abortOptions, runId),
+        abortOptions.clearPendingSignals ? undefined : publishAbortRequest(getPubsub(), runId),
+      ]);
       return true;
     },
 

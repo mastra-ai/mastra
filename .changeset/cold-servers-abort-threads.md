@@ -3,7 +3,7 @@
 '@mastra/server': patch
 ---
 
-Fixed thread aborts for durable agents on multi-server deployments. Aborting a thread on a server that didn't start the run now stops the run on whichever server executes it, as aborting by run id already did.
+Fixed thread aborts for durable agents on multi-server deployments. Aborting a thread on a server that didn't start the run now stops the run on whichever server executes it, as aborting by run id already did. A run parked on a suspension, such as a tool waiting for approval, is released too.
 
 ```ts
 agent.abortThreadStream({ resourceId, threadId });

@@ -2812,13 +2812,14 @@ export class DurableAgent<
     if (options.expectedRunId !== undefined && options.expectedRunId !== runId) return false;
     // The run executes elsewhere, so success means the request was published: a
     // failed lease lookup or publish throws rather than reading as an idle thread.
-    if (options.clearPendingSignals) {
-      // Queued input lives on the owner, which must clear it before the run ends and
-      // drains it; the thread-topic request does both there, in that order.
-      await agentThreadStreamRuntime.requestThreadRunAbort(this.getPubSub(), options, runId);
-    } else {
-      await publishAbortRequest(this.pubsub, runId);
-    }
+    // The thread-topic request reaches the owner's thread runtime, which stops an
+    // executing run and also releases one parked on a suspension; a run-topic request
+    // only reaches an executing step. With clearPendingSignals the owner must clear the
+    // queued input before the run ends and drains it, so only the thread request goes.
+    await Promise.all([
+      agentThreadStreamRuntime.requestThreadRunAbort(this.getPubSub(), options, runId),
+      options.clearPendingSignals ? undefined : publishAbortRequest(this.pubsub, runId),
+    ]);
     return true;
   }
 

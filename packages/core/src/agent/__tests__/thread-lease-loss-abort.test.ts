@@ -414,6 +414,47 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
   );
 
   it.skipIf(!isDurableEngineVariant(engine))(
+    'releases a run parked on a tool approval when a cold replica aborts its thread',
+    async () => {
+      const thread = 'cold-abort-parked';
+      const prompt = 'cold abort parked';
+      const key = [RESOURCE, thread].join('\u0000');
+      llm.on({ userMessage: prompt }, { toolCalls: [{ id: 'call_parked', name: 'approve', arguments: {} }] });
+      const shared = new SharedLeases();
+      const events = new EventEmitter();
+      events.setMaxListeners(0);
+      const memory = new MockMemory();
+      const approve = createTool({
+        id: 'approve',
+        description: 'Needs approval',
+        inputSchema: z.object({}),
+        requireApproval: true,
+        execute: async () => 'approved',
+      });
+      const ownerReplica = replica(shared, memory, { approve }, new ReplicaPubSub(shared, events));
+      const coldReplica = replica(shared, memory, {}, new ReplicaPubSub(shared, events));
+      const result = await ownerReplica.stream(prompt, { maxSteps: 5, memory: { thread, resource: RESOURCE } });
+      let awaitingApproval = false;
+      // The stream stays open while the run is parked.
+      void (async () => {
+        for await (const chunk of result.fullStream) if (chunk.type === 'tool-call-approval') awaitingApproval = true;
+      })().catch(() => undefined);
+      await vi.waitFor(() => expect(awaitingApproval).toBe(true), { timeout: 5_000 });
+      const parkedRunId = shared.owner(key);
+      expect(parkedRunId).toBeTruthy();
+      // Still parked well after the stream ended.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(shared.owner(key)).toBe(parkedRunId);
+
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({ resourceId: RESOURCE, threadId: thread }),
+      ).resolves.toBe(true);
+      await vi.waitFor(() => expect(shared.owner(key)).toBeUndefined(), { timeout: 3_000 });
+    },
+    20_000,
+  );
+
+  it.skipIf(!isDurableEngineVariant(engine))(
     'clears input queued on the owner when a cold replica aborts with clearPendingSignals',
     async () => {
       const thread = 'cold-abort-clear';
