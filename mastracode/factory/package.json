@@ -65,6 +65,7 @@
     "@mastra/code-sdk": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:*",
+    "@mastra/platform-workspace": "workspace:*",
     "@mastra/slack": "workspace:*",
     "@octokit/auth-app": "^8.0.0",
     "@octokit/rest": "^22.0.1",

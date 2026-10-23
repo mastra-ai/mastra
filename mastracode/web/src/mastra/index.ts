@@ -17,12 +17,9 @@
  * the server.
  */
 
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
-import { PlatformFactorySandbox } from '@mastra/platform-workspace';
 import { E2BFactorySandbox } from '@mastra/e2b';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
@@ -264,35 +261,6 @@ const jira =
 const incidentioApiKey = process.env.INCIDENT_IO_API_KEY?.trim();
 const incidentio = incidentioApiKey ? new IncidentioIntegration({ apiKey: incidentioApiKey }) : undefined;
 
-// Host env exposed to local sandboxes: an allow-list only, so app secrets
-// (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
-// commands run against untrusted repo checkouts. PATH is always added by the
-// core LocalSandbox itself; the rest keeps git and TLS working normally.
-const LOCAL_SANDBOX_ENV_KEYS = [
-  'HOME',
-  'USER',
-  'LOGNAME',
-  'SHELL',
-  'TMPDIR',
-  'LANG',
-  'LC_ALL',
-  'TERM',
-  'TZ',
-  'GIT_EXEC_PATH',
-  'GIT_TEMPLATE_DIR',
-  'SSL_CERT_FILE',
-  'SSL_CERT_DIR',
-] as const;
-
-function localSandboxEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const key of LOCAL_SANDBOX_ENV_KEYS) {
-    const value = process.env[key];
-    if (value) env[key] = value;
-  }
-  return env;
-}
-
 // One FactoryStorage backend powers agent storage, the factory app tables,
 // the distributed project lock, and better-auth. `DATABASE_URL` set →
 // Postgres (the paired PgVector rides the same database for recall search).
@@ -384,19 +352,20 @@ if (!useLocalSandbox && !hasPlatformSandboxEnv && !e2bApiKey && !localDevelopmen
 }
 
 /**
- * The host sandbox, chosen once at boot: local when forced, else the platform
- * (its client reads the MASTRA_PLATFORM_* env itself), else E2B, else local
- * (development and tests only; see the guard above).
+ * The host sandbox, chosen once at boot: local when forced; with Platform
+ * credentials, none, so the factory installs its own (local under
+ * `mastra dev`, Platform in built deployments); else E2B; else local
+ * (development and tests only; see the guard above). Local sandboxes get a
+ * per-session directory under MASTRACODE_LOCAL_SANDBOX_ROOT and an
+ * allow-listed host env, so app secrets never reach repository commands.
  */
-const sandbox =
-  !useLocalSandbox && hasPlatformSandboxEnv
-    ? new PlatformFactorySandbox()
-    : !useLocalSandbox && e2bApiKey
+const sandbox = useLocalSandbox
+  ? new LocalFactorySandbox()
+  : hasPlatformSandboxEnv
+    ? undefined
+    : e2bApiKey
       ? new E2BFactorySandbox({ apiKey: e2bApiKey })
-      : new LocalFactorySandbox({
-          root: process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
-          env: localSandboxEnv(),
-        });
+      : new LocalFactorySandbox();
 
 export const factory = new MastraFactory({
   auth,
