@@ -1,6 +1,6 @@
-import { useFactoryMembers } from '../../../../../../hooks/useFactoryMembers';
-import type { AuditEventPage } from '../../../services/audit';
-import type { FactoryMentionMember } from '../../../services/members';
+import { useFactoryMembers } from '../../../../hooks/useFactoryMembers';
+import type { AuditEventPage } from '../../factory/services/audit';
+import type { FactoryMentionMember } from '../../factory/services/members';
 
 /** Members plus the profiles the trail ships, keyed by the actor id events carry, which can differ from a profile's own id. */
 export function useFeedRoster(factoryId: string, auditPages: AuditEventPage[]): Map<string, FactoryMentionMember> {

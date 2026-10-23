@@ -35,6 +35,12 @@
     "Qwen3.8-Flash-Next"
   ],
   "reasoning": {
+    "Qwen3.8-27B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium"]
+      }
+    ],
     "DeepSeek-V4-Flash-Vision-Exp": [
       {
         "type": "effort",
@@ -57,12 +63,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "Qwen3.8-27B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium"]
       }
     ],
     "DeepSeek-V4.1-Flash": [

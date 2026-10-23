@@ -8,13 +8,13 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "kimi-for-coding": [
+    "k3": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "k3": [
+    "kimi-for-coding": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]

@@ -36,9 +36,6 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     const abort = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
 
-    const refreshAttention = () =>
-      void queryClient.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(factoryProjectId) });
-
     const connect = () => {
       streamFeedEvents(
         baseUrl,
@@ -50,13 +47,11 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
             if (workItemId) {
               void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
             }
-            refreshAttention();
           },
           onConnected: () => {
             setConnected(true);
             // Whatever landed while this tab held no stream was never announced.
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
-            refreshAttention();
           },
         },
         abort.signal,

@@ -486,7 +486,7 @@ export const weatherTool = createTool({
 })
 ```
 
-Mastra forwards `strict: true` to model adapters that support strict tool calling. On adapters that don't support strict tool calling, Mastra ignores this option.
+Mastra forwards `strict: true` to model adapters that support strict tool calling and ignores the option for other adapters.
 
 ## Example with `toModelOutput`
 
@@ -744,7 +744,7 @@ Client-executed tools don't define an `execute` function. The browser runs the t
 
 For client-executed results, the follow-up request must include both the assistant tool call and the tool result, which `@mastra/client-js` sends automatically. A request that carries only the tool result doesn't fire the hook. In this case the callback receives `{ toolCallId, toolName, output, abortSignal }` only.
 
-Delivery is at least once, so a retried request runs the hook again. Keep the hook idempotent and treat client output as untrusted data: the server doesn't validate the result against `outputSchema`, so the `output` type is a static type only.
+At-least-once delivery means a retried request runs the hook again. Keep the hook idempotent and treat client output as untrusted data: the server doesn't validate the result against `outputSchema`, so the `output` type is a static type only.
 
 ### Hook execution order
 

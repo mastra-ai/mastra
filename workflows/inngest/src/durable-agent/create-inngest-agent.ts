@@ -46,6 +46,8 @@ import {
   emitErrorEvent,
   runDurableStreamUntilIdle,
   runResumeDurableStreamUntilIdle,
+  getRunStreamSlot,
+  getScopeStreamSlot,
   globalRunRegistry,
   getRunRegistryEntry,
   deleteRunRegistryEntry,
@@ -882,7 +884,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   // Forward an external signal to the local controller and also publish the
   // abort request: the step worker may be another process that never sees
   // this controller (mirrors `result.abort()`).
-  function forwardExternalAbort(external: AbortSignal, controller: AbortController, runId: string): void {
+  function forwardExternalAbort(external: AbortSignal, controller: AbortController, runId: string): () => void {
     const forward = () => {
       controller.abort((external as AbortSignal & { reason?: unknown }).reason);
       void requestRemoteAbort(runId);
@@ -892,6 +894,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     } else {
       external.addEventListener('abort', forward, { once: true });
     }
+    return () => external.removeEventListener('abort', forward);
   }
 
   async function requestRemoteAbort(runId: string): Promise<void> {
@@ -1036,9 +1039,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // caller supplied an external signal, forward it onto the internal
       // controller so either source can cancel the run.
       const abortController = new AbortController();
-      if (streamOptions?.abortSignal) {
-        forwardExternalAbort(streamOptions.abortSignal, abortController, runId);
-      }
+      const stopForwardingAbort = streamOptions?.abortSignal
+        ? forwardExternalAbort(streamOptions.abortSignal, abortController, runId)
+        : undefined;
       registryEntry.abortController = abortController;
       registryEntry.abortSignal = abortController.signal;
 
@@ -1058,6 +1061,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const finalizeGlobalRegistry = () => {
         if (cleanedUp) return;
         cleanedUp = true;
+        stopForwardingAbort?.();
         deleteRunRegistryEntry(runId, mastra);
       };
 
@@ -1079,7 +1083,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         threadId,
         resourceId,
         structuredOutput: registryEntry.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
-        onChunk: callbackOptions.onChunk,
+        onChunk: chunk => {
+          // A parked segment is resumable; its observer's signal must not abort the next segment.
+          if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') stopForwardingAbort?.();
+          return callbackOptions.onChunk?.(chunk);
+        },
         onStepFinish: callbackOptions.onStepFinish,
         onFinish: async result => {
           try {
@@ -1274,9 +1282,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // co-located) can react. The previous run's controller is no longer
       // relevant.
       const abortController = new AbortController();
-      if (resumeOptions?.abortSignal) {
-        forwardExternalAbort(resumeOptions.abortSignal, abortController, runId);
-      }
+      const stopForwardingAbort = resumeOptions?.abortSignal
+        ? forwardExternalAbort(resumeOptions.abortSignal, abortController, runId)
+        : undefined;
       // Ensure a registry entry exists for this resumed segment. On Inngest,
       // a resume frequently runs in a fresh process where no prior stream()
       // entry is in memory — without this, the abort controller would be
@@ -1306,6 +1314,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const finalizeResumeRegistry = () => {
         if (resumeCleanedUp) return;
         resumeCleanedUp = true;
+        stopForwardingAbort?.();
         deleteRunRegistryEntry(runId, mastra);
       };
 
@@ -1336,6 +1345,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         structuredOutput: existingEntry.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
         onChunk: chunk => {
           resumedChunkSeen = true;
+          if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') stopForwardingAbort?.();
           return callbackOptions.onChunk?.(chunk);
         },
         onStepFinish: callbackOptions.onStepFinish,
@@ -1973,6 +1983,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     // The wrapped Agent's thread/run abort only reaches in-process state; an
     // Inngest run executes on the step worker, which must be told to stop.
     abortThreadStream(abortOptions) {
+      const scopeKey = `${abortOptions.threadId ?? ''}|${abortOptions.resourceId ?? ''}`;
+      const wrapperClose = getScopeStreamSlot(activeStreamUntilIdle, scopeKey, abortOptions.expectedRunId);
+      if (wrapperClose && !abortOptions.localOnly) {
+        wrapperClose();
+        return true;
+      }
       // Resolve the run before the base call: aborting releases the thread
       // lease, after which the thread no longer has an active run to look up.
       const runId = agent.getActiveThreadRunId(abortOptions);
@@ -1984,6 +2000,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     },
 
     abortRunStream(runId) {
+      const wrapperClose = getRunStreamSlot(activeStreamUntilIdle, runId);
+      if (wrapperClose) {
+        wrapperClose();
+        return true;
+      }
       const aborted = agent.abortRunStream(runId);
       // Publish regardless of local knowledge: the run is normally executing
       // on an Inngest worker this process cannot see.
