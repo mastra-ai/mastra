@@ -193,8 +193,14 @@ export function resolveModel(
     ]);
   };
   let currentModel = createRequestModel();
+  const assignedByHost = new Map<PropertyKey, unknown>();
   return new Proxy(currentModel, {
+    set(_target, property, value) {
+      assignedByHost.set(property, value);
+      return true;
+    },
     get(_target, property) {
+      if (assignedByHost.has(property)) return assignedByHost.get(property);
       if (property === 'supportedUrls') return createRequestModel().supportedUrls;
       if (property === 'doStream' || property === 'doGenerate') {
         return async (...args: unknown[]) => {
