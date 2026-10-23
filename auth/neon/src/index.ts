@@ -3,13 +3,14 @@ import type {
   ICredentialsProvider,
   ISessionProvider,
   MastraAuthRequest,
+  MastraUser,
   Session,
   CredentialsResult,
 } from '@mastra/core/auth';
 import { getRequestHeader } from '@mastra/core/auth';
 import type { EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
-import { MastraAuthProvider } from '@mastra/core/server';
+import { MastraAuthProvider, normalizeMastraUser } from '@mastra/core/server';
 
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
@@ -278,6 +279,18 @@ export class MastraAuthNeon
     }
 
     return true;
+  }
+
+  /**
+   * Normalize the inner Neon Auth user record; the default normalization
+   * cannot see through the `{ session, user, jwt }` wrapper and `image` field.
+   */
+  override toMastraUser(authUser: NeonAuthUser): MastraUser {
+    const normalized = normalizeMastraUser(authUser.user);
+    if (!normalized.avatarUrl && authUser.user.image) {
+      normalized.avatarUrl = authUser.user.image;
+    }
+    return normalized;
   }
 
   // ── ICredentialsProvider ──

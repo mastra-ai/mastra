@@ -7,11 +7,12 @@ import type {
   IUserProvider,
   CredentialsResult,
   MastraAuthRequest,
+  MastraUser,
 } from '@internal/auth';
 import { getRequestHeader } from '@internal/auth';
 import type { EEUser } from '@internal/auth/ee';
 import type { MastraAuthProviderOptions } from '@internal/auth/provider';
-import { MastraAuthProvider } from '@internal/auth/provider';
+import { MastraAuthProvider, normalizeMastraUser } from '@internal/auth/provider';
 import { LibsqlDialect } from '@libsql/kysely-libsql';
 
 import { betterAuth } from 'better-auth';
@@ -727,6 +728,18 @@ export class MastraAuthBetterAuth
   async authorizeUser(user: BetterAuthUser): Promise<boolean> {
     // By default, any authenticated user with a valid session is authorized
     return !!user?.session?.id && !!user?.user?.id;
+  }
+
+  /**
+   * Normalize the inner Better Auth user record; the default normalization
+   * cannot see through the `{ session, user }` wrapper and `image` field.
+   */
+  override toMastraUser(authUser: BetterAuthUser): MastraUser {
+    const normalized = normalizeMastraUser(authUser.user);
+    if (!normalized.avatarUrl && authUser.user.image) {
+      normalized.avatarUrl = authUser.user.image;
+    }
+    return normalized;
   }
 
   // ============================================

@@ -1,5 +1,6 @@
 export {
   MastraAuthProvider,
+  normalizeMastraUser,
   isSSOProvider,
   isSessionProvider,
   isUserProvider,
