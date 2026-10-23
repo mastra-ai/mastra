@@ -244,11 +244,14 @@ export class CachingPubSub extends PubSub {
   async subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
     const cacheKey = this.getCacheKey(topic);
 
-    // The counter is the log's length. Starting past it would make the
-    // transport's retained frame 0 look like a log restart (see `reconcile`)
-    // and replay the whole run, so an offset past the end starts at the end.
+    let next = offset;
+    // How far the log is known to reach. An offset past the log's end is a
+    // position it has not reached yet, so the restart check in `reconcile`
+    // compares the counter against this rather than the cursor; otherwise the
+    // transport's retained frame 0 looks like a log restart and the whole run
+    // replays.
     const logLength = offset > 0 ? await this.cache.get(this.getCounterKey(topic)).catch(() => undefined) : undefined;
-    let next = typeof logLength === 'number' ? Math.min(offset, logLength) : offset;
+    let reached = typeof logLength === 'number' ? Math.min(offset, logLength) : offset;
     let closed = false;
     let warnedUnnumbered = false;
     // Set only while a backfill (or the initial history read) is in flight.
@@ -261,7 +264,10 @@ export class CachingPubSub extends PubSub {
     let attaching = true;
 
     const emit = (event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>) => {
-      if (typeof event.index === 'number') next = event.index + 1;
+      if (typeof event.index === 'number') {
+        next = event.index + 1;
+        reached = Math.max(reached, next);
+      }
       return cb(event, ack, nack);
     };
 
@@ -318,7 +324,7 @@ export class CachingPubSub extends PubSub {
           const allocated = await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
           if (closed) return ack?.();
 
-          if (typeof allocated === 'number' && allocated < next) {
+          if (typeof allocated === 'number' && allocated < Math.min(next, reached)) {
             this.logWarn(
               `[CachingPubSub] Log for ${topic} restarted at 0 while the subscriber cursor was at ${next}; ` +
                 `the retained log expired or was cleared. Resyncing from the start of the new segment.`,

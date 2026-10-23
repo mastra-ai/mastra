@@ -7,9 +7,15 @@
  *
  * Covers both engines with a Redis server cache, and the durable engine with
  * the default in-memory server cache (its single process numbers every frame).
- * The evented engine without a shared server cache publishes unnumbered frames
- * that cannot be skipped by position; CachingPubSub warns about that instead. Requires a Redis server at REDIS_URL; the model is
- * served by AIMock.
+ *
+ * The evented engine with the default in-memory server cache is a known
+ * limitation: its step executor publishes unnumbered frames on a cross-process
+ * pubsub (per-process counters would disagree), and an unnumbered frame cannot
+ * be skipped by position, so the observer still receives frames from before
+ * the offset. That row pins the one-time warning CachingPubSub logs instead,
+ * and that the observation still closes.
+ *
+ * Requires a Redis server at REDIS_URL; the model is served by AIMock.
  */
 import { randomUUID } from 'node:crypto';
 
@@ -21,7 +27,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { createClient } from 'redis';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { nodeRedisPreset, RedisServerCache } from '../../../stores/redis/src/cache';
@@ -50,9 +56,10 @@ async function collect(stream: AsyncIterable<any>, timeoutMs = 15_000): Promise<
 }
 
 const matrix = [
-  { engine: 'durable', cache: 'default' },
-  { engine: 'durable', cache: 'redis' },
-  { engine: 'evented', cache: 'redis' },
+  { engine: 'durable', cache: 'default', numbered: true },
+  { engine: 'durable', cache: 'redis', numbered: true },
+  { engine: 'evented', cache: 'redis', numbered: true },
+  { engine: 'evented', cache: 'default', numbered: false },
 ] as const;
 
 describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_REDIS_TESTS === '1')(
@@ -69,15 +76,31 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       await llm.stop();
     });
 
-    describe.each(matrix)('$engine engine, $cache server cache', ({ engine, cache }) => {
+    describe.each(matrix)('$engine engine, $cache server cache', ({ engine, cache, numbered }) => {
       let mastra: Mastra;
       let durable: any;
       let cacheClient: ReturnType<typeof createClient> | undefined;
       let cleanupStorage: () => Promise<void>;
       let releaseTool: () => void;
       let toolStarted: Promise<void>;
+      let warn: ReturnType<typeof vi.spyOn>;
+      const notNumberedWarnings = () =>
+        warn.mock.calls.filter(([message]) => String(message).includes('are not numbered'));
+
+      /** Numbered frames resume exactly at the offset; unnumbered ones warn once and still close. */
+      const expectResumed = (resumed: Frame[], expected: Frame[]) => {
+        if (numbered) {
+          expect(resumed).toEqual(expected);
+          expect(notNumberedWarnings()).toHaveLength(0);
+        } else {
+          expect(notNumberedWarnings()).toHaveLength(1);
+          expect(notNumberedWarnings()[0]![0]).toContain('RedisServerCache');
+          expect(resumed.at(-1)?.type).toBe('finish');
+        }
+      };
 
       beforeEach(async () => {
+        warn = vi.spyOn(console, 'warn');
         await flushRedis();
         const storage = await makeStorageDir('mastra-observe-offset-');
         cleanupStorage = storage.cleanup;
@@ -137,6 +160,7 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       });
 
       afterEach(async () => {
+        warn.mockRestore();
         releaseTool?.();
         llm.clearFixtures?.();
         llm.reset?.();
@@ -162,7 +186,7 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
         const resumed = await observed;
 
         expect(caller.length).toBeGreaterThan(offset);
-        expect(resumed).toEqual(caller.slice(offset));
+        expectResumed(resumed, caller.slice(offset));
       });
 
       it('delivers nothing for an offset past the end of a finished run', async () => {
@@ -170,7 +194,7 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
         const run = await durable.stream('Echo hi', { maxSteps: 5 });
         await collect(run.fullStream);
 
-        expect(await collect((await durable.observe(run.runId, { offset: 1_000 })).fullStream)).toEqual([]);
+        expectResumed(await collect((await durable.observe(run.runId, { offset: 1_000 })).fullStream), []);
       });
 
       it('replays a finished run from a mid-run offset', async () => {
@@ -180,7 +204,7 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
 
         const resumed = await collect((await durable.observe(run.runId, { offset: 3 })).fullStream);
 
-        expect(resumed).toEqual(caller.slice(3));
+        expectResumed(resumed, caller.slice(3));
       });
     });
   },

@@ -1562,7 +1562,7 @@ describe('CachingPubSub', () => {
 
       const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
       const received: number[] = [];
-      await subscriber.subscribeFromOffset(topic, 19, event => {
+      await subscriber.subscribeFromOffset(topic, 5, event => {
         received.push(event.index!);
       });
       await flush();
@@ -1571,10 +1571,11 @@ describe('CachingPubSub', () => {
       expect(received).toEqual([]);
       expect(warn).not.toHaveBeenCalled();
 
-      // Frames appended after the end still arrive.
-      await inner.publish(topic, await append(shared, 3));
+      // Live frames below the offset stay skipped; delivery starts once the log reaches it.
+      for (const n of [3, 4, 5, 6]) await inner.publish(topic, await append(shared, n));
       await flush();
-      expect(received).toEqual([3]);
+      expect(received).toEqual([5, 6]);
+      expect(warn).not.toHaveBeenCalled();
     });
 
     it('resumes from an offset inside a short log without resyncing from the start', async () => {
