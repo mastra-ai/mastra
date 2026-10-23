@@ -1930,24 +1930,20 @@ ${workingMemory}`;
 
     if (Array.isArray(newMessage.content?.parts)) {
       if (Array.isArray(newMessage.content.toolInvocations)) {
-        newMessage.content.toolInvocations = removeWorkingMemoryToolInvocations(
-          newMessage.content.toolInvocations,
-        )?.filter(invocation => invocation.state !== 'partial-call');
+        newMessage.content.toolInvocations = removeWorkingMemoryToolInvocations(newMessage.content.toolInvocations);
       }
       const lastOriginalPart = newMessage.content.parts.at(-1);
       const sealMetadata = lastOriginalPart && 'metadata' in lastOriginalPart ? lastOriginalPart.metadata : undefined;
-      newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts)
-        .filter(part => part?.type !== 'tool-invocation' || part.toolInvocation.state !== 'partial-call')
-        .map(part => {
-          if (part?.type === 'text') {
-            const text = typeof part.text === 'string' ? part.text : '';
-            return {
-              ...part,
-              text: removeWorkingMemoryTags(text).trim(),
-            };
-          }
-          return part;
-        });
+      newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts).map(part => {
+        if (part?.type === 'text') {
+          const text = typeof part.text === 'string' ? part.text : '';
+          return {
+            ...part,
+            text: removeWorkingMemoryTags(text).trim(),
+          };
+        }
+        return part;
+      });
 
       // The last part can be a hidden tool call. Retain its seal boundary on the
       // last surviving part without changing the live message used by the observer.

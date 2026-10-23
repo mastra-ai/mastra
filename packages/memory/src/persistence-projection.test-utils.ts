@@ -43,10 +43,19 @@ function message(id = 'assistant'): MastraDBMessage {
             state: 'partial-call',
             toolName: 'lookup',
             toolCallId: 'partial',
-            args: { secret: 'unfinished' },
+            args: { query: 'unfinished' },
           },
         },
         { type: 'data-om-observation-end', data: { cycleId: 'cycle' } },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'partial-call',
+            toolName: 'updateWorkingMemory',
+            toolCallId: 'wm-partial',
+            args: { memory: 'private partial args' },
+          },
+        },
         {
           type: 'tool-invocation',
           toolInvocation: {
@@ -64,7 +73,7 @@ function message(id = 'assistant'): MastraDBMessage {
 }
 
 function assertProjection(stored: MastraDBMessage) {
-  expect(JSON.stringify(stored)).not.toMatch(/private|updateWorkingMemory|partial-call|unfinished|working_memory/);
+  expect(JSON.stringify(stored)).not.toMatch(/private|updateWorkingMemory|working_memory/);
   expect(stored.content).toMatchObject({
     content: 'Visible',
     metadata: { mastra: { sealed: true }, custom: 'retained' },
@@ -75,6 +84,10 @@ function assertProjection(stored: MastraDBMessage) {
       expect.objectContaining({
         type: 'tool-invocation',
         toolInvocation: expect.objectContaining({ toolName: 'lookup', result: 'public result' }),
+      }),
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({ state: 'partial-call', toolName: 'lookup', toolCallId: 'partial' }),
       }),
       expect.objectContaining({ type: 'data-om-observation-end', metadata: { mastra: { sealedAt: 123 } } }),
     ]),
@@ -183,36 +196,56 @@ export function testPersistenceProjection(createStorage: () => Promise<MastraCom
       });
     });
 
-    it('removes partial calls from legacy mirrors as well as parts', async () => {
-      const memory = new Memory({ storage: await createStorage() });
-      await memory.createThread({ threadId, resourceId });
-      const live: MastraDBMessage = {
-        ...message(),
-        content: {
-          format: 2,
-          parts: [
-            { type: 'text', text: 'Visible' },
-            {
-              type: 'tool-invocation',
-              toolInvocation: {
-                state: 'partial-call',
-                toolName: 'lookup',
-                toolCallId: 'partial',
-                args: { secret: 'unfinished' },
-              },
-            },
-          ],
-          toolInvocations: [
-            { state: 'partial-call', toolName: 'lookup', toolCallId: 'partial', args: { secret: 'unfinished' } },
-          ],
-        },
-      };
-      await memory.persistMessages([live]);
-      const recalled = await memory.recall({ threadId, resourceId, perPage: false });
-      expect(JSON.stringify(recalled.messages)).not.toMatch(/partial-call|unfinished/);
-      expect(recalled.messages[0]?.content.parts).toEqual([{ type: 'text', text: 'Visible' }]);
-      expect(live.content.toolInvocations).toHaveLength(1);
-    });
+    it.each(['save', 'persist', 'update'] as const)(
+      'keeps ordinary partial calls and hides working-memory calls in parts and legacy mirrors on %s',
+      async mode => {
+        const memory = new Memory({ storage: await createStorage() });
+        await memory.createThread({ threadId, resourceId });
+        const ordinary = {
+          state: 'partial-call' as const,
+          toolName: 'lookup',
+          toolCallId: 'partial',
+          args: { query: 'unfinished' },
+        };
+        const workingMemory = {
+          state: 'partial-call' as const,
+          toolName: 'updateWorkingMemory',
+          toolCallId: 'wm-partial',
+          args: { memory: 'private partial args' },
+        };
+        const live: MastraDBMessage = {
+          ...message(),
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Visible' },
+              { type: 'tool-invocation', toolInvocation: ordinary },
+              { type: 'tool-invocation', toolInvocation: workingMemory },
+            ],
+            toolInvocations: [ordinary, workingMemory],
+          },
+        };
+        const snapshot = structuredClone(live);
+        if (mode === 'save') {
+          await memory.saveMessages({ messages: [live] });
+        } else if (mode === 'persist') {
+          await memory.persistMessages([live]);
+        } else {
+          await memory.saveMessages({
+            messages: [{ ...message(), content: { format: 2, parts: [{ type: 'text', text: 'Original' }] } }],
+          });
+          await memory.updateMessages({ messages: [{ id: live.id, content: live.content }] });
+        }
+        const recalled = await memory.recall({ threadId, resourceId, perPage: false });
+        expect(JSON.stringify(recalled.messages)).not.toMatch(/private|updateWorkingMemory/);
+        expect(recalled.messages[0]?.content.parts).toEqual([
+          { type: 'text', text: 'Visible' },
+          { type: 'tool-invocation', toolInvocation: ordinary },
+        ]);
+        expect(recalled.messages[0]?.content.toolInvocations).toEqual([ordinary]);
+        expect(live).toEqual(snapshot);
+      },
+    );
 
     it('hides replaced parts and skips system, transient and empty edits without deleting rows', async () => {
       const memory = new Memory({ storage: await createStorage() });
