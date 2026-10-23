@@ -6,7 +6,6 @@ import type { ReactNode } from 'react';
 import { Navigate, useLocation, useParams } from 'react-router';
 
 import { ChatHeaderSidebarTrigger } from '../domains/chat/components/ChatHeaderSidebarTrigger';
-import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
 import {
@@ -73,7 +72,7 @@ function FocusedTitle({ children }: { children: ReactNode }) {
 /**
  * Settings body: on mobile the section title lives in the page header row
  * (the desktop title is rendered by the panel itself); with a collapsed
- * desktop sidebar the header row carries the sidebar trigger and search.
+ * desktop sidebar the header row carries the sidebar trigger.
  */
 export function SettingsPageLayout({
   children,
@@ -95,7 +94,6 @@ export function SettingsPageLayout({
         breadcrumbs ??
         (isMobile ? <SettingsHeader autoFocus /> : sidebarCollapsed ? <ChatHeaderSidebarTrigger /> : undefined)
       }
-      headerActions={sidebarCollapsed ? <GlobalSearchButton id="global-search-collapsed-trigger" /> : undefined}
     >
       {children}
     </PageLayout>
