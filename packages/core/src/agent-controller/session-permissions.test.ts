@@ -75,6 +75,22 @@ describe('session.permissions', () => {
     expect(rules.tools.fetch).toBe('allow');
   });
 
+  it('keeps every concurrent policy change', async () => {
+    const { session } = await createSession(storage);
+    await session.permissions.setForCategory({ category: 'execute', policy: 'allow' });
+
+    await Promise.all([
+      session.permissions.setForCategory({ category: 'execute', policy: 'deny' }),
+      session.permissions.setForCategory({ category: 'read', policy: 'deny' }),
+      session.permissions.setForTool({ toolName: 'fetch', policy: 'ask' }),
+    ]);
+
+    expect(session.permissions.getRules()).toEqual({
+      categories: { execute: 'deny', read: 'deny' },
+      tools: { fetch: 'ask' },
+    });
+  });
+
   it('leaves the rules unchanged when the state schema rejects an update', async () => {
     const askOrDeny = z.record(z.string(), z.enum(['ask', 'deny'])).default({});
     const { session } = await createSession(

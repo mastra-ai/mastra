@@ -431,7 +431,12 @@ export class AgentController<TState = {}> {
     });
     session.permissions.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
-      setState: updates => session.state.set(updates as Partial<TState>),
+      updateState: async updater => {
+        await session.state.update(state => ({
+          updates: updater(state as Record<string, unknown>) as Partial<TState>,
+          result: undefined,
+        }));
+      },
     });
     session.subagents.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,

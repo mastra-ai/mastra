@@ -2875,40 +2875,46 @@ class SessionOM {
  */
 class SessionPermissions {
   #getState: (() => Record<string, unknown>) | undefined;
-  #setState: ((updates: Record<string, unknown>) => Promise<void>) | undefined;
+  #updateState: ((updater: (state: Record<string, unknown>) => Record<string, unknown>) => Promise<void>) | undefined;
 
-  /** Attach the session-state read/write. The AgentController injects these once. */
+  /** Attach the session-state read and serialized update. The AgentController injects these once. */
   setResolver(options: {
     getState: () => Record<string, unknown>;
-    setState: (updates: Record<string, unknown>) => Promise<void>;
+    updateState: (updater: (state: Record<string, unknown>) => Record<string, unknown>) => Promise<void>;
   }): void {
     this.#getState = options.getState;
-    this.#setState = options.setState;
+    this.#updateState = options.updateState;
   }
 
   /** The current permission rules, or empty rules when none are set. */
   getRules(): PermissionRules {
-    const rules = this.#getState?.().permissionRules as PermissionRules | undefined;
+    return SessionPermissions.#rulesFrom(this.#getState?.());
+  }
+
+  static #rulesFrom(state: Record<string, unknown> | undefined): PermissionRules {
+    const rules = state?.permissionRules as PermissionRules | undefined;
     return rules ?? { categories: {}, tools: {} };
+  }
+
+  /**
+   * Derive new rules from the latest state inside the serialized update, so
+   * concurrent changes merge and a rejected update leaves the live rules untouched.
+   */
+  #updateRules(change: (rules: PermissionRules) => PermissionRules): Promise<void> {
+    return (
+      this.#updateState?.(state => ({ permissionRules: change(SessionPermissions.#rulesFrom(state)) })) ??
+      Promise.resolve()
+    );
   }
 
   /** Set the approval policy for a tool category. Resolves once persisted. */
   setForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): Promise<void> {
-    // Copy before changing: the rules are live session state, and a rejected update must leave them untouched.
-    const rules = this.getRules();
-    return (
-      this.#setState?.({ permissionRules: { ...rules, categories: { ...rules.categories, [category]: policy } } }) ??
-      Promise.resolve()
-    );
+    return this.#updateRules(rules => ({ ...rules, categories: { ...rules.categories, [category]: policy } }));
   }
 
   /** Set the approval policy for an individual tool. Resolves once persisted. */
   setForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): Promise<void> {
-    const rules = this.getRules();
-    return (
-      this.#setState?.({ permissionRules: { ...rules, tools: { ...rules.tools, [toolName]: policy } } }) ??
-      Promise.resolve()
-    );
+    return this.#updateRules(rules => ({ ...rules, tools: { ...rules.tools, [toolName]: policy } }));
   }
 }
 
