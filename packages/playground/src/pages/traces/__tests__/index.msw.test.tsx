@@ -3,7 +3,7 @@ import { EntityType } from '@mastra/core/observability';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
-import { useLocation } from 'react-router';
+import { Outlet, Route, Routes, useLocation } from 'react-router';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
 import {
@@ -11,6 +11,7 @@ import {
   legacyTraceCapabilities,
   noFeedbackCapabilities,
   noRootDurationCapabilities,
+  threadRowsCapabilities,
   traceQueryCapabilities,
   traceQueryFieldsWithRegion,
   traceQueryFieldsWithNestedTenant,
@@ -43,6 +44,7 @@ import {
   traceUsageBreakdown,
 } from './fixtures/traces';
 import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
+import { ObservabilityLayout } from '@/domains/observability/observability-layout';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -106,7 +108,22 @@ const LocationProbe = () => {
 const renderPage = (initialEntry = '/traces', props: React.ComponentProps<typeof TracesPage> = {}) =>
   renderWithProviders(
     <TestLinkProvider>
-      <TracesPage {...props} />
+      {props.scopedEntityId ? (
+        // Scoped traces live inside an agent/workflow tab, which owns its own header.
+        <TracesPage {...props} />
+      ) : (
+        <Routes>
+          <Route
+            element={
+              <ObservabilityLayout>
+                <Outlet />
+              </ObservabilityLayout>
+            }
+          >
+            <Route path="/traces" element={<TracesPage {...props} />} />
+          </Route>
+        </Routes>
+      )}
       <LocationProbe />
     </TestLinkProvider>,
     { router: { initialEntries: [initialEntry] } },
@@ -562,6 +579,42 @@ describe('Traces page view switch', () => {
       await waitFor(() => expect(screen.getByTestId('pathname').textContent).toBe('/spans'));
     });
   });
+
+  describe('when the store does not return thread rows', () => {
+    it('does not offer the Threads view', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      expect(views.queryByRole('tab', { name: 'Threads' })).toBeNull();
+    });
+  });
+
+  describe('when the store returns thread rows', () => {
+    it('offers the Threads view after Spans', async () => {
+      setTracePageHandlers(threadRowsCapabilities);
+
+      renderPage();
+
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      await waitFor(() =>
+        expect(views.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Traces', 'Spans', 'Threads']),
+      );
+    });
+  });
+
+  describe('when Threads is clicked in the view switch', () => {
+    it('navigates to the threads page', async () => {
+      setTracePageHandlers(threadRowsCapabilities);
+
+      renderPage();
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      fireEvent.click(await views.findByRole('tab', { name: 'Threads' }));
+
+      await waitFor(() => expect(screen.getByTestId('pathname').textContent).toBe('/threads'));
+    });
+  });
 });
 
 describe('Traces page action row', () => {
@@ -611,7 +664,7 @@ describe('Traces side panel header actions', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Score trace' }));
       fireEvent.click(await screen.findByRole('combobox', { name: 'Select scorer' }));
       fireEvent.click(await screen.findByRole('option', { name: 'Quality scorer' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Start Scoring' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
       await waitFor(() =>
         expect(onScore).toHaveBeenCalledWith({
           scorerName: 'quality',

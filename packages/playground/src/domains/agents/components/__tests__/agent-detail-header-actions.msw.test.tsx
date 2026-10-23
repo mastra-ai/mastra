@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { AgentConfigPanel } from '../agent-config-panel';
 import { AgentDetailHeaderActions } from '../agent-detail-header-actions';
 import { v2Agent } from './fixtures/composer-model-settings';
 import { RouteSidePanelProvider, useRouteSidePanel } from '@/lib/route-side-panel';
@@ -100,5 +101,52 @@ describe('AgentDetailHeaderActions', () => {
 
     const edit = await screen.findByText('Edit');
     expect(edit.closest('a')?.getAttribute('href')).toBe(`/cms/agents/${AGENT_ID}`);
+  });
+});
+
+describe('when the screen is narrow', () => {
+  function stubNarrowScreen() {
+    vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: () => false,
+    }));
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('opens the Config panel in a drawer from the header Config button', async () => {
+    stubNarrowScreen();
+    installHandlers();
+    renderWithProviders(
+      <TestLinkProvider>
+        <TooltipProvider>
+          <RouteSidePanelProvider>
+            <AgentConfigPanel agentId={AGENT_ID}>
+              <div data-testid="header-actions">
+                <AgentDetailHeaderActions agentId={AGENT_ID} />
+              </div>
+            </AgentConfigPanel>
+          </RouteSidePanelProvider>
+        </TooltipProvider>
+      </TestLinkProvider>,
+      { router: true },
+    );
+
+    const toggle = await screen.findByTestId('agent-overview-panel-toggle');
+    expect(screen.getByTestId('header-actions').contains(toggle)).toBe(true);
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fireEvent.click(toggle);
+
+    const drawer = await screen.findByRole('dialog', { name: 'Config' });
+    expect(drawer.contains(screen.getByTestId('agent-overview-panel'))).toBe(true);
   });
 });

@@ -1,8 +1,7 @@
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
-import { Brain, GitPullRequest, ListChecks, ScrollText, Settings, SquareKanban, Timeline } from 'lucide-react';
+import { Brain, GitPullRequest, ListChecks, Settings, SquareKanban } from 'lucide-react';
 
-import { everyEventPath } from '../../factory/activity';
 import { rememberedBoardPath } from '../../factory/services/boardViews';
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
@@ -31,25 +30,11 @@ export function GlobalSearchNavigationResults({
         onSelect={() => onSelect(rememberedBoardPath(factoryId, 'review'), false)}
       />
       <CommandPaletteItem
-        icon={<Timeline />}
-        title="Activity"
-        subtitle="Factory navigation"
-        value={`Activity Factory navigation needs attention overview /factories/${factoryId}/activity`}
-        onSelect={() => onSelect(`/factories/${factoryId}/activity`, false)}
-      />
-      <CommandPaletteItem
         icon={<ListChecks />}
         title="Rules"
         subtitle="Factory navigation"
         value={`Rules Factory navigation /factories/${factoryId}/rules`}
         onSelect={() => onSelect(`/factories/${factoryId}/rules`, false)}
-      />
-      <CommandPaletteItem
-        icon={<ScrollText />}
-        title="Audit log"
-        subtitle="Factory navigation"
-        value={`Audit log every event Activity Factory navigation ${everyEventPath(factoryId)}`}
-        onSelect={() => onSelect(everyEventPath(factoryId), false)}
       />
       <CommandPaletteItem
         icon={<Brain />}

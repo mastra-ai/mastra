@@ -402,6 +402,7 @@ export class InternalMastraMCPClient extends MastraBase {
   name: string;
   private client: Client;
   private readonly timeout: number;
+  private readonly processHooks: boolean;
   private logHandler?: LogHandler;
   private readonly serverLogLevel?: LoggingLevel;
   private enableProgressTracking: boolean;
@@ -446,6 +447,7 @@ export class InternalMastraMCPClient extends MastraBase {
     clientInfo,
     server,
     timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
+    registerProcessHooks = true,
     webhook,
   }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
@@ -454,6 +456,7 @@ export class InternalMastraMCPClient extends MastraBase {
     void loadInputSchemaMetaValidator();
     this.name = name;
     this.timeout = timeout;
+    this.processHooks = registerProcessHooks;
     this.logHandler = server.logger;
     this.serverLogLevel =
       (server.enableServerLogs ?? true) ? (server.serverLogLevel ?? DEFAULT_SERVER_LOG_LEVEL) : undefined;
@@ -895,8 +898,11 @@ export class InternalMastraMCPClient extends MastraBase {
 
     // Registered before the connection settles so an exit during a connect attempt still
     // tears down anything the transport already started (a spawned stdio child, say).
-    // The failure path inside the promise removes them again.
-    this.registerProcessHooks();
+    // The failure path inside the promise removes them again. Hosts that own shutdown must
+    // skip even the first registration: exit-hook's global signal listeners outlive unsubscribe.
+    if (this.processHooks) {
+      this.registerProcessHooks();
+    }
 
     return this.isConnected;
   }

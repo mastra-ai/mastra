@@ -23,10 +23,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "gemma4-31b": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "kimi-k3": [
@@ -35,10 +35,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "gpt-oss-120b": [
+    "gemma4-31b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "deepseek-v4-1-flash": [

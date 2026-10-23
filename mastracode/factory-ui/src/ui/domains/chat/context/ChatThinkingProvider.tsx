@@ -3,10 +3,12 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useChatModelScope } from './useChatModelScope';
 
+import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { useEffectiveThinkingLevel } from '../hooks/useEffectiveThinkingLevel';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { routedPersonalThinkingLevel } from './chatDefaultModel';
 import { ChatThinkingContext } from './ChatThinkingContext';
 import type { ChatThinkingApi } from './ChatThinkingContext';
 import { useChatModels } from './useChatModels';
@@ -26,12 +28,20 @@ export function ChatThinkingProvider({ children }: ChatThinkingProviderProps) {
 }
 
 function DraftChatThinkingProvider({ children }: ChatThinkingProviderProps) {
-  const { catalogTarget } = useChatModelScope();
+  const { catalogTarget, modelScope } = useChatModelScope();
   const { activeModelId } = useChatModels();
+  const defaultModelQuery = useDefaultModelQuery();
   const [override, setOverride] = useState<ThinkingLevelSetting>();
-  const { level, loadError } = useEffectiveThinkingLevel(activeModelId, override, catalogTarget);
+  const { level, thinkingDefault, loadError } = useEffectiveThinkingLevel({
+    modelId: activeModelId,
+    override,
+    catalogTarget,
+    personalDefault: routedPersonalThinkingLevel(modelScope, defaultModelQuery.data),
+    personalDefaultError: defaultModelQuery.error,
+  });
   const value: ChatThinkingApi = {
     level,
+    thinkingDefault,
     loadError,
     override,
     setLevel: async next => {
@@ -47,7 +57,7 @@ function DraftChatThinkingProvider({ children }: ChatThinkingProviderProps) {
 
 function LiveChatThinkingProvider({ children }: ChatThinkingProviderProps) {
   const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
-  const { catalogTarget } = useChatModelScope();
+  const { catalogTarget, sessionModelsQuery } = useChatModelScope();
   const { activeModelId } = useChatModels();
   const sessionArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -58,11 +68,18 @@ function LiveChatThinkingProvider({ children }: ChatThinkingProviderProps) {
   const settingsQuery = useAgentControllerSettings(sessionArgs);
   const { mutateAsync: updateSettings } = useUpdateAgentControllerSettingsMutation(sessionArgs);
   const override = settingsQuery.data?.thinkingLevel;
-  const effective = useEffectiveThinkingLevel(activeModelId, override, catalogTarget);
+  const effective = useEffectiveThinkingLevel({
+    modelId: activeModelId,
+    override,
+    catalogTarget,
+    personalDefault: sessionModelsQuery.isSuccess ? (sessionModelsQuery.data.personalThinkingLevel ?? null) : undefined,
+    personalDefaultError: sessionModelsQuery.error,
+  });
   const settingsLoaded = settingsQuery.data !== undefined;
   const settingsLoadError = settingsQuery.error ?? undefined;
   const value: ChatThinkingApi = {
     level: settingsLoaded ? effective.level : undefined,
+    thinkingDefault: effective.thinkingDefault,
     loadError: settingsLoaded ? effective.loadError : settingsLoadError,
     override,
     setLevel: async next => {

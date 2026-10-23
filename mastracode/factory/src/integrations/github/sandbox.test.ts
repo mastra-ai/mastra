@@ -794,7 +794,7 @@ describe('syncEnvironmentRepository', () => {
       outcome: 'kept',
       branch: 'factory/issue-7',
     });
-    expect(sandbox.calls).toHaveLength(1);
+    expect(sandbox.calls.join('\n')).not.toMatch(/ls-remote|fetch|checkout/);
   });
 
   it('keeps local work when the resume checkout is blocked by uncommitted changes', async () => {

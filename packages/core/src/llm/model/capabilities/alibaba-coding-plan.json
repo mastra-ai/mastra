@@ -14,11 +14,6 @@
   ],
   "structuredOutput": ["qwen3-coder-next"],
   "reasoning": {
-    "glm-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen3.6-plus": [
       {
         "type": "toggle"
@@ -35,6 +30,11 @@
       }
     ],
     "kimi-k2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-4.7": [
       {
         "type": "toggle"
       }

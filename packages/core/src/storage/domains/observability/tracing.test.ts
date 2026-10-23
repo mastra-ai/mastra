@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { createSignal } from '../../../agent/signals';
 import { SpanType } from '../../../observability/types';
 import {
   BATCH_DELETE_TRACES_MAX_IDS,
@@ -333,6 +334,24 @@ describe('buildPreview', () => {
 
   it('uses the serialized text the caller already has for the compact-JSON case', () => {
     expect(buildPreview({ query: 'lookup' }, '{"query": "as stored"}')).toBe('{"query": "as stored"}');
+  });
+
+  it('previews an agent signal recorded as a run input by its contents, labelling non-user signals', () => {
+    const skill = createSignal({
+      type: 'reactive',
+      tagName: 'skill',
+      attributes: { name: 'factory-triage' },
+      contents: 'Triage it.\n\nARGUMENTS: #123',
+    });
+    const reminder = createSignal({ type: 'reactive', tagName: 'system-reminder', contents: 'CI is red.' });
+    const user = createSignal({ type: 'user', contents: [{ type: 'text', text: 'Summarize the queue' }] });
+
+    expect(buildPreview(skill)).toBe('Skill factory-triage: Triage it.\n\nARGUMENTS: #123');
+    expect(buildPreview(reminder)).toBe('system-reminder: CI is red.');
+    expect(buildPreview(user)).toBe('Summarize the queue');
+    // Stores read the same preview back from the stored JSON column.
+    expect(buildPreviewFromJson(JSON.stringify(skill))).toBe('Skill factory-triage: Triage it.\n\nARGUMENTS: #123');
+    expect(buildPreview({ contents: 'not a signal' })).toBe('{"contents":"not a signal"}');
   });
 
   it('trims strings and returns null when there is nothing to preview', () => {

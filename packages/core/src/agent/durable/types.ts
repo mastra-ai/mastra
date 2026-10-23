@@ -43,7 +43,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
-import type { CreatedAgentSignal } from '../signals';
+import type { AgentSignalInput, CreatedAgentSignal } from '../signals';
 import type { TripwireData } from '../trip-wire';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
 import type { ExecutionFence } from './execution-fence';
@@ -623,6 +623,12 @@ export interface AgentStreamEvent<T = unknown> {
   /** Claim generation of the execution that published the event. See {@link Event.generation}. */
   generation?: number;
   /**
+   * Position of this event in its run topic's log. Only present on events read
+   * back from the topic; it is stripped before an event reaches an `observe()`
+   * consumer.
+   */
+  index?: number;
+  /**
    * The `chunk` event's chunk already ran through the run's output processors
    * before it was published, so the stream consumer must not run them again.
    */
@@ -904,6 +910,15 @@ export interface RunRegistryEntry {
    * signals sent to a restarted worker will not be drained.
    */
   drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  /**
+   * Queues a signal on `AgentThreadStreamRuntime` for this run, where the
+   * drain closure picks it up. Processors that keep a step's `sendSignal`
+   * and call it after that step returned are routed here, because the step's
+   * MessageList has already been serialized. In-process only like the drain.
+   */
+  enqueuePendingSignal?: (signalInput: AgentSignalInput) => Promise<CreatedAgentSignal>;
+  /** Process-local reminders for runs without a memory thread. Drained by the next LLM step. */
+  pendingProcessorSignals?: CreatedAgentSignal[];
   /** Owner-queue notifications, in-process only like the drain closure. */
   subscribePendingSignals?: (listener: () => void) => () => void;
   /** Releases the latest LLM step's pending-signal listener, whichever way that step exited. */
@@ -975,6 +990,8 @@ export interface RunRegistryEntry {
    * `createTimeoutAbortSignal` at install time.
    */
   timeoutTotalMs?: number;
+  /** A late subscriber re-publishes the winning deadline error at most once per segment. */
+  deadlineErrorRedelivered?: boolean;
   /**
    * Whether this process has already subscribed to cross-process abort
    * requests for the run. Set by `ensureRemoteAbortListener`, which every

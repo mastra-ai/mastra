@@ -2856,6 +2856,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     // removeAllListeners() here would silently kill every other subscriber
     // (see #19743).
     let detach: (() => void) | undefined;
+    // Erroring a ReadableStream discards the chunks still queued for its reader, so a failure that
+    // arrives while this subscriber is behind waits in `pendingError` until `pull` sees the queue empty.
+    let pendingError: { error: unknown } | undefined;
+    const fail = (controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>, error: unknown) => {
+      if ((controller.desiredSize ?? 0) > 0) {
+        controller.error(error);
+      } else {
+        pendingError = { error };
+      }
+    };
 
     return new ReadableStream<ChunkType<OUTPUT>>({
       start(controller) {
@@ -2867,7 +2877,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         // If stream already finished, close immediately
         if (self.#streamFinished) {
           if (self.#consumeStreamErrored) {
-            controller.error(self.#consumeStreamError);
+            fail(controller, self.#consumeStreamError);
           } else {
             controller.close();
           }
@@ -2890,7 +2900,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         };
         const errorHandler = (error: unknown) => {
           detachListeners();
-          controller.error(error);
+          fail(controller, error);
         };
 
         self.#emitter.on('chunk', chunkHandler);
@@ -2900,7 +2910,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         detach = detachListeners;
       },
 
-      pull(_controller) {
+      pull(controller) {
+        if (pendingError) {
+          controller.error(pendingError.error);
+          return;
+        }
         // Only start consumption when someone is actively reading the stream
         if (!self.#consumptionStarted) {
           self.consumeStream().catch(error => {
