@@ -5,7 +5,11 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { expect, it } from 'vitest';
 
 import { Memory } from '../../../index';
-import { createKnowledgeTools, getKnowledgeStore, resolveRunKnowledgeScopes } from '../subconscious/knowledge-tools';
+import {
+  createKnowledgeReadTools,
+  getKnowledgeStore,
+  resolveRunKnowledgeScopes,
+} from '../subconscious/knowledge-tools';
 
 it.each([false, true])('refuses cross-org resource reuse before reading (Knowledge facade: %s)', async facade => {
   const storage = new InMemoryStore();
@@ -22,7 +26,7 @@ it.each([false, true])('refuses cross-org resource reuse before reading (Knowled
   const store = await getKnowledgeStore(memory);
   const node = await store.createNode({ name: 'Private node', scopeIds: [a.levels[1]!.scopeId] });
   await store.createRecord({ node, text: 'Private text', source: 'test', scopeIds: [a.levels[1]!.scopeId] });
-  const tools = createKnowledgeTools(memory);
+  const tools = createKnowledgeReadTools(memory);
   const read = () => tools.knowledge_read.execute!({ id: node.id }, context('b', 'thread-b'));
   await expect(read()).rejects.toThrow('parent other than org:b');
   expect(await store.getScopeAddress('thread:thread-b')).toBeNull();

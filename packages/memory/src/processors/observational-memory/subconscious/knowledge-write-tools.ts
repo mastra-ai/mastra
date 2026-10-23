@@ -1,21 +1,39 @@
-import type { KnowledgeNode, KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
-import { isKnowledgeScopeVisible, KnowledgeConflictError } from '@mastra/core/storage';
+import type {
+  KnowledgeNode,
+  KnowledgeScopeIds,
+  KnowledgeSemanticDocumentType,
+  KnowledgeStorage,
+} from '@mastra/core/storage';
+import { isKnowledgeScopeVisible, KnowledgeConflictError, KnowledgeUnsupportedError } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
-import { knowledgeRecordWriter } from './knowledge-tools';
-import type { KnowledgeRunScopeLevel } from './knowledge-tools';
+import { knowledgeRecordWriter, resolveKnowledgeToolsHost, resolveRunKnowledgeScopes } from './knowledge-tools';
+import type {
+  KnowledgeRunScopeLevel,
+  KnowledgeStoreMemory,
+  KnowledgeToolContext,
+  KnowledgeToolsHost,
+} from './knowledge-tools';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
 export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
 export const MAX_KNOWLEDGE_RECORD_TEXT_LENGTH = 1000;
-function scopeLevelSchema(levels: KnowledgeRunScopeLevel[]): JSONSchema7 {
-  return { type: 'string', enum: levels.map(level => level.type) };
-}
-function nodePlacementSchema(levels: KnowledgeRunScopeLevel[]): JSONSchema7 {
+/** Levels are known up front for a fixed run; per-call tools check the named level when they run. */
+function scopeLevelSchema(levels: KnowledgeRunScopeLevel[] | undefined): JSONSchema7 {
+  if (levels) return { type: 'string', enum: levels.map(level => level.type) };
   return {
     type: 'string',
-    description: `Placement for the node: one of this run's scope levels (${levels.map(level => `'${level.type}'`).join(', ')}), or a structural scope address from the host-configured placement context (for example 'features:memory').`,
+    description: "One of this run's scope levels by type, for example 'org', 'resource' or 'thread'.",
+  };
+}
+function nodePlacementSchema(levels: KnowledgeRunScopeLevel[] | undefined): JSONSchema7 {
+  const named = levels
+    ? `one of this run's scope levels (${levels.map(level => `'${level.type}'`).join(', ')})`
+    : "one of this run's scope levels by type (for example 'thread')";
+  return {
+    type: 'string',
+    description: `Placement for the node: ${named}, or a structural scope address from the host-configured placement context (for example 'features:memory').`,
   };
 }
 const recordTextSchema: JSONSchema7 = {
@@ -58,6 +76,22 @@ export interface KnowledgeWriteToolsOptions {
   /** The run's chain of nested scopes, root first; writes name one of these levels by type. */
   levels: KnowledgeRunScopeLevel[];
   sourceThreadId: string;
+  /** Provenance stamped on every write. Defaults to the Subconscious curator. */
+  source?: string;
+}
+
+/**
+ * Write options for one call of an ordinary agent: the run's scopes, its thread, and the agent as
+ * provenance. A run without a thread has no conversation to cite, so it cannot write.
+ */
+export async function resolveRunKnowledgeWriteOptions(
+  memory: KnowledgeStoreMemory,
+  context: KnowledgeToolContext | undefined,
+): Promise<KnowledgeWriteToolsOptions> {
+  const threadId = context?.agent?.threadId;
+  if (!threadId) throw new Error('Knowledge write tools need a Memory thread to record where a write came from.');
+  const { scopeIds, levels } = await resolveRunKnowledgeScopes(memory, context);
+  return { scopeIds, levels, sourceThreadId: threadId, source: `agent:${context.agent?.agentId ?? 'unknown'}` };
 }
 
 async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeStorage> {
@@ -99,6 +133,31 @@ async function resolveNodePlacement(
   const scope = frontier.some(visible => visible.address === placement) ? await store.getScopeAddress(placement) : null;
   if (!scope) throw new Error(`Structural scope is outside the curator's visible scope: ${placement}`);
   return [...resolveWriteScopeIds(options, recordScope), scope.scopeNodeId];
+}
+
+/**
+ * Imported knowledge leaves only when its provider confirms the deletion, so agents cannot remove,
+ * rescope or merge away what an importer binding still claims. Stores without claims have none.
+ */
+async function requireNotImported(
+  store: KnowledgeStorage,
+  targetType: KnowledgeSemanticDocumentType,
+  id: string,
+  label: string,
+): Promise<void> {
+  let claims;
+  try {
+    claims = await store.listImportClaims({ targetType, targetId: id });
+  } catch (error) {
+    if (error instanceof KnowledgeUnsupportedError) return;
+    throw error;
+  }
+  const active = claims.find(claim => claim.scopeIds.length > 0);
+  if (active) {
+    throw new Error(
+      `${label} is imported by ${active.importerId} and leaves Knowledge only when its source deletes it. Append a correcting record instead.`,
+    );
+  }
 }
 
 async function requireVisible(
@@ -159,11 +218,20 @@ async function findSimilarNodes(
   return { similar };
 }
 
-export function createKnowledgeWriteTools(
-  memory: KnowledgeWriteToolsMemory,
-  options: KnowledgeWriteToolsOptions,
+export function createKnowledgeWriteTools<M extends KnowledgeWriteToolsMemory>(
+  host: KnowledgeToolsHost<M>,
+  runOptions:
+    | KnowledgeWriteToolsOptions
+    | ((memory: M, context: KnowledgeToolContext | undefined) => Promise<KnowledgeWriteToolsOptions>),
 ): Record<string, ToolAction<any, any, any>> {
-  async function resolveWritableNode(id: string) {
+  const levels = typeof runOptions === 'function' ? undefined : runOptions.levels;
+  async function resolveCall(context: unknown) {
+    const toolContext = context as KnowledgeToolContext | undefined;
+    const memory = resolveKnowledgeToolsHost(host, toolContext);
+    const options = typeof runOptions === 'function' ? await runOptions(memory, toolContext) : runOptions;
+    return { memory, options, source: options.source ?? CURATOR_IDENTITY };
+  }
+  async function resolveWritableNode(memory: M, options: KnowledgeWriteToolsOptions, id: string) {
     const store = await getStore(memory);
     const node = await store.getNode(id);
     if (!node) throw new Error(`Knowledge node not found: ${id}`);
@@ -182,8 +250,8 @@ export function createKnowledgeWriteTools(
           name: { type: 'string', minLength: 1 },
           kind: { type: 'string', minLength: 1 },
           text: recordTextSchema,
-          nodeScope: nodePlacementSchema(options.levels),
-          scope: scopeLevelSchema(options.levels),
+          nodeScope: nodePlacementSchema(levels),
+          scope: scopeLevelSchema(levels),
           when: dateTimeSchema,
           confirmDistinct: {
             type: 'boolean',
@@ -194,7 +262,8 @@ export function createKnowledgeWriteTools(
         required: ['name', 'kind', 'text'],
         additionalProperties: false,
       } satisfies JSONSchema7,
-      execute: async input => {
+      execute: async (input, context) => {
+        const { memory, options, source } = await resolveCall(context);
         const value = input as {
           name: string;
           kind: string;
@@ -213,7 +282,7 @@ export function createKnowledgeWriteTools(
         const record = {
           text: value.text,
           scopeIds: recordScope,
-          source: CURATOR_IDENTITY,
+          source,
           metadata: { sourceThreadId: options.sourceThreadId, ...(when ? { when: when.toISOString() } : {}) },
           resolutionScopeIds: options.scopeIds,
         };
@@ -245,13 +314,14 @@ export function createKnowledgeWriteTools(
         properties: {
           node: { type: 'string', minLength: 1 },
           text: recordTextSchema,
-          scope: scopeLevelSchema(options.levels),
+          scope: scopeLevelSchema(levels),
           when: dateTimeSchema,
         },
         required: ['node', 'text'],
         additionalProperties: false,
       } satisfies JSONSchema7,
-      execute: async input => {
+      execute: async (input, context) => {
+        const { memory, options, source } = await resolveCall(context);
         const value = input as { node: string; text: string; scope?: string; when?: string };
         requireRecordTextWithinBound(value.text);
         const store = await getStore(memory);
@@ -265,7 +335,7 @@ export function createKnowledgeWriteTools(
           text: value.text,
           scopeIds: resolveWriteScopeIds(options, value.scope),
           resolutionScopeIds: options.scopeIds,
-          source: CURATOR_IDENTITY,
+          source,
           metadata: { sourceThreadId: options.sourceThreadId, ...(when ? { when: when.toISOString() } : {}) },
         });
       },
@@ -279,13 +349,15 @@ export function createKnowledgeWriteTools(
         required: ['recordId'],
         additionalProperties: false,
       } satisfies JSONSchema7,
-      execute: async input => {
+      execute: async (input, context) => {
+        const { memory, options, source } = await resolveCall(context);
         const store = await getStore(memory);
         const id = (input as { recordId: string }).recordId;
         const record = await store.getRecord({ id, includeDeleted: true });
         if (!record) throw new Error(`KnowledgeRecord not found: ${id}`);
         await requireVisible(store, 'record', record.id, options, 'KnowledgeRecord');
-        return store.deleteRecord({ id: record.id, deletedBy: CURATOR_IDENTITY });
+        await requireNotImported(store, 'record', record.id, 'KnowledgeRecord');
+        return store.deleteRecord({ id: record.id, deletedBy: source });
       },
     }),
     // Single-field edits use dedicated tools rather than one tool with an optional pair, because
@@ -313,9 +385,10 @@ export function createKnowledgeWriteTools(
         required: ['node', 'expectedVersion', 'name', 'kind'],
         additionalProperties: false,
       } satisfies JSONSchema7,
-      execute: async input => {
+      execute: async (input, context) => {
+        const { memory, options } = await resolveCall(context);
         const value = input as { node: string; expectedVersion: number; name: string; kind: string };
-        const node = await resolveWritableNode(value.node);
+        const node = await resolveWritableNode(memory, options, value.node);
         const store = await getStore(memory);
         return store.updateNode({
           id: node.id,
@@ -338,9 +411,10 @@ export function createKnowledgeWriteTools(
         required: ['node', 'expectedVersion', 'name'],
         additionalProperties: false,
       } satisfies JSONSchema7,
-      execute: async input => {
+      execute: async (input, context) => {
+        const { memory, options } = await resolveCall(context);
         const value = input as { node: string; expectedVersion: number; name: string };
-        const node = await resolveWritableNode(value.node);
+        const node = await resolveWritableNode(memory, options, value.node);
         const store = await getStore(memory);
         return store.updateNode({ id: node.id, version: value.expectedVersion, name: value.name });
       },
@@ -358,9 +432,10 @@ export function createKnowledgeWriteTools(
         required: ['node', 'expectedVersion', 'kind'],
         additionalProperties: false,
       } satisfies JSONSchema7,
-      execute: async input => {
+      execute: async (input, context) => {
+        const { memory, options } = await resolveCall(context);
         const value = input as { node: string; expectedVersion: number; kind: string };
-        const node = await resolveWritableNode(value.node);
+        const node = await resolveWritableNode(memory, options, value.node);
         const store = await getStore(memory);
         return store.updateNode({ id: node.id, version: value.expectedVersion, kind: value.kind });
       },
@@ -378,7 +453,8 @@ export function createKnowledgeWriteTools(
         required: ['sourceId', 'targetId', 'sourceVersion'],
         additionalProperties: false,
       } satisfies JSONSchema7,
-      execute: async input => {
+      execute: async (input, context) => {
+        const { memory, options } = await resolveCall(context);
         const value = input as { sourceId: string; targetId: string; sourceVersion: number };
         const store = await getStore(memory);
         const [source, target] = await Promise.all([store.getNode(value.sourceId), store.getNode(value.targetId)]);
@@ -387,6 +463,7 @@ export function createKnowledgeWriteTools(
           requireVisible(store, 'node', source.id, options, 'Knowledge merge source'),
           requireVisible(store, 'node', target.id, options, 'Knowledge merge target'),
         ]);
+        await requireNotImported(store, 'node', source.id, 'Knowledge merge source');
         return store.mergeNodes(value);
       },
     }),
@@ -398,17 +475,19 @@ export function createKnowledgeWriteTools(
         properties: {
           recordId: { type: 'string', minLength: 1 },
           expectedVersion: { type: 'integer', minimum: 1 },
-          scope: scopeLevelSchema(options.levels),
+          scope: scopeLevelSchema(levels),
         },
         required: ['recordId', 'expectedVersion', 'scope'],
         additionalProperties: false,
       } satisfies JSONSchema7,
-      execute: async input => {
+      execute: async (input, context) => {
+        const { memory, options } = await resolveCall(context);
         const value = input as { recordId: string; expectedVersion: number; scope: string };
         const store = await getStore(memory);
         const record = await store.getRecord({ id: value.recordId });
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
         await requireVisible(store, 'record', record.id, options, 'KnowledgeRecord');
+        await requireNotImported(store, 'record', record.id, 'KnowledgeRecord');
         if (record.version !== value.expectedVersion) throw new KnowledgeConflictError(record.id);
         return knowledgeRecordWriter(memory, store).setRecordScopes({
           id: record.id,
@@ -435,7 +514,8 @@ export function createKnowledgeWriteTools(
         required: ['node', 'expectedVersion', 'description'],
         additionalProperties: false,
       } satisfies JSONSchema7,
-      execute: async input => {
+      execute: async (input, context) => {
+        const { memory, options } = await resolveCall(context);
         const value = input as { node: string; expectedVersion: number; description: string };
         // Schema maxLength counts code points; enforce the tool's UTF-16 bound as well.
         if (value.description.length > MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH) {
@@ -463,13 +543,14 @@ export function createKnowledgeWriteTools(
           name: { type: 'string', minLength: 1 },
           kind: { type: 'string', minLength: 1 },
           content: { type: 'string', minLength: 1 },
-          scope: scopeLevelSchema(options.levels),
+          scope: scopeLevelSchema(levels),
           expectedVersion: { type: 'integer', minimum: 1 },
         },
         required: ['name', 'content'],
         additionalProperties: false,
       } satisfies JSONSchema7,
-      execute: async input => {
+      execute: async (input, context) => {
+        const { memory, options, source } = await resolveCall(context);
         const value = input as {
           name: string;
           kind?: string;
@@ -483,7 +564,7 @@ export function createKnowledgeWriteTools(
         const node = await store.resolveNode({ name, scopeIds: options.scopeIds });
         const record = {
           text: value.content,
-          source: CURATOR_IDENTITY,
+          source,
           scopeIds,
           resolutionScopeIds: options.scopeIds,
           metadata: { sourceThreadId: options.sourceThreadId, content: true },

@@ -7,7 +7,7 @@ import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
 import type { Memory } from '../../..';
-import { createKnowledgeTools } from './knowledge-tools';
+import { createKnowledgeReadTools } from './knowledge-tools';
 import { RemindContinuationProcessor } from './remind-continuation';
 import { getRemindMessageMetadata } from './remind-protocol';
 import type { SubconsciousModel } from './types';
@@ -231,7 +231,7 @@ export function createReminderAgent(options: {
     mastra: options.parentAgent?.getMastraInstance?.(),
     pubsub: options.parentAgent?.getPubSub?.(),
     tools: {
-      ...createKnowledgeTools(options.memory, options.scopeIds),
+      ...createKnowledgeReadTools(options.memory, options.scopeIds),
       ...options.additionalTools,
       send_reminder: sendReminder,
     },
