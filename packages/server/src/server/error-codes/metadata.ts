@@ -37,10 +37,8 @@ export const SERVER_ERROR_METADATA_SCHEMAS = {
   CONVERSATION_MEMORY_NOT_CONFIGURED: z.object({ agentId: z.string() }),
   CONVERSATION_NOT_FOUND: z.object({ conversationId: z.string() }),
   DATASET_ITEM_EXTERNAL_ID_INVALID: z.object({ field: z.string() }),
-  DATASET_ITEM_NOT_FOUND: z.object({ itemId: z.string() }),
   DATASET_ITEM_VERSION_NOT_FOUND: z.object({ itemId: z.string(), datasetVersion: z.number() }),
   DYNAMIC_WORKFLOW_NOT_FOUND: z.object({ dynamicWorkflowId: z.string() }),
-  EXPERIMENT_NOT_FOUND: z.object({ experimentId: z.string() }),
   MCP_CLIENT_VERSION_NOT_FOUND: z.object({ versionId: z.string(), mcpClientId: z.string() }),
   MCP_RESOURCES_UNSUPPORTED: z.object({ serverId: z.string() }),
   MCP_RESOURCE_NOT_FOUND: z.object({ uri: z.string(), serverId: z.string() }),
@@ -117,10 +115,6 @@ export const SERVER_ERROR_METADATA_SCHEMAS = {
     .object({ methodName: z.string().optional(), endpoint: z.string().optional() })
     .optional(),
   PROCESSOR_PHASE_UNSUPPORTED: z.object({ phase: z.string() }),
-  PROCESSOR_WORKFLOW_FAILED: z.object({
-    processorId: z.string(),
-    status: z.enum(['failed', 'suspended', 'paused']).optional(),
-  }),
   WORKSPACE_PATH_NOT_FOUND: z.object({ path: z.string() }).optional(),
 
   // Framework: request validation, routing, rate limiting.
@@ -153,6 +147,14 @@ export const SERVER_ERROR_METADATA_SCHEMAS = {
   // Voice routes (`@mastra/voice` internals), which fall back to `handleError` without metadata.
   AGENT_VOICE_NOT_CONFIGURED: z.object({ agentId: z.string() }),
   AGENT_SPEAK_FAILED: z.object({ agentId: z.string() }).optional(),
+
+  // Core throws these ids without the fields below, and handlers forward the core id as the code,
+  // so the metadata is only present when the server raised the error itself.
+  DATASET_ITEM_NOT_FOUND: z.object({ itemId: z.string() }).optional(),
+  EXPERIMENT_NOT_FOUND: z.object({ experimentId: z.string() }).optional(),
+  PROCESSOR_WORKFLOW_FAILED: z
+    .object({ processorId: z.string(), status: z.enum(['failed', 'suspended', 'paused']).optional() })
+    .optional(),
 
   // Run-state conflicts and validation failures raised by core, forwarded with their `details`.
   WORKFLOW_RESUME_ALREADY_CLAIMED: forwardedDetails,

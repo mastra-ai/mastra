@@ -5,6 +5,7 @@ import { SpanType } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { SERVER_ERROR_METADATA_SCHEMAS } from '../error-codes/metadata';
 import { HTTPException } from '../http-exception';
 import {
   experimentResultResponseSchema,
@@ -14,6 +15,7 @@ import {
   listItemsQuerySchema,
   triggerExperimentBodySchema,
 } from '../schemas/datasets';
+import { formatErrorResponse } from '../server-adapter';
 import { DATASETS_ROUTES } from '../server-adapter/routes/datasets';
 import {
   ADD_ITEM_ROUTE,
@@ -108,6 +110,25 @@ describe('Datasets Handlers', () => {
           name: 'after',
         } as any),
       ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('sends an EXPERIMENT_NOT_FOUND body that matches the metadata declared for the code', async () => {
+      // Given an experiment id that core cannot find
+      const dataset = await mastra.datasets.create({ name: 'Rename DS' });
+
+      // When the route forwards core's error
+      const error = await UPDATE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: 'missing',
+        name: 'after',
+      } as any).catch((e: unknown) => e);
+      const { status, body } = formatErrorResponse(error);
+
+      // Then the wire body carries the code, and its metadata matches the declared schema
+      expect(status).toBe(404);
+      expect(body.code).toBe('EXPERIMENT_NOT_FOUND');
+      expect(SERVER_ERROR_METADATA_SCHEMAS.EXPERIMENT_NOT_FOUND.safeParse(body.metadata).success).toBe(true);
     });
 
     it('should reject an invalid body before the handler', () => {
@@ -1763,6 +1784,23 @@ describe('Datasets Handlers', () => {
       expect(error).toBeInstanceOf(HTTPException);
       expect((error as HTTPException).status).toBe(400);
       expect((error as HTTPException).cause).toEqual({ field: 'externalId' });
+    });
+
+    it('sends the declared metadata when a batch insert has an invalid externalId', async () => {
+      // Given a dataset
+      const dataset = await mastra.datasets.create({ name: 'Invalid Identity Batch DS' });
+
+      // When a batch item has an empty externalId, which core rejects
+      const error = await BATCH_INSERT_ITEMS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        items: [{ externalId: '', input: { q: 'invalid' } }],
+      } as any).catch((e: unknown) => e);
+      const { status, body } = formatErrorResponse(error);
+
+      // Then the body carries the code with its required metadata
+      expect(status).toBe(400);
+      expect(body).toMatchObject({ code: 'DATASET_ITEM_EXTERNAL_ID_INVALID', metadata: { field: 'externalId' } });
     });
 
     it('maps circular dataset item payloads to HTTP 400', async () => {
