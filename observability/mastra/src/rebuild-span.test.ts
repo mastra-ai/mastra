@@ -133,6 +133,43 @@ describe('rebuildSpan internal status', () => {
     expect(endedSpan('tool')?.parentEntityVersionId).toBeUndefined();
   });
 
+  it('does not take a parent entity version from the metadata of an older snapshot', () => {
+    const { tracing } = setup();
+    const supervisor = tracing.startSpan({
+      type: SpanType.AGENT_RUN,
+      name: 'supervisor',
+      entityType: EntityType.AGENT,
+      entityId: 'supervisor',
+      entityName: 'Supervisor',
+      metadata: { entityVersionId: 'supervisor-v1' },
+    });
+    const subAgent = tracing.startSpan({
+      type: SpanType.AGENT_RUN,
+      name: 'sub-agent',
+      parent: supervisor,
+      entityType: EntityType.AGENT,
+      entityId: 'researcher',
+      entityName: 'Researcher',
+    });
+
+    // Snapshots saved before ownEntityVersionId existed only have the inherited metadata version
+    const { ownEntityVersionId: _, ...legacySnapshot } = JSON.parse(JSON.stringify(subAgent.snapshot()));
+    expect(legacySnapshot.metadata.entityVersionId).toBe('supervisor-v1');
+    const rebuilt = tracing.rebuildSpan(legacySnapshot);
+    const tool = tracing.startSpan({
+      type: SpanType.TOOL_CALL,
+      name: 'tool',
+      parent: rebuilt,
+      entityType: EntityType.TOOL,
+      entityId: 'search',
+      entityName: 'search',
+    });
+
+    const exportedTool = tool.exportSpan();
+    expect(exportedTool).toMatchObject({ parentEntityId: 'researcher', rootEntityVersionId: 'supervisor-v1' });
+    expect(exportedTool?.parentEntityVersionId).toBeUndefined();
+  });
+
   it('falls back to the restored parent entity when the rebuilt ancestor is internal', async () => {
     const { tracing, ended } = setup();
     const agent = tracing.startSpan({

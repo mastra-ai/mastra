@@ -553,10 +553,9 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * rebuilt (durable execution), so it and its new children keep their lineage.
    */
   public restoreEntityLineage(cached: SpanEntityLineage & Pick<SpanSnapshot<SpanType>, 'ownEntityVersionId'>): void {
-    // Snapshots from older versions lack this, so the version from cached metadata stays
-    if (cached.ownEntityVersionId !== undefined) {
-      this.ownEntityVersionId = cached.ownEntityVersionId ?? undefined;
-    }
+    // Snapshots from older versions lack this. Their metadata version may belong to an
+    // ancestor entity, so treat ownership as unknown rather than guess.
+    this.ownEntityVersionId = cached.ownEntityVersionId ?? undefined;
     const lineage = definedLineage(cached);
     if (Object.keys(lineage).length > 0) {
       this.restoredLineage = lineage;
