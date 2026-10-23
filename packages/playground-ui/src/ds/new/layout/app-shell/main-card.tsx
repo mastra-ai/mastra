@@ -1,17 +1,22 @@
 import type { ReactNode } from 'react';
 
-import { useMaybeSidebarState } from '@/ds/components/Sidebar/root/sidebar-context';
 import { frameFillStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 // The app frame surface inside `AppShell`. Spacing around it is owned by the shell, not the card.
-// Framed only from lg while the sidebar sits beside it (the sidebar's drawer breakpoint); below lg, or
-// beside a hidden sidebar, it is flat page content. lg-only classes, not max-lg overrides, so consumer CSS
-// that also emits the base classes can't undo the flat state by source order.
+// Framed only from lg, where the sidebar sits beside it (the sidebar's drawer breakpoint); below lg it is
+// flat page content under the mobile header. lg-only classes, not max-lg overrides, so consumer CSS that
+// also emits the base classes can't undo the flat state by source order.
 // Reserve the 1px inset rim so child dividers don't paint over it and stack their alpha.
-export function MainCard({ children, className }: { children: ReactNode; className?: string }) {
-  const framed = !useMaybeSidebarState()?.isHidden;
-
+export function MainCard({
+  children,
+  className,
+  edgeToEdge,
+}: {
+  children: ReactNode;
+  className?: string;
+  edgeToEdge?: boolean;
+}) {
   return (
     <div
       data-slot="main-card"
@@ -19,7 +24,7 @@ export function MainCard({ children, className }: { children: ReactNode; classNa
         'relative min-h-0 flex-1 overflow-hidden',
         'transition-[border-radius,padding,box-shadow] duration-(--resize-dur) ease-(--resize-ease) motion-reduce:transition-none!',
         'in-data-[sidebar-gesture=active]:transition-none!',
-        framed && 'lg:rounded-studio-frame lg:p-px lg:shadow-raised',
+        !edgeToEdge && 'lg:rounded-studio-frame lg:p-px lg:shadow-raised',
         frameFillStyle,
         className,
       )}

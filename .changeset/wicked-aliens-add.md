@@ -2,13 +2,15 @@
 '@mastra/playground-ui': patch
 ---
 
-With a hidden sidebar (`collapsedWidth={0}` and collapsed), `AppShell` and `MainCard` now run the page edge to edge instead of framing it in an inset card. The frame comes back, animated, when the sidebar opens. `useSidebar()` also returns `isHidden` for layouts that need the same signal.
+`AppShell` and `MainCard` take an `edgeToEdge` prop. It drops the inset around the page and the card's frame, so the page fills the window. Use it when the sidebar hides completely instead of collapsing to a rail. The change animates on the sidebar's resize timing.
 
 ```tsx
-import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
+const { state, collapsedWidth } = useSidebar();
+const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
 
-function PageFrame({ children }: { children: React.ReactNode }) {
-  const { isHidden } = useSidebar();
-  return <div className={isHidden ? 'p-0' : 'p-2'}>{children}</div>;
-}
+<AppShell sidebar={<AppSidebar />} edgeToEdge={edgeToEdge}>
+  <MainCard edgeToEdge={edgeToEdge}>
+    <Outlet />
+  </MainCard>
+</AppShell>;
 ```

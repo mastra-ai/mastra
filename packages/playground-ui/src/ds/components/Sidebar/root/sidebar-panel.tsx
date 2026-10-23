@@ -26,7 +26,6 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
     maxWidth,
     collapseBelow,
     collapsedWidth,
-    isHidden,
     isMobile,
     openMobile,
     mobileTriggerRef,
@@ -40,6 +39,7 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
     setGestureActive,
   } = useSidebar();
   const isCollapsed = state === 'collapsed';
+  const isHidden = isCollapsed && collapsedWidth === 0;
 
   const draggedRef = useRef(false);
   const dragCleanupRef = useRef<(() => void) | null>(null);

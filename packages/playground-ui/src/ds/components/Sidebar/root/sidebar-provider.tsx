@@ -226,7 +226,6 @@ export function SidebarProvider({
       maxWidth: safeMax,
       collapseBelow: safeCollapseBelow,
       collapsedWidth: safeCollapsed,
-      isHidden: effectiveState === 'collapsed' && safeCollapsed === 0,
       isMobile,
       toggleSidebar,
       setWidth,
