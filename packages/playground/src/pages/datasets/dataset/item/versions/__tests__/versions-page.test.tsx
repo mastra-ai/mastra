@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import DatasetItemVersionsComparePage from '../index';
 import { dataset, history } from './fixtures/versions-page';
-import { RouteHeaderActionsProvider, RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 
@@ -45,11 +44,10 @@ const renderPage = (initialEntry: string) => {
               <Route
                 path="/datasets/:datasetId/items/:itemId/versions"
                 element={
-                  <RouteHeaderActionsProvider>
-                    <RouteHeaderActionsSlot />
+                  <>
                     <DatasetItemVersionsComparePage />
                     <LocationProbe />
-                  </RouteHeaderActionsProvider>
+                  </>
                 }
               />
             </Routes>
@@ -61,6 +59,13 @@ const renderPage = (initialEntry: string) => {
 };
 
 describe('DatasetItemVersionsComparePage', () => {
+  it('renders a single main landmark around the compare columns', async () => {
+    renderPage('/datasets/ds-1/items/item-a/versions');
+
+    expect(await screen.findByRole('combobox', { name: 'Version' })).toBeDefined();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+  });
+
   it('shows an empty compare column when no ?compare is provided', async () => {
     renderPage('/datasets/ds-1/items/item-a/versions');
 
@@ -97,44 +102,52 @@ describe('DatasetItemVersionsComparePage', () => {
     expect(screen.queryByText('No version selected')).toBeNull();
   });
 
-  describe('given ?view=diff with two versions selected', () => {
+  describe('when ?view=diff with two versions selected', () => {
     it('keeps the exact same two-card layout and only highlights changed lines in the editors', async () => {
       const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1&view=diff');
 
-      await waitFor(() => expect(container.querySelector('.cm-diff-removed')).not.toBeNull());
-      expect(container.querySelector('.cm-diff-added')).not.toBeNull();
+      await waitFor(() => expect(container.querySelector('.code-diff-removed')).not.toBeNull());
+      expect(container.querySelector('.code-diff-added')).not.toBeNull();
       expect(container.querySelector('.cm-mergeView')).toBeNull();
       expect(screen.getByRole('combobox', { name: 'Version' })).toBeDefined();
       expect(screen.getByRole('combobox', { name: 'Compare version' })).toBeDefined();
-      expect(screen.getByRole('button', { name: /Default View/ })).toBeDefined();
+      expect(screen.getByRole('button', { name: /Default view/ })).toBeDefined();
       expect(screen.getAllByText('Input')).toHaveLength(2);
       expect(screen.getAllByText('Tool Mocks')).toHaveLength(2);
+      // Left = v2, which sets Tool Mocks and Request Context; right = v1, which sets neither.
+      const [newerCard, olderCard] = Array.from(
+        container.querySelector('.md\\:grid-cols-2')!.children,
+      ) as HTMLElement[];
+      expect(within(newerCard).getByText('Request Context')).toBeDefined();
+      expect(within(newerCard).queryByText('Not set in this version')).toBeNull();
+      expect(within(olderCard).getByText('Request Context')).toBeDefined();
+      expect(within(olderCard).getAllByText('Not set in this version')).toHaveLength(2);
       expect(screen.queryByText('No version selected')).toBeNull();
     });
 
     it('colours by chronology: the newer version shows additions (green), the older one removals (red)', async () => {
       // Left = v2 (newer), right = v1 (older)
       const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1&view=diff');
-      await waitFor(() => expect(container.querySelector('.cm-diff-removed')).not.toBeNull());
+      await waitFor(() => expect(container.querySelector('.code-diff-removed')).not.toBeNull());
 
       const grid = container.querySelector('.md\\:grid-cols-2')!;
       const [leftCard, rightCard] = Array.from(grid.children);
-      expect(leftCard.querySelector('.cm-diff-added')).not.toBeNull();
-      expect(leftCard.querySelector('.cm-diff-removed')).toBeNull();
-      expect(rightCard.querySelector('.cm-diff-removed')).not.toBeNull();
-      expect(rightCard.querySelector('.cm-diff-added')).toBeNull();
+      expect(leftCard.querySelector('.code-diff-added')?.textContent).toContain('newer');
+      expect(leftCard.querySelector('.code-diff-removed')).toBeNull();
+      expect(rightCard.querySelector('.code-diff-removed')?.textContent).toContain('older');
+      expect(rightCard.querySelector('.code-diff-added')).toBeNull();
     });
   });
 
-  describe('given the Diff View button is clicked', () => {
+  describe('when the Diff view button is clicked', () => {
     it('stores ?view=diff in the URL and highlights the changes', async () => {
       const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1');
-      expect(container.querySelector('.cm-diff-removed')).toBeNull();
+      expect(container.querySelector('.code-diff-removed')).toBeNull();
 
-      fireEvent.click(await screen.findByRole('button', { name: /Diff View/ }));
+      fireEvent.click(await screen.findByRole('button', { name: /Diff view/ }));
 
-      await waitFor(() => expect(container.querySelector('.cm-diff-removed')).not.toBeNull());
-      expect(container.querySelector('.cm-diff-added')).not.toBeNull();
+      await waitFor(() => expect(container.querySelector('.code-diff-removed')).not.toBeNull());
+      expect(container.querySelector('.code-diff-added')).not.toBeNull();
       expect(screen.getByTestId('location').textContent).toContain('view=diff');
     });
   });

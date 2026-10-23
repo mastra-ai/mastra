@@ -52,6 +52,41 @@ This creates a `src/mastra` folder with an example weather agent and the followi
 
 You'll pass the `src/mastra/index.ts` file to the NestJS adapter in the next step.
 
+## Update the generated files for your module system
+
+The files that `mastra init` generates need one change to compile in a NestJS project. Check the `type` field in your `package.json`. NestJS CLI v12 creates ECMAScript module (ESM) projects with `"type": "module"`. Earlier versions of the CLI create CommonJS projects.
+
+<Tabs>
+  <TabItem value="esm" label="ESM">
+    ESM projects use `"moduleResolution": "nodenext"`, which requires file extensions on relative imports. Add `.js` to every relative import in the generated files, for example:
+
+    ```typescript title="src/mastra/index.ts"
+    import { weatherWorkflow } from './workflows/weather-workflow.js'
+    import { weatherAgent } from './agents/weather-agent.js'
+    ```
+
+    ```typescript title="src/mastra/agents/weather-agent.ts"
+    import { weatherTool } from '../tools/weather-tool.js'
+    ```
+  </TabItem>
+
+  <TabItem value="commonjs" label="CommonJS">
+    CommonJS doesn't support top-level `await`. Open `src/mastra/index.ts` and remove the `DuckDBStore` import and the `domains` option of `MastraCompositeStore`:
+
+    ```typescript title="src/mastra/index.ts" oxfmt:false
+    import { DuckDBStore } from '@mastra/duckdb'
+
+    // ...
+
+    domains: {
+      observability: await new DuckDBStore().getStore('observability'),
+    },
+    ```
+
+    Observability data is then stored in the default LibSQL storage.
+  </TabItem>
+</Tabs>
+
 ## Add server adapter
 
 Install the NestJS server adapter package:
@@ -65,7 +100,7 @@ Open `src/app.module.ts` and register `MastraModule`:
 ```typescript title="src/app.module.ts"
 import { Module } from '@nestjs/common'
 import { MastraModule } from '@mastra/nestjs'
-import { mastra } from './mastra'
+import { mastra } from './mastra/index.js'
 
 @Module({
   imports: [

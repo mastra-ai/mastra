@@ -1,8 +1,56 @@
-import { randomUUID } from 'node:crypto';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
 import { createClient } from './client.js';
 import type { ValkeyClientOptions, ValkeyClientType } from './client.js';
+
+/** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
+const RECLAIM_PAGE_SIZE = 100;
+/** Page size for replaying existing entries to a fan-out subscriber joining a shared reader. */
+const REPLAY_PAGE_SIZE = 500;
+
+/**
+ * Heartbeat: reset a pending entry's idle time only if this consumer still
+ * owns it, so a late heartbeat never takes an entry back from a sibling.
+ * KEYS[1] stream, ARGV[1] group, ARGV[2] consumer, ARGV[3] entry id
+ */
+const EXTEND_IF_OWNED_SCRIPT = `
+  local pending = redis.call("XPENDING", KEYS[1], ARGV[1], ARGV[3], ARGV[3], 1)
+  if #pending == 0 or pending[1][2] ~= ARGV[2] then
+    return 0
+  end
+  redis.call("XCLAIM", KEYS[1], ARGV[1], ARGV[2], 0, ARGV[3], "JUSTID")
+  return 1
+`;
+
+/**
+ * Atomically nack a pending entry only if it is still owned by the given
+ * consumer. Returns 1 if this consumer owned it and it was settled, 0 if the
+ * entry was not pending for this consumer (acked, or claimed by a sibling).
+ *
+ * KEYS[1] stream key
+ * ARGV[1] group, ARGV[2] consumer, ARGV[3] stream entry id,
+ * ARGV[4] republish payload ('' = drop without republish),
+ * ARGV[5] stream idle TTL in ms (0 = none),
+ * ARGV[6] approximate MAXLEN trim (0 = no trim)
+ */
+const NACK_IF_OWNED_SCRIPT = `
+  local pending = redis.call("XPENDING", KEYS[1], ARGV[1], ARGV[3], ARGV[3], 1)
+  if #pending == 0 or pending[1][2] ~= ARGV[2] then
+    return 0
+  end
+  if ARGV[4] ~= "" then
+    if tonumber(ARGV[6]) > 0 then
+      redis.call("XADD", KEYS[1], "MAXLEN", "~", ARGV[6], "*", "event", ARGV[4])
+    else
+      redis.call("XADD", KEYS[1], "*", "event", ARGV[4])
+    end
+    if tonumber(ARGV[5]) > 0 then
+      redis.call("PEXPIRE", KEYS[1], ARGV[5])
+    end
+  end
+  redis.call("XACK", KEYS[1], ARGV[1], ARGV[3])
+  return 1
+`;
 
 /**
  * Flatten an error into searchable text. node-redis MULTI failures throw a
@@ -18,14 +66,26 @@ function errorText(err: unknown): string {
   return parts.join('; ');
 }
 
+/** Order two stream ids (`<ms>-<seq>`). */
+function compareStreamIds(a: string, b: string): number {
+  const [aMs = '0', aSeq = '0'] = a.split('-');
+  const [bMs = '0', bSeq = '0'] = b.split('-');
+  const ms = BigInt(aMs) - BigInt(bMs);
+  if (ms !== 0n) return ms < 0n ? -1 : 1;
+  const seq = BigInt(aSeq) - BigInt(bSeq);
+  return seq === 0n ? 0 : seq < 0n ? -1 : 1;
+}
+
 /**
  * Mastra PubSub backed by Valkey Streams.
  *
  * - Each topic maps to a Valkey stream key `<prefix>:<topic>`.
  * - Subscriptions with `options.group` use a real Valkey consumer group, so
  *   competing subscribers in the same group share the work (round-robin).
- * - Subscriptions without a group create a private per-subscriber consumer
- *   group, so they get fan-out semantics (every subscriber sees every event).
+ * - Subscriptions without a group get fan-out semantics (every subscriber sees
+ *   every event). All fan-out subscribers to one topic in this instance share
+ *   one private consumer group and one reader connection; each extra callback
+ *   is dispatched locally, so it costs no Valkey connection.
  * - Nack triggers redelivery by re-publishing the event with an incremented
  *   `deliveryAttempt` field, then XACK-ing the original. This trades strict
  *   FIFO ordering on retry for a simple, reliable redelivery path.
@@ -56,7 +116,7 @@ export interface ValkeyStreamsPubSubConfig {
    */
   streamIdleTtlMs?: number;
   /**
-   * How often (in ms) each subscription runs XAUTOCLAIM to recover messages
+   * How often (in ms) each subscription runs a reclaim pass (XPENDING + XCLAIM) to recover messages
    * that an earlier consumer in the group read but never acked. Defaults to
    * 30_000 ms. Set to 0 to disable.
    */
@@ -76,6 +136,21 @@ export interface ValkeyStreamsPubSubConfig {
    * prefer `Infinity` to disable the cap explicitly.
    */
   maxDeliveryAttempts?: number;
+  /**
+   * How long (in ms) a handler may hold a message in-flight (neither acked nor
+   * nacked) before the reclaim loop gives up on it and nacks it on the
+   * handler's behalf. The nack republishes the event with an incremented
+   * `deliveryAttempt`, so `maxDeliveryAttempts` still bounds retries, and acks
+   * the original entry; the hung handler's own eventual ack/nack becomes a
+   * no-op.
+   *
+   * Without this, an in-flight entry is only ever recovered by a *different*
+   * consumer in the group once it has been idle for `reclaimIdleMs`. A
+   * single-consumer group therefore holds a hung message until the process
+   * restarts. Defaults to 0 (disabled). When set, it should be comfortably
+   * larger than the slowest legitimate handler.
+   */
+  inFlightTimeoutMs?: number;
   /**
    * Optional logger for diagnostics. When omitted, suppressed errors
    * (BUSYGROUP, malformed payloads, connection-close races) are swallowed
@@ -109,11 +184,18 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   #reclaimIntervalMs: number;
   #reclaimIdleMs: number;
   #maxDeliveryAttempts: number;
+  #inFlightTimeoutMs: number;
   #logger?: ValkeyStreamsPubSubConfig['logger'];
   // Keyed by `${topic}::${cbId}` so the same callback can be subscribed to
   // multiple topics independently. Without the topic in the key,
   // unsubscribe(otherTopic, cb) would tear down the wrong subscription.
+  // Fan-out subscribers to one topic share a reader, so several keys can point
+  // at the same Subscription record.
   #subscriptions: Map<string, Subscription> = new Map();
+  // The shared fan-out reader per topic, and readers still being opened (so
+  // concurrent first subscribers to a topic open only one).
+  #fanoutReaders: Map<string, Subscription> = new Map();
+  #pendingFanoutReaders: Map<string, Promise<Subscription>> = new Map();
   #cbIds: WeakMap<EventCallback, string> = new WeakMap();
   #pendingPublishes: Set<Promise<unknown>> = new Set();
   // `localOnly` publishes bypass Valkey entirely so values carrying live
@@ -157,6 +239,13 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     } else {
       this.#maxDeliveryAttempts = cap;
     }
+    const inFlightTimeout = options.inFlightTimeoutMs ?? 0;
+    if (!Number.isFinite(inFlightTimeout) || inFlightTimeout < 0) {
+      throw new Error(
+        `valkey-streams: inFlightTimeoutMs must be a non-negative number (milliseconds), got ${inFlightTimeout}`,
+      );
+    }
+    this.#inFlightTimeoutMs = inFlightTimeout;
   }
 
   /**
@@ -189,7 +278,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   #subKey(topic: string, cb: EventCallback): string {
     let cbId = this.#cbIds.get(cb);
     if (!cbId) {
-      cbId = randomUUID();
+      cbId = globalThis.crypto.randomUUID();
       this.#cbIds.set(cb, cbId);
     }
     return `${topic}::${cbId}`;
@@ -219,7 +308,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     if (options?.localOnly) {
       const localEvent: Event = {
         ...event,
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         createdAt: new Date(),
         deliveryAttempt: event.deliveryAttempt ?? 1,
       };
@@ -227,9 +316,21 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
       return;
     }
 
+    // Track the whole remote publish, connect included, so close() can drain
+    // a publish that is still connecting and not only one already in XADD.
+    const promise = this.#publishRemote(topic, event);
+    this.#pendingPublishes.add(promise);
+    try {
+      await promise;
+    } finally {
+      this.#pendingPublishes.delete(promise);
+    }
+  }
+
+  async #publishRemote(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
     await this.#ensureWriterConnected();
 
-    const id = randomUUID();
+    const id = globalThis.crypto.randomUUID();
     const createdAt = new Date();
     const payload: Event = {
       ...event,
@@ -237,14 +338,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
       createdAt,
       deliveryAttempt: event.deliveryAttempt ?? 1,
     };
-    const xaddOptions: { TRIM?: { strategy: 'MAXLEN'; strategyModifier: '~'; threshold: number } } = {};
-    if (this.#maxStreamLength > 0) {
-      xaddOptions.TRIM = {
-        strategy: 'MAXLEN',
-        strategyModifier: '~',
-        threshold: this.#maxStreamLength,
-      };
-    }
+    const xaddOptions = this.#xaddTrimOptions();
     const streamKey = this.#streamKey(topic);
     // When a TTL is configured the write and its PEXPIRE run in one MULTI
     // transaction. A detached PEXPIRE could fail or be skipped (process exit)
@@ -270,12 +364,12 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
               }
             })
         : this.#writeClient.xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions);
-    this.#pendingPublishes.add(promise);
-    try {
-      await promise;
-    } finally {
-      this.#pendingPublishes.delete(promise);
-    }
+    await promise;
+  }
+
+  #xaddTrimOptions(): { TRIM?: { strategy: 'MAXLEN'; strategyModifier: '~'; threshold: number } } {
+    if (this.#maxStreamLength <= 0) return {};
+    return { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: this.#maxStreamLength } };
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
@@ -294,11 +388,118 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
 
     await this.#ensureWriterConnected();
 
-    const isGrouped = !!options?.group;
-    const group = options?.group ?? `__fanout-${randomUUID()}`;
-    const consumer = `${group}-${randomUUID()}`;
-    const streamKey = this.#streamKey(topic);
     const groupAnchor = options?.startFrom === 'latest' ? '$' : '0';
+    if (options?.group) {
+      const sub = await this.#openSubscription(topic, cb, options.group, groupAnchor);
+      this.#subscriptions.set(key, sub);
+      sub.loop = this.#runReadLoop(sub);
+      this.#startReclaimLoop(sub);
+      return;
+    }
+
+    // Fan-out: every subscriber to this topic in this instance shares one
+    // consumer group and reader. Join the topic's reader if one is open (or
+    // being opened); otherwise open it.
+    for (;;) {
+      const reader = this.#fanoutReaders.get(topic);
+      if (reader) return this.#joinFanoutReader(reader, cb, key, groupAnchor);
+      const opening = this.#pendingFanoutReaders.get(topic);
+      if (!opening) break;
+      await opening.catch(() => {});
+    }
+    const opening = this.#openSubscription(topic, cb, undefined, groupAnchor);
+    this.#pendingFanoutReaders.set(topic, opening);
+    try {
+      const sub = await opening;
+      // Register in the same tick the pending entry is cleared, so a
+      // subscriber waiting on `opening` finds the reader and joins it.
+      this.#fanoutReaders.set(topic, sub);
+      this.#subscriptions.set(key, sub);
+      sub.loop = this.#runReadLoop(sub);
+      this.#startReclaimLoop(sub);
+    } finally {
+      this.#pendingFanoutReaders.delete(topic);
+    }
+  }
+
+  /**
+   * Add a callback to a topic's open fan-out reader. The reader may already
+   * have delivered entries this subscriber should see (`startFrom: 'earliest'`)
+   * or still be catching up on entries it should not (`startFrom: 'latest'`),
+   * so the new member buffers live entries while its starting point is
+   * resolved, replays what it missed, then switches to live delivery.
+   */
+  async #joinFanoutReader(sub: Subscription, cb: EventCallback, key: string, anchor: '0' | '$'): Promise<void> {
+    if (sub.members.has(cb)) {
+      // A concurrent subscribe for this (topic, cb) already joined.
+      this.#subscriptions.set(key, sub);
+      return;
+    }
+    const member: FanoutMember = { joining: [] };
+    sub.members.set(cb, member);
+    this.#subscriptions.set(key, sub);
+    const active = () => sub.members.get(cb) === member && !sub.stopped;
+
+    try {
+      if (anchor === '$') {
+        // Skip everything already in the stream, even entries the shared
+        // reader has not reached yet.
+        const [tail] = await this.#writeClient.xRevRange(sub.streamKey, '+', '-', { COUNT: 1 });
+        member.skipThrough = tail?.id;
+      } else {
+        // Entries up to the group's last-delivered id were read before this
+        // member was buffering, so replay them; later ones arrive live.
+        let boundary: string | undefined;
+        try {
+          const groups = await this.#writeClient.xInfoGroups(sub.streamKey);
+          const info = groups.find(g => String(g.name) === sub.group);
+          boundary = info ? String(info['last-delivered-id']) : undefined;
+        } catch (err) {
+          // No stream (or group) means nothing has been delivered yet.
+          if (!errorText(err).match(/no such key|NOGROUP/i)) throw err;
+        }
+        if (boundary && boundary !== '0-0') {
+          member.skipThrough = boundary;
+          let start = '-';
+          while (active()) {
+            const page = await this.#writeClient.xRange(sub.streamKey, start, boundary, { COUNT: REPLAY_PAGE_SIZE });
+            for (const entry of page) {
+              if (!active()) break;
+              this.#deliverDetached(sub, cb, entry.message);
+            }
+            if (page.length < REPLAY_PAGE_SIZE) break;
+            start = `(${page[page.length - 1]!.id}`;
+          }
+        }
+      }
+    } catch (err) {
+      sub.members.delete(cb);
+      this.#subscriptions.delete(key);
+      throw err;
+    }
+
+    if (!active()) return;
+    const buffered = member.joining ?? [];
+    for (const entry of buffered) {
+      if (member.skipThrough && compareStreamIds(entry.id, member.skipThrough) <= 0) continue;
+      this.#deliverDetached(sub, cb, entry.fields);
+    }
+    // `skipThrough` stays set: the reader may still be dispatching a batch read
+    // before this member joined (already replayed), or lagging behind a
+    // `latest` member's starting point. clearTopic resets it.
+    member.joining = undefined;
+  }
+
+  async #openSubscription(
+    topic: string,
+    cb: EventCallback,
+    groupName: string | undefined,
+    groupAnchor: '0' | '$',
+  ): Promise<Subscription> {
+    const isGrouped = groupName !== undefined;
+    const group = groupName ?? `__fanout-${globalThis.crypto.randomUUID()}`;
+    const consumer = `${group}-${globalThis.crypto.randomUUID()}`;
+    const streamKey = this.#streamKey(topic);
 
     // Create the consumer group if it doesn't exist. MKSTREAM creates the
     // stream if needed. BUSYGROUP means another subscriber raced us — fine.
@@ -332,14 +533,16 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
       this.#logger?.debug?.('valkey-streams: consumer group already exists', { topic, group });
     }
 
-    // Each subscription gets a dedicated reader connection because XREADGROUP
-    // with BLOCK > 0 holds the connection until a message arrives.
+    // Each reader (per fan-out topic, per grouped subscription) gets a
+    // dedicated connection because XREADGROUP with BLOCK > 0 holds the
+    // connection until a message arrives.
     const readClient = createClient(this.#connectOptions) as ValkeyClientType;
     this.#attachErrorLogger(readClient, 'read', { topic });
     await readClient.connect();
 
-    const sub: Subscription = {
-      cb,
+    return {
+      members: new Map([[cb, {}]]),
+      settling: new Map(),
       topic,
       streamKey,
       group,
@@ -351,51 +554,126 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
       stopped: false,
       loop: undefined,
       reclaimTimer: undefined,
+      inFlight: new Map(),
     };
-    this.#subscriptions.set(key, sub);
-    sub.loop = this.#runReadLoop(sub);
-    this.#startReclaimLoop(sub);
   }
 
   /**
-   * Periodically run XAUTOCLAIM against this subscription's group so that
-   * messages a crashed/stuck consumer read but never acked get redelivered to
-   * a live sibling. Runs only for grouped subscriptions — fan-out groups are
-   * private to one consumer, so there's no sibling to claim from.
+   * Periodically reclaim idle pending entries in this subscription's group so
+   * that messages a crashed/stuck consumer read but never acked get redelivered
+   * to a live sibling. Fan-out groups are private to one consumer, so there is
+   * no sibling to claim from and the XPENDING/XCLAIM scan is skipped for them;
+   * the loop still runs so `inFlightTimeoutMs` can recover a hung handler,
+   * which is the only recovery path a single-consumer group has.
    */
   #startReclaimLoop(sub: Subscription): void {
     if (this.#reclaimIntervalMs <= 0) return;
-    if (!sub.isGrouped) return;
+    if (!sub.isGrouped && this.#inFlightTimeoutMs <= 0) return;
 
     const tick = async () => {
       if (sub.stopped || this.#closed) return;
       try {
-        const reply = await this.#writeClient.xAutoClaim(
+        await this.#expireInFlight(sub);
+        if (!sub.isGrouped) {
+          sub.reclaimTimer = setTimeout(runTick, this.#reclaimIntervalMs);
+          return;
+        }
+        // List idle pending entries first and only claim the ones this
+        // subscription is not already processing. Claiming (XAUTOCLAIM/XCLAIM)
+        // resets the entry's idle clock even when the claimant already owns it,
+        // so a claim-then-skip design would let a handler running longer than
+        // reclaimIdleMs re-invoke itself (pre-fix) or keep refreshing the idle
+        // timer on every tick and starve a live sibling of a genuinely stalled
+        // entry. Filtering before the claim leaves in-flight entries untouched:
+        // if the handler settles, ack/nack removes them from the PEL; if it is
+        // truly hung, the idle clock keeps running and a sibling claims them.
+        //
+        // The scan is paginated: locally in-flight entries stay in the PEL
+        // (by design, above) and are listed on every tick, so with a single
+        // fixed-size page they could fill it and hide a reclaimable entry
+        // that sorts after them. Walk pages with an exclusive start id until
+        // the page comes back short or the claim batch is full.
+        const ids: string[] = [];
+        let afterId: string | undefined;
+        for (;;) {
+          const page = await this.#writeClient.xPendingRange(sub.streamKey, sub.group, RECLAIM_PAGE_SIZE, {
+            IDLE: this.#reclaimIdleMs,
+            afterId,
+          });
+          for (const p of page) {
+            if (sub.inFlight.has(p.id)) continue;
+            ids.push(p.id);
+            if (ids.length >= RECLAIM_PAGE_SIZE) break;
+          }
+          if (page.length < RECLAIM_PAGE_SIZE || ids.length >= RECLAIM_PAGE_SIZE) break;
+          afterId = page[page.length - 1]!.id;
+        }
+        // Stop may have started while XPENDING was in flight; claiming now would
+        // move entries onto a consumer that is about to go away.
+        if (ids.length === 0 || sub.stopped || this.#closed) {
+          if (sub.stopped || this.#closed) return;
+          sub.reclaimTimer = setTimeout(runTick, this.#reclaimIntervalMs);
+          return;
+        }
+        // XCLAIM re-checks min-idle atomically, so if a sibling claimed an entry
+        // between the XPENDING and here it is simply omitted from the reply.
+        const claimed = await this.#writeClient.xClaim(
           sub.streamKey,
           sub.group,
           sub.consumer,
           this.#reclaimIdleMs,
-          '0-0',
-          { COUNT: 100 },
+          ids,
         );
-        const messages = (reply?.messages ?? []) as Array<{ id: string; message: Record<string, string> } | null>;
-        for (const entry of messages) {
-          if (sub.stopped || this.#closed) return;
-          if (!entry) continue;
+        for (const entry of claimed) {
+          // A successful claim already transferred ownership; drain its full batch
+          // even if stop started meanwhile, otherwise the entries sit pending under
+          // this consumer until a sibling's idle window elapses again.
           await this.#deliverMessage(sub, entry.id, entry.message);
         }
       } catch (err) {
-        this.#logger?.debug?.('valkey-streams: XAUTOCLAIM failed', {
+        this.#logger?.debug?.('valkey-streams: reclaim failed', {
           topic: sub.topic,
           group: sub.group,
           err: err instanceof Error ? err.message : err,
         });
       }
       if (sub.stopped || this.#closed) return;
-      sub.reclaimTimer = setTimeout(tick, this.#reclaimIntervalMs);
+      sub.reclaimTimer = setTimeout(runTick, this.#reclaimIntervalMs);
     };
 
-    sub.reclaimTimer = setTimeout(tick, this.#reclaimIntervalMs);
+    const runTick = () => {
+      sub.reclaimLoop = tick().finally(() => {
+        sub.reclaimLoop = undefined;
+      });
+    };
+    sub.reclaimTimer = setTimeout(runTick, this.#reclaimIntervalMs);
+  }
+
+  /**
+   * Give up on local in-flight entries older than `inFlightTimeoutMs` by
+   * nacking them on the handler's behalf. This is the only way a
+   * single-consumer group recovers a hung handler: the reclaim loop never
+   * claims its own in-flight entries (see the tick above), so without a
+   * timeout the entry stays pending until the process restarts.
+   */
+  async #expireInFlight(sub: Subscription): Promise<void> {
+    if (this.#inFlightTimeoutMs <= 0) return;
+    const cutoff = Date.now() - this.#inFlightTimeoutMs;
+    for (const [streamId, entry] of sub.inFlight) {
+      if (entry.since > cutoff) continue;
+      this.#logger?.warn?.('valkey-streams: handler exceeded inFlightTimeoutMs; nacking on its behalf', {
+        topic: sub.topic,
+        group: sub.group,
+        streamId,
+        inFlightMs: Date.now() - entry.since,
+      });
+      // The local marker is not proof of ownership: once the entry has been
+      // idle >= reclaimIdleMs a sibling may have claimed it, or it may have
+      // been acked outright. `expire` verifies ownership and settles in one
+      // atomic step, honours maxDeliveryAttempts, and removes the entry
+      // from `inFlight` either way.
+      await entry.expire();
+    }
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
@@ -409,12 +687,29 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     const sub = this.#subscriptions.get(key);
     if (!sub) return;
     this.#subscriptions.delete(key);
+    if (sub.teardown) return sub.teardown;
+
+    if (sub.members.size > 1 && sub.members.delete(cb)) {
+      // Other members keep the reader. Entries handed to this member no
+      // longer wait on it.
+      for (const settle of [...sub.settling.values()]) void settle(cb);
+      return;
+    }
+
+    // Last member: close the reader. The member stays attached so entries an
+    // already-issued read returns are still delivered to it. A subscriber
+    // arriving from now on opens a fresh reader rather than join this one.
+    if (this.#fanoutReaders.get(topic) === sub) this.#fanoutReaders.delete(topic);
     sub.stopped = true;
     if (sub.reclaimTimer) {
       clearTimeout(sub.reclaimTimer);
       sub.reclaimTimer = undefined;
     }
+    sub.teardown = this.#stopSubscription(sub);
+    return sub.teardown;
+  }
 
+  async #stopSubscription(sub: Subscription): Promise<void> {
     // Cancel the in-flight blocking XREADGROUP by closing the reader.
     try {
       await sub.readClient.quit();
@@ -436,6 +731,9 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
         });
       }
     }
+
+    // Clearing the timer prevents future claims, but an issued claim still owns work.
+    await sub.reclaimLoop;
 
     // For fan-out, drop the private group entirely so the stream can be reclaimed.
     if (!sub.isGrouped) {
@@ -487,6 +785,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
         if (sub.topic === topic) {
           sub.lastId = undefined;
           sub.groupAnchor = '0';
+          for (const member of sub.members.values()) member.skipThrough = undefined;
         }
       }
     } catch (err) {
@@ -621,10 +920,17 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     this.#closed = true;
 
     // Walk the actual subscriptions and pass the original topic through so
-    // unsubscribe's key lookup works.
-    const subs = [...this.#subscriptions.values()];
-    await Promise.all(subs.map(sub => this.unsubscribe(sub.topic, sub.cb)));
+    // unsubscribe's key lookup works. A shared fan-out reader is torn down by
+    // unsubscribing each of its members.
+    const subs = new Set(this.#subscriptions.values());
+    await Promise.all([...subs].flatMap(sub => [...sub.members.keys()].map(cb => this.unsubscribe(sub.topic, cb))));
     this.#localCallbacks.clear();
+
+    // Let publishes that were accepted before close() reach the stream. A
+    // workflow's terminal event is often the last thing written before
+    // shutdown; quitting the writer under it would drop the event and reject
+    // the caller with a ClosingError.
+    await this.flush();
 
     if (this.#writeClient.isOpen) {
       try {
@@ -712,18 +1018,11 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   }
 
   async #deliverMessage(sub: Subscription, streamId: string, fields: Record<string, string>): Promise<void> {
-    let event: Event;
-    try {
-      event = JSON.parse(fields.event ?? '{}') as Event;
-      // createdAt is serialized as a string; rehydrate.
-      if (typeof event.createdAt === 'string') {
-        event.createdAt = new Date(event.createdAt);
-      }
-    } catch (err) {
+    const event = this.#parseEvent(fields);
+    if (!event) {
       this.#logger?.debug?.('valkey-streams: malformed payload, dropping', {
         topic: sub.topic,
         streamId,
-        err: err instanceof Error ? err.message : err,
       });
       try {
         await this.#writeClient.xAck(sub.streamKey, sub.group, streamId);
@@ -750,6 +1049,13 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
           topic: sub.topic,
           err: err instanceof Error ? err.message : err,
         });
+      } finally {
+        // Clear the in-flight guard only AFTER the entry has been settled.
+        // Clearing before the xAck resolves would open a window where the
+        // entry is neither in-flight nor acked, so a reclaim tick landing in
+        // that window (the entry is already idle >= reclaimIdleMs for a
+        // long-running handler) would redeliver and re-invoke the handler.
+        sub.inFlight.delete(streamId);
       }
     };
     const nack = async () => {
@@ -775,12 +1081,16 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
             topic: sub.topic,
             err: err instanceof Error ? err.message : err,
           });
+        } finally {
+          // Cleared only after settlement — see ack() for the reclaim-window
+          // rationale.
+          sub.inFlight.delete(streamId);
         }
         return;
       }
       // Republish with incremented deliveryAttempt FIRST, then ack the
       // original entry. If the republish fails we deliberately leave the
-      // original message pending so XAUTOCLAIM (or another consumer) can
+      // original message pending so the reclaim loop (or another consumer) can
       // pick it up on a future tick — acking first would silently drop it.
       const next: Event = {
         ...event,
@@ -796,11 +1106,11 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
           // the stream's final write.
           await this.#writeClient
             .multi()
-            .xAdd(sub.streamKey, '*', { event: JSON.stringify(next) })
+            .xAdd(sub.streamKey, '*', { event: JSON.stringify(next) }, this.#xaddTrimOptions())
             .pExpire(sub.streamKey, this.#streamIdleTtlMs)
             .exec();
         } else {
-          await this.#writeClient.xAdd(sub.streamKey, '*', { event: JSON.stringify(next) });
+          await this.#writeClient.xAdd(sub.streamKey, '*', { event: JSON.stringify(next) }, this.#xaddTrimOptions());
         }
       } catch (err) {
         this.#logger?.warn?.('valkey-streams: nack republish failed; leaving original pending for reclaim', {
@@ -809,8 +1119,11 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
           err: err instanceof Error ? err.message : err,
         });
         // Allow this entry to be redelivered: reset settled so the next
-        // delivery attempt (via XAUTOCLAIM) can ack/nack it again.
+        // delivery attempt (via reclaim) can ack/nack it again. The entry
+        // is intentionally left pending, so clear the in-flight guard now to
+        // make it eligible for a future reclaim.
         settled = false;
+        sub.inFlight.delete(streamId);
         return;
       }
       try {
@@ -820,26 +1133,230 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
           topic: sub.topic,
           err: err instanceof Error ? err.message : err,
         });
+      } finally {
+        // Cleared only after settlement — see ack() for the reclaim-window
+        // rationale.
+        sub.inFlight.delete(streamId);
       }
     };
 
+    // Timeout-driven nack, used by #expireInFlight. Unlike `nack` above this
+    // can run while a sibling may have reclaimed the entry, so the ownership
+    // check and the republish+xAck must be one atomic server-side step: a
+    // read-then-nack would let a sibling XCLAIM land in between, and we'd
+    // republish a duplicate and xAck the sibling's entry out from under it.
+    // Either way the local marker is settled afterwards so a late ack/nack
+    // from the hung handler is a no-op.
+    const expire = async () => {
+      if (settled) return;
+      settled = true;
+      sub.settling.delete(streamId);
+      const attempt = event.deliveryAttempt ?? 1;
+      const drop = attempt >= this.#maxDeliveryAttempts;
+      const payload = drop ? '' : JSON.stringify({ ...event, deliveryAttempt: attempt + 1 } satisfies Event);
+      let owned: unknown;
+      try {
+        owned = await this.#writeClient.eval(NACK_IF_OWNED_SCRIPT, {
+          keys: [sub.streamKey],
+          arguments: [
+            sub.group,
+            sub.consumer,
+            streamId,
+            payload,
+            String(this.#streamIdleTtlMs),
+            String(this.#maxStreamLength > 0 ? this.#maxStreamLength : 0),
+          ],
+        });
+      } catch (err) {
+        this.#logger?.warn?.('valkey-streams: timeout nack failed; leaving original pending for reclaim', {
+          topic: sub.topic,
+          eventId: event.id,
+          err: err instanceof Error ? err.message : err,
+        });
+        // Same recovery as a failed nack republish: the entry is still
+        // pending, so let a future reclaim (or the next timeout pass, if the
+        // handler is still hung) retry it. Fan-out readers have no reclaim
+        // scan, so they keep the timeout registration for the next pass.
+        settled = false;
+        sub.settling.set(streamId, cb => settleMember(cb, false));
+        if (sub.isGrouped) sub.inFlight.delete(streamId);
+        else sub.inFlight.set(streamId, { since: Date.now(), expire });
+        return;
+      }
+      sub.inFlight.delete(streamId);
+      if (owned !== 1) {
+        this.#logger?.warn?.(
+          'valkey-streams: handler exceeded inFlightTimeoutMs but entry is no longer owned; disowning',
+          { topic: sub.topic, group: sub.group, streamId },
+        );
+        return;
+      }
+      if (drop) {
+        this.#logger?.warn?.('valkey-streams: dropping event after max delivery attempts', {
+          topic: sub.topic,
+          eventType: event.type,
+          eventId: event.id,
+          attempt,
+          max: this.#maxDeliveryAttempts,
+        });
+      }
+    };
+
+    // Mark this entry in-flight for the reclaim loop's benefit for exactly the
+    // window between invoking the handler and the delivery settling (ack/nack).
+    // Heartbeat for long handlers: reset the entry's PEL idle time so the
+    // reclaim loop (ours or a sibling's) does not XCLAIM it mid-execution, and
+    // push back the local inFlightTimeoutMs deadline.
+    const extend = async () => {
+      const entry = sub.inFlight.get(streamId);
+      if (!entry || entry.expire !== expire) return;
+      entry.since = Date.now();
+      if (sub.isGrouped) {
+        await this.#writeClient.eval(EXTEND_IF_OWNED_SCRIPT, {
+          keys: [sub.streamKey],
+          arguments: [sub.group, sub.consumer, streamId],
+        });
+      }
+    };
+
+    // The entry is settled in Valkey once, after every member it was handed to
+    // has settled: acked if all acked, nacked (one republish) if any nacked.
+    // Members joining the topic buffer the entry instead; members whose
+    // starting point is past it skip it.
+    const waiting = new Set<EventCallback>();
+    let anyNack = false;
+    const settleMember = async (cb: EventCallback, nacked: boolean) => {
+      if (settled || !waiting.delete(cb)) return;
+      if (nacked) anyNack = true;
+      if (waiting.size > 0) return;
+      sub.settling.delete(streamId);
+      await (anyNack ? nack() : ack());
+    };
+    const targets: EventCallback[] = [];
+    for (const [cb, member] of sub.members) {
+      if (member.joining) {
+        member.joining.push({ id: streamId, fields });
+        continue;
+      }
+      if (member.skipThrough) {
+        if (compareStreamIds(streamId, member.skipThrough) <= 0) continue;
+        member.skipThrough = undefined;
+      }
+      waiting.add(cb);
+      targets.push(cb);
+    }
+    if (targets.length === 0) {
+      await ack();
+      return;
+    }
+
+    sub.inFlight.set(streamId, { since: Date.now(), expire });
+    sub.settling.set(streamId, cb => settleMember(cb, false));
+    for (const cb of targets) {
+      // Each member gets its own Event object so one handler mutating it
+      // can't affect another.
+      const memberEvent = targets.length === 1 ? event : this.#parseEvent(fields)!;
+      this.#invokeCallback(
+        cb,
+        memberEvent,
+        () => settleMember(cb, false),
+        () => settleMember(cb, true),
+        extend,
+      );
+    }
+  }
+
+  /**
+   * Invoke a handler without awaiting it. EventCallback is typed `=> void`
+   * but handlers commonly return a promise (TS allows Promise<void> to satisfy
+   * void); a rejection or synchronous throw routes to nack instead of silently
+   * dropping the message. We do NOT await — serializing messages on a
+   * subscription would deadlock orchestration callbacks that await their own
+   * future events.
+   */
+  #invokeCallback(
+    cb: EventCallback,
+    event: Event,
+    ack: () => Promise<void>,
+    nack: () => Promise<void>,
+    extend?: () => Promise<void>,
+  ): void {
     try {
-      // EventCallback is typed `=> void` but handlers commonly return a
-      // promise (TS allows Promise<void> to satisfy void). If we get one
-      // back, attach a catch handler so async rejections route to nack
-      // instead of silently dropping the message. We do NOT await here —
-      // serializing messages on a subscription would deadlock orchestration
-      // callbacks that await their own future events.
-      const result: unknown = sub.cb(event, ack, nack);
+      const result: unknown = cb(event, ack, nack, extend);
       if (result && typeof (result as { then?: unknown; catch?: unknown }).catch === 'function') {
         (result as Promise<unknown>).catch(async () => {
           await nack();
         });
       }
     } catch {
-      // Caller threw synchronously — treat as nack.
-      await nack();
+      void nack();
     }
+  }
+
+  #parseEvent(fields: Record<string, string>): Event | undefined {
+    try {
+      const event = JSON.parse(fields.event ?? '{}') as Event;
+      // createdAt is serialized as a string; rehydrate.
+      if (typeof event.createdAt === 'string') {
+        event.createdAt = new Date(event.createdAt);
+      }
+      return event;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Deliver an entry to one fan-out member outside the shared group's PEL:
+   * entries the topic's reader handed out before the member joined. Ack is a
+   * no-op (the group settles the entry on its own); nack republishes, which
+   * redelivers to every member just as a nack on the shared entry would.
+   */
+  #deliverDetached(sub: Subscription, cb: EventCallback, fields: Record<string, string>): void {
+    const event = this.#parseEvent(fields);
+    if (!event) return;
+    let settled = false;
+    const nack = async () => {
+      if (settled) return;
+      settled = true;
+      const attempt = event.deliveryAttempt ?? 1;
+      if (attempt >= this.#maxDeliveryAttempts) {
+        this.#logger?.warn?.('valkey-streams: dropping event after max delivery attempts', {
+          topic: sub.topic,
+          eventType: event.type,
+          eventId: event.id,
+          attempt,
+          max: this.#maxDeliveryAttempts,
+        });
+        return;
+      }
+      const payload = { event: JSON.stringify({ ...event, deliveryAttempt: attempt + 1 } satisfies Event) };
+      try {
+        if (this.#streamIdleTtlMs > 0) {
+          await this.#writeClient
+            .multi()
+            .xAdd(sub.streamKey, '*', payload, this.#xaddTrimOptions())
+            .pExpire(sub.streamKey, this.#streamIdleTtlMs)
+            .exec();
+        } else {
+          await this.#writeClient.xAdd(sub.streamKey, '*', payload, this.#xaddTrimOptions());
+        }
+      } catch (err) {
+        this.#logger?.warn?.('valkey-streams: nack republish failed for replayed event', {
+          topic: sub.topic,
+          eventId: event.id,
+          err: err instanceof Error ? err.message : err,
+        });
+      }
+    };
+    this.#invokeCallback(
+      cb,
+      event,
+      async () => {
+        settled = true;
+      },
+      nack,
+    );
   }
 
   #deliverLocal(topic: string, event: Event): void {
@@ -879,8 +1396,24 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   }
 }
 
+interface FanoutMember {
+  // Set while the member is resolving its starting point; live entries are
+  // buffered here and delivered once it has caught up.
+  joining?: { id: string; fields: Record<string, string> }[];
+  // Entries with ids up to this one were already delivered to (or precede the
+  // starting point of) this member.
+  skipThrough?: string;
+}
+
+/**
+ * A reader: one consumer, one connection. A grouped subscription has exactly
+ * one member; a fan-out reader is shared by every fan-out subscriber to its
+ * topic in this instance.
+ */
 interface Subscription {
-  cb: EventCallback;
+  members: Map<EventCallback, FanoutMember>;
+  // Per in-flight entry: marks a member settled-with-ack when it leaves early.
+  settling: Map<string, (cb: EventCallback) => Promise<void>>;
   topic: string;
   streamKey: string;
   group: string;
@@ -892,4 +1425,11 @@ interface Subscription {
   stopped: boolean;
   loop: Promise<void> | undefined;
   reclaimTimer: ReturnType<typeof setTimeout> | undefined;
+  reclaimLoop?: Promise<void>;
+  teardown?: Promise<void>;
+  // Stream entry IDs currently being processed locally by this subscription.
+  // The reclaim loop consults this to avoid re-invoking the handler for a
+  // message whose original delivery is still in flight (self-redelivery).
+  // `expire` is the timeout path's atomic nack-if-still-owned.
+  inFlight: Map<string, { since: number; expire: () => Promise<void> }>;
 }

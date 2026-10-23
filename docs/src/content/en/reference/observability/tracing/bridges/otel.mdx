@@ -22,9 +22,28 @@ Enables bidirectional integration between Mastra tracing and OpenTelemetry infra
 
 ## Constructor
 
-```typescript
-new OtelBridge()
+```typescript oxfmt:false
+new OtelBridge(config?: OtelBridgeConfig)
 ```
+
+<PropertiesTable
+  props={[
+  {
+    name: 'tracerProvider',
+    type: 'TracerProvider',
+    description:
+      "OpenTelemetry tracer provider used to create spans. Pass it when your provider isn't registered globally, for example when a framework creates the provider without calling `trace.setGlobalTracerProvider()`. Defaults to the globally registered provider.",
+    isOptional: true,
+  },
+  {
+    name: 'loggerProvider',
+    type: 'LoggerProvider',
+    description:
+      'OpenTelemetry logger provider used to forward Mastra log events. Defaults to the globally registered provider.',
+    isOptional: true,
+  },
+]}
+/>
 
 ## Methods
 
@@ -113,7 +132,7 @@ If no `LoggerProvider` is registered globally, emission is a silent no-op.
 async flush(): Promise<void>
 ```
 
-Force flushes the global OTEL tracer provider and logger provider if they support `forceFlush`. Useful in serverless environments where you need to drain telemetry before the runtime terminates.
+Force flushes the tracer provider and logger provider if they support `forceFlush`. The global providers are resolved at flush time, so a `LoggerProvider` registered after the bridge was constructed is flushed too. Useful in serverless environments where you need to drain telemetry before the runtime terminates. Call `sdk.shutdown()` as well before the process exits to wait for any batch your OTEL SDK has already started exporting. Neither this method nor the provider's own `forceFlush()` waits for that batch.
 
 ### `shutdown`
 
@@ -121,7 +140,7 @@ Force flushes the global OTEL tracer provider and logger provider if they suppor
 async shutdown(): Promise<void>
 ```
 
-Shuts down the bridge and cleans up resources. Ends any spans that weren't properly closed.
+Shuts down the bridge and cleans up resources. Ends any spans that weren't properly closed, then flushes the providers so those spans are exported.
 
 ## Usage examples
 
@@ -175,9 +194,18 @@ const mastra = new Mastra({
 })
 ```
 
-## `OpenTelemetry` setup requirements
+## Setup requirements
 
-The OtelBridge requires an active OpenTelemetry SDK to function. The bridge reads from OTEL's ambient context.
+The bridge creates spans through an OpenTelemetry tracer provider. For Mastra spans to be exported:
+
+- **A tracer provider must be available.** Register one globally before Mastra runs, for example by calling `sdk.start()` on `NodeSDK` from `@opentelemetry/sdk-node`, or by calling `trace.setGlobalTracerProvider(provider)`. If the provider isn't registered globally, pass it with `new OtelBridge({ tracerProvider })`.
+- **A context manager must be installed for Mastra spans to nest under outer spans.** `NodeSDK` installs one automatically. Without a context manager, spans are still exported, but Mastra root spans can't read the active span, so they start new traces instead of joining the outer trace.
+
+When no tracer provider is available, agents and workflows still run, but no Mastra spans are exported through OpenTelemetry. The bridge logs this warning once:
+
+```text
+[OtelBridge] No OpenTelemetry tracer provider is registered globally, so Mastra spans will not be exported through OpenTelemetry. ...
+```
 
 See the [OtelBridge Guide](/integrations/observability/opentelemetry#bridge) for complete setup instructions, including how to configure OTEL instrumentation and run your application.
 

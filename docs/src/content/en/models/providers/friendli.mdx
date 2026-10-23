@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "friendli/MiniMaxAI/MiniMax-M2.5"
+  model: "friendli/deepseek-ai/DeepSeek-V3.2"
 });
 
 // Generate a response
@@ -53,7 +53,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 163840,
-    "maxOutput": 163840,
+    "maxOutput": 64000,
     "inputCost": 0.5,
     "outputCost": 1.5
   },
@@ -70,18 +70,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "friendli/MiniMaxAI/MiniMax-M2.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 196608,
-    "maxOutput": 196608,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
     "model": "friendli/zai-org/GLM-5.1",
     "imageInput": false,
     "audioInput": false,
@@ -89,7 +77,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 202752,
-    "maxOutput": 202752,
+    "maxOutput": 131072,
     "inputCost": 1.4,
     "outputCost": 4.4
   },
@@ -100,7 +88,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 1048576,
     "maxOutput": 131072,
     "inputCost": 1.4,
     "outputCost": 4.4
@@ -113,9 +101,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 1048576,
-    "inputCost": 1.4,
-    "outputCost": 4.4
+    "maxOutput": 131072,
+    "inputCost": 1.26,
+    "outputCost": 3.96
+  },
+  {
+    "model": "friendli/zai-org/GLM-5.3-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.5
   }
 ]}
 />
@@ -132,7 +132,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.friendli.ai/serverless/v1",
-    id: "friendli/MiniMaxAI/MiniMax-M2.5",
+    id: "friendli/deepseek-ai/DeepSeek-V3.2",
     apiKey: process.env.FRIENDLI_TOKEN,
     headers: {
       "X-Custom-Header": "value"
@@ -150,8 +150,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "friendli/zai-org/GLM-5.3"
-      : "friendli/MiniMaxAI/MiniMax-M2.5";
+      ? "friendli/zai-org/GLM-5.3-Flash"
+      : "friendli/deepseek-ai/DeepSeek-V3.2";
   }
 });
 ```

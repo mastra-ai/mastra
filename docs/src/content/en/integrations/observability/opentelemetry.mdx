@@ -501,10 +501,13 @@ The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](http
 
 #### Span Naming
 
-- **LLM Operations**: `chat {model}`
+- **Model calls**: `chat {model}`
+- **Generation loop**: `model_generation {model}`, with one `agent_step {agent_id}` per turn
 - **Tool Execution**: `execute_tool {tool_name}`
 - **Agent Runs**: `invoke_agent {agent_id}`
 - **Workflow Runs**: `invoke_workflow {workflow_id}`
+
+Each agent turn calls the model once. The `chat` span is that call and is the only span that carries `gen_ai.request.model`, the messages, and `gen_ai.usage.*`, so backends that sum usage across spans count each call once. The `model_generation` span wraps the whole loop and `agent_step` wraps one turn (model call plus tool execution); neither carries usage.
 
 #### Key Attributes
 
@@ -681,7 +684,7 @@ No Mastra exporters are required when using the bridge. Traces are sent via your
 
 #### Forwarding logs (optional)
 
-The bridge also forwards Mastra log events to the globally registered OTEL `LoggerProvider`. To wire up logs alongside traces, register a `logRecordProcessor` on `NodeSDK`:
+The bridge also forwards Mastra log events to the globally registered OTEL `LoggerProvider`. To wire up logs alongside traces, register a log record processor on `NodeSDK`:
 
 ```typescript title="instrumentation.ts"
 import { NodeSDK } from '@opentelemetry/sdk-node'
@@ -690,11 +693,13 @@ import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs'
 
 const sdk = new NodeSDK({
   // ...trace config as usual
-  logRecordProcessor: new BatchLogRecordProcessor(
-    new OTLPLogExporter({
-      url: process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || 'http://localhost:4318/v1/logs',
+  logRecordProcessors: [
+    new BatchLogRecordProcessor({
+      exporter: new OTLPLogExporter({
+        url: process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || 'http://localhost:4318/v1/logs',
+      }),
     }),
-  ),
+  ],
 })
 ```
 
@@ -710,6 +715,10 @@ Use the `--import` flag to ensure instrumentation loads before your application:
 tsx --import ./instrumentation.ts ./src/index.ts
 ```
 
+#### Flushing before exit
+
+Mastra's `flush()` and `shutdown()` ask the registered OTEL providers to flush, but a `BatchSpanProcessor` can still hold a batch it has already started exporting. In serverless or short-lived processes, also `await sdk.shutdown()` after Mastra's flush, so no spans are left in your OTEL SDK when the process exits. The provider's own `forceFlush()` is not enough: it does not wait for a batch the exporter is already sending.
+
 ### Semantic conventions
 
 The `OtelBridge` exports Mastra spans using [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai). This includes standardized span names (`chat {model}`, `execute_tool {tool_name}`, etc.) and attributes (`gen_ai.usage.input_tokens`, `gen_ai.request.model`, etc.).
@@ -723,10 +732,13 @@ With the `OtelBridge`, your traces maintain proper hierarchy across OTEL and Mas
 ```
 HTTP POST /api/chat (from Hono middleware)
 └── agent.assistant (from Mastra via OtelBridge)
-    ├── chat gpt-5.4 (LLM call)
-    ├── tool.execute search (tool execution)
-    │   └── HTTP GET api.example.com (from OTEL auto-instrumentation)
-    └── chat gpt-5.4 (follow-up LLM call)
+    └── model_generation __AI_SDK_OPENAI_MODEL_BASE__ (generation loop)
+        ├── agent_step assistant (turn 1)
+        │   ├── chat __AI_SDK_OPENAI_MODEL_BASE__ (LLM call)
+        │   └── execute_tool search (tool execution)
+        │       └── HTTP GET api.example.com (from OTEL auto-instrumentation)
+        └── agent_step assistant (turn 2)
+            └── chat __AI_SDK_OPENAI_MODEL_BASE__ (follow-up LLM call)
 ```
 
 ### Multi-service distributed tracing
@@ -739,7 +751,9 @@ Service A: HTTP POST /api/process
 
 Service B: HTTP POST /api/analyze (incoming call - same trace!)
 └── agent.analyzer (Mastra agent inherits trace context)
-    └── chat gpt-5.4
+    └── model_generation __AI_SDK_OPENAI_MODEL_BASE__
+        └── agent_step analyzer
+            └── chat __AI_SDK_OPENAI_MODEL_BASE__
 ```
 
 Both services must have:
@@ -747,6 +761,8 @@ Both services must have:
 1. OTEL instrumentation configured
 1. W3C Trace Context propagator enabled
 1. Mastra with `OtelBridge` configured
+
+A Mastra `MCPServer` request over HTTP follows the same rule. With this setup, it joins the caller's trace. Without HTTP instrumentation on the server, each request keeps its own trace. In both cases, when a request carries a W3C `traceparent`, in `_meta` or as an HTTP header, the request span links to the caller's span, and the exporter and the bridge send that link as an OpenTelemetry span link. See [Linking to the caller's trace](/reference/tools/mcp-server#linking-to-the-callers-trace).
 
 ### Using tags
 
@@ -771,6 +787,7 @@ Tags are exported as a JSON string in the `mastra.tags` span attribute for broad
 If traces aren't displaying or connecting as expected:
 
 - Verify OTEL SDK is initialized before Mastra (use the `--import` flag or import at the top of the entry point)
+- If you see `[OtelBridge] No OpenTelemetry tracer provider is registered globally`, the bridge can't find a tracer provider. Some frameworks create a provider without registering it globally. Pass that provider directly with `new OtelBridge({ tracerProvider })`. See [setup requirements](/reference/observability/tracing/bridges/otel#setup-requirements)
 - Ensure the `OtelBridge` is added to your observability config
 - Check that your OTEL backend is running and accessible
 

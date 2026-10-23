@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
-import type { ListDynamicWorkflowsResponse, DynamicWorkflowDefinition, UpsertDynamicWorkflowParams } from '../types';
+import type {
+  ListDynamicWorkflowsResponse,
+  DynamicWorkflowDefinition,
+  UpsertDynamicWorkflowParams,
+  WorkflowBuilderSettingsResponse,
+} from '../types';
 
 const fetchMock = vi.fn();
 
@@ -78,6 +83,20 @@ describe('DynamicWorkflow resource', () => {
     expect(fetchMock).toHaveBeenLastCalledWith(
       'http://localhost:4111/api/stored/workflows/daily%20summary',
       expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('gets workflow builder settings', async () => {
+    const response: WorkflowBuilderSettingsResponse = {
+      enabled: true,
+      modelPolicy: { active: true, pickerVisible: false },
+    };
+    respond(response);
+
+    await expect(client.getWorkflowBuilderSettings()).resolves.toEqual(response);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:4111/api/editor/workflow-builder/settings',
+      expect.any(Object),
     );
   });
 

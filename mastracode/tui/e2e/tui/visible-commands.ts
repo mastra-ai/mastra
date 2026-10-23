@@ -14,8 +14,14 @@ export const visibleCommandsScenario: McE2eScenario = {
     ).toBeVisible();
     runtime.printScreen('after startup', terminal);
 
+    terminal.resize(120, 90);
     terminal.submit('/help');
     await runtime.waitForScreenText(/Commands/i, terminal);
+    await runtime.waitForScreenText(/\/clone\s+Clone the current thread/i, terminal);
+    await runtime.waitForScreenText(/\/threads\s+Switch between threads/i, terminal);
+    await runtime.waitForScreenText(/\/resume\s+Alias for \/threads/i, terminal);
+    await runtime.waitForScreenText(/\/name\s+Rename current thread/i, terminal);
+    await runtime.waitForScreenText(/\/rename\s+Alias for \/name/i, terminal);
     await runtime.waitForScreenText(/\/api-keys/i, terminal);
     await runtime.waitForScreenText(/Ctrl\+Z|Suspend process/i, terminal);
     await runtime.waitForScreenTextAbsent(/\/knowledge\s+Browse scoped Subconscious knowledge/i, terminal);
@@ -24,12 +30,19 @@ export const visibleCommandsScenario: McE2eScenario = {
     terminal.submit('/knowledge');
     await runtime.waitForScreenText(/Unknown command:\s*\/knowledge/i, terminal);
 
+    terminal.submit('/theme status');
+    await runtime.waitForScreenText(/Theme:\s+(dark|light)\s+\(preference:/i, terminal);
+    runtime.printScreen('after /theme status', terminal);
+
     terminal.submit('/theme');
-    await runtime.waitForScreenText(/Theme:\s+(dark|light|auto)/i, terminal);
+    await runtime.waitForScreenText(/preview · Enter select · Esc cancel/i, terminal);
     runtime.printScreen('after /theme', terminal);
 
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/preview · Enter select · Esc cancel/i, terminal);
+
     terminal.submit('/theme neon');
-    await runtime.waitForScreenText(/Usage:\s+\/theme \[auto\|dark\|light\]/i, terminal);
+    await runtime.waitForScreenText(/Could not load theme:/i, terminal);
     runtime.printScreen('after invalid /theme', terminal);
 
     terminal.keyCtrlC();

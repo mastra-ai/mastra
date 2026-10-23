@@ -76,15 +76,11 @@ constraints: a valid date-time",
       "type": "string",
     },
     "nullable": {
-      "anyOf": [
-        {
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
       "description": "leave this field empty as an example of a nullable field",
+      "type": [
+        "string",
+        "null",
+      ],
     },
     "number": {
       "description": "any valid sample number",
@@ -268,15 +264,11 @@ constraints: a valid uuid",
       "description": "give an valid object",
     },
     "unionPrimitives": {
-      "anyOf": [
-        {
-          "type": "string",
-        },
-        {
-          "type": "number",
-        },
-      ],
       "description": "sample text or number",
+      "type": [
+        "string",
+        "number",
+      ],
     },
   },
   "required": [
@@ -321,70 +313,60 @@ constraints: a valid uuid",
 exports[`Anthropic e2e test > should be successful with structured_output 2`] = `
 {
   "value": {
-    "actualData": 2024-01-20T16:45:00.000Z,
+    "actualData": 2024-06-15T08:30:00.000Z,
     "arrayMax": [
-      "one",
-      "two",
-      "three",
-      "four",
-      "five",
+      "a",
+      "b",
+      "c",
     ],
     "arrayMin": [
-      "item",
+      "one",
     ],
-    "date": 2023-06-15T10:30:00.000Z,
-    "dateAfter": 2024-03-15T14:20:00.000Z,
-    "dateBefore": 2023-12-01T09:15:00.000Z,
+    "date": 2024-06-15T12:00:00.000Z,
+    "dateAfter": 2024-03-01T00:00:00.000Z,
+    "dateBefore": 2023-01-01T00:00:00.000Z,
     "default": "test",
     "enum": "A",
     "exampleArray": [
-      "apple",
-      "banana",
-      "cherry",
+      "foo",
+      "bar",
+      "baz",
     ],
     "nativeEnum": "B",
     "nullable": null,
-    "number": 42.5,
-    "numberGt": 5,
+    "number": 42,
+    "numberGt": 4,
     "numberGte": 1,
-    "numberInt": 25,
-    "numberLt": 3,
-    "numberLte": 0.5,
-    "numberMultipleOf": 8,
+    "numberInt": 7,
+    "numberLt": 5,
+    "numberLte": 1,
+    "numberMultipleOf": 4,
     "object": {
-      "bar": 123,
-      "foo": "example",
+      "bar": 42,
+      "foo": "bar",
     },
-    "objectLoose": {
-      "active": true,
-      "count": 10,
-      "name": "Sample",
-    },
+    "objectLoose": {},
     "objectNested": {
       "user": {
-        "age": 25,
-        "name": "John Doe",
+        "age": 30,
+        "name": "Alice",
       },
     },
-    "objectPassthrough": {
-      "key1": "value1",
-      "key2": 42,
-      "key3": true,
-    },
-    "string": "Sample text",
-    "stringCuid": "c1234567890",
+    "objectPassthrough": {},
+    "string": "Hello, World!",
+    "stringCuid": "c123456abcdef",
     "stringEmail": "test@example.com",
-    "stringEmoji": "😀",
-    "stringMax": "Test123",
-    "stringMin": "Hello world",
+    "stringEmoji": "😊",
+    "stringMax": "Short",
+    "stringMin": "Hello",
     "stringRegex": "test-sample",
     "stringUrl": "https://example.com",
-    "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
+    "stringUuid": "550e8400-e29b-41d4-a716-446655440000",
     "unionObjects": {
-      "amount": 100,
+      "amount": 10,
       "inventoryItemName": "Widget",
     },
-    "unionPrimitives": "Hello",
+    "unionPrimitives": "hello",
   },
 }
 `;
@@ -392,81 +374,143 @@ exports[`Anthropic e2e test > should be successful with structured_output 2`] = 
 exports[`Anthropic e2e test > should handle tool call with manySchemas input 1`] = `
 {
   "value": {
-    "actualData": 2024-03-10T16:45:30.000Z,
+    "actualData": 2024-03-21T08:00:00.000Z,
     "arrayMax": [
       "one",
       "two",
       "three",
     ],
     "arrayMin": [
-      "item1",
+      "at-least-one",
     ],
-    "date": 2023-12-15T10:30:00.000Z,
-    "dateAfter": 2024-06-15T14:20:00.000Z,
-    "dateBefore": 2023-11-20T09:15:00.000Z,
+    "date": 2023-06-15T10:30:00.000Z,
+    "dateAfter": 2024-06-15T10:30:00.000Z,
+    "dateBefore": 2023-01-01T00:00:00.000Z,
     "default": "test",
     "enum": "A",
     "exampleArray": [
-      "apple",
-      "banana",
-      "cherry",
+      "foo",
+      "bar",
+      "baz",
     ],
     "nativeEnum": "B",
     "nullable": null,
-    "number": 42.5,
-    "numberGt": 5.7,
+    "number": 42,
+    "numberGt": 4,
     "numberGte": 1,
-    "numberInt": 25,
-    "numberLt": 4.2,
-    "numberLte": 0.5,
+    "numberInt": 7,
+    "numberLt": 5,
+    "numberLte": 1,
     "numberMultipleOf": 8,
     "object": {
       "bar": 123,
-      "foo": "example",
+      "foo": "bar",
     },
     "objectLoose": {
-      "active": true,
-      "example": "data",
-      "number": 100,
+      "count": 10,
+      "sampleKey": "sampleValue",
     },
     "objectNested": {
       "user": {
-        "age": 25,
-        "name": "John Doe",
+        "age": 30,
+        "name": "Alice",
       },
     },
     "objectPassthrough": {
       "key1": "value1",
       "key2": 42,
-      "key3": true,
     },
-    "string": "Sample text",
-    "stringCuid": "c1234567890",
-    "stringEmail": "user@example.com",
-    "stringEmoji": "😀",
-    "stringMax": "Short text",
-    "stringMin": "Hello world",
-    "stringRegex": "test-example",
+    "optional": "",
+    "string": "Hello, World!",
+    "stringCuid": "c1234567890abcdef",
+    "stringEmail": "example@email.com",
+    "stringEmoji": "😊",
+    "stringMax": "Short",
+    "stringMin": "Hello",
+    "stringRegex": "test-sample",
     "stringUrl": "https://www.example.com",
     "stringUuid": "550e8400-e29b-41d4-a716-446655440000",
     "unionObjects": {
-      "amount": 150,
+      "amount": 99,
       "inventoryItemName": "Widget",
     },
-    "unionPrimitives": "Hello",
+    "unionPrimitives": "hello",
   },
 }
 `;
 
 exports[`Anthropic e2e test > should handle tool call with manySchemas input and output 1`] = `
-"The tool call was successful! The manySchemasTool validated all the provided sample data and returned the following validated output:
+"The tool was successfully called and validated! Here's a summary of the output, broken down by category:
 
-- **String fields**: Various string validations including minimum/maximum length, email format, emoji, URL, UUID, CUID, and regex pattern matching
-- **Number fields**: Different numeric constraints including greater than, less than, multiples, and integers
-- **Array fields**: Arrays with minimum and maximum length constraints
-- **Date fields**: Various date-time validations including date ranges
-- **Object fields**: Nested objects with different validation rules
-- **Special fields**: Nullable field set to null, enums with specific values, union types, and default values
+---
 
-All fields passed their respective validation constraints, demonstrating the comprehensive schema validation capabilities of the tool."
+### 🔤 Strings
+| Field | Value |
+|---|---|
+| \`string\` | \`"Hello, World!"\` |
+| \`stringMin\` *(min 5 chars)* | \`"Hello"\` |
+| \`stringMax\` *(max 10 chars)* | \`"Short"\` |
+| \`stringEmail\` | \`"user@example.com"\` |
+| \`stringEmoji\` | \`"😊"\` |
+| \`stringUrl\` | \`"https://www.example.com"\` |
+| \`stringUuid\` | \`"550e8400-e29b-41d4-a716-446655440000"\` |
+| \`stringCuid\` | \`"c1a2b3c4d5e6f7g8"\` |
+| \`stringRegex\` *(matches \`^test-\`)* | \`"test-sample"\` |
+
+---
+
+### 🔢 Numbers
+| Field | Value |
+|---|---|
+| \`number\` | \`42\` |
+| \`numberGt\` *(> 3)* | \`4\` |
+| \`numberLt\` *(< 6)* | \`5\` |
+| \`numberGte\` *(≥ 1)* | \`1\` |
+| \`numberLte\` *(≤ 1)* | \`1\` |
+| \`numberMultipleOf\` *(multiple of 2)* | \`8\` |
+| \`numberInt\` *(integer)* | \`7\` |
+
+---
+
+### 📋 Arrays
+| Field | Value |
+|---|---|
+| \`exampleArray\` | \`["apple", "banana", "cherry"]\` |
+| \`arrayMin\` *(min 1 item)* | \`["at-least-one"]\` |
+| \`arrayMax\` *(max 5 items)* | \`["one", "two", "three"]\` |
+
+---
+
+### 📅 Dates
+| Field | Value |
+|---|---|
+| \`date\` | \`"2023-06-15T10:30:00.000Z"\` |
+| \`dateAfter\` *(after 2024-01-01)* | \`"2024-06-15T10:30:00.000Z"\` |
+| \`dateBefore\` *(before today)* | \`"2024-01-01T00:00:00.000Z"\` |
+| \`actualData\` | \`"2024-03-21T08:45:00.000Z"\` |
+
+---
+
+### 🧩 Objects
+| Field | Value |
+|---|---|
+| \`object\` | \`{ foo: "bar", bar: 123 }\` |
+| \`objectNested\` | \`{ user: { name: "Alice", age: 25 } }\` |
+| \`objectPassthrough\` | \`{ key1: "value1", key2: 42 }\` |
+| \`objectLoose\` | \`{ sampleKey: "sampleValue", count: 10 }\` |
+
+---
+
+### 🔀 Misc
+| Field | Value |
+|---|---|
+| \`nullable\` | \`null\` |
+| \`optional\` | \`"optional"\` |
+| \`default\` | \`"test"\` |
+| \`enum\` | \`"A"\` |
+| \`nativeEnum\` | \`"B"\` |
+| \`unionPrimitives\` | \`"hello"\` *(string variant)* |
+| \`unionObjects\` | \`{ amount: 99.99, inventoryItemName: "Widget" }\` *(inventory variant)* |
+
+All fields passed validation successfully! ✅"
 `;

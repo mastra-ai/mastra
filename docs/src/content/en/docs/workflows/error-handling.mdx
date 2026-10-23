@@ -39,7 +39,7 @@ switch (result.status) {
 
 The result object contains:
 
-- `status` - The workflow status: `'success'`, `'failed'`, `'suspended'`, or `'tripwire'`
+- `status` - The workflow status: `'success'`, `'failed'`, `'suspended'`, `'paused'`, or `'tripwire'`
 - `result` - The workflow output (when status is `'success'`)
 - `error` - Error details (when status is `'failed'`)
 - `steps` - Individual step results with their status and output
@@ -64,6 +64,8 @@ if (result.status === 'failed') {
 ## Lifecycle callbacks
 
 For scenarios where you need to handle workflow completion without awaiting the result, such as background jobs, fire-and-forget workflows, or centralized logging, you can use lifecycle callbacks.
+
+Lifecycle callbacks are awaited, but they aren't durable or retried. Use workflow steps for work that must complete reliably.
 
 ### `onFinish`
 

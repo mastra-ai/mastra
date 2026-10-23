@@ -258,6 +258,76 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'Get a trace span',
     examples: [{ description: 'Get a specific trace span', command: 'mastra api trace span trace_123 span_456' }],
   });
+  addAction(trace, 'query', 'POST /observability/traces/query', {
+    description: 'Query observability traces with advanced predicates',
+    input: 'required',
+    examples: [
+      {
+        description: 'Query traces in a time range',
+        command: `mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"}}'`,
+      },
+      {
+        description: 'Query traces containing failed tool calls',
+        command: `mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"spans":{"some":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"tool_call"}},{"op":"exists","path":"error"}]}}}}'`,
+      },
+    ],
+  });
+  addAction(trace, 'aggregate', 'POST /observability/traces/aggregate', {
+    description: 'Aggregate observability traces into grouped measures',
+    input: 'required',
+    examples: [
+      {
+        description: 'Count traces and error rate per entity over 7 days',
+        command: `mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"groupBy":["entityName"],"measures":["count","errorRate"]}'`,
+      },
+      {
+        description: 'Top 10 entities by cost, with total tokens',
+        command: `mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"groupBy":["entityName"],"measures":["tokens.total.sum","cost.sum"],"orderBy":{"field":"cost.sum","direction":"desc"},"limit":10}'`,
+      },
+      {
+        description: 'Daily trace count and p95 duration for one agent',
+        command: `mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}},"interval":"1d","measures":["count","duration.p95"]}'`,
+      },
+    ],
+  });
+
+  const span = api.command('span').description('Query and aggregate observability spans');
+  addAction(span, 'query', 'POST /observability/spans/query', {
+    description: 'Query observability spans with advanced predicates',
+    input: 'required',
+    examples: [
+      {
+        description: 'Query failed tool calls in the last day',
+        command: `mastra api span query '{"timeRange":{"from":"2026-08-07T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"tool_call"}},{"op":"eq","left":{"path":"status"},"right":{"literal":"error"}}]}}'`,
+      },
+      {
+        description: 'Query runs of one agent, including runs nested under other agents or workflows',
+        command: `mastra api span query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"agent_run"}},{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}}]},"page":{"limit":50}}'`,
+      },
+      {
+        description: 'Fetch the next page by passing data.page.next as page.after',
+        command: `mastra api span query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"agent_run"}},{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}}]},"page":{"limit":50,"after":"NEXT_CURSOR"}}'`,
+      },
+    ],
+  });
+  addAction(span, 'aggregate', 'POST /observability/spans/aggregate', {
+    description: 'Aggregate observability spans into grouped measures',
+    input: 'required',
+    examples: [
+      {
+        description: 'Daily agent runs by status',
+        command: `mastra api span aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"spanType"},"right":{"literal":"agent_run"}},"groupBy":["status"],"interval":"1d","measures":["count"]}'`,
+      },
+      {
+        description: 'Tools with the highest error rate, with call count and p95 duration',
+        command: `mastra api span aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"spanType"},"right":{"literal":"tool_call"}},"groupBy":["entityName"],"measures":["count","errorRate","duration.p95"],"orderBy":{"field":"errorRate","direction":"desc"},"limit":10}'`,
+      },
+      {
+        description: 'Model tokens and cost per root entity',
+        command: `mastra api span aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"spanType"},"right":{"literal":"model_generation"}},"groupBy":["rootEntityName"],"measures":["tokens.total.sum","cost.sum"]}'`,
+      },
+    ],
+  });
 
   const log = api.command('log').description('Inspect runtime logs');
   addAction(log, 'list', 'GET /observability/logs', {
@@ -461,9 +531,62 @@ export function registerApiCommand(program: CommanderCommand): void {
     input: 'required',
     routePlacement: 'origin',
   });
+  addAction(factoryProject, 'apply-default-model', FACTORY_API_ROUTE_CATALOG.projectApplyDefaultModel, {
+    description: 'Apply the project default model to running sessions',
+    routePlacement: 'origin',
+  });
   addAction(factoryProject, 'delete', FACTORY_API_ROUTE_CATALOG.projectDelete, {
     description: 'Delete a Factory project',
     routePlacement: 'origin',
+  });
+  const factoryEnvironment = factoryProject
+    .command('environment')
+    .description('Manage a Factory project sandbox environment');
+  addAction(factoryEnvironment, 'get', FACTORY_API_ROUTE_CATALOG.projectEnvironmentGet, {
+    description: 'Get the sandbox environment of a Factory project: provider settings and its repositories in order',
+    routePlacement: 'origin',
+  });
+  addAction(factoryEnvironment, 'update', FACTORY_API_ROUTE_CATALOG.projectEnvironmentUpdate, {
+    description: 'Update the sandbox environment of a Factory project: provider settings, repository order and setup',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description:
+          'Set a provider setting; the settings object is merged onto the stored document and null removes a key',
+        command: `mastra api factory project environment update <project-id> '{"settings":{"cpuCount":2}}'`,
+      },
+      {
+        description: 'Set the command that runs once in the workspace root after every repository is set up',
+        command: `mastra api factory project environment update <project-id> '{"workspaceSetupCommand":"pnpm -r build"}'`,
+      },
+      {
+        description: 'Build the environment every night at 03:00 UTC and on pushes to the default branch',
+        command: `mastra api factory project environment update <project-id> '{"buildTriggers":{"schedule":{"enabled":true,"cron":"0 3 * * *","timezone":"UTC"},"push":{"enabled":true}}}'`,
+      },
+    ],
+  });
+  addAction(factoryEnvironment, 'build', FACTORY_API_ROUTE_CATALOG.projectEnvironmentBuild, {
+    description: 'Build the sandbox environment template of a Factory project now',
+    routePlacement: 'origin',
+  });
+  const factoryEnvironmentBuilds = factoryEnvironment
+    .command('builds')
+    .description('Inspect the environment template builds of a Factory project');
+  addAction(factoryEnvironmentBuilds, 'list', FACTORY_API_ROUTE_CATALOG.projectEnvironmentBuilds, {
+    description:
+      'List the environment template builds of a Factory project, newest first, when the provider keeps history',
+    routePlacement: 'origin',
+  });
+  addAction(factoryEnvironmentBuilds, 'get', FACTORY_API_ROUTE_CATALOG.projectEnvironmentBuildGet, {
+    description: 'Get the live status of one environment template build of a Factory project',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'A composite build id (E2B uses <templateId>:<buildId>) is passed as is; the CLI encodes it',
+        command: `mastra api factory project environment builds get <project-id> 'tpl_123:bld_456'`,
+      },
+    ],
   });
 
   const factoryWorkItem = factory.command('work-item').description('Manage Factory work items');
@@ -506,6 +629,17 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'Explicitly start a Factory work-item run',
     input: 'required',
     routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'automation-run', FACTORY_API_ROUTE_CATALOG.workItemAutomationRun, {
+    description: 'Enqueue an idempotent deferred skill dispatch for a trusted external orchestrator',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Dispatch a skill run with optimistic concurrency and an idempotent request id',
+        command: `mastra api factory work-item automation-run <project-id> <work-item-id> '{"requestId":"00000000-0000-4000-8000-000000000000","expectedRevision":1,"role":"work","skillName":"factory-plan"}'`,
+      },
+    ],
   });
 
   addAction(factory, 'boards', FACTORY_API_ROUTE_CATALOG.boardCatalog, {
@@ -565,16 +699,6 @@ export function registerApiCommand(program: CommanderCommand): void {
   });
   addAction(factoryAttention, 'restore', FACTORY_API_ROUTE_CATALOG.attentionRestore, {
     description: 'Restore a Factory attention item',
-    routePlacement: 'origin',
-  });
-
-  const factorySupervisor = factory.command('supervisor').description('Inspect the Factory supervisor');
-  addAction(factorySupervisor, 'session', FACTORY_API_ROUTE_CATALOG.supervisorSession, {
-    description: 'Get or create the deterministic Factory supervisor session',
-    routePlacement: 'origin',
-  });
-  addAction(factorySupervisor, 'health', FACTORY_API_ROUTE_CATALOG.supervisorHealth, {
-    description: 'Run the deterministic Factory supervisor health check',
     routePlacement: 'origin',
   });
 
@@ -716,7 +840,10 @@ function addAction(
   for (const positional of descriptor.positionals) {
     // Keep identity args optional at Commander level so `--schema` can run without real IDs.
     // Actual requests still validate IDs before making an HTTP request.
-    command.argument(`[${positional}]`);
+    command.argument(
+      `[${positional}]`,
+      `${positional} (required for real requests; optional here to inspect the request schema without IDs)`,
+    );
   }
   if (descriptor.acceptsInput) {
     // Keep JSON input optional at Commander level so `--schema` can run without sample input;

@@ -10,9 +10,9 @@ export const chatColumnClass = '[--chat-column:var(--thread-column)]';
  * rather than another message. */
 export const composerColumnClass = 'px-1 md:px-1';
 
-/** Concentric with the pill rows it wraps: their radius (`h-form-sm` ÷ 2) plus the
+/** Concentric with the pill rows it wraps: their radius (`h-control-sm` ÷ 2) plus the
  * 6px inset (`p-1.5`) and the 1px border that sit between them and the card edge. */
-export const cardRadiusClass = 'rounded-[calc(var(--spacing-form-sm)/2+7px)]';
+export const cardRadiusClass = 'rounded-[calc(var(--spacing-control-sm)/2+7px)]';
 
 /** How much of the chat each view asks the card for; the card animates between them.
  * `min-h-0` keeps both ends of the `half` transition numeric. */

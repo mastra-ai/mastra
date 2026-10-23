@@ -25,8 +25,8 @@ export function VisibilitySelect({ agentId }: VisibilitySelectProps) {
           variant="default"
           onClick={() => requestChange('public')}
           data-testid="agent-builder-visibility-add"
+          icon={<Globe />}
         >
-          <Globe className="h-3.5 w-3.5" />
           Add to library
         </Button>
       ) : (
@@ -35,8 +35,8 @@ export function VisibilitySelect({ agentId }: VisibilitySelectProps) {
           variant="ghost"
           onClick={() => requestChange('private')}
           data-testid="agent-builder-visibility-remove"
+          icon={<LockIcon />}
         >
-          <LockIcon className="h-3.5 w-3.5" />
           Remove from library
         </Button>
       )}

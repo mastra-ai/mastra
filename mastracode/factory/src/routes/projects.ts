@@ -1,9 +1,20 @@
+import { MastraError } from '@mastra/core/error';
+import type { StandardSchemaWithJSON } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import { describeFactorySandbox, normalizeFactorySandboxSettings } from '@mastra/core/workspace';
+import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 
+import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
+import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.js';
+import { redactCredentials } from '../environment/build.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type {
+  FactoryProject,
+  FactoryProjectsStorage,
+  UpdateFactoryProjectInput,
+} from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
   SourceControlRepository,
@@ -11,6 +22,7 @@ import type {
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
+import { ACTIVE_RUN_BINDING_STAGES } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
@@ -143,6 +155,17 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
+interface ModelApplySession {
+  thread: {
+    getById: (args: { threadId: string }) => Promise<{ metadata?: Record<string, unknown> | null } | null>;
+    setSettingOn: (args: { threadId: string; key: string; value: unknown }) => Promise<unknown> | unknown;
+  };
+}
+
+interface ModelApplyController {
+  getSession: (sessionId: string) => Promise<ModelApplySession | undefined>;
+}
+
 export interface ProjectRoutesDeps extends RouteDependencies {
   /** Factory projects domain backing the CRUD surface. */
   projects: FactoryProjectsStorage;
@@ -154,6 +177,7 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   resolveRepository?: (input: {
     integrationId: string;
     orgId: string;
+    userId: string;
     installationId: string;
     externalId: string;
     slug: string;
@@ -165,16 +189,88 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   onProjectRepositoryLinked?: (args: { orgId: string; projectRepository: ProjectRepository }) => void;
   /** Shared lifecycle for retiring sessions before their owning records are deleted. */
   sessionRetirement?: SessionRetirementCoordinator;
-  /** Work-items domain — retired sessions drop the refs work items hold on them. */
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
+  /** Work-items domain used by session retirement and running-thread model updates. */
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'listRunBindings' | 'get'>;
+  /** Controller used to reach the thread store behind each active binding. */
+  controller?: ModelApplyController;
+  /** The factory's normalized sandbox; describes and validates the environment settings. */
+  sandbox?: FactorySandbox;
+  /** Environment builds, present only when the sandbox has a `builds` capability. */
+  environmentBuilds?: EnvironmentBuildRunner;
 }
+
+/** Provider output is shown to the user; strip any clone credential from it first. */
+function redactBuild<T extends { error?: string; logs?: string[] }>(build: T): T {
+  return {
+    ...build,
+    ...(build.error !== undefined ? { error: redactCredentials(build.error) } : {}),
+    ...(build.logs ? { logs: build.logs.map(redactCredentials) } : {}),
+  };
+}
+
+/** What the environment reports when the factory has no sandbox configured. */
+const NO_SANDBOX: FactorySandboxDescription = {
+  provider: 'none',
+  settingsSchema: { type: 'object', properties: {}, additionalProperties: false },
+  capabilities: { template: false, builds: { available: false, history: false } },
+};
 
 export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   readonly #versionControlIntegrationIds: Set<string>;
+  #sandboxDescription: FactorySandboxDescription | undefined;
+  #settingsSchema: StandardSchemaWithJSON | undefined;
 
   constructor(deps: ProjectRoutesDeps) {
     super(deps);
     this.#versionControlIntegrationIds = new Set(deps.versionControlIntegrationIds ?? []);
+  }
+
+  #describeSandbox(): FactorySandboxDescription {
+    if (!this.deps.sandbox) return NO_SANDBOX;
+    this.#sandboxDescription ??= describeFactorySandbox(this.deps.sandbox);
+    return this.#sandboxDescription;
+  }
+
+  /**
+   * Merge a settings patch onto the stored document (null removes a key) and
+   * validate the result through the sandbox's schema. Returns the issues when
+   * the merged document is rejected.
+   *
+   * A stored key the current schema does not declare, or whose stored value it
+   * now rejects (a tightened range or choice list), is left over from another
+   * provider or an older schema. When the merged document fails validation, the
+   * merge retries without those keys so one stale value cannot lock every later
+   * update; keys the patch itself sets are never pruned.
+   */
+  async #mergeSettings(
+    stored: Record<string, unknown>,
+    patch: Record<string, unknown | null>,
+  ): Promise<
+    { merged: Record<string, unknown> | null } | { issues: ReadonlyArray<{ message: string; path?: unknown }> }
+  > {
+    const merged: Record<string, unknown> = { ...stored };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null) delete merged[key];
+      else merged[key] = value;
+    }
+    this.#settingsSchema ??= normalizeFactorySandboxSettings(this.deps.sandbox!);
+    const result = await this.#settingsSchema['~standard'].validate(merged);
+    if (!result.issues) return { merged: Object.keys(merged).length > 0 ? merged : null };
+
+    const declared = this.#describeSandbox().settingsSchema.properties ?? {};
+    const rejected = new Set(
+      result.issues.map(issue => {
+        const segment = issue.path?.[0];
+        return typeof segment === 'object' && segment !== null ? segment.key : segment;
+      }),
+    );
+    const pruned = Object.fromEntries(
+      Object.entries(merged).filter(([key]) => key in patch || (Object.hasOwn(declared, key) && !rejected.has(key))),
+    );
+    if (Object.keys(pruned).length === Object.keys(merged).length) return { issues: result.issues };
+    const retried = await this.#settingsSchema['~standard'].validate(pruned);
+    if (retried.issues) return { issues: result.issues };
+    return { merged: Object.keys(pruned).length > 0 ? pruned : null };
   }
 
   async #projects(): Promise<FactoryProjectsStorage> {
@@ -217,6 +313,173 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   async #repositoryPayload(handle: SourceControlStorageHandle, orgId: string, projectRepository: ProjectRepository) {
     const repository = await handle.repositories.get({ orgId, id: projectRepository.repositoryId });
     return { ...projectRepository, repository };
+  }
+
+  /** Every link of the project across every handle, with the handle that owns it, in position order. */
+  async #environmentLinks(orgId: string, projectId: string) {
+    const links: Array<{ handle: SourceControlStorageHandle; projectRepository: ProjectRepository }> = [];
+    for (const handle of await this.#handles()) {
+      for (const projectRepository of await handle.projectRepositories.listByProject({
+        orgId,
+        factoryProjectId: projectId,
+      })) {
+        links.push({ handle, projectRepository });
+      }
+    }
+    return links.sort(
+      (a, b) =>
+        a.projectRepository.position - b.projectRepository.position ||
+        a.projectRepository.createdAt.getTime() - b.projectRepository.createdAt.getTime(),
+    );
+  }
+
+  async #environmentPayload(orgId: string, project: FactoryProject) {
+    const repositories = [];
+    for (const { handle, projectRepository } of await this.#environmentLinks(orgId, project.id)) {
+      const repository = await handle.repositories.get({ orgId, id: projectRepository.repositoryId });
+      repositories.push({
+        projectRepositoryId: projectRepository.id,
+        connectionId: projectRepository.connectionId,
+        repositoryId: projectRepository.repositoryId,
+        slug: repository?.slug ?? null,
+        defaultBranch: repository?.defaultBranch ?? null,
+        position: projectRepository.position,
+        inEnvironment: projectRepository.inEnvironment,
+        setupCommand: projectRepository.setupCommand,
+        teardownCommand: projectRepository.teardownCommand,
+        lastBuildStatus: projectRepository.lastBuildStatus,
+        lastBuildError: projectRepository.lastBuildError,
+        lastBuiltAt: projectRepository.lastBuiltAt,
+      });
+    }
+    return {
+      environment: {
+        sandbox: this.#describeSandbox(),
+        settings: project.sandboxSettings ?? {},
+        sandboxWorkingDirectory: project.sandboxWorkingDirectory,
+        workspaceSetupCommand: project.workspaceSetupCommand,
+        activeTemplateId: project.activeTemplateId,
+        activeTemplateHeads: project.activeTemplateHeads,
+        repositories,
+        ...(await this.#buildPayload(project)),
+      },
+    };
+  }
+
+  /**
+   * The build keys of the environment payload, present only when the
+   * sandbox can build. Reads the project row and the schedule row; never
+   * the provider (live status is the builds routes' job).
+   */
+  async #buildPayload(project: FactoryProject) {
+    const builds = this.deps.environmentBuilds;
+    if (!builds) return {};
+    const schedules = builds.scheduleAvailable ? builds.schedules() : undefined;
+    const schedule = schedules
+      ? await readSchedule(schedules, project.id)
+      : { enabled: false, cron: null, timezone: null };
+    return {
+      buildTriggers: {
+        schedule: { ...schedule, scheduleAvailable: builds.scheduleAvailable },
+        push: { enabled: project.buildOnPushEnabled, debounceMinutes: project.buildPushDebounceMinutes },
+      },
+      build: project.lastBuildId
+        ? { buildId: project.lastBuildId, attemptedAt: project.lastBuildAttemptedAt?.toISOString() ?? null }
+        : null,
+    };
+  }
+
+  /** The builds capability behind the routes, or the 404 to answer with. */
+  #builds(context: Context) {
+    const builds = this.deps.sandbox?.builds;
+    const runner = this.deps.environmentBuilds;
+    if (!builds || !runner) return { response: context.json({ error: 'no_builds' }, 404) };
+    return { builds, runner };
+  }
+
+  #buildRoutes(): ApiRoute[] {
+    return [
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuild.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuild.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const capability = this.#builds(context);
+          if ('response' in capability) return capability.response;
+          const { heads: _heads, ...outcome } = await capability.runner.start(project.id, 'manual');
+          return context.json(outcome);
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuilds.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuilds.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const capability = this.#builds(context);
+          if ('response' in capability) return capability.response;
+          if (!capability.builds.list) return context.json({ error: 'no_history' }, 404);
+          const read = await capability.runner.readContext(project.id);
+          if (!read) return context.json({ error: 'no_environment' }, 404);
+          const builds = await capability.builds.list(read.ctx, read.settings);
+          return context.json({ builds: builds.map(redactBuild) });
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuildGet.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuildGet.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const capability = this.#builds(context);
+          if ('response' in capability) return capability.response;
+          // A composite provider id (E2B's `<templateId>:<buildId>`) travels
+          // encoded; Hono hands the param back decoded.
+          const buildId = context.req.param('buildId') ?? '';
+          if (!buildId) return context.json({ error: 'Build not found' }, 404);
+          const read = await capability.runner.readContext(project.id);
+          if (!read) return context.json({ error: 'no_environment' }, 404);
+          // Providers answer for any id on the host's account, so the route
+          // only forwards ids that belong to this project: its last build, or
+          // one the provider lists under the project's template.
+          if (buildId !== project.lastBuildId) {
+            const listed = capability.builds.list ? await capability.builds.list(read.ctx, read.settings) : [];
+            if (!listed.some(build => build.buildId === buildId)) {
+              return context.json({ error: 'Build not found' }, 404);
+            }
+          }
+          return context.json({ build: redactBuild(await capability.builds.get(read.ctx, read.settings, buildId)) });
+        },
+      }),
+    ];
+  }
+
+  /** Best effort: a deleted project's cron schedule must not keep firing. */
+  async #dropSchedule(projectId: string): Promise<void> {
+    const runner = this.deps.environmentBuilds;
+    if (!runner?.scheduleAvailable) return;
+    try {
+      await runner.schedules()!.delete(scheduleIdFor(projectId));
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'SCHEDULES_NOT_FOUND') return;
+      console.warn('[factory] could not delete the environment build schedule of a deleted project:', error);
+    }
   }
 
   async #retireProjectRepositorySessions(
@@ -305,10 +568,122 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
           const parsedBody = FACTORY_ROUTE_CONTRACTS.projectUpdate.bodySchema.safeParse(await readJson(context));
           if (!parsedBody.success) return context.json({ error: 'invalid_project' }, 400);
+          // Scope decides whose credentials every session bills against, so only
+          // admins may switch a shared Factory onto owners' personal keys. The
+          // thinking default sets the reasoning spend of every run that has not
+          // picked its own, so it is admin-only too.
+          const adminField =
+            parsedBody.data.modelScope !== undefined
+              ? 'model scope'
+              : parsedBody.data.defaultThinkingLevel !== undefined
+                ? 'thinking default'
+                : undefined;
+          if (
+            adminField &&
+            this.deps.auth.enabled() &&
+            !(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))
+          ) {
+            return context.json(
+              {
+                error: 'forbidden',
+                message: `Organization administrator access is required to change the ${adminField}.`,
+              },
+              403,
+            );
+          }
           const project = await (
             await this.#projects()
           ).update({ orgId: tenant.orgId, id: parsedPath.data.id, input: parsedBody.data });
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          if (!(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))) {
+            return context.json(
+              {
+                error: 'forbidden',
+                message: 'Organization administrator access is required to update running sessions.',
+              },
+              403,
+            );
+          }
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.pathSchema.safeParse({
+            id: context.req.param('id'),
+          });
+          if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, parsedPath.data.id);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const modelId = project.defaultModelId;
+          if (!modelId) {
+            return context.json(
+              { error: 'default_model_not_set', message: 'Set a default model on the project first.' },
+              400,
+            );
+          }
+          const { workItems, controller } = this.deps;
+          if (!workItems || !controller) return context.json({ error: 'model_apply_unavailable' }, 503);
+
+          const bindings = (await workItems.listRunBindings(tenant.orgId, project.id)).filter(
+            binding => binding.status === 'active',
+          );
+          const seen = new Set<string>();
+          const applied: string[] = [];
+          const skipped: Array<{
+            threadId: string;
+            reason:
+              | 'not-running'
+              | 'work-item-missing'
+              | 'stage-inactive'
+              | 'thread-missing'
+              | 'mode-unknown'
+              | 'apply-failed';
+          }> = [];
+
+          for (const binding of bindings) {
+            const key = `${binding.sessionId}:${binding.threadId}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            const item = await workItems.get({ orgId: tenant.orgId, id: binding.workItemId });
+            if (!item || item.factoryProjectId !== project.id) {
+              skipped.push({ threadId: binding.threadId, reason: 'work-item-missing' });
+              continue;
+            }
+            if (!ACTIVE_RUN_BINDING_STAGES.has(item.stages[0] ?? '')) {
+              skipped.push({ threadId: binding.threadId, reason: 'stage-inactive' });
+              continue;
+            }
+            const session = await controller.getSession(binding.sessionId);
+            if (!session) {
+              skipped.push({ threadId: binding.threadId, reason: 'not-running' });
+              continue;
+            }
+            const thread = await session.thread.getById({ threadId: binding.threadId });
+            if (!thread) {
+              skipped.push({ threadId: binding.threadId, reason: 'thread-missing' });
+              continue;
+            }
+            try {
+              // This route targets inactive bound threads, so persist the controller-owned key through the session gateway.
+              await session.thread.setSettingOn({
+                threadId: binding.threadId,
+                key: 'currentModelId',
+                value: modelId,
+              });
+              applied.push(binding.threadId);
+            } catch (error) {
+              console.warn('[factory] apply-default-model failed for thread', binding.threadId, error);
+              skipped.push({ threadId: binding.threadId, reason: 'apply-failed' });
+            }
+          }
+
+          return context.json({ modelId, applied, skipped });
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectDelete.path, {
@@ -338,6 +713,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             }
           }
           await (await this.#projects()).delete({ orgId: tenant.orgId, id });
+          await this.#dropSchedule(id);
           return context.body(null, 204);
         },
       }),
@@ -452,6 +828,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               ? await this.deps.resolveRepository({
                   integrationId: found.connection.integrationId,
                   orgId: tenant.orgId,
+                  userId: tenant.userId,
                   installationId: found.connection.installationId,
                   ...input.repository,
                 })
@@ -475,6 +852,151 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             { projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository) },
             201,
           );
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentGet.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentGet.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          return context.json(await this.#environmentPayload(tenant.orgId, project));
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const parsed = FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.bodySchema.safeParse(await readJson(context));
+          if (!parsed.success) return context.json({ error: 'invalid_environment' }, 400);
+          const {
+            repositories: repositoryPatches,
+            settings: settingsPatch,
+            buildTriggers,
+            ...projectInput
+          } = parsed.data;
+          const input: UpdateFactoryProjectInput = projectInput;
+          const runner = this.deps.environmentBuilds;
+          if (buildTriggers !== undefined) {
+            if (!runner) return context.json({ error: 'no_builds' }, 400);
+            if (buildTriggers.push?.enabled !== undefined) input.buildOnPushEnabled = buildTriggers.push.enabled;
+            if (buildTriggers.push?.debounceMinutes !== undefined) {
+              input.buildPushDebounceMinutes = buildTriggers.push.debounceMinutes;
+            }
+            if (buildTriggers.schedule) {
+              if (!runner.scheduleAvailable) {
+                if (buildTriggers.schedule.enabled) return context.json({ error: 'schedules_unavailable' }, 400);
+              } else {
+                const { cron, timezone } = buildTriggers.schedule;
+                const stored = await readSchedule(runner.schedules()!, project.id);
+                const nextCron = cron ?? stored.cron;
+                // Disabling a schedule that never existed needs no cron: it is a no-op.
+                if (!nextCron && buildTriggers.schedule.enabled)
+                  return context.json(
+                    {
+                      error: 'invalid_environment',
+                      issues: [{ message: 'cron is required', path: ['buildTriggers', 'schedule', 'cron'] }],
+                    },
+                    400,
+                  );
+                const nextTimezone = timezone ?? stored.timezone ?? undefined;
+                const message = nextCron ? invalidCronMessage(nextCron, nextTimezone) : undefined;
+                if (message) {
+                  return context.json(
+                    {
+                      error: 'invalid_environment',
+                      issues: [{ message, path: ['buildTriggers', 'schedule', 'cron'] }],
+                    },
+                    400,
+                  );
+                }
+              }
+            }
+          }
+          if (settingsPatch !== undefined && !this.deps.sandbox) return context.json({ error: 'no_sandbox' }, 400);
+
+          let updated = project;
+          if (Object.keys(input).length > 0 || settingsPatch !== undefined || repositoryPatches !== undefined) {
+            let issues: ReadonlyArray<{ message: string; path?: unknown }> | undefined;
+            let repositoryOutcome: 'updated' | 'not_found' | 'incomplete_reorder' | undefined;
+            const sourceControl = await this.#sourceControl();
+            // One transaction holds the project row, so the settings merge and the link
+            // writes either all land or none do, and concurrent patches apply in turn.
+            const result = await (
+              await this.#projects()
+            ).update({
+              orgId: tenant.orgId,
+              id: projectId,
+              input: async (current, ops) => {
+                let sandboxSettings: Record<string, unknown> | null | undefined;
+                if (settingsPatch !== undefined) {
+                  const settings = await this.#mergeSettings(current.sandboxSettings ?? {}, settingsPatch);
+                  if ('issues' in settings) {
+                    issues = settings.issues;
+                    return null;
+                  }
+                  sandboxSettings = settings.merged;
+                }
+                if (repositoryPatches !== undefined) {
+                  repositoryOutcome = await sourceControl.updateEnvironmentRepositories(ops, {
+                    factoryProjectId: current.id,
+                    integrationIds: [...this.#versionControlIntegrationIds],
+                    patches: repositoryPatches,
+                  });
+                  if (repositoryOutcome !== 'updated') return null;
+                }
+                return { ...input, ...(sandboxSettings !== undefined ? { sandboxSettings } : {}) };
+              },
+            });
+            if (repositoryOutcome === 'not_found') return context.json({ error: 'Project repository not found' }, 404);
+            if (repositoryOutcome === 'incomplete_reorder') return context.json({ error: 'invalid_environment' }, 400);
+            if (issues) {
+              return context.json(
+                {
+                  error: 'invalid_environment',
+                  issues: issues.map(issue => ({
+                    message: issue.message,
+                    path: Array.isArray(issue.path)
+                      ? issue.path.map(segment =>
+                          typeof segment === 'object' && segment !== null && 'key' in segment ? segment.key : segment,
+                        )
+                      : [],
+                  })),
+                },
+                400,
+              );
+            }
+            if (!result) return context.json({ error: 'Project not found' }, 404);
+            updated = result;
+          }
+          if (buildTriggers?.schedule && runner?.scheduleAvailable) {
+            const stored = await readSchedule(runner.schedules()!, project.id);
+            const cron = buildTriggers.schedule.cron ?? stored.cron;
+            // Without a cron the request disables a schedule that never existed: nothing to write.
+            if (cron)
+              await ensureSchedule(runner.schedules()!, project.id, {
+                enabled: buildTriggers.schedule.enabled,
+                cron,
+                ...((buildTriggers.schedule.timezone ?? stored.timezone)
+                  ? { timezone: (buildTriggers.schedule.timezone ?? stored.timezone)! }
+                  : {}),
+              });
+          }
+          // Saving never builds: the next Build now, schedule or push run
+          // picks the changed template up.
+          return context.json(await this.#environmentPayload(tenant.orgId, updated));
         },
       }),
       registerApiRoute('/web/factory/projects/:id/repositories/:projectRepositoryId', {
@@ -522,6 +1044,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           return context.body(null, 204);
         },
       }),
+      ...this.#buildRoutes(),
     ];
   }
 }

@@ -1,3 +1,4 @@
+import type { AgentControllerThinkingLevel } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
@@ -9,24 +10,23 @@ import {
 
 export function useSetAgentControllerStateMutation({
   agentControllerId,
-  resourceId,
-  scope,
+  sessionId,
   baseUrl = '',
   enabled = true,
 }: AgentControllerMutationArgs) {
   const queryClient = useQueryClient();
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, scope, baseUrl, enabled });
+  const { session } = createAgentControllerClient({ agentControllerId, sessionId, baseUrl, enabled });
 
   return useMutation({
     mutationFn: (updates: Record<string, unknown>) => requireAgentControllerSession(session).setState(updates),
     onSuccess: async (_data, updates) => {
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope),
+          queryKey: queryKeys.agentControllerConnectionState(agentControllerId, sessionId),
         }),
         'settings' in updates
           ? queryClient.invalidateQueries({
-              queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId, scope),
+              queryKey: queryKeys.agentControllerSettings(agentControllerId, sessionId),
               exact: true,
             })
           : Promise.resolve(),
@@ -35,18 +35,9 @@ export function useSetAgentControllerStateMutation({
   });
 }
 
-export function useSwitchAgentControllerModeMutation(args: AgentControllerMutationArgs) {
-  const queryClient = useQueryClient();
-  const { session } = createAgentControllerClient(args);
-
-  return useMutation({
-    mutationFn: (modeId: string) => requireAgentControllerSession(session).switchMode(modeId),
-    // returning the invalidation keeps isPending true until the refetched state carries the new mode
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
-      }),
-  });
+interface ModelSwitch {
+  modelId: string;
+  thinkingLevel?: AgentControllerThinkingLevel;
 }
 
 export function useSwitchAgentControllerModelMutation(args: AgentControllerMutationArgs) {
@@ -54,10 +45,17 @@ export function useSwitchAgentControllerModelMutation(args: AgentControllerMutat
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
-    mutationFn: (modelId: string) => requireAgentControllerSession(session).switchModel(modelId),
+    mutationFn: ({ modelId, thinkingLevel }: ModelSwitch) =>
+      requireAgentControllerSession(session).switchModel(modelId, { thinkingLevel }),
     onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
-      }),
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.sessionId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agentControllerSettings(args.agentControllerId, args.sessionId),
+          exact: true,
+        }),
+      ]),
   });
 }

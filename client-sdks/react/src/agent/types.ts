@@ -2,6 +2,7 @@ import type { GenerateLegacyParams } from '@mastra/client-js';
 import type { ToolsInput } from '@mastra/core/agent';
 
 export type ClientToolsInput = ToolsInput;
+export type ClientToolsResolver = () => ClientToolsInput | undefined;
 export type ProviderOptionsInput = GenerateLegacyParams['providerOptions'];
 
 export interface ModelSettings {

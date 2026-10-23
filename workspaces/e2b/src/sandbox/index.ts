@@ -26,7 +26,7 @@ import type {
  * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
  */
 type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
-import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxError, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type {
   BuildOptions,
@@ -40,6 +40,7 @@ import type {
 } from 'e2b';
 import { createDefaultMountableTemplate, isDeferredNamedTemplateSpec, isNamedTemplateSpec } from '../utils/template';
 import type { DeferredNamedTemplateSpec, NamedTemplateSpec, TemplateResources, TemplateSpec } from '../utils/template';
+import { E2BSandboxFilesystem } from './filesystem';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX } from './mounts';
 import type {
   E2BMountConfig,
@@ -94,6 +95,16 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
    */
   sandboxId?: string;
   /**
+   * What `start()` does when `sandboxId` is set but E2B reports that sandbox
+   * is gone (not found / killed / not running).
+   *
+   * - `'best-effort'` (default): fall back to logical-id discovery, then
+   *   create a new sandbox.
+   * - `'required'`: throw a `SandboxError` with code `SANDBOX_REATTACH_FAILED`
+   *   instead of discovering or creating, so the caller can surface the lost VM.
+   */
+  reattach?: 'best-effort' | 'required';
+  /**
    * Sandbox template specification.
    *
    * - `string` - Use an existing template by ID
@@ -106,7 +117,7 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
    * @see createDefaultMountableTemplate
    */
   template?: TemplateSpec;
-  /** Execution timeout in milliseconds
+  /** Sandbox lifetime in milliseconds: how long E2B keeps the VM alive before stopping it
    *
    * @default 300_000 // 5 minutes
    */
@@ -229,6 +240,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   protected _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
   private _isRetrying = false;
+  private _filesystem?: E2BSandboxFilesystem;
   private readonly timeout: number;
   protected readonly templateSpec?: TemplateSpec;
   private readonly metadata: Record<string, unknown>;
@@ -260,7 +272,9 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     super({
       ...options,
       name: 'E2BSandbox',
-      processes: new E2BProcessManager(),
+      processes: new E2BProcessManager({
+        defaultTimeout: options.timeout ?? 300_000,
+      }),
     });
 
     this.id = options.id ?? this.generateId();
@@ -430,6 +444,14 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       const namedSpec =
         this.templateSpec && isNamedTemplateSpec(this.templateSpec) ? this.templateSpec : this._resolvedNamedSpec;
       if (namedSpec) {
+        const { fallbackTemplate } = namedSpec;
+        if (fallbackTemplate === false) {
+          this._resolvedTemplateId = undefined;
+          this.logger.error(
+            `${LOG_PREFIX} Creating from '${resolvedTemplateId}' failed (fallback disabled): ${createError}`,
+          );
+          throw createError;
+        }
         // Bounded ladder: broken name → named fallback → default mountable
         // template. Every rung only advances on a template-unusable error, so
         // a broken build never wedges the session on a dead name.
@@ -440,7 +462,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
         const spec = namedSpec;
         const fallbackId =
           resolvedTemplateId === spec.ref
-            ? await this.resolveFallbackTemplate(spec.fallbackTemplate)
+            ? await this.resolveFallbackTemplate(fallbackTemplate)
             : await this.buildOrReuseDefaultTemplate();
         try {
           sdkSandbox = await createFromTemplate(fallbackId);
@@ -598,9 +620,23 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   // ---------------------------------------------------------------------------
 
   /**
+   * The sandbox's disk through E2B's files API: one request per operation
+   * instead of a shell command. Paths are absolute inside the sandbox and are
+   * not confined to any root.
+   */
+  get filesystem(): E2BSandboxFilesystem {
+    this._filesystem ??= new E2BSandboxFilesystem(this);
+    return this._filesystem;
+  }
+
+  /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.
+   *
+   * Per-file permission modes are not supported; an explicit `mode` is
+   * rejected rather than silently discarded.
    */
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    assertModesUnsupported(files, 'E2B');
     await this.ensureRunning();
     await this.e2b.files.write(
       files.map(f => ({
@@ -974,6 +1010,13 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     if (this._preferredSandboxId) {
       const preferred = await this.connectToPreferredSandbox(this._preferredSandboxId);
       if (preferred) return preferred;
+      if (this._constructorOptions.reattach === 'required') {
+        throw new SandboxError(
+          `E2B sandbox ${this._preferredSandboxId} could not be reattached (gone); refusing to provision a replacement because reattach is 'required'. Clear the persisted sandboxId to start a fresh sandbox.`,
+          'SANDBOX_REATTACH_FAILED',
+          { provider: 'e2b', sandboxId: this._preferredSandboxId, logicalId: this.id },
+        );
+      }
     }
     return this.findExistingSandbox();
   }
@@ -1013,7 +1056,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     }
 
     try {
-      return await Sandbox.connect(preferredSandboxId, this.connectionOpts);
+      return await Sandbox.connect(preferredSandboxId, { ...this.connectionOpts, timeoutMs: this.timeout });
     } catch (e) {
       // The sandbox can terminate between getInfo and connect.
       if (this.isSandboxDeadError(e)) {
@@ -1036,7 +1079,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     const info = await this.lookupExistingSandboxInfo();
     if (!info) return null;
     try {
-      return await this.connectSdkSandbox(info.sandboxId, this.connectionOpts);
+      return await this.connectSdkSandbox(info.sandboxId, { ...this.connectionOpts, timeoutMs: this.timeout });
     } catch (e) {
       this.logger.debug(`${LOG_PREFIX} Error connecting to existing sandbox:`, e);
       return null;
@@ -1147,6 +1190,11 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
         this._resolvedTemplateId = ref;
         return ref;
       } catch (error) {
+        if (fallbackTemplate === false) {
+          this._resolvedTemplateId = undefined;
+          this.logger.error(`${LOG_PREFIX} Template '${ref}' resolution failed (fallback disabled): ${error}`);
+          throw error;
+        }
         this.logger.warn(`${LOG_PREFIX} Template '${ref}' resolution failed, falling back: ${error}`);
         return await this.resolveFallbackTemplate(fallbackTemplate);
       }
@@ -1208,7 +1256,9 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       });
   }
 
-  private async resolveFallbackTemplate(fallbackTemplate: NamedTemplateSpec['fallbackTemplate']): Promise<string> {
+  private async resolveFallbackTemplate(
+    fallbackTemplate: Exclude<NamedTemplateSpec['fallbackTemplate'], false>,
+  ): Promise<string> {
     if (typeof fallbackTemplate === 'string') {
       this._resolvedTemplateId = fallbackTemplate;
       return fallbackTemplate;
@@ -1401,7 +1451,8 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
    * When the E2B sandbox times out or crashes mid-operation, this method
    * resets sandbox state, restarts it, and retries the operation once.
    *
-   * @internal Used by E2BProcessManager to handle dead sandboxes during spawn.
+   * @internal Used by E2BProcessManager (spawn) and E2BCodeModeTransport (file setup)
+   * to handle dead sandboxes.
    */
   async retryOnDead<T>(fn: () => Promise<T>): Promise<T> {
     try {

@@ -14,10 +14,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import {
   GET_AUTH_CAPABILITIES_ROUTE,
+  GET_CURRENT_USER_ROUTE,
   GET_PERMISSION_PATTERNS_ROUTE,
   GET_ROLE_PERMISSIONS_ROUTE,
   GET_SSO_LOGIN_ROUTE,
   GET_SSO_CALLBACK_ROUTE,
+  POST_LOGOUT_ROUTE,
+  POST_REFRESH_ROUTE,
 } from './auth';
 import { createTestServerContext } from './test-utils';
 
@@ -468,5 +471,220 @@ describe('GET /auth/permission-patterns', () => {
   it('has correct path and method', () => {
     expect(GET_PERMISSION_PATTERNS_ROUTE.path).toBe('/auth/permission-patterns');
     expect(GET_PERMISSION_PATTERNS_ROUTE.method).toBe('GET');
+  });
+});
+
+// =============================================================================
+// POST /auth/logout — https://github.com/mastra-ai/mastra/issues/24456
+//
+// Logout reported `{ success: true }` even when nothing could possibly have been
+// logged out, while POST /auth/refresh returns 404 for the same missing
+// capability. These lock in the capability-based contract.
+// =============================================================================
+
+describe('POST /auth/logout — provider capability contract', () => {
+  async function logout(auth: unknown) {
+    const mastra = auth === undefined ? { getServer: () => ({}) } : { getServer: () => ({ auth }) };
+    return (await POST_LOGOUT_ROUTE.handler({
+      mastra,
+      request: { headers: new Headers(), url: 'http://localhost:4111/api/auth/logout' },
+    } as any)) as Response;
+  }
+
+  // 404s surface as a thrown HTTPException for the framework layer to
+  // serialize, which is exactly how POST /auth/refresh reports the same thing.
+  async function expectNotConfigured(auth: unknown) {
+    await expect(logout(auth)).rejects.toMatchObject({ status: 404, message: 'Logout not configured' });
+  }
+
+  it('returns 404 when no auth provider is configured', async () => {
+    await expectNotConfigured(undefined);
+  });
+
+  it('returns 404 when the provider has no logout capability at all', async () => {
+    await expectNotConfigured({
+      name: 'token-only',
+      authenticateToken: vi.fn(),
+      authorizeUser: vi.fn(),
+      isSimpleAuth: true,
+    });
+  });
+
+  it('succeeds for an SSO-only provider that can only supply a logout URL', async () => {
+    // No destroySession and no getClearSessionHeaders — but logout is still
+    // meaningful, so this must not 404.
+    const response = await logout({
+      name: 'sso-only',
+      authenticateToken: vi.fn(),
+      authorizeUser: vi.fn(),
+      getLogoutUrl: vi.fn(async () => 'https://sso.example.com/logout'),
+      isSimpleAuth: true,
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      redirectTo: 'https://sso.example.com/logout',
+    });
+  });
+
+  it('destroys the session and clears cookies when the provider supports it', async () => {
+    const destroySession = vi.fn(async () => {});
+    const response = await logout({
+      name: 'session',
+      authenticateToken: vi.fn(),
+      authorizeUser: vi.fn(),
+      getSessionIdFromRequest: vi.fn(() => 'session-1'),
+      destroySession,
+      getClearSessionHeaders: vi.fn(() => ({ 'Set-Cookie': 'session=; Max-Age=0' })),
+      isSimpleAuth: true,
+    });
+
+    expect(response.status).toBe(200);
+    expect(destroySession).toHaveBeenCalledWith('session-1');
+    expect(response.headers.get('Set-Cookie')).toBe('session=; Max-Age=0');
+  });
+
+  it('stays successful when there is no active session, since logout is idempotent', async () => {
+    // Unlike /auth/refresh (401 without a session), the desired end state of
+    // logout is already satisfied, so this is a success.
+    const destroySession = vi.fn(async () => {});
+    const response = await logout({
+      name: 'session',
+      authenticateToken: vi.fn(),
+      authorizeUser: vi.fn(),
+      getSessionIdFromRequest: vi.fn(() => undefined),
+      destroySession,
+      getClearSessionHeaders: vi.fn(() => ({ 'Set-Cookie': 'session=; Max-Age=0' })),
+      isSimpleAuth: true,
+    });
+
+    expect(response.status).toBe(200);
+    expect(destroySession).not.toHaveBeenCalled();
+    expect(response.headers.get('Set-Cookie')).toBe('session=; Max-Age=0');
+  });
+});
+
+describe('GET /auth/me — forwards a renewed session cookie', () => {
+  function providerWithPending(consume: (req: Request) => Record<string, string> | undefined) {
+    return {
+      name: 'renewing',
+      authenticateToken: vi.fn(),
+      authorizeUser: vi.fn(),
+      getCurrentUser: vi.fn(async () => ({ id: 'user-1', email: 'a@b.com' })),
+      consumePendingResponseHeaders: vi.fn(consume),
+      isSimpleAuth: true,
+    } as unknown as MastraAuthProvider;
+  }
+
+  it('attaches pending provider headers as __refreshHeaders', async () => {
+    const request = new Request('http://localhost:4111/api/auth/me');
+    const auth = providerWithPending(req => (req === request ? { 'Set-Cookie': 'wos-session=v2; Path=/' } : undefined));
+
+    const result = (await GET_CURRENT_USER_ROUTE.handler({
+      mastra: createMastraWithAuth(auth),
+      request,
+    } as any)) as any;
+
+    expect(result.id).toBe('user-1');
+    expect(result.__refreshHeaders).toEqual({ 'Set-Cookie': 'wos-session=v2; Path=/' });
+  });
+
+  it('still returns the user when the hook throws', async () => {
+    const auth = providerWithPending(() => {
+      throw new Error('boom');
+    });
+
+    const result = (await GET_CURRENT_USER_ROUTE.handler({
+      mastra: createMastraWithAuth(auth),
+      request: new Request('http://localhost:4111/api/auth/me'),
+    } as any)) as any;
+
+    expect(result.id).toBe('user-1');
+    expect(result.__refreshHeaders).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// Legacy session cookie clearing (SP-5): every response that sets or clears the
+// session cookie also expires legacy (e.g. shared parent-domain) copies.
+// =============================================================================
+
+describe('legacy session cookie clearing', () => {
+  const LEGACY = [
+    'wos-session=; Path=/; Max-Age=0; Secure',
+    'wos-session=; Path=/; Max-Age=0; Secure; Domain=.mastra.cloud',
+  ];
+
+  it('SSO callback appends the legacy clears after the new session cookie', async () => {
+    const mockAuth = Object.assign(createMockSSOProvider(), {
+      getLegacySessionClearCookies: vi.fn(() => LEGACY),
+    }) as unknown as MastraAuthProvider;
+    const mastra = createMastraWithAuth(mockAuth);
+    const request = new Request('http://localhost:4000/api/auth/sso/callback?code=c');
+    const response = (await GET_SSO_CALLBACK_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      request,
+      code: 'c',
+      state: undefined,
+    } as any)) as Response;
+
+    expect(response.headers.getSetCookie()).toEqual(['session=abc; Path=/; HttpOnly', ...LEGACY]);
+  });
+
+  it('logout appends the legacy clears', async () => {
+    const auth = {
+      name: 'session',
+      authenticateToken: vi.fn(),
+      authorizeUser: vi.fn(),
+      getSessionIdFromRequest: vi.fn(() => undefined),
+      destroySession: vi.fn(),
+      getClearSessionHeaders: vi.fn(() => ({ 'Set-Cookie': '__Host-wos-session=; Max-Age=0' })),
+      getLegacySessionClearCookies: vi.fn(() => LEGACY),
+      isSimpleAuth: true,
+    };
+    const response = (await POST_LOGOUT_ROUTE.handler({
+      mastra: { getServer: () => ({ auth }) },
+      request: { headers: new Headers(), url: 'http://localhost:4111/api/auth/logout' },
+    } as any)) as Response;
+
+    expect(response.headers.getSetCookie()).toEqual(['__Host-wos-session=; Max-Age=0', ...LEGACY]);
+  });
+
+  it('refresh appends the legacy clears', async () => {
+    const auth = {
+      name: 'session',
+      authenticateToken: vi.fn(),
+      authorizeUser: vi.fn(),
+      getSessionIdFromRequest: vi.fn(() => 'old'),
+      refreshSession: vi.fn(async () => ({ id: 'new', userId: 'u', expiresAt: new Date(), createdAt: new Date() })),
+      getSessionHeaders: vi.fn(() => ({ 'Set-Cookie': '__Host-wos-session=new; Path=/' })),
+      getLegacySessionClearCookies: vi.fn(() => LEGACY),
+      isSimpleAuth: true,
+    };
+    const response = (await POST_REFRESH_ROUTE.handler({
+      mastra: { getServer: () => ({ auth }) },
+      request: new Request('http://localhost:4111/api/auth/refresh', { method: 'POST' }),
+    } as any)) as Response;
+
+    expect(response.headers.getSetCookie()).toEqual(['__Host-wos-session=new; Path=/', ...LEGACY]);
+  });
+
+  it('providers without legacy clears are unaffected', async () => {
+    const auth = {
+      name: 'session',
+      authenticateToken: vi.fn(),
+      authorizeUser: vi.fn(),
+      getSessionIdFromRequest: vi.fn(() => undefined),
+      destroySession: vi.fn(),
+      getClearSessionHeaders: vi.fn(() => ({ 'Set-Cookie': 'session=; Max-Age=0' })),
+      isSimpleAuth: true,
+    };
+    const response = (await POST_LOGOUT_ROUTE.handler({
+      mastra: { getServer: () => ({ auth }) },
+      request: { headers: new Headers(), url: 'http://localhost:4111/api/auth/logout' },
+    } as any)) as Response;
+
+    expect(response.headers.getSetCookie()).toEqual(['session=; Max-Age=0']);
   });
 });

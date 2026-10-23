@@ -662,6 +662,11 @@ function generateIndexPage(grouped: GroupedProviders): string {
       .flat()
       .reduce((sum, p) => sum + p.models.length, 0);
 
+  // Link each provider's markdown page so agents reading /models/llms.txt can reach any provider.
+  const providerLinks = [...grouped.popular, ...grouped.other]
+    .map(provider => `  - [${provider.name}](https://mastra.ai/models/providers/${provider.id})`)
+    .join('\n');
+
   return `---
 title: "Models"
 description: "Access ${totalProviders}+ AI providers and ${totalModels}+ models through Mastra's model router."
@@ -971,7 +976,7 @@ const agent = new Agent({
       maxRetries: 2,
     },
     {
-      model: "__GATEWAY_GOOGLE_MODEL__",
+      model: "__GATEWAY_GOOGLE_MODEL_FLASH__",
       maxRetries: 2,
     },
   ],
@@ -1001,7 +1006,7 @@ const agent = new Agent({
       providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
     },
     {
-      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      model: '__GATEWAY_OPENAI_MODEL_LUNA__',
       maxRetries: 2,
       modelSettings: { temperature: 0.7 },
       providerOptions: { openai: { reasoningEffort: 'low' } },
@@ -1076,6 +1081,27 @@ const agent = new Agent({
 })
 \`\`\`
 
+### Select the OpenAI Responses API
+
+Custom \`url\` endpoints use the OpenAI Chat Completions API by default. If your endpoint exposes the OpenAI Responses API (\`/v1/responses\`) — for example to combine function tools with reasoning models on gateways that require it — set \`api: "responses"\`.
+
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "custom/my-model",
+    url: "http://your-custom-openai-compatible-endpoint.com/v1",
+    api: "responses"
+  }
+})
+\`\`\`
+
+When \`api\` is omitted it defaults to \`"chat"\`, so existing configurations are unchanged. Provider options are read from the \`openai\` namespace for the Responses API, whereas the Chat Completions path reads the \`openai-compatible\` namespace.
+
 ## Use AI SDK with Mastra
 
 Mastra supports AI SDK provider modules, should you need to use them directly.
@@ -1091,7 +1117,15 @@ const agent = new Agent({
 })
 \`\`\`
 
-You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/evals/overview).`;
+You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/evals/overview).
+
+<Inject>
+  ## All providers
+
+  Every provider below works with the model router as \`provider/model\`. Read the provider page for its environment variable, setup, and model list.
+
+${providerLinks}
+</Inject>`;
 }
 
 function generateGatewaysIndexPage(grouped: GroupedProviders): string {

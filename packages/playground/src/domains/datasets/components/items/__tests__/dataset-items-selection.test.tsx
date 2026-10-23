@@ -63,30 +63,48 @@ describe('DatasetItems selection', () => {
 
     expect(screen.getByText('Export CSV')).toBeDefined();
     expect(screen.getByText('Export JSON')).toBeDefined();
-    expect(screen.getByText('Create Dataset from Items')).toBeDefined();
-    expect(screen.getByText('Copy Items to Dataset')).toBeDefined();
-    expect(screen.getByText('Delete Items')).toBeDefined();
+    expect(screen.getByText('Create dataset from items')).toBeDefined();
+    expect(screen.getByText('Copy items to dataset')).toBeDefined();
+    expect(screen.getByText('Delete items')).toBeDefined();
     // Dropdown-only selection UX — no inline action buttons or Cancel.
     expect(screen.queryByText('Cancel')).toBeNull();
   });
 
-  it('keeps the Add Item button visible next to the selection menu', () => {
+  it('keeps the New item button visible next to the selection menu', () => {
     renderItems();
 
     fireEvent.click(screen.getByLabelText('Select item item-a'));
 
-    expect(screen.getByRole('button', { name: /Add Item/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /New item/ })).toBeDefined();
     expect(screen.getByRole('button', { name: /1 selected/ })).toBeDefined();
   });
 
-  it('invokes the Create Dataset action with the checked items', () => {
+  it('triggers the add item action once when pressing C', () => {
+    const onAddClick = vi.fn();
+    renderItems({ onAddClick });
+
+    fireEvent.keyDown(window, { key: 'c' });
+
+    expect(onAddClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not bind C when viewing an older version', () => {
+    const onAddClick = vi.fn();
+    renderItems({ onAddClick }, '/datasets/ds-1?version=1');
+
+    fireEvent.keyDown(window, { key: 'c' });
+
+    expect(onAddClick).not.toHaveBeenCalled();
+  });
+
+  it('invokes the Create dataset action with the checked items', () => {
     const onCreateDatasetClick = vi.fn();
     renderItems({ onCreateDatasetClick, onAddToDatasetClick: () => {} });
 
     fireEvent.click(screen.getByLabelText('Select item item-a'));
     fireEvent.click(selectionTrigger());
 
-    fireEvent.click(screen.getByText('Create Dataset from Items'));
+    fireEvent.click(screen.getByText('Create dataset from items'));
     expect(onCreateDatasetClick).toHaveBeenCalledWith([expect.objectContaining({ id: 'item-a' })]);
   });
 
@@ -96,9 +114,9 @@ describe('DatasetItems selection', () => {
     fireEvent.click(screen.getByLabelText('Select item item-a'));
     fireEvent.click(selectionTrigger());
 
-    expect(screen.queryByText('Delete Items')).toBeNull();
-    expect(screen.queryByText('Create Dataset from Items')).toBeNull();
-    expect(screen.queryByText('Copy Items to Dataset')).toBeNull();
+    expect(screen.queryByText('Delete items')).toBeNull();
+    expect(screen.queryByText('Create dataset from items')).toBeNull();
+    expect(screen.queryByText('Copy items to dataset')).toBeNull();
     expect(screen.getByText('Export CSV')).toBeDefined();
   });
 
@@ -118,7 +136,7 @@ describe('DatasetItems selection', () => {
     fireEvent.click(screen.getByLabelText('Select item item-a'));
     fireEvent.click(screen.getByLabelText('Select item item-b'));
     fireEvent.click(screen.getByRole('button', { name: /2 selected/ }));
-    fireEvent.click(screen.getByText('Delete Items'));
+    fireEvent.click(screen.getByText('Delete items'));
 
     expect(onBulkDeleteClick).toHaveBeenCalledWith(expect.arrayContaining(['item-a', 'item-b']));
   });

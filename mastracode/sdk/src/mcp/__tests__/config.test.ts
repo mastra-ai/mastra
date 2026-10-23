@@ -2,15 +2,39 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { getCallbackUrlCandidates } from '@mastra/mcp';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_OAUTH_REDIRECT_URL,
+  MASTRA_CODE_CLIENT_METADATA_URL,
   classifyServerEntry,
   expandEnvVars,
   loadMcpConfig,
   validateConfig,
 } from '../config.js';
+
+describe('zero-config OAuth identity', () => {
+  // The hosted Client ID Metadata Document (mastra-ai/mastracode-website,
+  // static/.well-known/oauth-client/mastracode.json) must list every URL the
+  // callback server may bind. If this assertion changes, republish the document.
+  it('pins the redirect URIs the hosted metadata document must list', () => {
+    expect(MASTRA_CODE_CLIENT_METADATA_URL).toBe('https://code.mastra.ai/.well-known/oauth-client/mastracode.json');
+    expect(getCallbackUrlCandidates(DEFAULT_OAUTH_REDIRECT_URL).map(String)).toEqual([
+      'http://127.0.0.1:1458/oauth/callback',
+      'http://127.0.0.1:1459/oauth/callback',
+      'http://127.0.0.1:1460/oauth/callback',
+      'http://127.0.0.1:1461/oauth/callback',
+      'http://127.0.0.1:1462/oauth/callback',
+      'http://127.0.0.1:1463/oauth/callback',
+      'http://127.0.0.1:1464/oauth/callback',
+      'http://127.0.0.1:1465/oauth/callback',
+      'http://127.0.0.1:1466/oauth/callback',
+      'http://127.0.0.1:1467/oauth/callback',
+      'http://127.0.0.1:1468/oauth/callback',
+    ]);
+  });
+});
 
 describe('classifyServerEntry', () => {
   it('classifies stdio entry', () => {

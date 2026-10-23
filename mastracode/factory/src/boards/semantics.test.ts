@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { defineBoard } from './define-board.js';
 import { createBoardRegistry } from './registry.js';
-import { boardForWorkItem, resolveBoardToolRule, resolvePhaseSemantics, workItemPhaseSemantics } from './semantics.js';
+import {
+  boardForWorkItem,
+  isTerminalWorkItem,
+  resolveBoardClosure,
+  resolveBoardToolRule,
+  resolvePhaseSemantics,
+  workItemPhaseSemantics,
+} from './semantics.js';
 import { createTestBoard } from './test-utils.js';
 
 describe('boardForWorkItem', () => {
@@ -108,5 +115,72 @@ describe('resolveBoardToolRule', () => {
     expect(
       resolveBoardToolRule(createBoardRegistry({ boards: [], includeDefaultBoards: false }), 'work', 'submit_plan'),
     ).toBeUndefined();
+  });
+});
+
+describe('isTerminalWorkItem', () => {
+  const custom = createBoardRegistry({ boards: [createTestBoard()] });
+
+  it("follows the installed board's phase kind", () => {
+    expect(isTerminalWorkItem(custom, { board: 'release', externalSource: null, stages: ['shipped'] })).toBe(true);
+    expect(isTerminalWorkItem(custom, { board: 'release', externalSource: null, stages: ['queued'] })).toBe(false);
+    expect(isTerminalWorkItem(custom, { board: 'work', externalSource: null, stages: ['done'] })).toBe(true);
+    expect(isTerminalWorkItem(custom, { board: 'work', externalSource: null, stages: ['intake'] })).toBe(false);
+  });
+
+  it('falls back to the built-in names only for Work and Review rows on uninstalled boards', () => {
+    const none = createBoardRegistry({ includeDefaultBoards: false });
+    expect(isTerminalWorkItem(none, { board: 'work', externalSource: null, stages: ['done'] })).toBe(true);
+    expect(isTerminalWorkItem(none, { board: null, externalSource: null, stages: ['canceled'] })).toBe(true);
+    expect(isTerminalWorkItem(none, { board: 'ghost', externalSource: null, stages: ['done'] })).toBe(false);
+    expect(isTerminalWorkItem(none, { board: 'work', externalSource: null, stages: ['done', 'intake'] })).toBe(false);
+  });
+});
+
+describe('resolveBoardClosure', () => {
+  const release = createTestBoard();
+  const closingRelease = defineBoard({
+    id: 'closing',
+    title: 'Closing release',
+    initialPhase: 'queued',
+    sourceClosed: { completed: 'shipped', canceled: 'dropped' },
+    phases: {
+      queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
+      shipped: { title: 'Shipped', kind: 'terminal' },
+      dropped: { title: 'Dropped', kind: 'terminal' },
+    },
+  });
+  const boards = createBoardRegistry({ boards: [release, closingRelease] });
+
+  it('reads Work’s mapping for legacy and persisted Work rows', () => {
+    expect(resolveBoardClosure(boards, { board: null, externalSource: null, stages: ['execute'] })).toEqual({
+      boardTitle: 'Work',
+      completed: { phase: 'done', title: 'Done' },
+      canceled: { phase: 'canceled', title: 'Canceled' },
+      itemTerminal: false,
+    });
+    expect(resolveBoardClosure(boards, { board: 'work', externalSource: null, stages: ['canceled'] })).toEqual({
+      boardTitle: 'Work',
+      completed: { phase: 'done', title: 'Done' },
+      canceled: { phase: 'canceled', title: 'Canceled' },
+      itemTerminal: true,
+    });
+  });
+
+  it('reads a custom board’s mapping and judges terminal phases by kind', () => {
+    expect(resolveBoardClosure(boards, { board: 'closing', externalSource: null, stages: ['queued'] })).toEqual({
+      boardTitle: 'Closing release',
+      completed: { phase: 'shipped', title: 'Shipped' },
+      canceled: { phase: 'dropped', title: 'Dropped' },
+      itemTerminal: false,
+    });
+    expect(
+      resolveBoardClosure(boards, { board: 'closing', externalSource: null, stages: ['dropped'] })?.itemTerminal,
+    ).toBe(true);
+  });
+
+  it('is undefined for boards that declare no mapping or are not installed', () => {
+    expect(resolveBoardClosure(boards, { board: 'release', externalSource: null, stages: ['queued'] })).toBeUndefined();
+    expect(resolveBoardClosure(boards, { board: 'gone', externalSource: null, stages: ['queued'] })).toBeUndefined();
   });
 });

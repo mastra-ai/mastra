@@ -23,6 +23,23 @@ describe('createProcessorSendSignal visibility', () => {
     expect(JSON.stringify(messageList.get.all.aiV5.model())).toContain('Continue working');
   });
 
+  it('does not mark a response boundary when no rotation is wired (issue #21940)', async () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    const boundary = vi.spyOn(messageList, 'markResponseMessageBoundary');
+    const custom = vi.fn().mockResolvedValue(undefined);
+    const sendSignal = createProcessorSendSignal({ messageList, writer: { custom } });
+
+    const signal = await sendSignal({ type: 'reactive', contents: 'Inspect the tool result before acting again.' });
+
+    // Without rotateResponseMessageId the in-flight response message must not be
+    // sealed: the next step streams under the same message id and relies on
+    // merging. A boundary stamp blocks MessageMerger and turns the same-id add
+    // into a destructive replacement that drops tool call/result parts.
+    expect(boundary).not.toHaveBeenCalled();
+    expect(custom).toHaveBeenCalledExactlyOnceWith(signal.toDataPart());
+    expect(messageList.get.all.db()).toEqual([expect.objectContaining({ id: signal.id, role: 'signal' })]);
+  });
+
   it.each(['user', 'state'] as const)('emits visible %s signals and retains them in the transcript', async type => {
     const messageList = new MessageList({ threadId: 'test-thread' });
     const custom = vi.fn().mockResolvedValue(undefined);

@@ -51,7 +51,7 @@ describe('cleanStepResult', () => {
     const result = {
       status: 'success',
       output: {},
-      metadata: { nestedRunId: 'run-123', customField: 'keep-me' },
+      metadata: { nestedRunId: 'run-123', foreachNestedRunIds: { 0: 'child-0' }, customField: 'keep-me' },
     };
     const cleaned = cleanStepResult(result) as any;
     expect(cleaned.metadata).toEqual({ customField: 'keep-me' });
@@ -359,6 +359,20 @@ describe('waitForSuspendedSnapshot', () => {
 
     await expect(waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1')).resolves.toBeNull();
     expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a claimed run whose row disappears instead of waiting out the timeout', async () => {
+    vi.useFakeTimers();
+    const workflowsStore = storeReturning(['pending', 'running', null]);
+    const onClaimedRunFinished = vi.fn();
+
+    const snapshotPromise = waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1', { onClaimedRunFinished });
+    await vi.advanceTimersByTimeAsync(100);
+
+    await expect(snapshotPromise).resolves.toBeNull();
+    expect(onClaimedRunFinished).toHaveBeenCalledOnce();
+    expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
   });
 
   it('uses a caller-requested grace period for a temporarily missing snapshot', async () => {

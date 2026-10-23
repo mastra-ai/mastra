@@ -74,13 +74,24 @@ describe('PromptInjectionDetector', () => {
       expect(detector.id).toBe('prompt-injection-detector');
     });
 
-    it('should use default detection types when none specified', () => {
+    it('should use default detection types when none specified', async () => {
       const model = setupMockModel(createMockDetectionResult(false));
-      const detector = new PromptInjectionDetector({
-        model,
-      });
+      const generateSpy = vi.spyOn(model, 'doGenerate');
+      const detector = new PromptInjectionDetector({ model });
 
-      expect(detector.id).toBe('prompt-injection-detector');
+      await detector.processInput({ messages: [createTestMessage('Hello there')], abort: vi.fn() as any });
+
+      const call = JSON.stringify(generateSpy.mock.calls[0]?.[0]);
+      for (const type of [
+        'injection',
+        'jailbreak',
+        'tool-exfiltration',
+        'data-exfiltration',
+        'system-override',
+        'role-manipulation',
+      ]) {
+        expect(call).toContain(`- ${type}`);
+      }
     });
 
     it('should accept custom detection types', () => {
@@ -547,6 +558,25 @@ describe('PromptInjectionDetector', () => {
       );
 
       consoleWarnSpy.mockRestore();
+    });
+
+    it('should propagate the processor tripwire when strict model detection fails', async () => {
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          throw new Error('provider failure');
+        },
+      });
+      const detector = new PromptInjectionDetector({ model, errorStrategy: 'strict' });
+      const tripwire = new TripWire('strict prompt injection failure');
+      const abort = vi.fn(() => {
+        throw tripwire;
+      });
+
+      await expect(
+        detector.processInput({ messages: [createTestMessage('Potentially malicious content')], abort: abort as any }),
+      ).rejects.toBe(tripwire);
+      expect(abort).toHaveBeenCalledWith('Prompt injection detection failed because the internal model call failed');
     });
 
     it('should handle empty message array', async () => {

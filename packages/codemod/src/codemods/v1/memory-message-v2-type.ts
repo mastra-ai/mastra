@@ -8,8 +8,8 @@ import { createTransformer } from '../lib/create-transformer';
  * import { MastraMessageV2 } from '@mastra/core';
  * function processMessage(message: MastraMessageV2) {}
  *
- * After:
- * import { MastraDBMessage } from '@mastra/core';
+ * After the v1 migration:
+ * import { MastraDBMessage } from '@mastra/core/agent';
  * function processMessage(message: MastraDBMessage) {}
  */
 export default createTransformer((_fileInfo, _api, _options, context) => {
@@ -17,16 +17,17 @@ export default createTransformer((_fileInfo, _api, _options, context) => {
 
   const oldTypeName = 'MastraMessageV2';
   const newTypeName = 'MastraDBMessage';
+  const supportedImportSources = new Set(['@mastra/core', '@mastra/core/agent', '@mastra/core/memory']);
 
   // Track which local names should be rewritten (only non-aliased imports)
   const localNamesToRewrite = new Set<string>();
 
-  // Transform import specifiers from @mastra/core
+  // Transform imports from every legacy subpath that exported MastraMessageV2
   root
     .find(j.ImportDeclaration)
     .filter(path => {
       const source = path.value.source.value;
-      return typeof source === 'string' && source === '@mastra/core';
+      return typeof source === 'string' && supportedImportSources.has(source);
     })
     .forEach(path => {
       if (!path.value.specifiers) return;

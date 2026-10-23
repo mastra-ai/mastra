@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   handleCloneCommand: vi.fn().mockResolvedValue(undefined),
   handleThreadsCommand: vi.fn().mockResolvedValue(undefined),
   handleNameCommand: vi.fn().mockResolvedValue(undefined),
+  handleUpdateCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
@@ -65,7 +66,7 @@ vi.mock('../commands/index.js', () => ({
   handleSetupCommand: vi.fn(),
   handleBrowserCommand: vi.fn(),
   handleThemeCommand: vi.fn(),
-  handleUpdateCommand: vi.fn(),
+  handleUpdateCommand: mocks.handleUpdateCommand,
   handleMastraGatewayCommand: mocks.handleMastraGatewayCommand,
   handleApiKeysCommand: vi.fn(),
   handlePluginsCommand: mocks.handlePluginsCommand,
@@ -129,6 +130,7 @@ describe('dispatchSlashCommand routing', () => {
   it('routes /connect to the authentication method selector and /login to account sign-in', async () => {
     const state = {
       customSlashCommands: [],
+      local: {},
       session: {
         identity: { getResourceId: vi.fn(() => 'resource-1') },
         thread: { getId: vi.fn(() => 'thread-1') },
@@ -145,9 +147,40 @@ describe('dispatchSlashCommand routing', () => {
     expect(mocks.handleLoginCommand).toHaveBeenCalledWith(ctx, 'login');
   });
 
+  it('gates local-only commands in Factory mode', async () => {
+    const state = {
+      customSlashCommands: [],
+      local: undefined,
+      factory: { projectName: 'p', repositorySlug: 'o/r', branch: 'b', url: 'https://f' },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: { get: vi.fn(() => 'build') },
+      },
+    } as any;
+    const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
+
+    for (const command of ['/mcp', '/login', '/goal', '/om', '/models', '/diff', '/github', '/settings']) {
+      expect(await dispatchSlashCommand(command, state, () => ctx)).toBe(true);
+    }
+    for (const command of ['diff', 'github', 'settings']) {
+      expect(mocks.showInfo).toHaveBeenCalledWith(state, `/${command} is not available in Factory mode.`);
+    }
+    expect(mocks.handleMcpCommand).not.toHaveBeenCalled();
+    expect(mocks.handleLoginCommand).not.toHaveBeenCalled();
+    expect(mocks.handleGoalCommand).not.toHaveBeenCalled();
+    expect(mocks.handleOMCommand).not.toHaveBeenCalled();
+    expect(mocks.handleModelsPackCommand).not.toHaveBeenCalled();
+    expect(mocks.showInfo).toHaveBeenCalledWith(state, '/mcp is not available in Factory mode.');
+
+    expect(await dispatchSlashCommand('/model', state, () => ctx)).toBe(true);
+    expect(mocks.handleModelCommand).toHaveBeenCalledOnce();
+  });
+
   it('routes /model to the current-mode model selector', async () => {
     const state = {
       customSlashCommands: [],
+      local: {},
       session: {
         identity: { getResourceId: vi.fn(() => 'resource-1') },
         thread: { getId: vi.fn(() => 'thread-1') },
@@ -164,6 +197,7 @@ describe('dispatchSlashCommand routing', () => {
   it('routes /models and /packs to the model pack selector', async () => {
     const state = {
       customSlashCommands: [],
+      local: {},
       session: {
         identity: { getResourceId: vi.fn(() => 'resource-1') },
         thread: { getId: vi.fn(() => 'thread-1') },
@@ -178,9 +212,10 @@ describe('dispatchSlashCommand routing', () => {
     expect(mocks.handleModelCommand).not.toHaveBeenCalled();
   });
 
-  it('routes /fork and /clone to the thread clone handler', async () => {
+  it('routes /clone to the thread clone handler and does not register /fork', async () => {
     const state = {
       customSlashCommands: [],
+      local: {},
       session: {
         identity: { getResourceId: vi.fn(() => 'resource-1') },
         thread: { getId: vi.fn(() => 'thread-1') },
@@ -189,16 +224,19 @@ describe('dispatchSlashCommand routing', () => {
     } as any;
     const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
 
-    expect(await dispatchSlashCommand('/fork', state, () => ctx)).toBe(true);
     expect(await dispatchSlashCommand('/clone', state, () => ctx)).toBe(true);
-    expect(mocks.handleCloneCommand).toHaveBeenCalledTimes(2);
-    expect(mocks.handleCloneCommand).toHaveBeenNthCalledWith(1, ctx);
-    expect(mocks.handleCloneCommand).toHaveBeenNthCalledWith(2, ctx);
+    expect(mocks.handleCloneCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleCloneCommand).toHaveBeenCalledWith(ctx);
+
+    await dispatchSlashCommand('/fork', state, () => ctx);
+    expect(mocks.handleCloneCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.showError).toHaveBeenCalledWith(state, 'Unknown command: fork');
   });
 
-  it('routes /resume and /threads to the thread selector', async () => {
+  it('routes /threads and its /resume alias to the thread selector', async () => {
     const state = {
       customSlashCommands: [],
+      local: {},
       session: {
         identity: { getResourceId: vi.fn(() => 'resource-1') },
         thread: { getId: vi.fn(() => 'thread-1') },
@@ -214,9 +252,20 @@ describe('dispatchSlashCommand routing', () => {
     expect(mocks.handleThreadsCommand).toHaveBeenNthCalledWith(2, ctx);
   });
 
-  it('routes /rename and /name to the thread name handler', async () => {
+  it('routes /update and its /upgrade alias to the update handler', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    expect(await dispatchSlashCommand('/update', state, () => ctx)).toBe(true);
+    expect(await dispatchSlashCommand('/upgrade', state, () => ctx)).toBe(true);
+    expect(mocks.handleUpdateCommand).toHaveBeenCalledTimes(2);
+    expect(mocks.handleUpdateCommand).toHaveBeenNthCalledWith(2, ctx);
+  });
+
+  it('routes /name and its /rename alias to the thread name handler', async () => {
     const state = {
       customSlashCommands: [],
+      local: {},
       session: {
         identity: { getResourceId: vi.fn(() => 'resource-1') },
         thread: { getId: vi.fn(() => 'thread-1') },
@@ -234,6 +283,7 @@ describe('dispatchSlashCommand routing', () => {
   it('routes /profile subcommands to handleProfileCommand', async () => {
     const state = {
       customSlashCommands: [],
+      local: {},
       session: {
         identity: { getResourceId: vi.fn(() => 'resource-1') },
         thread: { getId: vi.fn(() => 'thread-1') },
@@ -251,6 +301,7 @@ describe('dispatchSlashCommand routing', () => {
   it('routes /custom-providers to handleCustomProvidersCommand', async () => {
     const state = {
       customSlashCommands: [],
+      local: {},
       session: {
         identity: { getResourceId: vi.fn(() => 'resource-1') },
         thread: { getId: vi.fn(() => 'thread-1') },
@@ -273,7 +324,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('routes /memory and /om through the same Observational Memory handler', async () => {
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
     const ctx = {} as any;
 
     expect(await dispatchSlashCommand('/memory', state, () => ctx)).toBe(true);
@@ -286,7 +337,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('routes /knowledge to the scoped knowledge browser', async () => {
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
     const ctx = {} as any;
 
     expect(await dispatchSlashCommand('/knowledge', state, () => ctx)).toBe(true);
@@ -294,7 +345,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('routes /gateway and the legacy /memory-gateway alias separately from Observational Memory settings', async () => {
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
     const ctx = {} as any;
 
     expect(await dispatchSlashCommand('/gateway', state, () => ctx)).toBe(true);
@@ -307,7 +358,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('treats /models:pack as unknown command', async () => {
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
 
     const handled = await dispatchSlashCommand('/models:pack', state, () => ({}) as any);
 
@@ -317,7 +368,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('routes /goal judge to handleGoalCommand', async () => {
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
     const ctx = {} as any;
 
     const handled = await dispatchSlashCommand('/goal judge', state, () => ctx);
@@ -328,7 +379,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('routes /github to handleGithubCommand', async () => {
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
     const ctx = {} as any;
 
     const handled = await dispatchSlashCommand('/github mastra-ai/mastra#17447', state, () => ctx);
@@ -339,7 +390,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('routes /plugins to handlePluginsCommand', async () => {
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
     const ctx = {} as any;
 
     const handled = await dispatchSlashCommand('/plugins', state, () => ctx);
@@ -350,7 +401,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('routes /report-issue to handleReportIssueCommand', async () => {
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
     const ctx = {} as any;
 
     const handled = await dispatchSlashCommand('/report-issue startup hangs', state, () => ctx);
@@ -361,7 +412,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('keeps removed /fix-issue command absent from dispatch', async () => {
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
 
     const handled = await dispatchSlashCommand('/fix-issue 123', state, () => ({}) as any);
 
@@ -372,7 +423,7 @@ describe('dispatchSlashCommand routing', () => {
 
   it('routes /mcp with the slash command context that owns the manager', async () => {
     const mcpManager = { hasServers: vi.fn(() => true) };
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
     const ctx = { mcpManager } as any;
 
     const handled = await dispatchSlashCommand('/mcp status', state, () => ctx);
@@ -383,7 +434,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('routes /skill/name to handleSkillCommand', async () => {
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
     const ctx = {} as any;
 
     const handled = await dispatchSlashCommand('/skill/github-triage focus tests', state, () => ctx);
@@ -395,7 +446,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it.each(['/workflows', '/workflow'])('preserves whitespace in %s run JSON input', async commandName => {
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
     const ctx = {} as any;
     const command = `${commandName} run greeting {"name":"Ada  Lovelace"}`;
 
@@ -410,7 +461,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('routes multiline /goal objectives as a single goal argument', async () => {
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
     const ctx = {} as any;
 
     const handled = await dispatchSlashCommand('/goal build the feature\nthen verify it', state, () => ctx);
@@ -422,7 +473,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('routes /goal objectives that start on the next line', async () => {
-    const state = { customSlashCommands: [] } as any;
+    const state = { customSlashCommands: [], local: {} } as any;
     const ctx = {} as any;
 
     const handled = await dispatchSlashCommand('/goal\nbuild the feature', state, () => ctx);
@@ -434,7 +485,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('blocks slash commands while the goal judge is evaluating', async () => {
-    const state = { customSlashCommands: [], activeGoalJudge: { modelId: 'openai/gpt-5.5' } } as any;
+    const state = { customSlashCommands: [], local: {}, activeGoalJudge: { modelId: 'openai/gpt-5.5' } } as any;
 
     const handled = await dispatchSlashCommand('/models', state, () => ({}) as any);
 
@@ -444,7 +495,7 @@ describe('dispatchSlashCommand routing', () => {
   });
 
   it('allows goal escape hatches while the goal judge is evaluating', async () => {
-    const state = { customSlashCommands: [], activeGoalJudge: { modelId: 'openai/gpt-5.5' } } as any;
+    const state = { customSlashCommands: [], local: {}, activeGoalJudge: { modelId: 'openai/gpt-5.5' } } as any;
     const ctx = {} as any;
 
     await expect(dispatchSlashCommand('/goal pause', state, () => ctx)).resolves.toBe(true);
@@ -462,6 +513,7 @@ describe('dispatchSlashCommand routing', () => {
         { name: 'deploy', description: 'Deploy to prod', template: 'deploy $ARGUMENTS', sourcePath: '', goal: true },
       ],
       goalSkillCommands: [],
+      local: {},
     } as any;
     const ctx = {} as any;
 
@@ -480,6 +532,7 @@ describe('dispatchSlashCommand routing', () => {
     const state = {
       customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
       goalSkillCommands: [],
+      local: {},
     } as any;
 
     const handled = await dispatchSlashCommand('/goal/deploy', state, () => ({}) as any);
@@ -493,6 +546,7 @@ describe('dispatchSlashCommand routing', () => {
   it('routes /goal/review through a goal-enabled skill', async () => {
     const state = {
       customSlashCommands: [],
+      local: {},
       goalSkillCommands: [
         { name: 'review', path: '/skills/review', description: 'Review code', metadata: { goal: true } },
       ],
@@ -516,6 +570,7 @@ describe('dispatchSlashCommand routing', () => {
   it('eagerly resolves workspace for /goal skill aliases before the first message', async () => {
     const state = {
       customSlashCommands: [],
+      local: {},
       goalSkillCommands: [
         { name: 'review', path: '/skills/review', description: 'Review code', metadata: { goal: true } },
       ],
@@ -526,14 +581,13 @@ describe('dispatchSlashCommand routing', () => {
       metadata: { goal: true },
     };
     const workspace = { skills: { get: vi.fn().mockResolvedValue(skill) } };
-    const ctx = {
-      state,
-      getResolvedWorkspace: vi.fn(() => undefined),
+    state.local = {
       controller: {
         hasWorkspace: vi.fn(() => true),
         resolveWorkspace: vi.fn().mockResolvedValue(workspace),
       },
-    } as any;
+    };
+    const ctx = { state, getResolvedWorkspace: vi.fn(() => undefined), controller: state.local.controller } as any;
 
     const handled = await dispatchSlashCommand('/goal/review focus tests', state, () => ctx);
 

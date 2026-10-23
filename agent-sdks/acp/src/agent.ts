@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
 import type { ModelInfo, SessionUpdate } from '@agentclientprotocol/sdk';
@@ -111,7 +110,7 @@ export class AcpAgent<
       },
       toolResults: [],
       finishReason: 'stop',
-      runId: options?.runId ?? randomUUID(),
+      runId: options?.runId ?? globalThis.crypto.randomUUID(),
     };
   }
 
@@ -124,7 +123,7 @@ export class AcpAgent<
   }
 
   async stream(messages: MessageListInput, options?: AgentStreamOptions): Promise<SubAgentStreamResult> {
-    const runId = options?.runId ?? randomUUID();
+    const runId = options?.runId ?? globalThis.crypto.randomUUID();
     const prompt = this.getPrompt(messages, options?.instructions);
     const signal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
     const messageList = new MessageList();
@@ -136,10 +135,12 @@ export class AcpAgent<
       resolveText = resolve;
       rejectText = reject;
     });
+    // Callers that only read fullStream never await text; keep its rejection handled.
+    textPromise.catch(() => {});
 
     const fullStream = new ReadableStream<ChunkType>({
       start: async controller => {
-        const textId = randomUUID();
+        const textId = globalThis.crypto.randomUUID();
         const chunks: string[] = [];
         const toolNames = new Map<string, string>();
         const toolResults: AcpToolResult[] = [];
@@ -176,10 +177,13 @@ export class AcpAgent<
           resolveText(text);
           controller.close();
         } catch (error) {
-          const text = chunks.join('');
-          await options?.onFinish?.(createOnFinishResult({ text, runId, messageList, toolResults, error }) as any);
           rejectText(error);
-          controller.error(error);
+          try {
+            const text = chunks.join('');
+            await options?.onFinish?.(createOnFinishResult({ text, runId, messageList, toolResults, error }) as any);
+          } finally {
+            controller.error(error);
+          }
         }
       },
     });
@@ -359,7 +363,7 @@ function createFinishChunk(type: 'step-finish' | 'finish', runId: string): Chunk
     runId,
     from: CHUNK_FROM_AGENT,
     payload: {
-      id: randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       output: {
         steps: [],
         usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },

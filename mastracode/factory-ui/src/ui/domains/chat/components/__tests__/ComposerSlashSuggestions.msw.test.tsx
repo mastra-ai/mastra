@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -18,6 +18,7 @@ const COMMAND_NAMES = [
   'think',
   'om',
   'settings',
+  'connect',
   'login',
   'follow-up',
   'abort',
@@ -32,6 +33,15 @@ function renderComposer() {
   );
 }
 
+/**
+ * Matches a suggestion option by its command label. The option's accessible
+ * name concatenates the label and description spans with no separator under
+ * jsdom (inline spans), so a name regex can't tell `/goal` from `/goal-clear`.
+ */
+function commandOption(name: string) {
+  return (_accessibleName: string, element: Element | null) => element?.firstElementChild?.textContent === `/${name}`;
+}
+
 async function findReadyInput(): Promise<HTMLTextAreaElement> {
   const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
   await waitFor(() => expect(input).toBeEnabled());
@@ -41,6 +51,17 @@ async function findReadyInput(): Promise<HTMLTextAreaElement> {
 beforeEach(useOverlayControllerHandlers);
 
 describe('Composer slash-command suggestions', () => {
+  describe('when Enter commits an IME candidate', () => {
+    it.each([{ isComposing: true }, { keyCode: 229 }])('keeps the command draft %j', async flags => {
+      const user = userEvent.setup();
+      renderComposer();
+      const input = await findReadyInput();
+      await user.type(input, '/help');
+      fireEvent.keyDown(input, { key: 'Enter', ...flags });
+      expect(input).toHaveValue('/help');
+    });
+  });
+
   describe('when the user types "/" in the composer', () => {
     it('shows every registered slash command', async () => {
       const user = userEvent.setup();
@@ -50,7 +71,7 @@ describe('Composer slash-command suggestions', () => {
       await user.type(input, '/');
 
       for (const name of COMMAND_NAMES) {
-        expect(await screen.findByRole('button', { name: new RegExp(`^/${name}\\s`) })).toBeInTheDocument();
+        expect(await screen.findByRole('option', { name: commandOption(name) })).toBeInTheDocument();
       }
     });
   });
@@ -63,12 +84,12 @@ describe('Composer slash-command suggestions', () => {
       const input = await findReadyInput();
       await user.type(input, '/goa');
 
-      expect(await screen.findByRole('button', { name: /^\/goal\s/ })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /^\/help\s/ })).not.toBeInTheDocument();
+      expect(await screen.findByRole('option', { name: commandOption('goal') })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: commandOption('help') })).not.toBeInTheDocument();
 
       await user.keyboard('{Tab}');
       expect(input).toHaveValue('/goal ');
-      expect(screen.queryByRole('button', { name: /^\/goal\s/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: commandOption('goal') })).not.toBeInTheDocument();
     });
 
     it('opens command options as a second step and returns with Escape', async () => {

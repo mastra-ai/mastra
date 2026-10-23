@@ -12,22 +12,20 @@ export function DataListPagination({ currentPage, hasMore, onNextPage, onPrevPag
   const showNavigation = (typeof currentPage === 'number' && currentPage > 0) || hasMore;
 
   return (
-    <div className="text-ui-md text-neutral3 col-span-full flex items-center justify-center gap-8 py-4">
+    <div className="col-span-full flex items-center justify-center gap-4 py-3 text-body text-muted-foreground">
       <span>
         Page <b>{currentPage ? currentPage + 1 : '1'}</b>
       </span>
       {showNavigation && (
         <div className="flex gap-4">
           {typeof currentPage === 'number' && currentPage > 0 && (
-            <Button type="button" variant="outline" size="sm" onClick={onPrevPage}>
-              <ArrowLeftIcon />
+            <Button type="button" size="sm" onClick={onPrevPage} icon={<ArrowLeftIcon />}>
               Previous
             </Button>
           )}
           {hasMore && (
-            <Button type="button" variant="outline" size="sm" onClick={onNextPage}>
+            <Button type="button" size="sm" onClick={onNextPage} icon={<ArrowRightIcon />}>
               Next
-              <ArrowRightIcon />
             </Button>
           )}
         </div>

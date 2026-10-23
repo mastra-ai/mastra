@@ -1,6 +1,4 @@
-import { randomUUID } from 'node:crypto';
-
-import { NotificationsStorage, TABLE_NOTIFICATIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { NotificationsStorage, TABLE_CONFIGS, TABLE_NOTIFICATIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type {
   CreateNotificationInput,
   ListDueNotificationsInput,
@@ -20,7 +18,11 @@ import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
+import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
+
+/** Ids per UPDATE statement — keeps bind parameters well under SQLite's per-statement limit. */
+const BULK_ID_BATCH_SIZE = 500;
 
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
   if (status === 'delivered') return { deliveredAt: now };
@@ -113,7 +115,10 @@ export class NotificationsLibSQL extends NotificationsStorage {
     await this.#db.createTable({
       tableName: TABLE_NOTIFICATIONS,
       schema: TABLE_SCHEMAS[TABLE_NOTIFICATIONS],
+      compositePrimaryKey: TABLE_CONFIGS[TABLE_NOTIFICATIONS]?.compositePrimaryKey,
     });
+
+    await this.ensureUniqueKey();
 
     await this.#client.batch(
       [
@@ -132,6 +137,29 @@ export class NotificationsLibSQL extends NotificationsStorage {
       ],
       'write',
     );
+  }
+
+  /**
+   * Tables created before the composite primary key was declared have no key.
+   * SQLite cannot add a primary key in place, so enforce the same uniqueness with
+   * a unique index. Tables that already have the key are skipped, since SQLite
+   * would otherwise maintain a redundant second index. If duplicate rows exist
+   * the index cannot be built; warn instead of blocking init.
+   */
+  private async ensureUniqueKey(): Promise<void> {
+    const columns = await this.#client.execute(`PRAGMA table_info("${TABLE_NOTIFICATIONS}")`);
+    if (columns.rows.some(row => Number(row.pk) > 0)) return;
+
+    try {
+      await this.#client.execute(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_thread_id_unique ON "${TABLE_NOTIFICATIONS}" ("threadId", "id")`,
+      );
+    } catch (error) {
+      this.logger?.warn?.(
+        `Could not enforce unique ("threadId", "id") on ${TABLE_NOTIFICATIONS}; remove duplicate rows and restart to add it.`,
+        error,
+      );
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -181,7 +209,7 @@ export class NotificationsLibSQL extends NotificationsStorage {
 
     const now = input.createdAt ?? new Date();
     const record: NotificationRecord = {
-      id: input.id ?? randomUUID(),
+      id: input.id ?? globalThis.crypto.randomUUID(),
       threadId: input.threadId,
       source: input.source,
       kind: input.kind,
@@ -330,6 +358,46 @@ export class NotificationsLibSQL extends NotificationsStorage {
 
     const updated = await this.getNotification({ threadId: input.threadId, id: input.id });
     if (!updated) throw new Error(`Notification ${input.id} was not found for thread ${input.threadId}`);
+    return updated;
+  }
+
+  // Inlined instead of importing `UpdateNotificationsStatusInput` so this adapter's `.d.ts` stays valid
+  // against older @mastra/core versions that predate the bulk method.
+  override async updateNotificationsStatus(input: {
+    threadId: string;
+    ids: string[];
+    status: NotificationStatus;
+  }): Promise<NotificationRecord[]> {
+    const ids = Array.from(new Set(input.ids));
+    if (ids.length === 0) return [];
+
+    const now = new Date();
+    const assignments: Record<string, string> = { status: input.status, updatedAt: now.toISOString() };
+    for (const [column, value] of Object.entries(statusTimestamp(input.status, now))) {
+      assignments[column] = value.toISOString();
+    }
+    const setClause = Object.keys(assignments)
+      .map(column => `"${column}" = ?`)
+      .join(', ');
+
+    const updated: NotificationRecord[] = [];
+    // SQLite caps bind parameters per statement (999 on older builds); batch the id list.
+    for (let offset = 0; offset < ids.length; offset += BULK_ID_BATCH_SIZE) {
+      const batch = ids.slice(offset, offset + BULK_ID_BATCH_SIZE);
+      const result = await this.#db.executeWriteOperationWithRetry(
+        () =>
+          withClientWriteLock(this.#client, () =>
+            this.#client.execute({
+              sql: `UPDATE "${TABLE_NOTIFICATIONS}" SET ${setClause} WHERE "threadId" = ? AND "id" IN (${batch.map(() => '?').join(', ')}) RETURNING ${buildSelectColumns(TABLE_NOTIFICATIONS)}`,
+              args: [...Object.values(assignments), input.threadId, ...batch],
+            }),
+          ),
+        `bulk update notification status in table ${TABLE_NOTIFICATIONS}`,
+      );
+      for (const row of result.rows ?? []) {
+        updated.push(rowToNotification(row as Record<string, unknown>));
+      }
+    }
     return updated;
   }
 

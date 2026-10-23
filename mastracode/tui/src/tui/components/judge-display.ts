@@ -7,7 +7,8 @@ import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
 
-import { BOX_INDENT, mastraBrand, theme } from '../theme.js';
+import { stripControlChars } from '../sanitize-ansi.js';
+import { BOX_INDENT, mastra, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { WidthAwareContainer } from './width-aware-container.js';
 
@@ -29,10 +30,8 @@ export function evaluationToJudgeResult(payload: GoalEvaluationPayload): GoalJud
   return { decision, reason: payload.reason ?? '' };
 }
 
-const JUDGE_COLOR = mastraBrand.blue;
-const MUTED_COLOR = '#8a8a8a';
-const PAUSED_COLOR = '#f5a524';
-const WAITING_COLOR = '#8a8a8a';
+// Resolved lazily so theme switches and contrast adaptation apply.
+const judgeColor = () => mastra.blue;
 
 export class JudgeDisplayComponent extends WidthAwareContainer {
   private result: GoalJudgeResult | null;
@@ -49,7 +48,9 @@ export class JudgeDisplayComponent extends WidthAwareContainer {
     this.rebuild();
   }
 
-  addActivity(line: string): void {
+  addActivity(rawLine: string): void {
+    // Activity lines interpolate raw judge tool arguments.
+    const line = stripControlChars(rawLine);
     if (this.activity[this.activity.length - 1] !== line) {
       this.activity.push(line);
     }
@@ -84,12 +85,10 @@ export class JudgeDisplayComponent extends WidthAwareContainer {
   protected rebuildForWidth(termWidth: number): void {
     this.clear();
 
-    const border = (char: string) => chalk.hex(JUDGE_COLOR)(char);
-    const title = chalk.hex(JUDGE_COLOR).bold('Goal');
-    const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
-    const horizontal = '─'.repeat(innerWidth + 1);
+    const border = (char: string) => chalk.hex(judgeColor())(char);
+    const title = chalk.hex(judgeColor()).bold('Goal');
+    const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 2);
 
-    this.addChild(new Text(`${border('╭')}${border(horizontal)}${border('╮')}`, BOX_INDENT, 0));
     this.addChild(new Text(this.renderRow(this.renderHeader(title), innerWidth, border), BOX_INDENT, 0));
 
     if (!this.result && this.activity.length === 0 && !this.streamingReason) {
@@ -104,14 +103,13 @@ export class JudgeDisplayComponent extends WidthAwareContainer {
       this.addChild(new Text(this.renderRow('', innerWidth, border), BOX_INDENT, 0));
     }
 
-    const reason = this.result?.reason ?? this.streamingReason;
+    // The reason can be provider/scorer error text on a judge failure.
+    const reason = stripControlChars(this.result?.reason ?? this.streamingReason);
     if (reason) {
       for (const line of this.wrapLine(reason, innerWidth)) {
         this.addChild(new Text(this.renderRow(chalk.dim(line), innerWidth, border), BOX_INDENT, 0));
       }
     }
-
-    this.addChild(new Text(`${border('╰')}${border(horizontal)}${border('╯')}`, BOX_INDENT, 0));
   }
 
   private renderActivityLine(line: string): string {
@@ -124,7 +122,7 @@ export class JudgeDisplayComponent extends WidthAwareContainer {
 
   private renderHeader(title: string): string {
     if (!this.result) {
-      return `${title}  ◌ ${chalk.hex(WAITING_COLOR).bold('evaluating')}`;
+      return `${title}  ◌ ${theme.bold(theme.fg('muted', 'evaluating'))}`;
     }
 
     const decisionIcon =
@@ -136,13 +134,13 @@ export class JudgeDisplayComponent extends WidthAwareContainer {
             ? '◌'
             : '○';
     const decisionText = getDecisionText(this.result.decision);
-    const turnInfo = this.maxTurns > 0 ? chalk.hex(MUTED_COLOR)(`(${this.turnsUsed}/${this.maxTurns})`) : '';
+    const turnInfo = this.maxTurns > 0 ? theme.fg('muted', `(${this.turnsUsed}/${this.maxTurns})`) : '';
     return `${title}  ${decisionIcon} ${decisionText}${turnInfo ? `  ${turnInfo}` : ''}`;
   }
 
+  /** A row of the left-bar card (`width` is the room for text after the bar). */
   private renderRow(text: string, width: number, border: (char: string) => string): string {
-    const content = this.padLine(text, width);
-    return `${border('│')} ${content}${border('│')}`;
+    return text ? `${border('▎')} ${this.padLine(text, width)}` : border('▎');
   }
 
   private wrapLine(text: string, width: number): string[] {
@@ -178,8 +176,8 @@ function getActivityToolName(line: string): string | null {
 }
 
 function getDecisionText(decision: GoalJudgeResult['decision']): string {
-  if (decision === 'done') return chalk.hex('#16c858').bold('done');
-  if (decision === 'paused') return chalk.hex(PAUSED_COLOR).bold('paused');
-  if (decision === 'waiting') return chalk.hex(WAITING_COLOR).bold('waiting');
-  return chalk.hex(JUDGE_COLOR).bold('continue');
+  if (decision === 'done') return theme.bold(theme.fg('success', 'done'));
+  if (decision === 'paused') return theme.bold(theme.fg('warning', 'paused'));
+  if (decision === 'waiting') return theme.bold(theme.fg('muted', 'waiting'));
+  return chalk.hex(judgeColor()).bold('continue');
 }

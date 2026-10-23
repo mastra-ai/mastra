@@ -1,0 +1,41 @@
+name: 'Slack alert'
+description: 'Post a message to the maintainers Slack channel. Warns instead of failing the job.'
+inputs:
+  token:
+    description: 'Slack bot token (SLACK_BOT_TOKEN)'
+    required: true
+  text:
+    description: 'Message text, in Slack mrkdwn'
+    required: true
+  channel:
+    # #eng-maintainers-club; the bot must be a member of this channel.
+    description: 'Slack channel ID'
+    required: false
+    default: 'C08F5FH0KAM'
+runs:
+  using: 'composite'
+  steps:
+    - name: Post to Slack
+      shell: bash
+      env:
+        SLACK_BOT_TOKEN: ${{ inputs.token }}
+        SLACK_CHANNEL: ${{ inputs.channel }}
+        TEXT: ${{ inputs.text }}
+      run: |
+        if [ -z "$SLACK_BOT_TOKEN" ]; then
+          echo "::warning::SLACK_BOT_TOKEN is not set; skipping Slack alert."
+          exit 0
+        fi
+
+        if ! response=$(jq -n --arg channel "$SLACK_CHANNEL" --arg text "$TEXT" '{channel: $channel, text: $text, unfurl_links: false}' \
+          | curl -sS -X POST https://slack.com/api/chat.postMessage \
+              -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+              -H 'Content-Type: application/json; charset=utf-8' \
+              --data @-); then
+          echo "::warning::Could not reach Slack; skipping alert."
+          exit 0
+        fi
+
+        if [ "$(echo "$response" | jq -r .ok)" != "true" ]; then
+          echo "::warning::Slack alert failed: $(echo "$response" | jq -r .error)"
+        fi

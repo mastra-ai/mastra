@@ -90,12 +90,13 @@ describe('AgentConfig.durable', () => {
 
   it('forwards options object to createDurableAgent at registration', () => {
     const cache = new InMemoryServerCache();
+    const shouldPersistSnapshot = ({ workflowStatus }: { workflowStatus: string }) => workflowStatus === 'suspended';
     const raw = new Agent({
       id: 'b',
       name: 'B',
       instructions: 'test',
       model: makeMockModel(),
-      durable: { cache, maxSteps: 3, cleanupTimeoutMs: 5_000 },
+      durable: { cache, maxSteps: 3, cleanupTimeoutMs: 5_000, shouldPersistSnapshot },
     });
 
     const mastra = new Mastra({ agents: { b: raw as any } });
@@ -105,6 +106,9 @@ describe('AgentConfig.durable', () => {
     expect(registered.cache).toBe(cache);
     expect(registered.maxSteps).toBe(3);
     expect(registered.cleanupTimeoutMs).toBe(5_000);
+    // Non-serializable code-side option: the predicate must arrive by
+    // reference on the wrapper.
+    expect((registered as any).userShouldPersistSnapshot).toBe(shouldPersistSnapshot);
   });
 
   it('does not wrap when `durable` is unset or falsy', () => {

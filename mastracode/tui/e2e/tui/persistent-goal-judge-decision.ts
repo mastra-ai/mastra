@@ -57,7 +57,6 @@ values
     terminal.write('goal judge');
     await runtime.waitForScreenText(/E2E goal judge fixture/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Switched to: E2E goal judge fixture/i, terminal, 8_000);
     terminal.submit('/goal status');
     await runtime.waitForScreenText(
       /Goal \(paused\): "Drive the persistent goal judge e2e until it is done\."/i,

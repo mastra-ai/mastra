@@ -61,11 +61,12 @@ export async function runInSandbox(
   }
   // Run via `sh -c` (argv style): providers pass `command` straight to their
   // exec API as an executable, so a raw script string with spaces would fail.
-  const result = await sandbox.executeCommand(
-    'sh',
-    ['-c', script],
-    opts?.timeout ? { timeout: opts.timeout } : undefined,
-  );
+  // Scripts here bound their own output (e.g. `head -c` before base64), and
+  // dropping the oldest bytes would corrupt the leading size line and base64.
+  const result = await sandbox.executeCommand('sh', ['-c', script], {
+    ...(opts?.timeout ? { timeout: opts.timeout } : {}),
+    maxRetainedBytes: Infinity,
+  });
   if (!result.success && !opts?.allowFailure) {
     // Never echo the full script back: it can contain secrets (env values)
     // or entire base64 upload chunks. Use the label or a bounded excerpt.

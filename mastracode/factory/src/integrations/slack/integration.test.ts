@@ -10,7 +10,7 @@ import { SlackIntegration } from './integration.js';
 function ctxWith(overrides: Record<string, unknown> = {}) {
   return {
     storage: { channelIdentity: {}, projects: {}, memorySettings: {}, ...overrides },
-    runtime: { workItems: {} },
+    runtime: { workItems: { findRunBindingByThread: async () => null } },
   } as any;
 }
 
@@ -40,13 +40,62 @@ describe('SlackIntegration.channels', () => {
 
     const context = (currentStatus?: string) => ({ currentStatus, channelTools: new Set<string>() }) as any;
 
-    expect(typingStatus({ type: 'reasoning-delta' } as any, context())).toBe('is thinking..');
-    expect(typingStatus({ type: 'reasoning-delta' } as any, context('is thinking..'))).toBe('is thinking...');
-    expect(typingStatus({ type: 'text-delta' } as any, context())).toBe('is typing...');
-    expect(typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context())).toBe('is working..');
+    expect(typingStatus({ type: 'reasoning-delta' } as any, context())).toBe('is thinking...');
+    expect(typingStatus({ type: 'reasoning-delta' } as any, context('is thinking...'))).toBe('is thinking...');
+    // Reply text is hidden by default, so streamed text sets no status.
+    expect(typingStatus({ type: 'text-delta' } as any, context())).toBeUndefined();
+    // ...but the reply tool's text, which streams into the thread, does.
     expect(
-      typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context('is working.....')),
-    ).toBe('is working..');
+      typingStatus({ type: 'tool-call-input-streaming-start', payload: { toolName: 'reply_in_thread' } } as any, context()),
+    ).toBe('is typing...');
+    expect(
+      typingStatus({ type: 'tool-call-input-streaming-start', payload: { toolName: 'search' } } as any, context()),
+    ).toBeUndefined();
+    // When the reply's args finish it is still typing, not "working".
+    expect(
+      typingStatus({ type: 'tool-call', payload: { toolName: 'reply_in_thread', args: { text: 'hi' } } } as any, context()),
+    ).toBe('is typing...');
+    expect(typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context())).toBe(
+      'is working...',
+    );
+    expect(typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context('is working...'))).toBe(
+      'is working...',
+    );
+  });
+
+  it('shows "is typing..." for streamed text when reply text is shown', () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret', adapterOptions: { textDisplay: 'show' } });
+    const typingStatus = integration.channels(ctxWith()).adapters.slack.typingStatus;
+    if (typeof typingStatus !== 'function') throw new Error('Expected a typing status function');
+    const ctx = { currentStatus: undefined, channelTools: new Set<string>() } as any;
+    expect(typingStatus({ type: 'text-delta' } as any, ctx)).toBe('is typing...');
+  });
+
+  it("names the tool's current step in the typing status when its args describe it", () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+    const typingStatus = integration.channels(ctxWith()).adapters.slack.typingStatus;
+    if (typeof typingStatus !== 'function') throw new Error('Expected a typing status function');
+    const ctx = { currentStatus: undefined, channelTools: new Set<string>() } as any;
+    const status = (args: unknown) =>
+      typingStatus({ type: 'tool-call', payload: { toolName: 'execute_command', args } } as any, ctx);
+
+    // Sentence-case descriptions read after the app name: "<App> is listing the repo root".
+    expect(status({ description: 'Listing the repo root', command: 'ls' })).toBe('is listing the repo root');
+    // Acronyms and identifiers keep their case.
+    expect(status({ description: 'PR lookup for #27350' })).toBe('is PR lookup for #27350');
+    // Multi-line bodies (issue/PR creators) contribute their first line only, whitespace collapsed.
+    expect(status({ description: '\n  Fix the   flaky\tlogin test\n\nIt fails when…' })).toBe(
+      'is fix the flaky login test',
+    );
+    // Long descriptions are clipped so Slack's inline status stays one line.
+    const long = 'A'.repeat(200);
+    expect(status({ description: long })).toHaveLength('is '.length + 80);
+    expect(status({ description: long })!.endsWith('…')).toBe(true);
+    // No usable description falls back to the generic status.
+    expect(status({ command: 'ls' })).toBe('is working...');
+    expect(status({ description: '   \n ' })).toBe('is working...');
+    expect(status({ description: 42 })).toBe('is working...');
+    expect(status('{"description":"raw string"}')).toBe('is working...');
   });
 
   it('defaults streaming when an explicit undefined value is provided', () => {
@@ -70,6 +119,23 @@ describe('SlackIntegration.channels', () => {
 
     expect(config.adapters.slack.toolDisplay).toBe('hidden');
     expect(config.adapters.slack.typingStatus).toBeTypeOf('function');
+  });
+
+  it('keeps reply text out of Slack by default, so the agent posts through reply_in_thread', () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+    expect(integration.channels(ctxWith()).adapters.slack.textDisplay).toBe('hidden');
+
+    const shown = new SlackIntegration({ signingSecret: 'secret', adapterOptions: { textDisplay: 'show' } });
+    expect(shown.channels(ctxWith()).adapters.slack.textDisplay).toBe('show');
+  });
+
+  it('lets a caller opt into the Thinking Steps widget', () => {
+    const integration = new SlackIntegration({
+      signingSecret: 'secret',
+      adapterOptions: { toolDisplay: 'grouped' },
+    });
+
+    expect(integration.channels(ctxWith()).adapters.slack.toolDisplay).toBe('grouped');
   });
 
   it('preserves an explicit typingStatus: false override', () => {
@@ -122,5 +188,65 @@ describe('SlackIntegration.channels', () => {
     integration.channels(ctxWith());
 
     expect(integration.diagnostics()).toMatchObject({ repoBackedSessions: false });
+  });
+
+  // The storage handle is only useful if it survives the trip from the
+  // integration context into the hook the channel machinery calls.
+  it("forwards the model-defaults domain to the session-start hook, so a session starts on the sender's own model", async () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+    const modelDefaults = { get: vi.fn(async () => ({ modelId: 'openai/gpt-5.6' })) };
+    const config = integration.channels(
+      ctxWith({
+        modelDefaults,
+        memorySettings: { get: vi.fn(async () => null) },
+        projects: {
+          getById: vi.fn(async () => ({
+            id: 'fp-1',
+            orgId: 'org-1',
+            modelScope: 'user',
+            defaultModelId: 'anthropic/claude-opus-5',
+          })),
+        },
+        sourceControlOwner: {
+          sessions: {
+            getBySessionId: vi.fn(async () => ({
+              orgId: 'org-1',
+              userId: 'user-1',
+              projectRepositoryId: 'pr-1',
+              factoryProjectId: 'fp-1',
+            })),
+          },
+        },
+      }),
+    );
+    const session = {
+      identity: { getId: () => 'us-1', getResourceId: () => 'us-1' },
+      mode: { get: () => 'build' },
+      thread: {
+        getId: () => 'us-1',
+        getById: vi.fn(async () => ({ metadata: {} })),
+        getSetting: vi.fn(async () => null),
+        setSetting: vi.fn(async () => {}),
+        setSettingOn: vi.fn(async () => {}),
+      },
+      model: {
+        get: vi.fn(() => 'openai/gpt-5.5'),
+        switch: vi.fn(async () => {}),
+      },
+      om: {
+        observer: { modelId: () => 'initial/model', switchModel: vi.fn(async () => {}) },
+        reflector: { modelId: () => 'initial/model', switchModel: vi.fn(async () => {}) },
+      },
+      state: { get: () => ({}), set: vi.fn(async () => {}) },
+      subagents: { model: { set: vi.fn(async () => {}) } },
+    };
+
+    await config.onSessionStart!({
+      session,
+      thread: { id: 'us-1', resourceId: 'us-1' },
+    } as any);
+
+    expect(modelDefaults.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(session.model.switch).toHaveBeenLastCalledWith('openai/gpt-5.6');
   });
 });

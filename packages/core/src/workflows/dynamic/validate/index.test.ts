@@ -234,6 +234,7 @@ describe('validateDynamicWorkflow', () => {
     const graph = [
       { type: 'agent', id: 'a1', agentId: 'writer' },
       { type: 'tool', id: 't1', toolId: 'lookup' },
+      { type: 'classifier', id: 'c1', classifierId: 'router' },
       { type: 'workflow', id: 'wf-child', workflowId: 'wf-child' },
     ] as const;
 
@@ -244,7 +245,7 @@ describe('validateDynamicWorkflow', () => {
     });
 
     it('flags unresolved references with per-kind messages', () => {
-      const index: WorkflowRegistryIndex = { agents: {}, tools: {}, workflows: {} };
+      const index: WorkflowRegistryIndex = { agents: {}, tools: {}, classifiers: { available: {} }, workflows: {} };
       const issues = validateDynamicWorkflow(def({ graph: [...graph] }), index);
       expect(issues).toEqual([
         expect.objectContaining({
@@ -259,7 +260,12 @@ describe('validateDynamicWorkflow', () => {
         }),
         expect.objectContaining({
           code: 'missing-reference',
-          path: 'graph.2.workflowId',
+          path: 'graph.2.classifierId',
+          message: expect.stringContaining('Available classifiers: available'),
+        }),
+        expect.objectContaining({
+          code: 'missing-reference',
+          path: 'graph.3.workflowId',
           message: expect.stringContaining('not a registered workflow'),
         }),
       ]);
@@ -493,6 +499,39 @@ describe('validateDynamicWorkflow', () => {
             blocksFinalize: true,
           },
         }),
+      ]);
+    });
+
+    it('flags a missing required property whose name is inherited from Object.prototype', () => {
+      const buildEntity = {
+        inputSchema: { type: 'object', properties: { constructor: { type: 'string' } }, required: ['constructor'] },
+        outputSchema: emptyObjectSchema,
+      };
+      const issues = validateDynamicWorkflow(
+        def({
+          inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+          graph: [{ type: 'tool', id: 'build', toolId: 'buildEntity' }],
+        }),
+        { tools: { buildEntity } },
+      );
+      expect(issues).toEqual([expect.objectContaining({ code: 'incompatible-schema', path: 'graph.0' })]);
+    });
+
+    it('rejects a mapping path that only resolves through Object.prototype', () => {
+      const issues = validateDynamicWorkflow(
+        def({
+          inputSchema: { type: 'object', properties: { email: { type: 'string' } }, required: ['email'] },
+          graph: [
+            {
+              type: 'mapping',
+              id: 'from-proto',
+              mapConfig: JSON.stringify({ email: { initData: true, path: '__proto__' } }),
+            },
+          ],
+        }),
+      );
+      expect(issues).toEqual([
+        expect.objectContaining({ code: 'invalid-map-config', path: 'graph.0.mapConfig.email.path' }),
       ]);
     });
 

@@ -1,4 +1,4 @@
-import type { TextPart } from '@mastra/react';
+import type { TextPart } from '@mastra/react/ui';
 
 import type { MessageMetadata } from '../message-metadata';
 import { MessageText } from './message-text';
@@ -15,5 +15,10 @@ export interface AssistantTextPartRendererProps {
  * applies markdown plus the legacy error/completion-check handling.
  */
 export const AssistantTextPartRenderer = ({ part, metadata, revealing }: AssistantTextPartRendererProps) => (
-  <MessageText text={part.text ?? ''} metadata={metadata} streaming={part.state === 'streaming' || revealing} />
+  <MessageText
+    text={part.text ?? ''}
+    metadata={metadata}
+    streaming={part.state === 'streaming' || revealing}
+    tableActions
+  />
 );

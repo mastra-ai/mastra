@@ -1,0 +1,5 @@
+{
+  "attachment": ["vispark/vision-large", "vispark/vision-medium", "vispark/vision-small"],
+  "temperature": ["vispark/vision-large", "vispark/vision-medium", "vispark/vision-small"],
+  "structuredOutput": ["vispark/vision-large", "vispark/vision-medium", "vispark/vision-small"]
+}

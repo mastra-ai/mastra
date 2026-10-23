@@ -625,6 +625,9 @@ export class InngestRun<
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
     this.hydrateFailedResult(result);
+    if (result.status !== 'suspended') {
+      this.cleanup?.();
+    }
     return result;
   }
 
@@ -768,11 +771,7 @@ export class InngestRun<
       throw new Error('This workflow run is still running, cannot time travel');
     }
 
-    let inputDataToUse = params.inputData;
-
-    if (inputDataToUse && steps.length === 1) {
-      inputDataToUse = await this._validateTimetravelInputData(params.inputData, this.workflowSteps[steps[0]!]!);
-    }
+    const inputDataToUse = (await this._resolveTimetravelInputData(params.inputData, steps)) as typeof params.inputData;
 
     const timeTravelData = createTimeTravelExecutionParams({
       steps,

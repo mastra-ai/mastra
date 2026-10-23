@@ -1,3 +1,5 @@
+import { focusRingInset } from '@/ds/primitives/transitions';
+
 /**
  * Row-level styling for the element that participates in the row sibling
  * chain — applied to `DataList.RowButton` / `DataList.RowLink` when used
@@ -6,20 +8,35 @@
  * Carries the `.data-list-row` marker class the root styles target.
  */
 export const dataListRowOuterStyles = [
-  'group/data-list-row data-list-row col-span-full relative min-h-9 bg-surface2',
-  'transition-colors duration-200',
+  'group/data-list-row data-list-row col-span-full relative min-h-9',
+  // The row surface is a `before` pseudo at `-z-2` so the root's fluid hover
+  // highlight (`-z-1`) can glide *between* the surface and the row content,
+  // exactly like menu items. The row element itself stays transparent.
+  "before:absolute before:inset-0 before:-z-2 before:rounded-[inherit] before:bg-background before:content-['']",
 ] as const;
 
 /**
  * Interactive state fills for the outer row element. Applied to standalone
  * `RowButton` / `RowLink` and to `RowWrapper`. The `has-*` forms let a wrapper
  * mirror the tone of the interactive row nested inside it.
+ *
+ * Hover is not painted per row: the root renders one fluid `fill-subtle`
+ * highlight under the row content. Rows are sunken wells (`--background`) inside
+ * the card panel, whose material also shows through the 1px gaps between them,
+ * so a resting tone steps to `--surface-panel` — the opaque twin of a `--fill`
+ * rung over the well — rather than to `--card`, which would make a selected row
+ * the exact colour of the separators around it. Pressed rises a full `--fill`
+ * rung, the same rung a resting control carries, and error sits on the row
+ * element itself so it reads on top of the highlight.
  */
 export const dataListRowStateStyles = [
-  'hover:bg-surface3 active:bg-surface4',
-  'data-featured:bg-surface3 has-data-featured:bg-surface3 has-data-selected:bg-surface3',
-  'data-featured:hover:bg-surface4 has-data-featured:hover:bg-surface4 has-data-selected:hover:bg-surface4',
-  'data-[variant=error]:bg-notice-destructive/10 has-data-[variant=error]:bg-notice-destructive/10',
+  'active:bg-fill',
+  'focus-visible:bg-surface-panel has-focus-visible:bg-surface-panel',
+  'data-featured:before:bg-surface-panel has-data-featured:before:bg-surface-panel has-data-selected:before:bg-surface-panel',
+  'data-[variant=error]:bg-destructive-subtle has-data-[variant=error]:bg-destructive-subtle data-[variant=error]:active:bg-destructive-subtle-active has-data-[variant=error]:active:bg-destructive-subtle-active',
+  // Info is a faint translucent tint on the row element, so the surface below it (resting or selected) and the
+  // fluid hover still read through.
+  'data-[variant=info]:bg-info-subtle/50 has-data-[variant=info]:bg-info-subtle/50',
 ] as const;
 
 /**
@@ -27,8 +44,8 @@ export const dataListRowStateStyles = [
  * outer row element so it sits inside the root surface.
  */
 export const dataListRowInteractiveStyles = [
-  'grid grid-cols-subgrid gap-8 px-5 cursor-pointer',
-  'outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
+  'grid grid-cols-subgrid gap-4 px-3 cursor-pointer',
+  focusRingInset,
 ] as const;
 
 export const dataListRowStyles = [
@@ -37,7 +54,7 @@ export const dataListRowStyles = [
   ...dataListRowStateStyles,
 ] as const;
 
-export const dataListRowStaticStyles = ['grid grid-cols-subgrid gap-8 px-5', ...dataListRowOuterStyles] as const;
+export const dataListRowStaticStyles = ['grid grid-cols-subgrid gap-4 px-3', ...dataListRowOuterStyles] as const;
 
 /**
  * Row actions that stay out of the way until the row is hovered or focused.
@@ -54,8 +71,8 @@ export const dataListStickyStartStyles = [
   'data-list-sticky-start sticky left-0 z-10 isolate self-stretch overflow-visible',
 ] as const;
 
-/** Tone for a single row. Exposed as `data-variant`; `error` tints the row. */
-export type DataListRowVariant = 'default' | 'error';
+/** Tone for a single row. Exposed as `data-variant`; `error` tints the row red, `info` tints it blue to set it apart. */
+export type DataListRowVariant = 'default' | 'error' | 'info';
 
 /**
  * Layout/state modifiers shared by interactive row primitives

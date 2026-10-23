@@ -13,6 +13,7 @@ import {
   dimensionsField,
   groupBySchema,
   deltaCursorSchema,
+  experimentIdField,
   listModeSchema,
   normalizeObservabilityListArgs,
   paginationArgsSchema,
@@ -157,6 +158,12 @@ export const metricsFilterSchema = z
   .object({
     ...commonFilterFields,
     traceIds: z.array(traceIdField).nonempty().max(1000).optional().describe('Filter by one or more trace IDs'),
+    experimentIds: z
+      .array(experimentIdField)
+      .nonempty()
+      .max(1000)
+      .optional()
+      .describe('Filter by one or more experiment IDs'),
 
     // Metric identification
     name: z.array(z.string()).nonempty().optional().describe('Filter by metric name(s)'),

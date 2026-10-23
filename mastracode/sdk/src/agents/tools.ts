@@ -8,6 +8,7 @@ import type {
   ListDueNotificationsInput,
   ListNotificationsInput,
   UpdateNotificationInput,
+  UpdateNotificationsStatusInput,
 } from '@mastra/core/notifications';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
@@ -28,6 +29,11 @@ import { WORKFLOW_MANAGEMENT_TOOL_IDS } from '../tools/workflows/tool-ids.js';
 export type ToolLike = {
   execute?: (...args: any[]) => Promise<unknown> | unknown;
 } & Record<string, any>;
+
+function configurePluginTool(tool: ToolLike, backgroundToolsEnabled: boolean): ToolLike {
+  if (backgroundToolsEnabled || !tool.background) return tool;
+  return { ...tool, background: { ...tool.background, enabled: false } };
+}
 
 export class LazyNotificationsStorage extends NotificationsStorage {
   constructor(private readonly storage: MastraCompositeStore) {
@@ -60,6 +66,10 @@ export class LazyNotificationsStorage extends NotificationsStorage {
 
   async updateNotification(input: UpdateNotificationInput) {
     return (await this.getNotificationsStorage()).updateNotification(input);
+  }
+
+  override async updateNotificationsStatus(input: UpdateNotificationsStatusInput) {
+    return (await this.getNotificationsStorage()).updateNotificationsStatus(input);
   }
 
   async dangerouslyClearAll() {
@@ -119,6 +129,8 @@ export function createDynamicTools(
   disabledTools?: string[],
   storage?: MastraCompositeStore,
   pluginTools?: Record<string, ToolLike>,
+  backgroundToolsEnabled = false,
+  builtinTools?: Record<string, ToolLike>,
 ) {
   return function getDynamicTools({
     requestContext,
@@ -147,27 +159,29 @@ export function createDynamicTools(
       [WORKFLOW_MANAGEMENT_TOOL_IDS.deleteWorkflow]: deleteWorkflowTool,
     };
 
+    // Opt-in built-ins (e.g. the experimental schedule tools).
+    if (builtinTools) Object.assign(tools, builtinTools);
+
     if (storage) {
       tools[MC_TOOLS.NOTIFICATION_INBOX] = createNotificationInboxTool({
         storage: new LazyNotificationsStorage(storage),
       });
     }
 
+    // Async only when a Tavily/Parallel key is set; otherwise the tool list stays synchronous.
     const configuredWebTools = createConfiguredWebTools();
-    if (configuredWebTools) {
-      Object.assign(tools, configuredWebTools);
-    } else if (isAnthropicModel) {
-      const anthropic = createAnthropic({});
-      tools.web_search = anthropic.tools.webSearch_20250305();
-    } else if (isOpenAIModel) {
-      const openai = createOpenAI({});
-      tools.web_search = openai.tools.webSearch();
+    if (!configuredWebTools) {
+      if (isAnthropicModel) {
+        const anthropic = createAnthropic({});
+        tools.web_search = anthropic.tools.webSearch_20250305();
+      } else if (isOpenAIModel) {
+        const openai = createOpenAI({});
+        tools.web_search = openai.tools.webSearch();
+      }
     }
 
-    if (mcpManager) {
-      const mcpTools = mcpManager.getTools();
-      Object.assign(tools, mcpTools);
-    }
+    const mcpTools = mcpManager?.getTools();
+    if (mcpTools) Object.assign(tools, mcpTools);
 
     const finish = (resolvedExtra: Record<string, ToolLike | undefined> | undefined) => {
       if (resolvedExtra) {
@@ -181,7 +195,7 @@ export function createDynamicTools(
       if (pluginTools) {
         for (const [name, tool] of Object.entries(pluginTools)) {
           if (!(name in tools)) {
-            tools[name] = tool;
+            tools[name] = configurePluginTool(tool, backgroundToolsEnabled);
           }
         }
       }
@@ -206,15 +220,26 @@ export function createDynamicTools(
       return tools as ToolsInput;
     };
 
-    if (typeof extraTools === 'function') {
-      const resolved = extraTools({ requestContext });
-      // Stay synchronous for sync providers; only go async when the provider does.
-      if (resolved && typeof (resolved as PromiseLike<unknown>).then === 'function') {
-        return Promise.resolve(resolved).then(finish);
+    const resolveExtra = (): ToolsInput | Promise<ToolsInput> => {
+      if (typeof extraTools === 'function') {
+        const resolved = extraTools({ requestContext });
+        // Stay synchronous for sync providers; only go async when the provider does.
+        if (resolved && typeof (resolved as PromiseLike<unknown>).then === 'function') {
+          return Promise.resolve(resolved).then(finish);
+        }
+        return finish(resolved as Record<string, ToolLike | undefined>);
       }
-      return finish(resolved as Record<string, ToolLike | undefined>);
+      return finish(extraTools);
+    };
+
+    if (configuredWebTools) {
+      return configuredWebTools.then(webTools => {
+        // MCP tools keep precedence over the web tools, as when both were assigned in order.
+        Object.assign(tools, webTools, mcpTools);
+        return resolveExtra();
+      });
     }
 
-    return finish(extraTools);
+    return resolveExtra();
   };
 }

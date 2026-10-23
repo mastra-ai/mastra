@@ -1,4 +1,5 @@
-import { Batch, Decoder, GlideClient, type GlideClientConfiguration, type GlideString } from '@valkey/valkey-glide';
+import { Batch, Decoder, GlideClient, InfBoundary } from '@valkey/valkey-glide';
+import type { GlideClientConfiguration, GlideString } from '@valkey/valkey-glide';
 
 export type ValkeyClientOptions = Omit<Partial<GlideClientConfiguration>, 'addresses'> & {
   url?: string;
@@ -16,6 +17,15 @@ const messages = (value: unknown): StreamMessage[] =>
     for (let index = 0; index < fields.length; index += 2) message[text(fields[index])] = text(fields[index + 1]);
     return { id: text(id), message };
   });
+
+const countArgs = (options: { COUNT?: number }): string[] =>
+  options.COUNT === undefined ? [] : ['COUNT', String(options.COUNT)];
+/** Decode an XRANGE/XREVRANGE reply (`[{ key: id, value: [[field, value], …] }]`). */
+const records = (value: unknown): StreamMessage[] =>
+  ((value as Array<{ key: unknown; value: unknown[][] | null }> | null) ?? []).map(entry => ({
+    id: text(entry.key),
+    message: Object.fromEntries((entry.value ?? []).map(([field, fieldValue]) => [text(field), text(fieldValue)])),
+  }));
 
 class ValkeyMulti {
   readonly #batch = new Batch(true);
@@ -99,24 +109,45 @@ export class ValkeyStreamsClient {
       })) ?? null
     );
   }
-  async xAutoClaim(
-    key: string,
-    group: string,
-    consumer: string,
-    minIdle: number,
-    start: string,
-    options: { COUNT?: number } = {},
-  ) {
+  /**
+   * XPENDING <key> <group> [IDLE ms] <start> + <count>. `afterId` makes the
+   * range exclusive so callers can page past entries they've already seen.
+   */
+  async xPendingRange(key: string, group: string, count: number, options: { IDLE?: number; afterId?: string } = {}) {
     const result = await (
       await this.getClient()
-    ).xautoclaim(key, group, consumer, minIdle, start, { count: options.COUNT, decoder: Decoder.String });
-    return {
-      nextId: text(result[0]),
-      messages: Object.entries(result[1] ?? {}).map(([id, fields]) => ({
-        id,
-        message: Object.fromEntries(fields.map(([field, value]) => [text(field), text(value)])),
-      })),
-    };
+    ).xpendingWithOptions(key, group, {
+      start: options.afterId ? { value: options.afterId, isInclusive: false } : InfBoundary.NegativeInfinity,
+      end: InfBoundary.PositiveInfinity,
+      count,
+      minIdleTime: options.IDLE,
+    });
+    return result.map(([id, consumer, millisecondsSinceLastDelivery, deliveriesCounter]) => ({
+      id: text(id),
+      consumer: text(consumer),
+      millisecondsSinceLastDelivery,
+      deliveriesCounter,
+    }));
+  }
+  async xClaim(key: string, group: string, consumer: string, minIdle: number, ids: string[]) {
+    const result = await (
+      await this.getClient()
+    ).xclaim(key, group, consumer, minIdle, ids, { decoder: Decoder.String });
+    return Object.entries(result ?? {}).map(([id, fields]) => ({
+      id,
+      message: Object.fromEntries(fields.map(([field, value]) => [text(field), text(value)])),
+    }));
+  }
+  async xRange(key: string, start: string, end: string, options: { COUNT?: number } = {}) {
+    return records(await this.command(['XRANGE', key, start, end, ...countArgs(options)]));
+  }
+  async xRevRange(key: string, end: string, start: string, options: { COUNT?: number } = {}) {
+    return records(await this.command(['XREVRANGE', key, end, start, ...countArgs(options)]));
+  }
+  /** XINFO GROUPS <key>, one object per group keyed by field name. */
+  async xInfoGroups(key: string): Promise<Array<Record<string, unknown>>> {
+    const result = (await this.command(['XINFO', 'GROUPS', key])) as Array<Array<{ key: unknown; value: unknown }>>;
+    return (result ?? []).map(group => Object.fromEntries(group.map(({ key, value }) => [text(key), value])));
   }
   async xAck(key: string, group: string, id: string) {
     return (await this.getClient()).xack(key, group, [id]);
@@ -153,6 +184,9 @@ export class ValkeyStreamsClient {
           configuration.credentials ??
           (parsed?.password ? { username: parsed.username || 'default', password: parsed.password } : undefined),
         databaseId: configuration.databaseId ?? (parsed?.pathname ? Number(parsed.pathname.slice(1) || 0) : undefined),
+        useTLS:
+          configuration.useTLS ??
+          (parsed ? parsed.protocol === 'rediss:' || parsed.protocol === 'valkeys:' : undefined),
       });
     }
     return this.#client;

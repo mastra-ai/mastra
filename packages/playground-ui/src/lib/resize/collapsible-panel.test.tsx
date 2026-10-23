@@ -139,6 +139,35 @@ describe('CollapsiblePanel', () => {
       expect(panelMocks.handle.expand).toHaveBeenCalledTimes(1);
       expect(panelMocks.handle.resize).not.toHaveBeenCalled();
     });
+
+    it('is not rendered when hideExpandButton is set, even once collapsed', () => {
+      render(<Harness minSize={280} hideExpandButton />);
+      fireEvent.click(screen.getByTestId('resize-collapsed'));
+
+      expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+      expect(screen.getByTestId('panel-content').parentElement?.getAttribute('hidden')).toBe('');
+    });
+
+    it('shows the keyboard shortcut in its tooltip when one is provided', async () => {
+      render(<Harness minSize={280} expandShortcut="{" />);
+      fireEvent.click(screen.getByTestId('resize-collapsed'));
+
+      fireEvent.focus(screen.getByRole('button', { name: 'Expand panel' }));
+
+      const tooltip = await screen.findByRole('tooltip');
+      expect(tooltip.textContent).toContain('Expand panel');
+      expect(tooltip.querySelector('kbd')?.textContent).toBe('{');
+    });
+
+    it('shows no shortcut hint by default', async () => {
+      renderPanel();
+      fireEvent.click(screen.getByTestId('resize-collapsed'));
+
+      fireEvent.focus(screen.getByRole('button', { name: 'Expand panel' }));
+
+      const tooltip = await screen.findByRole('tooltip');
+      expect(tooltip.querySelector('kbd')).toBeNull();
+    });
   });
 
   describe('handle', () => {
@@ -181,6 +210,65 @@ describe('CollapsiblePanel', () => {
 
       expect(panelMocks.handle.expand).toHaveBeenCalledTimes(1);
       expect(panelMocks.handle.resize).not.toHaveBeenCalled();
+    });
+
+    describe('toggle', () => {
+      it('collapses an expanded panel', () => {
+        const handle = renderWithHandle();
+
+        act(() => handle.current?.toggle());
+
+        expect(panelMocks.handle.collapse).toHaveBeenCalledTimes(1);
+        expect(panelMocks.handle.resize).not.toHaveBeenCalled();
+        expect(panelMocks.handle.expand).not.toHaveBeenCalled();
+      });
+
+      it('expands a collapsed panel at its remembered width', () => {
+        const handle = renderWithHandle();
+        panelMocks.state.size = 280;
+
+        act(() => handle.current?.toggle());
+        fireEvent.click(screen.getByTestId('resize-shrinking'));
+        fireEvent.click(screen.getByTestId('resize-collapsed'));
+        panelMocks.state.size = 0;
+
+        act(() => handle.current?.toggle());
+
+        expect(panelMocks.handle.resize).toHaveBeenCalledWith(280);
+        expect(panelMocks.handle.collapse).toHaveBeenCalledTimes(1);
+      });
+
+      it('expands a panel that mounted collapsed', () => {
+        const handle = renderWithHandle();
+        fireEvent.click(screen.getByTestId('resize-collapsed'));
+        panelMocks.state.size = 0;
+
+        act(() => handle.current?.toggle());
+
+        expect(panelMocks.handle.resize).toHaveBeenCalledWith(300);
+        expect(panelMocks.handle.collapse).not.toHaveBeenCalled();
+      });
+
+      it('expands a panel at zero width before the first onResize has fired', () => {
+        // Mirrors a shortcut fired right after mount, before the library reports a layout.
+        panelMocks.state.size = 0;
+        const handle = renderWithHandle();
+
+        act(() => handle.current?.toggle());
+
+        expect(panelMocks.handle.resize).toHaveBeenCalledWith(300);
+        expect(panelMocks.handle.collapse).not.toHaveBeenCalled();
+      });
+
+      it('does not remember a collapsed width as the restore target', () => {
+        panelMocks.state.size = 0;
+        const handle = renderWithHandle();
+
+        act(() => handle.current?.collapse());
+        act(() => handle.current?.expand());
+
+        expect(panelMocks.handle.resize).toHaveBeenCalledWith(300);
+      });
     });
   });
 });

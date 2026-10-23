@@ -89,13 +89,17 @@ describe('ModerationProcessor', () => {
       expect(moderator.id).toBe('moderation');
     });
 
-    it('should use default categories when none specified', () => {
+    it('should use default categories when none specified', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationProcessor({
-        model,
-      });
+      const generateSpy = vi.spyOn(model, 'doGenerate');
+      const moderator = new ModerationProcessor({ model });
 
-      expect(moderator.id).toBe('moderation');
+      await moderator.processInput({ messages: [createTestMessage('Safe content')], abort: vi.fn() as any });
+
+      const call = JSON.stringify(generateSpy.mock.calls[0]?.[0]);
+      for (const category of ['hate/threatening', 'self-harm/instructions', 'sexual/minors', 'violence/graphic']) {
+        expect(call).toContain(`- ${category}`);
+      }
     });
 
     it('should accept custom categories', () => {
@@ -449,6 +453,68 @@ describe('ModerationProcessor', () => {
       );
 
       consoleWarnSpy.mockRestore();
+    });
+
+    it.each(['processInput', 'processOutputResult'] as const)(
+      'should propagate the processor tripwire from %s when strict model moderation fails',
+      async method => {
+        const model = new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doGenerate: async () => {
+            throw new Error('provider failure');
+          },
+        });
+        const moderator = new ModerationProcessor({ model, errorStrategy: 'strict' });
+        const tripwire = new TripWire('strict moderation failure');
+        const abort = vi.fn(() => {
+          throw tripwire;
+        });
+
+        await expect(
+          moderator[method]({ messages: [createTestMessage('Test content')], abort: abort as any }),
+        ).rejects.toBe(tripwire);
+        expect(abort).toHaveBeenCalledWith('Moderation failed because the internal model call failed');
+      },
+    );
+
+    it('should propagate the processor tripwire when legacy moderation returns no object', async () => {
+      const model = setupMockModel({ object: createMockModerationResult(false) });
+      const moderator = new ModerationProcessor({ model, errorStrategy: 'strict' });
+      vi.spyOn((moderator as any).moderationAgent, 'generateLegacy').mockResolvedValue({ object: undefined });
+      const tripwire = new TripWire('strict moderation failure');
+      const abort = vi.fn(() => {
+        throw tripwire;
+      });
+
+      await expect(
+        moderator.processInput({ messages: [createTestMessage('Test content')], abort: abort as any }),
+      ).rejects.toBe(tripwire);
+      expect(abort).toHaveBeenCalledWith('Moderation failed because the internal model call failed');
+    });
+
+    it('should not emit a stream part when strict model moderation fails', async () => {
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          throw new Error('provider failure');
+        },
+      });
+      const moderator = new ModerationProcessor({ model, errorStrategy: 'strict' });
+      const tripwire = new TripWire('strict moderation failure');
+      const abort = vi.fn(() => {
+        throw tripwire;
+      });
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'unchecked output', id: 'text-1' },
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+      };
+
+      await expect(
+        moderator.processOutputStream({ part, streamParts: [part], state: {}, abort: abort as any }),
+      ).rejects.toBe(tripwire);
+      expect(abort).toHaveBeenCalledWith('Moderation failed because the internal model call failed');
     });
 
     it('should handle empty message array', async () => {

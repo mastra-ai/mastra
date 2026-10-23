@@ -9,6 +9,8 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
+  getHTTPErrorResponse,
+  isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -96,8 +98,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
       }
 
-      // Parse request context from query params (GET)
-      if (request.method === 'GET') {
+      // Parse request context from query params.
+      if (request.method === 'GET' || request.method === 'POST') {
         try {
           const query = request.query as Record<string, string>;
           const encodedRequestContext = query.requestContext;
@@ -337,7 +339,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           });
 
           file.on('end', () => {
-            if (!limitExceeded) {
+            if (!limitExceeded && isSafeObjectKey(fieldname)) {
               result[fieldname] = Buffer.concat(chunks);
             }
           });
@@ -345,6 +347,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       );
 
       busboy.on('field', (fieldname: string, value: string) => {
+        if (!isSafeObjectKey(fieldname)) {
+          return;
+        }
         // Try to parse JSON strings (like 'options')
         try {
           result[fieldname] = JSON.parse(value);
@@ -391,8 +396,23 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     } else if (route.responseType === 'datastream-response') {
       // Handle AI SDK Response objects - pipe Response.body to Fastify response
       const fetchResponse = result as globalThis.Response;
-      fetchResponse.headers.forEach((value, key) => reply.header(key, value));
-      reply.status(fetchResponse.status);
+      // Writing to reply.raw bypasses Fastify's header map, so merge plugin-set
+      // headers (e.g. CORS) with the upstream headers and flush them via writeHead.
+      const headers: Record<string, string | number | string[]> = {};
+      for (const [key, value] of Object.entries(reply.getHeaders())) {
+        if (value === undefined) continue;
+        const lowerKey = key.toLowerCase();
+        if (lowerKey === 'content-length' || lowerKey === 'transfer-encoding') continue;
+        headers[lowerKey] = value;
+      }
+      fetchResponse.headers.forEach((value, key) => {
+        if (key.toLowerCase() !== 'set-cookie') headers[key.toLowerCase()] = value;
+      });
+      const setCookies = fetchResponse.headers.getSetCookie();
+      if (setCookies.length > 0) headers['set-cookie'] = setCookies;
+
+      reply.hijack();
+      reply.raw.writeHead(fetchResponse.status, headers);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
         let readerCanceled = false;
@@ -593,7 +613,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
       }
 
-      if (params.body) {
+      if (params.body !== undefined || route.bodySchema) {
         try {
           params.body = await this.parseBody(route, params.body);
         } catch (error) {
@@ -678,10 +698,13 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         const result = await route.handler(handlerParams);
         await this.sendResponse(route, reply, result, request, prefix);
       } catch (error) {
-        const httpStatus = error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+        const httpStatus =
+          error && typeof error === 'object' ? ((error as any).status ?? (error as any).details?.status) : undefined;
         const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
         if (!isClientError) {
-          this.mastra.getLogger()?.error('Error calling handler', {
+          // 501 means an optional capability isn't provided by the configured storage or core: expected, not a server fault.
+          const logLevel = httpStatus === 501 ? 'warn' : 'error';
+          this.mastra.getLogger()?.[logLevel]('Error calling handler', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             path: route.path,
             method: route.method,
@@ -694,24 +717,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           return;
         }
 
-        // Check if it's an HTTPException or MastraError with a status code
-        let status = 500;
-        if (error && typeof error === 'object') {
-          // Check for direct status property (HTTPException)
-          if ('status' in error) {
-            status = (error as any).status;
-          }
-          // Check for MastraError with status in details
-          else if (
-            'details' in error &&
-            error.details &&
-            typeof error.details === 'object' &&
-            'status' in error.details
-          ) {
-            status = (error.details as any).status;
-          }
-        }
-        await reply.status(status).send({ error: error instanceof Error ? error.message : 'Unknown error' });
+        const { status, body } = getHTTPErrorResponse(error);
+        await reply.status(status).send(body);
       }
     };
 
@@ -837,12 +844,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
 
         // Check FGA authorization (EE feature)
+        // Path params last: the custom handler reads them from the URL, so query/body
+        // values must not be able to change which resource FGA checks.
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, requestContext, {
-          ...(request.params as Record<string, string>),
           ...(request.query as Record<string, string>),
           ...(typeof request.body === 'object' && request.body !== null
             ? (request.body as Record<string, unknown>)
             : {}),
+          ...(request.params as Record<string, string>),
         });
         if (fgaError) {
           return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });

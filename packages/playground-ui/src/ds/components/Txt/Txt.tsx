@@ -1,39 +1,35 @@
-import type { HTMLAttributes, ReactNode, Ref } from 'react';
+import { useRender } from '@base-ui/react/use-render';
+import type { ComponentPropsWithoutRef, HTMLAttributes, Ref } from 'react';
 
-import type { FontSizes } from '../../tokens';
+import { textStyle } from '@/ds/primitives/text';
+import type { TextStyleProps } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
-export interface TxtProps extends HTMLAttributes<HTMLDivElement | HTMLLabelElement> {
-  as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label' | 'div';
+type TextElement = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label' | 'strong' | 'b' | 'time';
+
+export interface TxtProps extends HTMLAttributes<HTMLElement>, TextStyleProps {
+  as?: TextElement;
   ref?: Ref<HTMLElement>;
-  variant?: keyof typeof FontSizes;
-  font?: 'mono';
   htmlFor?: string;
-  className?: string;
-  title?: string;
-  children?: ReactNode;
 }
 
-const variants = {
-  // UI text sizes
-  'ui-xs': 'text-ui-xs leading-ui-xs',
-  'ui-sm': 'text-ui-sm leading-ui-sm',
-  'ui-smd': 'text-ui-smd leading-ui-smd',
-  'ui-md': 'text-ui-md leading-ui-md',
-  'ui-lg': 'text-ui-lg leading-ui-lg',
-  // Header sizes
-  'header-xs': 'text-header-xs leading-header-xs',
-  'header-sm': 'text-header-sm leading-header-sm',
-  'header-md': 'text-header-md leading-header-md',
-  'header-lg': 'text-header-lg leading-header-lg',
-  'header-xl': 'text-header-xl leading-header-xl',
-};
+type ElementTxtProps<T extends TextElement> = TextStyleProps & {
+  as?: T;
+  ref?: Ref<HTMLElement>;
+  htmlFor?: string;
+} & Omit<ComponentPropsWithoutRef<T>, keyof TextStyleProps | 'as' | 'ref'>;
 
-const fonts = {
-  mono: 'font-mono',
-};
-
-export const Txt = ({ as: Root = 'p', className, variant = 'ui-md', font, ref, ...props }: TxtProps) => {
-  // Cast needed: `Root` is polymorphic, so TS narrows the expected ref to a single element type.
-  return <Root ref={ref as never} className={cn(variants[variant], font && fonts[font], className)} {...props} />;
-};
+/** Typography for text elements. Controls and layout containers own their markup. */
+export function Txt<T extends TextElement = 'p'>({ as, className, variant, tone, font, ...props }: ElementTxtProps<T>) {
+  return useRender({
+    defaultTagName: as ?? 'p',
+    props: {
+      ...props,
+      className: cn(
+        textStyle({ variant: variant ?? 'body', tone, font }),
+        variant === undefined && (as === 'strong' || as === 'b') && 'font-bold',
+        className,
+      ),
+    },
+  });
+}

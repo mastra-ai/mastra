@@ -44,6 +44,7 @@ describe('getParallelClient', () => {
       apiKey: 'parallel-explicit',
       baseURL: 'https://parallel.example.test',
       maxRetries: 0,
+      fetch: expect.any(Function),
     });
   });
 
@@ -52,7 +53,7 @@ describe('getParallelClient', () => {
 
     getParallelClient();
 
-    expect(Parallel).toHaveBeenCalledWith({ apiKey: 'parallel-env' });
+    expect(Parallel).toHaveBeenCalledWith({ apiKey: 'parallel-env', fetch: expect.any(Function) });
   });
 
   it('prefers an explicit API key over the environment', () => {
@@ -60,7 +61,7 @@ describe('getParallelClient', () => {
 
     getParallelClient({ apiKey: 'parallel-explicit' });
 
-    expect(Parallel).toHaveBeenCalledWith({ apiKey: 'parallel-explicit' });
+    expect(Parallel).toHaveBeenCalledWith({ apiKey: 'parallel-explicit', fetch: expect.any(Function) });
   });
 
   it('creates the client only once when the lazy getter is first used', () => {

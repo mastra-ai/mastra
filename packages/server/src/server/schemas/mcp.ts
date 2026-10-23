@@ -17,6 +17,14 @@ export const mcpServerToolPathParams = z.object({
 
 export const executeToolBodySchema = z.object({
   data: z.unknown().optional(),
+  resumeData: z
+    .unknown()
+    .optional()
+    .describe('Answer for a tool that reported `status: "suspended"`; 2026-07-28 servers only'),
+  suspendPayload: z
+    .unknown()
+    .optional()
+    .describe('The `suspendPayload` from the suspended response, echoed back with `resumeData`'),
 });
 
 // Query parameters
@@ -34,10 +42,19 @@ export const versionDetailSchema = z.object({
   is_latest: z.boolean(),
 });
 
+export const mcpServerTransportSchema = z.enum(['streamable-http', 'sse']);
+
+/** Protocol transports the Studio/REST API exposes for a registered MCP server. */
+export type MCPServerTransport = z.infer<typeof mcpServerTransportSchema>;
+
 export const serverInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
   version_detail: versionDetailSchema,
+  /** Omitted by servers that predate transport reporting; treat absence as `['streamable-http', 'sse']`. */
+  transports: z.array(mcpServerTransportSchema).optional(),
+  /** Whether the server declares event types (experimental); see `GET /mcp/:serverId/events`. */
+  events_capability: z.boolean().optional(),
 });
 
 export const listMcpServersResponseSchema = z.object({
@@ -54,10 +71,16 @@ export const serverDetailSchema = z.object({
   package_canonical: z.string().optional(),
   packages: z.array(z.unknown()).optional(),
   remotes: z.array(z.unknown()).optional(),
+  /** Omitted by servers that predate transport reporting; treat absence as `['streamable-http', 'sse']`. */
+  transports: z.array(mcpServerTransportSchema).optional(),
+  /** Whether the server declares event types (experimental); see `GET /mcp/:serverId/events`. */
+  events_capability: z.boolean().optional(),
 });
 
 // Tool schemas
 export const mcpToolInfoSchema = z.object({
+  /** Tool id as registered on the server; present when the MCP server reports it. */
+  id: z.string().optional(),
   name: z.string(),
   description: z.string().optional(),
   inputSchema: z.unknown(),
@@ -70,9 +93,16 @@ export const listMcpServerToolsResponseSchema = z.object({
   tools: z.array(mcpToolInfoSchema),
 });
 
-export const executeToolResponseSchema = z.object({
-  result: z.unknown(),
-});
+export const executeToolResponseSchema = z.union([
+  z.object({
+    result: z.unknown(),
+  }),
+  z.object({
+    status: z.literal('suspended').describe('The tool paused and asked for input; it did not complete'),
+    suspendPayload: z.unknown().describe('What the tool suspended with'),
+    resumeSchema: z.unknown().optional().describe('JSON Schema of the input the tool needs to resume'),
+  }),
+]);
 
 // Resource schemas
 export const mcpServerResourcePathParams = z.object({
@@ -87,6 +117,8 @@ export const resourceContentSchema = z.object({
   uri: z.string(),
   text: z.string().optional(),
   blob: z.string().optional(),
+  mimeType: z.string().optional(),
+  _meta: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const readResourceResponseSchema = z.object({
@@ -113,4 +145,74 @@ export const jsonRpcErrorSchema = z.object({
     message: z.string(),
   }),
   id: z.null(),
+});
+
+// Event schemas (experimental)
+export const mcpServerEventPathParams = z.object({
+  serverId: z.string().describe('MCP server ID'),
+  eventName: z.string().describe('Event type name'),
+});
+
+const jsonObjectSchema = z.record(z.string(), z.unknown());
+const eventCursorSchema = z.string().nullable();
+
+export const mcpServerEventInfoSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  delivery: z.array(z.enum(['push', 'poll', 'webhook'])),
+  inputSchema: jsonObjectSchema.optional(),
+  payloadSchema: jsonObjectSchema.optional(),
+  /** Fed by `server.events.emit()`, so it can receive test events. */
+  emittable: z.boolean(),
+});
+
+export const listMcpServerEventsResponseSchema = z.object({
+  events: z.array(mcpServerEventInfoSchema),
+  /** Whether `POST /mcp/:serverId/events/:eventName/emit` is served (only under `mastra dev`). */
+  testEmit: z.boolean(),
+});
+
+export const mcpServerEventOccurrenceSchema = z.object({
+  eventId: z.string(),
+  name: z.string(),
+  timestamp: z.string(),
+  data: jsonObjectSchema,
+  cursor: eventCursorSchema.optional(),
+  _meta: jsonObjectSchema.optional(),
+});
+
+export const pollMcpServerEventBodySchema = z.object({
+  arguments: jsonObjectSchema.optional(),
+  cursor: eventCursorSchema.optional(),
+  maxEvents: z.number().int().min(1).max(1000).optional(),
+});
+
+export const pollMcpServerEventResponseSchema = z.object({
+  events: z.array(mcpServerEventOccurrenceSchema),
+  cursor: eventCursorSchema,
+  hasMore: z.boolean().optional(),
+  truncated: z.boolean().optional(),
+  nextPollMs: z.number().optional(),
+});
+
+export const streamMcpServerEventBodySchema = z.object({
+  arguments: jsonObjectSchema.optional(),
+  cursor: eventCursorSchema.optional(),
+});
+
+/** One SSE frame of `POST /mcp/:serverId/events/:eventName/stream`. */
+export const mcpServerEventStreamFrameSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('active'), cursor: eventCursorSchema, truncated: z.boolean() }),
+  z.object({ type: z.literal('event'), occurrence: mcpServerEventOccurrenceSchema }),
+  z.object({ type: z.literal('heartbeat'), cursor: eventCursorSchema }),
+  z.object({ type: z.literal('error'), message: z.string() }),
+  z.object({ type: z.literal('terminated') }),
+]);
+
+export const emitMcpServerEventBodySchema = z.object({
+  data: jsonObjectSchema,
+});
+
+export const emitMcpServerEventResponseSchema = z.object({
+  occurrence: mcpServerEventOccurrenceSchema,
 });

@@ -1,16 +1,19 @@
 import type { Agent } from '../agent';
-import type { MastraDBMessage } from '../agent/message-list/state/types';
+import type { MastraDBMessage, MastraMessagePart } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
+import type { BackgroundTaskManagerConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { AgentControllerChannelsConfig } from '../channels/agent-controller-channels';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
+import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
-import type { GoalEvaluationPayload } from '../stream/types';
+import type { GoalEvaluationPayload, IsTaskCompletePayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceStatus } from '../workspace';
 import type { Session } from './session';
@@ -51,7 +54,7 @@ interface AgentControllerModeBase {
 
   name?: string;
 
-  /** bootstrap model default when a session enters this mode. */
+  /** Seeds sessions that start in this mode and remains the subagent fallback. Mode switches do not apply it. */
   defaultModelId?: string;
 
   /** Surfaced in mode pickers / Studio UI. Free text. */
@@ -253,6 +256,9 @@ export interface AgentControllerConfig<TState = {}> {
   /** Storage backend for persistence (threads, messages, state) */
   storage?: MastraCompositeStore;
 
+  /** Background task configuration for the controller's standalone internal Mastra instance. */
+  backgroundTasks?: BackgroundTaskManagerConfig;
+
   /** Schema defining the shape of controller state (Zod, JSON Schema, Standard Schema, etc.) */
   stateSchema?: PublicSchema<TState, any>;
 
@@ -340,6 +346,13 @@ export interface AgentControllerConfig<TState = {}> {
   subagents?: AgentControllerSubagent[];
 
   /**
+   * Resolves a subagent's model id for the run that spawned it. Without it the
+   * bare id resolves through {@link gateways}; provide it when model resolution
+   * depends on the request (tenant credentials, request-scoped custom providers).
+   */
+  resolveSubagentModel?: (modelId: string, options: { requestContext?: RequestContext }) => MastraModelConfig;
+
+  /**
    * Model gateways registered on AgentController' internal Mastra instance.
    * The AgentController resolves every model — mode agents, Observational Memory,
    * subagents — and builds the `listAvailableModels()` catalog through these
@@ -394,16 +407,32 @@ export interface AgentControllerConfig<TState = {}> {
   observability?: ObservabilityEntrypoint;
 }
 
+/** An observational-memory role model. `auto` follows the active main model. */
+export type OMModel = 'auto' | (string & {});
+
+/** Arguments supplied when resolving an automatic observational-memory model. */
+export interface ResolveAutoOMModelArgs {
+  role: 'observer' | 'reflector';
+  currentModelId?: string;
+  state: Readonly<Record<string, unknown>>;
+}
+
 /**
  * Default configuration for Observational Memory.
  * These values are used when controller state doesn't have explicit OM values
  * (e.g., fresh thread with no persisted OM settings).
  */
 export interface AgentControllerOMConfig {
-  /** Default model ID for the observer agent */
+  /** Default observer model. Use `auto` to follow the active main model. */
+  observerModel?: OMModel;
+  /** Concrete observer model used when `observerModel` is unset or auto cannot resolve. */
   defaultObserverModelId?: string;
-  /** Default model ID for the reflector agent */
+  /** Default reflector model. Use `auto` to follow the active main model. */
+  reflectorModel?: OMModel;
+  /** Concrete reflector model used when `reflectorModel` is unset or auto cannot resolve. */
   defaultReflectorModelId?: string;
+  /** Resolve an automatic selection to a concrete model ID. */
+  resolveAutoModelId?: (args: ResolveAutoOMModelArgs) => string | undefined;
   /** Default observation threshold in tokens */
   defaultObservationThreshold?: number;
   /** Default reflection threshold in tokens */
@@ -613,6 +642,7 @@ export interface ActiveSubagentState {
   toolCalls: Array<{ name: string; isError: boolean }>;
   textDelta: string;
   status: 'running' | 'completed' | 'error';
+  startedAt?: number;
   durationMs?: number;
   result?: string;
 }
@@ -658,18 +688,29 @@ export interface AgentControllerDisplayState {
   toolInputBuffers: Map<string, { text: string; toolName: string }>;
 
   // ── Tool approval ────────────────────────────────────────────────────
-  /** A tool awaiting user approval (null when no approval pending) */
-  pendingApproval: {
-    toolCallId: string;
-    toolName: string;
-    args: unknown;
-  } | null;
+  /**
+   * Tools awaiting user approval, keyed by toolCallId. Each entry carries the
+   * thread that produced the call, so an approval parked on one thread can never
+   * shadow another thread's. More than one can be parked at once (e.g. a
+   * foreground run and a background/sub-agent run on a detached thread).
+   */
+  pendingApprovals: Map<
+    string,
+    {
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+      /** Thread that produced the gated call, when the producer knew it. */
+      threadId?: string;
+    }
+  >;
 
   // ── Tool suspension ─────────────────────────────────────────────────
   /**
-   * Tools awaiting resume data after calling suspend(), keyed by toolCallId.
-   * Multiple tools can be parked at once (e.g. parallel `ask_user` prompts), so
-   * resuming one leaves the others intact for the UI to keep rendering.
+   * Tools awaiting resume data after calling suspend(). Controller-produced
+   * entries are keyed by `getSuspensionAddressKey(address)` so separate runs may
+   * reuse a tool-call id; legacy events without an address remain keyed by
+   * `toolCallId`. Iterate values when the address is not already known.
    */
   pendingSuspensions: Map<
     string,
@@ -679,6 +720,10 @@ export interface AgentControllerDisplayState {
       args: unknown;
       suspendPayload: unknown;
       resumeSchema?: string;
+      /** Immutable address fields are present for controller-produced suspensions. */
+      resourceId?: string;
+      threadId?: string;
+      runId?: string;
     }
   >;
 
@@ -719,7 +764,7 @@ export function defaultDisplayState(): AgentControllerDisplayState {
     tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),
-    pendingApproval: null,
+    pendingApprovals: new Map(),
     pendingSuspensions: new Map(),
     activeSubagents: new Map(),
     omProgress: defaultOMProgressState(),
@@ -768,63 +813,123 @@ export function defaultOMProgressState(): OMProgressState {
 // =============================================================================
 
 /**
+ * Reasoning-effort levels a session can select alongside its model. Mirrors the
+ * persisted `thinkingLevel` session-state key so a model switch can carry the
+ * level that should take effect with it.
+ */
+export type AgentControllerThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+/**
  * Events emitted by the controller that UIs can subscribe to.
  *
- * Streamed `message_start`, `message_update`, and `message_end` events for one
- * assistant turn intentionally share a live `MastraDBMessage`. Its content is
- * updated in place as later deltas arrive. `display_state_changed.currentMessage`
- * refers to that same live message. Consumers that retain an event across an
- * asynchronous or storage boundary must copy or serialize the value there.
+ * A logical message emits one `message_start` containing its initial
+ * `MastraDBMessage`, zero or more compact id-addressed `message_update` deltas,
+ * and one id-only `message_end` after terminal metadata has been applied.
+ * Consumers reconstruct streamed text, reasoning, and non-text message parts
+ * from ordered deltas, then use the id-only end to finalize the matching entry.
  */
 export type AgentControllerEvent =
   | { type: 'mode_changed'; modeId: string; previousModeId: string }
-  | { type: 'model_changed'; modelId: string; scope?: 'global' | 'thread' | 'mode'; modeId?: string }
+  | {
+      type: 'model_changed';
+      modelId: string;
+      /**
+       * The current session thinking level, including for model-only switches.
+       * Undefined when the session has no thinking-level override.
+       */
+      thinkingLevel: AgentControllerThinkingLevel | undefined;
+    }
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: AgentControllerThread }
   | { type: 'thread_deleted'; threadId: string }
+  | { type: 'thread_owner_changed'; threadId: string; fromOwnerId: string | undefined; toOwnerId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
-  | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
+  | {
+      type: 'agent_end';
+      reason?: 'complete' | 'aborted' | 'error' | 'suspended';
+      /** Why an aborted run stopped, when the abort said: `'thread-lease-lost'` when another run holds its thread lease. */
+      abortReason?: string;
+    }
   | { type: 'message_start'; message: MastraDBMessage }
-  | { type: 'message_update'; message: MastraDBMessage }
-  | { type: 'message_end'; message: MastraDBMessage }
-  | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
-  | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
   | {
-      type: 'tool_suspended';
-      toolCallId: string;
-      toolName: string;
-      args: unknown;
-      suspendPayload: unknown;
-      resumeSchema?: string;
+      type: 'message_update';
+      id: string;
+      event:
+        | { type: 'text-delta'; delta: string }
+        | { type: 'reasoning-delta'; index: number; delta: string }
+        | { type: 'part'; index: number; part: MastraMessagePart };
     }
-  | { type: 'tool_suspension_cancelled'; toolCallId: string; toolName: string; reason: string }
-  | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
-  | {
-      type: 'tool_end';
-      toolCallId: string;
-      result: unknown;
-      isError: boolean;
-      /**
-       * True when the tool call resolved without ever running because the user
-       * denied its approval gate or the run was aborted while it was parked
-       * waiting for approval. `isError` stays `false` in that case (the tool
-       * did not fail — it simply never executed), so subscribers that gate on
-       * "the tool actually did work" must exclude `denied === true`.
-       */
-      denied?: boolean;
-      providerMetadata?: Record<string, unknown>;
-    }
-  | { type: 'tool_input_start'; toolCallId: string; toolName: string }
-  | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: unknown; toolName?: string }
-  | { type: 'tool_input_end'; toolCallId: string }
-  | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
-  | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
+  | { type: 'message_end'; id: string }
+  | ({ threadId?: string } & (
+      | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown; title?: string }
+      | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
+      | {
+          type: 'tool_suspended';
+          toolCallId: string;
+          toolName: string;
+          args: unknown;
+          suspendPayload: unknown;
+          resumeSchema?: string;
+          resourceId?: string;
+          runId?: string;
+        }
+      | {
+          type: 'tool_suspension_cancelled';
+          toolCallId: string;
+          toolName: string;
+          reason: string;
+          resourceId?: string;
+          runId?: string;
+        }
+      | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
+      | {
+          type: 'tool_end';
+          toolCallId: string;
+          result: unknown;
+          isError: boolean;
+          /**
+           * True when the tool call resolved without ever running because the user
+           * denied its approval gate or the run was aborted while it was parked
+           * waiting for approval. `isError` stays `false` in that case (the tool
+           * did not fail — it simply never executed), so subscribers that gate on
+           * "the tool actually did work" must exclude `denied === true`.
+           */
+          denied?: boolean;
+          providerMetadata?: Record<string, unknown>;
+        }
+      | {
+          type: 'tool_input_start';
+          toolCallId: string;
+          toolName: string;
+          title?: string;
+          /**
+           * Assistant message the tool call belongs to, so consumers can attribute
+           * streamed arguments to the model step that produced them. Tool-call chunks
+           * can precede this step's `message_start`, so the id is the only way to tell
+           * one step's arguments from the next step's.
+           */
+          messageId?: string;
+        }
+      | {
+          type: 'tool_input_delta';
+          toolCallId: string;
+          argsTextDelta: unknown;
+          toolName?: string;
+          /** Assistant message the tool call belongs to; see `tool_input_start.messageId`. */
+          messageId?: string;
+        }
+      | { type: 'tool_input_end'; toolCallId: string; messageId?: string }
+      | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
+      | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
+    ))
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }
   | {
       type: 'error';
       error: Error;
+      /** Provider finish reason when a response ended without normal completion. */
+      finishReason?: string;
       errorType?: string;
       retryable?: boolean;
       retryDelay?: number;
@@ -961,6 +1066,10 @@ export type AgentControllerEvent =
       type: 'goal_evaluation';
       payload: GoalEvaluationPayload;
     }
+  | {
+      type: 'task_complete_evaluation';
+      payload: IsTaskCompletePayload;
+    }
   | { type: 'display_state_changed'; displayState: AgentControllerDisplayState };
 
 /**
@@ -1004,7 +1113,7 @@ export interface AgentControllerRequestState<TState = unknown> {
 export interface AgentControllerRequestSession<TState = unknown> {
   /** Stable session identifier (mirrors SessionRecord.id in storage). */
   id: string;
-  /** Stable session owner (mirrors SessionRecord.ownerId in storage). */
+  /** Stable identity of the process-local session host. Use `threadOwnerId` for thread ownership and billing. */
   ownerId: string;
   /** Currently-selected mode ID */
   modeId: string;
@@ -1043,14 +1152,26 @@ export interface AgentControllerRequestContext<TState = unknown> {
   /** Update controller state from the latest state snapshot in a serialized transaction. */
   updateState?: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 
-  /** Current thread ID */
+  /** Read a setting from the thread captured for this request. */
+  getThreadSetting?: (key: string) => Promise<unknown>;
+
+  /** Persist a setting on the thread captured for this request. */
+  setThreadSetting?: (setting: { key: string; value: unknown }) => Promise<void>;
+
+  /** Whether the thread captured for this request is still active in the session. */
+  isThreadActive?: () => boolean;
+
+  /** Thread ID captured for this request. */
   threadId: string | null;
 
-  /** Current resource ID */
+  /** Thread owner captured once when this run starts. */
+  threadOwnerId?: string;
+
+  /** Current resource ID: whose threads and memory this session uses. Several sessions may share it. */
   resourceId: string;
 
-  /** Optional isolation scope used to identify this session within its resource. */
-  scope?: string;
+  /** ID of the session handling this request. Look the session up with `AgentController.getSession(sessionId)`. */
+  sessionId: string;
 
   /**
    * Snapshot of the relevant session-owned values for this request.

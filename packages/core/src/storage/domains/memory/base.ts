@@ -1,5 +1,7 @@
 import type { MastraMessageContentV2 } from '../../../agent';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
+import type { RunFence } from '../../run-fencing';
+import { runFencingNotSupportedError } from '../../run-fencing';
 import type {
   StorageResourceType,
   ThreadOrderBy,
@@ -12,11 +14,14 @@ import type {
   StorageOrderBy,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
+  StorageCopyThreadOutput,
   ObservationalMemoryRecord,
   ObservationalMemoryHistoryOptions,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
+  UpdateActiveObservationsResult,
   UpdateBufferedObservationsInput,
+  UpdateBufferedObservationsResult,
   UpdateBufferedReflectionInput,
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
@@ -43,6 +48,9 @@ export abstract class MemoryStorage extends StorageDomain {
    */
   readonly supportsObservationalMemory?: boolean = false;
 
+  /** Supports groupId, generation bounds, and ordering in OM history queries. */
+  readonly supportsObservationalMemoryHistorySearch?: boolean = false;
+
   /**
    * Whether this adapter's `updateThread` treats an omitted `title`/`metadata`
    * as "leave that column untouched" (partial update).
@@ -53,6 +61,14 @@ export abstract class MemoryStorage extends StorageDomain {
    * Adapters that implement partial updates must set this to true.
    */
   readonly supportsPartialThreadUpdate?: boolean = false;
+
+  /**
+   * Whether this adapter implements `mergeResourceWorkingMemory` as an atomic
+   * read-merge-write that is safe across processes.
+   */
+  readonly supportsAtomicWorkingMemoryMerge?: boolean = false;
+
+  private threadMetadataUpdateQueues = new Map<string, Promise<void>>();
 
   constructor() {
     super({
@@ -69,7 +85,62 @@ export abstract class MemoryStorage extends StorageDomain {
     resourceId?: string;
   }): Promise<StorageThreadType | null>;
 
-  abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
+  /**
+   * Whether this adapter implements run fencing: `raiseRunFence`,
+   * `retireRunFence`, and rejecting the writes listed below when their fence is no longer the run's
+   * current fence, atomically with the write. A write's fence is its `fence`
+   * argument, otherwise the one `resolveRunFence()` returns.
+   *
+   * Fenced: `saveThread`, `updateThread`, `patchThread`,
+   * `updateThreadMetadata`, `saveMessages`, `updateMessages`,
+   * `deleteMessages` and `updateResource`. Observational memory writes that
+   * change observations or reflections, and `mergeResourceWorkingMemory` on
+   * adapters that set `supportsAtomicWorkingMemoryMerge`, are fenced through
+   * `resolveRunFence()` only.
+   *
+   * Not fenced: `deleteThread`, `copyThread`, `cloneThread`,
+   * `updateThreadResourceId`, `saveResource`, and observational memory flags,
+   * pending token counts and record initialization.
+   *
+   * Memory fences are raised only for runs claimed in a workflows store that
+   * supports run fencing, so supporting it here has no effect on its own.
+   *
+   * A rejected write throws a `RunFenceConflictError` itself, not wrapped in
+   * another error, and writes nothing.
+   *
+   * Adapters that return true must pass the run-fencing conformance suite.
+   * An adapter that has to probe its backend to know returns a promise, and
+   * rejects when the probe fails: it must never answer false and later true.
+   */
+  supportsRunFencing(): boolean | Promise<boolean> {
+    return false;
+  }
+
+  /**
+   * Make `fence` the run's current fence in this domain, unless the domain
+   * already holds a newer generation for the run. Returns whether `fence` is
+   * current afterwards. Called once a run is claimed in the workflows domain,
+   * so that writes from older claims are rejected here too. Clears the
+   * fence's `retiredAt` whenever it writes, so a fence raised again is not
+   * pruned while its execution runs.
+   */
+  async raiseRunFence(_fence: RunFence): Promise<boolean> {
+    throw runFencingNotSupportedError('memory', this.constructor.name);
+  }
+
+  /**
+   * Mark `fence` as retired once the execution holding it has settled, by
+   * setting `retiredAt` from the store's clock. Only takes effect while
+   * `fence` is still the run's current fence, so a late retire cannot mark a
+   * newer execution's fence. Returns whether it took effect. Retiring does not
+   * change which writes are accepted; it only makes the fence eligible for
+   * `memory.runFences` retention.
+   */
+  async retireRunFence(_fence: RunFence): Promise<boolean> {
+    throw runFencingNotSupportedError('memory', this.constructor.name);
+  }
+
+  abstract saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType>;
 
   /**
    * Update a thread's title and/or metadata.
@@ -84,10 +155,12 @@ export abstract class MemoryStorage extends StorageDomain {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType>;
 
   /**
@@ -108,10 +181,12 @@ export abstract class MemoryStorage extends StorageDomain {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
     if (!this.supportsPartialThreadUpdate && (title === undefined || metadata === undefined)) {
       const existing = await this.getThreadById({ threadId: id });
@@ -124,7 +199,42 @@ export abstract class MemoryStorage extends StorageDomain {
       id,
       ...(title !== undefined ? { title } : {}),
       ...(metadata !== undefined ? { metadata } : {}),
+      ...(fence ? { fence } : {}),
     });
+  }
+
+  /**
+   * Serializes a metadata read-modify-write for one thread within this storage instance.
+   * Transaction-capable adapters may override this to provide cross-process atomicity.
+   */
+  async updateThreadMetadata({
+    id,
+    resourceId,
+    update,
+    fence,
+  }: {
+    id: string;
+    resourceId?: string;
+    update: (thread: StorageThreadType) => Record<string, unknown> | undefined;
+    fence?: RunFence;
+  }): Promise<StorageThreadType | null> {
+    const previous = this.threadMetadataUpdateQueues.get(id) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    this.threadMetadataUpdateQueues.set(id, current);
+
+    await previous.catch(() => {});
+    try {
+      const thread = await this.getThreadById({ threadId: id, resourceId });
+      if (!thread) return null;
+      const metadata = update(thread);
+      return metadata ? await this.patchThread({ id, metadata, ...(fence ? { fence } : {}) }) : thread;
+    } finally {
+      release();
+      if (this.threadMetadataUpdateQueues.get(id) === current) this.threadMetadataUpdateQueues.delete(id);
+    }
   }
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
@@ -147,16 +257,20 @@ export abstract class MemoryStorage extends StorageDomain {
 
   abstract listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }>;
 
-  abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }>;
+  abstract saveMessages(args: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }>;
 
   abstract updateMessages(args: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
     })[];
+    fence?: RunFence;
   }): Promise<MastraDBMessage[]>;
 
-  async deleteMessages(_messageIds: string[]): Promise<void> {
+  async deleteMessages(_messageIds: string[], _options?: { fence?: RunFence }): Promise<void> {
     throw new Error(
       `Message deletion is not supported by this storage adapter (${this.constructor.name}). ` +
         `The deleteMessages method needs to be implemented in the storage adapter.`,
@@ -175,17 +289,51 @@ export abstract class MemoryStorage extends StorageDomain {
   abstract listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
 
   /**
-   * Clone a thread and its messages to create a new independent thread.
-   * The cloned thread will have clone metadata stored in its metadata field.
+   * Copy a thread and its messages to a new independent thread without returning
+   * the message payloads. Adapters should copy rows inside the store (e.g.
+   * `INSERT … SELECT`) or stream them in pages so the whole thread never sits on
+   * the Node heap. The new thread carries clone metadata in its metadata field.
+   *
+   * Adapters that only override `cloneThread` get this for free; the payloads it
+   * returns are discarded.
+   *
+   * @param args - Clone configuration options
+   * @returns The newly created thread and the source→new message id map
+   */
+  async copyThread(args: StorageCloneThreadInput): Promise<StorageCopyThreadOutput> {
+    if (this.cloneThread !== MemoryStorage.prototype.cloneThread) {
+      const { thread, messageIdMap } = await this.cloneThread(args);
+      return { thread, messageIdMap };
+    }
+    throw new Error(
+      `Thread cloning is not implemented by this storage adapter (${this.constructor.name}). ` +
+        `The copyThread method needs to be implemented in the storage adapter.`,
+    );
+  }
+
+  /**
+   * Clone a thread and its messages to create a new independent thread and return
+   * the cloned messages. Defaults to `copyThread` followed by reading the new
+   * thread's messages back, so adapters only need to implement `copyThread`.
    *
    * @param args - Clone configuration options
    * @returns The newly created thread and the cloned messages
    */
-  async cloneThread(_args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
-    throw new Error(
-      `Thread cloning is not implemented by this storage adapter (${this.constructor.name}). ` +
-        `The cloneThread method needs to be implemented in the storage adapter.`,
-    );
+  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+    if (this.copyThread === MemoryStorage.prototype.copyThread) {
+      throw new Error(
+        `Thread cloning is not implemented by this storage adapter (${this.constructor.name}). ` +
+          `The copyThread method needs to be implemented in the storage adapter.`,
+      );
+    }
+    const { thread, messageIdMap } = await this.copyThread(args);
+    const { messages } = await this.listMessages({
+      threadId: thread.id,
+      resourceId: thread.resourceId,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    return { thread, clonedMessages: messages, messageIdMap };
   }
 
   /**
@@ -343,12 +491,26 @@ export abstract class MemoryStorage extends StorageDomain {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
     throw new Error(
       `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
         `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
         `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
+  }
+
+  /**
+   * Atomically replaces a resource's working memory with `merge(existing)`.
+   * The read and write happen under a lock held across processes, so concurrent
+   * merges never lose each other's changes. Creates the resource if missing.
+   * Adapters that support this must set `supportsAtomicWorkingMemoryMerge`.
+   */
+  async mergeResourceWorkingMemory(_: {
+    resourceId: string;
+    merge: (existing: string | undefined) => string;
+  }): Promise<StorageResourceType> {
+    throw new Error(`Atomic working memory merge is not supported by this storage adapter (${this.constructor.name}).`);
   }
 
   protected parseOrderBy(
@@ -403,9 +565,28 @@ export abstract class MemoryStorage extends StorageDomain {
   /**
    * Update active observations.
    * Called when observations are created and immediately activated (no buffering).
+   *
+   * Adapters that implement {@link commitActiveObservations} throw here when the write is not
+   * applied, so a caller that only awaits this method can't mistake a rejected write for a
+   * committed one. Use {@link commitActiveObservations} to get the outcome instead.
    */
   async updateActiveObservations(_input: UpdateActiveObservationsInput): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
+   * Write active observations and report whether they were written.
+   *
+   * Never writes to a superseded record (`{ applied: false, reason: 'retired' }`), and when
+   * `expectedActiveObservations` is given, writes only if the stored text still equals it
+   * (`{ applied: false, reason: 'conflict' }` otherwise). The cursor never moves backward.
+   *
+   * The default delegates to {@link updateActiveObservations} and reports the write as applied,
+   * which keeps adapters that predate this method working unchanged.
+   */
+  async commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
+    await this.updateActiveObservations(input);
+    return { applied: true };
   }
 
   // ============================================
@@ -416,9 +597,27 @@ export abstract class MemoryStorage extends StorageDomain {
   /**
    * Update buffered observations.
    * Called when observations are created asynchronously via `bufferTokens`.
+   *
+   * Use {@link appendBufferedObservations} to learn where the chunk was stored, or whether it
+   * was skipped.
    */
   async updateBufferedObservations(_input: UpdateBufferedObservationsInput): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
+   * Append a buffered observation chunk and report where it was stored.
+   *
+   * Appends to the head generation (a superseded `id` is redirected to the head). Skips the
+   * append when the head already holds a chunk with the same `cycleId` or the chunk is wholly
+   * covered by the head's cursor; see {@link UpdateBufferedObservationsResult}.
+   *
+   * The default delegates to {@link updateBufferedObservations} and reports the chunk as stored
+   * on `input.id`, which keeps adapters that predate this method working unchanged.
+   */
+  async appendBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
+    await this.updateBufferedObservations(input);
+    return { persisted: true, recordId: input.id };
   }
 
   /**
@@ -428,6 +627,10 @@ export abstract class MemoryStorage extends StorageDomain {
    * 2. Moves activated bufferedMessageIds → observedMessageIds
    * 3. Keeps remaining buffered content if activationRatio < 100
    * 4. Updates lastObservedAt
+   *
+   * Activates a prefix of the **stored** chunk list (`bufferedChunks` only overrides per-chunk
+   * token weights), never moves the cursor backward, and returns `retired: true` without
+   * writing when the target record was superseded.
    *
    * Returns info about what was activated for UI feedback.
    */
@@ -441,6 +644,9 @@ export abstract class MemoryStorage extends StorageDomain {
    * - originType: 'reflection'
    * - activeObservations containing the reflection
    * - generationCount incremented from the current record
+   *
+   * See {@link CreateReflectionGenerationInput} for how the stored record (not the snapshot)
+   * decides the carried state, and how superseded or rewritten records are handled.
    */
   async createReflectionGeneration(_input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
@@ -458,6 +664,9 @@ export abstract class MemoryStorage extends StorageDomain {
    * Swap buffered reflection to active observations.
    * Creates a new generation where activeObservations = bufferedReflection + unreflected observations.
    * The `tokenCount` in input is the processor-computed token count for the combined content.
+   * Buffered observation chunks and buffering state move to the new generation, as in
+   * `createReflectionGeneration`. If `currentRecord` was superseded, nothing is created and
+   * the head is returned.
    */
   async swapBufferedReflectionToActive(
     _input: SwapBufferedReflectionToActiveInput,
@@ -485,6 +694,8 @@ export abstract class MemoryStorage extends StorageDomain {
    * @param id - Record ID
    * @param isBuffering - Whether buffering is in progress
    * @param lastBufferedAtTokens - The pending token count at which this buffer was triggered (only set when isBuffering=true)
+   *
+   * A superseded `id` is redirected to the head generation.
    */
   async setBufferingObservationFlag(_id: string, _isBuffering: boolean, _lastBufferedAtTokens?: number): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
@@ -518,6 +729,7 @@ export abstract class MemoryStorage extends StorageDomain {
    * Set the pending message token count.
    * Called at the end of each OM processing step to persist the current
    * context window token count so the UI can display it on page load.
+   * A superseded `id` is redirected to the head generation.
    */
   async setPendingMessageTokens(_id: string, _tokenCount: number): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);

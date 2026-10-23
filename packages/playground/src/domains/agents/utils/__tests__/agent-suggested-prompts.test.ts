@@ -10,7 +10,7 @@ describe('getAgentSuggestedPrompts', () => {
   });
 
   describe('when suggested prompts contain invalid and duplicate values', () => {
-    it('returns the first three unique non-empty strings', () => {
+    it('returns the first six unique non-empty strings', () => {
       const metadata = {
         suggestedPrompts: [
           '  Check the weather  ',
@@ -20,11 +20,21 @@ describe('getAgentSuggestedPrompts', () => {
           'Check a stock',
           null,
           'Build a page',
+          'Plan a trip',
+          'Write a haiku',
+          'Summarize a doc',
           'Ignored after the limit',
         ],
       };
 
-      expect(getAgentSuggestedPrompts(metadata)).toEqual(['Check the weather', 'Check a stock', 'Build a page']);
+      expect(getAgentSuggestedPrompts(metadata)).toEqual([
+        'Check the weather',
+        'Check a stock',
+        'Build a page',
+        'Plan a trip',
+        'Write a haiku',
+        'Summarize a doc',
+      ]);
     });
   });
 });

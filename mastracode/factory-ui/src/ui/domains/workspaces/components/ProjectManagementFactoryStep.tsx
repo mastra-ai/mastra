@@ -1,54 +1,39 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
-
-import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { useWorkSourceConnections } from '../hooks/useWorkSourceConnections';
+import type { WorkSource } from '../hooks/useWorkSourceConnections';
+import { OnboardingLinearConnection } from './onboarding/OnboardingLinearConnection';
+import { OnboardingPlatformConnection } from './onboarding/OnboardingPlatformConnection';
 
 export interface ProjectManagementFactoryStepProps {
   onConnect: () => void;
   onContinue: () => void;
+  onPreviewSource?: (source: WorkSource) => void;
 }
 
-export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectManagementFactoryStepProps) {
-  const linearStatus = useLinearStatusQuery();
-
+export function ProjectManagementFactoryStep({
+  onConnect,
+  onContinue,
+  onPreviewSource,
+}: ProjectManagementFactoryStepProps) {
+  const anyConnected = Object.values(useWorkSourceConnections()).some(Boolean);
   return (
-    <section aria-label="Linear connection" className="border-border1 bg-surface2/80 max-w-xl rounded-2xl border p-5">
-      {linearStatus.isPending ? (
-        <SkeletonRows label="Loading Linear status" rows={2} rowClassName="h-12 w-full rounded-xl" />
-      ) : linearStatus.data?.connected ? (
-        <div className="flex flex-col gap-4">
-          <Txt as="p" variant="ui-md" className="text-icon5 m-0">
-            Connected to {linearStatus.data.workspace?.name ?? 'Linear'}.
-          </Txt>
-          <Button variant="primary" onClick={onContinue}>
-            Continue
-          </Button>
+    <div className="flex min-h-0 w-full flex-col">
+      <section aria-label="Project management connections" className="-mx-3 min-h-0 space-y-1 overflow-y-auto px-3">
+        <div onMouseEnter={() => onPreviewSource?.('linear')} onFocus={() => onPreviewSource?.('linear')}>
+          <OnboardingLinearConnection onConnect={onConnect} />
         </div>
-      ) : (
-        <EmptyState
-          className="py-8"
-          iconSlot={<LinearIcon className="text-icon3 size-10" />}
-          titleSlot="Connect Linear"
-          descriptionSlot="Give your Factory the issue context and priorities behind your code."
-          actionSlot={
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              {linearStatus.data?.reason !== 'missing_config' &&
-                linearStatus.data?.reason !== 'organization_required' && (
-                  <Button variant="primary" onClick={onConnect}>
-                    <LinearIcon className="size-4" />
-                    {linearStatus.data?.reason === 'not_connected' ? 'Connect Linear' : 'Reconnect Linear'}
-                  </Button>
-                )}
-              <Button variant="ghost" onClick={onContinue}>
-                Skip for now
-              </Button>
-            </div>
-          }
-        />
-      )}
-    </section>
+        <div onMouseEnter={() => onPreviewSource?.('jira')} onFocus={() => onPreviewSource?.('jira')}>
+          <OnboardingPlatformConnection provider="jira" />
+        </div>
+        <div onMouseEnter={() => onPreviewSource?.('incident-io')} onFocus={() => onPreviewSource?.('incident-io')}>
+          <OnboardingPlatformConnection provider="incident-io" />
+        </div>
+      </section>
+      <div className="mt-8 flex shrink-0 items-center gap-2">
+        <Button variant={anyConnected ? 'primary' : 'ghost'} size="lg" onClick={onContinue}>
+          {anyConnected ? 'Continue' : 'Skip for now'}
+        </Button>
+      </div>
+    </div>
   );
 }

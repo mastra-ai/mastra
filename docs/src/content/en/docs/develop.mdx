@@ -27,9 +27,9 @@ Changes in your `src/mastra/` directory automatically restart the development se
 
 Mastra provides a skill and a CLI to help your coding agent write high-quality Mastra code.
 
-### Mastra skill
+### Mastra skills
 
-AI models may not have up-to-date knowledge of Mastra's APIs. Use the [Mastra skill](https://github.com/mastra-ai/skills) to give your coding agent implementation guidance and best practices, including instructions for fetching the latest Mastra documentation.
+AI models may not have up-to-date knowledge of Mastra's APIs. Use the [Mastra skills](https://github.com/mastra-ai/skills) to give your coding agent implementation guidance and best practices, including instructions for fetching the latest Mastra documentation. Your coding agent will also be able to interact with [Mastra Factory](https://factory.mastra.ai).
 
 Install the skill manually with:
 
@@ -45,7 +45,7 @@ npx skills update mastra
 
 :::note
 
-When you create a project with [create mastra](/docs), the command automatically installs the Mastra skill so your coding agent can discover and use it.
+When you create a project with [create mastra](/docs), the command automatically installs the Mastra skills so your coding agent can discover and use them.
 
 :::
 
@@ -60,7 +60,7 @@ npx mastra api --url http://localhost:4111 agent run agent '{"messages":"Hello"}
 npx mastra api --url http://localhost:4111 trace list
 ```
 
-Remember to install the [Mastra skill](#mastra-skill) to teach your coding agent how to use the CLI.
+Remember to install the [Mastra skills](#mastra-skills) to teach your coding agent how to use the CLI.
 
 ## Project structure
 
@@ -87,9 +87,7 @@ See the [project structure reference](/reference/project-structure) for the defa
 
 ## File-based agents
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
+:::note
 
 File-based discovery only runs through `mastra dev` or `mastra build`. If your app imports `mastra` directly, including through a web framework or server adapter, file-based agents aren't discovered. Register those agents in code or run Mastra as a separate server.
 

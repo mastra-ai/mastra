@@ -2,33 +2,15 @@
 
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { Label } from '@mastra/playground-ui/components/Label';
-import { Pencil } from 'lucide-react';
-import { DatasetItemScorerSelector } from './dataset-item-scorer-selector';
+import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Pencil, X, Check } from 'lucide-react';
+import { DatasetFieldErrors } from '../dataset-field-errors';
 
 /** Schema validation error from API */
 export interface SchemaValidationError {
   field: 'input' | 'groundTruth' | 'toolMocks';
   errors: Array<{ path: string; message: string }>;
-}
-
-/** Displays field-level validation errors */
-function ValidationErrors({ field, errors }: { field: string; errors: Array<{ path: string; message: string }> }) {
-  if (!errors.length) return null;
-
-  return (
-    <div className="mt-2 space-y-1">
-      {errors.map((err, idx) => (
-        <p key={idx} className="text-destructive text-ui-sm">
-          <code className="bg-destructive/10 rounded px-1">
-            {field}
-            {err.path !== '/' ? err.path : ''}
-          </code>
-          : {err.message}
-        </p>
-      ))}
-    </div>
-  );
 }
 
 /**
@@ -45,10 +27,6 @@ export interface EditModeContentProps {
   setTrajectoryValue: (value: string) => void;
   toolMocksValue: string;
   setToolMocksValue: (value: string) => void;
-  scorerOverrideEnabled: boolean;
-  setScorerOverrideEnabled: (enabled: boolean) => void;
-  selectedScorerIds: string[];
-  setSelectedScorerIds: (scorerIds: string[]) => void;
   requestContextValue: string;
   setRequestContextValue: (value: string) => void;
   validationErrors: SchemaValidationError | null;
@@ -68,10 +46,6 @@ export function EditModeContent({
   setTrajectoryValue,
   toolMocksValue,
   setToolMocksValue,
-  scorerOverrideEnabled,
-  setScorerOverrideEnabled,
-  selectedScorerIds,
-  setSelectedScorerIds,
   requestContextValue,
   setRequestContextValue,
   validationErrors,
@@ -82,20 +56,20 @@ export function EditModeContent({
   return (
     <>
       <div className="mb-4">
-        <h3 className="text-header-sm flex items-center gap-2 font-medium">
+        <Txt as="h3" variant="heading" className="flex items-center gap-2">
           <Pencil className="h-5 w-5" /> Edit Item
-        </h3>
+        </Txt>
       </div>
 
       <div className="space-y-6">
-        <div className="space-y-2">
-          <Label>Input (JSON) *</Label>
+        <Field invalid={validationErrors?.field === 'input'}>
+          <FieldLabel required>Input (JSON)</FieldLabel>
           <CodeEditor value={inputValue} onChange={setInputValue} showCopyButton={false} className="min-h-[120px]" />
-          {validationErrors?.field === 'input' && <ValidationErrors field="input" errors={validationErrors.errors} />}
-        </div>
+          {validationErrors?.field === 'input' && <DatasetFieldErrors field="input" errors={validationErrors.errors} />}
+        </Field>
 
-        <div className="space-y-2">
-          <Label>Ground Truth (JSON, optional)</Label>
+        <Field invalid={validationErrors?.field === 'groundTruth'}>
+          <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
           <CodeEditor
             value={groundTruthValue}
             onChange={setGroundTruthValue}
@@ -103,27 +77,27 @@ export function EditModeContent({
             className="min-h-[100px]"
           />
           {validationErrors?.field === 'groundTruth' && (
-            <ValidationErrors field="groundTruth" errors={validationErrors.errors} />
+            <DatasetFieldErrors field="groundTruth" errors={validationErrors.errors} />
           )}
-        </div>
+        </Field>
 
-        <div className="space-y-2">
-          <Label>Expected Trajectory (JSON, optional)</Label>
+        <Field>
+          <FieldLabel>Expected Trajectory (JSON, optional)</FieldLabel>
           <CodeEditor
             value={trajectoryValue}
             onChange={setTrajectoryValue}
             showCopyButton={false}
             className="min-h-[80px]"
           />
-        </div>
+        </Field>
 
-        <div className="space-y-2">
-          <Label>Tool Mocks (JSON array, optional)</Label>
-          <p className="text-muted-foreground text-ui-sm">
+        <Field invalid={validationErrors?.field === 'toolMocks'}>
+          <FieldLabel>Tool Mocks (JSON array, optional)</FieldLabel>
+          <FieldDescription>
             Ordered static mocks served in place of executing the tool. Each entry is{' '}
             <code>{`{ "toolName", "args", "output" }`}</code>. Calling a mocked tool with non-matching args fails the
             item; unmocked tools run live.
-          </p>
+          </FieldDescription>
           <CodeEditor
             value={toolMocksValue}
             onChange={setToolMocksValue}
@@ -131,43 +105,35 @@ export function EditModeContent({
             className="min-h-[100px]"
           />
           {validationErrors?.field === 'toolMocks' && (
-            <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
+            <DatasetFieldErrors field="toolMocks" errors={validationErrors.errors} />
           )}
-        </div>
+        </Field>
 
-        <DatasetItemScorerSelector
-          overrideEnabled={scorerOverrideEnabled}
-          onOverrideEnabledChange={setScorerOverrideEnabled}
-          selectedScorerIds={selectedScorerIds}
-          onSelectedScorerIdsChange={setSelectedScorerIds}
-          disabled={isSaving}
-        />
-
-        <div className="space-y-2">
-          <Label>Request Context (JSON, optional)</Label>
+        <Field>
+          <FieldLabel>Request Context (JSON, optional)</FieldLabel>
           <CodeEditor
             value={requestContextValue}
             onChange={setRequestContextValue}
             showCopyButton={false}
             className="min-h-[80px]"
           />
-        </div>
+        </Field>
 
-        <div className="space-y-2">
-          <Label>Metadata (JSON, optional)</Label>
+        <Field>
+          <FieldLabel>Metadata (JSON, optional)</FieldLabel>
           <CodeEditor
             value={metadataValue}
             onChange={setMetadataValue}
             showCopyButton={false}
             className="min-h-[80px]"
           />
-        </div>
+        </Field>
 
         <div className="flex gap-2 pt-4">
-          <Button variant="primary" onClick={onSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save Changes'}
+          <Button icon={<Check />} variant="primary" onClick={onSave} disabled={isSaving}>
+            {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
-          <Button onClick={onCancel} disabled={isSaving}>
+          <Button icon={<X />} onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
         </div>

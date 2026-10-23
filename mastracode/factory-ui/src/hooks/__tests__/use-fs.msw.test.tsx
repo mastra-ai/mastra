@@ -5,11 +5,12 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderHookWithProviders } from '../../../e2e/ui/render';
 import {
+  normalizePlanPath,
   useArtifactListing,
   useDirectoryListing,
   useWorkspaceFile,
-  useWorkspaceFiles,
   useWorkspaceRenderedListing,
+  useWorkspaceTree,
 } from '../use-fs';
 import { listing } from './fixtures/fs';
 
@@ -119,9 +120,8 @@ describe('useArtifactListing', () => {
 });
 
 const WORKSPACE_RENDERED_URL = `${TEST_BASE_URL}/web/workspace/rendered/list`;
-const WORKSPACE_FILES_URL = `${TEST_BASE_URL}/web/workspace/files`;
+const WORKSPACE_TREE_URL = `${TEST_BASE_URL}/web/workspace/tree`;
 const WORKSPACE_FILE_URL = `${TEST_BASE_URL}/web/workspace/file`;
-const THREAD = 'thread-1';
 
 describe('useWorkspaceRenderedListing', () => {
   it('does not fetch until workspace path and root are available', () => {
@@ -173,39 +173,52 @@ describe('useWorkspaceRenderedListing', () => {
   });
 });
 
-describe('useWorkspaceFiles', () => {
-  describe('when a workspace and thread are available', () => {
-    it('requests the persisted file list for that exact scope', async () => {
-      let seenWorkspacePath: string | null = null;
-      let seenThreadId: string | null = null;
-      server.use(
-        http.get(WORKSPACE_FILES_URL, ({ request }) => {
-          const url = new global.URL(request.url);
-          seenWorkspacePath = url.searchParams.get('workspacePath');
-          seenThreadId = url.searchParams.get('threadId');
-          return HttpResponse.json({
-            workspacePath: seenWorkspacePath,
-            threadId: seenThreadId,
-            files: [{ path: 'src/agent.ts' }],
-          });
-        }),
-      );
+describe('useWorkspaceTree', () => {
+  it('requests one directory of the session', async () => {
+    const seen: Array<{ workspacePath: string | null; path: string | null }> = [];
+    server.use(
+      http.get(WORKSPACE_TREE_URL, ({ request }) => {
+        const url = new global.URL(request.url);
+        seen.push({ workspacePath: url.searchParams.get('workspacePath'), path: url.searchParams.get('path') });
+        return HttpResponse.json({
+          workspacePath: 'session-1',
+          path: 'src',
+          available: true,
+          entries: [{ name: 'agent.ts', path: 'src/agent.ts', type: 'file', size: 13 }],
+        });
+      }),
+    );
 
-      const { result } = renderHookWithProviders(() => useWorkspaceFiles('session-1', THREAD));
+    const { result } = renderHookWithProviders(() => useWorkspaceTree('session-1', 'src'));
 
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(seenWorkspacePath).toBe('session-1');
-      expect(seenThreadId).toBe(THREAD);
-      expect(result.current.data?.files).toEqual([{ path: 'src/agent.ts' }]);
-    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(seen).toEqual([{ workspacePath: 'session-1', path: 'src' }]);
+    expect(result.current.data?.entries.map(entry => entry.path)).toEqual(['src/agent.ts']);
+  });
+
+  it('does not fetch while disabled or without a workspace', () => {
+    let called = false;
+    server.use(
+      http.get(WORKSPACE_TREE_URL, () => {
+        called = true;
+        return HttpResponse.json({ workspacePath: '', path: '', available: true, entries: [] });
+      }),
+    );
+
+    const disabled = renderHookWithProviders(() => useWorkspaceTree('session-1', '', { enabled: false }));
+    const missing = renderHookWithProviders(() => useWorkspaceTree(undefined, ''));
+
+    expect(disabled.result.current.fetchStatus).toBe('idle');
+    expect(missing.result.current.fetchStatus).toBe('idle');
+    expect(called).toBe(false);
   });
 });
 
 describe('useWorkspaceFile', () => {
   it.each([
-    ['disabled', THREAD, { enabled: false }],
-    ['without a thread ID', undefined, undefined],
-  ])('does not fetch when %s', (_reason, threadId, options) => {
+    ['disabled', '.artifacts/file.md', { enabled: false }],
+    ['without a path', undefined, undefined],
+  ])('does not fetch when %s', (_reason, filePath, options) => {
     let called = false;
     server.use(
       http.get(WORKSPACE_FILE_URL, () => {
@@ -222,9 +235,7 @@ describe('useWorkspaceFile', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() =>
-      useWorkspaceFile('/home/user/project', '.artifacts/file.md', threadId, options),
-    );
+    const { result } = renderHookWithProviders(() => useWorkspaceFile('/home/user/project', filePath, options));
 
     expect(result.current.fetchStatus).toBe('idle');
     expect(called).toBe(false);
@@ -251,12 +262,63 @@ describe('useWorkspaceFile', () => {
     );
 
     const { result } = renderHookWithProviders(() =>
-      useWorkspaceFile('/home/user/project', '.artifacts/understand-pr/HISTORY.md', THREAD),
+      useWorkspaceFile('/home/user/project', '.artifacts/understand-pr/HISTORY.md'),
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(seenWorkspacePath).toBe('/home/user/project');
     expect(seenPath).toBe('.artifacts/understand-pr/HISTORY.md');
     expect(result.current.data?.content).toBe('notes');
+  });
+});
+
+describe('normalizePlanPath', () => {
+  const ROOT = '/leadrvision/.artifacts';
+
+  it('passes through a workspace-relative artifacts path unchanged', () => {
+    expect(normalizePlanPath('.artifacts/plans/issue.md', ROOT)).toBe('.artifacts/plans/issue.md');
+    // Relative paths do not require the rendered root.
+    expect(normalizePlanPath('.artifacts/plans/issue.md', undefined)).toBe('.artifacts/plans/issue.md');
+  });
+
+  it('normalizes an absolute path inside the artifacts root', () => {
+    expect(normalizePlanPath('/leadrvision/.artifacts/plans/issue.md', ROOT)).toBe('.artifacts/plans/issue.md');
+  });
+
+  it('tolerates a trailing slash on the root', () => {
+    expect(normalizePlanPath('/leadrvision/.artifacts/plans/issue.md', `${ROOT}/`)).toBe('.artifacts/plans/issue.md');
+  });
+
+  it('rejects an absolute path outside the artifacts root', () => {
+    expect(normalizePlanPath('/leadrvision/secrets/issue.md', ROOT)).toBeUndefined();
+    expect(normalizePlanPath('/other/.artifacts/plans/issue.md', ROOT)).toBeUndefined();
+  });
+
+  it('rejects the artifacts root itself (not a plan file)', () => {
+    expect(normalizePlanPath('/leadrvision/.artifacts', ROOT)).toBeUndefined();
+  });
+
+  it('rejects traversal, backslash, and NUL inputs', () => {
+    expect(normalizePlanPath('/leadrvision/.artifacts/../secrets.md', ROOT)).toBeUndefined();
+    expect(normalizePlanPath('/leadrvision/.artifacts/plans\\issue.md', ROOT)).toBeUndefined();
+    expect(normalizePlanPath('/leadrvision/.artifacts/plans/\0issue.md', ROOT)).toBeUndefined();
+  });
+
+  it('rejects malformed relative .artifacts paths', () => {
+    expect(normalizePlanPath('.artifacts/../secret.md', ROOT)).toBeUndefined();
+    expect(normalizePlanPath('.artifacts/plans\\issue.md', ROOT)).toBeUndefined();
+    expect(normalizePlanPath('.artifacts/plans/\0issue.md', ROOT)).toBeUndefined();
+  });
+
+  it('returns undefined for an absolute path when the root is unknown', () => {
+    expect(normalizePlanPath('/leadrvision/.artifacts/plans/issue.md', undefined)).toBeUndefined();
+  });
+
+  it('returns undefined for a non-artifacts relative path', () => {
+    expect(normalizePlanPath('.mastracode/plans/local.md', ROOT)).toBeUndefined();
+  });
+
+  it('returns undefined for an empty path', () => {
+    expect(normalizePlanPath(undefined, ROOT)).toBeUndefined();
   });
 });

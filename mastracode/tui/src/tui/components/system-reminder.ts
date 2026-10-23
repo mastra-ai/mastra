@@ -82,8 +82,7 @@ export class SystemReminderComponent extends WidthAwareContainer {
     const metadataColor = (text: string) => theme.fg('dim', text);
     const bodyColor = (text: string) => theme.fg('text', text);
     const hintColor = (text: string) => theme.fg('dim', text);
-    const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
-    const horizontal = '─'.repeat(innerWidth + 1);
+    const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 2);
 
     const metadataLines = [this.path ? formatReminderPath(this.path) : undefined].filter((line): line is string =>
       Boolean(line),
@@ -94,7 +93,6 @@ export class SystemReminderComponent extends WidthAwareContainer {
     const visibleMessageLines =
       shouldCollapse && !this.expanded ? wrappedMessageLines.slice(0, MAX_COLLAPSED_LINES) : wrappedMessageLines;
 
-    this.addChild(new Text(`${border('╭')}${border(horizontal)}${border('╮')}`, BOX_INDENT, 0));
     this.addChild(new Text(renderRow(title, innerWidth, border), BOX_INDENT, 0));
 
     for (const line of metadataLines) {
@@ -114,15 +112,12 @@ export class SystemReminderComponent extends WidthAwareContainer {
       const hint = hintColor(`... ${remaining} more lines (ctrl+e to expand)`);
       this.addChild(new Text(renderRow(hint, innerWidth, border), BOX_INDENT, 0));
     }
-
-    this.addChild(new Text(`${border('╰')}${border(horizontal)}${border('╯')}`, BOX_INDENT, 0));
   }
 }
 
+/** A row of the left-bar card (`width` is the room for text after the bar). */
 function renderRow(text: string, width: number, border: (char: string) => string): string {
-  const content = padLine(text, width);
-  const rightPadding = hasWideGlyph(stripAnsi(text)) ? ' ' : '';
-  return `${border('│')} ${content}${rightPadding}${border('│')}`;
+  return text ? `${border('▎')} ${padLine(text, width)}` : border('▎');
 }
 
 function splitMessageLines(message: string): string[] {
@@ -173,14 +168,6 @@ function formatReminderPath(path: string): string {
 
   const cwdPrefix = `${cwd}/`;
   return path.startsWith(cwdPrefix) ? path.slice(cwdPrefix.length) : path;
-}
-
-function hasWideGlyph(text: string): boolean {
-  return [...text].some(char =>
-    /[\p{Extended_Pictographic}\u1100-\u115F\u2329\u232A\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE10-\uFE19\uFE30-\uFE6F\uFF00-\uFF60\uFFE0-\uFFE6]/u.test(
-      char,
-    ),
-  );
 }
 
 function wrapLines(lines: string[], maxLineWidth: number): string[] {

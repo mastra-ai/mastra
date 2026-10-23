@@ -69,6 +69,22 @@ const upstashTransport = new UpstashTransport({
 
 `HttpTransport` sends batches of structured log records to an HTTP endpoint and supports request headers, batching, retry, and flush configuration. Use it for application-specific collectors and hosted logging gateways.
 
+Logs wait in an in-memory buffer until they are sent. `maxBufferSize` caps that buffer so an unreachable endpoint can't exhaust memory. It defaults to 10,000 records and is never lower than `batchSize`. When the buffer is full, the oldest records are dropped first; `getDroppedLogCount()` returns how many were dropped. `batchSize` and `maxBufferSize` must be positive integers, otherwise the constructor throws.
+
+```typescript
+import { HttpTransport } from '@mastra/loggers/http';
+
+const httpTransport = new HttpTransport({
+  url: 'https://logs.example.com/ingest',
+  headers: { Authorization: `Bearer ${process.env.LOG_TOKEN}` },
+  batchSize: 100,
+  flushInterval: 10_000,
+  maxBufferSize: 5_000,
+});
+
+const droppedLogs = httpTransport.getDroppedLogCount();
+```
+
 - [`PinoLogger` reference](https://mastra.ai/reference/logging/pino-logger)
 
 ## Changelog

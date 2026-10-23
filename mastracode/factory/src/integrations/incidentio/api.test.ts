@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { IncidentioApiClient } from './api.js';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
@@ -13,9 +17,11 @@ function requestUrl(fetchImpl: ReturnType<typeof vi.fn<typeof fetch>>, call = 0)
 describe('IncidentioApiClient additional API surfaces', () => {
   it('lists actions with incident filters and normalized pagination', async () => {
     const action = { id: 'action-1', description: 'Roll back the release' };
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
-      json({ actions: [action], pagination_meta: { after: 'action-next', total_record_count: 12 } }),
-    );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        json({ actions: [action], pagination_meta: { after: 'action-next', total_record_count: 12 } }),
+      );
     const client = new IncidentioApiClient({
       baseUrl: 'https://api.incident.test/',
       accessToken: 'incident-key',
@@ -45,6 +51,56 @@ describe('IncidentioApiClient additional API surfaces', () => {
         headers: expect.objectContaining({ authorization: 'Bearer incident-key' }),
       }),
     );
+  });
+
+  it('sends x-mastra-project-id only when configured for the Platform proxy', async () => {
+    vi.stubEnv('MASTRA_PROJECT_ID', '');
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json({ incidents: [], pagination_meta: {} }));
+    const proxied = new IncidentioApiClient({
+      baseUrl: 'https://integrations.example.com/v2/connections/a1b_incidentio/proxy',
+      accessToken: 'platform-token',
+      projectId: 'proj_123',
+      fetchImpl,
+    });
+
+    await proxied.listIncidents();
+
+    expect(fetchImpl.mock.calls[0]?.[1]?.headers).toMatchObject({ 'x-mastra-project-id': 'proj_123' });
+
+    const unconfigured = new IncidentioApiClient({
+      baseUrl: 'https://api.incident.test',
+      accessToken: 'incident-key',
+      fetchImpl,
+    });
+
+    await unconfigured.listIncidents();
+
+    expect(fetchImpl.mock.calls[1]?.[1]?.headers).not.toHaveProperty('x-mastra-project-id');
+  });
+
+  it('falls back to MASTRA_PROJECT_ID unless the direct mode opts out with projectId: null', async () => {
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json({ incidents: [], pagination_meta: {} }));
+    const proxied = new IncidentioApiClient({
+      baseUrl: 'https://integrations.example.com/v2/connections/a1b_incidentio/proxy',
+      accessToken: 'platform-token',
+      fetchImpl,
+    });
+
+    await proxied.listIncidents();
+
+    expect(fetchImpl.mock.calls[0]?.[1]?.headers).toMatchObject({ 'x-mastra-project-id': 'proj_env' });
+
+    const direct = new IncidentioApiClient({
+      baseUrl: 'https://api.incident.test',
+      accessToken: 'incident-key',
+      projectId: null,
+      fetchImpl,
+    });
+
+    await direct.listIncidents();
+
+    expect(fetchImpl.mock.calls[1]?.[1]?.headers).not.toHaveProperty('x-mastra-project-id');
   });
 
   it('lists incident updates with an optional incident filter', async () => {

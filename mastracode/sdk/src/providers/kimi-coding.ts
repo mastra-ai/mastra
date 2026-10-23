@@ -1,16 +1,14 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
+import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
 import { getKimiCodingDeviceHeaders, isKimiCodingDeviceId } from '../auth/providers/kimi-coding.js';
 import { AuthStorage } from '../auth/storage.js';
-import type { CredentialStore } from '../auth/types.js';
+import type { CredentialStore, OAuthCredential } from '../auth/types.js';
 
 const PROVIDER_ID = 'kimi-for-coding';
 // Pi's provider root is https://api.kimi.com/coding. The AI SDK expects the
 // versioned Anthropic base URL and appends /messages itself.
 const BASE_URL = 'https://api.kimi.com/coding/v1';
-
-export const KIMI_CODING_MODELS = ['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'] as const;
 
 let authStorageInstance: AuthStorage | null = null;
 
@@ -34,9 +32,22 @@ export function buildKimiCodingOAuthFetch(options: { credentialStore?: Credentia
     if (!isKimiCodingDeviceId(credential.deviceId)) {
       throw new ProviderAuthRequiredError('Kimi For Coding credentials are invalid. Please reconnect the account.');
     }
-    const deviceHeaders = getKimiCodingDeviceHeaders(credential.deviceId);
-    const token = await store.getApiKey(PROVIDER_ID);
+    let token: string | undefined;
+    let activeCredential: OAuthCredential | undefined = credential;
+    if (store.getOAuthCredential) {
+      activeCredential = await store.getOAuthCredential(PROVIDER_ID);
+      token = activeCredential?.access;
+    } else {
+      token = await store.getApiKey(PROVIDER_ID);
+      store.reload();
+      const reloaded = store.get(PROVIDER_ID);
+      activeCredential = reloaded?.type === 'oauth' ? { ...reloaded, access: token ?? reloaded.access } : undefined;
+    }
     if (!token) throw new ProviderAuthRequiredError('Failed to refresh the Kimi For Coding token.');
+    if (!activeCredential || !isKimiCodingDeviceId(activeCredential.deviceId)) {
+      throw new ProviderAuthRequiredError('Kimi For Coding credentials are invalid. Please reconnect the account.');
+    }
+    const deviceHeaders = getKimiCodingDeviceHeaders(activeCredential.deviceId);
 
     const headers = new Headers(input instanceof Request ? input.headers : undefined);
     if (init?.headers) new Headers(init.headers).forEach((value, key) => headers.set(key, value));
@@ -44,7 +55,10 @@ export function buildKimiCodingOAuthFetch(options: { credentialStore?: Credentia
     headers.delete('authorization');
     headers.delete('x-api-key');
     headers.set('Authorization', `Bearer ${token}`);
-    return fetch(input, { ...init, headers });
+    return rejectUnauthorizedResponse(await fetch(input, { ...init, headers }), {
+      providerName: 'Kimi For Coding',
+      requestUrl: input instanceof URL ? input.toString() : typeof input === 'string' ? input : input.url,
+    });
   }) as typeof fetch;
 }
 
@@ -65,6 +79,7 @@ export function kimiCodingProvider(
 ): MastraModelConfig {
   const usesOAuth = options.credentialStore?.get(PROVIDER_ID)?.type === 'oauth';
   const provider = createAnthropic({
+    name: PROVIDER_ID,
     apiKey: 'auth-placeholder',
     baseURL: BASE_URL,
     headers: options.headers,

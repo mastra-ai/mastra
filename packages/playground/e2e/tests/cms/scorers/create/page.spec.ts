@@ -37,13 +37,13 @@ async function fillScorerFields(
   },
 ) {
   if (options.name !== undefined) {
-    const nameInput = page.locator('#scorer-name');
+    const nameInput = page.getByRole('textbox', { name: /^Name/ });
     await nameInput.clear();
     await nameInput.fill(options.name);
   }
 
   if (options.description !== undefined) {
-    const descInput = page.locator('#scorer-description');
+    const descInput = page.getByRole('textbox', { name: /^Description/ });
     await descInput.clear();
     await descInput.fill(options.description);
   }
@@ -110,7 +110,7 @@ async function openEditPage(page: Page) {
   const menu = page.getByRole('button', { name: 'Scorer actions menu' });
   await expect(menu).toBeVisible({ timeout: 10000 });
   await menu.click();
-  await page.getByRole('menuitem', { name: 'Edit Scorer' }).click();
+  await page.getByRole('menuitem', { name: 'Edit scorer' }).click();
 }
 
 test.describe('CMS create scorer page', () => {
@@ -251,21 +251,21 @@ test.describe('CMS create scorer page', () => {
       await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
 
       // Verify name
-      await expect(page.locator('#scorer-name')).toHaveValue(scorerName);
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(scorerName);
 
       // Verify description
-      await expect(page.locator('#scorer-description')).toHaveValue(description);
+      await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue(description);
 
-      // Verify provider/model selections persisted on the edit page.
-      await expect(page.getByRole('combobox').nth(1)).not.toContainText('Select provider');
-      await expect(page.getByRole('combobox').nth(2)).not.toContainText('Select model');
+      // Verify provider/model selections persisted on the edit page (the fields show the picked values).
+      await expect(page.getByRole('combobox').nth(1)).toHaveValue('OpenAI');
+      await expect(page.getByRole('combobox').nth(2)).toHaveValue('gpt-4o-mini');
 
       // Verify score range
       await expect(page.getByPlaceholder('Min')).toHaveValue('0');
       await expect(page.getByPlaceholder('Max')).toHaveValue('10');
 
       // Verify sampling type is ratio
-      await expect(page.locator('#sampling-ratio')).toBeChecked();
+      await expect(page.getByRole('radio', { name: 'Ratio' })).toBeChecked();
 
       // Verify sampling rate
       await expect(page.getByPlaceholder('Rate (0-1)')).toHaveValue('0.5');
@@ -289,11 +289,11 @@ test.describe('CMS create scorer page', () => {
       await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
 
       // Verify name is set
-      await expect(page.locator('#scorer-name')).toBeVisible({ timeout: 10000 });
-      await expect(page.locator('#scorer-name')).toHaveValue(scorerName);
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(scorerName);
 
       // Verify description has the value set by fillRequiredFields
-      await expect(page.locator('#scorer-description')).toHaveValue('Test scorer description');
+      await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue('Test scorer description');
 
       // Verify default score range (0-1)
       await expect(page.getByPlaceholder('Min')).toHaveValue('0');
@@ -329,7 +329,7 @@ test.describe('CMS create scorer page', () => {
       await page.reload();
 
       // Verify name persists after reload
-      await expect(page.locator('#scorer-name')).toHaveValue(scorerName, { timeout: 10000 });
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(scorerName, { timeout: 10000 });
 
       // Verify instructions persist after reload
       await expect(page.locator('.cm-content')).toContainText(instructions, { timeout: 10000 });
@@ -378,8 +378,8 @@ test.describe('CMS create scorer page', () => {
       await page.goto('/cms/scorers/create');
 
       // Form should be empty
-      await expect(page.locator('#scorer-name')).toHaveValue('');
-      await expect(page.locator('#scorer-description')).toHaveValue('');
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue('');
+      await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue('');
     });
   });
 

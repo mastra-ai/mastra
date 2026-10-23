@@ -37,12 +37,13 @@ import { ThemeFilterBanner } from './theme-filter-banner';
 import { ThemeLifelines } from './theme-lifelines';
 import { TraceIntelligenceContext } from './trace-intelligence-context';
 import { TraceIntelligenceExplainer } from './trace-intelligence-explainer';
-import type { ThemeFlowResponse, TraceSignalName } from './types';
+import type { TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { ViewModeTab } from './view-mode-tab';
 import type { SignalsViewMode } from './view-mode-tab';
 import type { SankeyChartNodeSelection } from '@/ds/components/SankeyChart';
 import { TabList, Tabs } from '@/ds/components/Tabs';
+import { Txt } from '@/ds/components/Txt';
 
 export interface SankeySignalsProps {
   entityId: string;
@@ -290,7 +291,7 @@ export function SankeySignals({
 
   if (isFlowPending) {
     return (
-      <main className="min-w-0 space-y-5 p-4 lg:p-6">
+      <div className="min-w-0 space-y-5 p-4 lg:p-6">
         {dateRangePicker && <div className="flex justify-end">{dateRangePicker}</div>}
         <SnapshotTimeline
           snapshots={snapshots}
@@ -302,7 +303,7 @@ export function SankeySignals({
           onSnapshotChange={selectSnapshot}
         />
         <SignalsFrameLoadingSkeleton />
-      </main>
+      </div>
     );
   }
 
@@ -368,7 +369,7 @@ export function SankeySignals({
 
   return (
     <TraceIntelligenceContext.Provider value={traceIntelligenceContext}>
-      <main className="min-w-0 space-y-5 p-4 lg:p-6">
+      <div className="min-w-0 space-y-5 p-4 lg:p-6">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-4">
             <Tabs<SignalsViewMode>
@@ -387,7 +388,9 @@ export function SankeySignals({
           </div>
           {dateRangePicker}
         </div>
-        <p className="text-neutral3 text-ui-sm">{viewDescription}</p>
+        <Txt variant="caption" tone="muted">
+          {viewDescription}
+        </Txt>
         <PendingSignalProgress progress={progressQuery.data} signalCatalog={effectiveSignalCatalog} />
         {viewMode === 'compare' ? (
           <ThemeCompare
@@ -442,14 +445,18 @@ export function SankeySignals({
               />
             ) : null}
             {isDrilledEmpty ? (
-              <section className="border-border1 bg-surface2 text-neutral3 text-ui-md rounded-lg border p-6">
-                This theme is not present in the selected snapshot. Use the clear filter action above to return to the
-                full flow.
+              <section className="rounded-lg border border-border bg-background p-6 text-muted-foreground">
+                <Txt as="span" variant="body" className="block">
+                  This theme is not present in the selected snapshot. Use the clear filter action above to return to the
+                  full flow.
+                </Txt>
               </section>
             ) : graphSummary.records.length === 0 ? (
-              <section className="border-border1 bg-surface2 text-neutral3 text-ui-md rounded-lg border p-6">
-                No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet.
-                Pick another snapshot from the timeline below.
+              <section className="rounded-lg border border-border bg-background p-6 text-muted-foreground">
+                <Txt as="span" variant="body" className="block">
+                  No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet.
+                  Pick another snapshot from the timeline below.
+                </Txt>
               </section>
             ) : (
               <FlowCard
@@ -466,14 +473,14 @@ export function SankeySignals({
               />
             )}
             {perspectiveMutation.isPending ? (
-              <p className="text-neutral3 text-ui-sm font-mono" role="status">
+              <Txt variant="caption" tone="muted" role="status">
                 Reloading snapshots for new trace signal perspective…
-              </p>
+              </Txt>
             ) : null}
             {perspectiveMutation.isError ? (
-              <p className="text-ui-sm text-red-500" role="alert">
+              <Txt variant="caption" className="text-destructive-foreground" role="alert">
                 Unable to load that trace signal perspective. Try reordering the columns again.
-              </p>
+              </Txt>
             ) : null}
           </>
         )}
@@ -498,7 +505,7 @@ export function SankeySignals({
           filteredStats={noiseStats}
           onClose={() => setNoiseSignalName(undefined)}
         />
-      </main>
+      </div>
     </TraceIntelligenceContext.Provider>
   );
 }

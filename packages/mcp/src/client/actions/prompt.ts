@@ -116,6 +116,6 @@ export class PromptClientActions {
    * ```
    */
   public async onListChanged(handler: () => void): Promise<void> {
-    this.client.setPromptListChangedNotificationHandler(handler);
+    await this.client.setPromptListChangedNotificationHandler(handler);
   }
 }

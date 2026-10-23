@@ -11,7 +11,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 import { assistantOnlyThreadMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
 
@@ -67,8 +67,8 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () =>
-      HttpResponse.json({ packs: [], activePackId: null, sessionPackId: null }),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: null, thinkingLevel: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
@@ -94,7 +94,7 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [userSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
@@ -139,7 +139,6 @@ function stubThreadRoute({
       await messagesGate.promise;
       return HttpResponse.json({ messages });
     }),
-    http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     // Right workspace-files panel, which appears once workspacePath resolves.
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
@@ -165,7 +164,7 @@ describe('ThreadPage loading shell', () => {
     // Pending phase: the shell is up — sidebar navigation renders alongside
     // the loading spinner instead of a bare full-page placeholder.
     expect(await screen.findByLabelText('Loading session')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'User sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New user session' })).toBeInTheDocument();
     // The thread chrome itself is not mounted yet.
     expect(screen.queryByRole('region', { name: 'Thread composer' })).not.toBeInTheDocument();
@@ -175,7 +174,7 @@ describe('ThreadPage loading shell', () => {
     sessionGate.resolve();
     expect(await screen.findByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument());
-    expect(screen.getByRole('region', { name: 'User sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
   });
 
   it('keeps the session header and its workspace toggle mounted while thread messages load', async () => {
@@ -183,7 +182,7 @@ describe('ThreadPage loading shell', () => {
     renderThreadRoute();
     sessionGate.resolve();
 
-    const header = await screen.findByRole('region', { name: 'Factory session' });
+    const header = await findPageHeader();
     // The messages-loading window is now covered by the session-prepare step
     // loader (with "Loading messages" as its active tail step) rather than
     // the old skeleton bars — keeps the composer's spinning ring meaningful
@@ -193,7 +192,7 @@ describe('ThreadPage loading shell', () => {
 
     messagesGate.resolve();
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
-    expect(screen.getByRole('region', { name: 'Factory session' })).toBeInTheDocument();
+    expect(await findPageHeader()).toBeInTheDocument();
   });
 
   it('reveals loaded history without briefly rendering the empty thread state', async () => {

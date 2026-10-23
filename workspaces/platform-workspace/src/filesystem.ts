@@ -228,17 +228,7 @@ export class PlatformFilesystem extends MastraFilesystem {
 
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
     await this.ensureReady();
-    const prefix = keyFromPath(path);
-    const response = await this._client.request(
-      `/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(prefix)}`,
-      {
-        query: {
-          delimiter: options?.recursive ? undefined : '/',
-          prefix: prefix ? `${prefix.replace(/\/$/, '')}/` : undefined,
-        },
-      },
-    );
-    const json = (await response.json()) as ProxyListResponse;
+    const json = await this.listPrefix(keyFromPath(path), options?.recursive);
     return [
       ...(json.commonPrefixes ?? []).map(prefix => ({
         name: nameFromPath(prefix.replace(/\/$/, '')),
@@ -254,6 +244,22 @@ export class PlatformFilesystem extends MastraFilesystem {
     ].filter(
       entry => !options?.extension || entry.type === 'directory' || matchesExtension(entry.name, options.extension),
     );
+  }
+
+  private async listPrefix(prefix: string, recursive?: boolean): Promise<ProxyListResponse> {
+    // The proxy only routes a GET to its list handler when the URL path key is
+    // empty or ends with `/`; a bare key like `foo` is treated as a GetObject
+    // and 404s for prefix-only folders. Always request the bucket root and
+    // pass the prefix as a query param, matching the platform API's own
+    // workspace-proxy client.
+    const normalized = prefix.replace(/\/$/, '');
+    const response = await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/`, {
+      query: {
+        delimiter: recursive ? undefined : '/',
+        prefix: normalized ? `${normalized}/` : undefined,
+      },
+    });
+    return (await response.json()) as ProxyListResponse;
   }
 
   async exists(path: string): Promise<boolean> {
@@ -281,8 +287,19 @@ export class PlatformFilesystem extends MastraFilesystem {
         },
       );
     } catch (error) {
-      if (isNotFound(error)) throw new FileNotFoundError(path);
-      throw error;
+      if (!isNotFound(error)) throw error;
+      // Object stores have no real directories: a folder may exist only as a
+      // key prefix (e.g. `foo/bar.md` implies `foo`), so HEAD 404s for it.
+      const listing = await this.listPrefix(keyFromPath(path));
+      if (!listing.contents?.length && !listing.commonPrefixes?.length) throw new FileNotFoundError(path);
+      return {
+        name: nameFromPath(path),
+        path: normalized,
+        type: 'directory',
+        size: 0,
+        createdAt: new Date(0),
+        modifiedAt: new Date(0),
+      };
     }
     return {
       name: nameFromPath(path),

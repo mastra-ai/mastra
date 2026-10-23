@@ -1,9 +1,60 @@
 import { describe, expect, it } from 'vitest';
-import type { FeedbackEvent, LogEvent, MetricEvent, ScoreEvent } from '../../../observability';
-import { EntityType } from '../../../observability/types/tracing';
-import { buildFeedbackRecord, buildLogRecord, buildMetricRecord, buildScoreRecord } from './record-builders';
+import type { AnyExportedSpan, FeedbackEvent, LogEvent, MetricEvent, ScoreEvent } from '../../../observability';
+import { EntityType, SpanType } from '../../../observability/types/tracing';
+import {
+  buildCreateSpanRecord,
+  buildFeedbackRecord,
+  buildLogRecord,
+  buildMetricRecord,
+  buildScoreRecord,
+  buildUpdateSpanRecord,
+} from './record-builders';
 
 describe('record-builders', () => {
+  describe('span records', () => {
+    const span = (links?: AnyExportedSpan['links']): AnyExportedSpan => ({
+      id: 'span-1',
+      traceId: 'trace-1',
+      name: 'tools/call echo',
+      type: SpanType.MCP_SERVER_REQUEST,
+      startTime: new Date('2026-01-01T00:00:00.000Z'),
+      isEvent: false,
+      isRootSpan: true,
+      ...(links ? { links } : {}),
+    });
+    const link = { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' };
+
+    it('stores span links on create and update', () => {
+      expect(buildCreateSpanRecord(span([link])).links).toEqual([link]);
+      expect(buildUpdateSpanRecord(span([link])).links).toEqual([link]);
+    });
+
+    it('stores null links for a span without links', () => {
+      expect(buildCreateSpanRecord(span()).links).toBeNull();
+      expect(buildUpdateSpanRecord(span()).links).toBeNull();
+    });
+
+    it('derives time to first chunk, clamps clock skew to zero, and leaves it off updates until the first chunk arrived', () => {
+      const streamed = (ms: number): AnyExportedSpan => ({
+        ...span(),
+        attributes: { completionStartTime: new Date(span().startTime.getTime() + ms) },
+      });
+      expect(buildCreateSpanRecord(streamed(250)).timeToFirstChunkMs).toBe(250);
+      expect(buildUpdateSpanRecord(streamed(250)).timeToFirstChunkMs).toBe(250);
+      expect(buildCreateSpanRecord(streamed(0)).timeToFirstChunkMs).toBe(0);
+      expect(buildCreateSpanRecord(streamed(-5)).timeToFirstChunkMs).toBe(0);
+      expect(buildCreateSpanRecord(span()).timeToFirstChunkMs).toBeNull();
+      expect(buildUpdateSpanRecord(span())).not.toHaveProperty('timeToFirstChunkMs');
+    });
+  });
+
+  it('preserves exporter-supplied previews for create and update records', () => {
+    const previews = { inputPreview: ' custom ', outputPreview: '', errorPreview: null };
+    const span = { id: 'span', traceId: 'trace', ...previews } as AnyExportedSpan;
+    expect(buildCreateSpanRecord(span)).toMatchObject(previews);
+    expect(buildUpdateSpanRecord(span)).toMatchObject(previews);
+  });
+
   describe('buildMetricRecord', () => {
     it('maps shared correlation fields and canonical cost fields', () => {
       const timestamp = new Date('2026-01-01T00:00:00.000Z');

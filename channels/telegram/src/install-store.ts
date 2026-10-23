@@ -9,6 +9,7 @@ export const PLATFORM = 'telegram';
 /** Per-bot secret fields serialized into a {@link ChannelInstallation.data} blob. */
 interface TelegramInstallationData {
   botToken?: string;
+  botUserId?: number;
   secretToken?: string;
   username?: string;
   webhookUrl?: string;
@@ -77,6 +78,7 @@ export class TelegramInstallStore {
   #toRecord(install: TelegramInstallation): ChannelInstallation {
     const data: TelegramInstallationData = {
       botToken: this.#enc(install.botToken),
+      botUserId: install.botUserId,
       secretToken: this.#enc(install.secretToken),
       username: install.username,
       webhookUrl: install.webhookUrl,
@@ -102,6 +104,7 @@ export class TelegramInstallStore {
       webhookId: record.webhookId ?? '',
       status: record.status === 'active' ? 'active' : 'pending',
       botToken: this.#dec(data.botToken),
+      botUserId: data.botUserId,
       secretToken: this.#dec(data.secretToken),
       username: data.username,
       webhookUrl: data.webhookUrl,

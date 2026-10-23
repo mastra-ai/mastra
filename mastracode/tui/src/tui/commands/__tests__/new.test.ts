@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantRenderRegistry, getAssistantSegmentKey } from '../../assistant-render-registry.js';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
+import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
 import { handleNewCommand } from '../new.js';
 import type { SlashCommandContext } from '../types.js';
 
@@ -22,25 +23,27 @@ function createMockState() {
     currentThreadTitle: 'Current thread',
     options: { appName: 'Mastra Code' },
     chatContainer: { clear: vi.fn() },
-    pendingTools: { clear: vi.fn() },
+    pendingTools: new Map(),
     pendingTaskToolIds: { clear: vi.fn() },
+    pendingSubagents: new Map([['subagent', {}]]),
+    pendingSignalMessageComponentsById: new Map([['signal', {}]]),
+    followUpComponents: [{}],
     allToolComponents: [{}],
     allSlashCommandComponents: [{}],
     allSystemReminderComponents: [{}],
     messageComponentsById: new Map([['a', {}]]),
     allShellComponents: [{}],
+    globalBackgroundNotice: { setActivities: vi.fn() },
     taskProgress: { updateTasks: vi.fn() },
     taskToolInsertIndex: 5,
+    gradientAnimator: { stop: vi.fn() },
+    githubPrGradientAnimator: { stop: vi.fn() },
+    githubPrPollingActive: true,
+    agentRunStartedAt: 1_700_000_000_000,
+    agentRunLastStreamPartAt: 1_700_000_000_500,
     session: {
       state: { set: vi.fn(async () => {}) },
-      thread: {
-        getId: vi.fn(() => 'old-thread'),
-        detachFromCurrent: vi.fn(),
-        create: vi.fn(async () => ({ id: 'new-thread' })),
-        switch: vi.fn(async () => {}),
-        clearAndReleaseLock: vi.fn(async () => {}),
-        ensureCurrentSubscription: vi.fn(async () => {}),
-      },
+      thread: { detachFromCurrent: vi.fn() },
       displayState: { get: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })) },
     },
     controller: {
@@ -64,7 +67,7 @@ function createCtx(state: ReturnType<typeof createMockState>): SlashCommandConte
 }
 
 describe('handleNewCommand', () => {
-  it('creates and marks a durable thread before reporting the new conversation ready', async () => {
+  it('detaches from current thread before setting pendingNewThread', async () => {
     const state = createMockState();
     const ctx = createCtx(state);
     const callOrder: string[] = [];
@@ -72,47 +75,22 @@ describe('handleNewCommand', () => {
     state.session.thread.detachFromCurrent.mockImplementation(() => {
       callOrder.push('detach');
     });
-    state.session.thread.create.mockImplementation(async () => {
-      callOrder.push('create');
-      return { id: 'new-thread' };
+    const origPendingNewThread = Object.getOwnPropertyDescriptor(state, 'pendingNewThread');
+    Object.defineProperty(state, 'pendingNewThread', {
+      set(v: boolean) {
+        if (v) callOrder.push('pendingNewThread');
+        Object.defineProperty(state, 'pendingNewThread', { value: v, writable: true, configurable: true });
+      },
+      get() {
+        return origPendingNewThread?.value ?? false;
+      },
+      configurable: true,
     });
-    ctx.showInfo = vi.fn(() => callOrder.push('ready'));
 
     await handleNewCommand(ctx);
 
     expect(state.session.thread.detachFromCurrent).toHaveBeenCalledOnce();
-    expect(state.session.thread.create).toHaveBeenCalledWith({ metadata: { explicitNewThread: true } });
-    expect(state.pendingNewThread).toBe(false);
-    expect(callOrder).toEqual(['detach', 'create', 'ready']);
-  });
-
-  it('restores the previous thread subscription when durable thread creation fails', async () => {
-    const state = createMockState();
-    const ctx = createCtx(state);
-    const error = new Error('create failed');
-    state.session.thread.create.mockRejectedValue(error);
-
-    await expect(handleNewCommand(ctx)).rejects.toBe(error);
-
-    expect(state.session.thread.detachFromCurrent).toHaveBeenCalledOnce();
-    expect(state.session.thread.ensureCurrentSubscription).toHaveBeenCalledOnce();
-    expect(ctx.showInfo).not.toHaveBeenCalled();
-  });
-
-  it('restores the previous thread binding when creation fails after rebinding', async () => {
-    const state = createMockState();
-    const ctx = createCtx(state);
-    const error = new Error('subscription failed');
-    state.session.thread.create.mockImplementation(async () => {
-      state.session.thread.getId.mockReturnValue('new-thread');
-      throw error;
-    });
-
-    await expect(handleNewCommand(ctx)).rejects.toBe(error);
-
-    expect(state.session.thread.switch).toHaveBeenCalledWith({ threadId: 'old-thread' });
-    expect(state.session.thread.ensureCurrentSubscription).not.toHaveBeenCalled();
-    expect(ctx.showInfo).not.toHaveBeenCalled();
+    expect(callOrder).toEqual(['detach', 'pendingNewThread']);
   });
 
   it('clears UI state and ephemeral thread state', async () => {
@@ -122,7 +100,11 @@ describe('handleNewCommand', () => {
     await handleNewCommand(ctx);
 
     expect(state.chatContainer.clear).toHaveBeenCalled();
-    expect(state.pendingTools.clear).toHaveBeenCalled();
+    expect(state.pendingTools.size).toBe(0);
+    expect(state.pendingTaskToolIds.clear).toHaveBeenCalled();
+    expect(state.pendingSubagents.size).toBe(0);
+    expect(state.pendingSignalMessageComponentsById.size).toBe(0);
+    expect(state.followUpComponents).toEqual([]);
     expect(state.allToolComponents).toEqual([]);
     expect(state.allSlashCommandComponents).toEqual([]);
     expect(state.allSystemReminderComponents).toEqual([]);
@@ -130,6 +112,7 @@ describe('handleNewCommand', () => {
     expect(state.assistantRenderRegistry.size).toBe(0);
     expect(state.assistantSegment.component.disposeRenderState).toHaveBeenCalledOnce();
     expect(state.allShellComponents).toEqual([]);
+    expect(state.globalBackgroundNotice.setActivities).toHaveBeenCalledWith([]);
     expect(state.session.state.set).toHaveBeenCalledWith({
       tasks: [],
       activePlan: null,
@@ -141,5 +124,50 @@ describe('handleNewCommand', () => {
     expect(state.ui.terminal.setTitle).toHaveBeenCalledWith(`Mastra Code - ${basename(process.cwd())}`);
     expect(ctx.updateStatusLine).toHaveBeenCalled();
     expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('stops status bar animations from the thread being left', async () => {
+    const state = createMockState();
+    const ctx = createCtx(state);
+
+    await handleNewCommand(ctx);
+
+    // A thread owned by another instance never delivers a local agent_end on
+    // detach, so /new has to stop the run animation itself.
+    expect(state.gradientAnimator.stop).toHaveBeenCalled();
+    expect(state.githubPrGradientAnimator.stop).toHaveBeenCalled();
+    expect(state.githubPrPollingActive).toBe(false);
+    expect(state.agentRunStartedAt).toBeUndefined();
+    expect(state.agentRunLastStreamPartAt).toBeUndefined();
+  });
+
+  it('stops the running time ticker of a shell call left running in the old thread', async () => {
+    vi.useFakeTimers();
+    try {
+      const state = createMockState();
+      const ctx = createCtx(state);
+      const requestRender = vi.fn();
+      // A compact shell row redraws its elapsed time every 100ms while the command runs.
+      const shell = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command: 'sleep 15', description: 'Waiting' },
+        { collapsedByDefault: true, previewLineLimit: 0 },
+        { requestRender } as any,
+      );
+      shell.render(80);
+      state.pendingTools.set('call-1', shell);
+      vi.advanceTimersByTime(500);
+      expect(requestRender).toHaveBeenCalled();
+
+      await handleNewCommand(ctx);
+      requestRender.mockClear();
+      vi.advanceTimersByTime(5_000);
+
+      // The row is gone from the new conversation, so nothing should keep redrawing the TUI.
+      expect(requestRender).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

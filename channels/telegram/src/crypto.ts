@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, hkdfSync } from 'node:crypto';
 
 /**
  * Opt-in AES-256-GCM encryption for installation secrets at rest, with
@@ -24,8 +24,8 @@ export function isEncrypted(value: string): boolean {
 
 /** Encrypt a UTF-8 string with a per-value random salt + IV. */
 export function encrypt(plaintext: string, passphrase: string): string {
-  const salt = randomBytes(16);
-  const iv = randomBytes(12);
+  const salt = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(16)));
+  const iv = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(12)));
   const cipher = createCipheriv('aes-256-gcm', deriveKey(passphrase, salt), iv);
   const enc = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();

@@ -44,6 +44,12 @@ function stubBase({ workItems, threads }: { workItems: unknown[]; threads: unkno
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
     ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
+      HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory', defaultModelId: 'openai/gpt-4o-mini' } }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
         connections: [
@@ -63,7 +69,7 @@ function stubBase({ workItems, threads }: { workItems: unknown[]; threads: unkno
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [workspaceSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
@@ -94,7 +100,6 @@ function stubBase({ workItems, threads }: { workItems: unknown[]; threads: unkno
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads })),
     http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
-    http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),
@@ -199,7 +204,7 @@ describe('ThreadPage document title', () => {
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
     await waitFor(() => expect(document.title).toBe('#42 | Mastra Factory'));
-    expect(await screen.findByRole('button', { name: 'Fix flaky login' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Fix flaky login' })).toBeInTheDocument();
   });
 
   it('shows the team key for Linear issue-backed work sessions', async () => {
@@ -252,6 +257,6 @@ describe('ThreadPage document title', () => {
     // the branch that mounts <PageTitle/>; without a title/PR number the hook
     // must leave the default in place and preserve the sidebar branch fallback.
     await waitFor(() => expect(document.title).toBe('Mastra Factory'), { timeout: 2000 });
-    expect(await screen.findByRole('button', { name: 'factory/pr-1567' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'factory/pr-1567' })).toBeInTheDocument();
   });
 });

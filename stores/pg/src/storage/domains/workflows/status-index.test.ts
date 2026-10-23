@@ -68,6 +68,39 @@ describe('workflow snapshot status index', () => {
     expect(runs.runs.every(run => (run.snapshot as any).status === 'failed')).toBe(true);
   });
 
+  it('persists a snapshot with a real backslash before an unpaired surrogate without losing literal escapes', async () => {
+    const runId = randomUUID();
+    const note = { path: 'C:\\path\\\uD800-end', literal: String.raw`literal\uD800`, nullPath: 'C:\\path\\\0-end' };
+
+    await expect(store.db.query('SELECT $1::jsonb', [JSON.stringify(note)])).rejects.toThrow();
+
+    await workflows.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      snapshot: {
+        status: 'running',
+        value: note,
+        context: {},
+        activePaths: [],
+        serializedStepGraph: [],
+        suspendedPaths: {},
+        waitingPaths: {},
+        runId,
+        timestamp: Date.now(),
+      } as any,
+    });
+
+    const saved = await store.db.one<{ snapshot: { value: typeof note } }>(
+      `SELECT snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = $1 AND run_id = $2`,
+      [workflowName, runId],
+    );
+    expect(saved.snapshot.value).toEqual({
+      path: 'C:\\path\\�-end',
+      literal: note.literal,
+      nullPath: 'C:\\path\\-end',
+    });
+  });
+
   it('still filters correctly when snapshots contain Unicode escape sequences', async () => {
     const runId = randomUUID();
     await workflows.persistWorkflowSnapshot({

@@ -7,7 +7,7 @@ description: "Browse Deep Infra model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 
-Access 67 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
+Access 77 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
 
 Learn more in the [Deep Infra documentation](https://deepinfra.com/models).
 
@@ -39,6 +39,18 @@ for await (const chunk of stream) {
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "deepinfra/anthropic/claude-fable-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
+  },
   {
     "model": "deepinfra/ByteDance/Seed-2.0-code",
     "imageInput": true,
@@ -98,18 +110,6 @@ for await (const chunk of stream) {
     "maxOutput": 8192,
     "inputCost": 0.32,
     "outputCost": 0.89
-  },
-  {
-    "model": "deepinfra/deepseek-ai/DeepSeek-V3-0324",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 163840,
-    "maxOutput": 163840,
-    "inputCost": 0.24,
-    "outputCost": 0.9
   },
   {
     "model": "deepinfra/deepseek-ai/DeepSeek-V3.1",
@@ -208,6 +208,18 @@ for await (const chunk of stream) {
     "outputCost": 0.6
   },
   {
+    "model": "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
+    "inputCost": 0.2,
+    "outputCost": 0.6
+  },
+  {
     "model": "deepinfra/google/gemma-3-12b-it",
     "imageInput": true,
     "audioInput": false,
@@ -264,20 +276,8 @@ for await (const chunk of stream) {
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 32768,
-    "inputCost": 0.13,
-    "outputCost": 0.38
-  },
-  {
-    "model": "deepinfra/google/gemma-4-E4B-it",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.02,
-    "outputCost": 0.1
+    "inputCost": 0.2,
+    "outputCost": 0.4
   },
   {
     "model": "deepinfra/meta-llama/Llama-3.3-70B-Instruct-Turbo",
@@ -292,18 +292,6 @@ for await (const chunk of stream) {
     "outputCost": 0.32
   },
   {
-    "model": "deepinfra/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 1048576,
-    "maxOutput": 16384,
-    "inputCost": 0.2,
-    "outputCost": 0.8
-  },
-  {
     "model": "deepinfra/meta-llama/Llama-4-Scout-17B-16E-Instruct",
     "imageInput": true,
     "audioInput": false,
@@ -314,6 +302,18 @@ for await (const chunk of stream) {
     "maxOutput": 16384,
     "inputCost": 0.1,
     "outputCost": 0.3
+  },
+  {
+    "model": "deepinfra/meta-llama/Llama-Guard-4-12B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.18,
+    "outputCost": 0.18
   },
   {
     "model": "deepinfra/MiniMaxAI/MiniMax-M3",
@@ -328,6 +328,18 @@ for await (const chunk of stream) {
     "outputCost": 1.1
   },
   {
+    "model": "deepinfra/mistralai/Mistral-Small-24B-Instruct-2501",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 16384,
+    "inputCost": 0.05,
+    "outputCost": 0.08
+  },
+  {
     "model": "deepinfra/moonshotai/Kimi-K2.6",
     "imageInput": true,
     "audioInput": false,
@@ -340,18 +352,6 @@ for await (const chunk of stream) {
     "outputCost": 3.5
   },
   {
-    "model": "deepinfra/moonshotai/Kimi-K2.7-Code",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.68,
-    "outputCost": 3.4
-  },
-  {
     "model": "deepinfra/moonshotai/Kimi-K3",
     "imageInput": true,
     "audioInput": false,
@@ -362,18 +362,6 @@ for await (const chunk of stream) {
     "maxOutput": 131072,
     "inputCost": 2.85,
     "outputCost": 14.25
-  },
-  {
-    "model": "deepinfra/nvidia/Nemotron-3-Nano-30B-A3B",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.05,
-    "outputCost": 0.2
   },
   {
     "model": "deepinfra/openai/gpt-oss-120b",
@@ -448,18 +436,6 @@ for await (const chunk of stream) {
     "outputCost": 1
   },
   {
-    "model": "deepinfra/Qwen/Qwen3-Max",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 256000,
-    "maxOutput": 65536,
-    "inputCost": 1.2,
-    "outputCost": 6
-  },
-  {
     "model": "deepinfra/Qwen/Qwen3-Next-80B-A3B-Instruct",
     "imageInput": false,
     "audioInput": false,
@@ -484,21 +460,21 @@ for await (const chunk of stream) {
     "outputCost": 0.88
   },
   {
-    "model": "deepinfra/Qwen/Qwen3.5-122B-A10B",
+    "model": "deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct",
     "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
+    "audioInput": false,
+    "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.29,
-    "outputCost": 2.4
+    "maxOutput": 32768,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "deepinfra/Qwen/Qwen3.5-27B",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -546,7 +522,7 @@ for await (const chunk of stream) {
   {
     "model": "deepinfra/Qwen/Qwen3.6-27B",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -575,33 +551,33 @@ for await (const chunk of stream) {
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 256000,
-    "maxOutput": 65536,
+    "maxOutput": 131072,
     "inputCost": 2.5,
     "outputCost": 7.5
-  },
-  {
-    "model": "deepinfra/Qwen/Qwen3.8-2.4T-A95B",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 2,
-    "outputCost": 6
   },
   {
     "model": "deepinfra/Qwen/Qwen3.8-27B",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 32768,
-    "inputCost": 0.4,
-    "outputCost": 3
+    "inputCost": 0.2,
+    "outputCost": 2.5
+  },
+  {
+    "model": "deepinfra/Qwen/Qwen3.8-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.113,
+    "outputCost": 0.382
   },
   {
     "model": "deepinfra/Qwen/Qwen3.8-Max",
@@ -616,40 +592,28 @@ for await (const chunk of stream) {
     "outputCost": 4.951
   },
   {
-    "model": "deepinfra/stepfun-ai/Step-3.7-Flash",
+    "model": "deepinfra/stepfun-ai/Step-5-Preview",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 256000,
-    "inputCost": 0.2,
-    "outputCost": 1.15
+    "contextWindow": 1048576,
+    "maxOutput": 1000000,
+    "inputCost": 1,
+    "outputCost": 2.7
   },
   {
-    "model": "deepinfra/tencent/Hy3",
+    "model": "deepinfra/tencent/Hy4-preview",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 128000,
-    "inputCost": 0.14,
-    "outputCost": 0.58
-  },
-  {
-    "model": "deepinfra/thinkingmachines/Inkling",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 524288,
-    "maxOutput": 1048576,
-    "inputCost": 0.95,
-    "outputCost": 4.05
+    "contextWindow": 1048576,
+    "maxOutput": 64000,
+    "inputCost": 0.834,
+    "outputCost": 2.501
   },
   {
     "model": "deepinfra/thinkingmachines/Inkling-Small",
@@ -664,28 +628,28 @@ for await (const chunk of stream) {
     "outputCost": 1.2
   },
   {
-    "model": "deepinfra/XiaomiMiMo/MiMo-V2.5",
+    "model": "deepinfra/XiaomiMiMo/MiMo-V2.6-Flash",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 16384,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
     "inputCost": 0.14,
     "outputCost": 0.28
   },
   {
-    "model": "deepinfra/XiaomiMiMo/MiMo-V2.5-Pro",
-    "imageInput": false,
+    "model": "deepinfra/XiaomiMiMo/MiMo-V2.6-Pro",
+    "imageInput": true,
     "audioInput": true,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 16384,
-    "inputCost": 1,
-    "outputCost": 3
+    "maxOutput": 131072,
+    "inputCost": 0.43,
+    "outputCost": 0.87
   },
   {
     "model": "deepinfra/zai-org/GLM-4.6",
@@ -712,18 +676,6 @@ for await (const chunk of stream) {
     "outputCost": 1.75
   },
   {
-    "model": "deepinfra/zai-org/GLM-5.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 202752,
-    "maxOutput": 16384,
-    "inputCost": 1.05,
-    "outputCost": 3.5
-  },
-  {
     "model": "deepinfra/zai-org/GLM-5.2",
     "imageInput": false,
     "audioInput": false,
@@ -744,7 +696,7 @@ for await (const chunk of stream) {
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 1.2,
+    "inputCost": 0.9,
     "outputCost": 4
   },
   {

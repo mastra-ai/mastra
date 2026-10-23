@@ -1,5 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { useAllProviderTools } from '@mastra/react/hooks/tool-providers';
 import type { CSSProperties } from 'react';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import { useBuilderPaneGates } from '../../../hooks/use-builder-pane-gates';
@@ -10,7 +11,6 @@ import { Integrations } from './integrations';
 import { Models } from './models';
 import { Skills } from './skills';
 import { Tools } from './tools';
-import { useAllProviderTools } from '@/domains/tool-providers/hooks/use-all-provider-tools';
 
 export interface AgentProfileTabsProps {
   agentId: string;
@@ -51,7 +51,7 @@ export const AgentProfileTabs = ({
   const browserTabEnabled = gates.browser;
   const integrationsTabEnabled = gates.integrations;
 
-  const tabContentClassName = 'h-full min-h-0 pb-6 pt-6';
+  const tabContentClassName = 'h-full min-h-0 pb-4 pt-4';
   // The Model/Tools tabs use a two-pane layout whose left filter pane must run
   // the full height of the panel, so they manage their own vertical spacing
   // instead of inheriting the shared vertical padding.
@@ -63,7 +63,7 @@ export const AgentProfileTabs = ({
   return (
     <div className="h-full min-h-0 overflow-hidden" data-testid="agent-profile-tabs">
       <Tabs defaultTab={defaultTab} className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
-        <TabList variant="line" sticky className="!bg-surface3 px-6" style={tabListStyle}>
+        <TabList sticky className="px-4" style={tabListStyle}>
           {modelTabEnabled && <Tab value="model">Model</Tab>}
           {toolsTabEnabled && <Tab value="tools">Tools</Tab>}
           <Tab value="instructions">Instructions</Tab>

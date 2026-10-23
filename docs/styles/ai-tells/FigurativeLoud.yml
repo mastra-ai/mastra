@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI overused word: '%s'. Name the actual behavior instead of calling emphasis volume. Disable this rule for prose about sound."
+message: "AI overused word: '%s'. Describe the actual behavior instead of calling emphasis volume. Disable this rule for prose about sound."
 level: error
 nonword: true
 ignorecase: true

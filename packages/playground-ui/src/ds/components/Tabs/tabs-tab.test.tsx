@@ -2,10 +2,13 @@
 import { cleanup, act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { buttonVariants } from '../Button/Button';
 import { TabContent } from './tabs-content';
 import { TabList } from './tabs-list';
 import { Tabs } from './tabs-root';
 import { Tab } from './tabs-tab';
+import { controlHeight } from '@/ds/primitives/control-size';
+import { cn } from '@/lib/utils';
 
 beforeEach(() => {
   vi.stubGlobal('PointerEvent', window.MouseEvent);
@@ -27,6 +30,26 @@ afterEach(() => {
 });
 
 describe('Tab', () => {
+  it('when a tab with a tooltip receives keyboard focus, then the tooltip shows and the tab stays selectable', async () => {
+    render(
+      <Tabs defaultTab="first">
+        <TabList>
+          <Tab value="first">First</Tab>
+          <Tab value="second" tooltip="Second tab">
+            <span className="sr-only">Second</span>
+          </Tab>
+        </TabList>
+      </Tabs>,
+    );
+
+    const tab = screen.getByRole('tab', { name: 'Second' });
+    act(() => tab.focus());
+    expect(await screen.findByText('Second tab')).toBeTruthy();
+
+    fireEvent.click(tab);
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+  });
+
   it('measures contained tabs once without ResizeObserver', () => {
     Reflect.deleteProperty(globalThis, 'ResizeObserver');
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);
@@ -67,14 +90,11 @@ describe('Tab', () => {
     expect(screen.queryByText('Needs attention')).toBeNull();
     expect(tab.querySelector('[data-slot="tab-attention"]')).toBeNull();
   });
-  it.each([
-    ['stroke', 200],
-    ['inset', 234],
-  ] as const)('keeps exactly fitting %s tabs out of the overflow menu', (frame, width) => {
-    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(width);
+  it('keeps exactly fitting contained tabs out of the overflow menu', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(234);
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
     render(
-      <Tabs defaultTab="first" appearance="contained" frame={frame}>
+      <Tabs defaultTab="first" appearance="contained">
         <TabList>
           <Tab value="first">First</Tab>
           <Tab value="second">Second</Tab>
@@ -477,18 +497,18 @@ describe('Tab', () => {
         </Tabs>,
       );
 
-      const isTooltipTrigger = (name: string) =>
-        screen.getByRole('tab', { name }).hasAttribute('data-base-ui-tooltip-trigger');
+      const tooltipTrigger = (name: string) => screen.getByRole('tab', { name }).parentElement;
 
       // Only a tab that is both disabled and has something to say gets one.
-      expect(isTooltipTrigger('Explained')).toBe(true);
-      expect(isTooltipTrigger('Silent')).toBe(false);
-      expect(isTooltipTrigger('Enabled with text')).toBe(false);
-      expect(isTooltipTrigger('Enabled')).toBe(false);
+      expect(tooltipTrigger('Explained')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(true);
+      expect(tooltipTrigger('Explained')?.tabIndex).toBe(0);
+      expect(tooltipTrigger('Silent')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(false);
+      expect(tooltipTrigger('Enabled with text')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(false);
+      expect(tooltipTrigger('Enabled')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(false);
     });
   });
 
-  it('keeps a caller class alongside its own', () => {
+  it('keeps a caller class', () => {
     render(
       <Tabs defaultTab="first">
         <TabList>
@@ -502,6 +522,101 @@ describe('Tab', () => {
 
     const tab = screen.getByRole('tab', { name: 'First' });
     expect(tab.className).toContain('my-own-class');
-    expect(tab.className).toContain('text-neutral3');
+  });
+
+  describe('pill-ghost variant', () => {
+    it('renders tabs from the shared ghost buttonVariants recipe', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill-ghost">
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      const tab = screen.getByRole('tab', { name: 'First' });
+      const tabClasses = tab.className.split(/\s+/);
+      // `cn` merges the raw recipe the same way <Button> does (e.g. tailwind-merge drops `leading-0`
+      // in favour of the size's `text-*`), so compare against the merged form.
+      for (const token of cn(buttonVariants({ variant: 'ghost', size: 'md' })).split(/\s+/)) {
+        expect(tabClasses).toContain(token);
+      }
+      // The list owns no padding of its own — the button recipe is the only source of spacing.
+      const list = screen.getByRole('tablist');
+      expect(list.className).not.toMatch(/\bp-1\b/);
+      expect(list.className).toContain('gap-0.5');
+    });
+
+    it('does not apply the button recipe to pill tabs', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill">
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      const tab = screen.getByRole('tab', { name: 'First' });
+      expect(tab.className).not.toContain('h-control-md');
+    });
+  });
+
+  // jsdom has no layout, so these pin the shared rung token: the one Button and Input use too.
+  describe('size', () => {
+    it.each(['sm', 'md'] as const)('when size="%s" on pill-ghost, then each tab takes that control rung', size => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill-ghost" size={size}>
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      expect(screen.getByRole('tab', { name: 'First' }).className.split(/\s+/)).toContain(controlHeight[size]);
+    });
+
+    it.each(['sm', 'md'] as const)('when size="%s" on pill, then the track takes that control rung', size => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill" size={size}>
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      const list = screen.getByRole('tablist');
+      expect(list.className.split(/\s+/)).toContain(controlHeight[size]);
+      expect(list.getAttribute('data-size')).toBe(size);
+    });
+
+    it('when size is omitted, then the pill track takes the md rung', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList>
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      expect(screen.getByRole('tablist').className.split(/\s+/)).toContain(controlHeight.md);
+    });
+
+    it('when the tabs are contained, then the pill track keeps its own height', () => {
+      render(
+        <Tabs defaultTab="first" appearance="contained">
+          <TabList>
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      expect(screen.getByRole('tablist').className).not.toContain('h-control-');
+    });
   });
 });

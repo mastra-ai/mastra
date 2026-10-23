@@ -6,7 +6,7 @@ import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { useChatTranscript } from '../../context/useChatTranscript';
 import { usePreparingThreadId } from '../../hooks/usePreparingThreadId';
 
-const statusItem = 'inline-flex items-center gap-1 text-icon3 [&_svg]:text-icon2';
+const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-placeholder';
 
 export function ConnectionActivity() {
   const { status } = useChatConnection();
@@ -24,7 +24,7 @@ export function ConnectionActivity() {
   if (status === 'error')
     return (
       <span
-        className={cn(statusItem, 'text-accent2 [&_svg]:text-accent2')}
+        className={cn(statusItem, 'text-destructive-foreground [&_svg]:text-destructive-foreground')}
         role="status"
         aria-live="polite"
         title="Check the server and reload to reconnect"

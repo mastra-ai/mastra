@@ -39,6 +39,7 @@ export type OpenAICompatibleConfig =
       url?: string; // Optional custom URL endpoint
       apiKey?: string; // Optional API key (falls back to env vars)
       headers?: Record<string, string>; // Additional headers
+      api?: 'chat' | 'responses'; // OpenAI wire API for custom url; defaults to 'chat'
     }
   | {
       providerId: string; // Provider ID like "openai" or "custom-provider"
@@ -46,6 +47,7 @@ export type OpenAICompatibleConfig =
       url?: string; // Optional custom URL endpoint
       apiKey?: string; // Optional API key (falls back to env vars)
       headers?: Record<string, string>; // Additional headers
+      api?: 'chat' | 'responses'; // OpenAI wire API for custom url; defaults to 'chat'
     };
 
 type DoStreamResultPromiseV2 = PromiseLike<Awaited<ReturnType<LanguageModelV2['doStream']>>>;
@@ -54,18 +56,24 @@ type DoStreamResultPromiseV4 = PromiseLike<Awaited<ReturnType<LanguageModelV4['d
 
 /** Wrapped V2 model with unified doGenerate/doStream that returns streams */
 export type MastraLanguageModelV2 = Omit<LanguageModelV2, 'doGenerate' | 'doStream'> & {
+  /** Full `provider/model` ID the model was resolved from, when known (see {@link IdentifiedModelConfig}). */
+  id?: string;
   doGenerate: (options: LanguageModelV2CallOptions) => DoStreamResultPromiseV2;
   doStream: (options: LanguageModelV2CallOptions) => DoStreamResultPromiseV2;
 };
 
 /** Wrapped V3 model with unified doGenerate/doStream that returns streams */
 export type MastraLanguageModelV3 = Omit<LanguageModelV3, 'doGenerate' | 'doStream'> & {
+  /** Full `provider/model` ID the model was resolved from, when known (see {@link IdentifiedModelConfig}). */
+  id?: string;
   doGenerate: (options: LanguageModelV3CallOptions) => DoStreamResultPromiseV3;
   doStream: (options: LanguageModelV3CallOptions) => DoStreamResultPromiseV3;
 };
 
 /** Wrapped V4 model with unified doGenerate/doStream that returns streams */
 export type MastraLanguageModelV4 = Omit<LanguageModelV4, 'doGenerate' | 'doStream'> & {
+  /** Full `provider/model` ID the model was resolved from, when known (see {@link IdentifiedModelConfig}). */
+  id?: string;
   doGenerate: (options: LanguageModelV4CallOptions) => DoStreamResultPromiseV4;
   doStream: (options: LanguageModelV4CallOptions) => DoStreamResultPromiseV4;
 };
@@ -83,7 +91,8 @@ export type SharedProviderOptions = SharedV2ProviderOptions | SharedV3ProviderOp
 // - { id: "openai/gpt-4o", apiKey: "..." } (config object)
 // - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
 // - LanguageModelV1/V2/V3/V4 (existing AI SDK models)
-export type MastraModelConfig =
+// - { model, id: "mastra/openai/gpt-4o" } (any of the above, labeled with its full model ID)
+type BaseModelConfig =
   | LanguageModelV1
   | LanguageModelV2
   | LanguageModelV3
@@ -91,6 +100,34 @@ export type MastraModelConfig =
   | ModelRouterModelId
   | OpenAICompatibleConfig
   | MastraLanguageModel;
+
+/**
+ * A model labeled with the full `provider/model` ID it was built from (including any route
+ * prefix such as `mastra/`). Useful when a dynamic model function builds a model instance whose
+ * own `provider`/`modelId` fields no longer carry that ID. The resolved model exposes it as `id`.
+ */
+export type IdentifiedModelConfig = {
+  model: BaseModelConfig;
+  id: string;
+};
+
+export type MastraModelConfig = BaseModelConfig | IdentifiedModelConfig;
+
+/**
+ * Replaces the model-id literal union (`ModelRouterModelId`) inside `T` with plain `string`,
+ * leaving every other member (language model objects, config objects, functions, arrays) as-is.
+ *
+ * Keep `MastraModelConfig` on public config fields so users get autocomplete, but widen with
+ * this before merging model values in internal code (`a ?? b`, ternaries, array literals):
+ * those expressions make TypeScript subtype-reduce the union, which scales with the number of
+ * model-id literals and fails with "union type is too complex" (TS2590) once the registry is
+ * large enough. `string` is assignable back to `ModelRouterModelId`, so widened values can
+ * still be passed anywhere the public type is expected.
+ */
+export type WidenModelId<T> = T extends ModelRouterModelId ? string : T;
+
+/** `MastraModelConfig` with model-id literals widened to `string`. See {@link WidenModelId}. */
+export type WidenedMastraModelConfig = WidenModelId<MastraModelConfig>;
 
 export type MastraModelOptions = {
   tracingPolicy?: TracingPolicy;

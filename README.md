@@ -42,7 +42,7 @@ The **recommended** way to get started with Mastra is by running the command bel
 npm create mastra@latest
 ```
 
-Follow the [Installation guide](https://mastra.ai/guides/getting-started/quickstart) for step-by-step setup with the CLI or a manual install.
+Follow the [Installation guide](https://mastra.ai/docs) for step-by-step setup with the CLI or a manual install.
 
 If you're new to AI agents, check out our [templates](https://mastra.ai/docs/getting-started/templates), [course](https://mastra.ai/course), and [YouTube videos](https://youtube.com/@mastra-ai) to start building with Mastra today.
 
@@ -81,11 +81,9 @@ Learn how to make your agent a Mastra expert by following the [Build with AI gui
 
 ## Contributing
 
-Looking to contribute? All types of help are appreciated, from coding to testing and feature specification. Read [CONTRIBUTING.md](./CONTRIBUTING.md) for more details on how to get involved.
+Looking to contribute? Pull requests are limited to collaborators only. Therefore you can _best_ help by creating high-quality issues with good reproductions and descriptions. Mastra will then verify your report and prioritize it accordingly.
 
-If you are a developer and would like to contribute with code, please open an issue to discuss before opening a Pull Request.
-
-Information about the project setup can be found in the [development documentation](./DEVELOPMENT.md)
+If you want to run Mastra or its tests locally, refer to the [development documentation](./DEVELOPMENT.md)
 
 ## Support
 

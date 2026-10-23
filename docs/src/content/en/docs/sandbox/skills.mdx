@@ -113,7 +113,7 @@ If multiple highest-priority candidates have the same source type, Mastra can't 
 
 The agent can bypass name-based resolution by passing the exact path shown in the system message to `skill` or `skill_read`. Paths with or without the trailing `/SKILL.md` work. If several configured paths resolve to the same canonical directory, Mastra treats them as aliases and lists the skill once.
 
-Direct [agent skills](/docs/skills) are resolved before filesystem-backed skills, so a direct skill wins when both types use the same name.
+Direct [agent skills](/docs/skills) are resolved before filesystem-backed skills. A direct skill wins when both types use the same name.
 
 ## Search skill content
 

@@ -54,7 +54,13 @@ describe('transformWorkflow cumulative growth', () => {
             metadata: {},
             workflowStatus: 'success',
             output: {
-              usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+              usage: {
+                inputTokens: undefined,
+                outputTokens: 10,
+                totalTokens: undefined,
+                reasoningTokens: 4,
+                cachedInputTokens: 3,
+              },
             },
           },
         });
@@ -103,6 +109,13 @@ describe('transformWorkflow cumulative growth', () => {
 
     const finalChunk = workflowChunks[workflowChunks.length - 1]!;
     expect(finalChunk.data.status).toBe('success');
+    expect(finalChunk.data.output?.usage).toEqual({
+      inputTokens: undefined,
+      outputTokens: 10,
+      totalTokens: undefined,
+      reasoningTokens: 4,
+      cachedInputTokens: 3,
+    });
     expect(finalChunk.data.steps['step-0']?.output).toEqual({
       text: `step 0 output `.repeat(80),
     });

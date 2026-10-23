@@ -71,6 +71,8 @@ const FEEDBACK_UPSERT_COLUMNS = [
   'feedbackSource',
   'feedbackType',
   'value',
+  'valueString',
+  'valueNumber',
   'comment',
   'tags',
   'metadata',
@@ -116,7 +118,7 @@ const FEEDBACK_GROUP_BY_COLUMNS = new Set([
   'comment',
 ]);
 
-function getAggregationSql(aggregation: AggregationType, measure = 'TRY_CAST(value AS DOUBLE)'): string {
+function getAggregationSql(aggregation: AggregationType, measure = 'valueNumber'): string {
   switch (aggregation) {
     case 'sum':
       return `SUM(${measure})`;
@@ -188,7 +190,7 @@ function buildFeedbackWhereClause(
   }
 
   if (includeNumericGuard) {
-    conditions.push('TRY_CAST(value AS DOUBLE) IS NOT NULL');
+    conditions.push('valueNumber IS NOT NULL');
   }
 
   return { clause: `WHERE ${conditions.join(' AND ')}`, params };
@@ -214,12 +216,20 @@ function toSeriesName(values: unknown[]): string {
   return values.map(value => (value === null || value === undefined ? '' : String(value))).join('|');
 }
 
-function rowToFeedbackRecord(row: Record<string, unknown>): FeedbackRecord {
-  const rawValue = row.value;
-  let value: number | string = rawValue as string;
-  const numValue = Number(rawValue);
-  if (!isNaN(numValue)) value = numValue;
+function readFeedbackValue(row: Record<string, unknown>): FeedbackRecord['value'] {
+  if (row.valueNumber != null) {
+    return Number(row.valueNumber);
+  }
 
+  if (row.valueString != null) {
+    return String(row.valueString);
+  }
+
+  // Legacy rows have neither typed column populated.
+  return String(row.value);
+}
+
+function rowToFeedbackRecord(row: Record<string, unknown>): FeedbackRecord {
   return feedbackRecordSchema.parse({
     feedbackId: row.feedbackId as string,
     timestamp: toDate(row.timestamp),
@@ -254,7 +264,7 @@ function rowToFeedbackRecord(row: Record<string, unknown>): FeedbackRecord {
     source: row.feedbackSource as string,
     feedbackSource: row.feedbackSource as string,
     feedbackType: row.feedbackType as string,
-    value,
+    value: readFeedbackValue(row),
     comment: (row.comment as string) ?? null,
     tags: parseJsonArray(row.tags) as string[] | null,
     metadata: parseJson(row.metadata) as Record<string, unknown> | null,
@@ -304,7 +314,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
       feedbackId, timestamp, cursorId, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
-      feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, comment, tags, metadata, scope
+      feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, valueString, valueNumber, comment, tags, metadata, scope
     )
      VALUES (${[
        v(f.feedbackId),
@@ -341,6 +351,8 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
        v(feedbackSource),
        v(f.feedbackType),
        v(String(f.value)),
+       v(typeof f.value === 'string' ? f.value : null),
+       v(typeof f.value === 'number' ? f.value : null),
        v(f.comment ?? null),
        jsonV(f.tags ?? null),
        jsonV(f.metadata),
@@ -394,6 +406,8 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
       v(feedbackSource),
       v(legacyFeedback.feedbackType),
       v(String(legacyFeedback.value)),
+      v(typeof legacyFeedback.value === 'string' ? legacyFeedback.value : null),
+      v(typeof legacyFeedback.value === 'number' ? legacyFeedback.value : null),
       v(legacyFeedback.comment ?? null),
       jsonV(legacyFeedback.tags ?? null),
       jsonV(legacyFeedback.metadata),
@@ -406,7 +420,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
       feedbackId, timestamp, cursorId, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
-      feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, comment, tags, metadata, scope
+      feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, valueString, valueNumber, comment, tags, metadata, scope
     )
      VALUES ${tuples.join(',\n       ')}
      ${FEEDBACK_UPSERT_CLAUSE}`,
@@ -681,7 +695,7 @@ export async function getFeedbackPercentiles(
     const rows = await db.query<Record<string, unknown>>(
       `
         SELECT time_bucket(INTERVAL '${intervalSql}', timestamp) AS bucket,
-               percentile_cont(${percentile}) WITHIN GROUP (ORDER BY TRY_CAST(value AS DOUBLE)) AS pvalue
+               percentile_cont(${percentile}) WITHIN GROUP (ORDER BY valueNumber) AS pvalue
         FROM feedback_events ${clause}
         GROUP BY bucket
         ORDER BY bucket

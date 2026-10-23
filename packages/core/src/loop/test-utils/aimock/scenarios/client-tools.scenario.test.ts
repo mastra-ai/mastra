@@ -99,6 +99,46 @@ describeForAllEngines('AIMock scenario: client tools', engine => {
     expect(clientToolDef?.function.description).toBe('A client-side tool');
   });
 
+  it('continues after an opt-in render-only tool without a browser result (#26183)', async () => {
+    const renderCard = createTool({
+      id: 'render-card',
+      description: 'Display a product card',
+      inputSchema: z.object({ productId: z.string() }),
+      renderOnly: true,
+    });
+
+    const { output, chunks, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Show product sku-1 and explain it',
+      clientTools: { 'render-card': renderCard },
+      stopWhen: stepCountIs(3),
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [{ id: 'call-card', name: 'render-card', arguments: { productId: 'sku-1' } }],
+          },
+        );
+        llm.on(
+          { endpoint: 'chat', toolCallId: 'call-card', hasToolResult: true },
+          {
+            content: 'Here is the product card for sku-1.',
+          },
+        );
+      },
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(
+      (chunks ?? []).find((chunk: any) => chunk.type === 'tool-result' && chunk.payload?.toolCallId === 'call-card'),
+    ).toMatchObject({
+      payload: { result: { acknowledged: true } },
+    });
+    expect(await output.text).toBe('Here is the product card for sku-1.');
+  });
+
   it('should stream a completed server tool result when a client tool stays pending in the same step (#21637)', async () => {
     // A server-side tool (has execute) and a client-side tool (no execute, resolved by the
     // browser) are called in the same step. The turn ends so the client can resolve its own
@@ -118,7 +158,7 @@ describeForAllEngines('AIMock scenario: client tools', engine => {
       // No execute: the client executes this one and sends the result back.
     });
 
-    const { chunks } = await runLoopScenario({
+    const { chunks, requests } = await runLoopScenario({
       engine,
       llm: getMock(),
       prompt: 'Use both tools',
@@ -148,5 +188,10 @@ describeForAllEngines('AIMock scenario: client tools', engine => {
 
     // ...while the client-side tool stays unresolved for the client to complete.
     expect(toolResults.some((c: any) => c.payload?.toolCallId === 'call-browser')).toBe(false);
+
+    // The turn really did end at the pending client call: exactly one model request. Without
+    // this the loop can re-invoke the model on a result nobody produced while the assertions
+    // above still pass (issue #23295 — durable only).
+    expect(requests.length).toBe(1);
   });
 });

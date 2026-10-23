@@ -1,3 +1,10 @@
+import type { ActivityOptions } from '@temporalio/workflow';
+
+export type WorkflowRuntimeOptions = {
+  startToCloseTimeout?: string;
+  retry?: ActivityOptions['retry'];
+};
+
 export interface WorkflowExecutionResult {
   status: 'success';
   input: unknown;
@@ -6,6 +13,18 @@ export interface WorkflowExecutionResult {
   steps: Record<string, unknown>;
 }
 
+export type StepEntry = {
+  type: 'step';
+  step: { id: string };
+};
+
+export type ChildWorkflowEntry = {
+  type: 'childWorkflow';
+  workflowType: string;
+};
+
+export type ParallelEntry = StepEntry | ChildWorkflowEntry;
+
 export type WorkflowRuntime = ((startArgs?: {
   runId?: string;
   resourceId?: string;
@@ -13,9 +32,11 @@ export type WorkflowRuntime = ((startArgs?: {
   initialState?: unknown;
 }) => Promise<WorkflowExecutionResult>) & {
   then(stepId: string): WorkflowRuntime;
+  thenWorkflow(workflowType: string): WorkflowRuntime;
+  map(mappingId: string, options?: unknown): WorkflowRuntime;
   sleep(durationOrFnId: number | string): WorkflowRuntime;
   sleepUntil(dateOrFnId: Date | number | string): WorkflowRuntime;
-  parallel(stepIds: string[]): WorkflowRuntime;
+  parallel(entries: ParallelEntry[]): WorkflowRuntime;
   branch(pairs: [string, string][]): WorkflowRuntime;
   dowhile(stepId: string, condId: string): WorkflowRuntime;
   dountil(stepId: string, condId: string): WorkflowRuntime;
@@ -27,7 +48,7 @@ export type WorkflowRuntime = ((startArgs?: {
 };
 
 export class TemporalExecutionEngine {
-  constructor(params?: { options?: { startToCloseTimeout?: string } });
+  constructor(params?: { options?: WorkflowRuntimeOptions });
   execute(params: {
     workflowId: string;
     runId?: string;
@@ -38,4 +59,4 @@ export class TemporalExecutionEngine {
   }): Promise<WorkflowExecutionResult>;
 }
 
-export function createWorkflow(workflowId: string, options?: { startToCloseTimeout?: string }): WorkflowRuntime;
+export function createWorkflow(workflowId: string, options?: WorkflowRuntimeOptions): WorkflowRuntime;

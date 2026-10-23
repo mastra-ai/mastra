@@ -34,6 +34,7 @@ import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 export * from './routes';
 export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-auth';
 export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
+export { propagateRequestAbort } from './mcp-disconnect';
 export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
@@ -42,6 +43,7 @@ export {
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_STUDIO_CLIENT_TYPE,
+  RESERVED_REQUEST_CONTEXT_KEYS,
   isReservedRequestContextKey,
   isStudioClientTypeHeader,
 } from '../constants';
@@ -56,6 +58,82 @@ export function getCustomHTTPExceptionResponse(error: unknown): Response | undef
   }
 
   return error.getResponse();
+}
+
+/**
+ * Response for an HTTPException thrown from a `registerApiRoute` handler, or undefined for
+ * any other error (which callers keep behind a generic 500). Duck-typed so an HTTPException
+ * from `hono/http-exception`, possibly a separate Hono install, is recognised too.
+ */
+export function getCustomRouteHTTPExceptionResponse(error: unknown): Response | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const httpError = error as Error & { status?: unknown; res?: unknown; getResponse?: unknown };
+  const status = httpError.status;
+  if (
+    typeof httpError.getResponse !== 'function' ||
+    typeof status !== 'number' ||
+    !Number.isInteger(status) ||
+    status < 400 ||
+    status > 599
+  ) {
+    return undefined;
+  }
+  if (httpError.res) return (httpError.getResponse as () => Response).call(httpError);
+  return Response.json({ error: httpError.message }, { status });
+}
+
+export interface HTTPErrorResponseBody {
+  error: string;
+  cause?: { failingItems: unknown[] } | { field: string; errors: Array<{ path: string; message: string }> };
+}
+
+/**
+ * Only allowlisted causes are exposed to clients; any other cause stays server-side:
+ * - `cause.failingItems` (dataset schema-update rejections)
+ * - `cause.field` + `cause.errors` (schema validation failures), reduced to each error's path and message
+ */
+function getSafeErrorCause(error: unknown): HTTPErrorResponseBody['cause'] {
+  try {
+    const raw = error instanceof Error ? error.cause : undefined;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+    if (Array.isArray((raw as any).failingItems)) {
+      return { failingItems: (raw as any).failingItems };
+    }
+    const { field, errors } = raw as { field?: unknown; errors?: unknown };
+    if (typeof field === 'string' && Array.isArray(errors)) {
+      return {
+        field,
+        errors: errors.flatMap(e =>
+          e && typeof e.path === 'string' && typeof e.message === 'string'
+            ? [{ path: e.path, message: e.message }]
+            : [],
+        ),
+      };
+    }
+  } catch {
+    // property access threw (e.g. a getter) — omit cause
+  }
+  return undefined;
+}
+
+/**
+ * Maps a handler error to the status and JSON body every adapter sends:
+ * `error.status` (HTTPException) first, then `error.details.status` (MastraError), else 500.
+ */
+export function getHTTPErrorResponse(error: unknown): { status: number; body: HTTPErrorResponseBody } {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+
+  if (error && typeof error === 'object') {
+    if ('status' in error) {
+      const cause = getSafeErrorCause(error);
+      return { status: (error as any).status, body: { error: message, ...(cause ? { cause } : {}) } };
+    }
+    if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
+      return { status: (error.details as any).status, body: { error: message } };
+    }
+  }
+
+  return { status: 500, body: { error: message } };
 }
 
 /**
@@ -196,7 +274,7 @@ function isSchemaApiRoute(route: ApiRoute): route is SchemaCustomApiRoute {
   return '_mastraSchemaRoute' in route && route._mastraSchemaRoute === true;
 }
 
-function getFGAProvider(mastra: any, requestContext?: RequestContext): IFGAProvider | undefined {
+export function getFGAProvider(mastra: any, requestContext?: RequestContext): IFGAProvider | undefined {
   // If we have request context, check auth mode to determine which FGA provider to use
   if (requestContext) {
     const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY);
@@ -315,6 +393,20 @@ function parseComplexQueryParams(
 }
 
 /**
+ * Property names that must never be written onto objects built from untrusted
+ * input: assigning them can mutate the object's prototype chain.
+ */
+const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+
+/**
+ * Returns whether `key` is safe to use as a property name when building an
+ * object from untrusted input (query strings, form fields, etc.).
+ */
+export function isSafeObjectKey(key: string): boolean {
+  return !UNSAFE_OBJECT_KEYS.has(key);
+}
+
+/**
  * Normalizes query parameters from various HTTP framework formats to a consistent structure.
  * Handles both single string values and arrays (for repeated query params like ?tag=a&tag=b).
  * Reconstructs bracket-notation keys (e.g., `orderBy[field]=createdAt`) into JSON strings
@@ -339,15 +431,20 @@ export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<
         : typeof value === 'string'
           ? value
           : undefined;
-      if (strValue !== undefined) {
-        if (!bracketGroups[parent]) {
+      if (strValue !== undefined && isSafeObjectKey(parent) && isSafeObjectKey(child)) {
+        if (!Object.hasOwn(bracketGroups, parent)) {
           bracketGroups[parent] = {};
         }
         bracketGroups[parent]![child] = strValue;
       }
     } else if (typeof value === 'string') {
-      queryParams[key] = value;
+      if (isSafeObjectKey(key)) {
+        queryParams[key] = value;
+      }
     } else if (Array.isArray(value)) {
+      if (!isSafeObjectKey(key)) {
+        continue;
+      }
       // Filter to only string values (some frameworks include nested objects)
       const stringValues = value.filter((v): v is string => typeof v === 'string');
       // Convert single-value arrays back to strings for compatibility
@@ -357,7 +454,7 @@ export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<
 
   // Merge bracket groups as JSON strings (only if the parent key wasn't already set directly)
   for (const [parent, children] of Object.entries(bracketGroups)) {
-    if (!(parent in queryParams)) {
+    if (!Object.hasOwn(queryParams, parent)) {
       queryParams[parent] = JSON.stringify(children);
     }
   }
@@ -380,6 +477,9 @@ export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<
  * @template TResponse - The type of the response object
  */
 export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServerBase<TApp> {
+  /** Request bodies cannot set agent scopes: handlers strip `scopes`, and `mastra__scopes` is a reserved key. */
+  readonly reservesAgentScopes = true;
+
   protected mastra: Mastra;
   protected bodyLimitOptions?: BodyLimitOptions;
   protected tools?: ToolsInput;
@@ -753,11 +853,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     route: ServerRoute,
     userPermissions: string[] | undefined,
     hasPermissionFn: (userPerms: string[], required: string) => boolean,
-    requestContext?: RequestContext,
+    requestContext: RequestContext,
   ): { status: number; error: string; message: string } | null {
     // If RBAC is not configured, skip permission checks entirely
     // Auth-only mode = authenticated users get full access
-    const rbacProvider = requestContext ? this.getEffectiveRBACProvider(requestContext) : this.mastra.getServer()?.rbac;
+    const rbacProvider = this.getEffectiveRBACProvider(requestContext);
 
     if (!rbacProvider) {
       return null;
@@ -1095,6 +1195,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
+      const httpExceptionResponse = getCustomRouteHTTPExceptionResponse(err);
+      if (httpExceptionResponse) return httpExceptionResponse;
       // Log before responding — otherwise the error is invisible on the server
       // and the client only ever sees an opaque 500.
       this.mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
@@ -1267,7 +1369,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Custom routes are served at root (/), not under the API prefix — add per-path servers override.
     const allCustomRoutes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
     if (allCustomRoutes && allCustomRoutes.length > 0) {
-      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes);
+      const componentSchemas = openApiSpec.components?.schemas ?? Object.create(null);
+      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes, componentSchemas);
+      if (Object.keys(componentSchemas).length > 0) {
+        openApiSpec.components = { ...openApiSpec.components, schemas: componentSchemas };
+      }
       if (prefix) {
         for (const pathKey of Object.keys(customPaths)) {
           if (!customPaths[pathKey].servers) {
@@ -1343,6 +1449,19 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const bodySchema = route.bodySchema;
     if (!bodySchema) {
       return body;
+    }
+
+    if (body === undefined) {
+      const omitted = await bodySchema.safeParseAsync(undefined);
+      if (omitted.success) return omitted.data;
+      // Preserve bodyless object requests with optional/defaulted fields, but keep
+      // the original missing-input error if the compatibility fallback also fails.
+      const schemaType = getSchemaTypeName(unwrapOptionalNullable(bodySchema));
+      if (schemaType === 'object' || schemaType === 'ZodObject') {
+        const emptyObject = await bodySchema.safeParseAsync({});
+        if (emptyObject.success) return emptyObject.data;
+      }
+      throw omitted.error;
     }
 
     return bodySchema.parseAsync(body);

@@ -1,6 +1,6 @@
 {
   "name": "create-factory",
-  "version": "0.1.18-alpha.1",
+  "version": "0.3.1-alpha.0",
   "description": "Create a Mastra Factory project: an agent-powered software delivery environment built on Mastra. Run `npm create factory` to scaffold and get started.",
   "type": "module",
   "license": "Apache-2.0",
@@ -15,8 +15,8 @@
     "prepack": "npm run build",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "engines": {
     "node": ">=22.13.0"
@@ -48,9 +48,8 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@types/node": "22.20.1",
-    "eslint": "^10.4.1",
-    "tsdown": "0.22.9",
+    "@types/node": "22.20.5",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

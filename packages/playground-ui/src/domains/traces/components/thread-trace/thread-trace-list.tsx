@@ -1,0 +1,30 @@
+import type { ComponentProps } from 'react';
+import { Panel } from 'react-resizable-panels';
+
+import { useThreadTrace } from './thread-trace-context';
+import { MessageScroller, MessageScrollerContent, MessageScrollerViewport } from '@/ds/components/MessageScroller';
+import { cn } from '@/lib/utils';
+
+export interface ThreadTraceListProps extends ComponentProps<'div'> {
+  /** Class name of the inner wrapper that establishes the positioning context for the rail. */
+  innerClassName?: string;
+}
+
+/** The scroll container holding the rows; visible-row tracking observes `[data-trace-id]` inside it. */
+export function ThreadTraceList({ className, innerClassName, children, ...props }: ThreadTraceListProps) {
+  const { listRef } = useThreadTrace();
+  return (
+    <Panel id="thread-trace-main" minSize={320} className="flex min-h-0 min-w-0 flex-col">
+      <MessageScroller data-slot="thread-trace-list" className={cn('min-h-0 flex-1', className)} {...props}>
+        <MessageScrollerViewport ref={listRef} className="overflow-x-hidden">
+          <MessageScrollerContent
+            data-slot="thread-trace-list-inner"
+            className={cn('relative min-h-full gap-0', innerClassName)}
+          >
+            {children}
+          </MessageScrollerContent>
+        </MessageScrollerViewport>
+      </MessageScroller>
+    </Panel>
+  );
+}

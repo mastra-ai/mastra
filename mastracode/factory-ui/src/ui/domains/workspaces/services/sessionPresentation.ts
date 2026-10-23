@@ -1,8 +1,10 @@
-import type { WorkItem } from '../../factory/services/workItems';
-import { USER_SESSION_BRANCH_PREFIX } from './user-sessions';
+import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
+import { isPullRequestSource } from '../../factory/services/workItems';
+import { SLACK_SESSION_BRANCH_PREFIX, USER_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
 
-const REVIEW_BRANCH_PREFIX = 'factory/pr-';
+const GITHUB_REVIEW_BRANCH = /^factory\/pr-([1-9]\d*)$/;
+const GITLAB_REVIEW_BRANCH = /^factory\/gitlab-mr-([1-9]\d*)-[a-z0-9]+$/;
 
 export interface SessionOwnerDetails {
   name: string;
@@ -31,16 +33,28 @@ export function getSessionOwnerDetails(
 }
 
 export function getFactorySessionKind(session: FactoryUserSession, workItem: WorkItem | undefined): 'work' | 'review' {
-  if (workItem?.source === 'github-pr') return 'review';
-  if (!workItem && session.branch.startsWith(REVIEW_BRANCH_PREFIX)) return 'review';
+  if (workItem && isPullRequestSource(workItem.source)) return 'review';
+  if (!workItem && getReviewBranchIdentifier(session.branch)) return 'review';
   return 'work';
 }
 
+/** Where a sidebar session came from: a user's own session, or the source of the work it runs. */
+export type SessionSource = WorkItemSource | 'user';
+
+/** Falls back to the branch when the session's work item isn't loaded. */
+export function getFactorySessionSource(session: FactoryUserSession, workItem: WorkItem | undefined): WorkItemSource {
+  if (workItem) return workItem.source;
+  if (GITHUB_REVIEW_BRANCH.test(session.branch)) return 'github-pr';
+  if (GITLAB_REVIEW_BRANCH.test(session.branch)) return 'gitlab-pr';
+  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)) return 'slack-thread';
+  return 'manual';
+}
+
 export function getReviewBranchIdentifier(branch: string): string | undefined {
-  if (!branch.startsWith(REVIEW_BRANCH_PREFIX)) return undefined;
-  const number = branch.slice(REVIEW_BRANCH_PREFIX.length);
-  if (!/^\d+$/.test(number)) return undefined;
-  return `#${number}`;
+  const github = GITHUB_REVIEW_BRANCH.exec(branch);
+  if (github) return `#${github[1]}`;
+  const gitlab = GITLAB_REVIEW_BRANCH.exec(branch);
+  return gitlab ? `!${gitlab[1]}` : undefined;
 }
 
 export function isAutomaticUserSessionBranch(session: FactoryUserSession): boolean {

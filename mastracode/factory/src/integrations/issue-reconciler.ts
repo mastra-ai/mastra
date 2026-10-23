@@ -1,6 +1,9 @@
-import type { Intake, IntakeIssue } from '../capabilities/intake.js';
+import type { Intake, IntakeIssue, ResolvedIntakeDispatch } from '../capabilities/intake.js';
 import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+
+export const EXTERNAL_SOURCE_MISSING_KEY = 'externalSourceMissingAt';
+const MISSING_RECHECK_MS = 24 * 60 * 60_000;
 
 export interface IssueReconcileSummary {
   projects: number;
@@ -30,15 +33,25 @@ export interface IssueReconcilerOptions<TScope = void> {
   storage: WorkItemsStorage;
   externalSource?(item: WorkItemRow): { type: string; externalId: string };
   issueId(item: WorkItemRow): string | undefined;
-  metadata(item: WorkItemRow, issue: IntakeIssue): Record<string, unknown>;
+  metadata(
+    item: WorkItemRow,
+    issue: IntakeIssue,
+    dispatch: ResolvedIntakeDispatch,
+  ): Record<string, unknown> | Promise<Record<string, unknown>>;
   /**
    * Called when a closed issue (stateType 'completed' or 'canceled') is detected
    * on a non-terminal work item. Use this to replay the close event through
    * the provider's rules ingress.
    */
-  onClosed?(item: WorkItemRow, issue: IntakeIssue, project: FactoryProject): Promise<void>;
+  onClosed?(
+    item: WorkItemRow,
+    issue: IntakeIssue,
+    project: FactoryProject,
+    dispatch: ResolvedIntakeDispatch,
+  ): Promise<Record<string, unknown> | void>;
   /** Whether the item already rests in a terminal phase of its board. Unknown phases are not terminal. */
   isTerminal(item: WorkItemRow): boolean;
+  now?: () => Date;
 }
 
 export type IssueReconciler<TScope = void> = TScope extends void
@@ -48,9 +61,28 @@ export type IssueReconciler<TScope = void> = TScope extends void
 function sameValue(left: unknown, right: unknown): boolean {
   if (Array.isArray(right)) {
     if (!Array.isArray(left)) return right.length === 0;
-    const leftStrings = left.filter((value): value is string => typeof value === 'string').slice().sort();
-    const rightStrings = right.filter((value): value is string => typeof value === 'string').slice().sort();
-    return leftStrings.length === rightStrings.length && leftStrings.every((value, index) => value === rightStrings[index]);
+    const leftStrings = left
+      .filter((value): value is string => typeof value === 'string')
+      .slice()
+      .sort();
+    const rightStrings = right
+      .filter((value): value is string => typeof value === 'string')
+      .slice()
+      .sort();
+    return (
+      leftStrings.length === rightStrings.length && leftStrings.every((value, index) => value === rightStrings[index])
+    );
+  }
+  if (right !== null && typeof right === 'object') {
+    if (left === null || typeof left !== 'object' || Array.isArray(left)) return false;
+    const leftRecord = left as Record<string, unknown>;
+    const rightRecord = right as Record<string, unknown>;
+    const leftKeys = Object.keys(leftRecord);
+    const rightKeys = Object.keys(rightRecord);
+    return (
+      leftKeys.length === rightKeys.length &&
+      rightKeys.every(key => Object.hasOwn(leftRecord, key) && sameValue(leftRecord[key], rightRecord[key]))
+    );
   }
   return left === right;
 }
@@ -72,6 +104,11 @@ function withoutUndefined(record: Record<string, unknown>): Record<string, unkno
   return out;
 }
 
+function withoutMissingMarker(record: Record<string, unknown> | null): Record<string, unknown> {
+  const { [EXTERNAL_SOURCE_MISSING_KEY]: _missingAt, ...metadata } = record ?? {};
+  return metadata;
+}
+
 function issueItems(project: FactoryProject, items: WorkItemRow[], integrationId: string): WorkItemRow[] {
   return items.filter(
     item =>
@@ -81,9 +118,8 @@ function issueItems(project: FactoryProject, items: WorkItemRow[], integrationId
   );
 }
 
-export function createIssueReconciler<TScope = void>(
-  options: IssueReconcilerOptions<TScope>,
-): IssueReconciler<TScope> {
+export function createIssueReconciler<TScope = void>(options: IssueReconcilerOptions<TScope>): IssueReconciler<TScope> {
+  const now = options.now ?? (() => new Date());
   const run = async (scope?: IssueReconcileScope<TScope>): Promise<IssueReconcileSummary> => {
     const summary: IssueReconcileSummary = {
       projects: 0,
@@ -112,36 +148,79 @@ export function createIssueReconciler<TScope = void>(
       for (const item of items) {
         summary.checked += 1;
         try {
+          const missingAt = item.metadata?.[EXTERNAL_SOURCE_MISSING_KEY];
+          const missingTime = typeof missingAt === 'string' ? Date.parse(missingAt) : Number.NaN;
+          const missingAge = now().getTime() - missingTime;
+          if (Number.isFinite(missingTime) && missingAge >= 0 && missingAge < MISSING_RECHECK_MS) {
+            summary.missing += 1;
+            continue;
+          }
+
           const resolved = await options.intake.resolveIntakeDispatch?.({
             orgId: project.orgId,
             externalSource: options.externalSource?.(item) ?? item.externalSource!,
           });
           if (!resolved) {
+            await options.storage.update({
+              orgId: project.orgId,
+              id: item.id,
+              userId: 'factory-rule-dispatcher',
+              patch: { metadata: { ...(item.metadata ?? {}), [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
+            });
             summary.missing += 1;
             continue;
           }
           const issueId = options.issueId(item) ?? resolved.issueId;
           const issue = await options.intake.getIssue({ ...resolved, issueId });
           if (!issue) {
+            await options.storage.update({
+              orgId: project.orgId,
+              id: item.id,
+              userId: 'factory-rule-dispatcher',
+              patch: { metadata: { ...(item.metadata ?? {}), [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
+            });
             summary.missing += 1;
             continue;
           }
 
+          const hadMissingMarker = typeof missingAt === 'string';
+          const baseMetadata = withoutMissingMarker(item.metadata);
           // Close detection for Linear: replay through rules ingress if closed
           const isClosed = issue.stateType === 'completed' || issue.stateType === 'canceled';
           if (isClosed && !options.isTerminal(item) && options.onClosed) {
-            await options.onClosed(item, issue, project);
+            const closedMetadata = withoutUndefined((await options.onClosed(item, issue, project, resolved)) ?? {});
+            if (hadMissingMarker || !metadataMatches(baseMetadata, closedMetadata)) {
+              await options.storage.update({
+                orgId: project.orgId,
+                id: item.id,
+                userId: 'factory-rule-dispatcher',
+                patch: {
+                  metadata: {
+                    ...baseMetadata,
+                    ...closedMetadata,
+                    ...(hadMissingMarker ? { [EXTERNAL_SOURCE_MISSING_KEY]: undefined } : {}),
+                  },
+                },
+              });
+              summary.updated += 1;
+            }
             summary.closed += 1;
-            continue; // Skip metadata patch for closed issues
+            continue;
           }
 
-          const metadata = withoutUndefined(options.metadata(item, issue));
-          if (metadataMatches(item.metadata, metadata)) continue;
+          const metadata = withoutUndefined(await options.metadata(item, issue, resolved));
+          if (!hadMissingMarker && metadataMatches(baseMetadata, metadata)) continue;
           await options.storage.update({
             orgId: project.orgId,
             id: item.id,
             userId: 'factory-rule-dispatcher',
-            patch: { metadata: { ...(item.metadata ?? {}), ...metadata } },
+            patch: {
+              metadata: {
+                ...baseMetadata,
+                ...metadata,
+                ...(hadMissingMarker ? { [EXTERNAL_SOURCE_MISSING_KEY]: undefined } : {}),
+              },
+            },
           });
           summary.updated += 1;
         } catch (error) {

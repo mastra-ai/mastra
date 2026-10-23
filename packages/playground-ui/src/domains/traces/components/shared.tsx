@@ -1,12 +1,13 @@
-import { BrainIcon, GaugeIcon } from 'lucide-react';
+import { BrainIcon } from 'lucide-react';
 import type { UISpanStyle } from '../types';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
-import { FolderIcon } from '@/ds/icons/FolderIcon';
 import { McpServerIcon } from '@/ds/icons/McpServerIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
+import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 import { SkillIcon } from '@/ds/icons/SkillIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { WorkspacesIcon } from '@/ds/icons/WorkspacesIcon';
 
 export const spanTypePrefixes = [
   'agent',
@@ -25,68 +26,68 @@ export const spanTypePrefixes = [
 const spanTypeToUiElements: Record<string, UISpanStyle> = {
   agent: {
     icon: <AgentIcon />,
-    color: 'oklch(0.75 0.15 250)',
+    color: 'var(--span-agent)',
     label: 'Agent',
     typePrefix: 'agent',
   },
   workflow: {
     icon: <WorkflowIcon />,
-    color: 'oklch(0.75 0.15 200)',
+    color: 'var(--span-workflow)',
     label: 'Workflow',
     typePrefix: 'workflow',
   },
   model: {
     icon: <BrainIcon />,
-    color: 'oklch(0.75 0.15 320)',
+    color: 'var(--span-model)',
     label: 'Model',
     typePrefix: 'model',
   },
   mcp: {
     icon: <McpServerIcon />,
-    color: 'oklch(0.75 0.15 160)',
+    color: 'var(--span-mcp)',
     label: 'MCP',
     typePrefix: 'mcp',
   },
   tool: {
     icon: <ToolsIcon />,
-    color: 'oklch(0.75 0.15 100)',
+    color: 'var(--span-tool)',
     label: 'Tool',
     typePrefix: 'tool',
   },
   provider: {
     icon: <ToolsIcon />,
-    color: 'oklch(0.75 0.15 60)',
+    color: 'var(--span-provider)',
     label: 'Provider Tool',
     typePrefix: 'provider',
   },
   memory: {
     icon: <MemoryIcon />,
-    color: 'oklch(0.75 0.12 50)',
+    color: 'var(--span-memory)',
     label: 'Memory',
     typePrefix: 'memory',
   },
   workspace: {
-    icon: <FolderIcon />,
-    color: 'oklch(0.75 0.15 40)',
+    icon: <WorkspacesIcon />,
+    color: 'var(--span-workspace)',
     label: 'Workspace',
     typePrefix: 'workspace',
   },
   skill: {
     icon: <SkillIcon />,
-    color: 'oklch(0.75 0.15 130)',
+    color: 'var(--span-skill)',
     label: 'Skill',
     typePrefix: 'skill',
   },
   scorer: {
-    icon: <GaugeIcon />,
-    color: 'oklch(0.75 0.15 280)',
+    icon: <ScorersIcon />,
+    color: 'var(--span-scorer)',
     label: 'Scorer',
     typePrefix: 'scorer',
   },
 };
 
 const otherSpanType: UISpanStyle = {
-  color: 'oklch(0.65 0 0)',
+  color: 'var(--span-other)',
   label: 'Other',
   typePrefix: 'other',
 };

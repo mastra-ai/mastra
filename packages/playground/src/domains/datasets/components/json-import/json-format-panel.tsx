@@ -1,8 +1,11 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
-import { ExternalLinkIcon } from 'lucide-react';
+import { textStyle } from '@mastra/playground-ui/primitives/text';
+import { ExternalLinkIcon, Check, Copy } from 'lucide-react';
 
 const DOCS_URL = 'https://mastra.ai/docs/evals/datasets';
 
@@ -25,20 +28,26 @@ export function JSONFormatPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-ui-sm text-neutral5 flex h-8 items-center font-medium">Each item looks like this</p>
+      <Txt variant="column" tone="ink" className="flex h-8 items-center">
+        Each item looks like this
+      </Txt>
 
-      <dl className="border-border1 divide-border1 divide-y rounded-lg border">
+      <dl className="divide-y divide-border rounded-lg border border-border">
         {FIELDS.map(field => (
           <div key={field.name} className="grid grid-cols-[7rem_1fr] gap-3 px-3 py-2.5">
-            <dt className="text-ui-xs text-neutral6 font-mono">{field.name}</dt>
-            <dd className="text-ui-xs text-neutral4 flex flex-col items-start gap-1.5">
-              <span>{field.description}</span>
+            <dt className={textStyle({ tone: 'ink', variant: 'meta' })}>
+              <InlineCode>{field.name}</InlineCode>
+            </dt>
+            <dd className="flex flex-col items-start gap-1.5 text-muted-foreground">
+              <Txt as="span" variant="meta">
+                {field.description}
+              </Txt>
               {field.required ? (
-                <Badge variant="green" size="xs">
+                <Badge variant="success" size="xs">
                   required
                 </Badge>
               ) : (
-                <Badge variant="neutral" emphasis="muted" size="xs">
+                <Badge variant="neutral" emphasis="subtle" size="xs">
                   optional
                 </Badge>
               )}
@@ -47,10 +56,12 @@ export function JSONFormatPanel() {
         ))}
       </dl>
 
-      <div className="border-border1 overflow-hidden rounded-lg border">
-        <div className="border-border1 bg-surface3 flex items-center justify-between border-b py-1.5 pr-1.5 pl-3">
-          <span className="text-ui-xs text-neutral4 font-mono">example.json</span>
-          <Button variant="ghost" size="xs" onClick={handleCopy}>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <div className="flex items-center justify-between border-b border-border bg-card py-1.5 pr-1.5 pl-3">
+          <Txt as="span" variant="meta" tone="muted" font="mono">
+            example.json
+          </Txt>
+          <Button icon={isCopied ? <Check /> : <Copy />} variant="ghost" size="sm" onClick={handleCopy}>
             {isCopied ? 'Copied' : 'Copy'}
           </Button>
         </div>
@@ -65,8 +76,14 @@ export function JSONFormatPanel() {
         />
       </div>
 
-      <Button variant="ghost" as="a" href={DOCS_URL} target="_blank" rel="noopener noreferrer" className="self-start">
-        Datasets documentation <ExternalLinkIcon />
+      <Button
+        variant="ghost"
+        render={<a href={DOCS_URL} target="_blank" rel="noopener noreferrer" />}
+
+        className="self-start"
+        icon={<ExternalLinkIcon />}
+      >
+        Datasets documentation
       </Button>
     </div>
   );

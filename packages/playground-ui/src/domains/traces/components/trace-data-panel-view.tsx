@@ -1,59 +1,75 @@
 import {
+  ChartGanttIcon,
   CircleGaugeIcon,
-  ChevronsDownUpIcon,
-  ChevronsUpDownIcon,
   DownloadIcon,
   Link2Icon,
+  ListTreeIcon,
   Loader2Icon,
-  MoreHorizontalIcon,
+  MessageSquareReplyIcon,
+  MessageSquareTextIcon,
   SaveIcon,
-  WrenchIcon,
 } from 'lucide-react';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { Group, Panel, useGroupRef } from 'react-resizable-panels';
+import type { Layout } from 'react-resizable-panels';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { useTraceSearch } from '../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../trace-list-columns';
-import type { SearchableSpan } from '../types';
+import type { LightSpanRecord } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
-import { TraceIdButton } from './trace-id-button';
-import { TraceSummaryDescription } from './trace-summary-description';
-import { TraceTimeline } from './trace-timeline';
+import { TraceSpanTimeline } from './trace-span-timeline';
+import { TraceSpanTree } from './trace-span-tree';
+import { TraceEntityMeta, TraceStatusMeta, TraceSummaryDescription } from './trace-summary-description';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
+import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
-import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
+import { SearchInput } from '@/ds/components/SearchInput';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
+import { Icon } from '@/ds/icons/Icon';
+import { ScorersIcon } from '@/ds/icons/ScorersIcon';
+import { TraceIcon } from '@/ds/icons/TraceIcon';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
 import { useTextHighlight } from '@/hooks/use-text-highlight';
-import { cn } from '@/lib/utils';
+import { PanelSeparator } from '@/lib/resize/separator';
 
 export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
 
-export type TraceDataPanelTab = 'details' | 'scores' | 'feedback';
+export type TraceSpanView = 'tree' | 'timeline';
+
+export type TraceSideView = 'messages' | 'feedback' | 'scores';
 
 export interface TraceDataPanelViewProps {
-  traceId: string;
+  /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
+  traceId?: string;
   /** Lightweight spans for the trace. Caller fetches via useTraceLightSpans. */
-  spans: SearchableSpan[] | undefined;
+  spans: (LightSpanRecord & { signalLabel?: string })[] | undefined;
   isLoading?: boolean;
   onClose: () => void;
   onSpanSelect?: (spanId: string | undefined) => void;
   onEvaluateTrace?: () => void;
   /** When set, an "Add full trace to dataset" button appears; the consumer owns the dialog. */
   onSaveAsDatasetItem?: (args: { traceId: string; rootSpanId: string | undefined }) => void;
-  /** When set, an "Add tool mocks to item" button appears; the consumer owns the dialog. */
-  onAddTraceMocksToItem?: (args: { traceId: string }) => void;
   initialSpanId?: string | null;
   onPrevious?: () => void;
   onNext?: () => void;
-  collapsed?: boolean;
-  onCollapsedChange?: (collapsed: boolean) => void;
+  /** Drawer width; defaults to `wide` since the panel lays out several columns. */
+  size?: DataPanelProps['size'];
+  /** Elevation when opened next to other sibling panels. */
+  depth?: DataPanelProps['depth'];
+  /** Rendered inside the drawer above the trace header (e.g. inbox feedback context). */
+  headerSlot?: ReactNode;
+  /** Integration-specific actions shown alongside the standard trace controls. */
+  headerActionsSlot?: ReactNode;
+  /** Accessible drawer name; defaults to the trace id. */
+  title?: string;
   placement: TraceDataPanelPlacement;
+  /** @deprecated No longer used: the panel renders the span tree with the duration as text. */
   timelineChartWidth?: 'wide' | 'default';
   /** When both are provided, renders an "Open trace page" button. */
   LinkComponent?: LinkComponent;
@@ -69,6 +85,12 @@ export interface TraceDataPanelViewProps {
    */
   anchorSpanId?: string;
   /**
+   * Root entity type when the caller knows it before the spans load (e.g. from the listed row).
+   * Sizes the columns from the start, so they don't shift once the trace arrives. `null` is a
+   * trace known to have no entity type.
+   */
+  entityType?: string | null;
+  /**
    * Whether to render the "Evaluating traces and saving them as dataset items is
    * available in Mastra Studio" info notice when neither `onEvaluateTrace` nor
    * `onSaveAsDatasetItem` is provided. Defaults to `true`. Pass `false` when this
@@ -77,35 +99,43 @@ export interface TraceDataPanelViewProps {
    */
   showUnavailableFeaturesMsg?: boolean;
   /**
-   * When provided, the panel content becomes tabbed ("Details" / "Scores"); the slot
-   * renders whatever trace-level scoring UI the consumer wants.
+   * When provided, a "Scores" tab appears in the side column and a "Scores" readout in the
+   * summary row opens the same slot in a popover.
    */
   scoresTabSlot?: (args: { traceId: string; rootSpanId: string | undefined }) => ReactNode;
-  /** Optional count shown in the "Scores" tab label. */
+  /** Optional count rendered after the "Scores" labels, e.g. `Scores (3)`. */
   scoresTabBadge?: ReactNode;
   /**
-   * When provided, a "Feedback" tab appears; the slot renders the trace-level
-   * feedback UI. Trace feedback is not scoped to a span — the span panel owns that.
+   * When provided, a "Feedback" tab appears in the side column and a "Feedback" readout in
+   * the summary row opens the same slot in a popover. Trace feedback is not scoped to a
+   * span — the span panel owns that.
    */
   feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
-  /** Optional indicator rendered after the "Feedback" tab label (e.g. a needs-review dot). */
+  /** Optional count rendered after the "Feedback" labels, e.g. `Feedback (3)`. */
   feedbackTabBadge?: ReactNode;
-  activeTab?: TraceDataPanelTab;
-  onTabChange?: (tab: TraceDataPanelTab) => void;
   /** Span ids to feature in the timeline; every other span is faded. */
   featuredSpanIds?: string[];
   /**
-   * Rendered as a column to the left of the timeline inside the same card;
-   * typically the reconstructed agent turn ("Messages").
+   * The "Messages" view of the side column next to the span tree (typically the
+   * trace as one reconstructed agent turn). Rendered without content padding.
    */
   messagesPanelSlot?: ReactNode;
+  /**
+   * Actions rendered at the end of the side column's tab row (e.g. "Open full thread").
+   * `compact` is true when the side column is narrow and controls collapse to icons.
+   */
+  sideHeaderActions?: (options: { compact: boolean }) => ReactNode;
+  /** Controlled span view (tree or timeline); falls back to local state starting on the tree. */
+  spanView?: TraceSpanView;
+  onSpanViewChange?: (view: TraceSpanView) => void;
+  /** Controlled side column view; falls back to the first available view. */
+  sideView?: TraceSideView;
+  onSideViewChange?: (view: TraceSideView) => void;
   /**
    * Rendered as a column to the right of the timeline inside the same card;
    * typically the span detail.
    */
   spanPanelSlot?: ReactNode;
-  /** Extra classes applied to the panel root (e.g. `h-full` on the trace page). */
-  className?: string;
 }
 
 export function TraceDataPanelView({
@@ -116,35 +146,111 @@ export function TraceDataPanelView({
   onSpanSelect,
   onEvaluateTrace,
   onSaveAsDatasetItem,
-  onAddTraceMocksToItem,
   initialSpanId,
   onPrevious,
   onNext,
-  collapsed: controlledCollapsed,
-  onCollapsedChange,
+  size = 'wide',
+  depth,
+  headerSlot,
+  headerActionsSlot,
+  title,
   placement,
-  timelineChartWidth = 'default',
   LinkComponent,
   traceHref,
   entityHref,
   usage,
   anchorSpanId,
+  entityType,
   showUnavailableFeaturesMsg = true,
   scoresTabSlot,
   scoresTabBadge,
   feedbackTabSlot,
   feedbackTabBadge,
-  activeTab,
-  onTabChange,
   featuredSpanIds,
   messagesPanelSlot,
+  sideHeaderActions,
+  sideView: controlledSideView,
+  onSideViewChange,
+  spanView: controlledSpanView,
+  onSpanViewChange,
   spanPanelSlot,
-  className,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
-  const [internalCollapsed, setInternalCollapsed] = useState(false);
-  const collapsed = controlledCollapsed ?? internalCollapsed;
-  const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
+
+  // The side column next to the span tree hosts Messages / Feedback / Scores;
+  // which one is shown is purely a local viewing choice.
+  const sideViews = useMemo(() => {
+    const views: Array<{ value: TraceSideView; name: string; label: ReactNode }> = [];
+    if (messagesPanelSlot) {
+      views.push({
+        value: 'messages',
+        name: 'Messages',
+        label: (
+          <>
+            <Icon size="xs">
+              <MessageSquareTextIcon />
+            </Icon>
+            <span className="@max-[501px]:sr-only">Messages</span>
+          </>
+        ),
+      });
+    }
+    if (feedbackTabSlot) {
+      views.push({
+        value: 'feedback',
+        name: 'Feedback',
+        label: (
+          <>
+            <Icon size="xs">
+              <MessageSquareReplyIcon />
+            </Icon>
+            <span className="@max-[501px]:sr-only">
+              Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}
+            </span>
+          </>
+        ),
+      });
+    }
+    if (scoresTabSlot) {
+      views.push({
+        value: 'scores',
+        name: 'Scores',
+        label: (
+          <>
+            <Icon size="xs">
+              <ScorersIcon />
+            </Icon>
+            <span className="@max-[501px]:sr-only">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</span>
+          </>
+        ),
+      });
+    }
+    return views;
+  }, [messagesPanelSlot, feedbackTabSlot, feedbackTabBadge, scoresTabSlot, scoresTabBadge]);
+  const [uncontrolledSideView, setUncontrolledSideView] = useState<TraceSideView>();
+  // Mirrors the side column's `@max-[501px]` container query: the layout collapses in CSS, but
+  // tooltips render in a portal outside the container, so they need the width in JS.
+  const [sideColumnElement, setSideColumnElement] = useState<HTMLDivElement | null>(null);
+  const [compactSide, setCompactSide] = useState(false);
+  useEffect(() => {
+    if (!sideColumnElement || !('ResizeObserver' in globalThis)) return;
+    const observer = new ResizeObserver(() => setCompactSide(sideColumnElement.clientWidth <= 500));
+    observer.observe(sideColumnElement);
+    return () => observer.disconnect();
+  }, [sideColumnElement]);
+  const chosenSideView = controlledSideView ?? uncontrolledSideView;
+  const sideView = (sideViews.find(view => view.value === chosenSideView) ?? sideViews[0])?.value;
+  const handleSideViewChange = (view: TraceSideView) => {
+    setUncontrolledSideView(view);
+    onSideViewChange?.(view);
+  };
+
+  const [uncontrolledSpanView, setUncontrolledSpanView] = useState<TraceSpanView>('tree');
+  const spanView = controlledSpanView ?? uncontrolledSpanView;
+  const setSpanView = (view: TraceSpanView) => {
+    setUncontrolledSpanView(view);
+    onSpanViewChange?.(view);
+  };
 
   const { download: downloadTraceJson, isPending: isDownloadingTrace } = useDownloadTraceJson();
 
@@ -174,7 +280,6 @@ export function TraceDataPanelView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSpanId, spans, isLoading]);
 
-  const searchFieldName = useId();
   const { query, setQuery, results, payloadOnlyMatchIds } = useTraceSearch(spans ?? []);
 
   const hierarchicalSpans = useMemo(
@@ -200,221 +305,355 @@ export function TraceDataPanelView({
     () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)),
     [spans, anchorSpanId],
   );
+  const rootError = getSpanError(rootSpan?.error);
   const handleSpanClick = (id: string) => {
     const newId = selectedSpanId === id ? undefined : id;
     setSelectedSpanId(newId);
     onSpanSelect?.(newId);
   };
 
-  const traceActionsMenu = (
-    <DropdownMenu>
-      <DropdownMenu.Trigger
-        render={
-          <Button size="md" tooltip="Trace actions" aria-label="Trace actions">
-            <MoreHorizontalIcon />
-          </Button>
-        }
-      />
-      <DropdownMenu.Content align="end">
-        {!isOnTracePage && onCollapsedChange && (
-          <DropdownMenu.Item onSelect={() => setCollapsed(!collapsed)}>
-            {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-            {collapsed ? 'Expand panel' : 'Collapse panel'}
-          </DropdownMenu.Item>
-        )}
-        {!isOnTracePage && onEvaluateTrace && (
-          <DropdownMenu.Item onSelect={onEvaluateTrace}>
-            <CircleGaugeIcon />
-            Evaluate trace
-          </DropdownMenu.Item>
-        )}
-        {!isOnTracePage && onSaveAsDatasetItem && (
-          <DropdownMenu.Item onSelect={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}>
-            <SaveIcon />
-            Add full trace to dataset
-          </DropdownMenu.Item>
-        )}
-        {!isOnTracePage && onAddTraceMocksToItem && (
-          <DropdownMenu.Item onSelect={() => onAddTraceMocksToItem({ traceId })}>
-            <WrenchIcon />
-            Add tool mocks to item
-          </DropdownMenu.Item>
-        )}
-        {!isOnTracePage && LinkComponent && traceHref && (
-          <DropdownMenu.Item render={<LinkComponent href={traceHref} />}>
-            <Link2Icon />
-            Open trace page
-          </DropdownMenu.Item>
-        )}
-        <DropdownMenu.Item disabled={isDownloadingTrace} onSelect={() => downloadTraceJson(traceId)}>
-          {isDownloadingTrace ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
-          Download trace JSON
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu>
+  const traceSummary = rootSpan && (
+    <TraceSummaryDescription rootSpan={rootSpan} usage={usage} entityHref={entityHref} LinkComponent={LinkComponent} />
   );
 
-  return (
-    <DataPanel collapsed={collapsed} className={className}>
-      <DataPanel.Header>
-        {isOnTracePage ? (
-          <>
-            <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
-            <ButtonsGroup className="ml-auto shrink-0">{traceActionsMenu}</ButtonsGroup>
-          </>
-        ) : (
-          <>
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <DataPanel.Heading className="items-center">
-                Trace
-                <TraceIdButton id={traceId} />
-              </DataPanel.Heading>
-              {!collapsed && rootSpan && (
-                <TraceSummaryDescription
-                  rootSpan={rootSpan}
-                  usage={usage}
-                  entityHref={entityHref}
-                  LinkComponent={LinkComponent}
-                />
-              )}
+  const traceActions = traceId && (
+    <>
+      {!isOnTracePage && LinkComponent && traceHref && (
+        <Button size="icon-sm" variant="ghost" tooltip="Open trace page" render={<LinkComponent href={traceHref} />}>
+          <Link2Icon />
+        </Button>
+      )}
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        tooltip="Download trace JSON"
+        disabled={isDownloadingTrace}
+        onClick={() => downloadTraceJson(traceId)}
+      >
+        {isDownloadingTrace ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
+      </Button>
+    </>
+  );
+
+  const scoreAction = onEvaluateTrace && (
+    <Button variant="primary" size="sm" onClick={onEvaluateTrace} disabled={!rootSpan}>
+      <CircleGaugeIcon />
+      Score trace
+    </Button>
+  );
+
+  const sideColumn =
+    traceId && sideView ? (
+      <div
+        ref={setSideColumnElement}
+        data-trace-side-column
+        className="@container flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+      >
+        {/* Whether the Messages tab exists depends on the spans, so the tabs wait for them;
+            otherwise the column flickers Feedback → Messages as the first tab changes. */}
+        {isLoading ? (
+          <DataPanel.Header className="border-b border-surface-rim">
+            <div aria-hidden className="flex h-control-sm items-center gap-2">
+              <Skeleton className="h-5 w-24 rounded-full" />
+              <Skeleton className="h-5 w-20 rounded-full" />
             </div>
-            <ButtonsGroup className="ml-auto shrink-0 self-start">
-              {traceActionsMenu}
-              {(onPrevious || onNext) && (
-                <DataPanel.NextPrevNav
-                  onPrevious={onPrevious}
-                  onNext={onNext}
-                  previousLabel="Previous trace"
-                  nextLabel="Next trace"
-                />
+          </DataPanel.Header>
+        ) : (
+          <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
+            {/* `flex-nowrap` + a shrinkable tab column: the tab list's scroll wrapper is full-width,
+                so in a wrapping row it would push the actions onto a second line. */}
+            <DataPanel.Header className="flex-nowrap border-b border-surface-rim">
+              <div className="min-w-0 flex-1">
+                <TabList variant="pill-ghost" size="sm">
+                  {sideViews.map(view => (
+                    <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
+                      {view.label}
+                    </Tab>
+                  ))}
+                </TabList>
+              </div>
+              {sideHeaderActions && (
+                <div className="flex shrink-0 items-center whitespace-nowrap">
+                  {sideHeaderActions({ compact: compactSide })}
+                </div>
               )}
-              <DataPanel.CloseButton onClick={onClose} />
-            </ButtonsGroup>
-          </>
+            </DataPanel.Header>
+          </Tabs>
         )}
-      </DataPanel.Header>
+        {!isLoading && sideView === 'messages' && (
+          <DataPanel.Content className="p-0">{messagesPanelSlot}</DataPanel.Content>
+        )}
+        {!isLoading && sideView === 'feedback' && (
+          <DataPanel.Content>{feedbackTabSlot?.({ traceId })}</DataPanel.Content>
+        )}
+        {!isLoading && sideView === 'scores' && (
+          <DataPanel.Content>{scoresTabSlot?.({ traceId, rootSpanId: rootSpan?.spanId })}</DataPanel.Content>
+        )}
+      </div>
+    ) : null;
 
-      {!collapsed && (
-        <TracePanelColumns
-          messagesPanelSlot={messagesPanelSlot}
-          spanPanelSlot={spanPanelSlot}
-          highlightQuery={query}
-          spanPanelKey={selectedSpanId}
-        >
-          {isLoading ? (
-            <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>
-          ) : !spans?.length ? (
-            <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
+  return (
+    <DataPanel
+      open={!!traceId}
+      onClose={onClose}
+      title={title ?? (isOnTracePage ? 'Trace Timeline' : `Trace ${traceId ?? ''}`)}
+      size={size}
+      depth={depth}
+    >
+      {traceId && (
+        <>
+          {headerSlot}
+          {isOnTracePage ? (
+            <DataPanel.Header>
+              <DataPanel.HeaderContent>
+                <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+                {traceSummary}
+              </DataPanel.HeaderContent>
+              <DataPanel.HeaderActions>
+                {headerActionsSlot}
+                {scoreAction}
+                {traceActions}
+              </DataPanel.HeaderActions>
+            </DataPanel.Header>
           ) : (
-            (() => {
-              const detailsBody = (
-                <DataPanel.Content>
-                  {!isOnTracePage &&
-                    !onEvaluateTrace &&
-                    !onSaveAsDatasetItem &&
-                    !onAddTraceMocksToItem &&
-                    showUnavailableFeaturesMsg && (
-                      <Notice variant="info" className="mb-6">
-                        <Notice.Message>
-                          Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                          deployed).
-                        </Notice.Message>
-                      </Notice>
-                    )}
-
-                  {/* The timeline stays mounted even with no results, because it
-                        hosts the search field: unmounting it would strand the user
-                        with a query they can no longer clear. */}
-                  <TraceTimeline
-                    hierarchicalSpans={hierarchicalSpans}
-                    onSpanClick={handleSpanClick}
-                    selectedSpanId={selectedSpanId}
-                    expandedSpanIds={expandedSpanIds}
-                    setExpandedSpanIds={setExpandedSpanIds}
-                    featuredSpanIds={featuredSpanIds}
-                    chartWidth={timelineChartWidth}
-                    leadingSlot={
-                      <SearchFieldBlock
-                        name={searchFieldName}
-                        label="Search spans"
-                        labelIsHidden
-                        placeholder="Search spans..."
-                        value={query}
-                        onChange={e => setQuery(e.target.value)}
-                        onReset={() => setQuery('')}
-                        size="sm"
-                        variant="outline"
-                        className="w-full"
-                      />
-                    }
+            <>
+              {/* Navigation row: trace stepping and the trace id on the left; trace actions, then close, on the right. */}
+              <DataPanel.Header>
+                {(onPrevious || onNext) && (
+                  <DataPanel.NextPrevNav
+                    onPrevious={onPrevious}
+                    onNext={onNext}
+                    previousLabel="Go to previous trace"
+                    nextLabel="Go to next trace"
                   />
-
-                  {hierarchicalSpans.length === 0 && <DataPanel.NoData>No spans match your search.</DataPanel.NoData>}
-                </DataPanel.Content>
-              );
-
-              // No extra tab slots → render details directly without the Tabs wrapper.
-              if (!scoresTabSlot && !feedbackTabSlot) return detailsBody;
-
-              // The tab list sits in a header row so it lines up with the Messages and
-              // span-detail headers in the neighbouring columns.
-              return (
-                <Tabs<TraceDataPanelTab>
-                  defaultTab="details"
-                  value={activeTab}
-                  onValueChange={onTabChange}
-                  className="grid h-full min-h-0 grid-rows-[auto_1fr]"
-                >
-                  {/* min-h-16 keeps this header level with the two-line span panel header next to it. */}
-                  <DataPanel.Header className="min-h-16 py-2">
-                    <TabList variant="pill-ghost" className="px-0">
-                      <Tab value="details">Spans</Tab>
-                      {feedbackTabSlot && <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>}
-                      {scoresTabSlot && (
-                        <Tab value="scores">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</Tab>
-                      )}
-                    </TabList>
-                  </DataPanel.Header>
-
-                  <TabContent value="details" className="min-h-0 py-0">
-                    {detailsBody}
-                  </TabContent>
-                  {feedbackTabSlot && (
-                    <TabContent value="feedback" className="h-full min-h-0 py-0">
-                      <DataPanel.Content>{feedbackTabSlot({ traceId })}</DataPanel.Content>
-                    </TabContent>
+                )}
+                <DataPanel.HeaderContent>
+                  <DataPanel.Heading>
+                    <span className="sr-only">Trace</span>
+                    <DataPanel.CopyId id={traceId} maxLength={6} ellipsis={false} icon={<TraceIcon />} />
+                  </DataPanel.Heading>
+                </DataPanel.HeaderContent>
+                <DataPanel.HeaderActions>
+                  {headerActionsSlot}
+                  {scoreAction}
+                  {onSaveAsDatasetItem && (
+                    <Button
+                      size="sm"
+                      tooltip="Add the full trace to a dataset"
+                      onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}
+                    >
+                      <SaveIcon />
+                      Add to dataset
+                    </Button>
                   )}
-                  {scoresTabSlot && (
-                    <TabContent value="scores" className="h-full min-h-0 py-0">
-                      <DataPanel.Content>{scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}</DataPanel.Content>
-                    </TabContent>
-                  )}
-                </Tabs>
-              );
-            })()
+                  {traceActions}
+                  <div aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-border-strong" />
+                  <DataPanel.CloseButton icon="x" onClick={onClose} label="Close trace" tooltip="Close trace" />
+                </DataPanel.HeaderActions>
+              </DataPanel.Header>
+              {/* Summary row: what ran and how it ended on the left; timing, tokens and cost on the right. */}
+              {!rootSpan && isLoading && (
+                <DataPanel.Header>
+                  <div role="status" aria-label="Loading trace summary" className="flex w-full items-center gap-2">
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                    <Skeleton className="ml-auto h-3 w-48" />
+                  </div>
+                </DataPanel.Header>
+              )}
+              {rootSpan && (
+                <DataPanel.Header>
+                  <DataPanel.Metadata>
+                    <TraceEntityMeta rootSpan={rootSpan} entityHref={entityHref} LinkComponent={LinkComponent} />
+                    <TraceStatusMeta rootSpan={rootSpan} />
+                  </DataPanel.Metadata>
+                  <div className="ml-auto flex min-w-0">
+                    <TraceSummaryDescription
+                      rootSpan={rootSpan}
+                      usage={usage}
+                      entityHref={entityHref}
+                      LinkComponent={LinkComponent}
+                      showEntity={false}
+                      showStatus={false}
+                    />
+                  </div>
+                </DataPanel.Header>
+              )}
+            </>
           )}
-        </TracePanelColumns>
+
+          <TracePanelColumns
+            layoutKey={rootSpan ? (rootSpan.entityType ?? 'unknown') : entityType === null ? 'unknown' : entityType}
+            sideColumnSlot={sideColumn}
+            spanPanelSlot={spanPanelSlot}
+            highlightQuery={query}
+            spanPanelKey={selectedSpanId}
+          >
+            {!isLoading && !spans?.length ? (
+              <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
+            ) : (
+              (() => {
+                // Shared by the Spans and Timeline tabs: both views render the same
+                // filtered `hierarchicalSpans`, so one query drives both.
+                const isTimeline = spanView === 'timeline';
+                const searchHeader = (
+                  <DataPanel.Header className="gap-2 border-b border-surface-rim">
+                    <SearchInput
+                      label="Search spans"
+                      placeholder="Search spans..."
+                      size="sm"
+                      value={query}
+                      onValueChange={setQuery}
+                      className="min-w-0 flex-1"
+                    />
+                    <ButtonsGroup size="sm" className="shrink-0">
+                      <Button
+                        size="icon-md"
+                        variant={isTimeline ? 'default' : 'primary'}
+                        aria-pressed={!isTimeline}
+                        tooltip="Span tree"
+                        tooltipPosition="bottom"
+                        onClick={() => setSpanView('tree')}
+                      >
+                        <ListTreeIcon />
+                      </Button>
+                      <Button
+                        size="icon-md"
+                        variant={isTimeline ? 'primary' : 'default'}
+                        aria-pressed={isTimeline}
+                        tooltip="Timeline"
+                        tooltipPosition="bottom"
+                        onClick={() => setSpanView('timeline')}
+                      >
+                        <ChartGanttIcon />
+                      </Button>
+                    </ButtonsGroup>
+                  </DataPanel.Header>
+                );
+                const noSearchResults = !isLoading && hierarchicalSpans.length === 0 && (
+                  <DataPanel.NoData>No spans match your search.</DataPanel.NoData>
+                );
+                const viewProps = {
+                  hierarchicalSpans,
+                  onSpanClick: handleSpanClick,
+                  selectedSpanId,
+                  expandedSpanIds,
+                  setExpandedSpanIds,
+                  featuredSpanIds,
+                  revealSpanId: featuredSpanIds?.at(-1),
+                  isLoading,
+                };
+
+                return (
+                  <>
+                    {searchHeader}
+                    <DataPanel.Content>
+                      {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && showUnavailableFeaturesMsg && (
+                        <Notice variant="info" className="mb-6">
+                          <Notice.Message>
+                            Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                            deployed).
+                          </Notice.Message>
+                        </Notice>
+                      )}
+
+                      {rootSpan && rootError && (
+                        <Notice
+                          variant="destructive"
+                          title={rootError.name ?? 'Error'}
+                          action={
+                            <Notice.Button
+                              onClick={() => {
+                                setSelectedSpanId(rootSpan.spanId);
+                                onSpanSelect?.(rootSpan.spanId);
+                              }}
+                            >
+                              View details
+                            </Notice.Button>
+                          }
+                          className="mb-4"
+                        >
+                          <Notice.Message className="line-clamp-3">{rootError.message}</Notice.Message>
+                        </Notice>
+                      )}
+
+                      {/* Both views share selection + expansion state, and stay mounted with no
+                    results because they host the search field: unmounting would strand the
+                    user with a query they can no longer clear. */}
+                      {isTimeline ? <TraceSpanTimeline {...viewProps} /> : <TraceSpanTree {...viewProps} />}
+                      {noSearchResults}
+                    </DataPanel.Content>
+                  </>
+                );
+              })()
+            )}
+          </TracePanelColumns>
+        </>
       )}
     </DataPanel>
   );
 }
 
+/** The error a span recorded, when it has the `{ name?, message }` shape spans store. */
+function getSpanError(error: unknown): { name?: string; message: string } | undefined {
+  if (typeof error !== 'object' || error === null || !('message' in error) || typeof error.message !== 'string') {
+    return undefined;
+  }
+  const name = 'name' in error && typeof error.name === 'string' ? error.name : undefined;
+  return { name, message: error.message };
+}
+
 /**
- * Lays out the card body as three columns — `[messages] [trace] [span]` — inside the
- * same card. Both side cells always exist and collapse to `0fr` when their slot is
- * absent, so opening/closing a column animates via `grid-template-columns` rather
- * than mounting/unmounting a DOM column (which cannot be transitioned).
+ * Lays out the card body as three columns — `[side] [trace] [span]` — inside the
+ * same card. The side column (messages / feedback / scores) is independent of the
+ * Spans/Timeline tabs, so it sits beside them rather than inside a tab. The side
+ * and span columns are resizable (down to a minimum width); the trace column takes the rest.
  * Search matches — span names in the timeline tree as well as values in the span
  * detail — are highlighted while a query is active.
  */
+/** Column widths in pixels, persisted per trace entity type. */
+type TraceColumnWidths = { side?: number; span?: number };
+
+const pixelWidth = (value: unknown) => (typeof value === 'number' && value > 0 ? value : undefined);
+
+// localStorage access throws when storage is blocked (privacy modes, sandboxed iframes) and stored
+// values may be corrupted; fall back to the default widths instead of crashing the panel.
+function readColumnWidths(key: string): TraceColumnWidths {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(key) ?? 'null');
+    if (!stored || typeof stored !== 'object') return {};
+    return {
+      side: pixelWidth((stored as TraceColumnWidths).side),
+      span: pixelWidth((stored as TraceColumnWidths).span),
+    };
+  } catch {
+    return {};
+  }
+}
+
+function writeColumnWidths(key: string, widths: TraceColumnWidths) {
+  try {
+    localStorage.setItem(key, JSON.stringify(widths));
+  } catch {
+    // Persisting is best-effort.
+  }
+}
+
 function TracePanelColumns({
-  messagesPanelSlot,
+  layoutKey,
+  sideColumnSlot,
   spanPanelSlot,
   highlightQuery,
   spanPanelKey,
   children,
 }: {
-  messagesPanelSlot?: ReactNode;
+  /**
+   * Root entity type of the trace; column sizes are persisted per value in localStorage.
+   * Undefined while the root span is unknown, in which case nothing is persisted.
+   */
+  layoutKey?: string;
+  /** Resizable column on the left (messages / feedback / scores). */
+  sideColumnSlot?: ReactNode;
   spanPanelSlot?: ReactNode;
   highlightQuery: string;
   /** Identity of the span shown in the panel; changing it re-triggers the match scroll. */
@@ -430,40 +669,118 @@ function TracePanelColumns({
   // The timeline column must never be scrolled by this.
   const { ref: scrollToMatchRef } = useScrollToFirstHighlight<HTMLDivElement>(highlightQuery, spanPanelKey);
 
-  const columns = messagesPanelSlot
-    ? spanPanelSlot
-      ? 'grid-cols-[1fr_1fr_1fr]'
-      : 'grid-cols-[1fr_1fr_0fr]'
-    : spanPanelSlot
-      ? 'grid-cols-[0fr_1fr_1fr]'
-      : 'grid-cols-[0fr_1fr_0fr]';
+  // The side and span columns are sized in pixels: they keep their width when the drawer resizes
+  // (it widens when a span opens) and when the span column comes and goes; only the trace column in
+  // the middle absorbs the change. The library lays panels out in percentages, so the pixel widths
+  // are owned here.
+  const groupRef = useGroupRef();
+  const columnsRef = useRef<HTMLDivElement>(null);
+  const storageKey = layoutKey ? `mastra:trace-panel-widths:${layoutKey}` : undefined;
+  const widths = useRef<{ key?: string; value: TraceColumnWidths }>({ value: {} });
+  if (widths.current.key !== storageKey) {
+    widths.current = { key: storageKey, value: storageKey ? readColumnWidths(storageKey) : {} };
+  }
+  // Only agent traces have messages worth reading side by side with the spans; for every other
+  // entity the side column starts narrow so the span tree gets the room.
+  const sideWidth = () => widths.current.value.side ?? (layoutKey === 'agent' ? 480 : 320);
+  const spanWidth = () => widths.current.value.span ?? 480;
+
+  const panelElements = () =>
+    Array.from(columnsRef.current?.querySelectorAll<HTMLElement>(':scope > [data-panel]') ?? []);
+
+  // Only a resize the user makes is remembered: layout changes from the drawer resizing or a
+  // column mounting are derived from the stored widths and must not drift them.
+  const userResizing = useRef(false);
+  const markUserResize = (event: { target: EventTarget }) => {
+    if (event.target instanceof Element && event.target.closest('[data-separator]')) userResizing.current = true;
+  };
+  const persistWidths = (layout: Layout) => {
+    if (!userResizing.current) return;
+    userResizing.current = false;
+    const width = (id: string) =>
+      id in layout
+        ? pixelWidth(Math.round(panelElements().find(panel => panel.id === id)?.offsetWidth ?? 0))
+        : undefined;
+    widths.current.value = {
+      side: width('trace-side') ?? widths.current.value.side,
+      span: width('trace-span') ?? widths.current.value.span,
+    };
+    if (storageKey) writeColumnWidths(storageKey, widths.current.value);
+  };
+
+  // The library re-lays panels out on its own — when the drawer resizes, when a column mounts or
+  // unmounts — so every layout it reports is brought back to the pixel widths, unless the user is
+  // dragging a separator. The layout it settles on after clamping to min sizes is left alone.
+  const settledLayout = useRef<Layout | undefined>(undefined);
+  const holdPixelWidths = (layout: Layout) => {
+    if (userResizing.current) return;
+    const group = groupRef.current;
+    const ids = Object.keys(layout);
+    // The library sizes panels against their summed width, separators excluded.
+    const total = panelElements()
+      .filter(panel => ids.includes(panel.id))
+      .reduce((sum, panel) => sum + panel.offsetWidth, 0);
+    if (!group || total === 0 || !ids.includes('trace-main')) return;
+    const side = ids.includes('trace-side') ? (sideWidth() / total) * 100 : 0;
+    const span = ids.includes('trace-span') ? (spanWidth() / total) * 100 : 0;
+    const target: Layout = { 'trace-main': 100 - side - span };
+    if (side) target['trace-side'] = side;
+    if (span) target['trace-span'] = span;
+    const tolerance = (0.5 / total) * 100;
+    const matches = (a: Layout, b?: Layout) =>
+      !!b && ids.every(id => Math.abs((a[id] ?? 0) - (b[id] ?? Infinity)) < tolerance);
+    if (matches(layout, target) || matches(layout, settledLayout.current)) return;
+    queueMicrotask(() => {
+      settledLayout.current = group.setLayout(target);
+    });
+  };
 
   return (
     <div
       ref={highlightRef}
       data-trace-columns
-      className={cn('grid min-h-0 flex-1 transition-[grid-template-columns] duration-300 ease-in-out', columns)}
+      className="flex min-h-0 flex-1"
+      onPointerDownCapture={markUserResize}
+      onKeyDownCapture={markUserResize}
     >
-      <div
-        className={cn(
-          'flex min-h-0 min-w-0 flex-col overflow-hidden',
-          messagesPanelSlot && 'animate-in border-r border-border1 duration-300 fade-in-0',
-        )}
+      {/* Plain Group, not PanelGroup: its flex-grow transition would lag behind the drawer
+          resizing and make the pixel-sized columns visibly stretch. */}
+      <Group
+        // Default sizes are only read on mount: remount once the entity type is known.
+        key={layoutKey ?? 'unknown'}
+        groupRef={groupRef}
+        elementRef={columnsRef}
+        orientation="horizontal"
+        className="min-h-0 flex-1"
+        onLayoutChange={holdPixelWidths}
+        onLayoutChanged={persistWidths}
       >
-        {messagesPanelSlot}
-      </div>
-      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{children}</div>
-      {/* Searchable: the span detail is where a match hides inside a large payload. */}
-      <div
-        ref={scrollToMatchRef}
-        data-highlight
-        className={cn(
-          'flex min-h-0 min-w-0 flex-col overflow-hidden',
-          spanPanelSlot && 'animate-in border-l border-border1 duration-300 fade-in-0',
+        {sideColumnSlot && (
+          <>
+            <Panel id="trace-side" minSize={280} defaultSize={sideWidth()} groupResizeBehavior="preserve-pixel-size">
+              <div className="flex h-full min-h-0 flex-col border-r border-surface-rim">{sideColumnSlot}</div>
+            </Panel>
+            <PanelSeparator variant="pill" />
+          </>
         )}
-      >
-        {spanPanelSlot}
-      </div>
+        <Panel id="trace-main" minSize={320} className="flex min-h-0 min-w-0 flex-col">
+          {children}
+        </Panel>
+        {spanPanelSlot && (
+          <>
+            <PanelSeparator variant="pill" />
+            <Panel id="trace-span" minSize={320} defaultSize={spanWidth()} groupResizeBehavior="preserve-pixel-size">
+              <div
+                ref={scrollToMatchRef}
+                data-highlight
+                className="flex h-full min-h-0 animate-in flex-col border-l border-surface-rim duration-300 fade-in-0"
+              >
+                {spanPanelSlot}
+              </div>
+            </Panel>
+          </>
+        )}
+      </Group>
     </div>
   );
 }

@@ -197,3 +197,142 @@ describe('DurableAgent ToolSearchProcessor meta-tool resolution (#19571)', () =>
     expect(durableResults).toEqual(regularResults);
   });
 });
+
+/**
+ * Issue #22933: with `includeResolvedTools: true` the searchable catalog is built
+ * from the per-step tool map. The durable LLM step writes the *narrowed* per-step
+ * snapshot (e.g. only `search_tools`) back to `registryEntry.tools`, and the next
+ * step seeds its tools from that same registry slot. The resolved catalog is
+ * therefore gone on step 2, so a tool that `search_tools` auto-loaded never
+ * becomes visible and a real model loops on `search_tools` forever.
+ */
+describe('DurableAgent ToolSearchProcessor keeps resolved catalog across steps (#22933)', () => {
+  let pubsub: EventEmitterPubSub;
+
+  beforeEach(() => {
+    pubsub = new EventEmitterPubSub();
+  });
+
+  afterEach(async () => {
+    await pubsub.close();
+  });
+
+  /**
+   * Model that records the tool names it is shown on each step. Step 1 calls
+   * `search_tools`; step 2 calls `echo` if visible, otherwise reports it missing.
+   */
+  function createCatalogRecordingModel(visibleToolsByStep: string[][]) {
+    let step = 0;
+    const finishWithText = (text: string) => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: `resp-${step}`, modelId: 'mock', timestamp: new Date(0) },
+        { type: 'text-start', id: `text-${step}` },
+        { type: 'text-delta', id: `text-${step}`, delta: text },
+        { type: 'text-end', id: `text-${step}` },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    });
+    const callTool = (toolName: string, args: Record<string, unknown>) => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: `resp-${step}`, modelId: 'mock', timestamp: new Date(0) },
+        {
+          type: 'tool-call',
+          id: `tc-${step}`,
+          toolCallType: 'function',
+          toolCallId: `tc-${step}`,
+          toolName,
+          input: JSON.stringify(args),
+        },
+        { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    });
+
+    return new MockLanguageModelV2({
+      doStream: async options => {
+        const visible = (options.tools ?? []).map((t: any) => t.name);
+        visibleToolsByStep.push(visible);
+        step++;
+        if (step === 1) return callTool('search_tools', { query: 'echo a message' });
+        if (step === 2 && visible.includes('echo')) return callTool('echo', { message: 'hello' });
+        if (step === 2) return finishWithText('echo was unavailable');
+        return finishWithText('done');
+      },
+    });
+  }
+
+  function makeResolvedCatalogAgent(id: string, visibleToolsByStep: string[][], onEcho: () => void) {
+    const echo = createTool({
+      id: 'echo',
+      description: 'Echo a message back to the user.',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async ({ message }) => {
+        onEcho();
+        return { echoed: message };
+      },
+    });
+    return new Agent({
+      id,
+      name: id,
+      instructions: 'Search for the echo tool, call it, then answer.',
+      model: createCatalogRecordingModel(visibleToolsByStep) as LanguageModelV2,
+      // `echo` is a regular agent tool; the processor discovers it via
+      // includeResolvedTools and withholds it until search auto-loads it.
+      tools: { echo },
+      inputProcessors: [
+        new ToolSearchProcessor({
+          tools: {},
+          includeResolvedTools: true,
+          storage: 'context',
+          search: { autoLoad: true, topK: 1, minScore: 0 },
+        }),
+      ],
+    });
+  }
+
+  it('makes a search-auto-loaded resolved tool visible on the next durable step', async () => {
+    const visibleToolsByStep: string[][] = [];
+    let echoCalls = 0;
+    const id = 'durable-resolved-catalog';
+    const durableAgent = createDurableAgent({
+      agent: makeResolvedCatalogAgent(id, visibleToolsByStep, () => echoCalls++),
+      pubsub,
+    });
+    new Mastra({
+      agents: { [id]: durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+
+    const result = await durableAgent.generate('Use the echo tool to say hello.', { maxSteps: 3 });
+
+    // Step 1: only the meta-tool is exposed; `echo` is withheld until searched.
+    expect(visibleToolsByStep[0]).toEqual(['search_tools']);
+    // Step 2: search auto-loaded `echo`, so the model must now be able to call it.
+    expect(visibleToolsByStep[1]).toContain('echo');
+    expect(echoCalls).toBe(1);
+    expect(result.text).toBe('done');
+  });
+
+  it('regular Agent parity: the auto-loaded resolved tool is visible on the next step', async () => {
+    const visibleToolsByStep: string[][] = [];
+    let echoCalls = 0;
+    const agent = makeResolvedCatalogAgent('regular-resolved-catalog', visibleToolsByStep, () => echoCalls++);
+
+    // The regular Agent's generate() calls doGenerate, which the mock does not
+    // implement; stream() exercises the same agentic loop via doStream.
+    const result = await agent.stream('Use the echo tool to say hello.', { maxSteps: 3 });
+    const text = await result.text;
+
+    expect(visibleToolsByStep[0]).toEqual(['search_tools']);
+    expect(visibleToolsByStep[1]).toContain('echo');
+    expect(echoCalls).toBe(1);
+    expect(text).toBe('done');
+  });
+});

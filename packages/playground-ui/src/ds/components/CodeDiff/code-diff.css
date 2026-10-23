@@ -1,0 +1,14 @@
+.code-diff {
+  --diffs-font-family: var(--font-mono);
+  --diffs-header-font-family: var(--font-sans);
+  --diffs-font-size: var(--text-caption);
+  --diffs-line-height: 1.5;
+  --diffs-addition-color-override: var(--success-indicator);
+  --diffs-deletion-color-override: var(--destructive-indicator);
+  --diffs-bg-addition-override: var(--success-subtle);
+  --diffs-bg-deletion-override: var(--destructive-subtle);
+  --diffs-bg-context-override: var(--card);
+  --diffs-bg-context-gutter-override: var(--card);
+  --diffs-bg-separator-override: var(--muted);
+  --diffs-fg-number-override: var(--placeholder);
+}

@@ -30,15 +30,17 @@ describe('Bug 3: background-task system prompt on durable', () => {
     await bgStore?.dangerouslyClearAll();
   });
 
-  it('injects the background-task guidance into the leading system message', async () => {
+  it('injects background-task guidance and tool schema into the model request', async () => {
     const promptSnapshots: Array<{ role: string; content: any }[]> = [];
+    const toolSnapshots: any[][] = [];
     let resolveCalled: () => void;
     const calledPromise = new Promise<void>(r => {
       resolveCalled = r;
     });
     const mockModel = new MockLanguageModelV2({
-      doStream: async ({ prompt }) => {
+      doStream: async ({ prompt, tools }) => {
         promptSnapshots.push(prompt as any);
+        toolSnapshots.push(tools as any[]);
         resolveCalled();
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -98,6 +100,9 @@ describe('Bug 3: background-task system prompt on durable', () => {
     // lists each eligible tool by name.
     expect(systemContent).toContain('_background');
     expect(systemContent).toContain('research');
+
+    const researchToolDefinition = toolSnapshots[0]!.find(tool => tool.name === 'research');
+    expect(researchToolDefinition?.inputSchema?.properties).toHaveProperty('_background');
   });
 
   it('skips the injection when no background-task manager is wired in', async () => {

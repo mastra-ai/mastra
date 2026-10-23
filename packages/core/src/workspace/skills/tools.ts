@@ -216,13 +216,13 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         }
         const resolvedPath = resolved.skill.path;
 
-        // Try each reader using the resolved path to target the exact skill candidate
-        let content: string | Buffer | null = null;
-        content = await scopedSkills.getReference(resolvedPath, path);
-        if (content === null) content = await scopedSkills.getScript(resolvedPath, path);
-        if (content === null) content = await scopedSkills.getAsset(resolvedPath, path);
+        // Every accessor resolves the same skill-root-relative path; getAsset is the only one
+        // that returns the raw bytes instead of decoding them as UTF-8, so read through it and
+        // classify the bytes here. Going through getReference first would lossily decode any
+        // binary file before getAsset was reached.
+        const bytes = await scopedSkills.getAsset(resolvedPath, path);
 
-        if (content === null) {
+        if (bytes === null) {
           const refs = (await scopedSkills.listReferences(resolvedPath)).map(f => `references/${f}`);
           const scriptsList = (await scopedSkills.listScripts(resolvedPath)).map(f => `scripts/${f}`);
           const assets = (await scopedSkills.listAssets(resolvedPath)).map(f => `assets/${f}`);
@@ -232,17 +232,17 @@ function createSkillReadTool(skills: WorkspaceSkills) {
           return `File "${path}" not found in skill "${skillName}".${fileList}`;
         }
 
-        // Detect binary content — getReference/getScript may return binary as garbled utf-8 strings
-        const textContent = typeof content === 'string' ? content : content.toString('utf-8');
-        if (textContent.slice(0, 1000).includes('\0')) {
+        // Binary if it contains NUL bytes or is not valid UTF-8 (e.g. PNGs, PDFs — which are
+        // often NUL-free). Report the exact byte size and never put mojibake in model context.
+        const text = bytes.toString('utf-8');
+        const isBinary = bytes.includes(0) || !bytes.equals(Buffer.from(text, 'utf-8'));
+        if (isBinary) {
           const fullPath = `${resolved.skill.path}/${path}`;
-          const size = typeof content === 'string' ? Buffer.byteLength(content) : content.length;
-          span.end({ success: true }, { bytesTransferred: size });
-          return `Binary file: ${fullPath} (${size} bytes)`;
+          span.end({ success: true }, { bytesTransferred: bytes.length });
+          return `Binary file: ${fullPath} (${bytes.length} bytes)`;
         }
-        content = textContent;
 
-        const result = extractLines(content, startLine, endLine);
+        const result = extractLines(text, startLine, endLine);
 
         // An empty range is indistinguishable from a failed read, so the model keeps paginating
         if (result.lines.start === 0 && result.lines.end === 0) {

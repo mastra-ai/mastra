@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   TABLE_DATASETS,
@@ -12,6 +11,7 @@ import {
   calculatePagination,
   hasErrorCode,
   normalizePerPage,
+  resolveListOrderBy,
 } from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
@@ -366,7 +366,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   async createExperiment(input: CreateExperimentInput): Promise<Experiment> {
     try {
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? globalThis.crypto.randomUUID();
       const now = new Date();
 
       await this.operations.insert({
@@ -516,6 +516,10 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'status'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
 
       const conditions: string[] = [];
@@ -589,7 +593,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       const rows = await this.operations.loadMany<ExperimentRow>({
         tableName: TABLE_EXPERIMENTS,
         whereClause,
-        orderBy: `${quoteIdentifier('createdAt', 'column name')} DESC`,
+        orderBy: `${quoteIdentifier(orderBy.field, 'column name')} ${orderBy.direction}, \`id\` ASC`,
         offset,
         limit: limitValue,
       });
@@ -694,7 +698,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       });
     }
     try {
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? globalThis.crypto.randomUUID();
       const now = new Date();
       const purgeMetadata = await this.#withPurgeBarrier(
         input.experimentId,
@@ -872,7 +876,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
                  `${quoteIdentifier(column, 'column name')} = VALUES(${quoteIdentifier(column, 'column name')})`,
              )
              .join(', ')}`,
-          [randomUUID(), input.experimentId, input.itemId, ...updateValues, new Date()],
+          [globalThis.crypto.randomUUID(), input.experimentId, input.itemId, ...updateValues, new Date()],
         );
 
         const [rows] = await connection.execute(
@@ -996,6 +1000,10 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['startedAt', 'createdAt'], {
+        field: 'startedAt',
+        direction: 'ASC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
 
       const conditions: string[] = [`${quoteIdentifier('experimentId', 'column name')} = ?`];
@@ -1045,7 +1053,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       const rows = await this.operations.loadMany<ExperimentResultRow>({
         tableName: TABLE_EXPERIMENT_RESULTS,
         whereClause,
-        orderBy: `${quoteIdentifier('startedAt', 'column name')} ASC`,
+        orderBy: `${quoteIdentifier(orderBy.field, 'column name')} ${orderBy.direction}, \`id\` ASC`,
         offset,
         limit: limitValue,
       });

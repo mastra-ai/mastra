@@ -5,20 +5,27 @@ import type { MemoryOperationAttributes, ObservabilityContext } from '@mastra/co
 import { SpanType } from '@mastra/core/observability';
 import type {
   Processor,
+  ProcessAPIErrorArgs,
+  ProcessAPIErrorResult,
   ProcessInputStepArgs,
   ProcessOutputResultArgs,
   ProcessorSpanPhase,
 } from '@mastra/core/processors';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
+import { isContextOverflowError } from './context-overflow';
 import { omDebug } from './debug';
+import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
+import { getPartKeys } from './observation-turn/step';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
+import type { ObservationModelContext } from './types';
 
 /**
  * Coerce a shared `state.__omTurn` value to a usable live turn.
@@ -46,6 +53,7 @@ export interface MemoryContextProvider {
   }>;
   /** Raw message upsert — persist sealed messages to storage without embedding or working memory processing. */
   persistMessages(messages: MastraDBMessage[]): Promise<void>;
+  getPersistedMessages?(threadId: string, ids: string[]): Promise<MastraDBMessage[]>;
 }
 
 /**
@@ -61,7 +69,7 @@ export interface MemoryContextProvider {
  * Turn/Step abstraction.
  */
 function getOmObservabilityContext(
-  args: ProcessInputStepArgs | ProcessOutputResultArgs,
+  args: ProcessInputStepArgs | ProcessOutputResultArgs | ProcessAPIErrorArgs,
 ): ObservabilityContext | undefined {
   if (!args.tracing || !args.tracingContext || !args.loggerVNext || !args.metrics) {
     return undefined;
@@ -77,6 +85,9 @@ function getOmObservabilityContext(
 
 /** Key used to store gateway detection result in per-processor state. */
 const GATEWAY_STATE_KEY = '__isGatewayModel';
+
+/** Step number OM last recovered from a context-overflow error, so each step retries at most once. */
+const CONTEXT_OVERFLOW_STEP_KEY = '__omContextOverflowStep';
 
 /** Check if the model is routed through a Mastra gateway (duck-type check to avoid cross-package instanceof issues). */
 function isMastraGatewayModel(model: ProcessInputStepArgs['model']): boolean {
@@ -209,8 +220,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const runState = memoryContext?.runState?.();
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
-    const actorModelContext = model?.modelId
-      ? { provider: model.provider, modelId: model.modelId, providerOptions: args.providerOptions }
+    const actorModelContext = model
+      ? {
+          provider: model.provider,
+          modelId: model.modelId,
+          providerOptions: args.providerOptions,
+          model,
+        }
       : undefined;
     state.__omActorModelContext = actorModelContext;
 
@@ -236,17 +252,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           resourceId,
           runState,
         });
-        // Pass the record through even without observations — resource-scoped
-        // retrieval still injects recall guidance so the actor can browse and
-        // search other threads.
-        const systemMessages = ctx.omRecord
-          ? await this.engine.buildContextSystemMessages({
-              threadId,
-              resourceId,
-              record: ctx.omRecord,
-              unobservedContextBlocks: ctx.otherThreadsContext,
-            })
-          : undefined;
+        // Recall guidance is useful even with no record; null preserves read-only behavior.
+        const systemMessages = await this.engine.buildContextSystemMessages({
+          threadId,
+          resourceId,
+          record: ctx.omRecord,
+          unobservedContextBlocks: ctx.otherThreadsContext,
+        });
 
         injectObservationContextMessages({
           messageList,
@@ -276,6 +288,18 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         state.__omTurn = undefined;
       }
 
+      // A turn can be sealed before the loop reaches its next step — for example when a
+      // sub-agent's `finish` / `step-finish` chunks are forwarded into the parent writer.
+      // Reusing an ended turn throws "Turn already ended" from `step()` below, so discard it
+      // and let beginTurn() start a fresh one, mirroring the message-list cleanup above.
+      if (activeTurn?.ended || this.turn?.ended) {
+        if (this.turn?.ended) {
+          this.turn = undefined;
+        }
+        state.__omTurn = undefined;
+      }
+
+      let responseMessageId = messageId;
       if (!this.turn || !state.__omTurn) {
         // End previous turn if state was reset mid-flow
         if (this.turn && !state.__omTurn) {
@@ -298,6 +322,67 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.agent = args.agent;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory, runState);
+        if (stepNumber > 0) {
+          // The durable snapshot retains the run's inputs, but a background result may have
+          // landed in storage after the snapshot was saved. Reconcile those response messages
+          // before the unread-part scan; the snapshot's part keys represent what was seen.
+          this.turn.inputMessageIds = messageList.getPersisted.input.db().map(message => message.id);
+          if (this.memory?.getPersistedMessages) {
+            const responseIds = messageList.getPersisted.response.db().map(message => message.id);
+            const snapshotMessages = new Map(messageList.get.all.db().map(message => [message.id, message]));
+            const storedMessages = await this.memory.getPersistedMessages(threadId, responseIds);
+            for (const stored of storedMessages) {
+              const snapshot = snapshotMessages.get(stored.id);
+              if (!snapshot) continue;
+              const snapshotTools = snapshot.content.parts.filter(part => part.type === 'tool-invocation');
+              const storedHasNewResult = stored.content.parts.some(part => {
+                if (part.type !== 'tool-invocation' || part.toolInvocation.state !== 'result') return false;
+                const previous = snapshotTools.find(
+                  candidate => candidate.toolInvocation.toolCallId === part.toolInvocation.toolCallId,
+                );
+                if (!previous || previous.toolInvocation.state !== 'result') return true;
+                const previousTask = previous.providerMetadata?.mastra?.backgroundTask as
+                  | { status?: string }
+                  | undefined;
+                const storedTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
+                return (
+                  previousTask?.status === 'running' &&
+                  (storedTask?.status === 'completed' || storedTask?.status === 'failed')
+                );
+              });
+              if (storedHasNewResult) {
+                this.turn.drainedPartKeys.set(stored.id, new Set(getPartKeys(snapshot)));
+                messageList.add(stored, 'memory');
+              }
+            }
+          }
+        }
+        // A run recovered by another worker can continue a response message that the dead
+        // worker already observed. That worker rotated the id in memory, but the rotation was
+        // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
+        // observedMessageIds alone misses responses observed before an activation or a reflection,
+        // neither of which keeps their ids. What survives is on the message itself: buffering
+        // persists OM's seal before the Observer runs, and sync observation persists its end
+        // marker on the observed message before it may reflect.
+        // When only the ids say so, persist the seal too: a later reflection drops the ids, and
+        // the message would otherwise look unobserved if this worker also dies.
+        const observedIds = this.turn.record.observedMessageIds;
+        const response = messageId ? messageList.get.all.db().find(message => message.id === messageId) : undefined;
+        const responseSealed =
+          (response?.content?.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed === true;
+        const responseObserved =
+          responseSealed ||
+          (!!response && findLastCompletedObservationBoundary(response) >= 0) ||
+          (!!messageId && Array.isArray(observedIds) && observedIds.includes(messageId));
+        if (messageId && responseObserved) {
+          if (response && !responseSealed) {
+            // Persist first, and fail the step rather than continue: without the stored seal, a later
+            // reflection erases the only evidence, and the next recovery would merge into this message.
+            await this.engine.persistMessageSeal(response);
+            this.engine.sealMessagesForBuffering([response]);
+          }
+          responseMessageId = rotateResponseMessageId?.() ?? messageId;
+        }
         if (stepNumber === 0 && this.temporalMarkers) {
           await insertTemporalGapMarkers({ messageList, sendSignal: args.sendSignal });
         }
@@ -313,7 +398,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       state.__omObservabilityContext = observabilityContext;
       this.turn.observabilityContext = observabilityContext;
       this.turn.actorModelContext = actorModelContext;
-      this.turn.responseMessageId = messageId;
+      this.turn.responseMessageId = responseMessageId;
 
       // ── Run step preparation (activation, threshold, observation, filtering) ──
       {
@@ -327,6 +412,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           const abortMessage = abortSignal?.aborted
             ? 'Agent execution was aborted'
             : `Encountered error during memory observation: ${err.message}`;
+          // A tripwire skips output processors, so end the turn here to save the user message and
+          // finished steps. The step that failed never reached the model, so nothing blocked is saved.
+          const failedTurn = this.turn;
+          await failedTurn.end().catch(() => {});
+          if (this.turn === failedTurn) {
+            this.turn = undefined;
+          }
+          state.__omTurn = undefined;
           if (typeof abort === 'function') {
             abort(abortMessage);
           }
@@ -360,7 +453,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // prepare() already counted the current unobserved window and resource context.
         const finalTotalPending = ctx.status.pendingTokens;
         try {
-          await this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending);
+          await runOMCommit(this.engine.buffering.getLockKey(threadId, resourceId), () =>
+            this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+          );
           this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
         } catch {
           // Token persistence is intentionally non-fatal for streaming UX.
@@ -411,20 +506,34 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         const memoryContext = parseMemoryRequestContext(requestContext);
         if (memoryContext?.memoryConfig?.readOnly) return messageList;
 
+        const persistenceMessageList = messageList.cloneForPersistence();
+
         // Retrieve the turn from shared processor state — in production, the input
         // and output processors are separate instances (see comment in processInputStep).
         const turn = asLiveTurn(state.__omTurn) ?? this.turn;
-        if (turn) {
-          await turn.end();
-          this.turn = undefined;
-          state.__omTurn = undefined;
-        } else {
-          // No turn exists — this happens during a resumed stream where input processors
-          // were skipped (isResume=true), so processInputStep never created a turn.
-          // Directly persist any new response messages so the final assistant text
-          // from the resumed turn is not lost.
-          const newOutput = messageList.get.response.db();
-          const newInput = messageList.get.input.db();
+        // The turn can already be sealed by the time the loop finalizes — for example when a
+        // sub-agent's `finish` / `step-finish` chunks are forwarded into the parent writer, or
+        // when a mid-loop seal left the shared state pointing at an ended turn. `end()` throws
+        // on an ended turn, and the refs are only cleared after it resolves, so a stale ended
+        // turn would reject finalization and never reach the direct-persist path below. Treat it
+        // as absent, mirroring the ended-turn cleanup in processInputStep.
+        const liveTurn = turn && !turn.ended ? turn : undefined;
+
+        if (liveTurn) {
+          // Use the pipeline's accepted terminal list as the persistence authority,
+          // rather than relying on the list captured when the turn began.
+          await liveTurn.end(persistenceMessageList);
+        }
+        this.turn = undefined;
+        state.__omTurn = undefined;
+
+        if (!liveTurn) {
+          // No live turn exists — this happens during a resumed stream where input processors
+          // were skipped (isResume=true), so processInputStep never created a turn, or when the
+          // turn was already sealed before finalization. Directly persist any new response
+          // messages so the final assistant text from the resumed turn is not lost.
+          const newOutput = persistenceMessageList.get.response.db();
+          const newInput = persistenceMessageList.get.input.db();
           const messagesToSave = [...newInput, ...newOutput];
           if (messagesToSave.length > 0 && context.threadId) {
             await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);
@@ -433,6 +542,57 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
         return messageList;
       });
+  }
+
+  async processAPIError(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
+    const { error, messageList, requestContext, stepNumber, state } = args;
+
+    if (!this.engine.getObservationConfig().observeOnContextOverflow) return;
+    if (state[GATEWAY_STATE_KEY]) return;
+    // One recovery per step: if the retry overflows again, observing more won't help.
+    if (state[CONTEXT_OVERFLOW_STEP_KEY] === stepNumber) return;
+    if (!isContextOverflowError(error)) return;
+
+    const context = this.engine.getThreadContext(requestContext, messageList);
+    if (!context) return;
+    if (parseMemoryRequestContext(requestContext)?.memoryConfig?.readOnly) return;
+
+    state[CONTEXT_OVERFLOW_STEP_KEY] = stepNumber;
+    omDebug(`[OM:processAPIError] context overflow at step ${stepNumber} — observing pending messages`);
+
+    // The provider counted more tokens than OM's estimate, so pending tokens can be below the
+    // threshold. Activate buffered observations and observe what's left regardless of it; the
+    // retry's input step then drops the observed messages from the prompt.
+    const { threadId, resourceId } = context;
+    await this.engine.waitForBuffering(threadId, resourceId);
+    const messages = getObservableMessages(messageList);
+    const { activated } = await this.engine.activate({
+      threadId,
+      resourceId,
+      messages,
+      messageList,
+      writer: args.writer,
+    });
+    const { observed } = await this.engine
+      .getTokenCounter()
+      .runWithModelContext(state.__omActorModelContext as TokenCounterModelContext | undefined, () =>
+        this.engine.observe({
+          threadId,
+          resourceId,
+          messages: getObservableMessages(messageList),
+          messageList,
+          force: true,
+          agent: args.agent,
+          sendSignal: args.sendSignal,
+          sendStateSignal: args.sendStateSignal,
+          requestContext,
+          currentModel: state.__omActorModelContext as ObservationModelContext | undefined,
+          writer: args.writer,
+          observabilityContext: getOmObservabilityContext(args),
+        }),
+      );
+
+    return { retry: activated || observed };
   }
 
   // ─── Passthrough API ────────────────────────────────────────────────────

@@ -1,20 +1,14 @@
 ---
-title: "Reference: Session | AgentController"
-description: "Use AgentController Session to manage per-conversation identity, threads, mode, model, run state, grants, and display snapshots within an isolated runtime."
+title: 'Reference: Session | AgentController'
+description: 'Use AgentController Session to manage per-conversation identity, threads, mode, model, run state, grants, and display snapshots within an isolated runtime.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 toc_max_heading_level: 2
 ---
 
 # Session
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
-
-A `Session` is the isolated runtime for one resource and optional scope. It owns its event bus, thread binding, state, mode and model selections, run control, approvals, suspensions, follow-ups, and display state. The [`AgentController`](/reference/agent-controller/agent-controller-class) supplies shared agents, configuration, storage, workspaces, and services.
+A `Session` is the isolated runtime registered under one session id. Several sessions can share a resource, which owns their stored threads and resource-scoped memory. It owns its event bus, thread binding, state, mode and model selections, run control, approvals, suspensions, follow-ups, and display state. The [`AgentController`](/reference/agent-controller/agent-controller-class) supplies shared agents, configuration, storage, workspaces, and services.
 
 Create sessions through `controller.createSession()`. Direct construction and controller wiring methods aren't application APIs.
 
@@ -154,33 +148,54 @@ Returns: `() => void`
 
 ### Messages and run control
 
-#### `sendMessage({ content, files?, requestContext? })`
+#### `sendMessage({ content, files?, requestContext?, author? })`
 
-Send a user message. The session creates a thread first when no thread is active.
+Send a user message. The session creates a thread first when no thread is active. Pass `author` when the host has authenticated the sender.
 
 ```typescript
 await session.sendMessage({
   content: 'Summarize this file.',
   files: [{ data: fileContents, mediaType: 'text/plain', filename: 'notes.txt' }],
+  author: { id: 'user-123' },
 })
 ```
 
-When `requestContext` carries `MASTRA_MESSAGE_AUTHOR_KEY`, the stored message names that sender under `content.providerMetadata.mastra.author`. See [Reserved keys](/docs/server/request-context#reserved-keys).
+The author persists under `content.metadata.signal.author`. Read it with `getMessageAuthor(message)` from `@mastra/core/agent`. When `requestContext` carries `MASTRA_MESSAGE_AUTHOR_KEY`, the session uses that value if `author` is omitted. See [Reserved keys](/docs/server/request-context#reserved-keys).
 
-#### `steer({ content, requestContext? })`
+#### `queueMessage({ content, files?, requestContext?, author? })`
 
-Queue steering content into an active run.
+Queue a message for the next run, or send it immediately while the session is idle. Author metadata persists with the queued message.
+
+#### `queueSignal(signal, { requestContext?, tracingContext?, tracingOptions? }?)`
+
+Queue a typed signal for the next run, or send it immediately while the session is idle. The signal keeps its `type`, `tagName`, and `attributes`. Set `signal.author` to record an author, because the session doesn't stamp one from `requestContext` as it does for `queueMessage()`.
+
+```typescript
+await session.queueSignal({
+  type: 'reactive',
+  tagName: 'skill',
+  attributes: { name: 'triage' },
+  contents: 'Triage the new issue.',
+})
+```
+
+#### `steer({ content, files?, requestContext?, author? })`
+
+Abort the active run, then send `content` as a new message. Pass `files` to attach files in the same shape as `sendMessage()`: `{ data, mediaType, filename? }`, where `data` is raw text or a base64 data URL for text files, and base64 for binary files.
 
 ```typescript
 await session.steer({ content: 'Focus on the failing tests.' })
 ```
 
-#### `followUp({ content, requestContext? })`
+#### `followUp({ content, files?, requestContext? })`
 
-Queue a follow-up while a run is active, or send it immediately while idle.
+Queue a follow-up while a run is active, or send it immediately while idle. Pass `files` to attach files the same way as `steer()`.
 
 ```typescript
-await session.followUp({ content: 'Then propose a fix.' })
+await session.followUp({
+  content: 'Then compare against this screenshot.',
+  files: [{ data: screenshotBase64, mediaType: 'image/png', filename: 'expected.png' }],
+})
 ```
 
 #### `getCurrentRunId()`
@@ -205,7 +220,7 @@ session.abort()
 
 #### `getWorkspace()`
 
-Return the workspace resolved for this session. This preserves session-level overrides and workspaces selected from the session scope.
+Return the workspace resolved for this session. This preserves session-level overrides.
 
 A workspace is optional. When neither the session nor the `AgentController` configures one, the session still runs without filesystem or sandbox access, and this returns `undefined`. Check the result before using it.
 
@@ -277,19 +292,23 @@ const policy = session.resolveToolApproval('execute_command')
 
 Returns: `PermissionPolicy`
 
-#### `respondToToolApproval({ decision, toolCallId?, requestContext?, declineContext? })`
+#### `respondToToolApproval({ decision, toolCallId, requestContext?, declineContext? })`
 
-Respond to a pending tool approval request, raised by a `tool_approval_required` event. Pass `always_allow_category` to also grant the tool's whole category for the rest of the session.
+Respond to a pending tool approval request, raised by a `tool_approval_required` event. `toolCallId` is required and identifies the parked call, so pass the `toolCallId` from the event. Pass `always_allow_category` to also grant the tool's whole category for the gate's thread.
 
 ```typescript
-session.respondToToolApproval({ decision: 'approve' })
-session.respondToToolApproval({ decision: 'decline' })
-session.respondToToolApproval({ decision: 'always_allow_category' })
+session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId })
+session.respondToToolApproval({ decision: 'decline', toolCallId: event.toolCallId })
+session.respondToToolApproval({ decision: 'always_allow_category', toolCallId: event.toolCallId })
 ```
 
-#### `respondToToolSuspension({ resumeData, toolCallId?, requestContext? })`
+#### `respondToToolSuspension({ resumeData, address?, toolCallId?, requestContext? })`
 
-Resume a suspended tool with application-provided data. Supply `toolCallId` when several tool calls are suspended.
+Resume a suspended tool with application-provided data. Supply `toolCallId` for a prompt on the active thread. To resume after switching threads, retain the full `address` returned by `session.claimToolSuspension(toolCallId, runId)` and pass it instead of `toolCallId`.
+
+An addressed resume uses the source thread's mode, model, and thread-owned preferences, without selecting that thread or replacing the active thread's subscription. Tool state callbacks remain bound to the source even if you switch threads during execution. Host-owned custom state and permission rules remain shared.
+
+After a process restart, a full address can recover a persisted suspension through the controller's configured agents. Recovery requires a uniquely identified originating agent and the existing resume authorization checks. A setup failure leaves the prompt retryable without finishing another thread's active run.
 
 ```typescript
 await session.respondToToolSuspension({
@@ -306,6 +325,8 @@ For `submit_plan`, pass `{ action: 'approved' }` or `{ action: 'rejected', feedb
 
 Return a copy of the running token-usage tally for the active thread.
 
+The executing run saves token usage to its own thread as each step finishes, including runs resumed while another thread is selected. If a storage operation fails, the execution owner retains the measured usage and retries it with the next step. Sessions that only subscribe to a thread display its saved total without counting replayed steps again or saving usage.
+
 ```typescript
 const usage = session.getTokenUsage()
 // { promptTokens, completionTokens, totalTokens, ... }
@@ -313,7 +334,7 @@ const usage = session.getTokenUsage()
 
 ## Identity
 
-`session.identity` owns the stable identifiers for the conversation: the resource ID and session `id`, plus an `ownerId`. The `id` and `ownerId` are stable for the life of the session and don't change when the resource ID is switched. They mirror the `id` and `ownerId` fields on `SessionRecord` in storage.
+`session.identity` identifies the process-local session host: the resource ID and session `id`, plus an `ownerId`. The `id` and `ownerId` are stable for the life of the host and don't change when the resource ID is switched. AgentController doesn't persist the live session or mirror these values to a `SessionRecord`.
 
 ### `session.identity.getId()`
 
@@ -325,7 +346,7 @@ const sessionId = session.identity.getId()
 
 ### `session.identity.getOwnerId()`
 
-Return the stable owner identifier for the session.
+Return the stable owner identifier for the process-local session host. This value isn't a durable thread owner.
 
 ```typescript
 const ownerId = session.identity.getOwnerId()
@@ -351,17 +372,22 @@ To change the resource ID, use [`controller.setResourceId()`](/reference/agent-c
 
 ## Thread
 
-`session.thread` owns the active thread binding and resource-scoped thread operations. Stored threads and messages can survive controller recreation when storage is configured. The live session and its event bus don't.
+`session.thread` owns the active thread binding and resource-scoped thread operations. Stored threads and messages can survive controller recreation when storage is configured. Conversation settings such as mode, model, thinking level, token usage, pending runs, and ownership are restored from the active thread when the session creates or switches threads. The live session and its event bus don't persist.
 
-### `session.thread.create({ title?, id?, metadata? })`
+New threads store the Session host's `ownerId` in the reserved `metadata.ownerId` and `metadata.createdBy` fields. Clones use the cloning Session host for both fields. Existing threads without `metadata.ownerId` read as owned by the current Session host without writing a backfill.
 
-Create a thread, bind the session to it, and open its event stream. Pass `metadata` to persist non-reserved values as part of the initial thread record. Session scope metadata takes precedence over matching keys supplied by the caller. Session-managed keys such as `currentModeId`, `tokenUsage`, and `modeModelId_*` are ignored when supplied by the caller.
+### `session.thread.create({ title?, id?, requestContext? })`
+
+Create a thread, bind the session to it, and open its event stream. Pass `requestContext` when memory is a function that reads the signed-in user.
+
+For a session created with `createInitialThread: false`, explicit mode, model, and thread-preference selections made before its first binding seed the first new thread. This also applies to `ensureId()` and the first message. Failed creation leaves those selections available for retry.
+
+After the session has bound a conversation, each new thread uses controller defaults rather than the previous conversation's choices, even if you clear or delete the binding. Opening an existing thread restores that thread's settings instead of applying unbound startup selections.
 
 ```typescript
 const thread = await session.thread.create({
   id: 'thread-7',
   title: 'Investigate login failure',
-  metadata: { source: 'support-queue' },
 })
 ```
 
@@ -375,9 +401,9 @@ Rename the active stored thread.
 await session.thread.rename({ title: 'Fix login failure' })
 ```
 
-### `session.thread.clone({ sourceThreadId?, title?, resourceId? })`
+### `session.thread.clone({ sourceThreadId?, title?, resourceId?, requestContext? })`
 
-Clone an owned thread and its messages, then bind the session to the clone.
+Clone an owned thread and its messages, then bind the session to the clone. Pass `requestContext` when memory is a function that reads the signed-in user.
 
 ```typescript
 const clone = await session.thread.clone({
@@ -388,17 +414,19 @@ const clone = await session.thread.clone({
 
 Returns: `Promise<AgentControllerThread>`
 
-### `session.thread.switch({ threadId, emitEvent? })`
+### `session.thread.switch({ threadId, emitEvent?, requestContext? })`
 
-Switch to an owned stored thread and hydrate its mode, model, and observational memory settings.
+Switch to an owned stored thread and hydrate its mode, model, and observational memory settings. Pass `requestContext` when memory is a function that reads the signed-in user.
+
+Switching away cancels a running local execution only when this session initiated it. A session listening to another session's run detaches without cancelling that run. This follows the current action's initiator, not ownership of the thread. Parked tool prompts remain available for later resume.
 
 ```typescript
 await session.thread.switch({ threadId: 'thread-8' })
 ```
 
-### `session.thread.delete({ threadId })`
+### `session.thread.delete({ threadId, requestContext? })`
 
-Delete an owned thread. Deleting the active thread also clears the current binding.
+Delete an owned thread. Deleting the active thread also clears the current binding. Pass `requestContext` when memory is a function that reads the signed-in user.
 
 ```typescript
 await session.thread.delete({ threadId: 'thread-8' })
@@ -411,6 +439,52 @@ Return the active thread ID, or `null` when no thread is bound.
 ```typescript
 const threadId = session.thread.getId()
 ```
+
+### `session.thread.ensureId({ requestContext? })`
+
+Return the active thread ID, creating and binding a new thread when none is bound. Concurrent calls share one thread. Use it with sessions created with `createInitialThread: false`.
+
+```typescript
+const threadId = await session.thread.ensureId()
+```
+
+### `session.thread.getOwner({ threadId? })`
+
+Return a thread's durable owner. Omit `threadId` to read the active thread. The method returns `undefined` when no thread is selected. An owner-less legacy thread returns the Session host's `ownerId` without writing a backfill.
+
+```typescript
+const ownerId = await session.thread.getOwner()
+```
+
+Returns: `Promise<string | undefined>`
+
+### `session.thread.transferOwnership({ toOwnerId, threadId? })`
+
+Store `toOwnerId` in the thread's `metadata.ownerId` and emit `thread_owner_changed`. The original `metadata.createdBy` value doesn't change. Without `threadId`, this transfers the active thread. With `threadId`, it transfers that thread of the session's resource and the active thread stays the same.
+
+```typescript
+await session.thread.transferOwnership({
+  toOwnerId: 'user-456',
+  threadId: 'thread-123',
+})
+```
+
+Returns: `Promise<void>`
+
+Transfers are serialized within one process. Storage-backed applications that require a durable cross-process compare-and-set should perform it in their own store first, then call this method to mirror the result.
+
+A successful change emits:
+
+```typescript
+const event = {
+  type: 'thread_owner_changed',
+  threadId: 'thread-7',
+  fromOwnerId: 'user-123',
+  toOwnerId: 'user-456',
+}
+```
+
+Runs snapshot ownership when they start. Within agent tools and dynamic runtime functions, `AgentControllerRequestContext.threadOwnerId` remains unchanged for the run's lifetime. A transfer becomes visible on the next run. `AgentControllerRequestContext.session.ownerId` continues to identify the process-local Session host.
 
 ### `session.thread.list(options?)`
 
@@ -514,7 +588,7 @@ const mode = session.mode.resolve()
 
 ### `session.mode.switch({ modeId })`
 
-Switch to another mode. The session saves the outgoing mode's model before persisting the new mode on the active thread. It then restores the incoming mode's selected or default model. The session emits `mode_changed` immediately and `model_changed` after model resolution.
+Switch to another mode, persist the mode on the active thread, and emit `mode_changed`. The active model stays the same unless you switch it separately, which is necessary when your host assigns different models to different modes.
 
 ```typescript
 await session.mode.switch({ modeId: 'build' })
@@ -522,7 +596,7 @@ await session.mode.switch({ modeId: 'build' })
 
 ## Model
 
-`session.model` owns the active model selection, including per-mode model memory.
+`session.model` owns the session's single active model selection.
 
 ### `session.model.get()`
 
@@ -550,28 +624,48 @@ if (session.model.hasSelection()) {
 }
 ```
 
-### `session.model.switch({ modelId, scope?, modeId? })`
+### `session.model.set({ modelId })`
 
-Switch the active model. When `scope` is `'thread'` (the default), the model ID is persisted as the per-mode model so it's restored when switching back. Reports the selection to the controller's `modelUseCountTracker` and emits a `model_changed` event.
+Set the active model in memory without persisting it, reporting model use, or emitting a `model_changed` event.
 
 ```typescript
-// Set for the current session only
-await session.model.switch({
-  modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-  scope: 'global',
-})
-
-// Persist to the current thread (default)
-await session.model.switch({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
+session.model.set({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
 ```
+
+### `session.model.switch(modelId, options?)`
+
+Switch the session's active model. The model ID is persisted as the thread's `currentModelId` and restored with that thread. Reports the selection to the controller's `modelUseCountTracker` and emits a `model_changed` event.
+
+Pass `{ thinkingLevel }` as the second argument to switch and persist both values in one operation. The level must be `'off'`, `'low'`, `'medium'`, `'high'`, `'xhigh'`, or `'max'`, and the controller's state schema must accept it. Both live values are updated before events are emitted. Omitting the option preserves the existing thinking-level override. Every `model_changed` event includes the current `{ modelId, thinkingLevel }`, even when the thinking level is unchanged. The level is `undefined` when the session has no override.
+
+```typescript
+await session.model.switch('__GATEWAY_ANTHROPIC_MODEL_SONNET__', {
+  thinkingLevel: 'high',
+})
+```
+
+The client SDK exposes the same operation as `session.switchModel(modelId, { thinkingLevel })`.
 
 ## Observational Memory
 
-The observational-memory model selection, grouped by role under `session.om.observer` and `session.om.reflector`. Both roles expose the same methods. Reads return the value from session state when set, falling back to the controller's `omConfig` defaults.
+The observational-memory model selection, grouped by role under `session.om.observer` and `session.om.reflector`. Both roles expose the same methods. Selection intent and the effective concrete model ID are separate values.
+
+### `session.om.observer.model()` / `session.om.reflector.model()`
+
+Return the role's configured model.
+
+```typescript
+const observerModel = session.om.observer.model()
+const reflectorModel = session.om.reflector.model()
+```
+
+Returns: `'auto' | string | undefined`
+
+`'auto'` follows the active main model. Any other string is an explicit model ID.
 
 ### `session.om.observer.modelId()` / `session.om.reflector.modelId()`
 
-Return the role's model ID, or `undefined` when neither session state nor `omConfig` provides one.
+Return the role's effective concrete model ID. For an automatic selection, the controller calls `omConfig.resolveAutoModelId` with the role, current main model ID, and read-only session state. If that resolver returns no model or throws, the role uses its concrete `omConfig` fallback.
 
 ```typescript
 const observer = session.om.observer.modelId()
@@ -589,12 +683,10 @@ const reflectionThreshold = session.om.reflector.threshold()
 
 ### `session.om.observer.switchModel({ modelId })` / `session.om.reflector.switchModel({ modelId })`
 
-Switch the role's model. Persists the setting to thread metadata and emits an `om_model_changed` event.
+Switch one role between automatic and explicit selection. Pass `'auto'` to follow the active main model, or pass a concrete model ID to pin the role. Automatic selection clears the role's stale concrete model ID. The other role is unchanged. The emitted `om_model_changed` event continues to contain the effective concrete `modelId`.
 
 ```typescript
-await session.om.observer.switchModel({
-  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
-})
+await session.om.observer.switchModel({ modelId: 'auto' })
 await session.om.reflector.switchModel({
   modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
 })
@@ -796,7 +888,13 @@ After every event, the session emits `display_state_changed` with the latest sna
 
 ## State
 
-`session.state` owns the schema-validated AgentController state for the conversation. It holds the current snapshot and validates updates against the `stateSchema` passed to the AgentController. Updates are serialized, and every change emits a `state_changed` event.
+`session.state` exposes the active conversation's thread-owned preferences together with host-owned state. Updates are serialized and validated against the `stateSchema` passed to the AgentController. Visible state changes emit `state_changed`.
+
+Thread-owned preferences include thinking level, observational memory settings, and subagent model selections. Switching threads leaves host-owned custom fields and permission rules unchanged and doesn't persist them.
+
+A queued write keeps its source thread through asynchronous updates and validation. Switching from A to B while a write is pending doesn't apply A's preferences to B. Host-field updates still affect the host. A retained run and the active view of the same thread share update ordering. A resumed run sees edits made while it was parked. Events without a source address that affect the conversation display are emitted only while that source is active.
+
+Inside a tool's controller request context, `sessionId`, `resourceId`, and `threadId` identify the session, its resource, and its active thread. `state` is a snapshot taken when the context was built. Use `getState()` or `session.state.get()` to read the latest source-thread state after a write.
 
 ### `session.state.get()`
 
@@ -827,9 +925,13 @@ const added = await session.state.update(current => ({
 
 ## Persistence boundaries
 
-A `Session` is a live runtime object. Its event bus, arbitrary `session.state`, permission rules, permission grants, pending approvals, suspensions, follow-ups, run state, and stream state don't automatically survive controller or process recreation. The host must restore any of this state when recreating a session.
+A `Session` is a live runtime object. Its event bus, arbitrary custom state, permission rules, permission grants, follow-ups, and active stream don't automatically survive controller or process recreation. The host must restore the host-owned state it needs.
 
-Configured storage persists threads and messages along with token usage, while thread settings restore mode and model choices. Restored settings can include observational memory and subagent model selections with per-agent-type overrides. A chat channel can map back to stored threads. However, `AgentControllerChannels` keeps channel-to-session and auto-approval state in memory.
+Configured storage persists threads and messages along with token usage, while thread settings restore mode, model, and supported preferences. Restored settings can include thinking level, observational memory, and subagent model selections with per-agent-type overrides. Persisted suspended runs can be recovered using their full suspension address and originating agent, but arbitrary custom state still requires host-managed persistence.
+
+While a run retains a source-thread view, successful in-memory preference writes remain available when returning to that thread even if best-effort metadata persistence fails. A cold restart can recover only persisted settings and controller defaults.
+
+A chat channel can map back to stored threads. However, `AgentControllerChannels` keeps channel-to-session and auto-approval state in memory.
 
 ## Related
 

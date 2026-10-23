@@ -1,7 +1,8 @@
 {
   "name": "@mastra/elasticsearch",
-  "version": "1.4.1",
+  "version": "1.4.6-alpha.0",
   "description": "ElasticSearch vector store provider for Mastra",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -28,8 +29,8 @@
     "pretest:watch": "docker compose up -d && (for i in $(seq 1 120); do curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"' && break || (sleep 2; [ $i -eq 120 ] && exit 1); done)",
     "test:watch": "vitest watch",
     "posttest:watch": "docker compose down -v",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "dependencies": {
     "@elastic/elasticsearch": "^8.19.2"
@@ -39,11 +40,10 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

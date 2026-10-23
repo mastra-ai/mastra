@@ -1,4 +1,4 @@
-import type { DataPart, MessageFactoryPart } from '@mastra/react';
+import type { DataPart, MessageFactoryPart } from '@mastra/react/ui';
 
 import { isToolPart, readToolPart } from '../messages/renderers/tool-part';
 import type { ToolPart } from '../messages/renderers/tool-part';

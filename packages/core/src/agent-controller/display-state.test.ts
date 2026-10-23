@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { ChunkFrom } from '../stream/types';
+import { getSuspensionAddressKey } from './session';
 import type { Session } from './session';
 import { createTestSession } from './test-utils';
 import type { AgentControllerEvent, AgentControllerSubagent, AgentControllerSubagentHistoryEntry } from './types';
@@ -27,7 +28,7 @@ describe('defaultDisplayState', () => {
     expect(ds.activeTools.size).toBe(0);
     expect(ds.toolInputBuffers).toBeInstanceOf(Map);
     expect(ds.toolInputBuffers.size).toBe(0);
-    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingApprovals.size).toBe(0);
     expect(ds.activeSubagents).toBeInstanceOf(Map);
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.omProgress.status).toBe('idle');
@@ -63,7 +64,7 @@ describe('session.displayState.get()', () => {
     expect(ds.currentMessage).toBeNull();
     expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools.size).toBe(0);
-    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingApprovals.size).toBe(0);
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.modifiedFiles.size).toBe(0);
     expect(ds.tasks).toEqual([]);
@@ -110,12 +111,22 @@ describe('agent lifecycle', () => {
     expect(session.displayState.get().toolInputBuffers.size).toBe(0);
   });
 
-  it('clears pendingApproval on agent_start', () => {
+  it('keeps a parked approval across agent_start', () => {
     emit(session, { type: 'tool_approval_required', toolCallId: 't1', toolName: 'write_file', args: {} });
-    expect(session.displayState.get().pendingApproval).not.toBeNull();
+    expect(session.displayState.get().pendingApprovals.size).toBe(1);
 
+    // A fresh run (a resume, or another thread's run) must not wipe a gate that
+    // is still parked waiting for a decision.
     emit(session, { type: 'agent_start' });
-    expect(session.displayState.get().pendingApproval).toBeNull();
+    expect(session.displayState.get().pendingApprovals.size).toBe(1);
+  });
+
+  it('drops a parked approval when its tool call ends', () => {
+    emit(session, { type: 'tool_approval_required', toolCallId: 't1', toolName: 'write_file', args: {} });
+    expect(session.displayState.get().pendingApprovals.size).toBe(1);
+
+    emit(session, { type: 'tool_end', toolCallId: 't1', result: 'ok', isError: false });
+    expect(session.displayState.get().pendingApprovals.size).toBe(0);
   });
 
   it('sets isRunning to false on agent_end', () => {
@@ -169,36 +180,80 @@ describe('message streaming', () => {
   const msg1 = {
     id: 'm1',
     role: 'assistant' as const,
-    content: [{ type: 'text' as const, text: 'hello' }],
+    content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'hello' }] },
     createdAt: new Date(),
   };
-  const msg2 = {
-    id: 'm1',
-    role: 'assistant' as const,
-    content: [{ type: 'text' as const, text: 'hello world' }],
-    createdAt: new Date(),
-  };
-
   beforeEach(async () => {
     const ctx = await createSession();
     session = ctx.session;
   });
 
-  it('tracks currentMessage on message_start', () => {
+  it('tracks an isolated currentMessage on message_start', () => {
     emit(session, { type: 'message_start', message: msg1 as any });
-    expect(session.displayState.get().currentMessage).toBe(msg1);
+    expect(session.displayState.get().currentMessage).toEqual(msg1);
+    expect(session.displayState.get().currentMessage).not.toBe(msg1);
   });
 
-  it('updates currentMessage on message_update', () => {
+  it('applies compact text deltas to the matching current message', () => {
     emit(session, { type: 'message_start', message: msg1 as any });
-    emit(session, { type: 'message_update', message: msg2 as any });
-    expect(session.displayState.get().currentMessage).toBe(msg2);
+    emit(session, { type: 'message_update', id: 'm1', event: { type: 'text-delta', delta: ' world' } });
+    expect(session.displayState.get().currentMessage).toMatchObject({
+      id: 'm1',
+      content: { parts: [{ type: 'text', text: 'hello world' }] },
+    });
   });
 
-  it('keeps currentMessage reference on message_end', () => {
+  it('applies reasoning and tool-part updates to the matching current message', () => {
+    emit(session, {
+      type: 'message_start',
+      message: {
+        ...msg1,
+        content: {
+          ...msg1.content,
+          parts: [
+            { type: 'reasoning', reasoning: '', details: [] },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 't1', toolName: 'read_file', args: {} },
+            },
+          ],
+        },
+      } as any,
+    });
+    emit(session, {
+      type: 'message_update',
+      id: 'm1',
+      event: { type: 'reasoning-delta', index: 0, delta: 'thinking' },
+    });
+    emit(session, {
+      type: 'message_update',
+      id: 'm1',
+      event: {
+        type: 'part',
+        index: 1,
+        part: {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-denied',
+            toolCallId: 't1',
+            toolName: 'read_file',
+            args: {},
+            approval: { id: 't1', approved: false },
+          },
+        },
+      },
+    });
+    expect(session.displayState.get().currentMessage?.content.parts).toMatchObject([
+      { type: 'reasoning', reasoning: 'thinking', details: [{ type: 'text', text: 'thinking' }] },
+      { type: 'tool-invocation', toolInvocation: { state: 'output-denied' } },
+    ]);
+  });
+
+  it('ignores compact deltas for a different message id and id-only ends', () => {
     emit(session, { type: 'message_start', message: msg1 as any });
-    emit(session, { type: 'message_end', message: msg2 as any });
-    expect(session.displayState.get().currentMessage).toBe(msg2);
+    emit(session, { type: 'message_update', id: 'other', event: { type: 'text-delta', delta: ' ignored' } });
+    emit(session, { type: 'message_end', id: 'm1' });
+    expect(session.displayState.get().currentMessage).toEqual(msg1);
   });
 });
 
@@ -559,18 +614,40 @@ describe('tool lifecycle', () => {
   });
 
   describe('tool_approval_required', () => {
-    it('sets pendingApproval', () => {
+    it('parks an approval keyed by toolCallId', () => {
       emit(session, {
         type: 'tool_approval_required',
         toolCallId: 't1',
         toolName: 'execute_command',
         args: { command: 'rm -rf /' },
       });
-      const approval = session.displayState.get().pendingApproval;
-      expect(approval).not.toBeNull();
+      const approval = session.displayState.get().pendingApprovals.get('t1');
+      expect(approval).toBeDefined();
       expect(approval!.toolCallId).toBe('t1');
       expect(approval!.toolName).toBe('execute_command');
       expect(approval!.args).toEqual({ command: 'rm -rf /' });
+    });
+
+    it('parks concurrent approvals without shadowing one another', () => {
+      emit(session, {
+        type: 'tool_approval_required',
+        toolCallId: 'a',
+        toolName: 'write_file',
+        args: {},
+        threadId: 'thread-a',
+      });
+      emit(session, {
+        type: 'tool_approval_required',
+        toolCallId: 'b',
+        toolName: 'execute_command',
+        args: {},
+        threadId: 'thread-b',
+      });
+
+      const pending = session.displayState.get().pendingApprovals;
+      expect(pending.size).toBe(2);
+      expect(pending.get('a')!.threadId).toBe('thread-a');
+      expect(pending.get('b')!.threadId).toBe('thread-b');
     });
   });
 
@@ -590,6 +667,120 @@ describe('tool lifecycle', () => {
       expect(suspension!.toolName).toBe('confirmAction');
       expect(suspension!.args).toEqual({ action: 'deploy' });
       expect(suspension!.suspendPayload).toEqual({ reason: 'Needs confirmation' });
+    });
+
+    it("clears the ending run's own prompts on a non-suspended agent_end and keeps other runs' prompts", () => {
+      // A run can end with its prompt never answered or cancelled, e.g. when it
+      // loses the thread lease: the error path skips the per-prompt cancel.
+      for (const runId of ['run-own', 'run-other']) {
+        emit(session, {
+          type: 'tool_suspended',
+          resourceId: 'resource',
+          threadId: 'thread',
+          runId,
+          toolCallId: `call-${runId}`,
+          toolName: 'ask_user',
+          args: {},
+          suspendPayload: {},
+        });
+      }
+      session.run.setRunId({ runId: 'run-own' });
+
+      emit(session, { type: 'agent_end', reason: 'error' });
+
+      expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
+    });
+
+    it('clears the prompts of the run that ended even when the tracked run moves on before agent_end', async () => {
+      for (const runId of ['run-own', 'run-other']) {
+        emit(session, {
+          type: 'tool_suspended',
+          resourceId: 'resource',
+          threadId: 'thread',
+          runId,
+          toolCallId: `call-${runId}`,
+          toolName: 'ask_user',
+          args: {},
+          suspendPayload: {},
+        });
+      }
+      session.run.setRunId({ runId: 'run-own' });
+      session.onBeforeAgentEnd(() => session.run.setRunId({ runId: 'run-other' }));
+
+      await session.finishAgentRun('error');
+
+      expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
+    });
+
+    it('keeps duplicate tool-call ids from separate runs independently addressable', () => {
+      for (const runId of ['run-a', 'run-b']) {
+        emit(session, {
+          type: 'tool_suspended',
+          resourceId: 'resource',
+          threadId: 'thread',
+          runId,
+          toolCallId: 'shared-call',
+          toolName: 'ask_user',
+          args: { runId },
+          suspendPayload: { runId },
+        });
+      }
+
+      const pendingBeforeCancel = session.displayState.get().pendingSuspensions;
+      expect(pendingBeforeCancel.size).toBe(2);
+      for (const runId of ['run-a', 'run-b']) {
+        expect(
+          pendingBeforeCancel.get(
+            getSuspensionAddressKey({ resourceId: 'resource', threadId: 'thread', runId, toolCallId: 'shared-call' }),
+          ),
+        ).toMatchObject({ runId, args: { runId } });
+      }
+
+      emit(session, {
+        type: 'tool_suspension_cancelled',
+        resourceId: 'resource',
+        threadId: 'thread',
+        runId: 'run-b',
+        toolCallId: 'shared-call',
+        toolName: 'ask_user',
+        reason: 'answered',
+      });
+
+      const pending = session.displayState.get().pendingSuspensions;
+      expect(pending.size).toBe(1);
+      expect(
+        pending.get(
+          getSuspensionAddressKey({
+            resourceId: 'resource',
+            threadId: 'thread',
+            runId: 'run-a',
+            toolCallId: 'shared-call',
+          }),
+        ),
+      ).toMatchObject({ runId: 'run-a', args: { runId: 'run-a' } });
+    });
+
+    it('uses collision-safe keys for addressed suspensions, including empty components', () => {
+      const addresses = [
+        { resourceId: 'resource\0thread', threadId: '', runId: 'run', toolCallId: 'call' },
+        { resourceId: 'resource', threadId: '\0thread', runId: 'run', toolCallId: 'call' },
+      ];
+      for (const address of addresses) {
+        emit(session, {
+          type: 'tool_suspended',
+          ...address,
+          toolName: 'ask_user',
+          args: address,
+          suspendPayload: {},
+        });
+      }
+
+      const pending = session.displayState.get().pendingSuspensions;
+      expect(pending.size).toBe(2);
+      expect(getSuspensionAddressKey(addresses[0]!)).not.toBe(getSuspensionAddressKey(addresses[1]!));
+      for (const address of addresses) {
+        expect(pending.get(getSuspensionAddressKey(address))).toMatchObject({ ...address, args: address });
+      }
     });
 
     it('preserves pendingSuspensions on agent_start so resuming one keeps the rest', () => {
@@ -1458,7 +1649,7 @@ describe('resetThreadDisplayState', () => {
     const ds = session.displayState.get();
     expect(ds.activeTools.size).toBe(0);
     expect(ds.toolInputBuffers.size).toBe(0);
-    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingApprovals.size).toBe(0);
     expect(ds.pendingSuspensions.size).toBe(0);
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.currentMessage).toBeNull();
@@ -1655,9 +1846,15 @@ describe('full lifecycle integration', () => {
     expect(ds.isRunning).toBe(true);
 
     // Message starts streaming
-    const msg = { id: 'm1', role: 'assistant' as const, content: [], createdAt: new Date() };
-    emit(session, { type: 'message_start', message: msg as any });
-    expect(ds.currentMessage).toBe(msg);
+    const msg = {
+      id: 'm1',
+      role: 'assistant' as const,
+      content: { format: 2 as const, parts: [] },
+      createdAt: new Date(),
+    };
+    emit(session, { type: 'message_start', message: msg });
+    expect(ds.currentMessage).toEqual(msg);
+    expect(ds.currentMessage).not.toBe(msg);
 
     // Tool input streaming
     emit(session, { type: 'tool_input_start', toolCallId: 't1', toolName: 'string_replace_lsp' });

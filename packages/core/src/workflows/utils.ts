@@ -43,7 +43,7 @@ async function validateWithStandardSchema<T>(
     };
   }
 
-  return { success: true, data: resolvedResult.value as T };
+  return { success: true, data: resolvedResult.value };
 }
 
 export async function validateStepInput({
@@ -218,13 +218,10 @@ export function getResumeLabelsByStepId(
 ) {
   return Object.entries(resumeLabels)
     .filter(([_, value]) => value.stepId === stepId)
-    .reduce(
-      (acc, [key, value]) => {
-        acc[key] = value;
-        return acc;
-      },
-      {} as Record<string, { stepId: string; foreachIndex?: number }>,
-    );
+    .reduce<Record<string, { stepId: string; foreachIndex?: number }>>((acc, [key, value]) => {
+      acc[key] = value;
+      return acc;
+    }, {});
 }
 
 export function abortableSleep(duration: number, signal?: AbortSignal): Promise<void> {
@@ -292,11 +289,28 @@ export function createDeprecationProxy<T extends Record<string, any>>(
   });
 }
 
-const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'mapping'] as const;
+/**
+ * Defines `writer` on execute params as a memoized getter so the stream is only
+ * allocated when step code actually reads it. The property stays enumerable so
+ * spreading the params still carries `writer` along.
+ */
+export function defineLazyWriter<T extends object, W>(
+  params: T,
+  createWriter: () => W,
+): NoInfer<T> & { writer: NoInfer<W> } {
+  let writer: W | undefined;
+  return Object.defineProperty(params, 'writer', {
+    enumerable: true,
+    configurable: true,
+    get: () => (writer ??= createWriter()),
+  }) as T & { writer: W };
+}
+
+const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'classifier', 'mapping'] as const;
 
 /**
  * Whether an entry is a "single step-like" entry: a plain user step or one of the
- * declarative variants (agent / tool / mapping) that resolve to exactly one step.
+ * declarative variants (agent / tool / classifier / mapping) that resolve to exactly one step.
  */
 export function isSingleStepEntry(entry: StepFlowEntry): entry is SingleStepEntry {
   return (SINGLE_STEP_TYPES as readonly string[]).includes(entry.type);
@@ -462,13 +476,10 @@ export const createTimeTravelExecutionParams = (params: {
         if (prevStepIds.length === 1) {
           stepPayload = (stepResults?.[prevStepIds[0]!] as any)?.output ?? {};
         } else {
-          stepPayload = prevStepIds.reduce(
-            (acc, stepId) => {
-              acc[stepId] = (stepResults?.[stepId] as any)?.output ?? {};
-              return acc;
-            },
-            {} as Record<string, any>,
-          );
+          stepPayload = prevStepIds.reduce<Record<string, any>>((acc, stepId) => {
+            acc[stepId] = (stepResults?.[stepId] as any)?.output ?? {};
+            return acc;
+          }, {});
         }
       }
     }
@@ -505,10 +516,8 @@ export const createTimeTravelExecutionParams = (params: {
     stepIds.forEach(stepId => {
       let result;
       const stepContext = context?.[stepId] ?? snapshotContext[stepId];
-      // Siblings of the time-travel target inside a conditional were not selected by the
-      // branch's condition, so they should be reported as skipped rather than as a fake
-      // success (otherwise their empty output leaks into the conditional's aggregated result).
-      const isUnselectedConditionalSibling = isTargetEntry && entry.type === 'conditional' && !steps?.includes(stepId);
+      const isUnselectedConditionalSibling =
+        entry.type === 'conditional' && !steps.includes(stepId) && (isTargetEntry || !stepContext);
       const defaultStepStatus = steps?.includes(stepId)
         ? 'running'
         : isUnselectedConditionalSibling
@@ -597,41 +606,84 @@ export const createRestartExecutionParams = ({
     }
   }
 
-  let nestedWorkflowActiveStepsPath: Record<string, number[]> = {};
+  let firstEntryActiveStepsPath: Record<string, number[]> = {};
 
   const firstEntry = graph.steps[0]!;
 
   if (isSingleStepEntry(firstEntry)) {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [getSingleStepEntryId(firstEntry)]: [0],
     };
   } else if (firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [getSingleStepEntryId(firstEntry.step)]: [0],
     };
   } else if (firstEntry.type === 'sleep' || firstEntry.type === 'sleepUntil') {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [firstEntry.id]: [0],
     };
   } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
-    nestedWorkflowActiveStepsPath = firstEntry.steps.reduce(
-      (acc, step) => {
-        acc[getSingleStepEntryId(step)] = [0];
-        return acc;
-      },
-      {} as Record<string, number[]>,
-    );
+    firstEntryActiveStepsPath = firstEntry.steps.reduce<Record<string, number[]>>((acc, step) => {
+      acc[getSingleStepEntryId(step)] = [0];
+      return acc;
+    }, {});
   }
+
+  const hasFirstEntryResult = getStepIds(firstEntry).some(stepId =>
+    Object.prototype.hasOwnProperty.call(snapshot.context, stepId),
+  );
+  const isPreFirstStepRestart = nestedWorkflowPending || (snapshot.activePaths.length === 0 && !hasFirstEntryResult);
   const restartData: RestartExecutionParams = {
-    activePaths: nestedWorkflowPending ? [0] : snapshot.activePaths,
-    activeStepsPath: nestedWorkflowPending ? nestedWorkflowActiveStepsPath : snapshot.activeStepsPath,
+    activePaths: isPreFirstStepRestart ? [0] : snapshot.activePaths,
+    activeStepsPath: isPreFirstStepRestart ? firstEntryActiveStepsPath : snapshot.activeStepsPath,
     stepResults: snapshot.context,
-    state: snapshot.value,
+    // The evented engine records mid-run state as `context.__state` alongside step results;
+    // `value` only holds the state from the run's start or last suspension.
+    state: (snapshot.context as Record<string, any>)?.__state ?? snapshot.value,
     stepExecutionPath: snapshot?.stepExecutionPath,
+    isPreFirstStepRestart,
   };
 
   return restartData;
 };
+
+/**
+ * Top-level index the default engine should restart from.
+ *
+ * The engine checkpoints an entry when it finishes but only moves the pointer
+ * when the next entry starts. A checkpoint with nothing running whose
+ * pointed-at entry saved only successful results was written in that gap, so
+ * restart resumes at the next entry instead of replaying a finished one (#24615).
+ * Any other checkpoint resumes at the entry it points to.
+ *
+ * Skips at most one entry, so a step id reused later in the graph is never
+ * mistaken for finished.
+ */
+export function getRestartStartIndex(steps: StepFlowEntry[], restart: RestartExecutionParams): number {
+  const startIdx = restart.activePaths[0]!;
+  const entry = steps[startIdx];
+  if (!entry || restart.activePaths.length !== 1 || Object.keys(restart.activeStepsPath ?? {}).length > 0) {
+    return startIdx;
+  }
+
+  const results = getStepIds(entry).map(id => restart.stepResults[id]);
+  return isEntryFinished(entry.type, results) ? startIdx + 1 : startIdx;
+}
+
+/**
+ * Whether a top-level entry saved only successful results, given its results
+ * in `getStepIds` order. Agent-loop snapshot pruning makes the same decision to
+ * keep the output a restart that skips the entry reads.
+ */
+export function isEntryFinished(
+  entryType: string,
+  results: ReadonlyArray<{ status: string } | null | undefined>,
+): boolean {
+  return entryType === 'conditional'
+    ? // Arms that were not selected have no result.
+      results.every(result => !result || result.status === 'success')
+    : results.length > 0 && results.every(result => result?.status === 'success');
+}
 
 /**
  * Re-hydrates serialized errors in step results back into proper Error instances.
@@ -659,9 +711,13 @@ export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) 
 function cleanSingleResult(result: Record<string, unknown>): Record<string, unknown> {
   const { __state: _state, __stateDelta: _stateDelta, metadata, ...rest } = result;
 
-  // Strip nestedRunId from metadata but keep other user-defined fields
+  // Strip nested run identities from metadata but keep other user-defined fields
   if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
-    const { nestedRunId: _nestedRunId, ...userMetadata } = metadata as Record<string, unknown>;
+    const {
+      nestedRunId: _nestedRunId,
+      foreachNestedRunIds: _foreachNestedRunIds,
+      ...userMetadata
+    } = metadata as Record<string, unknown>;
     if (Object.keys(userMetadata).length > 0) {
       return { ...rest, metadata: userMetadata };
     }
@@ -717,6 +773,14 @@ export function cleanStepResult(stepResult: unknown): unknown {
 
   const result = stepResult as Record<string, unknown>;
   const cleaned = cleanSingleResult(result);
+
+  // The evented engine persists a running forEach with null slots for unfinished iterations
+  // (they drive storage merges and completion checks). Those are bookkeeping, not output:
+  // like the default engine, a running step exposes no output until it finishes.
+  if (cleaned.status === 'running' && Array.isArray(cleaned.output)) {
+    delete cleaned.output;
+    return cleaned;
+  }
 
   // If output is an array (forEach results), clean each iteration result
   // Iteration results can have __state (for suspended) or metadata.nestedRunId (for nested workflows)
@@ -795,9 +859,9 @@ export function resolveForeachConcurrency(
   return Math.floor(resolved);
 }
 
-const RESUME_SNAPSHOT_POLL_INTERVAL_MS = 25;
+export const RESUME_SNAPSHOT_POLL_INTERVAL_MS = 25;
 const RESUME_SNAPSHOT_POLL_TIMEOUT_MS = 2000;
-const RESUME_SNAPSHOT_WAIT_STATUSES = new Set(['running', 'pending']);
+export const RESUME_SNAPSHOT_WAIT_STATUSES = new Set(['running', 'pending']);
 
 export async function waitForSuspendedSnapshot(
   workflowsStore:
@@ -808,7 +872,13 @@ export async function waitForSuspendedSnapshot(
   {
     timeoutMs = RESUME_SNAPSHOT_POLL_TIMEOUT_MS,
     missingSnapshotGraceReads = 1,
-  }: { timeoutMs?: number; missingSnapshotGraceReads?: number } = {},
+    onClaimedRunFinished,
+  }: {
+    timeoutMs?: number;
+    missingSnapshotGraceReads?: number;
+    /** Called when a `running`/`pending` row is seen and then disappears (its run finished and was cleaned up). */
+    onClaimedRunFinished?: () => void;
+  } = {},
 ): Promise<WorkflowRunState | null> {
   if (!workflowsStore) return null;
 
@@ -823,7 +893,12 @@ export async function waitForSuspendedSnapshot(
     if (snapshot) {
       if (!RESUME_SNAPSHOT_WAIT_STATUSES.has(snapshot.status)) return snapshot;
       observedTransitionableSnapshot = true;
-    } else if (!observedTransitionableSnapshot && ++missingReads >= missingSnapshotGraceReads) {
+    } else if (observedTransitionableSnapshot) {
+      if (onClaimedRunFinished) {
+        onClaimedRunFinished();
+        return null;
+      }
+    } else if (++missingReads >= missingSnapshotGraceReads) {
       return null;
     }
 

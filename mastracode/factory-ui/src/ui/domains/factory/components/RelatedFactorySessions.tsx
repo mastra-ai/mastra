@@ -1,15 +1,20 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link2 } from 'lucide-react';
-import { Link, useNavigate, useParams } from 'react-router';
+import type { ReactNode } from 'react';
+import { Link, useMatch, useParams } from 'react-router';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
-import { ChatHeader } from '../../chat/components/ChatHeader';
+import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
+import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
+import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
-import { useWorkspacePanel } from '../../workspace-viewer/context/useWorkspacePanel';
+import { rememberedBoardPath } from '../services/boardViews';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
+import { isPullRequestSource } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { SourceIcon } from './BoardIcons';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
@@ -23,6 +28,7 @@ function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): Work
 function sessionTitle(item: WorkItem): string {
   const number = workItemNumber(item);
   if (item.source === 'github-pr' && number) return `PR #${number}: ${item.title}`;
+  if (item.source === 'gitlab-pr' && number) return `MR !${number}: ${item.title}`;
   if (item.source === 'github-issue' && number) return `Issue #${number}: ${item.title}`;
   return item.title;
 }
@@ -30,6 +36,7 @@ function sessionTitle(item: WorkItem): string {
 function externalWorkItemLabel(item: WorkItem): string {
   const number = workItemNumber(item);
   if (item.source === 'github-pr') return number ? `PR #${number}` : 'Pull request';
+  if (item.source === 'gitlab-pr') return number ? `MR !${number}` : 'Merge request';
   if (item.source === 'github-issue') return number ? `Issue #${number}` : 'Issue';
   if (item.source === 'linear-issue') {
     return typeof item.metadata.identifier === 'string' ? item.metadata.identifier : (number ?? 'Linear issue');
@@ -49,59 +56,73 @@ function activeWorkItem(
   );
 }
 
-export function FactorySessionHeader() {
+/** Chat page frame for a factory thread: breadcrumb of the work item or session, plus its actions. */
+export function FactorySessionPage({ children }: { children: ReactNode }) {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
-  const sessionQuery = useUserSessionQuery(sessionId);
+  // User threads carry the session id as `threadId` (see ChatSessionProvider).
+  const isUserThread = Boolean(useMatch('/factories/:factoryId/user/threads/:threadId'));
+  const userSessionId = sessionId ?? threadId;
+  const sessionQuery = useUserSessionQuery(userSessionId);
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
   const items = useWorkItemsQuery(factoryId);
-  const workspaces = useWorkspacesQuery(projectRepositoryId);
-  const { workspacePath } = useWorkspacePanel();
+  const workspaces = useWorkspacesQuery(factoryId);
 
   const allItems = items.data ?? [];
   const currentItem = activeWorkItem(allItems, factoryId, sessionId, threadId);
-  const hasSession = Boolean(currentItem || workspacePath);
+  // Prefer the list row: PageTitle patches it with the generated title, the detail cache is not updated.
+  const session = workspaces.data?.userSessions.find(entry => entry.sessionId === userSessionId) ?? sessionQuery.data;
+  const workspaceTitle = !isUserThread && !currentItem ? session?.title?.trim() : undefined;
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
+  const isReview = currentItem ? isPullRequestSource(currentItem.source) : false;
+
+  const crumbs =
+    currentItem && factoryId ? (
+      <>
+        <Crumb as={Link} to={rememberedBoardPath(factoryId, isReview ? 'review' : 'work')}>
+          {isReview ? 'Review' : 'Work'}
+        </Crumb>
+        <Crumb as="span" isCurrent>
+          {sessionTitle(currentItem)}
+        </Crumb>
+      </>
+    ) : isUserThread && session ? (
+      <>
+        <Crumb as="span">User sessions</Crumb>
+        <Crumb as="span" isCurrent>
+          {getUserSessionLabel(session)}
+        </Crumb>
+      </>
+    ) : workspaceTitle ? (
+      <>
+        <Crumb as="span">Sessions</Crumb>
+        <Crumb as="span" isCurrent>
+          {workspaceTitle}
+        </Crumb>
+      </>
+    ) : undefined;
 
   return (
-    <ChatHeader className={cn(hasSession && 'border-border1 border-b md:px-5')}>
-      {hasSession ? (
-        <div role="region" aria-label="Factory session" className="flex min-w-0 flex-1 items-center gap-2">
-          {currentItem ? <WorkItemBreadcrumb item={currentItem} factoryId={factoryId} /> : null}
-          <div className="ml-auto flex shrink-0 items-center gap-1">
-            {currentItem && factoryId && threadId ? (
-              <WorkItemActions
-                item={currentItem}
-                allItems={allItems}
-                livePaths={livePaths}
-                factoryId={factoryId}
-                threadId={threadId}
-                projectRepositoryId={projectRepositoryId}
-              />
-            ) : null}
-            <WorkspaceFilesToggle />
-          </div>
-        </div>
-      ) : null}
-    </ChatHeader>
-  );
-}
-
-function WorkItemBreadcrumb({ item, factoryId }: { item: WorkItem; factoryId?: string }) {
-  const isReview = item.source === 'github-pr';
-
-  return (
-    <nav className="text-ui-sm flex min-w-0 items-center gap-2" aria-label="Factory session breadcrumb">
-      <Link
-        to={isReview ? `/factories/${factoryId}/review` : `/factories/${factoryId}/work`}
-        className="text-icon4 hover:text-icon6 shrink-0 font-medium hover:underline"
-      >
-        {isReview ? 'Review' : 'Work'}
-      </Link>
-      <span className="text-icon3" aria-hidden>
-        /
-      </span>
-      <span className="text-icon6 truncate">{sessionTitle(item)}</span>
-    </nav>
+    <ChatPageLayout
+      crumbs={crumbs}
+      headerActions={
+        <>
+          {isUserThread && factoryId && session ? <UserSessionSharing factoryId={factoryId} session={session} /> : null}
+          {currentItem && factoryId && threadId ? (
+            <WorkItemActions
+              item={currentItem}
+              allItems={allItems}
+              livePaths={livePaths}
+              factoryId={factoryId}
+              threadId={threadId}
+              projectRepositoryId={projectRepositoryId}
+            />
+          ) : null}
+          <WorkspaceFilesToggle />
+        </>
+      }
+    >
+      {children}
+    </ChatPageLayout>
   );
 }
 
@@ -120,13 +141,8 @@ function WorkItemActions({
   threadId: string;
   projectRepositoryId?: string;
 }) {
-  const navigate = useNavigate();
   const externalItemUrl = genericExternalWorkItemUrl(item);
   const externalItemLabel = externalWorkItemLabel(item);
-
-  const openSession = (session: WorkItemSessionRef) => {
-    void navigate(`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
-  };
 
   return (
     <>
@@ -151,13 +167,15 @@ function WorkItemActions({
         if (!session) {
           return (
             <Link
-              key={related.id}
               to={relationshipPath(related, factoryId)}
-              className="text-ui-sm text-icon4 hover:bg-surface3 hover:text-icon6 flex items-center gap-1.5 rounded-md px-2 py-1"
               aria-label={`Open ${label}: ${related.title}`}
+              key={related.id}
+              className="text-muted-foreground hover:bg-fill hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1"
             >
               <Link2 size={13} aria-hidden />
-              {label}
+              <Txt as="span" variant="caption" className="block">
+                {label}
+              </Txt>
             </Link>
           );
         }
@@ -165,18 +183,17 @@ function WorkItemActions({
         return (
           <Button
             key={related.id}
-            type="button"
             variant="ghost"
             size="sm"
             aria-label={`Open ${label}: ${related.title}`}
-            onClick={() => openSession(session)}
+            render={<Link to={`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`} />}
           >
             <Link2 size={13} aria-hidden />
             {label}
           </Button>
         );
       })}
-      {item.source === 'github-pr' ? (
+      {isPullRequestSource(item.source) ? (
         <FactoryReviewPullRequestLinks
           factoryId={factoryId}
           projectRepositoryId={projectRepositoryId}

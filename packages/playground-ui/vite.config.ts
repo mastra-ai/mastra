@@ -1,11 +1,12 @@
-import { existsSync, readdirSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { spawn } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { dirname, relative, resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import nodeExternals from 'rollup-plugin-node-externals';
-import type { PluginOption, UserConfig } from 'vite';
+import type { Plugin, UserConfig } from 'vite';
 import { defineConfig } from 'vite';
-import dts from 'vite-plugin-dts';
 import { libInjectCss } from 'vite-plugin-lib-inject-css';
 
 const srcDir = resolve(__dirname, 'src');
@@ -22,10 +23,6 @@ const forEachSourceFile = (directory: string, visit: (file: string) => void) => 
   });
 };
 
-// One entry per source file, published as `@mastra/playground-ui/<prefix>/<path>`:
-// `src/hooks/use-is-mobile.ts` becomes `hooks/use-is-mobile`. A folder's index.ts
-// takes the folder's own name, and a root barrel would collide with the prefix,
-// so it is left out.
 const fileEntries = (directory: string, prefix: string) => {
   const sourceDir = resolve(__dirname, directory);
   const entries: Array<[string, string]> = [];
@@ -42,10 +39,6 @@ const fileEntries = (directory: string, prefix: string) => {
   return Object.fromEntries(entries);
 };
 
-// One entry per design-system component folder holding an index.ts, published as
-// `components/<Name>` or a nested `components/ai/plan`. The walk stops at that
-// index.ts — deeper folders are the component's internals, already re-exported by
-// its barrel — and folders without one only group files.
 const componentEntries = (directory: string, prefix: string) => {
   const sourceDir = resolve(__dirname, directory);
   const entries: Array<[string, string]> = [];
@@ -71,18 +64,120 @@ const componentEntries = (directory: string, prefix: string) => {
   return Object.fromEntries(entries);
 };
 
-// vite-plugin-dts only logs type errors. It is the package's single TypeScript pass
-// since `build` dropped its standalone tsc, so make diagnostics fail the build.
-const typeDeclarations = () =>
-  dts({
-    insertTypesEntry: true,
-    exclude: ['vite.config.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
-    afterDiagnostic: diagnostics => {
-      if (diagnostics.length > 0) {
-        throw new Error(`vite-plugin-dts found ${diagnostics.length} type error(s); see log above.`);
+const toPosix = (path: string) => path.replace(/\\/g, '/');
+const toImportPath = (path: string) => (path.startsWith('.') ? path : `./${path}`);
+
+const runTsc = (args: string[]) =>
+  new Promise<number>(resolveExit => {
+    const child = spawn('tsc', args, { stdio: 'inherit', shell: process.platform === 'win32' });
+    child.on('error', error => {
+      console.error(`Failed to run tsc: ${error.message}`);
+      resolveExit(1);
+    });
+    child.on('close', code => resolveExit(code ?? 1));
+  });
+
+// Side-effect imports (CSS) are dropped and `@/` aliases made relative, so consumers resolve every import.
+const sideEffectImportRE = /^import ['"][^'"]+['"];\r?\n/gm;
+const aliasImportRE = /(from |import\()(['"])@\/([^'"]+)\2/g;
+
+const finishDeclaration = async (file: string) => {
+  const content = await readFile(file, 'utf8');
+  const next = content
+    .replace(sideEffectImportRE, '')
+    .replace(
+      aliasImportRE,
+      (_, prefix, quote, path) =>
+        `${prefix}${quote}${toImportPath(toPosix(relative(dirname(file), resolve(dtsSrcDir, path))))}${quote}`,
+    );
+  if (next !== content) await writeFile(file, next);
+};
+
+const forEachDeclaration = (directory: string, visit: (file: string) => void) => {
+  readdirSync(directory, { withFileTypes: true }).forEach(dirent => {
+    const path = resolve(directory, dirent.name);
+    if (dirent.isDirectory()) forEachDeclaration(path, visit);
+    else if (dirent.name.endsWith('.d.ts')) visit(path);
+  });
+};
+
+const distDir = resolve(__dirname, 'dist');
+const dtsTempDir = resolve(__dirname, 'node_modules/.cache/dts');
+const dtsSrcDir = resolve(distDir, 'src');
+
+// TypeScript 7 emits declarations while Vite bundles; vite-plugin-dts needs the TypeScript 6 compiler API and took ~14s.
+// tsc writes to a temp dir because Vite empties `dist` when it writes the bundle. Type errors fail the build.
+const typeDeclarations = (): Plugin => {
+  let entries: Record<string, string> = {};
+  let tsc: Promise<number> | undefined;
+
+  return {
+    name: 'playground-ui:dts',
+    configResolved(config) {
+      if (config.build.lib) entries = config.build.lib.entry as Record<string, string>;
+    },
+    // Rolldown runs buildStart once per output format but closeBundle once, so start tsc only once.
+    buildStart() {
+      tsc ??= rm(dtsTempDir, { recursive: true, force: true }).then(() =>
+        runTsc(['-p', 'tsconfig.build.json', '--declarationDir', dtsTempDir]),
+      );
+    },
+    async closeBundle() {
+      const exitCode = await tsc;
+      tsc = undefined;
+      if (exitCode !== 0) throw new Error('tsc found type errors; see log above.');
+
+      await rm(dtsSrcDir, { recursive: true, force: true });
+      await rename(resolve(dtsTempDir, 'src'), dtsSrcDir);
+
+      const declarations: string[] = [];
+      forEachDeclaration(dtsSrcDir, file => declarations.push(file));
+      await Promise.all(declarations.map(finishDeclaration));
+
+      // Each lib entry gets a declaration next to its JS that re-exports the emitted source declaration.
+      await Promise.all(
+        Object.entries(entries).map(async ([name, source]) => {
+          const entryFile = resolve(distDir, `${name}.d.ts`);
+          const sourceFile = resolve(distDir, relative(__dirname, source)).replace(/\.tsx?$/, '.d.ts');
+          const from = toImportPath(toPosix(relative(dirname(entryFile), sourceFile)).replace(/\.d\.ts$/, ''));
+          const declaration = await readFile(sourceFile, 'utf8');
+          const lines = [/^export /m.test(declaration) ? `export * from '${from}';` : 'export {};'];
+          if (/^export default |^export \{[^}]*\bdefault\b/m.test(declaration)) {
+            lines.push(`export { default } from '${from}';`);
+          }
+
+          await mkdir(dirname(entryFile), { recursive: true });
+          await writeFile(entryFile, `${lines.join('\n')}\n`);
+        }),
+      );
+    },
+  };
+};
+
+const readWrittenOutput = (path: string) => {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch {
+    return undefined;
+  }
+};
+
+// Watch rebuilds rewrite every output file; each identical rewrite still reaches consuming dev servers as an HMR update.
+const skipUnchangedWrites = (): Plugin => ({
+  name: 'skip-unchanged-writes',
+  enforce: 'post',
+  generateBundle: {
+    order: 'post',
+    handler({ dir }, bundle) {
+      if (!dir) return;
+
+      for (const [fileName, output] of Object.entries(bundle)) {
+        const content = output.type === 'chunk' ? output.code : output.source;
+        if (readWrittenOutput(resolve(dir, fileName)) === content) delete bundle[fileName];
       }
     },
-  });
+  },
+});
 
 const appPlugins = [react(), tailwindcss()];
 
@@ -95,52 +190,55 @@ const baseConfig: UserConfig = {
   },
 };
 
-// The `dev` watch layers fresh JS over a previous full build: declarations cost ~7s
-// per rebuild, so it skips them and leaves the ones on disk alone — consumers resolve
-// their types from there.
+// Watch builds reuse the previous full build declarations.
 const createLibConfig = (isProduction: boolean): UserConfig => ({
   ...baseConfig,
-  plugins: [...appPlugins, isProduction && typeDeclarations(), libInjectCss(), nodeExternals() as PluginOption],
+  plugins: [
+    ...appPlugins,
+    isProduction && typeDeclarations(),
+    libInjectCss(),
+    nodeExternals(),
+    !isProduction && skipUnchangedWrites(),
+  ],
   build: {
     emptyOutDir: isProduction,
     lib: {
       entry: {
         style: resolve(srcDir, 'style.ts'),
         tokens: resolve(srcDir, 'ds/tokens/index.ts'),
+        'lib/framework': resolve(srcDir, 'lib/framework.tsx'),
         ...fileEntries('src/utils', 'utils'),
         ...fileEntries('src/domains', 'domains'),
         ...fileEntries('src/ee', 'ee'),
         ...fileEntries('src/ds/primitives', 'primitives'),
         ...fileEntries('src/lib/resize', 'resize'),
         ...fileEntries('src/lib/keyboard', 'keyboard'),
-        ...fileEntries('src/store', 'store'),
+        ...fileEntries('src/lib/sort', 'sort'),
+        ...fileEntries('src/components', 'components'),
         ...fileEntries('src/ds/icons', 'icons'),
         ...fileEntries('src/hooks', 'hooks'),
+        ...fileEntries('src/lib/form', 'lib/form'),
         ...componentEntries('src/ds/components', 'components'),
+        ...componentEntries('src/ds/layout', 'layout'),
+        ...componentEntries('src/ds/new', 'new'),
       },
       formats: ['es', 'cjs'],
-      // Slashed keys make Rollup emit nested output: dist/components/<Name>.<format>.js
       fileName: (format, entryName) => `${entryName}.${format}.js`,
     },
     sourcemap: true,
-    // Reduce bloat from legacy polyfills.
     target: 'esnext',
-    // Leave minification up to applications.
     minify: false,
-    rollupOptions: {
-      external: ['motion/react'],
+    rolldownOptions: {
       output: {
-        // With ~300 entries, hoisted transitive imports would bloat every entry
-        // chunk with empty side-effect imports of shared chunks.
         hoistTransitiveImports: false,
+        // Stable module URLs let React Fast Refresh retain state across watch builds.
+        ...(!isProduction && { chunkFileNames: '[name].[format].js' }),
       },
     },
   },
 });
 
-// Storybook sets STORYBOOK=true and bundles this package as an app.
-// Library-mode plugins (dts, libInjectCss, nodeExternals) would externalize
-// deps and break the static build, so we skip them when Storybook is running.
+// Library plugins externalize dependencies and break Storybook.
 const isStorybook = process.env.STORYBOOK === 'true';
 
 export default defineConfig(({ mode }) => (isStorybook ? baseConfig : createLibConfig(mode === 'production')));

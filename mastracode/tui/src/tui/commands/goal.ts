@@ -14,8 +14,7 @@ import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import { createGoalReminderSignal } from '@mastra/code-sdk/goal-signal';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { createSignal } from '@mastra/core/signals';
+import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
@@ -23,13 +22,11 @@ import { DEFAULT_MAX_TURNS } from '../goal-manager.js';
 import type { GoalState } from '../goal-manager.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
+import { requireLocal } from '../runtime.js';
+import { stripControlChars } from '../sanitize-ansi.js';
 import { getSelectListTheme, theme } from '../theme.js';
 
 import type { SlashCommandContext } from './types.js';
-
-export interface StartGoalOptions {
-  trigger?: 'send' | 'none';
-}
 
 export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   const { state } = ctx;
@@ -54,10 +51,10 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       ctx.showInfo('No goal to pause.');
       return;
     }
-    await goalManager.saveToThread(state);
+    await goalManager.saveToThread(requireLocal(state, '/goal'));
     ctx.updateStatusLine();
     ctx.showInfo(
-      `Goal paused: "${goal.objective}" (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`,
+      `Goal paused: "${stripControlChars(goal.objective)}" (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`,
     );
     return;
   }
@@ -79,28 +76,23 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     }
 
     goalManager.resume();
-    await goalManager.saveToThread(state);
+    await goalManager.saveToThread(requireLocal(state, '/goal'));
     ctx.updateStatusLine();
 
-    // Kick off the next turn using the same goal-reminder signal format used by
-    // startGoal, so the model receives a structured system-reminder rather than
-    // a plain user message.
+    // The goal-reminder signal below is echoed back into the live stream as the
+    // goal box; rendering it here too would show the goal twice.
     const resumedGoal = goalManager.getGoal();
-    ctx.addUserMessage(
-      createGoalReminderMessage(
-        resumedGoal!.id,
-        resumedGoal!.objective,
-        resumedGoal!.maxTurns,
-        resumedGoal!.judgeModelId,
-      ),
-    );
     try {
       await state.session.sendSignal(createGoalReminderSignal(resumedGoal!)).accepted;
     } catch (err) {
       goalManager.pause();
-      await goalManager.saveToThread(state);
+      await goalManager.saveToThread(requireLocal(state, '/goal'));
+      if (isSessionStartupCancelledError(err)) {
+        ctx.showInfo('Interrupted');
+        return;
+      }
       ctx.showError(
-        `Goal paused — failed to send continuation for "${goal.objective}": ${err instanceof Error ? err.message : String(err)}`,
+        `Goal paused — failed to send continuation for "${stripControlChars(goal.objective)}": ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
       );
     }
     return;
@@ -109,8 +101,14 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
   // /goal clear
   if (subCommand === 'clear') {
     goalManager.clear();
-    state.planStartedGoalId = undefined;
-    await goalManager.saveToThread(state);
+    if (!(await goalManager.deleteFromThread(requireLocal(state, '/goal')))) {
+      // Loading retries the delete once; only a retry that lands counts as cleared.
+      if (!(await goalManager.loadFromThread(requireLocal(state, '/goal')))) {
+        ctx.updateStatusLine();
+        ctx.showError('Could not clear the goal; it may still be active. Try /goal clear again.');
+        return;
+      }
+    }
     // Abort any in-flight turn. The cleared objective stops the core loop from
     // driving *new* goal continuations, but a turn that was already running when
     // the user cleared keeps going to completion — which reads as "it's still
@@ -141,7 +139,10 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
 }
 
 function formatGoalStatus(goal: GoalState): string {
-  return `Goal (${goal.status}): "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used [judge: ${goal.judgeModelId}]`;
+  const reason = goal.status === 'paused' && goal.pausedReason ? ` — paused: ${goal.pausedReason}` : '';
+  return stripControlChars(
+    `Goal (${goal.status}): "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used [judge: ${goal.judgeModelId}]${reason}`,
+  );
 }
 
 function formatGoalStatusRow(goal: GoalState): string {
@@ -221,7 +222,7 @@ export async function handleJudgeCommand(ctx: SlashCommandContext): Promise<void
   if (!defaults) return;
 
   const activeGoal = await ctx.state.goalManager.updateJudgeDefaults(
-    ctx.state,
+    requireLocal(ctx.state, '/goal'),
     defaults.judgeModelId,
     defaults.maxTurns,
   );
@@ -244,13 +245,26 @@ export async function startGoalWithDefaults(
   ctx: SlashCommandContext,
   objective: string,
   cancelMessage = 'Goal cancelled.',
-  options: StartGoalOptions = {},
 ): Promise<void> {
+  const goal = await setGoalWithDefaults(ctx, objective, cancelMessage);
+  if (goal) await sendGoalReminder(ctx, goal);
+}
+
+/**
+ * Replace the thread's goal with `objective` without sending the goal reminder,
+ * asking for judge defaults only if they are unset. Resolves to `null` when the
+ * user cancels the defaults prompt or the goal could not be set.
+ */
+export async function setGoalWithDefaults(
+  ctx: SlashCommandContext,
+  objective: string,
+  cancelMessage = 'Goal cancelled.',
+): Promise<GoalState | null> {
   const defaults = getJudgeDefaults();
   const judgeDefaults = defaults ?? (await promptForJudgeDefaults(ctx, cancelMessage));
-  if (!judgeDefaults) return;
+  if (!judgeDefaults) return null;
 
-  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns, options);
+  return setGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns);
 }
 
 function getJudgeDefaults(): JudgeDefaults | null {
@@ -327,13 +341,12 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
   });
 }
 
-async function startGoal(
+async function setGoal(
   ctx: SlashCommandContext,
   objective: string,
   judgeModelId: string,
   maxTurns: number,
-  options: StartGoalOptions = {},
-): Promise<void> {
+): Promise<GoalState | null> {
   const { state } = ctx;
   const goalManager = state.goalManager;
 
@@ -358,7 +371,7 @@ async function startGoal(
       state.pendingNewThread = false;
     }
 
-    goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
+    goal = await goalManager.setGoal(requireLocal(state, '/goal'), objective, judgeModelId, maxTurns);
   } catch (error) {
     if (shouldPersistToCreatedThread) {
       goalManager.consumePersistOnNextThreadCreate();
@@ -371,44 +384,44 @@ async function startGoal(
       goalManager.consumePersistOnNextThreadCreate();
     }
     ctx.showError('Failed to set goal.');
-    return;
+    return null;
   }
 
-  state.planStartedGoalId = undefined;
-  await goalManager.saveToThread(state);
+  await goalManager.saveToThread(requireLocal(state, '/goal'));
   ctx.updateStatusLine();
-
-  // Model-only reminders are not echoed to the live stream. Render the goal
-  // locally, including plan handoffs that start their run separately.
-  ctx.addUserMessage(createGoalReminderMessage(goal.id, goal.objective, goal.maxTurns, goal.judgeModelId));
-
-  if (options.trigger === 'none') {
-    return;
-  }
-
-  try {
-    await state.session.sendSignal(createGoalReminderSignal(goal)).accepted;
-  } catch (err) {
-    goalManager.pause();
-    await goalManager.saveToThread(state);
-    ctx.showError(`Goal paused — failed to start: ${err instanceof Error ? err.message : String(err)}`);
-  }
+  return goal;
 }
 
-export function createGoalReminderMessage(
-  goalId: string,
-  objective: string,
-  maxTurns: number,
-  judgeModelId: string,
-): MastraDBMessage {
-  return createSignal({
-    id: `goal-${goalId}`,
-    type: 'reactive',
-    tagName: 'system-reminder',
-    contents: objective,
-    attributes: { type: 'goal' },
-    metadata: { goalMaxTurns: maxTurns, judgeModelId },
-  } as Parameters<typeof createSignal>[0]).toDBMessage();
+/**
+ * Send the canonical goal reminder for `goal`. It is delivered into an active
+ * run; on an idle thread it starts the goal run, or with `persistIfIdle` it is
+ * only recorded so no new run starts.
+ */
+export async function sendGoalReminder(
+  ctx: SlashCommandContext,
+  goal: GoalState,
+  options: { persistIfIdle?: boolean } = {},
+): Promise<void> {
+  const { state } = ctx;
+  const goalManager = state.goalManager;
+  const signal = createGoalReminderSignal(goal);
+  try {
+    await (
+      options.persistIfIdle
+        ? state.session.sendSignal(signal, { ifIdle: { behavior: 'persist' } })
+        : state.session.sendSignal(signal)
+    ).accepted;
+  } catch (err) {
+    goalManager.pause();
+    await goalManager.saveToThread(requireLocal(state, '/goal'));
+    if (isSessionStartupCancelledError(err)) {
+      ctx.showInfo('Interrupted');
+      return;
+    }
+    ctx.showError(
+      `Goal paused — failed to start: ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
+    );
+  }
 }
 
 export function createGoalReminderXml(message: string): string {

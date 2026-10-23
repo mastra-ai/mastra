@@ -16,7 +16,7 @@ jobs:
       github.event.deployment_status.state == 'success' &&
       github.event.deployment.environment == 'Preview – mastra-docs-1.x' &&
       github.event.deployment.creator.login == 'vercel[bot]'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read
       pull-requests: read
@@ -83,7 +83,7 @@ jobs:
     name: Detect matching docs evals
     needs: resolve-pr
     if: needs.resolve-pr.outputs.eligible == 'true'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read
       pull-requests: read
@@ -190,7 +190,7 @@ jobs:
     name: 2027 eval (${{ matrix.title }})
     needs: detect
     if: needs.detect.outputs.has-evals == 'true'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read
       pull-requests: write

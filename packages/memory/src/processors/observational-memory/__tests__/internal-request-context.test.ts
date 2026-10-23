@@ -1,4 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { ObservabilityContext } from '@mastra/core/observability';
+import { createObservabilityContext } from '@mastra/core/observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -118,6 +120,90 @@ describe('withOmInternalThreadId', () => {
   });
 });
 
+describe.each(['observer', 'multi-thread-observer', 'reflector'] as const)('%s tracing handoff', role => {
+  it.each([true, false])(
+    'preserves caller session without changing execution identity (caller identity: %s)',
+    async hasIdentity => {
+      const requestContext = hasIdentity ? createParentRequestContext() : new RequestContext();
+      const child = {
+        end: vi.fn(),
+        error: vi.fn(),
+        executeInContext: <T>(fn: () => Promise<T>) => fn(),
+      };
+      const parent = {
+        metadata: hasIdentity ? { threadId: 'invoking-caller' } : {},
+        createChildSpan: vi.fn((_options: { metadata: Record<string, unknown> }) => child),
+      };
+      const caller = createObservabilityContext({ currentSpan: parent } as unknown as Parameters<
+        typeof createObservabilityContext
+      >[0]);
+      const tracing = caller.tracingContext;
+      const runner = role === 'reflector' ? createReflectorRunner() : createObserverRunner();
+      const id = role === 'multi-thread-observer' ? role : `observational-memory-${role}`;
+      const stream = vi.fn(
+        async (_prompt: unknown, options: ObservabilityContext & { requestContext?: RequestContext }) => {
+          expect(options.tracingContext).not.toBe(tracing);
+          expect(options.tracing).toBe(options.tracingContext);
+          expect(options.tracingContext?.currentSpan).toBe(child);
+          expect(caller.tracingContext).toBe(tracing);
+          expect(tracing?.currentSpan).toBe(parent);
+          expect(options.requestContext).not.toBe(requestContext);
+          expect(options.requestContext?.get(MASTRA_THREAD_ID_KEY)).toBe(
+            hasIdentity ? `parent-thread-${id}` : undefined,
+          );
+          return {
+            getFullOutput: async () => ({
+              text: '<observations>\n<thread id="batch-thread">\n- learned something\n</thread>\n</observations>',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            }),
+          };
+        },
+      );
+      vi.spyOn(runner as any, 'createAgent').mockReturnValue({ id, stream });
+      if (runner instanceof ReflectorRunner) {
+        await runner.call(
+          'existing observations',
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          0,
+          requestContext,
+          undefined,
+          caller,
+        );
+      } else if (role === 'multi-thread-observer') {
+        await runner.callMultiThread(
+          undefined,
+          new Map([['batch-thread', [createMessage('msg-1', 'batch-thread')]]]),
+          ['batch-thread'],
+          undefined,
+          requestContext,
+          undefined,
+          caller,
+        );
+      } else {
+        await runner.call(undefined, [createMessage('msg-1')], undefined, {
+          requestContext,
+          observabilityContext: caller,
+        });
+      }
+      expect(stream).toHaveBeenCalledTimes(1);
+      expect(parent.createChildSpan).toHaveBeenCalledTimes(1);
+      const spanOptions = parent.createChildSpan.mock.calls[0]!;
+      expect(spanOptions[0].metadata).not.toHaveProperty('sessionId');
+      if (hasIdentity)
+        expect(spanOptions[0].metadata.__mastraObservationalMemoryCallerThreadId).toBe('invoking-caller');
+      else expect(spanOptions[0].metadata).not.toHaveProperty('__mastraObservationalMemoryCallerThreadId');
+      expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBe(hasIdentity ? 'parent-thread' : undefined);
+      expect(caller.tracingContext).toBe(tracing);
+      expect(caller.tracingContext?.currentSpan).toBe(parent);
+      expect(child.end).toHaveBeenCalledTimes(1);
+    },
+  );
+});
+
 describe('OM internal agent request contexts', () => {
   it('passes a derived thread id to the single-thread observer stream call', async () => {
     const observer = createObserverRunner();
@@ -216,6 +302,147 @@ describe('OM internal agent request contexts', () => {
     expect(capturedRequestContext?.get(MASTRA_RESOURCE_ID_KEY)).toBe('resource-1');
     expect(capturedRequestContext?.get('tenantId')).toBe('tenant-1');
     expect(parentRequestContext.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread');
+  });
+});
+
+describe('multi-thread observer failure state', () => {
+  it('keeps failed messages eligible for a later observation cycle', async () => {
+    const observedMessageIds = new Set<string>(['previously-observed']);
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model: 'mock/model',
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: false,
+        maxRetries: 0,
+        failurePolicy: 'continue',
+      } as any,
+      observedMessageIds,
+      resolveModel: () => ({ model: 'mock/model' as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+
+    vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+      id: 'observational-memory-observer',
+      stream: vi.fn().mockRejectedValue(new TypeError('fetch failed')),
+    });
+
+    const messagesByThread = new Map([
+      ['thread-1', [createMessage('message-1', 'thread-1')]],
+      ['thread-2', [createMessage('message-2', 'thread-2')]],
+    ]);
+
+    await expect(
+      (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1', 'thread-2']),
+    ).rejects.toMatchObject({ name: 'OmModelExecutionError', failureKind: 'observer-model' });
+    expect([...observedMessageIds]).toEqual(['previously-observed']);
+  });
+
+  // Same retention under the default ('abort') policy: marking happens after a
+  // successful observer parse, so a failure leaves the messages unobserved.
+  it('keeps failed messages eligible under the default failure policy', async () => {
+    const observedMessageIds = new Set<string>(['previously-observed']);
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model: 'mock/model',
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: false,
+        maxRetries: 0,
+      } as any,
+      observedMessageIds,
+      resolveModel: () => ({ model: 'mock/model' as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+
+    vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+      id: 'observational-memory-observer',
+      stream: vi.fn().mockRejectedValue(new TypeError('fetch failed')),
+    });
+
+    const messagesByThread = new Map([
+      ['thread-1', [createMessage('message-1', 'thread-1')]],
+      ['thread-2', [createMessage('message-2', 'thread-2')]],
+    ]);
+
+    await expect(
+      (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1', 'thread-2']),
+    ).rejects.toThrow();
+    expect([...observedMessageIds]).toEqual(['previously-observed']);
+  });
+});
+
+describe('multi-thread structured-extractor branch', () => {
+  it('marks observed messages after a successful per-thread observer pass', async () => {
+    const observedMessageIds = new Set<string>();
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model: 'mock/model',
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: false,
+        maxRetries: 0,
+        extractors: [
+          new Extractor({ name: 'Support profile', instructions: 'Extract the profile.', schema: z.string() }),
+        ],
+      } as any,
+      observedMessageIds,
+      resolveModel: () => ({ model: 'mock/model' as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+
+    const callObserver = vi
+      .spyOn(observer as any, 'callObserver')
+      .mockResolvedValue({ observations: '- observed', extractedValues: {}, extractionFailures: [] });
+
+    const messagesByThread = new Map([
+      ['thread-1', [createMessage('message-1', 'thread-1')]],
+      ['thread-2', [createMessage('message-2', 'thread-2')]],
+    ]);
+
+    await (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1', 'thread-2']);
+
+    expect(callObserver).toHaveBeenCalledTimes(2);
+    expect([...observedMessageIds].sort()).toEqual(['message-1', 'message-2']);
+  });
+
+  it('leaves messages eligible when a per-thread observer pass fails', async () => {
+    const observedMessageIds = new Set<string>();
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model: 'mock/model',
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: false,
+        maxRetries: 0,
+        extractors: [
+          new Extractor({ name: 'Support profile', instructions: 'Extract the profile.', schema: z.string() }),
+        ],
+      } as any,
+      observedMessageIds,
+      resolveModel: () => ({ model: 'mock/model' as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+
+    // First thread succeeds, second fails: marking is deferred until every
+    // thread lands, so nothing may be marked.
+    vi.spyOn(observer as any, 'callObserver')
+      .mockResolvedValueOnce({ observations: '- observed', extractedValues: {}, extractionFailures: [] })
+      .mockRejectedValueOnce(new TypeError('fetch failed'));
+
+    const messagesByThread = new Map([
+      ['thread-1', [createMessage('message-1', 'thread-1')]],
+      ['thread-2', [createMessage('message-2', 'thread-2')]],
+    ]);
+
+    await expect(
+      (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1', 'thread-2']),
+    ).rejects.toThrow();
+    expect([...observedMessageIds]).toEqual([]);
   });
 });
 

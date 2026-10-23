@@ -195,9 +195,7 @@ interface SubscriptionRow extends Record<string, unknown> {
  * `FactoryStorageOps` surface — works on any `FactoryStorage` backend.
  */
 export class IntegrationStorage extends FactoryStorageDomain {
-  constructor(
-    private readonly encryption: FactorySecretEncryption = createPlaintextFactorySecretEncryption(),
-  ) {
+  constructor(private readonly encryption: FactorySecretEncryption = createPlaintextFactorySecretEncryption()) {
     super('integrations');
   }
 
@@ -215,6 +213,18 @@ export class IntegrationStorage extends FactoryStorageDomain {
       ...connections.map(row => this.#migrateValue('integration_connections', row.id, 'data')),
       ...settings.map(row => this.#migrateValue('integration_settings', row.id, 'config')),
     ]);
+  }
+
+  /**
+   * Move every subscription still recorded under `fromResourceId` onto
+   * `toResourceId`, across integrations. A rerun finds nothing to move.
+   */
+  async moveSubscriptionsToResource(input: { fromResourceId: string; toResourceId: string }): Promise<number> {
+    return this.ops.updateMany(
+      'integration_subscriptions',
+      { resource_id: input.fromResourceId },
+      { resource_id: input.toResourceId },
+    );
   }
 
   async dangerouslyClearAll(): Promise<void> {

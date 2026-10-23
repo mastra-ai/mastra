@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { MessageList } from '../../agent/message-list';
 import { RequestContext, MASTRA_THREAD_ID_KEY } from '../../request-context';
@@ -60,6 +60,120 @@ describe('ToolSearchProcessor', () => {
       });
 
       expect(processor).toBeDefined();
+    });
+  });
+
+  describe('explicit tool names (#28113)', () => {
+    const definitions = {
+      create_github_comment: 'Create a comment on a GitHub issue or pull request',
+      update_github_comment: 'Update an existing comment on a GitHub issue or pull request',
+      'review-task': 'Review a task and record the verdict',
+      github_issue_write: 'Create or update a GitHub issue',
+      add_comment_to_jira_issue: 'Add a comment to a Jira issue',
+      edit_comment_on_jira_issue: 'Edit a comment on a Jira issue',
+      list_github_pull_requests: 'List GitHub pull requests',
+      get_task: 'Get a task by id',
+      delete_github_comment: 'Delete a comment on a GitHub issue',
+      list_github_comments: 'List comments on a GitHub issue or pull request',
+      github_pull_request_review_write: 'Create or submit a GitHub pull request review comment',
+      hide_github_comment: 'Hide a comment on a GitHub issue',
+      react_to_github_comment: 'Add a reaction to a GitHub comment',
+      resolve_jira_comment: 'Resolve a comment thread on a Jira issue',
+    };
+    const tools = Object.fromEntries(
+      Object.entries(definitions).map(([id, description]) => [id, createMockTool(id, description)]),
+    );
+    const query = 'create_github_comment update_github_comment review-task';
+
+    async function search(processor: ToolSearchProcessor, query: string) {
+      const step = await processor.processInputStep(createMockArgs());
+      const searchTool = step.tools?.search_tools;
+      if (!searchTool?.execute) throw new Error('search_tools is unavailable');
+      const result = await searchTool.execute({ query }, undefined);
+      return result.results.map((result: { name: string }) => result.name);
+    }
+
+    it('returns all three named tools before generic matches in the mixed catalog', async () => {
+      const processor = new ToolSearchProcessor({ tools, search: { topK: 5, minScore: 0 } });
+      const names = await search(processor, query);
+      expect(names).toHaveLength(5);
+      expect(new Set(names.slice(0, 3))).toEqual(
+        new Set(['create_github_comment', 'update_github_comment', 'review-task']),
+      );
+    });
+
+    it('recovers a named tool below the raw BM25 candidate cutoff', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          ...Object.fromEntries(
+            Array.from({ length: 12 }, (_, i) => [`candidate_${i}`, createMockTool(`candidate_${i}`, 'Review task')]),
+          ),
+          'review-task': createMockTool('review-task', `Review task ${'unrelated '.repeat(300)}`),
+        },
+        search: { topK: 1, minScore: 0 },
+      });
+      expect(await search(processor, 'review-task')).toEqual(['review-task']);
+    });
+
+    it('does not let repeated scoring tokens change keyword ranking', async () => {
+      const processor = new ToolSearchProcessor({ tools, search: { topK: 14, minScore: 0 } });
+      expect(await search(processor, 'github comment review task github comment github comment')).toEqual(
+        await search(processor, 'github comment review task'),
+      );
+    });
+
+    it.each(['"REVIEW-TASK", (create_github_comment)', '`review-task`; create_github_comment'])(
+      'recognizes complete names surrounded by punctuation: %s',
+      async query => {
+        const processor = new ToolSearchProcessor({ tools, search: { topK: 2, minScore: 0 } });
+        expect(new Set(await search(processor, query))).toEqual(new Set(['review-task', 'create_github_comment']));
+      },
+    );
+
+    it.each(['prefix-review-task', 'review-task-suffix', 'prefix_review-task', 'review-task_suffix'])(
+      'does not treat an ID within a longer identifier as exact: %s',
+      async nearMatch => {
+        const processor = new ToolSearchProcessor({
+          tools: {
+            'review-task': createMockTool('review-task', 'Review task'),
+            other: createMockTool('other', 'Other'),
+          },
+          search: { topK: 1, minScore: 0 },
+        });
+        expect(await search(processor, `${nearMatch} other`)).toEqual(['other']);
+      },
+    );
+
+    it('filters denied exact names and fills the result set with allowed tools', async () => {
+      const processor = new ToolSearchProcessor({
+        tools,
+        search: { topK: 5, minScore: 0 },
+        filter: ({ toolName }) => toolName !== 'review-task',
+      });
+      const names = await search(processor, query);
+      expect(names).toHaveLength(5);
+      expect(names).not.toContain('review-task');
+      expect(new Set(names.slice(0, 2))).toEqual(new Set(['create_github_comment', 'update_github_comment']));
+    });
+
+    it('limits explicitly named tools to topK', async () => {
+      const processor = new ToolSearchProcessor({ tools, search: { topK: 2, minScore: 0 } });
+      const names = await search(processor, query);
+      expect(names).toHaveLength(2);
+      expect(names.every((name: string) => query.split(' ').includes(name))).toBe(true);
+    });
+
+    it('finds a complete short ID even when BM25 has no matching tokens', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: { x: createMockTool('x', 'Execute operation') },
+        search: { topK: 1, minScore: 0 },
+      });
+      expect(await search(processor, '"x"')).toEqual(['x']);
+    });
+
+    it('keeps the minimum-score threshold for exact names', async () => {
+      const processor = new ToolSearchProcessor({ tools, search: { topK: 5, minScore: 1000 } });
+      expect(await search(processor, query)).toEqual([]);
     });
   });
 
@@ -1305,6 +1419,64 @@ describe('ToolSearchProcessor', () => {
       } as unknown as ProcessInputStepArgs;
     }
 
+    function argsWithSearchResult(threadId: string, result: unknown): ProcessInputStepArgs {
+      return {
+        ...createMockArgs(threadId),
+        messages: [
+          {
+            id: 'm1',
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: 'call-0',
+                    toolName: 'search_tools',
+                    args: {},
+                    result,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      } as unknown as ProcessInputStepArgs;
+    }
+
+    it("'context' mode: search_tools hits do not load tools when autoLoad is false", async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+        },
+        storage: 'context',
+      });
+
+      const first = await processor.processInputStep(createMockArgs('thread-search'));
+      const searchResult = await first.tools?.search_tools!.execute?.({ query: 'weather' }, undefined);
+      expect(searchResult.results.map((r: { name: string }) => r.name)).toContain('weather');
+      expect(searchResult.loaded).toBeUndefined();
+
+      const next = await processor.processInputStep(argsWithSearchResult('thread-search', searchResult));
+      expect(Object.keys(next.tools ?? {})).toEqual(['search_tools', 'load_tool']);
+    });
+
+    it("'context' mode: autoLoad search_tools results load their hits from messages alone", async () => {
+      const tools = { weather: createMockTool('weather', 'Get weather') };
+      const searcher = new ToolSearchProcessor({ tools, storage: 'context', search: { autoLoad: true } });
+      const first = await searcher.processInputStep(createMockArgs('thread-auto'));
+      const searchResult = await first.tools?.search_tools!.execute?.({ query: 'weather' }, undefined);
+      expect(searchResult.loaded).toEqual(['weather']);
+
+      // A fresh processor has no same-process state, so activation comes from the messages.
+      const fresh = new ToolSearchProcessor({ tools, storage: 'context', search: { autoLoad: true } });
+      const next = await fresh.processInputStep(argsWithSearchResult('thread-auto', searchResult));
+      expect(next.tools?.weather).toBeDefined();
+    });
+
     it('loads are append-only: the cached prefix keeps its order as tools are loaded', async () => {
       const processor = new ToolSearchProcessor({
         tools: {
@@ -1360,6 +1532,34 @@ describe('ToolSearchProcessor', () => {
       // the window). weather de-loads on the very next step.
       const withoutWeather = await processor.processInputStep(argsWithLoadedMessages('thread-ctx', []));
       expect(withoutWeather.tools?.weather).toBeUndefined();
+    });
+
+    it("'context' mode: resume rebuild derives loaded tools from persisted thread messages", async () => {
+      const tools = {
+        weather: createMockTool('weather', 'Get weather'),
+        calendar: createMockTool('calendar', 'Manage calendar'),
+      };
+      // A fresh processor models a restart or another instance: no same-process state.
+      const processor = new ToolSearchProcessor({ tools, storage: 'context' });
+      const { requestContext, messages } = argsWithLoadedMessages('thread-resume', [['weather']]);
+
+      const withoutMessages = await processor.getLoadedToolsForRequestContext({ requestContext });
+      expect(Object.keys(withoutMessages)).toEqual([]);
+
+      const getMessages = vi.fn(async () => messages);
+      const rebuilt = await processor.getLoadedToolsForRequestContext({ requestContext, getMessages });
+      expect(Object.keys(rebuilt)).toEqual(['weather']);
+      expect(getMessages).toHaveBeenCalledTimes(1);
+    });
+
+    it("'in-memory' mode: resume rebuild does not load thread messages", async () => {
+      const processor = new ToolSearchProcessor({ tools: { weather: createMockTool('weather', 'Get weather') } });
+      const getMessages = vi.fn(async () => []);
+      await processor.getLoadedToolsForRequestContext({
+        requestContext: createMockArgs('thread-mem').requestContext,
+        getMessages,
+      });
+      expect(getMessages).not.toHaveBeenCalled();
     });
 
     it("'context' mode: an unload shrinks the active tool set (the change that moves the cache prefix)", async () => {

@@ -8,6 +8,7 @@
 import type { AgentController, AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 
 import type { GoalManager } from '../goal-manager.js';
+import type { PackSelection } from '../onboarding/pack-activation.js';
 
 export type RunMode = 'build' | 'plan' | 'fast';
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -56,12 +57,27 @@ interface RunMCBaseOptions<TState extends Record<string, unknown> = Record<strin
   /** Session built via `createMastraCode(...)`. */
   session: Session<TState>;
 
-  /** Explicit model id override. Takes precedence over `mode`. */
+  /** Explicit model id override. Takes precedence over `mode` and `pack`. */
   model?: string;
   /** Execution mode; resolves a model from `modeDefaults` when `model` is absent. */
   mode?: RunMode;
   /** Per-mode default model ids (resolved from settings at startup). */
   modeDefaults?: Record<string, string>;
+  /**
+   * A model pack to activate for the run (canonical id from
+   * `resolveModePackArg`). The selection is resolved via `resolve` only after
+   * thread selection, because a resumed thread restores its persisted mode —
+   * the mode that decides which model the pack provides. Sets the thread's
+   * activeModelPackId, the subagent models, and the model route; `model`
+   * still wins for the active mode's session model. `onApplied` fires once
+   * the pack has been applied to the session (used by the CLI to persist the
+   * activation as the global default only when it actually took effect).
+   */
+  pack?: {
+    id: string;
+    resolve: (modeId: string) => PackSelection | undefined;
+    onApplied?: () => void;
+  };
   /** Thinking-effort level. */
   thinkingLevel?: ThinkingLevel;
   /** Thread selection / mutation. */

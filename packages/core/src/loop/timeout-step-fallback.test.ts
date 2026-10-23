@@ -128,6 +128,43 @@ describe('modelSettings.timeout drives model fallback', () => {
     expect(await result.text).toBe('merged timeout fallback');
   });
 
+  it.each([
+    [50, '`modelSettings.timeout` must be an object'],
+    [{ stepMs: 0 }, '`modelSettings.timeout.stepMs` must be a positive, finite number'],
+  ])('rejects invalid per-model timeout settings before fallback: %j', (timeout, errorMessage) => {
+    const invalidModel: ModelManagerModelConfig = {
+      id: 'invalid-timeout',
+      maxRetries: 0,
+      modelSettings: { timeout } as any,
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          throw new Error('invalid model should not run');
+        },
+      }),
+    };
+    const fallbackModel: ModelManagerModelConfig = {
+      id: 'fallback',
+      maxRetries: 0,
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([{ type: 'finish', finishReason: 'stop', usage: testUsage }]),
+        }),
+      }),
+    };
+    const settings = defaultSettings();
+
+    expect(() =>
+      loop({
+        ...settings,
+        mastra: mastraRef.current as any,
+        methodType: 'stream',
+        runId: 'test-run-id',
+        messageList: createMessageListWithUserMessage(),
+        models: [invalidModel, fallbackModel],
+      } as any),
+    ).toThrow(errorMessage);
+  });
+
   it('advances to the next model when the first exceeds its step budget', async () => {
     const stalling: ModelManagerModelConfig = {
       id: 'stalling',

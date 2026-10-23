@@ -8,7 +8,7 @@
  * @see https://www.daytona.io/docs
  */
 
-import { Daytona, DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk';
+import { Daytona, DaytonaGoneError, DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk';
 import type {
   ComputerUse,
   CreateSandboxFromImageParams,
@@ -32,7 +32,7 @@ import type {
   SandboxCloneOptions,
   SandboxStartResult,
 } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
 
 import { compact } from '../utils/compact';
 import { shellQuote } from '../utils/shell-quote';
@@ -583,8 +583,10 @@ export class DaytonaSandbox extends MastraSandbox {
     if (this._sandbox && this._daytona) {
       try {
         await this._daytona.delete(this._sandbox);
-      } catch {
-        // Ignore errors during cleanup
+      } catch (error) {
+        if (!(error instanceof DaytonaNotFoundError) && !(error instanceof DaytonaGoneError)) {
+          throw error;
+        }
       }
     } else if (!this._sandbox) {
       // Not attached in this process — delete by identity without starting it.
@@ -595,8 +597,10 @@ export class DaytonaSandbox extends MastraSandbox {
         if (orphan) {
           await this._daytona!.delete(orphan);
         }
-      } catch {
-        // Best-effort — orphan may not exist or may already be gone
+      } catch (error) {
+        if (!(error instanceof DaytonaNotFoundError) && !(error instanceof DaytonaGoneError)) {
+          throw error;
+        }
       }
     }
 
@@ -687,8 +691,12 @@ export class DaytonaSandbox extends MastraSandbox {
 
   /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.
+   *
+   * Per-file permission modes are not supported; an explicit `mode` is
+   * rejected rather than silently discarded.
    */
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    assertModesUnsupported(files, 'Daytona');
     await this.ensureRunning();
     await this.daytona.fs.uploadFiles(
       files.map(file => ({

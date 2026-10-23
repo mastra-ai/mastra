@@ -65,6 +65,8 @@ function makeChannels(
   opts: {
     streaming?: boolean | { updateIntervalMs?: number };
     textFormat?: 'markdown' | 'plain';
+    textDisplay?: 'show' | 'hidden';
+    onAbort?: 'flush' | 'discard';
     toolDisplay?: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ((event: any, ctx: any) => any);
     typingStatus?: boolean | ((chunk: any, ctx: any) => any);
     cards?: boolean;
@@ -83,6 +85,8 @@ function makeChannels(
     streaming: opts.streaming ?? false,
   };
   if (opts.textFormat !== undefined) adapterConfig.textFormat = opts.textFormat;
+  if (opts.textDisplay !== undefined) adapterConfig.textDisplay = opts.textDisplay;
+  if (opts.onAbort !== undefined) adapterConfig.onAbort = opts.onAbort;
   if (opts.toolDisplay !== undefined) adapterConfig.toolDisplay = opts.toolDisplay;
   if (opts.typingStatus !== undefined) adapterConfig.typingStatus = opts.typingStatus;
   if (opts.cards !== undefined) adapterConfig.cards = opts.cards;
@@ -100,7 +104,7 @@ async function drive(
   chatThread: any,
   approvalContext?: { toolCallId: string; messageId: string },
 ) {
-  const render = (channels as any)._buildRenderContext(chatThread, 'test', approvalContext);
+  const render = (channels as any)._buildRenderContext(chatThread, 'test', { approvalContext });
   const processor = new ChatChannelOutputProcessor();
   const requestContext = new Map<string, unknown>();
   requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);
@@ -297,6 +301,80 @@ describe('ChatChannelOutputProcessor', () => {
       const posts = calls.filter(c => c.kind === 'post');
       expect(posts).toHaveLength(1);
       expect((posts[0] as any).arg).toBe('❌ Error: boom');
+    });
+  });
+
+  describe("textDisplay: 'hidden'", () => {
+    const reply = [
+      { type: 'text-start', payload: { id: 'x' } },
+      { type: 'text-delta', payload: { text: 'Running the tests now.' } },
+      { type: 'text-end', payload: { id: 'x' } },
+    ];
+
+    it('posts no reply text with the static driver', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, textDisplay: 'hidden' });
+      await drive(
+        channels,
+        [...reply, { type: 'step-finish', payload: {} }, { type: 'finish', payload: {} }],
+        chatThread,
+      );
+      expect(calls.filter(c => c.kind === 'post')).toEqual([]);
+    });
+
+    it('opens no streaming post with the streaming driver', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: true,
+        toolDisplay: 'hidden',
+        textDisplay: 'hidden',
+      });
+      await drive(
+        channels,
+        [...reply, { type: 'step-finish', payload: {} }, { type: 'finish', payload: {} }],
+        chatThread,
+      );
+      expect(calls.filter(c => c.kind === 'post')).toEqual([]);
+    });
+
+    it('still renders tool cards and errors', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, textDisplay: 'hidden' });
+      await drive(
+        channels,
+        [
+          ...reply,
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' }, result: 'sunny' },
+          },
+          { type: 'error', payload: { error: new Error('boom') } },
+        ],
+        chatThread,
+      );
+      const posts = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
+      expect(posts).toContain('❌ Error: boom');
+      expect(posts.some(p => typeof p === 'object' && p !== null && !('markdown' in p))).toBe(true);
+      expect(JSON.stringify(posts)).not.toContain('Running the tests now.');
+    });
+
+    it('still shows the typing status while hidden text streams', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, textDisplay: 'hidden' });
+      await drive(
+        channels,
+        [...reply, { type: 'step-finish', payload: {} }, { type: 'finish', payload: {} }],
+        chatThread,
+      );
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      expect(typingStatuses).toContain('is typing…');
+    });
+
+    it('passes text through to the agent stream unchanged', async () => {
+      const { channels, chatThread } = makeChannels({ streaming: false, textDisplay: 'hidden' });
+      const render = (channels as any)._buildRenderContext(chatThread, 'test', {});
+      const requestContext = { get: (key: string) => (key === CHAT_CHANNEL_RENDER_CONTEXT_KEY ? render : undefined) };
+      const processor = new ChatChannelOutputProcessor();
+      const part = { type: 'text-delta', payload: { text: 'kept' } };
+      const out = await processor.processOutputStream({ part, state: {}, requestContext } as any);
+      expect(out).toBe(part);
     });
   });
 
@@ -518,12 +596,63 @@ describe('ChatChannelOutputProcessor', () => {
       expect(new Set(taskUpdates.map(t => t.id))).toEqual(new Set(['t1', 't2']));
     });
 
+    it("'grouped': one fixed plan header; rows show the tool's description when it has one", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: {
+              toolCallId: 't1',
+              toolName: 'execute_command',
+              args: { description: 'Listing the repo root', command: 'ls -la' },
+            },
+          },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: {
+              toolCallId: 't1',
+              toolName: 'execute_command',
+              args: { description: 'Listing the repo root', command: 'ls -la' },
+              result: 'ok',
+            },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg as any);
+
+      const planUpdates = drained.filter(
+        (p): p is { type: 'plan_update'; title: string } => typeof p === 'object' && (p as any).type === 'plan_update',
+      );
+      // The header is set once and never echoes a row title.
+      expect(planUpdates.map(p => p.title)).toEqual(['Working…']);
+
+      const starts = drained.filter(
+        (p): p is { type: 'task_update'; id: string; title?: string; status: string } =>
+          typeof p === 'object' && (p as any).type === 'task_update' && (p as any).status === 'in_progress',
+      );
+      expect(starts.map(t => t.title)).toEqual(['Listing the repo root', 'weather NYC']);
+    });
+
     it("'grouped': keeps one plan open across per-step finish chunks", async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
       await drive(
         channels,
         [
-          { type: 'text-delta', payload: { text: 'first ' } },
           {
             type: 'tool-call',
             payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
@@ -532,6 +661,7 @@ describe('ChatChannelOutputProcessor', () => {
             type: 'tool-result',
             payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
           },
+          { type: 'text-delta', payload: { text: 'first ' } },
           { type: 'finish', payload: {} },
           { type: 'step-finish', payload: { stepResult: { isContinued: true } } },
           { type: 'text-delta', payload: { text: 'second' } },
@@ -558,6 +688,236 @@ describe('ChatChannelOutputProcessor', () => {
           typeof piece === 'object' && (piece as any).type === 'task_update',
       );
       expect(new Set(taskUpdates.map(update => update.id))).toEqual(new Set(['t1', 't2']));
+    });
+
+    it("'grouped': posts a text opener as its own message before the first tool", async () => {
+      // Slack renders plan tasks above the text inside one post, so an
+      // "On it — checking X first" opener streamed into the same session
+      // would land under the widget. Flush it as its own message, then let
+      // every later step accumulate under the one widget.
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'On it — checking the weather first.' } },
+          { type: 'text-end', payload: {} },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
+          },
+          { type: 'finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: true } } },
+          { type: 'text-delta', payload: { text: 'Rainy there, trying LA. ' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: true } } },
+          { type: 'text-delta', payload: { text: 'Sunny in LA.' } },
+          { type: 'finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(2);
+
+      const opener = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
+      expect(opener.filter((piece): piece is string => typeof piece === 'string').join('')).toBe(
+        'On it — checking the weather first.',
+      );
+      expect(opener.some(piece => typeof piece === 'object' && (piece as any).type === 'task_update')).toBe(false);
+
+      const rest = await drainStreamingPlan((posts[1] as Extract<Call, { kind: 'post' }>).arg);
+      expect(rest.filter((piece): piece is string => typeof piece === 'string').join('')).toBe(
+        'Rainy there, trying LA. Sunny in LA.',
+      );
+      const taskUpdates = rest.filter(
+        (piece): piece is { type: 'task_update'; id: string } =>
+          typeof piece === 'object' && (piece as any).type === 'task_update',
+      );
+      expect(new Set(taskUpdates.map(update => update.id))).toEqual(new Set(['t1', 't2']));
+    });
+
+    it("'grouped': a memory event before the first tool neither pins the opener nor steals the header", async () => {
+      // OM recall fires before the model says anything. It sets its own
+      // "Updating memory" header, which must not count as "tools have
+      // started": the opener still flushes on its own (with the memory row)
+      // and the first tool row still brings the `Working…` header.
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      await drive(
+        channels,
+        [
+          {
+            type: 'data-om-activation',
+            data: { cycleId: 'a1', operationType: 'observation', tokensActivated: 100, observationTokens: 10 },
+          },
+          { type: 'text-delta', payload: { text: 'On it — checking the weather first.' } },
+          { type: 'text-end', payload: {} },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
+          },
+          { type: 'text-delta', payload: { text: 'Rainy.' } },
+          { type: 'finish', payload: {} },
+        ] as any,
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(2);
+
+      const opener = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
+      expect(opener.filter((piece): piece is string => typeof piece === 'string').join('')).toBe(
+        'On it — checking the weather first.',
+      );
+      const planTitles = (pieces: (string | object)[]) =>
+        pieces
+          .filter((p): p is { type: 'plan_update'; title: string } => (p as any).type === 'plan_update')
+          .map(p => p.title);
+      expect(planTitles(opener)).toEqual(['Updating memory']);
+      expect(opener.some(piece => (piece as any).type === 'task_update' && (piece as any).id === 't1')).toBe(false);
+
+      const rest = await drainStreamingPlan((posts[1] as Extract<Call, { kind: 'post' }>).arg);
+      expect(planTitles(rest)).toEqual(['Working…']);
+      expect(rest.filter((piece): piece is string => typeof piece === 'string').join('')).toBe('Rainy.');
+    });
+
+    it("'grouped': a resumed run whose tool-result arrives without its tool-call still gets the header", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      (channels as any).pendingApprovalCards.set('t1', {
+        displayName: 'weather',
+        argsSummary: 'NYC',
+        startedAt: Date.now() - 1000,
+        messageId: 'pending-card-1',
+      });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
+      const planUpdates = drained.filter(
+        (p): p is { type: 'plan_update'; title: string } => typeof p === 'object' && (p as any).type === 'plan_update',
+      );
+      expect(planUpdates.map(p => p.title)).toEqual(['Working…']);
+      const taskUpdates = drained.filter(
+        (p): p is { type: 'task_update'; id: string; status: string; title: string } =>
+          typeof p === 'object' && (p as any).type === 'task_update',
+      );
+      expect(taskUpdates).toEqual([expect.objectContaining({ id: 't1', status: 'complete', title: 'weather NYC' })]);
+    });
+
+    it("'grouped': an opener before a result-only first tool row still posts on its own", async () => {
+      // Same resumed-approval shape, but the model speaks first. The split
+      // lives with the header logic, so a `tool-result` (or `tool-error`)
+      // that opens the widget flushes the opener exactly like a `tool-call`.
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      (channels as any).pendingApprovalCards.set('t1', {
+        displayName: 'weather',
+        argsSummary: 'NYC',
+        startedAt: Date.now() - 1000,
+        messageId: 'pending-card-1',
+      });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'Resuming the weather check.' } },
+          { type: 'text-end', payload: {} },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'text-delta', payload: { text: 'Sunny.' } },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(2);
+
+      const opener = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
+      expect(opener).toEqual(['Resuming the weather check.']);
+
+      const rest = await drainStreamingPlan((posts[1] as Extract<Call, { kind: 'post' }>).arg);
+      expect(rest.filter(p => typeof p === 'object' && (p as any).type === 'plan_update')).toEqual([
+        expect.objectContaining({ title: 'Working…' }),
+      ]);
+      expect(rest.some(p => typeof p === 'object' && (p as any).type === 'task_update' && (p as any).id === 't1')).toBe(
+        true,
+      );
+      expect(rest.filter((p): p is string => typeof p === 'string').join('')).toBe('Sunny.');
+    });
+
+    it("'timeline': one fixed plan header per message, never a per-row echo", async () => {
+      // Timeline shares the header rule with grouped: rows carry the tool
+      // detail, so the header is a fixed label rather than the current row's
+      // title (which used to be re-pushed on every result). Timeline still
+      // flushes before each sequential tool, so each tool is its own post.
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'timeline' });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
+          },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(2);
+      for (const [i, expectedTitle] of [['weather NYC'], ['weather LA']].entries()) {
+        const drained = await drainStreamingPlan((posts[i] as Extract<Call, { kind: 'post' }>).arg);
+        const planUpdates = drained.filter(
+          (p): p is { type: 'plan_update'; title: string } =>
+            typeof p === 'object' && (p as any).type === 'plan_update',
+        );
+        expect(planUpdates.map(p => p.title)).toEqual(['Working…']);
+        const starts = drained.filter(
+          (p): p is { type: 'task_update'; title: string; status: string } =>
+            typeof p === 'object' && (p as any).type === 'task_update' && (p as any).status === 'in_progress',
+        );
+        expect(starts.map(t => t.title)).toEqual(expectedTitle);
+      }
     });
 
     it("flushes pending OM tasks as 'complete' before closing the session", async () => {
@@ -792,6 +1152,31 @@ describe('ChatChannelOutputProcessor', () => {
       expect(edits).toHaveLength(2);
       expect(edits[0]!.messageId).toBe('m1');
       expect(edits[1]!.messageId).toBe('m1');
+    });
+
+    it('skips the approval card but still returns the chunk when the channels decline to render it', async () => {
+      const { channels, calls, chatThread } = makeChannels({ toolDisplay: 'cards' });
+      const shouldRender = vi.spyOn(channels, 'shouldRenderToolApproval').mockResolvedValue(false);
+      const processor = new ChatChannelOutputProcessor(channels);
+      const render = (channels as any)._buildRenderContext(chatThread, 'test');
+      const requestContext = { get: (key: string) => (key === CHAT_CHANNEL_RENDER_CONTEXT_KEY ? render : undefined) };
+      const state: Record<string, unknown> = {};
+      const approval = {
+        type: 'tool-call-approval',
+        payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } },
+      };
+
+      for (const part of [
+        { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } } },
+        approval,
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      ]) {
+        const returned = await processor.processOutputStream({ part, state, requestContext } as any);
+        expect(returned).toBe(part);
+      }
+
+      expect(shouldRender).toHaveBeenCalledWith(requestContext, 'weather');
+      expect(JSON.stringify(calls)).not.toContain('tool_approve:');
     });
 
     it("'cards' approval does not push plan/task rows (no flash plan widget)", async () => {
@@ -2150,7 +2535,7 @@ describe('ChatChannelOutputProcessor', () => {
       expect(postArgs).toEqual([{ markdown: 'partial' }, '❌ Error: boom', { markdown: 'recovery' }]);
     });
 
-    it('does not post anything on abort but still flushes pending text', async () => {
+    it('flushes pending buffered text on abort by default', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
@@ -2162,6 +2547,34 @@ describe('ChatChannelOutputProcessor', () => {
       );
       const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
       expect(postArgs).toEqual([{ markdown: 'partial' }]);
+    });
+
+    it("flushes pending buffered text on abort when onAbort is 'flush'", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, onAbort: 'flush' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'partial' } },
+          { type: 'abort', payload: {} },
+        ],
+        chatThread,
+      );
+      const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
+      expect(postArgs).toEqual([{ markdown: 'partial' }]);
+    });
+
+    it("discards buffered text on abort when onAbort is 'discard'", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, onAbort: 'discard' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'partial' } },
+          { type: 'abort', payload: {} },
+        ],
+        chatThread,
+      );
+      const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
+      expect(postArgs).toEqual([]);
     });
   });
 

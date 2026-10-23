@@ -746,7 +746,7 @@ describe('ProcessorRunner', () => {
       expect(result.reason).toBe('Content blocked');
     });
 
-    it('should handle processor errors gracefully', async () => {
+    it('should fail when a processor throws', async () => {
       const outputProcessors: Processor[] = [
         {
           id: 'processor1',
@@ -765,12 +765,17 @@ describe('ProcessorRunner', () => {
       });
 
       const processorStates = new Map();
-      const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'test content', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
-        processorStates,
-      );
-      expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('test content'); // Should return original text on error
-      expect(result.blocked).toBe(false);
+      await expect(
+        runner.processPart(
+          {
+            type: 'text-delta',
+            payload: { text: 'test content', id: 'text-1' },
+            runId: '1',
+            from: ChunkFrom.AGENT,
+          },
+          processorStates,
+        ),
+      ).rejects.toThrow('Processor error');
     });
 
     it('should skip processors that do not implement processOutputStream', async () => {
@@ -2878,10 +2883,16 @@ describe('ProcessorRunner', () => {
         cacheKey: 'workflow-state-cache-key',
         contents: 'workflow state',
       }));
-      const processor: Processor = {
+      const firstProcessInputStep = vi.fn(() => ({ runId: 'processor-overwrite-attempt' }) as any);
+      const secondProcessInputStep = vi.fn(() => undefined);
+      const firstProcessor: Processor = {
         id: 'workflow-state-processor',
-        processInputStep: () => undefined,
+        processInputStep: firstProcessInputStep,
         computeStateSignal,
+      };
+      const secondProcessor: Processor = {
+        id: 'workflow-run-id-processor',
+        processInputStep: secondProcessInputStep,
       };
       const workflow = createWorkflow({
         id: 'workflow-state-test',
@@ -2890,9 +2901,10 @@ describe('ProcessorRunner', () => {
         type: 'processor',
         options: { validateInputs: false },
       })
-        .then(createStep(processor as any))
+        .then(createStep(firstProcessor as any))
+        .then(createStep(secondProcessor as any))
         .commit() as ProcessorWorkflow;
-      workflow.__stateSignalProcessors = [processor];
+      workflow.__stateSignalProcessors = [firstProcessor];
       const chunks: unknown[] = [];
 
       runner = new ProcessorRunner({
@@ -2909,6 +2921,7 @@ describe('ProcessorRunner', () => {
         model: {} as any,
         tools: {},
         retryCount: 0,
+        runId: 'run-workflow-processor',
         requestContext,
         memory: memory as any,
         writer: {
@@ -2918,6 +2931,8 @@ describe('ProcessorRunner', () => {
         },
       });
 
+      expect(firstProcessInputStep).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-workflow-processor' }));
+      expect(secondProcessInputStep).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-workflow-processor' }));
       expect(computeStateSignal).toHaveBeenCalledTimes(1);
       expect(messageList.get.all.db().at(-1)?.content.metadata?.signal).toEqual(
         expect.objectContaining({
@@ -2929,6 +2944,46 @@ describe('ProcessorRunner', () => {
       );
       expect(chunks).toHaveLength(1);
       expect(memory.saveThread).toHaveBeenCalledTimes(1);
+    });
+
+    it('forwards the abort signal to output-stream workflow processors', async () => {
+      const processOutputStream = vi.fn(async ({ part }: any) => part);
+      const workflow = createWorkflow({
+        id: 'output-stream-abort-test',
+        inputSchema: ProcessorStepSchema,
+        outputSchema: ProcessorStepSchema,
+        type: 'processor',
+        options: { validateInputs: false },
+      })
+        .then(createStep({ id: 'abort-aware-processor', processOutputStream } as any))
+        .commit() as ProcessorWorkflow;
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [workflow],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const controller = new AbortController();
+      controller.abort();
+      await runner.processPart(
+        {
+          type: 'text-delta',
+          runId: 'run-1',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: 'hi' },
+        } as ChunkType,
+        new Map(),
+        undefined,
+        undefined,
+        messageList,
+        0,
+        undefined,
+        controller.signal,
+      );
+
+      expect(processOutputStream).toHaveBeenCalledWith(expect.objectContaining({ abortSignal: controller.signal }));
     });
 
     it('passes empty state history to computeStateSignal before any state exists', async () => {

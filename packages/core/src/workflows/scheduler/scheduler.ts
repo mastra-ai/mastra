@@ -2,8 +2,8 @@ import { MastraBase } from '../../base';
 import type { PubSub } from '../../events/pubsub';
 import { RegisteredLogger } from '../../logger/constants';
 import type { Schedule, ScheduleTrigger, SchedulesStorage } from '../../storage/domains/schedules/base';
-import { computeNextFireAt } from './cron';
-import type { SchedulerConfig } from './types';
+import { computeNextFire } from './cron';
+import type { ScheduledWorkflowTrigger, SchedulerConfig } from './types';
 
 const TOPIC_WORKFLOWS = 'workflows';
 export const TOPIC_AGENT_SCHEDULES = 'agent-schedules';
@@ -343,11 +343,9 @@ export class Scheduler extends MastraBase {
     const actualFireAt = Date.now();
 
     let newNextFireAt: number;
+    let completed: boolean;
     try {
-      newNextFireAt = computeNextFireAt(schedule.cron, {
-        timezone: schedule.timezone,
-        after: actualFireAt,
-      });
+      ({ nextFireAt: newNextFireAt, completed } = computeNextFire(schedule, actualFireAt));
     } catch (err) {
       this.logger.error('Failed to compute next fire time for schedule', {
         scheduleId: schedule.id,
@@ -369,6 +367,7 @@ export class Scheduler extends MastraBase {
         newNextFireAt,
         actualFireAt,
         runId,
+        completed ? 'completed' : undefined,
       );
     } catch (err) {
       this.logger.error('Failed to claim due schedule fire', {
@@ -448,7 +447,7 @@ export class Scheduler extends MastraBase {
   async #publishTargetStart(schedule: Schedule, claimId: string): Promise<void> {
     switch (schedule.target.type) {
       case 'workflow': {
-        const { workflowId, inputData, initialState, requestContext, definitionHash } = schedule.target;
+        const { workflowId, inputData, initialState, requestContext, resourceId, definitionHash } = schedule.target;
         // Claim/execute affinity (#19169). When this process also consumes
         // workflow events, keep the fire local so the instance that proved
         // the target ready and current is the one that runs it. A
@@ -468,9 +467,15 @@ export class Scheduler extends MastraBase {
               prevResult: { status: 'success', output: inputData ?? {} },
               requestContext: requestContext ?? {},
               initialState: initialState ?? {},
+              ...(resourceId ? { resourceId } : {}),
               // Only stamped when the row carries a hash, so legacy and
               // imperative schedules stay unfenced (fail open).
               ...(definitionHash ? { scheduleDefinitionHash: definitionHash } : {}),
+              scheduleTrigger: {
+                scheduleId: schedule.id,
+                scheduledFireAt: schedule.nextFireAt,
+                triggerKind: 'schedule-fire',
+              } satisfies ScheduledWorkflowTrigger,
             },
           },
           localOnly ? { localOnly: true } : undefined,

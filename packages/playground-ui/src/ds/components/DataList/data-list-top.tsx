@@ -15,8 +15,8 @@ export function DataListTop({ children, className, hasLeadingCell, ...props }: D
   return (
     <div
       className={cn(
-        'group/data-list-top data-list-top sticky top-0 z-20 col-span-full grid grid-cols-subgrid gap-8 px-5',
-        hasLeadingCell && 'gap-0 pl-0!',
+        'group/data-list-top data-list-top sticky top-0 z-20 col-span-full grid grid-cols-subgrid gap-4 px-3',
+        hasLeadingCell ? 'gap-0 pl-0!' : 'data-list-cells',
         className,
       )}
       {...props}

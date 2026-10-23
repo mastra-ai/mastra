@@ -12,8 +12,11 @@ const FAILURE_METADATA = {
   session_unavailable: { canRetry: true, label: 'Factory session unavailable' },
   source_control_missing: { canRetry: true, label: 'Source-control connection unavailable' },
   source_repository_missing: { canRetry: true, label: 'Source repository unavailable' },
+  source_repository_ambiguous: { canRetry: true, label: 'Choose a repository for this work item' },
   unsupported_provider_item: { canRetry: false, label: 'Unsupported provider work item' },
   notification_delivery_failed: { canRetry: true, label: 'Factory message delivery failed' },
+  run_terminal_event_missing: { canRetry: false, label: 'Agent run terminal event was not observed' },
+  skill_delivery_ambiguous: { canRetry: false, label: 'Factory skill delivery could not be confirmed' },
   run_overdue: { canRetry: false, label: 'Agent run is overdue' },
   repository_git_missing: { canRetry: false, label: 'Git is unavailable in the workspace' },
   repository_egress_blocked: { canRetry: false, label: 'Repository network access is blocked' },
@@ -24,6 +27,10 @@ const FAILURE_METADATA = {
   repository_cli_missing: { canRetry: false, label: 'GitHub CLI is unavailable in the workspace' },
   repository_pr_failed: { canRetry: true, label: 'Pull request creation failed' },
   run_configuration_invalid: { canRetry: false, label: 'Run configuration rejected by provider' },
+  run_credentials_unavailable: { canRetry: true, label: 'Model credentials unavailable for the run' },
+  // The run's request carries no user, so every retry fails the same way; a person has to start it.
+  run_user_unauthenticated: { canRetry: false, label: 'Run started without an authenticated user' },
+  run_failed: { canRetry: true, label: 'Agent run ended in error' },
   unknown: { canRetry: true, label: 'Factory automation failed' },
   // Retired: no path writes these any more, stored rows still read through here.
   plan_awaiting_approval: { canRetry: false, label: 'Plan waiting for review' },

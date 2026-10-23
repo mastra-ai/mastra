@@ -71,6 +71,13 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
     | void
     | undefined
 
+  /** State lane id for `computeStateSignal`. Defaults to the processor id. */
+  stateId?: string
+
+  computeStateSignal?(
+    args: ComputeStateSignalArgs<TTripwireMetadata>,
+  ): Promise<ComputeStateSignalResult> | ComputeStateSignalResult
+
   processLLMRequest?(
     args: ProcessLLMRequestArgs<TTripwireMetadata>,
   ): Promise<ProcessLLMRequestResult> | ProcessLLMRequestResult
@@ -220,7 +227,7 @@ Use `messages` when you only need to read, map over, or lightly edit fields on t
 
 When memory is enabled, only what ends up in `messageList` after all processors finish is persisted to storage. Both return styles are equivalent for persistence:
 
-- When you mutate `messageList` directly (or return the same `MessageList` instance), recorded mutations are applied in place, so the saved conversation reflects your changes.
+- When you mutate `messageList` directly (or return the same `MessageList` instance), recorded mutations are applied in place. The saved conversation reflects your changes.
 - When you return a `MastraDBMessage[]` or `{ messages, systemMessages }`, Mastra reconciles the returned array against `messageList` for the current stage, removing missing messages and replacing system messages.
 
 Returning a different `MessageList` instance is an error. Always mutate the one passed to your processor.
@@ -367,6 +374,7 @@ processInputStep?<TTripwireMetadata = unknown>(
 1. `processInput` (once at start)
 1. `processInputStep` from inputProcessors (at each step, before LLM call)
 1. `prepareStep` callback (runs as part of the processInputStep pipeline, after inputProcessors)
+1. `computeStateSignal` from inputProcessors (after `processInputStep`, before the LLM request)
 1. `processLLMRequest` from inputProcessors (after prompt conversion, before the provider call)
 1. LLM execution
 1. `processOutputStream` from outputProcessors (on each streaming chunk)
@@ -390,6 +398,12 @@ processInputStep?<TTripwireMetadata = unknown>(
     type: 'MessageList',
     description: 'MessageList instance for managing messages. Can mutate directly or return in result.',
     isOptional: false,
+  },
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'ID of the active agent run.',
+    isOptional: true,
   },
   {
     name: 'stepNumber',
@@ -583,6 +597,106 @@ System messages are **reset to their original values** at the start of each step
 
 ---
 
+### `computeStateSignal`
+
+Computes a thread-scoped state signal once per model input step, after `processInputStep()` and before the LLM request is finalized. This method requires an agent with memory and an active `resourceId` and `threadId`.
+
+```typescript oxfmt:false
+computeStateSignal?(
+  args: ComputeStateSignalArgs,
+): Promise<ProcessorStateSignal | undefined | void> | ProcessorStateSignal | undefined | void;
+```
+
+Return a state signal to store it, or `undefined` or `void` when nothing changed. The returned `id` defaults to the processor's `stateId`, which itself defaults to the processor `id`. `mode` defaults to `snapshot`.
+
+#### `ComputeStateSignalArgs`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'stepNumber',
+    type: 'number',
+    description: 'Current step number (0-indexed).',
+    isOptional: false,
+  },
+  {
+    name: 'steps',
+    type: 'StepResult[]',
+    description: 'Results from previous steps.',
+    isOptional: false,
+  },
+  {
+    name: 'state',
+    type: 'Record<string, unknown>',
+    description: 'Per-processor state that persists across method calls within the request.',
+    isOptional: false,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'Memory resource ID for the active thread.',
+    isOptional: false,
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Memory thread ID that scopes the state lane.',
+    isOptional: false,
+  },
+  {
+    name: 'activeStateSignals',
+    type: 'ProcessorActiveStateSignal[]',
+    description: 'Active state signals for this processor and thread that the runtime currently knows about.',
+    isOptional: false,
+  },
+  {
+    name: 'contextWindow',
+    type: '{ hasSnapshot: boolean }',
+    description: 'Whether the active message window already contains a snapshot for this lane.',
+    isOptional: false,
+  },
+  {
+    name: 'lastSnapshot',
+    type: 'ProcessorActiveStateSignal | undefined',
+    description:
+      'Latest snapshot for this lane, resolved from message history when the current message list does not contain it.',
+    isOptional: true,
+  },
+  {
+    name: 'deltasSinceSnapshot',
+    type: 'ProcessorActiveStateSignal[]',
+    description: 'Delta signals accepted after the latest snapshot.',
+    isOptional: false,
+  },
+  {
+    name: 'tracking',
+    type: 'ProcessorStateSignalTracking | undefined',
+    description:
+      'Last persisted tracking metadata for this lane, including the current cache key, mode, version, and active copies.',
+    isOptional: true,
+  },
+  {
+    name: 'sendStateSignal',
+    type: '(signal: AgentStateSignalInput) => Promise<CreatedAgentSignal | ApplyStateSignalResult>',
+    description:
+      'Adds another state signal from inside the method. Returns a skip result when the same cache key and mode are already current.',
+    isOptional: true,
+  },
+]}
+/>
+
+#### Deduplication
+
+Mastra stores tracking metadata under `metadata.mastra.stateSignals[stateId]` on the thread. When a returned state signal has the same `cacheKey` and mode as the current state and a copy is still in the active message window, Mastra skips it instead of storing a duplicate. If the matching copy has left the active window, Mastra stores it again so the model keeps seeing the state. State signals can't be transient because this tracking is rebuilt from persisted history.
+
+#### Use cases
+
+- Sync browser, editor, or background-watcher state into a lane the model can see
+- Emit a fresh snapshot after older state messages leave the context window
+- Keep working memory or goal state outside the system prompt
+
+---
+
 ### `processLLMRequest`
 
 Processes the final LLM request after Mastra converts the `MessageList` into `LanguageModelV2Prompt` and before the provider call. Use this method for transient, model-aware rewrites that should affect only the current outbound request.
@@ -610,6 +724,20 @@ processLLMRequest?(
     type: 'MastraLanguageModel',
     description: 'The resolved model that will receive the prompt. Use this to scope provider-specific rewrites.',
     isOptional: false,
+  },
+  {
+    name: 'messageList',
+    type: 'MessageList',
+    description:
+      'The message list the prompt was converted from, when the call path has one. Use it for provenance the converted prompt no longer carries, such as per-turn provider stamps.',
+    isOptional: true,
+  },
+  {
+    name: 'workspace',
+    type: 'Workspace',
+    description:
+      "The workspace of this step, the one the agent's tools use. Undefined when the agent has no workspace.",
+    isOptional: true,
   },
   {
     name: 'stepNumber',
@@ -1216,6 +1344,14 @@ processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
 ]}
 />
 
+#### Return value
+
+`processOutputStep` returns a `MessageList` or `MastraDBMessage[]`, directly or in a promise.
+
+- Return the supplied `messageList` instance to keep it, including any in-place changes.
+- Return a messages array to replace the current messages. Return the supplied `messages` array to leave them unchanged.
+- Returning `[]` removes all current messages, including the conversation history and the latest response. It isn't a no-op.
+
 #### Use cases
 
 - Implementing quality guardrails that can request retries
@@ -1231,7 +1367,7 @@ import type { Processor } from '@mastra/core/processors'
 export class QualityGuardrail implements Processor {
   id = 'quality-guardrail'
 
-  async processOutputStep({ text, abort, retryCount }) {
+  async processOutputStep({ messages, text, abort, retryCount }) {
     const score = await evaluateResponseQuality(text)
 
     if (score < 0.7) {
@@ -1247,7 +1383,7 @@ export class QualityGuardrail implements Processor {
       }
     }
 
-    return []
+    return messages
   }
 }
 ```
@@ -1504,7 +1640,7 @@ export class DynamicModelProcessor implements Processor {
   }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     // Use a fast model for initial response
     if (stepNumber === 0) {
-      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' }
+      return { model: '__GATEWAY_OPENAI_MODEL_LUNA__' }
     }
 
     // Switch to powerful model after tool calls
@@ -1654,7 +1790,7 @@ abort('Blocked content detected', { retry: false, metadata: { category: 'pii' } 
 ```
 
 - `reason`: A human-readable explanation. Appears as `tripwire.payload.reason`.
-- `retry`: When `true`, the agent retries the same step with `reason` fed back as feedback. Retries only run when `maxProcessorRetries` is set on the agent or call; otherwise the request aborts. When `errorProcessors` are configured, `maxProcessorRetries` defaults to `10` for that call.
+- `retry`: When `true`, the agent retries the same step with `reason` fed back as feedback. Retries only run when `maxProcessorRetries` is set on the agent or call; otherwise the request aborts. The safety cap of `3` that applies when no cap is set covers only error-processor retries from `processAPIError`. It doesn't give abort retries a budget.
 - `metadata`: Optional structured data attached to the `tripwire` chunk for downstream consumers.
 
 The emitted `tripwire` chunk has the shape:

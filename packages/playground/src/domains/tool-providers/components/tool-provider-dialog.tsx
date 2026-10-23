@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { SelectedToolList } from './selected-tool-list';
@@ -68,17 +69,17 @@ export function ToolProviderDialog({ provider, onClose, selectedToolIds, onSubmi
       dialogDescription={provider?.description ?? 'Browse tools from this provider'}
       level={1}
     >
-      <SideDialog.Header className="px-9 pt-6">
+      <SideDialog.Header className="px-9 pt-4">
         <SideDialog.Heading>{provider?.name}</SideDialog.Heading>
         {onSubmit && (
-          <Button variant="primary" size="sm" onClick={handleSubmit}>
+          <Button icon={<ToolsIcon />} variant="primary" size="sm" onClick={handleSubmit}>
             {selectionCount > 0 ? `Add ${selectionCount} tool${selectionCount !== 1 ? 's' : ''}` : 'Add tools'}
           </Button>
         )}
       </SideDialog.Header>
 
       <div className="grid h-full grid-cols-[220px_1fr] overflow-hidden">
-        <div className="border-border1 overflow-hidden border-r">
+        <div className="overflow-hidden border-r border-border">
           {provider && (
             <ToolkitList
               providerId={provider.id}

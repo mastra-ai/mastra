@@ -99,20 +99,18 @@ describe('CommentComposer', () => {
     if (!(input instanceof HTMLTextAreaElement)) throw new Error('composer input is not a textarea');
     await user.click(input);
     await user.keyboard('ping @Al');
-    await screen.findByRole('button', { name: 'Alan' });
+    await screen.findByRole('option', { name: 'Alan' });
     await user.keyboard('{Enter}');
     expect(input).toHaveValue('ping @Alan ');
-    // Role queries skip aria-hidden: the dropdown is closed once the pick lands.
-    expect(screen.queryByRole('button', { name: 'Alan' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Alan' })).not.toBeInTheDocument();
     expect(input.selectionStart).toBe('ping @Alan '.length);
 
     await user.keyboard('and @Ad');
-    await screen.findByRole('button', { name: 'Ada' });
+    await screen.findByRole('option', { name: 'Ada' });
     await user.keyboard('{Enter}');
     expect(input).toHaveValue('ping @Alan and @Ada ');
     expect(input.selectionStart).toBe('ping @Alan and @Ada '.length);
 
-    // Deleting a name from the text must drop its mention from the POST.
     await user.clear(input);
     await user.keyboard('only @Alan stays');
     await user.keyboard('{Enter}');
@@ -140,12 +138,10 @@ describe('CommentComposer', () => {
 
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Mentions options' })).not.toBeInTheDocument());
-    // The popover behind listens on bubbled keydown; the composer swallowed it.
     const escapes = outerKeyDown.mock.calls.filter(([event]) => event.key === 'Escape');
     expect(escapes).toEqual([]);
     expect(input).toHaveValue('@A');
 
-    // Retyping the same query at the same spot asks again.
     await user.keyboard('{Backspace}A');
     expect(await screen.findByRole('region', { name: 'Mentions options' })).toBeInTheDocument();
   });
@@ -169,7 +165,6 @@ describe('CommentComposer', () => {
     await user.keyboard('{Enter}');
     await waitFor(() => expect(posts).toHaveLength(2));
 
-    // Reusing the token would recover the stored 'first try' and lose this text.
     const tokenOf = (post: unknown) =>
       typeof post === 'object' && post !== null && 'clientToken' in post ? post.clientToken : undefined;
     expect(tokenOf(posts[1])).not.toBe(tokenOf(posts[0]));
@@ -194,7 +189,6 @@ describe('CommentComposer', () => {
     expect(screen.getByText('earlier words')).toBeInTheDocument();
     expect(posts).toHaveLength(1);
 
-    // Retry reuses the same client token, so the server can dedupe.
     stubCreate(posts);
     await user.keyboard('{Enter}');
     await waitFor(() => expect(posts).toHaveLength(2));

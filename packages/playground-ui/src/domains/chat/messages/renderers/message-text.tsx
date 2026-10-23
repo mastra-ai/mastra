@@ -1,19 +1,21 @@
-import { CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
+import { CheckCircleIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { MessageMetadata } from '../message-metadata';
 import { TripwireNotice } from '../tripwire-notice';
 import { errorMessage, messageTextKind } from './message-text-kind';
 import { Badge } from '@/ds/components/Badge';
-import { MarkdownRenderer, type MarkdownExternalLinkTarget } from '@/ds/components/MarkdownRenderer';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import type { MarkdownExternalLinkTarget } from '@/ds/components/MarkdownRenderer';
 import { Notice } from '@/ds/components/Notice';
 import { Icon } from '@/ds/icons/Icon';
-import { cn } from '@/lib/utils';
 
 export interface MessageTextProps {
   text: string;
   metadata: MessageMetadata | undefined;
   externalLinkTarget?: MarkdownExternalLinkTarget;
   streaming?: boolean;
+  tableActions?: boolean;
 }
 
 /**
@@ -21,7 +23,7 @@ export interface MessageTextProps {
  * error/completion handling previously in `ErrorAwareText` (which read part
  * metadata).
  */
-export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: MessageTextProps) => {
+export const MessageText = ({ text, metadata, externalLinkTarget, streaming, tableActions }: MessageTextProps) => {
   const [collapsedCompletionCheck, setCollapsedCompletionCheck] = useState(false);
 
   switch (messageTextKind(text, metadata)) {
@@ -45,9 +47,13 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: M
     case 'completion':
       return (
         <div className="mb-2 space-y-2">
-          <button onClick={() => setCollapsedCompletionCheck(s => !s)} className="flex items-center gap-2">
+          <button
+            onClick={() => setCollapsedCompletionCheck(s => !s)}
+            aria-expanded={!collapsedCompletionCheck}
+            className="flex items-center gap-2"
+          >
             <Icon>
-              <ChevronUpIcon className={cn('transition-all', collapsedCompletionCheck ? 'rotate-90' : 'rotate-180')} />
+              <DisclosureChevron direction="right" />
             </Icon>
             <Badge variant="blue" icon={<CheckCircleIcon />}>
               {collapsedCompletionCheck ? 'Show' : 'Hide'} completion check
@@ -63,7 +69,11 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: M
 
     default:
       return (
-        <MarkdownRenderer externalLinkTarget={externalLinkTarget} streaming={Boolean(streaming)}>
+        <MarkdownRenderer
+          externalLinkTarget={externalLinkTarget}
+          streaming={Boolean(streaming)}
+          tableActions={tableActions}
+        >
           {text}
         </MarkdownRenderer>
       );

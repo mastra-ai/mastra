@@ -10,6 +10,19 @@ const mockAuthStorageInstance = vi.hoisted(() => ({
   isLoggedIn: vi.fn().mockReturnValue(false),
 }));
 
+/**
+ * Providers are handed a request-scoped wrapper over the global store (pack
+ * subscription routing picks the account per request), so instance identity no
+ * longer holds. Assert the wrapper delegates reads to the mocked global store.
+ */
+function scopedAuthStorage() {
+  return expect.objectContaining({
+    reload: expect.any(Function),
+    get: expect.any(Function),
+    getStoredApiKey: expect.any(Function),
+  });
+}
+
 vi.mock('../../auth/storage.js', () => {
   return {
     AuthStorage: class MockAuthStorage {
@@ -27,7 +40,7 @@ const mockAnthropicOAuthFetch = vi.hoisted(() => vi.fn());
 vi.mock('../../providers/claude-max.js', () => ({
   opencodeClaudeMaxProvider: vi.fn(() => ({ __provider: 'claude-max-oauth' })),
   claudeCodeMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
-  promptCacheMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
+  createPromptCacheMiddleware: vi.fn(() => ({ specificationVersion: 'v3', transformParams: vi.fn() })),
   buildAnthropicOAuthFetch: vi.fn(() => mockAnthropicOAuthFetch),
   createAnthropicThinkingMiddleware: vi.fn(() => undefined),
 }));
@@ -38,6 +51,9 @@ vi.mock('../../providers/openai-codex.js', () => ({
   openaiCodexProvider: vi.fn(() => ({ __provider: 'openai-codex' })),
   buildOpenAICodexOAuthFetch: vi.fn(() => mockCodexOAuthFetch),
   createCodexMiddleware: vi.fn((effort?: string) => ({ __middleware: 'codex', effort })),
+  createReasoningEffortMiddleware: vi.fn((providerKey: string, effort?: string) =>
+    effort === undefined ? undefined : { __middleware: 'reasoning-effort', providerKey, effort },
+  ),
   getEffectiveThinkingLevel: vi.fn((_modelId: string, level: string) => level),
   THINKING_LEVEL_TO_REASONING_EFFORT: {
     off: undefined,
@@ -191,13 +207,20 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
+import { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models.js';
-import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
+import { ProviderAuthRequiredError } from '../../auth/provider-auth-error.js';
+import {
+  opencodeClaudeMaxProvider,
+  buildAnthropicOAuthFetch,
+  createPromptCacheMiddleware,
+} from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import { setCredentialStoreProvider } from '../credential-resolver.js';
 import {
+  canUseProvider,
   createMastraCodeGateway,
   resolveModel,
   getDynamicModel,
@@ -246,7 +269,7 @@ describe('resolveModel', () => {
     process.env = { ...originalEnv };
   });
 
-  it('discovers custom and Copilot providers through the MastraCode gateway', async () => {
+  it('lists only custom providers under the MastraCode gateway namespace', async () => {
     mockLoadSettings.mockReturnValue({
       customProviders: [
         {
@@ -258,8 +281,6 @@ describe('resolveModel', () => {
       ],
       memoryGateway: {},
     });
-    mockGetCopilotModelCatalog.mockResolvedValueOnce([{ id: 'gpt-4.1' }] as any);
-
     const gateway = createMastraCodeGateway({
       mastraGatewayBaseUrl: 'https://gateway-api.mastra.ai',
       routeThroughMastraGateway: false,
@@ -268,20 +289,16 @@ describe('resolveModel', () => {
     expect(gateway).toBeInstanceOf(MastraCodeGateway);
     expect(gateway.id).toBe('mastracode');
 
-    await expect(gateway.fetchProviders()).resolves.toMatchObject({
-      'acme-models': {
-        name: 'Acme Models',
-        url: 'https://llm.acme.dev/v1',
-        gateway: 'mastracode',
-        models: ['reasoner-v1'],
-      },
-      'github-copilot': {
-        name: 'GitHub Copilot',
-        gateway: 'mastracode',
-        models: ['gpt-4.1'],
-      },
+    const providers = await gateway.fetchProviders();
+    // Kimi augments models.dev `kimi-code-plan-cn`, and Copilot has its own
+    // gateway, so neither surfaces as `mastracode/<provider>/<model>`.
+    expect(Object.keys(providers)).toEqual(['acme-models']);
+    expect(providers['acme-models']).toMatchObject({
+      name: 'Acme Models',
+      url: 'https://llm.acme.dev/v1',
+      gateway: 'mastracode',
+      models: ['reasoner-v1'],
     });
-    expect(mockGetCopilotModelCatalog).toHaveBeenCalled();
   });
 
   it('claims models.dev providers authenticated by the injected credential store', () => {
@@ -303,19 +320,21 @@ describe('resolveModel', () => {
 
   describe('anthropic/* models', () => {
     it('prefers Claude Max OAuth when stored OAuth credential exists', () => {
-      mockAuthStorageInstance.get.mockReturnValue({
+      const stored = {
         type: 'oauth',
         access: 'oauth-access-token',
         refresh: 'oauth-refresh-token',
         expires: Date.now() + 60_000,
-      });
+      };
+      mockAuthStorageInstance.get.mockReturnValue(stored);
 
       resolveModel('anthropic/claude-sonnet-4-20250514');
 
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
-        headers: undefined,
-        authStorage: mockAuthStorageInstance,
-      });
+      const [modelId, args] = opencodeClaudeMaxProvider.mock.calls.at(-1)!;
+      expect(modelId).toBe('claude-sonnet-4-20250514');
+      expect(args).toMatchObject({ headers: undefined, authStorage: scopedAuthStorage() });
+      // The wrapper must resolve the account's credential from the global store.
+      expect((args as { authStorage: { get(id: string): unknown } }).authStorage.get('anthropic')).toEqual(stored);
     });
 
     it('parses provider/model ids and delegates directly through the MastraCode gateway', () => {
@@ -391,7 +410,8 @@ describe('resolveModel', () => {
 
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
         headers: undefined,
-        authStorage: mockAuthStorageInstance,
+        authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
       });
     });
 
@@ -412,7 +432,8 @@ describe('resolveModel', () => {
           'x-thread-id': 'thread-123',
           'x-resource-id': 'resource-456',
         },
-        authStorage: mockAuthStorageInstance,
+        authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
       });
     });
 
@@ -428,7 +449,72 @@ describe('resolveModel', () => {
 
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-opus-4-6', {
         headers: undefined,
-        authStorage: mockAuthStorageInstance,
+        authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
+      });
+    });
+
+    describe('anthropicPromptCacheScope: system (observational memory calls)', () => {
+      const oauthCred = () => ({
+        type: 'oauth',
+        access: 'oauth-access-token',
+        refresh: 'oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      it('reaches the Claude Max provider on the direct OAuth route', () => {
+        mockAuthStorageInstance.get.mockReturnValue(oauthCred());
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        const [, args] = opencodeClaudeMaxProvider.mock.calls.at(-1)!;
+        expect(args).toMatchObject({ promptCacheScope: 'system' });
+      });
+
+      it('reaches the Claude Max provider when no credential is stored', () => {
+        mockAuthStorageInstance.get.mockReturnValue(undefined);
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        const [, args] = opencodeClaudeMaxProvider.mock.calls.at(-1)!;
+        expect(args).toMatchObject({ promptCacheScope: 'system' });
+      });
+
+      it('reaches the prompt-cache middleware on the stored API-key route', () => {
+        mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key-456' });
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        expect(createPromptCacheMiddleware).toHaveBeenCalledTimes(1);
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('system');
+      });
+
+      it('reaches the prompt-cache middleware on the env API-key route', () => {
+        process.env.ANTHROPIC_API_KEY = 'sk-test-key-123';
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        expect(createPromptCacheMiddleware).toHaveBeenCalledTimes(1);
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('system');
+      });
+
+      it('reaches the prompt-cache middleware on the OAuth route through the Mastra gateway', () => {
+        mockAuthStorageInstance.get.mockReturnValue(oauthCred());
+        process.env['MASTRA_GATEWAY_API_KEY'] = 'msk_env_key';
+
+        resolveModel('mastra/anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
+        expect(createPromptCacheMiddleware).toHaveBeenCalledTimes(1);
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('system');
+      });
+
+      it('defaults to the conversation scope when the option is omitted', () => {
+        mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key-456' });
+
+        resolveModel('anthropic/claude-sonnet-4-5');
+
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('conversation');
       });
     });
 
@@ -479,6 +565,24 @@ describe('resolveModel', () => {
       expect(result.__provider).toBe('model-router');
     });
 
+    it('reports only providers the signed-in Factory account can use, ignoring server keys', () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'server-google-key');
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: (providerId: string) =>
+          providerId === 'anthropic' ? { type: 'api_key' as const, key: 'sk-anthropic' } : undefined,
+        getStoredApiKey: (providerId: string) => (providerId === 'anthropic' ? 'sk-anthropic' : undefined),
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+
+      expect(canUseProvider('anthropic', { requestContext })).toBe(true);
+      expect(canUseProvider('google', { requestContext })).toBe(false);
+      vi.unstubAllEnvs();
+    });
+
     it('reports a missing signed-in Factory credential instead of an environment variable', () => {
       setCredentialStoreProvider(() => ({
         allowEnvironmentFallback: false,
@@ -491,7 +595,46 @@ describe('resolveModel', () => {
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
 
       expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(
-        'No usable openai credential is configured for this signed-in Factory account.',
+        "No usable openai credential is available for openai/gpt-4o. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.",
+      );
+      expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(ProviderAuthRequiredError);
+      try {
+        resolveModel('openai/gpt-4o', { requestContext });
+      } catch (error) {
+        expect((error as Error).name).toBe('ProviderAuthRequiredError');
+      }
+    });
+
+    it('names organization scope when an organization-scoped Factory has no credential', async () => {
+      setCredentialStoreProvider(
+        () => ({
+          allowEnvironmentFallback: false,
+          reload() {},
+          get: () => undefined,
+          getStoredApiKey: () => undefined,
+          getApiKey: async () => undefined,
+        }),
+        async () => ({ orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' as const }),
+      );
+      // Keep the router lazy so the test owns the request-scoped resolution promise.
+      vi.mocked(ModelRouterLanguageModel).mockImplementationOnce(function (
+        this: Record<string, unknown>,
+        _config: unknown,
+        customGateways?: unknown,
+      ) {
+        this.customGateways = customGateways;
+      } as never);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+
+      const model = resolveModel('openai/gpt-4o', { requestContext }) as unknown as {
+        customGateways: Array<{ resolveLanguageModel: () => Promise<unknown> }>;
+      };
+      const resolution = model.customGateways[0]!.resolveLanguageModel();
+
+      await expect(resolution).rejects.toThrow(ProviderAuthRequiredError);
+      await expect(resolution).rejects.toThrow(
+        "No usable openai credential is available for openai/gpt-4o. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.",
       );
     });
 
@@ -513,7 +656,7 @@ describe('resolveModel', () => {
           'x-thread-id': 'thread-123',
           'x-resource-id': 'resource-456',
         },
-        authStorage: mockAuthStorageInstance,
+        authStorage: scopedAuthStorage(),
       });
     });
 
@@ -542,9 +685,46 @@ describe('resolveModel', () => {
       expect(openaiCodexProvider).toHaveBeenCalledWith('gpt-5.2-codex', {
         thinkingLevel: 'high',
         headers: undefined,
-        authStorage: mockAuthStorageInstance,
+        authStorage: scopedAuthStorage(),
       });
     });
+
+    it.each([
+      { modeless: false, expected: 'high' },
+      { modeless: true, expected: 'low' },
+    ])(
+      'given a Build session without an override, when modeless is $modeless, then dynamic resolution thinks at $expected',
+      ({ modeless, expected }) => {
+        mockAuthStorageInstance.get.mockReturnValue({
+          type: 'oauth',
+          access: 'openai-oauth-access-token',
+          refresh: 'openai-oauth-refresh-token',
+          expires: Date.now() + 60_000,
+        });
+        mockLoadSettings.mockImplementation(
+          () =>
+            ({
+              customProviders: [],
+              memoryGateway: {},
+              models: { modeThinkingDefaults: { build: 'high' } },
+              preferences: { thinkingLevel: 'low' },
+            }) as any,
+        );
+        const values = new Map<string, unknown>();
+        const requestContext = {
+          get: (key: string) => values.get(key),
+          set: (key: string, value: unknown) => values.set(key, value),
+        } as any;
+        requestContext.set('controller', { session: { modelId: 'openai/gpt-5.2', modeId: 'build' }, state: {} });
+
+        getDynamicModel({ requestContext }, undefined, { modeless });
+
+        expect(openaiCodexProvider).toHaveBeenCalledWith(
+          'gpt-5.2-codex',
+          expect.objectContaining({ thinkingLevel: expected }),
+        );
+      },
+    );
   });
 
   describe('moonshotai/* models', () => {
@@ -750,6 +930,44 @@ describe('resolveModel', () => {
         'x-resource-id': 'resource-456',
       });
     });
+
+    function tenantRequest(allowsDeploymentCredentials?: (provider: string) => boolean) {
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        allowsDeploymentCredentials,
+        reload() {},
+        get: () => undefined,
+        getStoredApiKey: () => undefined,
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      return requestContext;
+    }
+
+    it('refuses Bedrock for a signed-in Factory tenant unless the deployment opted in', () => {
+      const requestContext = tenantRequest();
+
+      expect(() => resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, { requestContext })).toThrow(
+        ProviderAuthRequiredError,
+      );
+      expect(() => resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, { requestContext })).toThrow(
+        'Amazon Bedrock is not enabled for this Factory deployment.',
+      );
+      expect(createAmazonBedrock).not.toHaveBeenCalled();
+    });
+
+    it('resolves Bedrock for a signed-in Factory tenant when the deployment opted in', () => {
+      const requestContext = tenantRequest(provider => provider === 'amazon-bedrock');
+
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, { requestContext }) as Record<
+        string,
+        unknown
+      >;
+
+      expect(result.__provider).toBe('amazon-bedrock');
+      expect(result.credentialProvider).toBe(mockCredentialProvider);
+    });
   });
 
   describe('mastra gateway enabled (gateway API key stored)', () => {
@@ -878,7 +1096,7 @@ describe('resolveModel', () => {
         'Bearer msk_gateway_key_123',
       );
       expect(buildOpenAICodexOAuthFetch).toHaveBeenCalledWith({
-        authStorage: mockAuthStorageInstance,
+        authStorage: scopedAuthStorage(),
         rewriteUrl: false,
       });
       expect(wrapLanguageModel).toHaveBeenCalled();
@@ -999,7 +1217,8 @@ describe('resolveModel', () => {
       expect(MastraGateway).toHaveBeenCalledWith({ baseUrl: 'https://gateway-api.mastra.ai' });
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4', {
         headers: undefined,
-        authStorage: mockAuthStorageInstance,
+        authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
       });
       delete process.env['MASTRA_GATEWAY_API_KEY'];
     });
@@ -1163,6 +1382,14 @@ describe('resolveRequestThinkingLevel', () => {
     expect(level).toBe('medium');
   });
 
+  it('given a context without a session mode, when the settings have mode defaults, then the global default applies', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    expect(resolveRequestThinkingLevel({ state: {} })).toBe('low');
+  });
+
   it('treats a null session value as a cleared override', () => {
     mockLoadSettings.mockImplementation(() =>
       settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'medium' }),
@@ -1177,6 +1404,18 @@ describe('resolveRequestThinkingLevel', () => {
     mockLoadSettings.mockImplementation(() => settingsWithThinking({ thinkingLevel: 'low' }));
 
     expect(resolveRequestThinkingLevel(undefined)).toBe('low');
+  });
+
+  it('uses the host default over settings defaults but under the session override', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    expect(resolveRequestThinkingLevel({ state: {}, session: { modeId: 'build' } } as any, undefined, 'max')).toBe(
+      'max',
+    );
+    expect(mockLoadSettings).not.toHaveBeenCalled();
+    expect(resolveRequestThinkingLevel({ state: { thinkingLevel: 'medium' } } as any, undefined, 'max')).toBe('medium');
   });
 
   it('passes the settings path through to loadSettings', () => {

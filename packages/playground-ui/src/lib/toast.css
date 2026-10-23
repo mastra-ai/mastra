@@ -1,21 +1,16 @@
 /* Toast tokens live here — only consumed by `.mastra-toaster` so they don't need to ship in
-   index.css for every component. The bg/border use color-mix on theme-scoped notice tokens,
-   so the single :root declaration computes correctly under `html.light` too. Only the shadow
-   needs an explicit per-theme override (light gets a gloss highlight, dark stays elevation-only). */
+   components.css for every component. The bg/border alias theme-scoped status roles, so the single
+   :root declaration flips with the theme. */
 :root {
-  --toast-success-bg: color-mix(in srgb, var(--notice-success) 20%, var(--surface1));
-  --toast-success-border: color-mix(in srgb, var(--notice-success) 45%, var(--surface1));
-  --toast-destructive-bg: color-mix(in srgb, var(--notice-destructive) 20%, var(--surface1));
-  --toast-destructive-border: color-mix(in srgb, var(--notice-destructive) 45%, var(--surface1));
-  --toast-warning-bg: color-mix(in srgb, var(--notice-warning) 20%, var(--surface1));
-  --toast-warning-border: color-mix(in srgb, var(--notice-warning) 45%, var(--surface1));
-  --toast-info-bg: color-mix(in srgb, var(--notice-info) 20%, var(--surface1));
-  --toast-info-border: color-mix(in srgb, var(--notice-info) 45%, var(--surface1));
-  --toast-shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -12px oklch(0 0 0 / 0.55);
-}
-html.light {
-  --toast-shadow:
-    inset 0 1px 0 0 oklch(1 0 0 / 0.6), 0 1px 2px oklch(0 0 0 / 0.04), 0 12px 32px -12px oklch(0 0 0 / 0.14);
+  --toast-success-bg: var(--success-subtle);
+  --toast-success-border: var(--success-edge);
+  --toast-destructive-bg: var(--destructive-subtle);
+  --toast-destructive-border: var(--destructive-edge);
+  --toast-warning-bg: var(--warning-subtle);
+  --toast-warning-border: var(--warning-edge);
+  --toast-info-bg: var(--info-subtle);
+  --toast-info-border: var(--info-edge);
+  --toast-shadow: var(--elevation-overlay);
 }
 
 /* Mastra toast theming — applied to sonner's Toaster wrapper via className.
@@ -23,20 +18,20 @@ html.light {
    The `[data-sonner-toaster][data-sonner-theme]` prefix matches sonner's own theme rules
    (specificity 0,2,0) and adds our class for (0,3,0) so our notice tokens win without !important. */
 [data-sonner-toaster][data-sonner-theme].mastra-toaster {
-  --normal-bg: var(--surface3);
-  --normal-text: var(--neutral5);
-  --normal-border: var(--border1);
+  --normal-bg: var(--card);
+  --normal-text: var(--foreground);
+  --normal-border: var(--border);
   --success-bg: var(--toast-success-bg);
-  --success-text: var(--notice-success-fg);
+  --success-text: var(--success-subtle-foreground);
   --success-border: var(--toast-success-border);
   --error-bg: var(--toast-destructive-bg);
-  --error-text: var(--notice-destructive-fg);
+  --error-text: var(--destructive-subtle-foreground);
   --error-border: var(--toast-destructive-border);
   --warning-bg: var(--toast-warning-bg);
-  --warning-text: var(--notice-warning-fg);
+  --warning-text: var(--warning-subtle-foreground);
   --warning-border: var(--toast-warning-border);
   --info-bg: var(--toast-info-bg);
-  --info-text: var(--notice-info-fg);
+  --info-text: var(--info-subtle-foreground);
   --info-border: var(--toast-info-border);
   --border-radius: var(--radius-xl);
 
@@ -51,12 +46,91 @@ html.light {
   box-shadow: var(--toast-shadow);
 }
 
+/* Type. Sonner pins its own system stack on the toaster and 13px on the toast, so neither the
+   product font nor the text roles reach a toast without this. Title is `text-label`, description
+   `text-body-sm`: the same 13px, told apart by weight. A toast floats like a popover, so fields
+   inside it take the on-surface field material (the Cancel button below wears it). */
+[data-sonner-toaster][data-sonner-theme].mastra-toaster {
+  font-family: var(--font-sans);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] {
+  --field: var(--field-on-surface);
+  --field-rim: var(--field-rim-on-surface);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-title] {
+  font-weight: var(--text-label--font-weight);
+  line-height: var(--text-label--line-height);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-description] {
+  font-weight: var(--text-body-sm--font-weight);
+  line-height: var(--text-body-sm--line-height);
+}
+
+/* Action and cancel buttons follow `Button` at size `sm`: a pill at the small control height with
+   a `text-label` label. Action is the `primary` variant, cancel the `default` one, the same pair
+   a dialog footer uses. `font: inherit` because a <button> does not inherit the font by default.
+   Focus is an outline like `Button`'s, replacing sonner's box-shadow ring, which would also wipe
+   the cancel button's rim. */
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button] {
+  height: var(--spacing-control-sm);
+  padding-inline: 0.9em;
+  border: 0;
+  border-radius: 9999px;
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--text-label--font-weight);
+  line-height: var(--text-label--line-height);
+  background: var(--fill-inverse);
+  color: var(--background);
+  transition:
+    background-color var(--duration-fast) var(--ease-out-custom),
+    color var(--duration-fast) var(--ease-out-custom);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button]:hover {
+  background: var(--fill-inverse-hover);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button]:active {
+  background: var(--fill-inverse-active);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button]:focus-visible {
+  outline: 1px solid var(--border-focus);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* Cancel: the raised field material `Button`'s default variant wears (see `shadow-input` in
+   components.css). States wash through `--surface-tint` so the fill stays put. The extra
+   [data-cancel] keeps it ahead of sonner's dark-theme cancel rule. */
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button][data-cancel] {
+  --surface-tint: transparent;
+  --surface-rim: var(--field-rim);
+  background: var(--field);
+  color: var(--foreground);
+  box-shadow:
+    var(--elevation-lip),
+    inset 0 0 0 1px var(--surface-rim),
+    inset 0 0 0 9999px var(--surface-tint),
+    var(--elevation-raised);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button][data-cancel]:hover {
+  --surface-tint: var(--fill-subtle);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button][data-cancel]:active {
+  --surface-tint: var(--fill);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button][data-cancel]:focus-visible {
+  --surface-rim: var(--border-focus);
+  outline: none;
+}
+
 /* Close button — size + transitions are shared. Per-variant rules below own bg/border colors
    and beat sonner's per-type rules on specificity (we add .mastra-toaster + [data-type] for 0,5,0). */
 [data-sonner-toaster].mastra-toaster [data-sonner-toast] [data-close-button] {
   width: 22px;
   height: 22px;
-  box-shadow: 0 1px 2px oklch(0 0 0 / 0.25);
+  box-shadow: var(--elevation-raised);
   transition:
     background-color 160ms var(--ease-out-custom),
     border-color 160ms var(--ease-out-custom),
@@ -69,27 +143,27 @@ html.light {
      --close-bg       → chip surface, equal to the toast's own bg so the chip blends at rest
      --close-border   → chip border, equal to the toast's own border so the chip blends at rest */
 [data-sonner-toaster].mastra-toaster [data-sonner-toast]:not([data-type]) {
-  --close-tint: var(--neutral5);
+  --close-tint: var(--foreground);
   --close-bg: var(--normal-bg);
   --close-border: var(--normal-border);
 }
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='success'] {
-  --close-tint: var(--notice-success-fg);
+  --close-tint: var(--success-subtle-foreground);
   --close-bg: var(--success-bg);
   --close-border: var(--success-border);
 }
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='error'] {
-  --close-tint: var(--notice-destructive-fg);
+  --close-tint: var(--destructive-subtle-foreground);
   --close-bg: var(--error-bg);
   --close-border: var(--error-border);
 }
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='warning'] {
-  --close-tint: var(--notice-warning-fg);
+  --close-tint: var(--warning-subtle-foreground);
   --close-bg: var(--warning-bg);
   --close-border: var(--warning-border);
 }
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='info'] {
-  --close-tint: var(--notice-info-fg);
+  --close-tint: var(--info-subtle-foreground);
   --close-bg: var(--info-bg);
   --close-border: var(--info-border);
 }
@@ -110,9 +184,9 @@ html.light {
 [data-sonner-toaster].mastra-toaster [data-sonner-toast]:not([data-type]):hover [data-close-button]:hover,
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type] [data-close-button]:focus-visible,
 [data-sonner-toaster].mastra-toaster [data-sonner-toast]:not([data-type]) [data-close-button]:focus-visible {
-  background: color-mix(in srgb, var(--close-bg), var(--close-tint) 14%);
-  border-color: color-mix(in srgb, var(--close-tint) 55%, transparent);
-  box-shadow: 0 4px 12px oklch(0 0 0 / 0.3);
+  background: var(--close-border);
+  border-color: var(--close-tint);
+  box-shadow: var(--elevation-overlay);
   transform: var(--toast-close-button-transform) scale(1.08);
 }
 

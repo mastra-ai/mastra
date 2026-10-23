@@ -15,6 +15,7 @@ import {
   updateScheduleBodySchema,
 } from '../schemas/schedules';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { getPublicWorkflowById } from './utils';
 
 type RunSummary = {
   status: WorkflowRunState['status'];
@@ -95,7 +96,7 @@ export const LIST_SCHEDULES_ROUTE = createRoute({
   responseSchema: listSchedulesResponseSchema,
   summary: 'List schedules',
   description:
-    'Returns all schedules — agent schedules and workflow schedules — optionally filtered by agentId, workflowId, or status. Agent schedules can additionally be filtered by threadId, resourceId, or name.',
+    'Returns all schedules — agent schedules and workflow schedules — optionally filtered by agentId, workflowId, or status. Completed schedules are excluded unless requested with a status filter. Agent schedules can additionally be filtered by threadId, resourceId, or name.',
   tags: ['Schedules'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, workflowId, status, threadId, resourceId, name }) => {
@@ -138,13 +139,21 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
   tags: ['Schedules'],
   requiresAuth: true,
   handler: async ({ mastra, ...body }) => {
-    // getAgentById / getWorkflowById throw a MastraError (status 404) when the
-    // target is unknown; translate that into a clean HTTP 404 instead of
-    // letting it surface as 500.
+    // getAgentById throws a MastraError (status 404) when the target is
+    // unknown; translate that into a clean HTTP 404 instead of letting it
+    // surface as 500. Hidden internal workflows are treated as unknown.
     if ('workflowId' in body && body.workflowId) {
+      // The scheduler later resolves the stored id through core, which also
+      // sees hidden workflows. Reject ids where that lookup would pick a
+      // different workflow than the public one validated here.
+      const workflow = getPublicWorkflowById(mastra, body.workflowId);
+      let resolved: unknown;
       try {
-        mastra.getWorkflowById(body.workflowId);
+        resolved = mastra.getWorkflowById(body.workflowId);
       } catch {
+        resolved = undefined;
+      }
+      if (!workflow || resolved !== workflow) {
         throw new HTTPException(404, { message: `Workflow "${body.workflowId}" not found` });
       }
       return await mastra.schedules.create({
@@ -155,6 +164,7 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
         ...(body.inputData !== undefined ? { inputData: body.inputData } : {}),
         ...(body.initialState !== undefined ? { initialState: body.initialState } : {}),
         ...(body.requestContext ? { requestContext: body.requestContext } : {}),
+        ...(body.resourceId ? { resourceId: body.resourceId } : {}),
         ...(body.metadata ? { metadata: body.metadata } : {}),
       });
     }
@@ -193,7 +203,7 @@ export const UPDATE_SCHEDULE_ROUTE = createRoute({
   responseSchema: scheduleSchema,
   summary: 'Update a schedule',
   description:
-    'Partial update of a schedule. Fields apply to the matching target type; agent-only fields on a workflow schedule are rejected. `threadId` and `resourceId` are part of an agent schedule identity and cannot be changed — to re-target, delete and recreate. Editing `cron` (or `timezone`) recomputes `nextFireAt`.',
+    "Partial update of a schedule. Fields apply to the matching target type; agent-only fields on a workflow schedule are rejected. An agent schedule's `threadId` and `resourceId` are part of its identity and cannot be changed — to re-target, delete and recreate. A workflow schedule's `resourceId` is run-attribution metadata and may be updated. Editing `cron` (or `timezone`) recomputes `nextFireAt`. A recomputed cadence that can still fire reactivates a `completed` schedule, while a cadence with no future occurrence leaves the schedule `completed`.",
   tags: ['Schedules'],
   requiresAuth: true,
   handler: async ({ mastra, scheduleId, ...body }) => {
@@ -214,6 +224,7 @@ export const UPDATE_SCHEDULE_ROUTE = createRoute({
       ...(body.inputData !== undefined ? { inputData: body.inputData } : {}),
       ...(body.initialState !== undefined ? { initialState: body.initialState } : {}),
       ...(body.requestContext !== undefined ? { requestContext: body.requestContext } : {}),
+      ...(body.resourceId !== undefined ? { resourceId: body.resourceId } : {}),
     });
   },
 });

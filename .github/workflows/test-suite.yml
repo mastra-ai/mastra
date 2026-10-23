@@ -6,16 +6,13 @@ on:
       head_sha:
         required: true
         type: string
-      base_ref:
-        required: true
-        type: string
       has_code:
         required: true
         type: string
-      unit_test_files:
+      has_unit_tests:
         required: false
         type: string
-        default: ''
+        default: 'false'
       e2e_test_files:
         required: false
         type: string
@@ -36,7 +33,7 @@ jobs:
   unit-test:
     name: UNIT Test (Shard ${{ matrix.shard }})
     if: inputs.has_code == 'true' && inputs.run_full != 'false'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -63,7 +60,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -86,7 +83,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: vitest-blob-unit-${{ matrix.shard }}
           path: .vitest-reports/
@@ -95,8 +92,8 @@ jobs:
 
   affected-unit-test:
     name: Affected UNIT Test
-    if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.unit_test_files != ''
-    runs-on: starsling-ubuntu-24.04
+    if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true'
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -104,6 +101,7 @@ jobs:
       TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
       NODE_OPTIONS: --max-old-space-size=8192
     permissions:
+      actions: read
       contents: read
     steps:
       - name: Checkout repo
@@ -128,19 +126,25 @@ jobs:
       - name: Build packages
         run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
 
+      - name: Download affected tests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: affected-tests-outputs
+          path: /tmp/affected-outputs
+
       - name: Run affected tests
-        env:
-          TEST_FILES: ${{ inputs.unit_test_files }}
+        # One vitest run for the whole list. xargs would split a long list into several runs
+        # that overwrite each other's blob report.
         run: |
-          printf '%s\n' "$TEST_FILES" > /tmp/affected.txt
+          mapfile -t test_files < /tmp/affected-outputs/unit_test_files.txt
           pnpm vitest run \
-            $(cat /tmp/affected.txt | tr '\n' ' ') \
             --project 'unit:*' --project 'typecheck:*' \
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
             --outputFile.blob=.vitest-reports/blob-unit-affected.json \
-            --passWithNoTests
+            --passWithNoTests \
+            "${test_files[@]}"
 
       - name: Upload test results
         if: always()
@@ -154,7 +158,7 @@ jobs:
   e2e-test:
     name: E2E Test (${{ matrix.project }})
     if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.e2e_test_files != '')
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -180,7 +184,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -219,7 +223,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: vitest-blob-e2e-${{ steps.normalize.outputs.project_id }}
           path: .vitest-reports/
@@ -228,7 +232,7 @@ jobs:
 
   merge-reports:
     name: Merge Test Reports
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     needs: [unit-test, affected-unit-test, e2e-test]
     if: always()
     permissions:
@@ -237,11 +241,11 @@ jobs:
 
     steps:
       - name: Skip tests when no test selection is needed
-        if: inputs.has_code != 'true' || (inputs.run_full == 'false' && inputs.unit_test_files == '' && inputs.e2e_test_files == '')
+        if: inputs.has_code != 'true' || (inputs.run_full == 'false' && inputs.has_unit_tests != 'true' && inputs.e2e_test_files == '')
         run: echo "No unit or E2E tests selected; skipping report merge."
 
       - name: Checkout repo
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
@@ -249,17 +253,17 @@ jobs:
           ref: ${{ inputs.head_sha }}
 
       - name: Setup pnpm and Node.js
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Download test results
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
-        uses: actions/download-artifact@v8
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: vitest-blob-*
           path: .vitest-reports
           merge-multiple: true
 
       - name: Merge reports
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
         run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests

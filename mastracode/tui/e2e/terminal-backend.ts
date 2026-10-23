@@ -41,9 +41,8 @@ function resolveInitialStateFromEnv(): MastraCodeConfig['initialState'] {
   return Object.keys(initialState).length > 0 ? initialState : undefined;
 }
 
-export class EmulatedTerminal implements Terminal {
+class EmulatedTerminal implements Terminal {
   private readonly xterm: XtermTerminalType;
-  private inputEpoch = 0;
   private inputHandler?: (data: string) => void;
   private inputQueue = Promise.resolve();
   private outputQueue = Promise.resolve();
@@ -83,7 +82,6 @@ export class EmulatedTerminal implements Terminal {
   }
 
   stop(): void {
-    this.inputEpoch += 1;
     this.writeToXterm('\x1b[?2004l');
     this.stdinBuffer?.destroy();
     this.stdinBuffer = undefined;
@@ -141,10 +139,8 @@ export class EmulatedTerminal implements Terminal {
   setProgress(_active: boolean): void {}
 
   sendInput(data: string): void {
-    const inputEpoch = this.inputEpoch;
     this.inputQueue = this.inputQueue
       .then(async () => {
-        if (inputEpoch !== this.inputEpoch) return;
         this.stdinBuffer?.process(data);
         await sleep(25);
       })
@@ -342,7 +338,11 @@ async function startMastraCodeApp(
   terminal: Terminal,
   options?: McE2eStartMastraCodeAppOptions,
 ): Promise<McE2eInProcessApp> {
-  const [{ createMastraCode }, { MastraTUI }, { createBrowserFromSettings, loadSettings }] = await Promise.all([
+  const [
+    { createMastraCode },
+    { MastraTUI },
+    { createBrowserFromSettings, loadSettings, resolveStagehandModel, toActiveBrowserSettings },
+  ] = await Promise.all([
     import('@mastra/code-sdk'),
     import('../src/tui/index.js'),
     import('@mastra/code-sdk/onboarding/settings'),
@@ -361,9 +361,11 @@ async function startMastraCodeApp(
       ? { ...(envInitialState ?? {}), ...(configuredInitialState ?? {}) }
       : undefined;
   const result = await createMastraCode({
+    createInitialThread: false,
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
+    ...(isTruthyEnv('MASTRACODE_ENABLE_CROSS_AGENT_SIGNALS') ? { crossAgentSignals: true } : {}),
     ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false } : {}),
     cwd: runConfig.cwd,
     ...(process.env.HOME ? { homeDir: process.env.HOME } : {}),
@@ -385,9 +387,14 @@ async function startMastraCodeApp(
     appName: 'Mastra Code',
     version: process.env.npm_package_version ?? 'mc-e2e-terminal',
     inlineQuestions: true,
+    initialModelOverride: Boolean(initialState?.currentModelId),
     githubSignals: result.githubSignals,
+    backgroundToolsEnabled: result.backgroundToolsEnabled,
+    backgroundCompletionEvents: result.backgroundCompletionEvents,
     storageMaintenance: result.storageMaintenance,
     knowledgeInspector: result.knowledgeInspector,
+    knowledgeInspectorUnavailableReason: result.knowledgeInspectorUnavailableReason,
+    threadScheduler: result.threadScheduler,
     terminal,
     ...(options?.tui ?? {}),
   });
@@ -397,11 +404,16 @@ async function startMastraCodeApp(
     process.stderr.write(`[mc-e2e:terminal] TUI run failed: ${error instanceof Error ? error.stack : String(error)}\n`);
   });
 
+  // Mirrors main.ts: snapshot credential-free settings plus the launch-time model.
   if (settings.browser.enabled) {
-    const browser = await createBrowserFromSettings(settings.browser);
+    const chatModelId = result.session.model.get();
+    const browser = await createBrowserFromSettings(settings.browser, { chatModelId });
     if (browser) {
       result.controller.setBrowser(browser);
-      await result.session.state.set({ activeBrowserSettings: settings.browser });
+      await result.session.state.set({
+        activeBrowserSettings: toActiveBrowserSettings(settings.browser),
+        activeBrowserModel: resolveStagehandModel(settings.browser, { chatModelId }),
+      });
     }
   }
 
@@ -411,13 +423,23 @@ async function startMastraCodeApp(
       if (stopped) return;
       stopped = true;
       tui.stop();
-      const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+      result.threadScheduler.stop();
+      // As in the production asyncCleanup(): stop delivering notifications and
+      // release the dispatch leases before storage and the pubsub close.
+      await result.stopNotificationDispatch?.().catch(() => {});
       await Promise.allSettled([
         result.mcpManager?.disconnect(),
         result.controller.getMastra()?.stopWorkers(),
         result.controller.stopIntervals(),
-        closeSignalsPubSub?.(),
       ]);
+      // Let background memory work (buffered observations, indexing) finish before storage
+      // closes and the scenario's temp HOME is deleted, so none of it leaks into later scenarios.
+      if (result.memory && 'settled' in result.memory) await result.memory.settled();
+      // The signals pubsub is Mastra's event bus, so close it after the workers
+      // stop (as the production asyncCleanup() does after Mastra shutdown). Call
+      // close() on the object; a detached method loses `this` and rejects silently.
+      const signalsPubSub = result.signalsPubSub as { close?: () => Promise<void> | void } | undefined;
+      await Promise.allSettled([signalsPubSub?.close?.()]);
       // Close storage last — checkpoints WAL and switches to DELETE journal
       // mode for local libsql, mirroring the production asyncCleanup() path.
       await result.storageMaintenance?.closeStorage?.().catch(() => {
@@ -478,13 +500,6 @@ export async function runTerminalScenario(
 
       runtime.stopApp = async () => {
         await stopApp?.();
-      };
-      runtime.restartApp = async options => {
-        await stopApp?.();
-        releaseAllThreadLocks();
-        terminal.clearScreen();
-        const app = await startMastraCodeApp(runConfig, terminal, options);
-        stopApp = app.stop;
       };
 
       await withTerminalProcessOutput(terminal, () =>

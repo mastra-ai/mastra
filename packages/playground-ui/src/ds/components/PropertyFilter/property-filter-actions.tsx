@@ -31,8 +31,7 @@ export function PropertyFilterActions({
   return (
     <div className="flex items-center gap-2">
       {onClear && (
-        <Button disabled={disabled} size="md" onClick={onClear}>
-          <XIcon />
+        <Button disabled={disabled} size="md" onClick={onClear} icon={<XIcon />}>
           Clear
         </Button>
       )}
@@ -40,7 +39,7 @@ export function PropertyFilterActions({
       {hasMenuItems && (
         <DropdownMenu>
           <DropdownMenu.Trigger asChild>
-            <Button disabled={disabled} size="md" aria-label="More filter actions">
+            <Button disabled={disabled} size="icon-md" aria-label="More filter actions">
               <EllipsisVerticalIcon />
             </Button>
           </DropdownMenu.Trigger>

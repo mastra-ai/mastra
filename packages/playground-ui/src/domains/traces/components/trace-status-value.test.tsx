@@ -7,14 +7,14 @@ afterEach(cleanup);
 
 describe('TraceStatusValue', () => {
   it.each([
-    ['success', 'Success', 'text-accent1'],
-    ['error', 'Error', 'text-error'],
-    ['running', 'Running', 'text-neutral4'],
-  ] as const)('renders the %s status with its semantic color', (status, label, colorClass) => {
+    ['success', 'Success', 'bg-badge-green-subtle'],
+    ['error', 'Error', 'bg-badge-red-subtle'],
+    ['running', 'Running', 'bg-fill-subtle'],
+  ] as const)('reads a %s status in a matching badge, and shimmers only while it runs', (status, label, tone) => {
     render(<TraceStatusValue status={status} />);
 
-    const value = screen.getByText(label);
-    expect(value.classList.contains(colorClass)).toBe(true);
-    expect(value.classList.contains('shimmer-text')).toBe(status === 'running');
+    const text = screen.getByText(label);
+    expect(text.classList.contains('shimmer-text')).toBe(status === 'running');
+    expect(text.parentElement?.classList.contains(tone)).toBe(true);
   });
 });

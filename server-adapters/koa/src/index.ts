@@ -10,6 +10,8 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
+  getHTTPErrorResponse,
+  isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -122,21 +124,20 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         // Default error handling
         const error = err instanceof Error ? err : new Error(String(err));
-        let status = 500;
-        if (err && typeof err === 'object') {
-          if ('status' in err) {
-            status = (err as any).status;
-          } else if (
-            'details' in err &&
-            (err as any).details &&
-            typeof (err as any).details === 'object' &&
-            'status' in (err as any).details
-          ) {
-            status = (err as any).details.status;
-          }
-        }
+        const routeErrorResponse = (ctx as any)._mastraRouteErrorResponse;
+        const { status, body } =
+          routeErrorResponse?.error === err ? routeErrorResponse.response : getHTTPErrorResponse(err);
         ctx.status = status;
-        ctx.body = { error: error.message || 'Unknown error' };
+        ctx.body = { ...body, error: error.message || 'Unknown error' };
+
+        // The route handler already logged this 501 at warn level. Skip the emit when only
+        // Koa's default listener would receive it, since that prints to console.error.
+        // Apps that register their own 'error' listeners still get the event.
+        const loggedAsWarning = status === 501 && (ctx as any)._mastraLoggedNotImplementedError === err;
+        const onlyDefaultListener = ctx.app.listeners('error').every(listener => listener === ctx.app.onerror);
+        if (loggedAsWarning && onlyDefaultListener) {
+          return;
+        }
 
         // Emit the error for logging (standard Koa pattern) but don't re-throw
         // since this middleware is the final error boundary.
@@ -259,9 +260,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
       // Create abort controller for request cancellation
       const controller = new AbortController();
-      ctx.req.on('close', () => {
+      // Listen on the response, not the request: once a body parser has consumed the request,
+      // `ctx.req` is already closed, so its 'close' event never reports a client disconnect.
+      ctx.res.on('close', () => {
         // Only abort if the response wasn't successfully completed
-        if (!ctx.res.writableEnded) {
+        if (!ctx.res.writableFinished) {
           controller.abort();
         }
       });
@@ -336,7 +339,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
       ctx.params = {};
       registeredRoute.paramNames.forEach((name, index) => {
-        ctx.params[name] = match[index + 1];
+        const value = match[index + 1];
+        ctx.params[name] = value === undefined ? value : decodeURIComponent(value);
       });
 
       return registeredRoute;
@@ -408,7 +412,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       }
     }
 
-    if (params.body) {
+    if (params.body !== undefined || route.bodySchema) {
       try {
         params.body = await this.parseBody(route, params.body);
       } catch (error) {
@@ -505,14 +509,18 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       const result = await route.handler(handlerParams);
       await this.sendResponse(route, ctx, result, prefix);
     } catch (error) {
-      const httpStatus = error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+      const httpStatus =
+        error && typeof error === 'object' ? ((error as any).status ?? (error as any).details?.status) : undefined;
       const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
       if (!isClientError) {
-        this.mastra.getLogger()?.error('Error calling handler', {
+        // 501 means an optional capability isn't provided by the configured storage or core: expected, not a server fault.
+        const logLevel = httpStatus === 501 ? 'warn' : 'error';
+        this.mastra.getLogger()?.[logLevel]('Error calling handler', {
           error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           path: route.path,
           method: route.method,
         });
+        (ctx as any)._mastraLoggedNotImplementedError = httpStatus === 501 ? error : undefined;
       }
       const customResponse = getCustomHTTPExceptionResponse(error);
       if (customResponse) {
@@ -521,6 +529,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         ctx.body = Buffer.from(await customResponse.arrayBuffer());
         return;
       }
+
+      // Computed before the status is copied onto the error below, so a MastraError's
+      // details.status keeps its message-only body when it reaches the error boundary.
+      (ctx as any)._mastraRouteErrorResponse = { error, response: getHTTPErrorResponse(error) };
 
       // Attach status code to the error for upstream middleware
       if (error && typeof error === 'object') {
@@ -683,13 +695,16 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         });
 
         file.on('end', () => {
-          if (!limitExceeded) {
+          if (!limitExceeded && isSafeObjectKey(fieldname)) {
             result[fieldname] = Buffer.concat(chunks);
           }
         });
       });
 
       busboy.on('field', (fieldname: string, value: string) => {
+        if (!isSafeObjectKey(fieldname)) {
+          return;
+        }
         // Try to parse JSON strings (like 'options')
         try {
           result[fieldname] = JSON.parse(value);
@@ -977,12 +992,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           }
 
           // Check FGA authorization (EE feature)
+          // Path params last: the custom handler reads them from the URL, so query/body
+          // values must not be able to change which resource FGA checks.
           const fgaError = await checkRouteFGA(server.mastra, serverRoute, ctx.state.requestContext, {
-            ...(matchedRoute?.params ?? {}),
             ...(ctx.query as Record<string, string>),
             ...(typeof ctx.request.body === 'object' && ctx.request.body !== null
               ? (ctx.request.body as Record<string, unknown>)
               : {}),
+            ...(matchedRoute?.params ?? {}),
           });
           if (fgaError) {
             ctx.status = fgaError.status;

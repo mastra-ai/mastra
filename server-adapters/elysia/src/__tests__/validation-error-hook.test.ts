@@ -1,5 +1,5 @@
-import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
+import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
 import { Elysia } from 'elysia';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';

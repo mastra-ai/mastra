@@ -59,7 +59,6 @@ values
     await runtime.waitForScreenText(/E2E loaded file attachment fixture/i, terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Switched to: E2E loaded file attachment fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/\[1 image\] \[1 file\] Review loaded attachment history/i, terminal, 8_000);
     await runtime.waitForScreenText(/\[File: notes\.md\]/i, terminal, 8_000);
     await runtime.waitForScreenText(/Loaded text attachment body/i, terminal, 8_000);

@@ -3,13 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <base href="%%MASTRA_STUDIO_BASE_PATH%%/" />
-    <link rel="icon" type="image/svg+xml" href="./mastra.svg" />
+    <link rel="icon" type="image/svg+xml" href="./mastra-dark-tile.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mastra Studio</title>
     <script>
       window.MASTRA_TELEMETRY_DISABLED = '%%MASTRA_TELEMETRY_DISABLED%%';
       window.MASTRA_SERVER_HOST = '%%MASTRA_SERVER_HOST%%';
       window.MASTRA_SERVER_PORT = '%%MASTRA_SERVER_PORT%%';
+      window.MASTRA_DEV_SERVER_INSTANCE_ID = '%%MASTRA_DEV_SERVER_INSTANCE_ID%%';
       window.MASTRA_API_PREFIX = '%%MASTRA_API_PREFIX%%';
       window.MASTRA_HIDE_CLOUD_CTA = '%%MASTRA_HIDE_CLOUD_CTA%%';
       window.MASTRA_STUDIO_BASE_PATH = '%%MASTRA_STUDIO_BASE_PATH%%';
@@ -46,6 +47,8 @@
       (function () {
         let retryCount = 0;
         let currentEvents = null;
+        // The server can restart after serving HTML but before the first handshake.
+        let serverInstanceId = window.MASTRA_DEV_SERVER_INSTANCE_ID || undefined;
         const baseDelay = 1000;
         const maxDelay = 30000;
 
@@ -67,7 +70,12 @@
           };
 
           currentEvents.onmessage = event => {
-            if (event.data === 'refresh') {
+            if (event.data === 'connected' && event.lastEventId) {
+              // The one-shot refresh may have happened before this reconnect.
+              const restarted = serverInstanceId && serverInstanceId !== event.lastEventId;
+              serverInstanceId = event.lastEventId;
+              if (restarted) window.location.reload();
+            } else if (event.data === 'refresh') {
               window.location.reload();
             }
           };

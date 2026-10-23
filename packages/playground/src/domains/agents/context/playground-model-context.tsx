@@ -6,6 +6,7 @@ interface PlaygroundModelContextType {
   provider: string;
   model: string;
   modelOverride?: string;
+  modelWarning?: string;
   setProvider: (provider: string) => void;
   setModel: (provider: string, model: string) => void;
 }
@@ -16,7 +17,7 @@ interface ModelSelection {
   explicit: boolean;
 }
 
-const PlaygroundModelContext = createContext<PlaygroundModelContextType | null>(null);
+export const PlaygroundModelContext = createContext<PlaygroundModelContextType | null>(null);
 
 interface PlaygroundModelProviderProps {
   children: ReactNode;

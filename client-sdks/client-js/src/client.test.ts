@@ -652,28 +652,6 @@ describe('MastraClient', () => {
         expect(result).toEqual(mockMessages);
       });
 
-      it('should not include system reminders by default', async () => {
-        const mockMessages = {
-          messages: [{ id: 'msg-1', content: 'Hello' }],
-        };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockMessages,
-        });
-
-        const result = await client.listThreadMessages('thread-1', {
-          agentId: 'agent-1',
-        });
-
-        expect(global.fetch).toHaveBeenCalledWith(
-          'http://localhost:4111/api/memory/threads/thread-1/messages?agentId=agent-1',
-          expect.any(Object),
-        );
-        expect(result).toEqual(mockMessages);
-      });
-
       it('should include system reminders when requested', async () => {
         const mockMessages = {
           messages: [{ id: 'msg-1', content: 'Hello' }],
@@ -715,6 +693,35 @@ describe('MastraClient', () => {
           expect.any(Object),
         );
         expect(result).toEqual(mockMessages);
+      });
+
+      it('should pass pagination parameters page, perPage, and orderBy correctly', async () => {
+        const mockResponse = {
+          messages: [{ id: 'msg-1', content: 'Hello' }],
+          total: 100,
+          page: 1,
+          perPage: 40,
+          hasMore: true,
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockResponse,
+        });
+
+        const result = await client.listThreadMessages('thread-1', {
+          agentId: 'agent-1',
+          page: 1,
+          perPage: 40,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1/messages?agentId=agent-1&page=1&perPage=40&orderBy=%7B%22field%22%3A%22createdAt%22%2C%22direction%22%3A%22ASC%22%7D',
+          expect.any(Object),
+        );
+        expect(result).toEqual(mockResponse);
       });
     });
 
@@ -992,6 +999,81 @@ describe('MastraClient', () => {
       );
     });
 
+    it('serializes target filters for experiment listings', async () => {
+      mockSuccess();
+
+      await client.listExperiments({ targetType: 'agent', targetId: 'agent-1' });
+      mockSuccess();
+      await client.listDatasetExperiments('dataset-1', { targetType: 'workflow', targetId: 'wf 1' });
+
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        1,
+        'http://localhost:4111/api/experiments?targetType=agent&targetId=agent-1',
+        expect.any(Object),
+      );
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        2,
+        'http://localhost:4111/api/datasets/dataset-1/experiments?targetType=workflow&targetId=wf+1',
+        expect.any(Object),
+      );
+    });
+
+    it('serializes target filters as repeated targetIds for dataset listings', async () => {
+      mockSuccess();
+
+      await client.listDatasets({ page: 0, perPage: 20, targetType: 'agent', targetIds: ['a1', 'a 2'] });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets?page=0&perPage=20&targetType=agent&targetIds=a1&targetIds=a+2',
+        expect.any(Object),
+      );
+    });
+
+    it('serializes datasetIds as repeated query params for dataset listings', async () => {
+      mockSuccess();
+
+      await client.listDatasets({ datasetIds: ['ds-1', 'ds 2'] });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets?datasetIds=ds-1&datasetIds=ds+2',
+        expect.any(Object),
+      );
+    });
+
+    it('returns no datasets without a request when datasetIds is empty', async () => {
+      const result = await client.listDatasets({ datasetIds: [] });
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        datasets: [],
+        pagination: { total: 0, page: 0, perPage: false, hasMore: false },
+      });
+    });
+
+    it('serializes orderBy as bracket-notation params for dataset and experiment listings', async () => {
+      mockSuccess();
+      await client.listDatasets({ orderBy: { field: 'name', direction: 'ASC' } });
+      mockSuccess();
+      await client.listDatasetItems('dataset-1', { orderBy: { field: 'updatedAt', direction: 'DESC' } });
+      mockSuccess();
+      await client.listExperiments({ orderBy: { field: 'status', direction: 'ASC' } });
+      mockSuccess();
+      await client.listDatasetExperiments('dataset-1', { orderBy: { field: 'createdAt', direction: 'ASC' } });
+      mockSuccess();
+      await client.listDatasetExperimentResults('dataset-1', 'experiment-1', {
+        orderBy: { field: 'startedAt', direction: 'DESC' },
+      });
+
+      const urls = (global.fetch as any).mock.calls.map((call: [string]) => decodeURIComponent(call[0]));
+      expect(urls).toEqual([
+        'http://localhost:4111/api/datasets?orderBy[field]=name&orderBy[direction]=ASC',
+        'http://localhost:4111/api/datasets/dataset-1/items?orderBy[field]=updatedAt&orderBy[direction]=DESC',
+        'http://localhost:4111/api/experiments?orderBy[field]=status&orderBy[direction]=ASC',
+        'http://localhost:4111/api/datasets/dataset-1/experiments?orderBy[field]=createdAt&orderBy[direction]=ASC',
+        'http://localhost:4111/api/datasets/dataset-1/experiments/experiment-1/results?orderBy[field]=startedAt&orderBy[direction]=DESC',
+      ]);
+    });
+
     it('serializes tags as repeated query params for experiment result listings', async () => {
       mockSuccess();
 
@@ -1048,6 +1130,37 @@ describe('MastraClient', () => {
       expect(global.fetch).toHaveBeenCalledWith(
         'http://localhost:4111/api/experiments/experiment-1?organizationId=org_a&projectId=proj_1',
         expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
+    it('issues a top-level GET for an experiment by id', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'experiment-1', datasetId: 'dataset-1' }),
+      });
+
+      const result = await client.getExperiment('experiment-1');
+
+      expect(result).toMatchObject({ id: 'experiment-1', datasetId: 'dataset-1' });
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/experiments/experiment-1',
+        expect.not.objectContaining({ method: expect.anything() }),
+      );
+    });
+
+    it('scopes a top-level experiment GET with tenancy query parameters', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'experiment-1', datasetId: 'dataset-1' }),
+      });
+
+      await client.getExperiment('experiment-1', { organizationId: 'org_a', projectId: 'proj_1' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/experiments/experiment-1?organizationId=org_a&projectId=proj_1',
+        expect.anything(),
       );
     });
 
@@ -1345,6 +1458,35 @@ describe('MastraClient', () => {
         description,
         metadata,
       });
+    });
+
+    it('triggerDatasetExperiment posts agentModel in the request body', async () => {
+      const agentModel = { provider: 'openai', modelId: 'gpt-5-mini' };
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({
+          experimentId: 'exp-1',
+          status: 'pending',
+          totalItems: 1,
+          succeededCount: 0,
+          failedCount: 0,
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+          results: [],
+        }),
+      });
+
+      await client.triggerDatasetExperiment({
+        datasetId: 'ds-1',
+        targetType: 'agent',
+        targetId: 'agent-1',
+        agentModel,
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments');
+      expect(JSON.parse(init.body)).toMatchObject({ targetType: 'agent', targetId: 'agent-1', agentModel });
     });
 
     it('updateDatasetExperiment should PATCH the experiment route with name, description and metadata', async () => {

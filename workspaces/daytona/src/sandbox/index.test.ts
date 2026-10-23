@@ -15,6 +15,7 @@
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
 import {
   SandboxNotReadyError,
+  SandboxUnsupportedFeatureError,
   WORKSPACE_TOOLS,
   Workspace,
   createWorkspaceTools,
@@ -24,6 +25,16 @@ import { S3Filesystem } from '@mastra/s3';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { DaytonaSandbox } from './index';
+
+const DaytonaGoneError = vi.hoisted(
+  () =>
+    class DaytonaGoneError extends Error {
+      constructor(message?: string) {
+        super(message ?? 'Gone');
+        this.name = 'DaytonaGoneError';
+      }
+    },
+);
 
 // Use vi.hoisted to define mocks before vi.mock is hoisted
 const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaNotFoundError } = vi.hoisted(() => {
@@ -162,6 +173,7 @@ vi.mock('@daytonaio/sdk', () => ({
     return mockDaytona;
   }),
   DaytonaError,
+  DaytonaGoneError,
   DaytonaNotFoundError,
   SandboxState: {
     CREATING: 'creating',
@@ -1313,14 +1325,39 @@ describe('DaytonaSandbox', () => {
       expect(sandbox.status).toBe('stopped');
     });
 
-    it('destroy handles errors gracefully', async () => {
-      mockDaytona.delete.mockRejectedValue(new Error('Already deleted'));
+    it.each([
+      ['not found', new DaytonaNotFoundError('No sandbox found')],
+      ['gone', new DaytonaGoneError('Sandbox already deleted')],
+    ])('destroy treats %s errors as successful cleanup', async (_name, error) => {
+      mockDaytona.delete.mockRejectedValue(error);
       const sandbox = new DaytonaSandbox();
 
       await sandbox._start();
       await sandbox._destroy();
 
       expect(sandbox.status).toBe('destroyed');
+      expect((sandbox as any)._sandbox).toBeNull();
+      expect((sandbox as any)._daytona).toBeNull();
+    });
+
+    it('destroy propagates operational errors and retains state for retry', async () => {
+      const deleteError = new DaytonaError('Service unavailable', 503);
+      mockDaytona.delete.mockRejectedValueOnce(deleteError).mockResolvedValueOnce(undefined);
+      const sandbox = new DaytonaSandbox();
+
+      await sandbox._start();
+
+      await expect(sandbox._destroy()).rejects.toBe(deleteError);
+      expect(sandbox.status).toBe('error');
+      expect((sandbox as any)._sandbox).toBe(mockSandbox);
+      expect((sandbox as any)._daytona).toBe(mockDaytona);
+
+      await sandbox._destroy();
+
+      expect(mockDaytona.delete).toHaveBeenCalledTimes(2);
+      expect(sandbox.status).toBe('destroyed');
+      expect((sandbox as any)._sandbox).toBeNull();
+      expect((sandbox as any)._daytona).toBeNull();
     });
 
     it('stop stops a detached running sandbox by identity without starting it', async () => {
@@ -1355,6 +1392,29 @@ describe('DaytonaSandbox', () => {
       expect(mockDaytona.delete).toHaveBeenCalledWith(detached);
       expect(mockDaytona.start).not.toHaveBeenCalled();
       expect(mockSandbox.start).not.toHaveBeenCalled();
+    });
+
+    it('destroy propagates detached sandbox deletion errors and retains identity for retry', async () => {
+      const detached = { ...mockSandbox, state: 'stopped' };
+      const deleteError = new DaytonaError('Service unavailable', 503);
+      mockDaytona.get.mockResolvedValue(detached);
+      mockDaytona.delete.mockRejectedValueOnce(deleteError).mockResolvedValueOnce(undefined);
+
+      const sandbox = new DaytonaSandbox({ id: 'my-preview' });
+      sandbox.status = 'stopped';
+
+      await expect(sandbox._destroy()).rejects.toBe(deleteError);
+      expect(sandbox.status).toBe('error');
+      expect((sandbox as any).sandboxName).toBe('my-preview');
+      expect((sandbox as any)._daytona).toBe(mockDaytona);
+
+      await sandbox._destroy();
+
+      expect(mockDaytona.get).toHaveBeenCalledTimes(2);
+      expect(mockDaytona.delete).toHaveBeenCalledTimes(2);
+      expect(sandbox.status).toBe('destroyed');
+      expect((sandbox as any)._daytonaSandboxId).toBeUndefined();
+      expect((sandbox as any)._daytona).toBeNull();
     });
   });
 
@@ -1412,6 +1472,17 @@ describe('DaytonaSandbox', () => {
         { source: Buffer.from('hello'), destination: '/home/daytona/app/a.txt' },
         { source: Buffer.from([1, 2, 3]), destination: '/home/daytona/app/b.bin' },
       ]);
+    });
+
+    it('writeFiles rejects an explicit per-file mode without uploading', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      mockSandbox.fs.uploadFiles.mockClear();
+
+      await expect(
+        sandbox.writeFiles([{ path: '/home/daytona/app/a.txt', content: 'hello', mode: 0o600 }]),
+      ).rejects.toThrow(SandboxUnsupportedFeatureError);
+      expect(mockSandbox.fs.uploadFiles).not.toHaveBeenCalled();
     });
   });
 

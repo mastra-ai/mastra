@@ -1,11 +1,13 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
+import { isOmModelExecutionError } from '../error';
 import { filterObservedMessages, getObservableMessages } from '../message-utils';
 import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
 
+import { selectSafeBufferPrefix } from './safe-buffer-prefix';
 import type { ObservationTurn } from './turn';
 import type { StepContext } from './types';
 
@@ -76,8 +78,13 @@ export class ObservationStep {
     let observerExchange: StepContext['observerExchange'];
 
     // ── Step 0: Activate buffered chunks ──────────────────────
+    // In the threshold→blockAfter band activate() never waits on an in-flight buffer op: it
+    // activates the stored chunks, and storage keeps a chunk appended meanwhile. Reflection below
+    // may start a new generation while a buffer op is in flight; the op's chunk then lands on the
+    // new head (storage resolves the head and carries chunks across the rollover).
+    const step0Messages = this.stepNumber === 0 ? getObservableMessages(messageList) : [];
     if (this.stepNumber === 0) {
-      const step0Messages = getObservableMessages(messageList);
+      this.turn.inputMessageIds = messageList.get.input.db().map(msg => msg.id);
       const activation = await om.activate({
         threadId,
         resourceId,
@@ -93,7 +100,7 @@ export class ObservationStep {
       if (activation.activated) {
         activated = true;
         if (activation.activatedMessageIds?.length) {
-          messageList.removeByIds(activation.activatedMessageIds);
+          messageList.removeByIds(activation.activatedMessageIds, { pruned: true });
         }
         await om.resetBufferingState({
           threadId,
@@ -129,8 +136,10 @@ export class ObservationStep {
     }
 
     // ── Check for incomplete tool calls ────────────────────────
-    // Provider-executed tools (e.g. Anthropic web_search) may still be in state:'call'
-    // while the agent loop continues. We must not observe/buffer until they complete.
+    // Tool calls (provider- or client-executed) may still be in state:'call'
+    // while the agent loop continues. Threshold observation must not run until
+    // they complete. Mid-loop buffering is NOT blocked here — it admits only
+    // the safe completed prefix via selectSafeBufferPrefix below.
     const allMsgsForToolCheck = getObservableMessages(messageList);
     const lastMessage = allMsgsForToolCheck[allMsgsForToolCheck.length - 1];
     const pendingStepMessages = [...messageList.get.input.db(), ...messageList.get.response.db()];
@@ -153,8 +162,29 @@ export class ObservationStep {
       messages: getObservableMessages(messageList),
     });
 
-    // Trigger buffering if interval boundary crossed (fire-and-forget, all steps)
-    if (statusSnapshot.shouldBuffer && !hasIncompleteToolCalls) {
+    if (statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate && !hasIncompleteToolCalls) {
+      // In the band without a chunk per the turn's cached record. A background buffer op
+      // may have persisted its chunk since the record was cached; refresh once so a ready
+      // chunk is activated instead of lingering behind a newly started buffer op.
+      await this.turn.refreshRecord();
+      statusSnapshot = await om.getStatus({
+        threadId,
+        resourceId,
+        record: this.turn.record,
+        messages: getObservableMessages(messageList),
+      });
+    }
+
+    // In the threshold→blockAfter band with a chunk ready, activate this step instead of
+    // starting another buffer op.
+    const activateBeforeBuffering =
+      statusSnapshot.inAsyncObservationBand && statusSnapshot.canActivate && !hasIncompleteToolCalls;
+
+    // Trigger buffering if interval boundary crossed (fire-and-forget, all steps).
+    // A pending tool call on the newest message doesn't block the whole batch:
+    // admit only the safe prefix before it — the same policy idle buffering
+    // applies at turn end (see selectSafeBufferPrefix).
+    if (statusSnapshot.shouldBuffer && !activateBeforeBuffering) {
       const allMessages = getObservableMessages(messageList);
       const unobservedMessages = om.getUnobservedMessages(allMessages, statusSnapshot.record);
 
@@ -167,8 +197,14 @@ export class ObservationStep {
       const candidates = om.getUnobservedMessages(unobservedMessages, statusSnapshot.record, {
         excludeBuffered: true,
       });
-      if (candidates.length > 0) {
-        om.sealMessagesForBuffering(candidates);
+      const safeCandidates = selectSafeBufferPrefix(candidates);
+      // Deferred = there were candidates but none can be buffered yet. Skip buffer()
+      // entirely so the interval boundary isn't advanced and the next step retries.
+      // When there simply are no candidates, still call buffer() (as before) so it
+      // records the boundary and this interval doesn't re-trigger every step.
+      const deferred = candidates.length > 0 && safeCandidates.length === 0;
+      if (safeCandidates.length > 0) {
+        om.sealMessagesForBuffering(safeCandidates);
 
         try {
           await this.turn.hooks?.onBufferChunkSealed?.();
@@ -179,61 +215,107 @@ export class ObservationStep {
         }
 
         if (this.turn.memory) {
-          await this.turn.memory.persistMessages(candidates);
+          await this.turn.memory.persistMessages(safeCandidates);
         }
 
         // Once a buffered chunk has been sealed and persisted, it should no longer
-        // remain in the live response/input buckets. Move the exact same messages
-        // into memory so later step-save drains don't pull them back out and grow
-        // them again under the old response id.
-        messageList.removeByIds(candidates.map(msg => msg.id));
-        for (const msg of candidates) {
+        // remain in the live response bucket. Move the exact same messages into
+        // memory so later step-save drains don't pull them back out and grow them
+        // again under the old response id. Input messages stay put: they don't grow,
+        // and semantic recall embeds the turn's new user messages from the input bucket.
+        const inputIds = new Set(messageList.get.input.db().map(msg => msg.id));
+        const sealedOutput = safeCandidates.filter(msg => !inputIds.has(msg.id));
+        messageList.removeByIds(sealedOutput.map(msg => msg.id));
+        for (const msg of sealedOutput) {
           messageList.add(msg, 'memory');
         }
       }
 
-      void om.trackBackgroundWork(
-        om
-          .buffer({
-            threadId,
-            resourceId,
-            messages: unobservedMessages,
-            pendingTokens: statusSnapshot.pendingTokens,
-            record: statusSnapshot.record,
-            writer: this.turn.writer,
-            agent: this.turn.agent,
-            sendSignal: this.turn.sendSignal,
-            sendStateSignal: this.turn.sendStateSignal,
-            requestContext: this.turn.requestContext,
-            observabilityContext: this.turn.observabilityContext,
-          })
-          .catch((err: Error) => {
-            omDebug(`[OM:buffer] fire-and-forget buffer failed: ${err?.message}`);
-          }),
-      );
-      buffered = true;
+      if (!deferred) {
+        void om.trackBackgroundWork(
+          om
+            .buffer({
+              threadId,
+              resourceId,
+              messages: safeCandidates,
+              pendingTokens: statusSnapshot.pendingTokens,
+              record: statusSnapshot.record,
+              writer: this.turn.writer,
+              agent: this.turn.agent,
+              sendSignal: this.turn.sendSignal,
+              sendStateSignal: this.turn.sendStateSignal,
+              requestContext: this.turn.requestContext,
+              currentModel: this.turn.actorModelContext,
+              observabilityContext: this.turn.observabilityContext,
+            })
+            .catch((err: Error) => {
+              omDebug(`[OM:buffer] fire-and-forget buffer failed: ${err?.message}`);
+            }),
+          { threadId, resourceId },
+        );
+        buffered = true;
+      }
     }
 
     // ── Save messages + threshold observation ──────
     // Historically gated to step > 0 (pre-async-buffering relic, 27d7398c51). A single
-    // over-threshold message at step 0 hit neither the buffer path (shouldBuffer requires
+    // over-threshold message at step 0 hit neither the buffer path (shouldBuffer then required
     // pendingTokens < threshold) nor this one — the #16523 dead zone. Now the block also
     // runs at step 0, but ONLY when observation is imminent, so buckets aren't drained on
     // turns where nothing will fire.
-    const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls;
-    /** In-flight message ids the step-0 cleanup must never remove from live context. */
-    let step0PreserveIds: string[] | undefined;
+    // In the threshold→blockAfter band nothing may block: run the threshold pipeline only to
+    // activate an already-buffered chunk (activate() doesn't wait on an in-flight buffer op in
+    // the band). Without a ready chunk, defer to a later step.
+    const bandDefersObservation = statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate;
+    const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls && !bandDefersObservation;
+    /**
+     * In-flight message ids cleanup must never remove from live context: the turn's own
+     * request, plus whatever the model has not read yet (the pending messages at step 0, the
+     * previous step's output — e.g. a tool result — at step > 0).
+     */
+    let inFlightIds: string[] | undefined;
     if (this.stepNumber > 0 || willObserveNow) {
       if (this.stepNumber > 0) {
-        // Save messages from previous step
+        // Save messages from previous step. Drain the buckets synchronously so nothing that lands
+        // in the run's MessageList during the save (e.g. a background tool result) is cleared with
+        // them. If the save fails, return the messages to their buckets for the end-of-turn save.
         const newInput = messageList.clear.input.db();
         const newOutput = messageList.clear.response.db();
         const messagesToSave = [...newInput, ...newOutput];
+        // A message drained again only because OM markers were appended to it was already read.
+        // A message drained on an earlier step can also change in place without returning to a
+        // bucket — e.g. a background task result merged over its placeholder after the response
+        // message id rotated. Its new parts are just as unread.
+        const drainedIds = new Set(messagesToSave.map(msg => msg.id));
+        const updatedEarlier = messageList.get.all
+          .db()
+          .filter(msg => !drainedIds.has(msg.id) && this.turn.drainedPartKeys.has(msg.id));
+        const drainedKeys = new Map<string, Set<string>>();
+        const unreadIds = [...messagesToSave, ...updatedEarlier]
+          .filter(msg => {
+            const keys = getPartKeys(msg);
+            const seen = this.turn.drainedPartKeys.get(msg.id);
+            drainedKeys.set(msg.id, new Set([...(seen ?? []), ...keys]));
+            return !seen || keys.some(key => !seen.has(key));
+          })
+          .map(msg => msg.id);
+        inFlightIds = [...new Set([...this.turn.inputMessageIds, ...unreadIds])];
         if (messagesToSave.length > 0) {
-          await om.persistMessages(messagesToSave, threadId, resourceId);
           for (const msg of messagesToSave) {
             messageList.add(msg, 'memory');
           }
+          try {
+            await om.persistMessages(messagesToSave, threadId, resourceId);
+          } catch (error) {
+            restoreDrainedMessages(messageList, newInput, 'input');
+            restoreDrainedMessages(messageList, newOutput, 'response');
+            throw error;
+          }
+        }
+        // Record parts as seen only once the save succeeded: a failed save returns the messages
+        // to their buckets, and a retry must still treat them as unread.
+        for (const [id, keys] of drainedKeys) {
+          this.turn.drainedPartKeys.set(id, keys);
         }
       } else {
         // Step 0: persist pending input WITHOUT draining the buckets. The input bucket is
@@ -251,7 +333,7 @@ export class ObservationStep {
         // protect it (and everything else pending) from cleanup by identity rather than
         // relying on the token-based retention floor, which resolves to 0 for sync-only,
         // resource-scope, and explicit `bufferActivation: 1` configs.
-        step0PreserveIds = pending.map(msg => msg.id);
+        inFlightIds = pending.map(msg => msg.id);
       }
 
       // Step-0 observation: seed an empty assistant message under the active response id
@@ -277,18 +359,18 @@ export class ObservationStep {
       // Threshold observation (skip if tool calls pending)
       if (willObserveNow) {
         const preObsGeneration = this.turn.record.generationCount;
-        const obsResult = await this.runThresholdObservation();
+        const obsResult = await this.runThresholdObservation(statusSnapshot.inAsyncObservationBand);
         observerExchange = obsResult.observerExchange;
         if (obsResult.succeeded) {
           observed = true;
           didThresholdCleanup = true;
 
-          // Cleanup after observation. At step 0 the just-observed messages include the
-          // fresh prompt the model is about to answer — preserve the in-flight messages
-          // by identity (the token-based retention floor resolves to 0 for sync-only,
+          // Cleanup after observation. The just-observed messages include the request the
+          // model is working on and the output it has not read yet — preserve the in-flight
+          // messages by identity (the token-based retention floor resolves to 0 for sync-only,
           // resource-scope, and explicit `bufferActivation: 1` configs, so it cannot be
-          // relied on to keep them). Step > 0 semantics are unchanged.
-          const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
+          // relied on to keep them).
+          const observedIds = obsResult.cleanupMessageIds;
           const minRemaining = resolveRetentionFloor(
             om.getObservationConfig().bufferActivation ?? 1,
             statusSnapshot.threshold,
@@ -300,7 +382,9 @@ export class ObservationStep {
             messages: messageList,
             observedMessageIds: observedIds,
             retentionFloor: minRemaining,
-            preserveMessageIds: step0PreserveIds,
+            // Re-check right before removal: output merged in place while the Observer ran (e.g.
+            // a background task result) has not been read either.
+            preserveMessageIds: [...(inFlightIds ?? []), ...this.changedSinceDrain(messageList)],
           });
 
           if (statusSnapshot.asyncObservationEnabled) {
@@ -347,7 +431,10 @@ export class ObservationStep {
         : undefined;
 
       const pendingMessageIds = new Set(
-        [...messageList.get.input.db(), ...messageList.get.response.db()].map(msg => msg.id).filter(Boolean),
+        [...messageList.get.input.db(), ...messageList.get.response.db()]
+          .map(msg => msg.id)
+          .concat(inFlightIds ?? [], this.turn.inputMessageIds, this.changedSinceDrain(messageList))
+          .filter(Boolean),
       );
 
       filterObservedMessages({
@@ -380,22 +467,40 @@ export class ObservationStep {
     return this._context;
   }
 
+  /** Ids of already-drained messages that now hold parts the model has not been sent. */
+  private changedSinceDrain(messageList: MessageList): string[] {
+    return messageList.get.all
+      .db()
+      .filter(msg => {
+        const seen = this.turn.drainedPartKeys.get(msg.id);
+        return seen !== undefined && getPartKeys(msg).some(key => !seen.has(key));
+      })
+      .map(msg => msg.id);
+  }
+
   /**
    * Run the full threshold observation pipeline:
-   * waitForBuffering → re-check → activate → reflect → observe (sync fallback when
-   * buffered activation did not happen)
+   * waitForBuffering → re-check → activate buffered chunks → reflect → observe
+   * (sync fallback at blockAfter when async buffering is enabled)
    */
-  private async runThresholdObservation(): Promise<{
+  private async runThresholdObservation(inAsyncObservationBand?: boolean): Promise<{
     succeeded: boolean;
     record: any;
     activatedMessageIds?: string[];
+    /** Messages covered by this cycle (activated and/or sync-observed) to remove from context. */
+    cleanupMessageIds: string[];
     observerExchange?: StepContext['observerExchange'];
   }> {
     const { threadId, resourceId, messageList } = this.turn;
     const om = this.turn.om;
 
     // Wait for any in-flight buffering to settle, then refresh the turn cache once.
-    await om.waitForBuffering(threadId, resourceId);
+    // In the threshold→blockAfter band this path is only entered to activate a ready
+    // chunk — skip the wait so an in-flight buffer op (Observer call, indexing) or
+    // reflection buffer op doesn't block the activation swap.
+    if (!inAsyncObservationBand) {
+      await om.waitForBuffering(threadId, resourceId);
+    }
     await this.turn.refreshRecord();
 
     // A step-0 seeded response message exists ONLY as a marker anchor in the live list.
@@ -408,72 +513,146 @@ export class ObservationStep {
       : getObservableMessages(messageList);
 
     // Re-check status with fresh state
-    const freshStatus = await om.getStatus({
+    let status = await om.getStatus({
       threadId,
       resourceId,
       record: this.turn.record,
       messages: observableMessages,
     });
 
-    if (!freshStatus.shouldObserve) {
-      return { succeeded: false, record: freshStatus.record };
+    if (!status.shouldObserve) {
+      return { succeeded: false, record: status.record, cleanupMessageIds: [] };
     }
 
-    // Try activation first if buffered chunks exist
-    if (freshStatus.canActivate) {
+    // A large batch may leave an uncovered tail after activation. Drain buffered
+    // chunks before sync observation so their messages are not observed twice.
+    let pendingMessages = observableMessages;
+    const activatedMessageIds: string[] = [];
+    let activated = false;
+    while (status.shouldObserve && status.canActivate) {
       const activation = await om.activate({
         threadId,
         resourceId,
         record: this.turn.record,
-        messages: observableMessages,
+        messages: pendingMessages,
+        pendingTokens: status.pendingTokens,
         currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
       });
       this.turn.setRecord(activation.record);
-
-      if (activation.activated) {
-        // Check reflection after activation — use maybeReflect so that a
-        // completed buffered reflection is activated instantly instead of
-        // running a redundant sync reflection from scratch.
-        const postActivationRecord = activation.record;
-        await om.reflector.maybeReflect({
-          record: postActivationRecord,
-          observationTokens: postActivationRecord.observationTokenCount ?? 0,
+      if (!activation.activated) {
+        await this.turn.refreshRecord();
+        status = await om.getStatus({
           threadId,
-          writer: this.turn.writer,
-          messageList,
-          currentModel: this.turn.actorModelContext,
-          requestContext: this.turn.requestContext,
-          observabilityContext: this.turn.observabilityContext,
-          lastActivityAt: getLastActivityFromMessages(getObservableMessages(messageList)),
-          reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
-          trigger: 'turn-sync',
+          resourceId,
+          record: this.turn.record,
+          messages: pendingMessages,
         });
+        break;
+      }
 
+      activated = true;
+      const ids = new Set(activation.activatedMessageIds ?? []);
+      activatedMessageIds.push(...ids);
+      pendingMessages = pendingMessages.filter(msg => !ids.has(msg.id));
+      status = await om.getStatus({
+        threadId,
+        resourceId,
+        record: this.turn.record,
+        messages: pendingMessages,
+      });
+    }
+
+    // Chunks still remain after activation (it stopped short of them): defer rather than
+    // sync-observe newer messages ahead of older buffered ones. Keep prior activation cleanup.
+    if (status.shouldObserve && status.canActivate) {
+      return {
+        succeeded: activated,
+        record: this.turn.record,
+        activatedMessageIds: activated ? activatedMessageIds : undefined,
+        cleanupMessageIds: activatedMessageIds,
+      };
+    }
+
+    if (activated) {
+      // Check reflection after activation — use maybeReflect so that a
+      // completed buffered reflection is activated instantly instead of
+      // running a redundant sync reflection from scratch.
+      const preReflectionRecord = this.turn.record;
+      await om.reflector.maybeReflect({
+        record: preReflectionRecord,
+        observationTokens: preReflectionRecord.observationTokenCount ?? 0,
+        threadId,
+        writer: this.turn.writer,
+        messageList,
+        currentModel: this.turn.actorModelContext,
+        requestContext: this.turn.requestContext,
+        observabilityContext: this.turn.observabilityContext,
+        lastActivityAt: getLastActivityFromMessages(getObservableMessages(messageList)),
+        reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
+        trigger: 'turn-sync',
+      });
+      await this.turn.refreshRecord();
+      const postActivationRecord = this.turn.record;
+      status = await om.getStatus({
+        threadId,
+        resourceId,
+        record: postActivationRecord,
+        messages: pendingMessages,
+      });
+
+      if (!status.shouldObserve) {
         return {
           succeeded: true,
-          record: activation.record,
-          activatedMessageIds: activation.activatedMessageIds,
+          record: postActivationRecord,
+          activatedMessageIds,
+          cleanupMessageIds: activatedMessageIds,
         };
       }
     }
 
-    // Sync observation — we've waited for buffering and tried activation,
-    // if we're still above threshold we must observe synchronously.
-    const obsResult = await om.observe({
-      threadId,
-      resourceId,
-      messages: observableMessages,
-      messageList,
-      trigger: 'turn-sync',
-      agent: this.turn.agent,
-      sendSignal: this.turn.sendSignal,
-      sendStateSignal: this.turn.sendStateSignal,
-      requestContext: this.turn.requestContext,
-      writer: this.turn.writer,
-      observabilityContext: this.turn.observabilityContext,
-    });
+    if (status.inAsyncObservationBand || status.canActivate) {
+      return {
+        succeeded: activated,
+        record: this.turn.record,
+        activatedMessageIds: activated ? activatedMessageIds : undefined,
+        cleanupMessageIds: activatedMessageIds,
+      };
+    }
+
+    // Sync observation — activation left the remaining messages at/above blockAfter
+    // (or async buffering is disabled).
+    let obsResult;
+    try {
+      obsResult = await om.observe({
+        threadId,
+        resourceId,
+        messages: pendingMessages,
+        messageList,
+        trigger: 'turn-sync',
+        agent: this.turn.agent,
+        sendSignal: this.turn.sendSignal,
+        sendStateSignal: this.turn.sendStateSignal,
+        requestContext: this.turn.requestContext,
+        currentModel: this.turn.actorModelContext,
+        writer: this.turn.writer,
+        observabilityContext: this.turn.observabilityContext,
+      });
+    } catch (error) {
+      if (
+        om.config.observation.failurePolicy !== 'continue' ||
+        !isOmModelExecutionError(error) ||
+        error.failureKind !== 'observer-model'
+      )
+        throw error;
+      return {
+        succeeded: activated,
+        record: this.turn.record,
+        activatedMessageIds: activated ? activatedMessageIds : undefined,
+        cleanupMessageIds: activatedMessageIds,
+      };
+    }
 
     if (obsResult.observed) {
       const observedMessageIds = new Set(obsResult.record.observedMessageIds ?? []);
@@ -524,9 +703,83 @@ export class ObservationStep {
     }
 
     return {
-      succeeded: obsResult.observed,
+      succeeded: activated || obsResult.observed,
       record: obsResult.record,
+      activatedMessageIds: activated ? activatedMessageIds : undefined,
+      cleanupMessageIds: [
+        ...new Set([
+          ...activatedMessageIds,
+          ...(obsResult.observed ? (obsResult.record.observedMessageIds ?? []) : []),
+        ]),
+      ],
       observerExchange: om.observer.lastExchange,
     };
   }
+}
+
+/**
+ * Move messages drained into the memory bucket back to `source` after a failed save. Messages that
+ * have already left the memory bucket (a background tool result moves its message to `response`)
+ * are left where they are. The list's current copy is re-added so changes made during the save
+ * are kept.
+ */
+function restoreDrainedMessages(messageList: MessageList, drained: MastraDBMessage[], source: 'input' | 'response') {
+  if (drained.length === 0) return;
+  const stillQueued = new Set([...messageList.get.input.db(), ...messageList.get.response.db()].map(msg => msg.id));
+  const ids = drained.map(msg => msg.id).filter(id => !stillQueued.has(id));
+  for (const msg of messageList.removeByIds(ids)) {
+    messageList.add(msg, source, { merge: false });
+  }
+}
+
+/**
+ * Identity keys of a message's non-marker parts. Tool parts are keyed by call id, state and result,
+ * so a result merged in place into an existing tool-invocation part yields a new key. Bookkeeping
+ * fields that change when a part is re-stamped are not part of the identity.
+ */
+export function getPartKeys(msg: MastraDBMessage): string[] {
+  const seen = new Map<string, number>();
+  return (msg.content.parts ?? []).flatMap(part => {
+    if (part.type.startsWith('data-om-')) return [];
+    let identity: string;
+    if (part.type === 'tool-invocation') {
+      identity = toolPartIdentity(part.toolInvocation);
+    } else {
+      const {
+        providerMetadata: _providerMetadata,
+        createdAt: _createdAt,
+        updatedAt: _updatedAt,
+        ...rest
+      } = part as typeof part & {
+        createdAt?: unknown;
+        updatedAt?: unknown;
+      };
+      identity = JSON.stringify(rest);
+    }
+    // Ordinal keeps identical parts within one message distinct.
+    const ordinal = seen.get(identity) ?? 0;
+    seen.set(identity, ordinal + 1);
+    return [`${identity}#${ordinal}`];
+  });
+}
+
+type ToolInvocation = Extract<
+  MastraDBMessage['content']['parts'][number],
+  { type: 'tool-invocation' }
+>['toolInvocation'];
+
+/**
+ * Serializing a tool result on every step is quadratic in turn length (each step rescans every drained
+ * message), so the identity is cached per invocation object and reused while its state and result
+ * reference are unchanged. A result merged in place replaces that reference and is re-serialized.
+ */
+const toolPartIdentityCache = new WeakMap<ToolInvocation, { state: string; result: unknown; identity: string }>();
+
+function toolPartIdentity(invocation: ToolInvocation): string {
+  const result = invocation.state === 'result' ? invocation.result : null;
+  const cached = toolPartIdentityCache.get(invocation);
+  if (cached && cached.state === invocation.state && cached.result === result) return cached.identity;
+  const identity = JSON.stringify(['tool-invocation', invocation.toolCallId, invocation.state, result]);
+  toolPartIdentityCache.set(invocation, { state: invocation.state, result, identity });
+  return identity;
 }

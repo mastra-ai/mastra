@@ -1,0 +1,85 @@
+---
+extends: existence
+message: "AI regime opener: '%s'. Lead with the subject and put the tool after the verb, with 'with' or 'when using'."
+level: error
+nonword: true
+# A sentence opened with "Under" and a bare name, which makes a tool, a
+# decision label, or a layout the jurisdiction the clause holds inside of
+# ("Under cog the same text is configurable twice," "Under mise the
+# mechanism is chosen by where vendir writes the file," "Under layout the
+# file lands in the vendored directory," "Under D15 the endpoint stays on
+# the loopback interface"). The plain form leads with the subject and
+# names the tool after the verb: "cog reads the same text from two
+# files," "mise picks the mechanism by where vendir writes the file."
+#
+# The gate is the shape, not a word list: "Under" at the start of a
+# sentence or list item, one bare name with no determiner in front of it,
+# and then the determiner or pronoun that opens the clause. A determiner
+# after "Under" never fires, so "Under this proposal," "Under the hood,"
+# and "Under these circumstances" stay out, and so does an adjective-led
+# condition ("Under normal circumstances," "Under heavy load"), since the
+# word after the adjective is a noun rather than a determiner. The name
+# slot takes a lowercase word, a letter-and-digit label, or a code span,
+# because that is what agent prose puts there; a capitalized proper noun
+# ("Under Windows, the DEFAULT parameter can be used") is the corpora's
+# own platform conditional and stays out. The bare condition idioms the language
+# already has ("under load," "under test," "under review," "under way,"
+# "under fire") sit in the exceptions.
+#
+# Costs across the seven pre-LLM corpora (2026-09): the determiner-led
+# opener is ordinary prose, twenty-nine hits ("Under this proposal,"
+# "Under this PEP," "Under the covers"), nineteen of them Rust RFCs
+# arguing a design, and the shape here never reads it. A bare name of any
+# case followed by a determiner matches four times: a platform
+# conditional in the Python standard library ("Under Windows, the"), an
+# acronym in a Rust RFC, a Go source line that starts with an identifier
+# named "under" ("under is a facade"), and an all-caps status note
+# ("UNDER CONSTRUCTION. This"). The two openers among them are
+# capitalized proper nouns, so the case gate takes the count to zero,
+# the verb exclusions keep the identifier out, and the exceptions hold
+# the status noun; the lowercase words the corpora put after a
+# sentence-initial "Under" are all adjectives ("normal," "heavy," "rare,"
+# "reasonable," "particular") with a noun behind them. The same shape
+# matches four times in agent-written documentation of half the size
+# ("Under mise the," "Under D15 it," "Under F8 the").
+exceptions:
+  - "(?i)\\bload\\b"
+  - "(?i)\\bpressure\\b"
+  - "(?i)\\bstress\\b"
+  - "(?i)\\btests?\\b"
+  - "(?i)\\btesting\\b"
+  - "(?i)\\bduress\\b"
+  - "(?i)\\battack\\b"
+  - "(?i)\\bcontention\\b"
+  - "(?i)\\bfire\\b"
+  - "(?i)\\bway\\b"
+  - "(?i)\\breview\\b"
+  - "(?i)\\bconstruction\\b"
+  - "(?i)\\bdevelopment\\b"
+  - "(?i)\\bdiscussion\\b"
+  - "(?i)\\bconsideration\\b"
+  - "(?i)\\binvestigation\\b"
+  - "(?i)\\bscrutiny\\b"
+  - "(?i)\\bwarranty\\b"
+  - "(?i)\\bmaintenance\\b"
+  - "(?i)\\brepair\\b"
+  - "(?i)\\bthreat\\b"
+  - "(?i)\\bsuspicion\\b"
+  - "(?i)\\boath\\b"
+  - "(?i)\\barrest\\b"
+  - "(?i)\\bwater\\b"
+  - "(?i)\\bground\\b"
+  - "(?i)\\bcover\\b"
+  - "(?i)\\bprotest\\b"
+  - "(?i)\\bcontrol\\b"
+  - "(?i)\\bsupervision\\b"
+  - "(?i)\\bobservation\\b"
+  - "(?i)\\bquarantine\\b"
+  - "(?i)\\block(?:down)?\\b"
+tokens:
+  - "(?:^|(?<=[.!?:;] )|(?<=^[-*] )|(?<=^\\d+\\. ))Under (?!(?:is|was|are|were|it|them|us|him|her|you|me|and|or|but|which|what|that|this|these|those|the|a|an)\\b)(?:[a-z][A-Za-z0-9._-]*|[A-Z]+\\d+[A-Za-z0-9]*),? (?:the|a|an|this|that|these|those|each|every|it|its|they|their|no|any|there|you|we|both|all|nothing|none|one|neither)\\b"
+  # The name in a code span. Markdown masks the span to an asterisk run
+  # before matching, and an alert whose span crosses the mask never
+  # reports, so this token keeps the span to the opener and reads the
+  # rest in a lookahead.
+  - "(?:^|(?<=[.!?:;] )|(?<=^[-*] )|(?<=^\\d+\\. ))Under(?= \\*+,? (?:the|a|an|this|that|these|those|each|every|it|its|they|their|no|any|there|you|we|both|all|nothing|none|one|neither)\\b)"

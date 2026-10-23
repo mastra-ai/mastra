@@ -170,7 +170,6 @@ values
     terminal.write('unsubscribe fixture');
     await runtime.waitForScreenText(/GitHub unsubscribe fixture/i, terminal);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Switched to: E2E GitHub unsubscribe fixture/i, terminal);
     await runtime.waitForScreenText(/idle/i, terminal, 10_000);
 
     terminal.submit('/github unsubscribe mastra-ai/mastra#17639');

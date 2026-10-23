@@ -37,11 +37,40 @@ const renderBadge = (
   return { ...utils, approveToolcall };
 };
 
-const badge = () => screen.getByTestId<HTMLElement>('ask-user-badge');
+const badge = () => screen.getByTestId('ask-user-badge');
 
 afterEach(() => cleanup());
 
 describe('AskUserBadge', () => {
+  describe('when the user enters a custom answer alongside options', () => {
+    it.each(['single_select', 'multi_select'] as const)(
+      'responds to the originating tool call with a %s custom answer',
+      selectionMode => {
+        const { approveToolcall } = renderBadge({
+          toolCallId: 'call-custom',
+          suspendPayload: {
+            question: 'Which environment?',
+            options: [{ label: 'Staging' }, { label: 'Production' }],
+            selectionMode,
+          },
+          result: undefined,
+        });
+        const isMultiSelect = selectionMode === 'multi_select';
+        if (isMultiSelect) fireEvent.click(screen.getByRole('checkbox', { name: 'Staging' }));
+        fireEvent.click(screen.getByRole(isMultiSelect ? 'checkbox' : 'radio', { name: 'Other…' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), {
+          target: { value: '  Customer test environment  ' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Submit answer' }));
+
+        expect(approveToolcall).toHaveBeenCalledExactlyOnceWith(
+          'call-custom',
+          isMultiSelect ? ['Staging', 'Customer test environment'] : 'Customer test environment',
+        );
+      },
+    );
+  });
+
   describe('when the payload offers single-select options', () => {
     const suspendPayload: AskUserPayload = {
       question: 'Pick a fruit',
@@ -194,7 +223,7 @@ describe('AskUserBadge', () => {
     it('disables the option controls', () => {
       renderBadge({ toolCallId: 'call-5', suspendPayload, result: undefined }, { isRunning: true });
 
-      expect(within(badge()).getByRole<HTMLInputElement>('radio', { name: 'Apple' }).disabled).toBe(true);
+      expect(within(badge()).getByRole('radio', { name: 'Apple' }).getAttribute('aria-disabled')).toBe('true');
     });
 
     it('does not submit when a disabled option is clicked', () => {

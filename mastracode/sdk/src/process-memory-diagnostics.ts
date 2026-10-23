@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import { appendFile, chmod, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { Session } from 'node:inspector/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { PerformanceObserver, type PerformanceEntry } from 'node:perf_hooks';
+import { PerformanceObserver } from 'node:perf_hooks';
+import type { PerformanceEntry } from 'node:perf_hooks';
 import { arch, platform } from 'node:process';
 import { getHeapSpaceStatistics, getHeapStatistics } from 'node:v8';
 
@@ -303,7 +303,7 @@ export class ProcessMemoryDiagnostics {
     this.createInspectorSession = dependencies.createInspectorSession ?? defaultInspectorSession;
     this.createPerformanceObserver = dependencies.createPerformanceObserver ?? defaultPerformanceObserver;
     this.now = dependencies.now ?? (() => new Date());
-    this.randomId = dependencies.randomId ?? randomUUID;
+    this.randomId = dependencies.randomId ?? (() => globalThis.crypto.randomUUID());
   }
 
   getStatus(): ProcessMemoryDiagnosticsStatus {

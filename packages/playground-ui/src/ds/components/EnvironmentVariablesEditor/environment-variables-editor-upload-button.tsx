@@ -45,9 +45,9 @@ export function EnvironmentVariablesEditorUploadButton({
             editor.fileInputRef.current?.click();
           }
         }}
+        icon={<UploadIcon />}
         {...props}
       >
-        <UploadIcon />
         {children}
       </Button>
     </>

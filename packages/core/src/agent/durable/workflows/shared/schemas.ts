@@ -10,6 +10,65 @@ import { z } from 'zod';
  */
 
 /**
+ * Returns the path of the first value that would not survive a JSON round trip
+ * (functions, symbols, bigints, non-finite numbers, class instances, cycles, and
+ * `undefined` array items), or undefined if the value is JSON-safe. Undefined
+ * object properties are allowed (JSON drops them), and so are Dates: the workflow
+ * snapshot codec round-trips them.
+ */
+function findNonJsonSafePath(value: unknown, path: string, ancestors: Set<object>): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  const type = typeof value;
+  if (type === 'string' || type === 'boolean') return undefined;
+  if (type === 'number') return Number.isFinite(value) ? undefined : path || '<root>';
+  if (type !== 'object') return path || '<root>';
+  if (value instanceof Date) return undefined;
+  // Only objects on the current path form a cycle; shared references are fine.
+  if (ancestors.has(value as object)) return path || '<root>';
+  ancestors.add(value as object);
+  try {
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) {
+        const itemPath = `${path}[${i}]`;
+        if (value[i] === undefined) return itemPath;
+        const bad = findNonJsonSafePath(value[i], itemPath, ancestors);
+        if (bad) return bad;
+      }
+      return undefined;
+    }
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return path || '<root>';
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const bad = findNonJsonSafePath(child, path ? `${path}.${key}` : key, ancestors);
+      if (bad) return bad;
+    }
+    return undefined;
+  } finally {
+    ancestors.delete(value as object);
+  }
+}
+
+export function isJsonSafe(value: unknown): boolean {
+  return findNonJsonSafePath(value, '', new Set()) === undefined;
+}
+
+/**
+ * Schema for the serialized durable options carried in workflow input. These
+ * options cross step boundaries (and processes) as JSON, so live objects such
+ * as Zod schemas must be converted before they get here — otherwise they are
+ * silently mangled by the round trip.
+ */
+export const durableOptionsSchema = z.any().superRefine((value, ctx) => {
+  const badPath = findNonJsonSafePath(value, '', new Set());
+  if (badPath) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Durable agent options must be JSON-safe; found a non-serializable value at options.${badPath}`,
+    });
+  }
+});
+
+/**
  * Schema for model configuration
  */
 export const modelConfigSchema = z.object({
@@ -30,6 +89,7 @@ export const modelListEntrySchema = z.object({
     modelId: z.string(),
     specificationVersion: z.string().optional(),
     originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
+    settings: z.record(z.string(), z.any()).optional(),
     providerOptions: z.record(z.string(), z.any()).optional(),
   }),
   maxRetries: z.number(),
@@ -37,13 +97,29 @@ export const modelListEntrySchema = z.object({
 });
 
 /**
+ * Type for accumulated usage. Keys stay present in memory so the value can be
+ * passed to usage consumers, while JSON serialization may omit unknown values.
+ */
+export type AccumulatedUsage = {
+  inputTokens: number | undefined;
+  outputTokens: number | undefined;
+  totalTokens: number | undefined;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  reasoningTokens?: number;
+};
+
+/**
  * Schema for accumulated usage across iterations
  */
 export const accumulatedUsageSchema = z.object({
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  totalTokens: z.number(),
-});
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  totalTokens: z.number().optional(),
+  cachedInputTokens: z.number().optional(),
+  cacheCreationInputTokens: z.number().optional(),
+  reasoningTokens: z.number().optional(),
+}) as z.ZodType<AccumulatedUsage>;
 
 /**
  * Schema for output from the durable agentic workflow
@@ -71,9 +147,17 @@ export const baseDurableAgenticInputSchema = z.object({
   messageListState: z.any(),
   toolsMetadata: z.array(z.any()),
   modelConfig: modelConfigSchema,
-  options: z.any(),
+  options: durableOptionsSchema,
   state: z.any(),
   messageId: z.string(),
+  inputTripwire: z
+    .object({
+      reason: z.string(),
+      retry: z.boolean().optional(),
+      processorId: z.string().optional(),
+      metadata: z.unknown().optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -85,10 +169,14 @@ export const baseIterationStateSchema = z.object({
   runId: z.string(),
   agentId: z.string(),
   agentName: z.string().optional(),
-  messageListState: z.any(),
+  // Absent when the run keeps the transcript in workflow state.
+  messageListState: z.any().optional(),
+  // Immutable untagged system-message baseline captured before the first
+  // iteration. Each model attempt restores it before input-step processors run.
+  initialUntaggedSystemMessages: z.array(z.any()).optional(),
   toolsMetadata: z.array(z.any()),
   modelConfig: z.any(),
-  options: z.any(),
+  options: durableOptionsSchema,
   state: z.any(),
   messageId: z.string(),
   // JSON-safe snapshot of the caller's requestContext.entries(), carried
@@ -96,12 +184,18 @@ export const baseIterationStateSchema = z.object({
   // instance resolve with the same request context on iteration N as on
   // iteration 1. Dropping it here silently falls back to an empty context.
   requestContextEntries: z.record(z.string(), z.any()).optional(),
+  inputTripwire: baseDurableAgenticInputSchema.shape.inputTripwire,
   // Iteration tracking
   iterationCount: z.number(),
   accumulatedSteps: z.array(z.any()),
   accumulatedUsage: accumulatedUsageSchema,
+  // Identifies states whose usage accumulator preserves unknown counters. Older
+  // states have no marker and may contain partial totals presented as complete.
+  usageAggregationVersion: z.literal(1).optional(),
   // Last step result for continuation check
   lastStepResult: z.any().optional(),
+  // Step-finish waits here until the loop's continuation policy resolves.
+  deferredStepFinishChunk: z.any().optional(),
   // Background task tracking
   backgroundTaskPending: z.boolean().optional(),
   // Set when a delegation hook calls ctx.bail() — signals the loop to stop
@@ -112,14 +206,11 @@ export const baseIterationStateSchema = z.object({
   // Span data, carried unchanged so every iteration shares one trace
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),
+  // First chunk clock, carried so the final step can end the generation and AGENT_RUN with it
+  completionStartTime: z.coerce.date().optional(),
 });
 
 /**
  * Type for the base iteration state
  */
 export type BaseIterationState = z.infer<typeof baseIterationStateSchema>;
-
-/**
- * Type for accumulated usage
- */
-export type AccumulatedUsage = z.infer<typeof accumulatedUsageSchema>;

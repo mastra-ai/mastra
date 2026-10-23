@@ -1,6 +1,6 @@
 {
   "name": "create-mastra",
-  "version": "1.29.1-alpha.1",
+  "version": "1.35.1-alpha.0",
   "description": "Create Mastra apps with one command",
   "license": "Apache-2.0",
   "type": "module",
@@ -12,9 +12,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "rollup -c",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "clean": "rm -rf dist && rm -rf node_modules",
     "test": "vitest run",
     "test:watch": "vitest watch"
@@ -36,23 +36,14 @@
     "typescript",
     "project"
   ],
-  "dependencies": {
-    "commander": "^14.0.3",
-    "posthog-node": "^5.46.1",
-    "tinyexec": "^1.1.1"
-  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@rollup/plugin-commonjs": "29.0.3",
-    "@rollup/plugin-json": "6.1.0",
-    "@rollup/plugin-node-resolve": "16.0.3",
-    "@types/node": "22.20.1",
-    "esbuild": "^0.28.0",
-    "eslint": "^10.7.0",
+    "@types/node": "22.20.5",
+    "commander": "^14.0.3",
     "mastra": "workspace:^",
-    "rollup": "^4.62.2",
-    "rollup-plugin-esbuild": "^6.2.1",
-    "rollup-plugin-node-externals": "^8.1.2",
+    "posthog-node": "^5.46.1",
+    "tinyexec": "^1.1.1",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

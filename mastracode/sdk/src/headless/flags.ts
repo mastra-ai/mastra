@@ -154,6 +154,7 @@ export const FLAGS: FlagSpec[] = [
       '  human  streaming text to stdout, activity to stderr',
       '  json   single final JSON object (text, usage, tools)',
       '  jsonl  newline-delimited JSON event stream',
+      '         (omits display_state_changed UI snapshots)',
     ],
   },
   {
@@ -163,7 +164,20 @@ export const FLAGS: FlagSpec[] = [
     field: 'model',
     coerce: validate.string,
     placeholder: '<id>',
-    help: 'Model override (e.g., a provider/model id)',
+    help: 'Model override (e.g., a provider/model id); wins over --pack for the active mode',
+  },
+  {
+    key: 'pack',
+    type: 'string',
+    field: 'pack',
+    coerce: validate.string,
+    placeholder: '<id>',
+    help: [
+      'Model pack to activate (like /models → Activate): a builtin pack id',
+      '(anthropic, openai, github-copilot) or a saved custom pack, by',
+      '"custom:<name>" or its bare name. Sets the pack for every mode and',
+      'becomes the global default pack. --model overrides it for the active mode.',
+    ],
   },
   {
     key: 'mode',

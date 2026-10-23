@@ -22,9 +22,10 @@ import type {
   ListMCPClientVersionsInput,
   ListMCPClientVersionsOutput,
 } from '@mastra/core/storage/domains/mcp-clients';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = ['name', 'description', 'servers'] as const;
@@ -59,7 +60,7 @@ export class MCPClientsPG extends MCPClientsStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     for (const tableName of MCPClientsPG.MANAGED_TABLES) {
@@ -81,7 +82,7 @@ export class MCPClientsPG extends MCPClientsStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return MCPClientsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -167,10 +168,12 @@ export class MCPClientsPG extends MCPClientsStorage {
 
   async create(input: { mcpClient: StorageCreateMCPClientInput }): Promise<StorageMCPClientType> {
     const { mcpClient } = input;
+    let draftInserted = false;
     try {
       const tableName = getTableName({ indexName: TABLE_MCP_CLIENTS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
       const nowIso = now.toISOString();
+      const metadataJson = mcpClient.metadata ? toPgJson(mcpClient.metadata) : null;
 
       // 1. Create the thin MCP client record
       await this.#db.client.none(
@@ -178,18 +181,9 @@ export class MCPClientsPG extends MCPClientsStorage {
           id, status, "activeVersionId", "authorId", metadata,
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          mcpClient.id,
-          'draft',
-          null,
-          mcpClient.authorId ?? null,
-          mcpClient.metadata ? JSON.stringify(mcpClient.metadata) : null,
-          nowIso,
-          nowIso,
-          nowIso,
-          nowIso,
-        ],
+        [mcpClient.id, 'draft', null, mcpClient.authorId ?? null, metadataJson, nowIso, nowIso, nowIso, nowIso],
       );
+      draftInserted = true;
 
       // 2. Extract snapshot fields and create version 1
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = mcpClient;
@@ -208,23 +202,26 @@ export class MCPClientsPG extends MCPClientsStorage {
         status: 'draft',
         activeVersionId: undefined,
         authorId: mcpClient.authorId,
-        metadata: mcpClient.metadata,
+        metadata: metadataJson ? JSON.parse(metadataJson) : mcpClient.metadata,
         createdAt: now,
         updatedAt: now,
       };
     } catch (error) {
-      // Best-effort cleanup
-      try {
-        const tableName = getTableName({
-          indexName: TABLE_MCP_CLIENTS,
-          schemaName: getSchemaName(this.#schema),
-        });
-        await this.#db.client.none(
-          `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
-          [mcpClient.id],
-        );
-      } catch {
-        // Ignore cleanup errors
+      // Best-effort cleanup, only for a draft this call inserted. If our INSERT failed
+      // (e.g. duplicate id), the row belongs to a concurrent creator and must be kept.
+      if (draftInserted) {
+        try {
+          const tableName = getTableName({
+            indexName: TABLE_MCP_CLIENTS,
+            schemaName: getSchemaName(this.#schema),
+          });
+          await this.#db.client.none(
+            `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
+            [mcpClient.id],
+          );
+        } catch {
+          // Ignore cleanup errors
+        }
       }
 
       if (error instanceof MastraError) throw error;
@@ -281,7 +278,7 @@ export class MCPClientsPG extends MCPClientsStorage {
       if (metadata !== undefined) {
         const mergedMetadata = { ...(existingClient.metadata || {}), ...metadata };
         setClauses.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(mergedMetadata));
+        values.push(toPgJson(mergedMetadata));
       }
 
       // Always update timestamps
@@ -377,7 +374,7 @@ export class MCPClientsPG extends MCPClientsStorage {
 
       if (metadata && Object.keys(metadata).length > 0) {
         conditions.push(`metadata @> $${paramIdx++}::jsonb`);
-        queryParams.push(JSON.stringify(metadata));
+        queryParams.push(toPgJson(metadata));
       }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
@@ -446,6 +443,8 @@ export class MCPClientsPG extends MCPClientsStorage {
       });
       const now = new Date();
       const nowIso = now.toISOString();
+      const serversJson = toPgJson(input.servers);
+      const changedFieldsJson = input.changedFields ? toPgJson(input.changedFields) : null;
 
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
@@ -460,8 +459,8 @@ export class MCPClientsPG extends MCPClientsStorage {
           input.versionNumber,
           input.name,
           input.description ?? null,
-          JSON.stringify(input.servers),
-          input.changedFields ? JSON.stringify(input.changedFields) : null,
+          serversJson,
+          changedFieldsJson,
           input.changeMessage ?? null,
           nowIso,
           nowIso,
@@ -470,6 +469,8 @@ export class MCPClientsPG extends MCPClientsStorage {
 
       return {
         ...input,
+        servers: JSON.parse(serversJson),
+        changedFields: changedFieldsJson ? JSON.parse(changedFieldsJson) : input.changedFields,
         createdAt: now,
       };
     } catch (error) {

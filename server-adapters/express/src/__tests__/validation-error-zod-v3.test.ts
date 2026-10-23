@@ -9,8 +9,8 @@
  * field path. The fix uses a structural ZodError check; these tests prove it.
  */
 import type { Server } from 'node:http';
-import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
+import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
 import express from 'express';
 import type { Application } from 'express';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

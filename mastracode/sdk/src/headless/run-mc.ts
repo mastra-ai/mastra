@@ -10,20 +10,16 @@
  * {@link MCRun} is async-iterable over controller events and also resolves to a
  * final result via `result`.
  */
-import type { AgentControllerEvent, MastraDBMessage, MastraMessagePart, Session } from '@mastra/core/agent-controller';
+import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 
+import { MODEL_FALLBACK_STATE_KEY } from '../auth/account-rotation-processor.js';
 import { GoalManager } from '../goal-manager.js';
 import { createGoalReminderSignal } from '../goal-signal.js';
+import { THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '../onboarding/settings.js';
 
 import { autoApprovePolicy } from './policy.js';
 import type { MCRun, ResolutionPolicy, RunMCOptions, RunMCResult, RunMCStatus } from './types.js';
-
-function extractAssistantText(message: MastraDBMessage): string {
-  return message.content.parts
-    .filter((p): p is MastraMessagePart & { text: string } => p.type === 'text' && typeof p.text === 'string')
-    .map(p => p.text)
-    .join('');
-}
 
 function exitCodeForStatus(status: RunMCStatus): number {
   switch (status) {
@@ -45,14 +41,21 @@ interface MutableResult {
   toolResults: RunMCResult['toolResults'];
   error?: RunMCResult['error'];
   threadId?: string;
+  activeAssistantMessageId?: string;
 }
 
 function aggregate(event: AgentControllerEvent, acc: MutableResult): void {
   switch (event.type) {
-    case 'message_end':
-      if (event.message.role === 'assistant') {
-        acc.text += extractAssistantText(event.message);
+    case 'message_start':
+      if (event.message.role === 'assistant') acc.activeAssistantMessageId = event.message.id;
+      break;
+    case 'message_update':
+      if (event.event.type === 'text-delta' && event.id === acc.activeAssistantMessageId) {
+        acc.text += event.event.delta;
       }
+      break;
+    case 'message_end':
+      if (event.id === acc.activeAssistantMessageId) acc.activeAssistantMessageId = undefined;
       break;
     case 'tool_start':
       acc.toolCalls.push({ id: event.toolCallId, name: event.toolName, args: event.args });
@@ -88,10 +91,11 @@ function aggregate(event: AgentControllerEvent, acc: MutableResult): void {
 async function resolveThread<TState extends Record<string, unknown>>(
   session: Session<TState>,
   threadId: string,
+  resourceId?: string,
 ): Promise<{ threadId: string } | { error: string }> {
-  const threads = await session.thread.list();
+  const threads = await session.thread.list(resourceId ? { allResources: true } : undefined);
 
-  const byId = threads.find(t => t.id === threadId);
+  const byId = threads.find(thread => thread.id === threadId && (!resourceId || thread.resourceId === resourceId));
   if (byId) return { threadId: byId.id };
 
   return { error: `No thread found with ID "${threadId}"` };
@@ -171,7 +175,9 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
   let aborted = false;
   let maxTurnsExceeded = false;
   let assistantTurns = 0;
+  let activeAssistantMessageId: string | undefined;
   let settled = false;
+  let agentStarts = 0;
   let unsubscribe: (() => void) | undefined;
   let resolveResult!: (r: RunMCResult) => void;
 
@@ -204,6 +210,52 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
     finish('error');
   }
 
+  function failUnresolvedSuspension(toolName?: string): void {
+    fail(`Run ended with an unresolved ${toolName ? `${toolName} suspension` : 'tool suspension'}.`);
+  }
+
+  /**
+   * Ask the policy for the next parked tool. The session starts a fresh
+   * run for it, so this run stays open until that run ends. Returns false when
+   * nothing is left to resume.
+   */
+  function resumeNextSuspension(): boolean {
+    const next = session.displayState.get().pendingSuspensions.values().next();
+    if (next.done) return false;
+    const { toolCallId, toolName } = next.value;
+    let outcome: ReturnType<ResolutionPolicy['onSuspension']>;
+    try {
+      outcome = policy.onSuspension({ type: 'tool_suspended', ...next.value });
+    } catch (err) {
+      fail(`Resolution policy failed: ${(err as Error).message}`);
+      return true;
+    }
+    if ('abort' in outcome) {
+      abort();
+      // This run has already ended suspended, so no further agent_end is due.
+      finish('aborted');
+      return true;
+    }
+    const { resumeData } = outcome;
+    // The session clears the ending run's state right after emitting
+    // agent_end, so resume on a later task, as an interactive client would.
+    setTimeout(() => {
+      if (settled) return;
+      if (timedOut) return finish('timeout');
+      if (aborted) return finish('aborted');
+      const startsBeforeResume = agentStarts;
+      session.respondToToolSuspension({ toolCallId, resumeData }).then(
+        () => {
+          // The session returns without starting a run when the suspension is
+          // no longer parked; nothing else would end this run then.
+          if (!settled && agentStarts === startsBeforeResume) failUnresolvedSuspension(toolName);
+        },
+        (err: unknown) => fail(`Failed to resume ${toolName}: ${(err as Error).message}`),
+      );
+    }, 0);
+    return true;
+  }
+
   function abort(): void {
     if (settled) return;
     aborted = true;
@@ -233,42 +285,10 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
   void (async () => {
     armTimeout();
 
-    // --- Config resolution (model / mode / thinking) ---
-    try {
-      if (options.model) {
-        const available = await controller.listAvailableModels();
-        const match = available.find(m => m.id === options.model);
-        if (!match) return fail(`Unknown model: "${options.model}"`);
-        if (!match.hasApiKey) {
-          const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
-          return fail(`Model "${options.model}" has no API key configured.${keyHint}`);
-        }
-        await session.model.switch({ modelId: options.model });
-      } else if (options.mode) {
-        const modelId = options.modeDefaults?.[options.mode];
-        if (modelId) {
-          const available = await controller.listAvailableModels();
-          const match = available.find(m => m.id === modelId);
-          if (!match) return fail(`Unknown model "${modelId}" configured for mode "${options.mode}"`);
-          if (!match.hasApiKey) {
-            const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
-            return fail(`Model "${modelId}" (mode: ${options.mode}) has no API key configured.${keyHint}`);
-          }
-          await session.model.switch({ modelId });
-        }
-        // No configured model for mode → fall through to default (no failure).
-      }
-
-      if (options.thinkingLevel) {
-        await session.state.set({ thinkingLevel: options.thinkingLevel } as unknown as Partial<TState>);
-      }
-    } catch (err) {
-      return fail(`Failed to resolve run config: ${(err as Error).message}`);
-    }
-
     // --- Subscribe ---
     unsubscribe = session.subscribe(event => {
       if (settled) return;
+      if (event.type === 'agent_start') agentStarts += 1;
       if (goal) armTimeout();
 
       if (event.type === 'tool_approval_required') {
@@ -287,22 +307,8 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
         return;
       }
 
-      if (event.type === 'tool_suspended') {
-        let outcome: ReturnType<ResolutionPolicy['onSuspension']>;
-        try {
-          outcome = policy.onSuspension(event);
-        } catch (err) {
-          fail(`Resolution policy failed: ${(err as Error).message}`);
-          return;
-        }
-        if ('abort' in outcome) {
-          queue.push(event);
-          abort();
-          return;
-        }
-        void session.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: outcome.resumeData });
-        queue.push(event);
-        return;
+      if (event.type === 'message_start' && event.message.role === 'assistant') {
+        activeAssistantMessageId = event.message.id;
       }
 
       aggregate(event, acc);
@@ -315,7 +321,8 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
 
       // Count agentic turns (one assistant response = one turn). When the cap is
       // reached, abort the run; agent_end then resolves as 'max_turns'.
-      if (event.type === 'message_end' && event.message.role === 'assistant' && options.maxTurns !== undefined) {
+      if (event.type === 'message_end' && event.id === activeAssistantMessageId && options.maxTurns !== undefined) {
+        activeAssistantMessageId = undefined;
         assistantTurns += 1;
         if (assistantTurns >= options.maxTurns && !maxTurnsExceeded) {
           maxTurnsExceeded = true;
@@ -338,6 +345,12 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
 
       if (event.type === 'agent_end') {
         acc.finishReason = event.reason;
+        // A suspended run is parked, not finished: nothing more arrives until a
+        // parked tool is answered, including goal evaluations.
+        if (event.reason === 'suspended' && !timedOut && !aborted) {
+          if (!resumeNextSuspension()) failUnresolvedSuspension();
+          return;
+        }
         // Goal evaluations can arrive after the agent stream ends, so goal runs
         // remain active until a terminal goal_evaluation is emitted.
         if (goal) return;
@@ -356,6 +369,62 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
       }
     });
 
+    // --- Thread resolution (read-only) ---
+    const thread = options.thread;
+    const targetResourceId = options.resourceId ?? session.identity.getResourceId();
+    let restoredThreadId: string | undefined;
+    try {
+      if (thread?.id) {
+        const resolved = await resolveThread(session, thread.id, targetResourceId);
+        if ('error' in resolved) return fail(resolved.error);
+        restoredThreadId = resolved.threadId;
+      } else if (thread?.continueLatest) {
+        const threads = await session.thread.list(targetResourceId ? { allResources: true } : undefined);
+        const resourceThreads = targetResourceId
+          ? threads.filter(candidate => candidate.resourceId === targetResourceId)
+          : threads;
+        if (resourceThreads.length > 0) {
+          restoredThreadId = [...resourceThreads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!.id;
+        }
+      }
+    } catch (err) {
+      return fail(`Failed to resolve thread: ${(err as Error).message}`);
+    }
+
+    // --- Config validation (read-only) ---
+    const restoredThreadSelection = Boolean(restoredThreadId || thread?.clone);
+    const modeIdForModel = options.mode ?? (options.modeDefaults ? session.mode.get() : undefined);
+    const configuredDefaultModelId = modeIdForModel ? options.modeDefaults?.[modeIdForModel] : undefined;
+    // A pack's model is not resolved here: a resumed thread restores its
+    // persisted mode during thread selection, and the pack selection depends
+    // on that mode. It is resolved and validated during config application.
+    const modelIdToApply = options.pack
+      ? options.model
+      : (options.model ?? (options.mode || !restoredThreadSelection ? configuredDefaultModelId : undefined));
+    // Where modelIdToApply came from, so validation errors name the right source.
+    const modelSource = options.model ? 'flag' : 'mode';
+    try {
+      if (options.mode && !controller.listModes().some(mode => mode.id === options.mode)) {
+        return fail(`Unknown mode: "${options.mode}"`);
+      }
+
+      if (modelIdToApply) {
+        const available = await controller.listAvailableModels();
+        const match = available.find(model => model.id === modelIdToApply);
+        if (!match) {
+          if (modelSource === 'flag') return fail(`Unknown model: "${modelIdToApply}"`);
+          return fail(`Unknown model "${modelIdToApply}" configured for mode "${modeIdForModel}"`);
+        }
+        if (!match.hasApiKey) {
+          const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
+          if (modelSource === 'flag') return fail(`Model "${modelIdToApply}" has no API key configured.${keyHint}`);
+          return fail(`Model "${modelIdToApply}" (mode: ${modeIdForModel}) has no API key configured.${keyHint}`);
+        }
+      }
+    } catch (err) {
+      return fail(`Failed to resolve run config: ${(err as Error).message}`);
+    }
+
     // --- Resource id ---
     try {
       if (options.resourceId) {
@@ -367,29 +436,76 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
 
     // --- Thread selection ---
     try {
-      const thread = options.thread;
-      if (thread?.id) {
-        const resolved = await resolveThread(session, thread.id);
-        if ('error' in resolved) return fail(resolved.error);
-        await session.thread.switch({ threadId: resolved.threadId });
-      } else if (thread?.continueLatest) {
-        const threads = await session.thread.list();
-        if (threads.length > 0) {
-          const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-          await session.thread.switch({ threadId: sorted[0]!.id });
-        }
+      if (restoredThreadId) {
+        await session.thread.switch({ threadId: restoredThreadId });
+      } else if (!thread?.clone) {
+        await session.thread.create();
       }
     } catch (err) {
       return fail(`Failed to select thread: ${(err as Error).message}`);
     }
 
     // --- Clone ---
-    if (options.thread?.clone) {
+    if (thread?.clone) {
       try {
         await session.thread.clone();
       } catch (err) {
         return fail(`Failed to clone thread: ${(err as Error).message}`);
       }
+    }
+
+    // --- Config application ---
+    try {
+      if (options.mode) {
+        await session.mode.switch({ modeId: options.mode });
+      }
+      let packModelId: string | undefined;
+      if (options.pack) {
+        // Resolve the selection against the mode in effect now — thread
+        // selection above may have restored a resumed thread's persisted mode.
+        const packModeId = options.mode ?? session.mode.get();
+        const packSelection = options.pack.resolve(packModeId);
+        if (!packSelection) {
+          return fail(`Model pack "${options.pack.id}" has no model for ${packModeId} mode`);
+        }
+        const available = await controller.listAvailableModels();
+        const match = available.find(model => model.id === packSelection.modelId);
+        if (!match) {
+          return fail(`Unknown model "${packSelection.modelId}" from pack "${options.pack.id}"`);
+        }
+        if (!match.hasApiKey) {
+          const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
+          return fail(
+            `Model "${packSelection.modelId}" (pack: ${options.pack.id}) has no API key configured.${keyHint}`,
+          );
+        }
+        packModelId = packSelection.modelId;
+        // Mirror /models → Activate on the session: sticky thread pack id,
+        // subagent models, and the fallback route. Clears any pending fallback
+        // from a continued thread so the pack's own route starts clean.
+        await session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: options.pack.id });
+        await session.thread.setSetting({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
+        for (const [agentType, modelId] of Object.entries(packSelection.subagentModels ?? {})) {
+          await session.subagents.model.set({ modelId, agentType });
+        }
+        await session.state.set({
+          modelRoute: packSelection.modelRoute,
+          [MODEL_FALLBACK_STATE_KEY]: null,
+        } as unknown as Partial<TState>);
+      }
+      const sessionModelId = modelIdToApply ?? packModelId;
+      if (sessionModelId) {
+        await session.model.switch(sessionModelId);
+      }
+      // Persist the pack activation (global default) only once the pack has
+      // fully taken effect on the session — a failed model switch above must
+      // not leave the global default changed.
+      options.pack?.onApplied?.();
+      if (options.thinkingLevel) {
+        await session.state.set({ thinkingLevel: options.thinkingLevel } as unknown as Partial<TState>);
+      }
+    } catch (err) {
+      return fail(`Failed to apply run config: ${(err as Error).message}`);
     }
 
     // --- Title ---
@@ -415,7 +531,6 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
           session,
           goalManager,
           pendingNewThread: false,
-          planStartedGoalId: undefined,
         } as any;
         const objective = await goalManager.setGoal(state, goal.objective, goal.judgeModelId, goal.maxRuns);
         if (!objective) return fail('Failed to set goal.');
@@ -433,6 +548,12 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
         await session.sendMessage({ content: options.prompt });
       }
     } catch (err) {
+      if (
+        isSessionStartupCancelledError(err) ||
+        (err instanceof Error && err.name === 'AbortError' && (aborted || timedOut || options.signal?.aborted))
+      ) {
+        return finish(timedOut ? 'timeout' : maxTurnsExceeded ? 'max_turns' : 'aborted');
+      }
       return fail(`Failed to start run: ${(err as Error).message}`);
     }
   })();

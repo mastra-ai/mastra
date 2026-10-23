@@ -1,5 +1,6 @@
 import type { MemoryOperationAttributes, ObservabilityContext } from '@mastra/core/observability';
 import { createObservabilityContext, EntityType, getOrCreateSpan, SpanType } from '@mastra/core/observability';
+import { MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type { ModelByInputTokens } from './model-by-input-tokens';
@@ -57,6 +58,21 @@ export async function withOmTracingSpan<T>({
   callback: (observabilityContext: ObservabilityContext) => Promise<T>;
 }): Promise<T> {
   const config = PHASE_CONFIG[phase];
+  const tracingContext = observabilityContext?.tracingContext ?? observabilityContext?.tracing;
+  const callerMetadata = tracingContext?.currentSpan?.metadata;
+  const inheritedCallerThreadId = callerMetadata?.__mastraObservationalMemoryCallerThreadId;
+  const callerThreadId = callerMetadata?.threadId;
+  const requestThreadId = requestContext?.get(MASTRA_THREAD_ID_KEY);
+  // Preserve caller identity separately from isolated execution threads. Exporters
+  // decide whether to use this reserved internal hint as a session fallback.
+  const omCallerThreadId =
+    typeof inheritedCallerThreadId === 'string' && inheritedCallerThreadId
+      ? inheritedCallerThreadId
+      : typeof callerThreadId === 'string' && callerThreadId
+        ? callerThreadId
+        : typeof requestThreadId === 'string' && requestThreadId
+          ? requestThreadId
+          : undefined;
   // GENERIC is reserved for spans ingested from outside Mastra, where the shape
   // is unknown. These are memory's own model passes, so they carry the memory
   // operation type and its typed attributes rather than an untyped metadata bag.
@@ -70,14 +86,17 @@ export async function withOmTracingSpan<T>({
     name: config.name,
     entityType: EntityType.MEMORY,
     entityName: config.entityName,
-    tracingContext: observabilityContext?.tracingContext ?? observabilityContext?.tracing,
+    tracingContext,
     attributes: {
       operationType: config.operationType,
       inputTokens,
       selectedModel: typeof model === 'string' ? model : '(dynamic-model)',
       ...(config.multiThread ? { multiThread: true } : {}),
     },
-    metadata,
+    metadata:
+      omCallerThreadId !== undefined
+        ? { ...metadata, __mastraObservationalMemoryCallerThreadId: omCallerThreadId }
+        : metadata,
     requestContext,
   });
   const childObservabilityContext = createObservabilityContext({ currentSpan: span });

@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Bell, Check, ChevronDown, Copy, Folder, Play, Plus, Search, Settings, Trash2, X } from 'lucide-react';
 import { Icon } from './Icon';
+import type { IconSize } from './Icon';
 import {
   AgentIcon,
   AgentCoinIcon,
@@ -8,17 +10,20 @@ import {
   ApiIcon,
   BranchIcon,
   CheckIcon,
+  ClaudeIcon,
   ChevronIcon,
   CommitIcon,
   CrossIcon,
   DbIcon,
   DebugIcon,
+  DeepSeekIcon,
   DeploymentIcon,
   DividerIcon,
   DocsIcon,
   EnvIcon,
   FiltersIcon,
   FolderIcon,
+  GeminiIcon,
   GithubCoinIcon,
   GithubIcon,
   GoogleIcon,
@@ -29,9 +34,16 @@ import {
   LogsIcon,
   McpCoinIcon,
   McpServerIcon,
+  MetaIcon,
   MemoryIcon,
+  MinimaxIcon,
+  MistralIcon,
+  MoonshotIcon,
+  NvidiaIcon,
   OpenAIIcon,
+  OpenRouterIcon,
   PromptIcon,
+  QwenIcon,
   RepoIcon,
   SettingsIcon,
   SlashIcon,
@@ -42,7 +54,11 @@ import {
   VariablesIcon,
   WorkflowCoinIcon,
   WorkflowIcon,
+  XaiIcon,
+  ZaiIcon,
 } from './index';
+import { Button } from '@/ds/components/Button';
+import { Sizes } from '@/ds/tokens/sizes';
 
 const meta: Meta<typeof Icon> = {
   title: 'Icons/All Icons',
@@ -99,17 +115,14 @@ const icons = [
   { name: 'WorkflowIcon', component: WorkflowIcon },
 ];
 
-const IconGrid = ({ size = 'default' }: { size?: 'sm' | 'default' | 'lg' }) => (
+const IconGrid = ({ size = 'md' }: { size?: IconSize }) => (
   <div className="grid grid-cols-6 gap-4">
     {icons.map(({ name, component: IconComponent }) => (
-      <div
-        key={name}
-        className="bg-surface3 hover:bg-surface4 flex flex-col items-center gap-2 rounded-lg p-3 transition-colors"
-      >
-        <Icon size={size} className="text-neutral5">
+      <div key={name} className="state-layer flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+        <Icon size={size} className="text-foreground">
           <IconComponent />
         </Icon>
-        <span className="text-neutral3 text-ui-sm text-center">{name.replace('Icon', '')}</span>
+        <span className="text-center text-caption text-muted-foreground">{name.replace('Icon', '')}</span>
       </div>
     ))}
   </div>
@@ -142,24 +155,16 @@ export const LargeIcons: Story = {
 export const IconSizes: Story = {
   render: () => (
     <div className="flex items-end gap-8">
-      <div className="flex flex-col items-center gap-2">
-        <Icon size="sm" className="text-neutral5">
-          <AgentIcon />
-        </Icon>
-        <span className="text-neutral3 text-ui-sm">Small</span>
-      </div>
-      <div className="flex flex-col items-center gap-2">
-        <Icon size="default" className="text-neutral5">
-          <AgentIcon />
-        </Icon>
-        <span className="text-neutral3 text-ui-sm">Default</span>
-      </div>
-      <div className="flex flex-col items-center gap-2">
-        <Icon size="lg" className="text-neutral5">
-          <AgentIcon />
-        </Icon>
-        <span className="text-neutral3 text-ui-sm">Large</span>
-      </div>
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+        <div key={size} className="flex flex-col items-center gap-2">
+          <Icon size={size} className="text-foreground">
+            <AgentIcon />
+          </Icon>
+          <span className="text-caption text-muted-foreground">
+            {size} · {Sizes[`icon-${size}`]}
+          </span>
+        </div>
+      ))}
     </div>
   ),
 };
@@ -167,22 +172,22 @@ export const IconSizes: Story = {
 export const IconColors: Story = {
   render: () => (
     <div className="flex gap-4">
-      <Icon className="text-neutral3">
+      <Icon className="text-muted-foreground">
         <AgentIcon />
       </Icon>
-      <Icon className="text-neutral5">
+      <Icon className="text-foreground">
         <AgentIcon />
       </Icon>
-      <Icon className="text-neutral6">
+      <Icon className="text-foreground">
         <AgentIcon />
       </Icon>
-      <Icon className="text-accent1">
+      <Icon className="text-success-indicator">
         <AgentIcon />
       </Icon>
-      <Icon className="text-accent1">
+      <Icon className="text-success-indicator">
         <AgentIcon />
       </Icon>
-      <Icon className="text-error">
+      <Icon className="text-destructive-foreground">
         <AgentIcon />
       </Icon>
     </div>
@@ -192,23 +197,23 @@ export const IconColors: Story = {
 export const AgentIcons: Story = {
   render: () => (
     <div className="flex gap-4">
-      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
-        <Icon size="lg" className="text-neutral5">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+        <Icon size="lg" className="text-foreground">
           <AgentIcon />
         </Icon>
-        <span className="text-neutral3 text-ui-sm">Agent</span>
+        <span className="text-caption text-muted-foreground">Agent</span>
       </div>
-      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
-        <Icon size="lg" className="text-neutral5">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+        <Icon size="lg" className="text-foreground">
           <AgentCoinIcon />
         </Icon>
-        <span className="text-neutral3 text-ui-sm">AgentCoin</span>
+        <span className="text-caption text-muted-foreground">AgentCoin</span>
       </div>
-      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
-        <Icon size="lg" className="text-neutral5">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+        <Icon size="lg" className="text-foreground">
           <AgentNetworkCoinIcon />
         </Icon>
-        <span className="text-neutral3 text-ui-sm">AgentNetworkCoin</span>
+        <span className="text-caption text-muted-foreground">AgentNetworkCoin</span>
       </div>
     </div>
   ),
@@ -217,17 +222,17 @@ export const AgentIcons: Story = {
 export const WorkflowIcons: Story = {
   render: () => (
     <div className="flex gap-4">
-      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
-        <Icon size="lg" className="text-neutral5">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+        <Icon size="lg" className="text-foreground">
           <WorkflowIcon />
         </Icon>
-        <span className="text-neutral3 text-ui-sm">Workflow</span>
+        <span className="text-caption text-muted-foreground">Workflow</span>
       </div>
-      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
-        <Icon size="lg" className="text-neutral5">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+        <Icon size="lg" className="text-foreground">
           <WorkflowCoinIcon />
         </Icon>
-        <span className="text-neutral3 text-ui-sm">WorkflowCoin</span>
+        <span className="text-caption text-muted-foreground">WorkflowCoin</span>
       </div>
     </div>
   ),
@@ -236,48 +241,102 @@ export const WorkflowIcons: Story = {
 export const ToolIcons: Story = {
   render: () => (
     <div className="flex gap-4">
-      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
-        <Icon size="lg" className="text-neutral5">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+        <Icon size="lg" className="text-foreground">
           <ToolsIcon />
         </Icon>
-        <span className="text-neutral3 text-ui-sm">Tools</span>
+        <span className="text-caption text-muted-foreground">Tools</span>
       </div>
-      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
-        <Icon size="lg" className="text-neutral5">
+      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+        <Icon size="lg" className="text-foreground">
           <ToolCoinIcon />
         </Icon>
-        <span className="text-neutral3 text-ui-sm">ToolCoin</span>
+        <span className="text-caption text-muted-foreground">ToolCoin</span>
       </div>
     </div>
   ),
 };
 
+const brandIcons = [
+  { name: 'Github', component: GithubIcon },
+  { name: 'GithubCoin', component: GithubCoinIcon },
+  { name: 'Google', component: GoogleIcon },
+  { name: 'OpenAI', component: OpenAIIcon },
+  { name: 'Claude', component: ClaudeIcon },
+  { name: 'Gemini', component: GeminiIcon },
+  { name: 'DeepSeek', component: DeepSeekIcon },
+  { name: 'OpenRouter', component: OpenRouterIcon },
+  { name: 'Qwen', component: QwenIcon },
+  { name: 'Mistral', component: MistralIcon },
+  { name: 'Z.ai', component: ZaiIcon },
+  { name: 'NVIDIA', component: NvidiaIcon },
+  { name: 'MiniMax', component: MinimaxIcon },
+  { name: 'Meta', component: MetaIcon },
+  { name: 'Moonshot', component: MoonshotIcon },
+  { name: 'xAI', component: XaiIcon },
+];
+
 export const BrandIcons: Story = {
   render: () => (
-    <div className="flex gap-4">
-      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
-        <Icon size="lg" className="text-neutral5">
-          <GithubIcon />
-        </Icon>
-        <span className="text-neutral3 text-ui-sm">Github</span>
+    <div className="grid w-200 grid-cols-6 gap-4">
+      {brandIcons.map(({ name, component: BrandIcon }) => (
+        <div key={name} className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+          <Icon size="lg" className="text-foreground">
+            <BrandIcon />
+          </Icon>
+          <span className="text-caption text-muted-foreground">{name}</span>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
+const strokeGlyphs = [Plus, Search, Settings, ChevronDown, Trash2, Copy, X, Check, Folder, Bell];
+
+// Every lucide icon draws its line from `--icon-stroke-width`, however it is sized.
+// Use this story for before/after shots of a stroke change.
+export const Stroke: Story = {
+  render: () => (
+    <div className="flex flex-col gap-6">
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+        <div key={size} className="flex items-center gap-6">
+          <span className="w-16 text-caption text-muted-foreground">
+            {size} · {Sizes[`icon-${size}`]}
+          </span>
+          {['text-foreground', 'text-muted-foreground'].map(tone => (
+            <div key={tone} className={`flex items-center gap-3 ${tone}`}>
+              {strokeGlyphs.map(Glyph => (
+                <Icon key={Glyph.displayName} size={size}>
+                  <Glyph />
+                </Icon>
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
+      <div className="flex items-center gap-3">
+        <Button size="sm" icon={<Plus />}>
+          Add header
+        </Button>
+        <Button size="md" icon={<Plus />}>
+          Add header
+        </Button>
+        <Button size="lg" icon={<Play />}>
+          Run
+        </Button>
+        <Button size="icon-md" tooltip="Copy">
+          <Copy />
+        </Button>
       </div>
-      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
-        <Icon size="lg" className="text-neutral5">
-          <GithubCoinIcon />
-        </Icon>
-        <span className="text-neutral3 text-ui-sm">GithubCoin</span>
-      </div>
-      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
-        <Icon size="lg" className="text-neutral5">
-          <GoogleIcon />
-        </Icon>
-        <span className="text-neutral3 text-ui-sm">Google</span>
-      </div>
-      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
-        <Icon size="lg" className="text-neutral5">
-          <OpenAIIcon />
-        </Icon>
-        <span className="text-neutral3 text-ui-sm">OpenAI</span>
+      <div className="flex items-center gap-3 text-muted-foreground">
+        <span className="w-16 text-caption">Unwrapped</span>
+        <Search className="size-3" />
+        <Search className="size-3.5" />
+        <Search className="size-4" />
+        <Search className="size-5" />
+        <span className="flex items-center [&>svg]:size-3.5">
+          <Folder />
+        </span>
       </div>
     </div>
   ),

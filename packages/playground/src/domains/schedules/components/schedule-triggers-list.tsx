@@ -1,11 +1,12 @@
 import type { ScheduleTriggerResponse } from '@mastra/client-js';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { AlertTriangleIcon } from 'lucide-react';
-import { formatScheduleTimestamp, formatRelativeTime } from '../utils/format';
 import { WorkflowRunStatusInline } from './workflow-run-status-inline';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ScheduleTriggersListProps {
   triggers: ScheduleTriggerResponse[];
@@ -17,24 +18,6 @@ export interface ScheduleTriggersListProps {
 }
 
 const COLUMNS = 'auto auto auto auto 1fr';
-
-function formatDuration(durationMs?: number): string {
-  if (durationMs === undefined) return '—';
-  if (durationMs < 1000) return `${durationMs}ms`;
-  if (durationMs < 60_000) return `${(durationMs / 1000).toFixed(1)}s`;
-  const minutes = Math.floor(durationMs / 60_000);
-  const seconds = Math.floor((durationMs % 60_000) / 1000);
-  return `${minutes}m ${seconds}s`;
-}
-
-function formatDriftValue(driftMs: number): string {
-  const abs = Math.abs(driftMs);
-  const sign = driftMs < 0 ? '-' : '';
-  if (abs < 1000) return `${sign}${abs}ms`;
-  if (abs < 60_000) return `${sign}${(abs / 1000).toFixed(1)}s`;
-  if (abs < 3_600_000) return `${sign}${(abs / 60_000).toFixed(1)}m`;
-  return `${sign}${(abs / 3_600_000).toFixed(1)}h`;
-}
 
 // Warn when the scheduler published noticeably late (>30s) but skip cases where
 // the row is almost certainly stale (paused schedule, long downtime, clock skew).
@@ -62,7 +45,7 @@ export function ScheduleTriggersList({
 
   if (triggers.length === 0) {
     return (
-      <Txt variant="ui-md" className="text-neutral4 p-4">
+      <Txt variant="body" tone="muted" className="p-4">
         No trigger history yet.
       </Txt>
     );
@@ -80,8 +63,7 @@ export function ScheduleTriggersList({
 
       {triggers.map(t => {
         const driftMs = t.actualFireAt - t.scheduledFireAt;
-        const driftValue = formatDriftValue(driftMs);
-        const startedTooltip = `Scheduled ${formatScheduleTimestamp(t.scheduledFireAt)} — published ${formatScheduleTimestamp(t.actualFireAt)} (drift ${driftValue})`;
+        const driftValue = formatDuration(driftMs, { signed: true });
         const isPublishFailure = t.outcome === 'failed';
         const errorMessage = isPublishFailure ? t.error : t.run?.error;
         const absDrift = Math.abs(driftMs);
@@ -91,15 +73,9 @@ export function ScheduleTriggersList({
         const isLinked = isTriggerLinked(t);
         if (isLinked) interactiveIndex += 1;
         const runIdLabel = (
-          <span
-            className={
-              isLinked
-                ? 'text-accent1 text-ui-sm font-mono whitespace-nowrap'
-                : 'text-neutral3 text-ui-sm font-mono whitespace-nowrap'
-            }
-          >
+          <Txt as="span" variant="caption" font="mono" tone={isLinked ? 'ink' : 'muted'} className="whitespace-nowrap">
             {t.runId}
-          </span>
+          </Txt>
         );
 
         const cells = (
@@ -109,21 +85,30 @@ export function ScheduleTriggersList({
             <DataList.Cell>
               <span className="inline-flex items-center gap-2">
                 {isPublishFailure ? (
-                  <span className="text-ui-sm text-accent2 inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <Txt
+                    as="span"
+                    variant="caption"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-destructive-foreground"
+                  >
                     <AlertTriangleIcon size={14} />
                     publish failed
-                  </span>
+                  </Txt>
                 ) : t.run ? (
                   <WorkflowRunStatusInline status={t.run.status} />
                 ) : (
-                  <span className="text-ui-sm text-neutral3 inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <Txt
+                    as="span"
+                    variant="caption"
+                    tone="muted"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap"
+                  >
                     pending
-                  </span>
+                  </Txt>
                 )}
                 {errorMessage ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-accent2 inline-flex">
+                      <span className="inline-flex text-destructive-foreground">
                         <AlertTriangleIcon size={14} />
                       </span>
                     </TooltipTrigger>
@@ -135,11 +120,11 @@ export function ScheduleTriggersList({
 
             <DataList.Cell>
               <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                <span title={startedTooltip}>{formatRelativeTime(t.actualFireAt)}</span>
+                {t.actualFireAt ? <RelativeTimestamp value={t.actualFireAt} /> : '—'}
                 {showDriftWarning ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-accent3 inline-flex">
+                      <span className="inline-flex text-info-indicator">
                         <AlertTriangleIcon size={14} />
                       </span>
                     </TooltipTrigger>
@@ -150,7 +135,13 @@ export function ScheduleTriggersList({
             </DataList.Cell>
 
             <DataList.Cell>
-              {t.run ? <span>{formatDuration(t.run.durationMs)}</span> : <span className="text-neutral4">—</span>}
+              {t.run ? (
+                <Txt as="span" variant="body-sm" font="mono">
+                  {formatDuration(t.run.durationMs) || '—'}
+                </Txt>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
             </DataList.Cell>
             <DataList.Cell> </DataList.Cell>
           </>

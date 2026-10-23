@@ -3,14 +3,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import {
-  useChannelPlatforms,
-  useChannelInstallations,
-  useConnectChannelAction,
-  useDisconnectChannel,
-} from '../../hooks/use-channels';
-import type { ChannelPlatformInfo } from '../../hooks/use-channels';
+import { useChannelPlatforms, useChannelInstallations, useDisconnectChannel } from '@mastra/react/hooks/agents';
+import type { ChannelPlatformInfo } from '@mastra/react/hooks/agents';
+import { Plug, Unplug } from 'lucide-react';
 import { PlatformIcon } from './platform-icons';
+import { useConnectChannelAction } from '@/domains/agents/hooks/use-connect-channel-action';
+import { useReconcilePendingInstallOnFocus } from '@/domains/agents/hooks/use-reconcile-pending-install-on-focus';
 
 export interface AgentChannelsProps {
   agentId: string;
@@ -29,14 +27,14 @@ export const AgentChannels = ({ agentId }: AgentChannelsProps) => {
 
   if (!platforms || platforms.length === 0) {
     return (
-      <Txt variant="ui-sm" className="text-neutral6">
+      <Txt variant="caption" tone="ink">
         No channel platforms configured.
       </Txt>
     );
   }
 
   return (
-    <ul className="divide-border1 divide-y">
+    <ul className="divide-y divide-border">
       {platforms.map(platform => (
         <ChannelRow key={platform.id} platform={platform} agentId={agentId} />
       ))}
@@ -50,11 +48,17 @@ interface ChannelRowProps {
 }
 
 function ChannelRow({ platform, agentId }: ChannelRowProps) {
-  const { data: installations, isLoading } = useChannelInstallations(platform.id, agentId);
+  const { data: installations, isLoading } = useChannelInstallations({
+    platform: platform.id,
+    agentId: agentId,
+    queryOptions: { enabled: Boolean(platform.id && agentId) },
+  });
   const { connect, isConnecting } = useConnectChannelAction(platform.id);
-  const { mutate: disconnect, isPending: isDisconnecting } = useDisconnectChannel(platform.id);
+  const { mutate: disconnect, isPending: isDisconnecting } = useDisconnectChannel({ platform: platform.id });
 
   const activeInstallation = installations?.find(i => i.status === 'active');
+  const hasPendingInstall = installations?.some(i => i.status === 'pending') ?? false;
+  useReconcilePendingInstallOnFocus({ platform: platform.id, agentId, hasPendingInstall });
 
   const handleConnect = () => {
     connect(agentId);
@@ -73,32 +77,39 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
       <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
 
       <span className="flex min-w-0 flex-1 flex-col">
-        <Txt as="span" variant="ui-md" className="text-neutral5 truncate">
+        <Txt as="span" variant="body" tone="ink" className="truncate">
           {platform.name}
         </Txt>
         {activeInstallation ? (
-          <Txt variant="ui-xs" className="text-neutral3 truncate">
+          <Txt variant="meta" tone="muted" className="truncate">
             {activeInstallation.displayName || 'Workspace'}
           </Txt>
         ) : null}
       </span>
 
       {isLoading ? null : activeInstallation ? (
-        <Badge variant="green" size="sm" indicator="dot">
+        <Badge variant="success" size="sm" indicator="dot">
           Connected
         </Badge>
       ) : !platform.isConfigured ? (
-        <Badge variant="yellow" size="sm" indicator="dot">
+        <Badge variant="warning" size="sm" indicator="dot">
           Not configured
         </Badge>
       ) : null}
 
       {isLoading ? null : activeInstallation ? (
-        <Button size="sm" variant="ghost" onClick={handleDisconnect} disabled={isDisconnecting} className="shrink-0">
+        <Button
+          icon={<Unplug />}
+          size="sm"
+          variant="ghost"
+          onClick={handleDisconnect}
+          disabled={isDisconnecting}
+          className="shrink-0"
+        >
           {isDisconnecting ? 'Removing...' : 'Remove'}
         </Button>
       ) : platform.isConfigured ? (
-        <Button size="sm" variant="default" onClick={handleConnect} disabled={isConnecting}>
+        <Button icon={<Plug />} size="sm" variant="default" onClick={handleConnect} disabled={isConnecting}>
           {isConnecting ? 'Connecting...' : 'Connect'}
         </Button>
       ) : null}

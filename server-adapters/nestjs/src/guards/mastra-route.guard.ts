@@ -1,9 +1,8 @@
-import type { Mastra } from '@mastra/core/mastra';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 
-import { MASTRA, MASTRA_OPTIONS } from '../constants';
+import { MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
 import { AuthService } from '../services/auth.service';
 import { RequestContextService } from '../services/request-context.service';
@@ -19,7 +18,6 @@ import { MastraThrottleGuard } from './mastra-throttle.guard';
 @Injectable({ scope: Scope.REQUEST })
 export class MastraRouteGuard implements CanActivate {
   constructor(
-    @Inject(MASTRA) private readonly mastra: Mastra,
     @Inject(MASTRA_OPTIONS) private readonly options: MastraModuleOptions,
     @Inject(RouteHandlerService) private readonly routeHandler: RouteHandlerService,
     @Inject(RequestContextService) private readonly requestContext: RequestContextService,
@@ -31,21 +29,19 @@ export class MastraRouteGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
     const method = request.method.toUpperCase();
     const routePath = getMastraRoutePath(request.path, this.options.prefix);
+    const matchResult = routePath ? this.routeHandler.matchRoute(method, routePath) : undefined;
 
-    if (!routePath) {
-      return true;
-    }
-
-    // If not a Mastra route, allow controller to handle 404 logic.
-    const matchResult = this.routeHandler.matchRoute(method, routePath);
     if (!matchResult) {
+      // Custom routes (`server.apiRoutes`) are authenticated by CustomRouteService once
+      // Hono has matched them; otherwise the controller handles 404s.
       return true;
     }
 
-    // Run auth if module options enable it, or if the Mastra server has auth
-    // configured (unless module options explicitly disable it).
-    if (this.options.auth?.enabled !== false && (this.options.auth?.enabled || this.mastra.getServer()?.auth)) {
-      const user = await this.authService.authenticate(request);
+    if (this.authService.isEnabled()) {
+      const user = await this.authService.authenticate(request, {
+        requestContext: this.requestContext.requestContext,
+        response: context.switchToHttp().getResponse<Response>(),
+      });
       if (user !== undefined) {
         this.requestContext.setUser(user);
       }
@@ -53,8 +49,8 @@ export class MastraRouteGuard implements CanActivate {
 
     // Apply rate limiting to matched Mastra routes.
     if (this.options.rateLimitOptions?.enabled !== false) {
-      const { limit, windowMs } = this.throttleGuard.getRateLimitSettings(request, undefined, routePath);
-      await this.throttleGuard.checkLimit(request, limit, windowMs, routePath);
+      const { limit, windowMs } = this.throttleGuard.getRateLimitSettings(request, undefined, routePath ?? undefined);
+      await this.throttleGuard.checkLimit(request, limit, windowMs, routePath ?? undefined);
     }
 
     return true;

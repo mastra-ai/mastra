@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatResumeHint, parseResumeThreadId, shouldRunHeadless } from './resume-command.js';
+import {
+  formatResumeHint,
+  parseResumeThreadId,
+  shouldRejectResumeWithoutTTY,
+  shouldRunHeadless,
+} from './resume-command.js';
 
 describe('resume command', () => {
   it('reads an explicit thread ID', () => {
@@ -17,10 +22,23 @@ describe('resume command', () => {
     expect(shouldRunHeadless(['node', 'mastracode', '--prompt', 'hello'], undefined, true)).toBe(true);
   });
 
+  it('rejects resume commands without an interactive terminal', () => {
+    expect(shouldRejectResumeWithoutTTY('thread-123', false)).toBe(true);
+    expect(shouldRejectResumeWithoutTTY('thread-123', true)).toBe(false);
+    expect(shouldRejectResumeWithoutTTY(undefined, false)).toBe(false);
+  });
+
   it('formats the exit hint', () => {
     expect(formatResumeHint('thread-123')).toBe('To continue this session, run mastracode resume thread-123');
     expect(formatResumeHint("thread 'quoted'")).toBe(
       "To continue this session, run mastracode resume 'thread '\\''quoted'\\'''",
     );
+  });
+
+  it('escapes terminal control characters in the exit hint', () => {
+    const hint = formatResumeHint("thread-\u001b[31m'\\name");
+
+    expect(hint).toBe("To continue this session, run mastracode resume $'thread-\\x1b[31m\\'\\\\name'");
+    expect(hint).not.toContain('\u001b');
   });
 });

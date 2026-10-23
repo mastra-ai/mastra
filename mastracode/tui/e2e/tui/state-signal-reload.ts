@@ -61,7 +61,6 @@ values
     await runtime.waitForScreenText(/E2E loaded state signal fixture/i, terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Switched to: E2E loaded state signal fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/Open the persisted state signal fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/State delta: browser/i, terminal, 8_000);
     await runtime.waitForScreenText(

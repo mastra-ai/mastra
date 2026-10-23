@@ -38,7 +38,7 @@ const result = await runEvals({
 })
 ```
 
-Each turn runs `agent.generate()` with the same thread ID, so the agent sees the full conversation history. Scorers receive the accumulated output messages from all turns.
+Each turn runs `agent.generate()` with the same thread ID. The agent sees the full conversation history. Scorers receive the accumulated output messages from all turns.
 
 :::warning[Prebuilt LLM judges grade one turn]
 
@@ -200,7 +200,7 @@ Semantics:
 
 - A per-turn gate or scorer receives **only that turn's** `run.input` and `run.output`, rather than the accumulated conversation. A different turn's output can't satisfy the check, and `run.input` contains the input for the turn being evaluated.
 - Per-turn outcomes fold into the [verdict](/docs/evals/gates-and-verdicts): a failing turn gate makes the verdict `failed`. A missed turn threshold (with gates passing) makes it `scored`.
-- `result.turnResults[i]` reports each turn's `gateResults`, `thresholdResults`, and `scores`, so a failure points at the exact turn. Across multiple conversations, turn results are averaged by turn index.
+- `result.turnResults[i]` reports each turn's `gateResults`, `thresholdResults`, and `scores`. A failure points at the exact turn. Across multiple conversations, turn results are averaged by turn index.
 - A turn with no `gates` or `scorers` advances the conversation.
 - Top-level `scorers`/`gates` still run as a whole over the accumulated output, so you can combine "this turn must call the tool" with "the answer mentions Brooklyn."
 - When the agent has storage configured, each per-turn scorer/gate result is persisted like top-level scores, so per-turn outcomes appear in your scores store. Each stored per-turn score uses its turn index as a label (`metadata.turnIndex`) and shares the conversation's `threadId`. It also includes a link to that turn's trace span.

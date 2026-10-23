@@ -14,6 +14,7 @@
  */
 
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
+import { SandboxError, SandboxUnsupportedFeatureError } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { createRepoTemplate } from '../utils/repo-template';
@@ -470,6 +471,77 @@ describe('E2BSandbox', () => {
     });
   });
 
+  describe('Named template fail-closed (fallbackTemplate: false)', () => {
+    const failClosedSpec = async (repo: string): Promise<NamedTemplateSpec> => {
+      mockHead('e'.repeat(40));
+      const spec = await resolveRepoTemplate({
+        getRepositoryAccess: repoAccess(`https://github.com/octocat/${repo}.git`),
+        setupCommand: 'pnpm install',
+      });
+      return { ...spec, fallbackTemplate: false };
+    };
+
+    it('rejects start() with the build error instead of falling back', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const spec = await failClosedSpec('fail-closed-build');
+      (Template.exists as any).mockResolvedValue(false);
+      (Template.build as any).mockRejectedValue(new Error('BuildError: setup failed'));
+
+      const sandbox = new E2BSandbox({ id: 'fail-closed-1', template: spec });
+
+      await expect(sandbox.start()).rejects.toThrow(/setup failed/);
+      expect(Template.build as any).toHaveBeenCalledTimes(1);
+      expect((Template.build as any).mock.calls[0]![1]).toBe(spec.ref);
+      expect(Sandbox.create as any).not.toHaveBeenCalled();
+      expect((sandbox as any)._resolvedTemplateId).toBeUndefined();
+    });
+
+    it('retries the named build on the next start after rejecting', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const spec = await failClosedSpec('fail-closed-retry');
+      (Template.exists as any).mockResolvedValue(false);
+      (Template.build as any)
+        .mockRejectedValueOnce(new Error('BuildError: setup failed'))
+        .mockResolvedValueOnce({ templateId: 'named-template-id' });
+
+      const sandbox = new E2BSandbox({ id: 'fail-closed-2', template: spec });
+      await expect(sandbox.start()).rejects.toThrow(/setup failed/);
+
+      await sandbox.start();
+      expect(Template.build as any).toHaveBeenCalledTimes(2);
+      expect((Template.build as any).mock.calls[1]![1]).toBe(spec.ref);
+      expect((Sandbox.create as any).mock.calls[0]![0]).toBe(spec.ref);
+    });
+
+    it('rejects start() when creating from a registered-but-broken ref 404s', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const spec = await failClosedSpec('fail-closed-404');
+      (Template.exists as any).mockResolvedValue(true);
+      (Sandbox.create as any).mockRejectedValueOnce(new Error("404: tag 'default' does not exist for template"));
+
+      const sandbox = new E2BSandbox({ id: 'fail-closed-3', template: spec });
+
+      await expect(sandbox.start()).rejects.toThrow(/404/);
+      expect(Sandbox.create as any).toHaveBeenCalledTimes(1);
+      expect((Sandbox.create as any).mock.calls[0]![0]).toBe(spec.ref);
+      expect(Template.build as any).not.toHaveBeenCalled();
+      expect((sandbox as any)._resolvedTemplateId).toBeUndefined();
+    });
+
+    it('applies to a deferred spec whose resolved spec disables fallback', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const spec = await failClosedSpec('fail-closed-deferred');
+      (Template.exists as any).mockResolvedValue(true);
+      (Sandbox.create as any).mockRejectedValueOnce(new Error('404: template not found'));
+
+      const sandbox = new E2BSandbox({ id: 'fail-closed-4', template: { resolveSpec: async () => spec } });
+
+      await expect(sandbox.start()).rejects.toThrow(/404/);
+      expect(Sandbox.create as any).toHaveBeenCalledTimes(1);
+      expect(Template.build as any).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Start - Race Condition Prevention', () => {
     it('concurrent start() calls return same promise', async () => {
       const { Sandbox } = await import('e2b');
@@ -599,6 +671,35 @@ describe('E2BSandbox', () => {
       expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox', expect.any(Object));
     });
 
+    it('forwards the configured timeout when reconnecting to an existing sandbox by metadata', async () => {
+      const { Sandbox } = await import('e2b');
+
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox', state: 'paused' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'existing-id', timeout: 900_000 });
+      await sandbox._start();
+
+      // Regression (#24621): without timeoutMs the e2b SDK falls back to its
+      // 5-minute default, so a resumed sandbox always came back with a 5-minute
+      // window regardless of the configured timeout.
+      expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox', expect.objectContaining({ timeoutMs: 900_000 }));
+    });
+
+    it('forwards the default timeout when reconnecting to an existing sandbox by metadata', async () => {
+      const { Sandbox } = await import('e2b');
+
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox', state: 'paused' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'existing-id' });
+      await sandbox._start();
+
+      expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox', expect.objectContaining({ timeoutMs: 300_000 }));
+    });
+
     it("reports outcome 'created' when a new sandbox is created", async () => {
       const sandbox = new E2BSandbox();
 
@@ -651,6 +752,23 @@ describe('E2BSandbox', () => {
       expect(Sandbox.list).not.toHaveBeenCalled();
       expect(Sandbox.create).not.toHaveBeenCalled();
       expect(sandbox.sandboxId).toBe('sbx_preferred');
+    });
+
+    it('forwards the configured timeout when connecting to the preferred sandbox', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockResolvedValue({
+        sandboxId: 'sbx_preferred',
+        metadata: { 'mastra-sandbox-id': 'my-logical-id' },
+        state: 'paused',
+      });
+      (Sandbox.connect as any).mockResolvedValue({ ...mockSandbox, sandboxId: 'sbx_preferred' });
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_preferred', timeout: 900_000 });
+      await sandbox._start();
+
+      // Regression (#24621): the preferred-sandbox resume path also dropped the
+      // configured timeout and fell back to the SDK's 5-minute default.
+      expect(Sandbox.connect).toHaveBeenCalledWith('sbx_preferred', expect.objectContaining({ timeoutMs: 900_000 }));
     });
 
     it('attaches to a preferred sandbox that has no mastra-sandbox-id metadata', async () => {
@@ -739,6 +857,73 @@ describe('E2BSandbox', () => {
       await sandbox._start();
 
       expect(Sandbox.create).toHaveBeenCalled();
+    });
+
+    describe("reattach: 'required'", () => {
+      it('throws SANDBOX_REATTACH_FAILED instead of discovering or creating when the preferred sandbox is gone', async () => {
+        const { Sandbox } = await import('e2b');
+        ((Sandbox as any).getInfo as any).mockRejectedValue(new Error('sandbox "sbx_gone" was not found'));
+        (Sandbox.list as any).mockReturnValue({
+          nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'sbx_logical', state: 'running' }]),
+        });
+
+        const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_gone', reattach: 'required' });
+        const error = await sandbox._start().catch(e => e);
+
+        expect(error).toBeInstanceOf(SandboxError);
+        expect(error.code).toBe('SANDBOX_REATTACH_FAILED');
+        expect(error.details).toMatchObject({ provider: 'e2b', sandboxId: 'sbx_gone', logicalId: 'my-logical-id' });
+        expect(Sandbox.list).not.toHaveBeenCalled();
+        expect(Sandbox.create).not.toHaveBeenCalled();
+      });
+
+      it('throws when the preferred sandbox vanishes between getInfo and connect', async () => {
+        const { Sandbox } = await import('e2b');
+        ((Sandbox as any).getInfo as any).mockResolvedValue({ sandboxId: 'sbx_racy', metadata: {}, state: 'running' });
+        (Sandbox.connect as any).mockRejectedValueOnce(new Error('sandbox "sbx_racy" was not found'));
+
+        const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_racy', reattach: 'required' });
+        await expect(sandbox._start()).rejects.toMatchObject({ code: 'SANDBOX_REATTACH_FAILED' });
+        expect(Sandbox.create).not.toHaveBeenCalled();
+      });
+
+      it('propagates non-gone errors unchanged', async () => {
+        const { Sandbox } = await import('e2b');
+        ((Sandbox as any).getInfo as any).mockRejectedValue(new Error('401 unauthorized: invalid API key'));
+
+        const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_preferred', reattach: 'required' });
+        const error = await sandbox._start().catch(e => e);
+        expect(error).not.toBeInstanceOf(SandboxError);
+        expect(error.message).toContain('401 unauthorized');
+      });
+
+      it('reattaches a live preferred sandbox', async () => {
+        const { Sandbox } = await import('e2b');
+        ((Sandbox as any).getInfo as any).mockResolvedValue({ sandboxId: 'sbx_live', metadata: {}, state: 'running' });
+
+        const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_live', reattach: 'required' });
+        await sandbox._start();
+
+        expect(Sandbox.connect).toHaveBeenCalledWith('sbx_live', expect.any(Object));
+        expect(Sandbox.create).not.toHaveBeenCalled();
+      });
+
+      it('creates normally when no sandboxId is set', async () => {
+        const { Sandbox } = await import('e2b');
+        const sandbox = new E2BSandbox({ id: 'my-logical-id', reattach: 'required' });
+        await sandbox._start();
+        expect(Sandbox.create).toHaveBeenCalled();
+      });
+
+      it('clone() inherits reattach', async () => {
+        const { Sandbox } = await import('e2b');
+        ((Sandbox as any).getInfo as any).mockRejectedValue(new Error('sandbox "sbx_child" was not found'));
+
+        const parent = new E2BSandbox({ id: 'parent-id', reattach: 'required' });
+        const child = parent.clone({ id: 'child-id', sandboxId: 'sbx_child' });
+        await expect(child._start()).rejects.toMatchObject({ code: 'SANDBOX_REATTACH_FAILED' });
+        expect(Sandbox.create).not.toHaveBeenCalled();
+      });
     });
 
     it('exposes the resolved provider sandbox ID after create', async () => {
@@ -886,6 +1071,44 @@ describe('E2BSandbox', () => {
       expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
         expect.any(String),
         expect.objectContaining({ envs: expect.objectContaining({ GH_TOKEN: 'tok_2' }) }),
+      );
+    });
+
+    it('fills in a provider default timeout when the caller omits one', async () => {
+      // Regression: an undefined timeoutMs reaches the E2B SDK, which falls back
+      // to its private 60s connection deadline and kills any longer command.
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await sandbox.executeCommand('echo', ['test']);
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ timeoutMs: 300_000 }),
+      );
+    });
+
+    it('uses the configured sandbox timeout as the per-command default', async () => {
+      const sandbox = new E2BSandbox({ timeout: 900_000 });
+      await sandbox._start();
+
+      await sandbox.executeCommand('echo', ['test']);
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ timeoutMs: 900_000 }),
+      );
+    });
+
+    it('per-command timeout still wins over the default', async () => {
+      const sandbox = new E2BSandbox({ timeout: 900_000 });
+      await sandbox._start();
+
+      await sandbox.executeCommand('echo', ['test'], { timeout: 5_000 });
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ timeoutMs: 5_000 }),
       );
     });
   });
@@ -1096,6 +1319,62 @@ describe('E2BSandbox', () => {
           cwd: '/tmp',
         }),
       );
+    });
+
+    it('closes stdin so commands that read it cannot hang', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      // `rg`/`grep`/`cat` with no path argument read stdin. executeCommand runs to
+      // completion and never feeds stdin, so leaving it attached would block the
+      // command forever.
+      await sandbox.executeCommand('rg', ['pattern', '--files-with-matches']);
+
+      expect(mockSandbox.commands.run).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ background: true, stdin: false }),
+      );
+    });
+
+    it('keeps stdin attached for processes.spawn so processes stay drivable', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await sandbox.processes.spawn('node server.js');
+
+      expect(mockSandbox.commands.run).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ background: true, stdin: true }),
+      );
+    });
+
+    it('rejects sendStdin on an ignore-mode process', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      // Spawned with stdin detached, so there is no channel for input. Reject
+      // like the local and Docker handles instead of posting an input RPC.
+      const handle = await sandbox.processes.spawn('cat', { stdinMode: 'ignore' });
+
+      await expect(handle.sendStdin('data\n')).rejects.toThrow(/stdin/i);
+      expect(mockSandbox.commands.sendStdin).not.toHaveBeenCalled();
+    });
+
+    it('lists an exited process until its output has been read', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+      mockSandbox.commands.list.mockResolvedValue([{ pid: 1, cmd: 'node', args: ['server.js'] }]);
+
+      const handle = await sandbox.processes.spawn('echo done');
+      await handle.wait();
+
+      expect(await sandbox.processes.list()).toEqual([
+        { pid: '1', command: 'node server.js', running: true },
+        { pid: handle.pid, command: 'echo done', running: false, exitCode: 0 },
+      ]);
+
+      await sandbox.processes.get(handle.pid);
+      expect(await sandbox.processes.list()).toEqual([{ pid: '1', command: 'node server.js', running: true }]);
     });
 
     it('defaults cwd to the configured workingDirectory', async () => {
@@ -1636,6 +1915,138 @@ describe('E2BSandbox S3 Public Bucket Mount', () => {
       expect(s3fsMountCall[0]).not.toContain('passwd_file=/tmp/.passwd-s3fs\n');
       expect(s3fsMountCall[0]).not.toMatch(/passwd_file=\/tmp\/\.passwd-s3fs\b(?!-)/);
     }
+  });
+
+  it('S3 mount uses session token credentials via env file and use_session_token', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-sts',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'ASIAKEY',
+        secretAccessKey: 'secret',
+        sessionToken: 'tok/en+value',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-sts');
+    expect(result.success).toBe(true);
+
+    const writeCall = mockSandbox.files.write.mock.calls.find((call: any[]) =>
+      String(call[0]).startsWith('/tmp/.passwd-s3fs-'),
+    );
+    expect(writeCall).toBeDefined();
+    const [credentialsPath, content] = writeCall!;
+    expect(content).toContain('export AWSACCESSKEYID=ASIAKEY');
+    expect(content).toContain('export AWSSECRETACCESSKEY=secret');
+    expect(content).toContain("export AWSSESSIONTOKEN='tok/en+value'");
+    expect(content).toContain("export AWS_SESSION_TOKEN='tok/en+value'");
+
+    const calls = mockSandbox.commands.run.mock.calls.map((call: any[]) => call[0] as string);
+    const mountCmd = calls.find(cmd => cmd.includes('s3fs') && cmd.includes('/data/s3-sts'));
+    expect(mountCmd).toBeDefined();
+    expect(mountCmd).toMatch(/^sudo sh -c /);
+    expect(mountCmd).toContain(`. ${credentialsPath} && exec s3fs`);
+    expect(mountCmd).toContain('use_session_token');
+    expect(mountCmd).not.toContain('passwd_file');
+    expect(mountCmd).not.toContain('tok/en+value');
+    expect(calls).toContain(`sudo rm -f ${credentialsPath}`);
+    expect(calls.lastIndexOf(`sudo rm -f ${credentialsPath}`)).toBeGreaterThan(calls.indexOf(mountCmd!));
+  });
+
+  it('S3 mount removes session credentials file when chmod fails', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const originalRun = mockSandbox.commands.run.getMockImplementation();
+    mockSandbox.commands.run.mockImplementation((cmd: string, ...args: any[]) => {
+      if (cmd.startsWith('chmod 600 /tmp/.passwd-s3fs-')) return Promise.reject(new Error('chmod failed'));
+      return originalRun ? originalRun(cmd, ...args) : Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+    });
+
+    const mockFilesystem = {
+      id: 'test-s3-sts-chmod',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'ASIAKEY',
+        secretAccessKey: 'secret',
+        sessionToken: 'token',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-sts-chmod');
+    expect(result.success).toBe(false);
+
+    const writeCall = mockSandbox.files.write.mock.calls.find((call: any[]) =>
+      String(call[0]).startsWith('/tmp/.passwd-s3fs-'),
+    );
+    const credentialsPath = writeCall![0];
+    const calls = mockSandbox.commands.run.mock.calls.map((call: any[]) => call[0] as string);
+    expect(calls.lastIndexOf(`sudo rm -f ${credentialsPath}`)).toBeGreaterThan(
+      calls.indexOf(`chmod 600 ${credentialsPath}`),
+    );
+    expect(calls.some(cmd => cmd.includes('s3fs') && cmd.includes('/data/s3-sts-chmod'))).toBe(false);
+  });
+
+  it('S3 mount rejects an invalid prefix before writing session credentials', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-sts-prefix',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        prefix: 'a/../b',
+        accessKeyId: 'ASIAKEY',
+        secretAccessKey: 'secret',
+        sessionToken: 'token',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-sts-prefix');
+    expect(result.success).toBe(false);
+    expect(
+      mockSandbox.files.write.mock.calls.some((call: any[]) => String(call[0]).startsWith('/tmp/.passwd-s3fs-')),
+    ).toBe(false);
+  });
+
+  it('S3 mount errors when sessionToken is provided without access keys', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-sts-nokeys',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        sessionToken: 'token',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-sts-nokeys');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('sessionToken requires accessKeyId and secretAccessKey');
   });
 
   it('S3 mount errors when only accessKeyId is provided without secretAccessKey', async () => {
@@ -3229,6 +3640,15 @@ describe('writeFiles()', () => {
     const { Sandbox } = await import('e2b');
     expect(Sandbox.create as any).toHaveBeenCalledTimes(1);
     expect(mockSandbox.files.write).toHaveBeenCalled();
+  });
+
+  it('rejects an explicit per-file mode without uploading', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+    await expect(sandbox.writeFiles([{ path: '/app/a.txt', content: 'hi', mode: 0o600 }])).rejects.toThrow(
+      SandboxUnsupportedFeatureError,
+    );
+    expect(mockSandbox.files.write).not.toHaveBeenCalled();
   });
 });
 

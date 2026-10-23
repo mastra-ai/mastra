@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 
 export const EXPERIMENT_WORKER_PROTOCOL_VERSION = '1' as const;
@@ -321,8 +321,8 @@ export async function runExperimentWorker({
   stdin = process.stdin,
   stdout = process.stdout,
   stderr = process.stderr,
-  workerId = randomUUID(),
-  createEventId = randomUUID,
+  workerId = globalThis.crypto.randomUUID(),
+  createEventId = () => globalThis.crypto.randomUUID(),
   now = () => new Date(),
 }: ExperimentWorkerDependencies): Promise<number> {
   let correlation: Correlation | undefined;

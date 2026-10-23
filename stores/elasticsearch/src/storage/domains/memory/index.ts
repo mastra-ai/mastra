@@ -1106,6 +1106,7 @@ export class MemoryElasticSearch extends MemoryStorage {
       };
 
       const clonedMessages: MastraDBMessage[] = [];
+      const messageIdMap: Record<string, string> = Object.create(null);
       const targetResourceId = resourceId || sourceThread.resourceId;
       const entries: Array<{ key: string; value: Record<string, unknown> }> = [];
 
@@ -1125,6 +1126,7 @@ export class MemoryElasticSearch extends MemoryStorage {
         entries.push({ key: getMessageIndexKey(newMessageId), value: { threadId: newThreadId } });
 
         clonedMessages.push(newMessage);
+        messageIdMap[sourceMsg.id] = newMessageId;
       }
 
       await this.db.insert({ tableName: TABLE_THREADS, record: newThread });
@@ -1133,6 +1135,7 @@ export class MemoryElasticSearch extends MemoryStorage {
       return {
         thread: newThread,
         clonedMessages,
+        messageIdMap,
       };
     } catch (error) {
       if (error instanceof MastraError) {

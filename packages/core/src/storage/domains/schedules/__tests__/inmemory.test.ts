@@ -192,6 +192,22 @@ describe('InMemorySchedulesStorage', () => {
       expect(fetched!.lastRunId).toBe('run_1');
     });
 
+    it('atomically records the final fire and marks the schedule completed', async () => {
+      const sched = makeSchedule({ id: 's1', nextFireAt: 100 });
+      await storage.createSchedule(sched);
+
+      const ok = await storage.updateScheduleNextFire('s1', 100, 100, 150, 'run_1', 'completed');
+      expect(ok).toBe(true);
+
+      const fetched = await storage.getSchedule('s1');
+      expect(fetched).toMatchObject({
+        status: 'completed',
+        nextFireAt: 100,
+        lastFireAt: 150,
+        lastRunId: 'run_1',
+      });
+    });
+
     it('returns false and does not update when expected does not match', async () => {
       const sched = makeSchedule({ id: 's1', nextFireAt: 100 });
       await storage.createSchedule(sched);

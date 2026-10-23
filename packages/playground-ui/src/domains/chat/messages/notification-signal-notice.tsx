@@ -1,14 +1,16 @@
-import { Bell } from 'lucide-react';
-
-import { getNotificationNoticeVariant } from './notification-signal-notice-variant';
-import { formatSignalValue, getNotificationMetadata, signalContentsToText } from './signal-data';
-import type { SignalData } from './signal-data';
+import { formatSignalValue, getMcpEventSignalInfo, getNotificationMetadata, signalContentsToText } from './signal-data';
+import type { McpEventSignalInfo, SignalData } from './signal-data';
+import { NotificationActivity } from '@/ds/components/ai/activity';
 import { Badge } from '@/ds/components/Badge';
-import { Notice } from '@/ds/components/Notice';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
 
 export type NotificationSignalNoticeProps = {
   signal: SignalData;
+  defaultOpen?: boolean;
 };
+
+export const MCP_EVENT_GAP_MESSAGE = 'Gap: events may have been skipped';
+export const MCP_EVENT_UNTRUSTED_LABEL = 'Untrusted event data from the MCP server';
 
 const getNotificationTitle = (signal: SignalData) => {
   const notification = getNotificationMetadata(signal);
@@ -20,35 +22,40 @@ const getNotificationTitle = (signal: SignalData) => {
   return source ?? kind ?? 'Notification';
 };
 
-export const NotificationSignalNotice = ({ signal }: NotificationSignalNoticeProps) => {
+const getMcpEventTitle = (info: McpEventSignalInfo) => {
+  const title = [info.server, info.event].filter(Boolean).join(' · ') || 'MCP event';
+  return info.kind === 'mcp-event-subscription-ended' ? `${title} · subscription ended` : title;
+};
+
+const GapBadge = () => (
+  <Tooltip>
+    <TooltipTrigger render={<span />}>
+      <Badge size="xs" variant="amber">
+        gap
+      </Badge>
+      <span className="sr-only">{MCP_EVENT_GAP_MESSAGE}</span>
+    </TooltipTrigger>
+    <TooltipContent>{MCP_EVENT_GAP_MESSAGE}</TooltipContent>
+  </Tooltip>
+);
+
+export const NotificationSignalNotice = ({ signal, defaultOpen }: NotificationSignalNoticeProps) => {
   const notification = getNotificationMetadata(signal);
+  const mcpEvent = getMcpEventSignalInfo(signal);
   const priority = notification?.priority ?? formatSignalValue(signal.attributes?.priority);
   const pending = formatSignalValue(notification?.pending) ?? formatSignalValue(signal.attributes?.pending);
   const status = notification?.status ?? formatSignalValue(signal.attributes?.status);
   const text = signalContentsToText(signal.contents);
-  const pendingLabel = pending ? `${pending} pending` : undefined;
-  const hasMetadata = Boolean(priority || status || pendingLabel);
-  const hasText = text.length > 0;
-
   return (
-    <Notice
-      variant={getNotificationNoticeVariant(priority)}
-      title={getNotificationTitle(signal)}
-      icon={<Bell />}
-      className="my-2 max-w-[80%]"
-    >
-      {hasMetadata || hasText ? (
-        <div className="flex flex-col gap-2">
-          {hasMetadata ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {priority ? <Badge size="xs">{priority}</Badge> : null}
-              {status ? <Badge size="xs">{status}</Badge> : null}
-              {pendingLabel ? <Badge size="xs">{pendingLabel}</Badge> : null}
-            </div>
-          ) : null}
-          {hasText ? <Notice.Message className="break-words whitespace-pre-wrap">{text}</Notice.Message> : null}
-        </div>
-      ) : null}
-    </Notice>
+    <NotificationActivity
+      label={mcpEvent ? getMcpEventTitle(mcpEvent) : getNotificationTitle(signal)}
+      message={text}
+      priority={priority}
+      status={status}
+      pending={pending}
+      extraBadges={mcpEvent?.truncated ? <GapBadge /> : undefined}
+      messageLabel={mcpEvent?.kind === 'mcp-event' ? MCP_EVENT_UNTRUSTED_LABEL : undefined}
+      defaultOpen={defaultOpen}
+    />
   );
 };

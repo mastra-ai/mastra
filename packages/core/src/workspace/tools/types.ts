@@ -7,6 +7,7 @@
  * and do not import any Node.js dependencies.
  */
 
+import type { ToolBackgroundConfig } from '../../background-tasks/types';
 import type { WorkspaceToolName, WORKSPACE_TOOLS } from '../constants';
 
 // =============================================================================
@@ -107,6 +108,9 @@ export interface WorkspaceToolConfig {
    */
   requireApproval?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
 
+  /** Background execution eligibility and defaults for this tool. */
+  background?: ToolBackgroundConfig;
+
   /**
    * Custom name to expose this tool as to the LLM.
    * When set, the tool is registered under this name instead of the default
@@ -190,6 +194,12 @@ export interface BackgroundProcessConfig {
 export interface ExecuteCommandToolConfig extends WorkspaceToolConfig {
   /** Configuration for background process callbacks and abort behavior. */
   backgroundProcesses?: BackgroundProcessConfig;
+  /**
+   * Require a short plain-language `description` of each command, listed before `command`
+   * in the tool schema. UIs can show it in place of the raw command. When unset, the tool
+   * schema has no `description` arg. Default: false.
+   */
+  requireDescription?: boolean;
 }
 
 /**

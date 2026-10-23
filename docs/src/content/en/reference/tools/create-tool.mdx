@@ -41,6 +41,21 @@ export const weatherTool = createTool({
 
 The first `execute` parameter is the validated value from `inputSchema`. Destructure schema fields directly in the function signature, as shown with `{ location }`. The optional second parameter contains the execution context.
 
+### Display-only tools
+
+For a tool that only asks the client to display something, set `renderOnly: true` instead of defining `execute`:
+
+```typescript
+const showCard = createTool({
+  id: 'show-card',
+  description: 'Display a product card',
+  inputSchema: z.object({ productId: z.string() }),
+  renderOnly: true,
+})
+```
+
+Mastra streams the tool call and returns `{ acknowledged: true }` as its result, allowing the agent to continue generating text without a client round trip. This also works for tools owned by sub-agents. Their calls appear as nested `tool-output` stream events. Don't set an incompatible `outputSchema` on a render-only tool. The acknowledgement means the call was emitted, **not** that the browser rendered it. Don't use this for client actions whose outcome matters to the agent. For those, omit `execute` and return the result from the client, or use a suspending server tool when a sub-agent needs user input.
+
 ## Parameters
 
 <PropertiesTable
@@ -50,6 +65,13 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     type: 'string',
     description: 'A unique identifier for the tool.',
     isOptional: false,
+  },
+  {
+    name: 'title',
+    type: 'string',
+    description:
+      'A human-readable display name for the tool. It is not sent to the model. It travels on the `tool-call` and `tool-call-input-streaming-start` stream chunks and on the stored tool-invocation part, so chat UIs can read it to label the call. MCP clients receive it as the tool `title`.',
+    isOptional: true,
   },
   {
     name: 'description',
@@ -70,11 +92,26 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     isOptional: true,
   },
   {
+    name: 'renderOnly',
+    type: 'boolean',
+    description:
+      'When true, streams a display-only tool call and automatically returns `{ acknowledged: true }` to the model so it can continue. Cannot be used with `execute`. The acknowledgement does not confirm that the client rendered the call.',
+    isOptional: true,
+  },
+  {
     name: 'strict',
     type: 'boolean',
     description:
       'When true, Mastra enables strict tool input generation on model adapters that support it. This helps supported providers return arguments that match the tool schema more closely.',
     isOptional: true,
+  },
+  {
+    name: 'outputValidation',
+    type: "'strict' | 'warn'",
+    description:
+      "How a result that fails `outputSchema` validation is handled. Both modes log a warning. `'strict'` replaces the result with a validation error object. `'warn'` returns the tool's actual result unchanged, for tools whose side effects have already happened.",
+    isOptional: true,
+    defaultValue: "'strict'",
   },
   {
     name: 'toModelOutput',
@@ -108,7 +145,14 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     name: 'requireApproval',
     type: 'boolean',
     description:
-      'When true, the tool requires explicit approval before execution. The agent will emit a `tool-call-approval` chunk and pause until approved or declined.',
+      'When true, the tool requires explicit approval before execution. The agent will emit a `tool-call-approval` chunk and pause until approved or declined. Input is validated against `inputSchema` first: if it is invalid, the validation error is returned to the model and no approval is requested.',
+    isOptional: true,
+  },
+  {
+    name: 'beforeApproval',
+    type: '(input, context) => void | { proceed: false; output: unknown } | Promise<...>',
+    description:
+      'Runs before the approval gate for calls that require approval, receiving the input validated against `inputSchema` (defaults applied) and a context with `toolCallId`, `toolName`, `requestContext`, and `workspace`. Return `{ proceed: false, output }` to reject the call: the agent does not pause for approval, `execute` is not called, and `output` is returned to the model as the tool result. Return nothing to continue to the approval gate. Not run when the input fails `inputSchema` validation (the validation error is returned to the model without asking for approval) or when resuming after an approval decision. If the hook throws, the error is logged and the call proceeds to the approval gate, so keep validating inside `execute` as well.',
     isOptional: true,
   },
   {
@@ -203,7 +247,15 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
                       {
                         name: 'messages',
                         type: 'CoreMessage[]',
-                        description: 'All messages in the current conversation.',
+                        description:
+                          'Messages supplied by the tool invocation contract. For ordinary tools in the standard agent loop, this contains input messages only. It does not include the complete current conversation.',
+                      },
+                      {
+                        name: 'getMessages',
+                        type: '() => readonly MastraDBMessage[]',
+                        isOptional: true,
+                        description:
+                          'Reads the current in-memory conversation, including remembered messages and responses produced during this run. Available in the standard and durable agent loops. Reflects message-list removals, but not transient provider-prompt transforms. Treat the returned messages as read-only.',
                       },
                       {
                         name: 'suspend',
@@ -434,7 +486,7 @@ export const weatherTool = createTool({
 })
 ```
 
-Mastra forwards `strict: true` to model adapters that support strict tool calling. On adapters that don't support strict tool calling, Mastra ignores this option.
+Mastra forwards `strict: true` to model adapters that support strict tool calling and ignores the option for other adapters.
 
 ## Example with `toModelOutput`
 
@@ -692,7 +744,7 @@ Client-executed tools don't define an `execute` function. The browser runs the t
 
 For client-executed results, the follow-up request must include both the assistant tool call and the tool result, which `@mastra/client-js` sends automatically. A request that carries only the tool result doesn't fire the hook. In this case the callback receives `{ toolCallId, toolName, output, abortSignal }` only.
 
-Delivery is at least once, so a retried request runs the hook again. Keep the hook idempotent and treat client output as untrusted data: the server doesn't validate the result against `outputSchema`, so the `output` type is a static type only.
+At-least-once delivery means a retried request runs the hook again. Keep the hook idempotent and treat client output as untrusted data: the server doesn't validate the result against `outputSchema`, so the `output` type is a static type only.
 
 ### Hook execution order
 

@@ -69,15 +69,17 @@ for (const it of items) {
 
 Script: `src/dataset.ts`
 
-The dataset / experiment runner (`runExperiment` under the hood) does
-**not** pass any `memory` option to `agent.generate()` — only
-`requestContext`. So the registry-based `target: agent` path can't drive
-memory either.
+For a registered agent with its own memory, the experiment runner supplies a
+fresh thread for each item and retry by default when no thread ID is supplied.
+It uses the resource ID from the request context, or an isolated,
+experiment-owned resource when that ID is omitted. See
+[memory-enabled experiment targets](https://mastra.ai/docs/evals/experiments#memory-enabled-agents)
+for request context options and cases where thread injection is skipped.
 
-Workaround that stays inside Mastra primitives: use an **inline `task`**
-function, stash the per-item `{ threadId, resourceId }` in the dataset
-item's `metadata`, and call `agent.generate(input, { memory: {...} })`
-yourself. The scorer still runs through the dataset/experiment pipeline.
+This example uses an **inline `task`** to select a specific thread and resource
+for each item. Store `{ threadId, resourceId }` in the item's `metadata`, then
+pass those IDs to `agent.generate(input, { memory: {...} })`. The scorer still
+runs through the dataset/experiment pipeline.
 
 ```ts
 await dataset.addItems({
@@ -110,19 +112,15 @@ await dataset.startExperiment({
   workflow-tool isolation and processor tests) does **not** by itself give
   the agent a thread — it's an internal contract populated by
   `prepare-memory-step` after a thread is resolved.
-- `Dataset.startExperiment({ target: agent })` does not forward memory.
-  Use the inline `task` workaround above, or call `runEvals` and skip the
-  dataset entirely.
 - The scorers in these examples are registered on the `Mastra` instance
   (`scorers: { contains }`) so persistence doesn't log
   `MASTRA_GET_SCORER_BY_ID_NOT_FOUND` warnings.
 
 ## Gaps worth filing
 
-- `ExperimentConfig` / `StartExperimentConfig` should accept a
-  `targetOptions` field that mirrors `runEvals.targetOptions`, so dataset
-  users can pass `{ memory: { thread, resource } }` without dropping to an
-  inline task.
+- A `targetOptions` field on `ExperimentConfig` / `StartExperimentConfig`
+  could expose agent options beyond thread and resource IDs, which are already
+  supported through request context.
 - `runEvals` could accept per-item `targetOptions` (or a `memory` field on
   `RunEvalsDataItem`) so per-item threads don't require a manual loop +
   aggregation.

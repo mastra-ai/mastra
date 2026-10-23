@@ -7,7 +7,7 @@ description: "Browse AgentRouter model IDs, capabilities, and context windows. L
 
 # <img src="https://models.dev/logos/agentrouter.svg" alt="AgentRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />AgentRouter
 
-Access 3 AgentRouter models through Mastra's model router. Authentication is handled automatically using the `AGENTROUTER_API_KEY` environment variable.
+Access 5 AgentRouter models through Mastra's model router. Authentication is handled automatically using the `AGENTROUTER_API_KEY` environment variable.
 
 Learn more in the [AgentRouter documentation](https://agentrouter.org/docs/opencode.html).
 
@@ -66,6 +66,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "agentrouter/deepseek-v4-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "agentrouter/glm-5.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
   },

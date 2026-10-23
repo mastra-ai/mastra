@@ -1,6 +1,7 @@
 export {
   createMappingStep,
   createStepFromAgent,
+  createStepFromClassifier,
   createStepFromTool,
   predicateToCondition,
   mapVariable,
@@ -10,7 +11,7 @@ export {
   Workflow,
   Run,
 } from './workflow';
-export type { AgentStepOptions, AnyWorkflow } from './workflow';
+export type { AgentStepOptions, AnyWorkflow, ClassifierStepOptions, ClassifierStepOutput } from './workflow';
 export { getEntryId, getEntryWorkflow } from './step-entry';
 export * from './execution-engine';
 export * from './default';

@@ -81,7 +81,7 @@ describe('AgentProfileModelStep', () => {
     expect(screen.getByTestId('agent-step-content').className).toContain('overflow-hidden');
     expect(screen.getByTestId('models-provider-filter').className).toContain('h-full');
     expect(screen.getByTestId('agent-step-footer').className).toContain('border-t');
-    expect(screen.getByTestId('agent-step-footer').className).toContain('pt-6');
+    expect(screen.getByTestId('agent-step-footer').className).toContain('pt-4');
   });
 
   it('makes the model picker read-only while the builder stream runs (parity with the Tools step)', async () => {

@@ -6,6 +6,7 @@ export {
 } from './components/prompt-block-version-combobox';
 export { PromptBlockEditSidebar } from './components/prompt-block-edit-page/prompt-block-edit-sidebar';
 export { PromptBlockEditMain } from './components/prompt-block-edit-page/prompt-block-edit-main';
+export { DeletePromptBlockAction } from './components/prompt-block-edit-page/delete-prompt-block-action';
 export {
   usePromptBlockEditForm,
   type UsePromptBlockEditFormOptions,
@@ -23,7 +24,7 @@ export {
   useStoredPromptBlocks,
   useStoredPromptBlock,
   useStoredPromptBlockMutations,
-} from './hooks/use-stored-prompt-blocks';
+} from '@mastra/react/hooks/prompt-blocks';
 export {
   usePromptBlockVersions,
   usePromptBlockVersion,
@@ -31,4 +32,4 @@ export {
   useActivatePromptBlockVersion,
   useRestorePromptBlockVersion,
   useDeletePromptBlockVersion,
-} from './hooks/use-prompt-block-versions';
+} from '@mastra/react/hooks/prompt-blocks';

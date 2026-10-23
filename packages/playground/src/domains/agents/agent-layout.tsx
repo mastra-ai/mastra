@@ -1,19 +1,53 @@
 import { coreFeatures } from '@mastra/core/features';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
-import { useParams, useLocation } from 'react-router';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import {
+  TRACE_PROPERTY_FILTER_PARAM_BY_FIELD,
+  traceFilterOperatorParam,
+} from '@mastra/playground-ui/domains/traces/trace-filters';
+import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
+import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
+import { useAgent } from '@mastra/react/hooks/agents';
+import { matchPath, useParams, useLocation, useNavigate } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { AgentConfigPanel } from '@/domains/agents/components/agent-config-panel';
+import { AgentDetailHeaderActions } from '@/domains/agents/components/agent-detail-header-actions';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
-import { AgentTopBarRunOptions } from '@/domains/agents/components/agent-top-bar-controls';
-import { ThreadTracesToggle } from '@/domains/agents/components/thread-traces-toggle';
+import { OverviewPanelShortcuts } from '@/domains/agents/components/overview-panel-shortcuts';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
-import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
-import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
-import { GenerationProvider } from '@/domains/datasets/context/generation-context';
-import { cleanProviderId } from '@/domains/llm/utils';
-import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
+import { AgentToolDrawerBody } from '@/domains/tools/components/tool-drawer/agent-tool-drawer-body';
+import { ToolDrawer } from '@/domains/tools/components/tool-drawer/tool-drawer';
+
+const crumbs = [navCrumb('/agents'), agentCrumb];
+
+/** Shadows the global "go to" sequences with agent-scoped targets while an agent page is mounted. */
+const AgentShortcuts = ({ agentId }: { agentId: string }) => {
+  const navigate = useNavigate();
+  useKeydown({ 'g$+t': () => navigate(`/agents/${agentId}/traces`) });
+  return null;
+};
+
+const THREAD_FILTER_PARAM = TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.threadId;
+
+/** The conversation the user is looking at: the open thread on Chat, or the thread Traces is filtered to. */
+function getConversationThreadId(activeTab: AgentPageTab | 'none', pathname: string, search: string) {
+  if (activeTab === 'chat') {
+    const threadId = matchPath('/agents/:agentId/threads/:threadId', pathname)?.params.threadId;
+    return threadId === 'new' ? undefined : threadId;
+  }
+  if (activeTab === 'traces') {
+    const params = new URLSearchParams(search);
+    const operator = params.get(traceFilterOperatorParam(THREAD_FILTER_PARAM));
+    if (operator && operator !== 'is') return undefined;
+    return params.get(THREAD_FILTER_PARAM) || undefined;
+  }
+  return undefined;
+}
 
 export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { agentId } = useParams();
@@ -25,61 +59,57 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const showPlayground = isCmsAvailable && isExperimentalFeatures;
   const showObservability = hasObservability && isExperimentalFeatures;
 
-  const { data: agent } = useAgent(agentId!);
+  const { data: agent } = useAgent({
+    agentId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
 
   const defaultProvider = cleanProviderId(agent?.provider ?? '');
   const defaultModel = agent?.modelId ?? '';
-  const requestContextSchema = agent?.requestContextSchema;
 
   const activeTab: AgentPageTab | 'none' = location.pathname.includes('/threads')
     ? 'chat'
     : location.pathname.includes('/editor')
       ? 'versions'
-      : location.pathname.includes('/evaluate')
-        ? 'evaluate'
-        : location.pathname.includes('/review')
-          ? 'review'
-          : location.pathname.includes('/traces')
-            ? 'traces'
-            : location.pathname.includes('/overview')
-              ? 'overview'
-              : 'none';
-
-  const showTopBarRunOptions =
-    (activeTab === 'evaluate' || activeTab === 'review') && (showPlayground || showObservability);
-
-  const content = (
-    <MainContentLayout>
-      <AgentPageTabs
-        agentId={agentId!}
-        activeTab={activeTab}
-        showPlayground={showPlayground}
-        showObservability={showObservability}
-        rightSlot={
-          activeTab === 'chat' ? (
-            <ThreadTracesToggle />
-          ) : showTopBarRunOptions ? (
-            <AgentTopBarRunOptions requestContextSchema={requestContextSchema} />
-          ) : undefined
-        }
-      />
-      {children}
-    </MainContentLayout>
-  );
+      : location.pathname.includes('/traces')
+        ? 'traces'
+        : 'none';
+  const threadId = getConversationThreadId(activeTab, location.pathname, location.search);
 
   return (
-    <TracingSettingsProvider entityId={agentId!} entityType="agent">
-      <SchemaRequestContextProvider>
-        <PlaygroundModelProvider
-          key={`${agentId}:${defaultProvider}/${defaultModel}`}
-          defaultProvider={defaultProvider}
-          defaultModel={defaultModel}
-        >
-          <GenerationProvider>
-            <ReviewQueueProvider>{content}</ReviewQueueProvider>
-          </GenerationProvider>
-        </PlaygroundModelProvider>
-      </SchemaRequestContextProvider>
-    </TracingSettingsProvider>
+    <PlaygroundModelProvider
+      key={`${agentId}:${defaultProvider}/${defaultModel}`}
+      defaultProvider={defaultProvider}
+      defaultModel={defaultModel}
+    >
+      <KeyboardScope>
+        <AgentShortcuts agentId={agentId!} />
+        <OverviewPanelShortcuts />
+        <ToolDrawer>
+          <AgentToolDrawerBody agentId={agentId!} />
+        </ToolDrawer>
+
+        <AgentConfigPanel agentId={agentId!}>
+          <PageLayout
+            variant="fit"
+            breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+            headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
+          >
+            <h1 className="sr-only">{agentId}</h1>
+            <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]">
+              <AgentPageTabs
+                agentId={agentId!}
+                activeTab={activeTab}
+                threadId={threadId}
+                showPlayground={showPlayground}
+                showObservability={showObservability}
+              />
+              {children}
+            </div>
+          </PageLayout>
+        </AgentConfigPanel>
+      </KeyboardScope>
+    </PlaygroundModelProvider>
   );
 };

@@ -1,4 +1,4 @@
-import { fireEvent } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -31,7 +31,9 @@ describe('ExperimentsList keyboard navigation', () => {
 
     const rows = interactiveRows();
     expect(rows.length).toBe(experiments.length);
-    expect(rows.every(row => row.tagName === 'A')).toBe(true);
+    // The RowWrapper is the focus target; the link inside is out of the tab order.
+    expect(rows.every(row => row.tagName === 'DIV')).toBe(true);
+    expect(rows.every(row => row.querySelector('a')?.tabIndex === -1)).toBe(true);
     expectRovingTabindex(rows);
   });
 
@@ -41,25 +43,31 @@ describe('ExperimentsList keyboard navigation', () => {
     expectArrowNavigation(interactiveRows());
   });
 
-  describe('when selection mode is active', () => {
-    it('keeps keyboard navigation on the inner row buttons', () => {
-      renderList({ selection: { selectedExperimentIds: [], onToggleSelection: () => {} } });
+  describe('when rows are selectable', () => {
+    const selection = (onToggleSelection = vi.fn()) => ({
+      selectedExperimentIds: [],
+      onToggleSelection,
+      onToggleAll: vi.fn(),
+    });
+
+    it('keeps keyboard navigation and the experiment links on the row wrappers', () => {
+      renderList({ selection: selection() });
       const rows = interactiveRows();
       expect(rows.length).toBe(experiments.length);
-      expect(rows.every(row => row.tagName === 'BUTTON')).toBe(true);
+      expect(rows.every(row => row.tagName === 'DIV')).toBe(true);
+      expect(rows.every(row => row.querySelector('a')?.tabIndex === -1)).toBe(true);
       expectArrowNavigation(rows);
     });
 
-    it('clicking a row toggles its selection instead of navigating', () => {
+    it('toggles selection from the row checkbox only', () => {
       const onToggleSelection = vi.fn();
-      renderList({ selection: { selectedExperimentIds: [], onToggleSelection } });
+      renderList({ selection: selection(onToggleSelection) });
 
       const rows = interactiveRows();
-      fireEvent.focus(rows[0] as HTMLElement);
-      fireEvent.keyDown(rows[0] as HTMLElement, { key: 'ArrowDown' });
-      fireEvent.click(rows[1] as HTMLElement);
+      fireEvent.click(rows[1]);
+      expect(onToggleSelection).not.toHaveBeenCalled();
 
-      // Rows are sorted newest first; the second row is the second-newest fixture.
+      fireEvent.click(screen.getByRole('checkbox', { name: `Select experiment ${experiments[2].id}` }));
       expect(onToggleSelection).toHaveBeenCalledWith(experiments[2].id);
     });
   });

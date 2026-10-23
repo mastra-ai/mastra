@@ -7,9 +7,17 @@ import type { IFGAProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod/v4';
 import { GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE } from '../handlers/agents';
 import { HTTPException } from '../http-exception';
-import { MastraServer, getCustomHTTPExceptionResponse } from './index';
+import { createRoute } from './routes/route-builder';
+import {
+  MastraServer,
+  getCustomHTTPExceptionResponse,
+  getFGAProvider,
+  MASTRA_AUTH_MODE_KEY,
+  normalizeQueryParams,
+} from './index';
 
 class TestMastraServer extends MastraServer<any, any, any> {
   stream = vi.fn();
@@ -59,6 +67,122 @@ function createTestAdapter() {
     } as unknown as Mastra,
   });
 }
+
+describe('body schema validation', () => {
+  const requiredBodyRoute = createRoute({
+    method: 'DELETE',
+    path: '/test/required-body',
+    responseType: 'json',
+    bodySchema: z.object({ itemIds: z.array(z.string().min(1)).min(1) }),
+    handler: async ({ itemIds }) => ({ itemIds }),
+  });
+
+  it.each([undefined, null, false, 0, '', {}, { itemIds: [] }])(
+    'rejects missing or invalid required input %#',
+    async body => {
+      await expect(createTestAdapter().parseBody(requiredBodyRoute, body)).rejects.toThrow();
+    },
+  );
+
+  it.each([z.string().min(1), z.array(z.string()), z.object({ name: z.string() })])(
+    'preserves the missing-input error when the empty-object fallback fails %#',
+    async bodySchema => {
+      const missing = await bodySchema.safeParseAsync(undefined);
+      expect(missing.success).toBe(false);
+      if (missing.success) throw new Error('Expected missing input to fail validation');
+      await expect(
+        createTestAdapter().parseBody({ ...requiredBodyRoute, bodySchema }, undefined),
+      ).rejects.toMatchObject({
+        issues: missing.error.issues,
+      });
+    },
+  );
+
+  it.each([z.record(z.string(), z.string()), z.record(z.string(), z.string()).nullable()])(
+    'rejects omitted record bodies without rejecting explicit empty objects %#',
+    async bodySchema => {
+      const adapter = createTestAdapter();
+      await expect(adapter.parseBody({ ...requiredBodyRoute, bodySchema }, undefined)).rejects.toThrow();
+      await expect(adapter.parseBody({ ...requiredBodyRoute, bodySchema }, {})).resolves.toEqual({});
+    },
+  );
+
+  it('preserves optional and defaulted record bodies', async () => {
+    const schema = z.record(z.string(), z.string());
+    const adapter = createTestAdapter();
+    await expect(
+      adapter.parseBody({ ...requiredBodyRoute, bodySchema: schema.optional() }, undefined),
+    ).resolves.toBeUndefined();
+    await expect(
+      adapter.parseBody({ ...requiredBodyRoute, bodySchema: schema.default({}) }, undefined),
+    ).resolves.toEqual({});
+  });
+
+  it('validates nullable object schemas through the original schema', async () => {
+    const schema = z.object({ limit: z.number().default(10) });
+    const adapter = createTestAdapter();
+    await expect(
+      adapter.parseBody({ ...requiredBodyRoute, bodySchema: schema.nullable() }, undefined),
+    ).resolves.toEqual({ limit: 10 });
+    await expect(
+      adapter.parseBody(
+        { ...requiredBodyRoute, bodySchema: schema.refine(value => value.limit < 5).nullable() },
+        undefined,
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('keeps explicit empty objects distinct from omitted bodies', async () => {
+    const bodySchema = z.object({ name: z.string().optional() }).default({ name: 'default' });
+    const adapter = createTestAdapter();
+    await expect(adapter.parseBody({ ...requiredBodyRoute, bodySchema }, undefined)).resolves.toEqual({
+      name: 'default',
+    });
+    await expect(adapter.parseBody({ ...requiredBodyRoute, bodySchema }, {})).resolves.toEqual({});
+  });
+
+  it('accepts valid required input', async () => {
+    const body = { itemIds: ['item-1', 'item-2'] };
+    await expect(createTestAdapter().parseBody(requiredBodyRoute, body)).resolves.toEqual(body);
+  });
+
+  it('preserves bodyless optional fields and applies field defaults', async () => {
+    const bodySchema = z.object({ name: z.string().optional(), limit: z.number().default(10) });
+    await expect(createTestAdapter().parseBody({ ...requiredBodyRoute, bodySchema }, undefined)).resolves.toEqual({
+      limit: 10,
+    });
+  });
+
+  it('preserves root optional, default, and nullable schemas', async () => {
+    const adapter = createTestAdapter();
+    await expect(
+      adapter.parseBody({ ...requiredBodyRoute, bodySchema: z.string().optional() }, undefined),
+    ).resolves.toBeUndefined();
+    await expect(
+      adapter.parseBody(
+        { ...requiredBodyRoute, bodySchema: z.object({ name: z.string() }).default({ name: 'default' }) },
+        undefined,
+      ),
+    ).resolves.toEqual({ name: 'default' });
+    await expect(
+      adapter.parseBody({ ...requiredBodyRoute, bodySchema: z.string().nullable() }, null),
+    ).resolves.toBeNull();
+  });
+
+  it('passes explicit falsy values through when the schema accepts them', async () => {
+    const bodySchema = z.union([z.literal(false), z.literal(0), z.literal('')]);
+    for (const body of [false, 0, '']) {
+      await expect(createTestAdapter().parseBody({ ...requiredBodyRoute, bodySchema }, body)).resolves.toBe(body);
+    }
+  });
+
+  it('leaves bodies unchanged when no schema is defined', async () => {
+    const route = { ...requiredBodyRoute, bodySchema: undefined };
+    for (const body of [undefined, null, false, 0, '', { value: true }]) {
+      await expect(createTestAdapter().parseBody(route, body)).resolves.toBe(body);
+    }
+  });
+});
 
 function createWritableResponse() {
   const response = new PassThrough();
@@ -283,6 +407,31 @@ describe('agent channel webhook diagnostics', () => {
     adapter.warnIfUnregisteredChannelWebhookForTest('/api/agents/support/channels/slack/webhook', 'POST', 404);
 
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('getFGAProvider', () => {
+  it.each([
+    [undefined, false, false, undefined],
+    [undefined, true, false, 'server'],
+    ['studio', true, true, 'studio'],
+    ['studio', false, true, 'studio'],
+    ['studio', true, false, 'server'],
+    ['default', false, true, undefined],
+    ['default', true, true, 'server'],
+  ] as const)('selects %s with server=%s and studio=%s', (mode, hasServer, hasStudio, expected) => {
+    const server = createMockFGAProvider();
+    const studio = createMockFGAProvider();
+    const mastra = {
+      getServer: () => ({ fga: hasServer ? server : undefined }),
+      getStudio: () => ({ fga: hasStudio ? studio : undefined }),
+    };
+    const context = new RequestContext();
+    if (mode) context.set(MASTRA_AUTH_MODE_KEY, mode);
+    expect(getFGAProvider(mastra, context)).toBe(
+      expected === 'server' ? server : expected === 'studio' ? studio : undefined,
+    );
+    expect(getFGAProvider(mastra)).toBe(hasServer ? server : undefined);
   });
 });
 
@@ -1238,5 +1387,91 @@ describe('getCustomHTTPExceptionResponse', () => {
     { status: 409, getResponse: () => Response.json({ code: 'NOT_TRUSTED' }) },
   ])('ignores non-HTTPException values', error => {
     expect(getCustomHTTPExceptionResponse(error)).toBeUndefined();
+  });
+});
+
+describe('normalizeQueryParams', () => {
+  it('passes through plain string and repeated-key params unchanged', () => {
+    const result = normalizeQueryParams({ page: '2', tag: ['a', 'b'], single: ['only'] });
+    expect(result).toEqual({ page: '2', tag: ['a', 'b'], single: 'only' });
+  });
+
+  it('reconstructs bracket-notation keys into JSON strings', () => {
+    const result = normalizeQueryParams({
+      'orderBy[field]': 'createdAt',
+      'orderBy[direction]': 'DESC',
+      'filter[status]': 'active',
+    });
+    expect(result).toEqual({
+      orderBy: JSON.stringify({ field: 'createdAt', direction: 'DESC' }),
+      filter: JSON.stringify({ status: 'active' }),
+    });
+  });
+
+  it('does not overwrite a directly-set parent key with a bracket group', () => {
+    const result = normalizeQueryParams({
+      orderBy: JSON.stringify({ field: 'name' }),
+      'orderBy[field]': 'createdAt',
+    });
+    expect(result).toEqual({ orderBy: JSON.stringify({ field: 'name' }) });
+  });
+
+  it('ignores special object keys in bracket-notation parents and children', () => {
+    const result = normalizeQueryParams(
+      Object.fromEntries([
+        ['__proto__[polluted]', 'yes'],
+        ['constructor[prototype]', 'yes'],
+        ['prototype[x]', 'yes'],
+        ['filter[__proto__]', 'yes'],
+        ['filter[constructor]', 'yes'],
+        ['filter[status]', 'active'],
+      ]),
+    );
+
+    // Only the legitimate bracket child survives
+    expect(result).toEqual({ filter: JSON.stringify({ status: 'active' }) });
+    // Nothing was written onto Object.prototype
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+  });
+
+  it('ignores flat special object keys', () => {
+    const result = normalizeQueryParams(
+      Object.fromEntries([
+        ['__proto__', 'yes'],
+        ['constructor', 'yes'],
+        ['prototype', 'yes'],
+        ['page', '1'],
+      ]),
+    );
+
+    expect(result).toEqual({ page: '1' });
+    expect(Object.keys(result)).toEqual(['page']);
+  });
+
+  it('does not treat inherited Object.prototype members as existing bracket groups', () => {
+    // `toString` is inherited, not own: bracket-group creation must not read or
+    // write the shared builtin function.
+    const result = normalizeQueryParams({
+      'toString[length]': 'x',
+      'valueOf[tagged]': 'x',
+    });
+
+    expect(result).toEqual({
+      toString: JSON.stringify({ length: 'x' }),
+      valueOf: JSON.stringify({ tagged: 'x' }),
+    });
+    // The shared builtins were not mutated
+    expect(Object.prototype.toString.length).toBe(0);
+    expect((Object.prototype.valueOf as unknown as Record<string, unknown>).tagged).toBeUndefined();
+  });
+
+  it('returns a plain object that supports spreads, `in` checks, and JSON serialization', () => {
+    const result = normalizeQueryParams({ 'filter[status]': 'x', page: '1' });
+
+    expect({ ...result }).toEqual(result);
+    expect('page' in result).toBe(true);
+    expect(JSON.parse(JSON.stringify(result))).toEqual({ filter: '{"status":"x"}', page: '1' });
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
   });
 });

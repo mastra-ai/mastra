@@ -144,7 +144,15 @@ describe('Trailing guard does not swallow new-run null-runId chunks', () => {
     );
 
     expect(approveToolCall).toHaveBeenCalledTimes(2);
+    expect(approveToolCall.mock.calls[0]?.[0]).toMatchObject({ runId: 'run-a' });
+    expect(approveToolCall.mock.calls[0]?.[0].threadId).toBeTruthy();
+    expect(approveToolCall.mock.calls[0]?.[0].resourceId).toBeTruthy();
     expect(approveToolCall.mock.calls[0]?.[0].requestContext?.get('user')).toEqual({ id: 'first-user' });
+    expect(approveToolCall.mock.calls[1]?.[0]).toMatchObject({
+      runId: 'run-b',
+      threadId: approveToolCall.mock.calls[0]?.[0].threadId,
+      resourceId: approveToolCall.mock.calls[0]?.[0].resourceId,
+    });
     expect(approveToolCall.mock.calls[1]?.[0].requestContext?.get('user')).toEqual({ id: 'second-user' });
   });
 });

@@ -43,12 +43,18 @@ const processor = new LanguageDetector({
             isOptional: false,
           },
           {
+            name: 'errorStrategy',
+            type: "'warn' | 'strict'",
+            description:
+              "How to handle failures from the internal model call. 'warn' is fail-open: it logs the failure and assumes the content uses a target language. 'strict' is fail-closed: it stops processing with a tripwire.",
+            isOptional: true,
+            default: "'warn'",
+          },
+          {
             name: 'targetLanguages',
             type: 'string[]',
             description:
               "Target language(s) for the project. If content is detected in a different language, it may be translated. Can be language name ('English') or ISO code ('en')",
-            isOptional: true,
-            default: "['English', 'en']",
           },
           {
             name: 'threshold',

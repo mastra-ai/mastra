@@ -74,7 +74,7 @@ const memory = new Memory({
 export const collabAgent = new Agent({
   id: 'collab',
   name: 'CollabAgent',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   memory,
   instructions: `
 You are a collaborative document assistant. Multiple users talk to you in the SAME thread.
@@ -163,7 +163,7 @@ const memory = new Memory({
 })
 ```
 
-OM requires a storage adapter that supports it: `@mastra/libsql`, `@mastra/pg`, `@mastra/mongodb`, or `@mastra/oracledb`.
+OM requires a storage adapter that supports it: `@mastra/libsql`, `@mastra/pg`, `@mastra/mongodb`, `@mastra/mysql`, `@mastra/convex`, or `@mastra/oracledb`.
 
 :::note
 

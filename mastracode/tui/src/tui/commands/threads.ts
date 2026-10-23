@@ -3,6 +3,7 @@ import { disposeAssistantRenderState } from '../assistant-render-registry.js';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
 import { askModalQuestion } from '../modal-question.js';
 import { showModalOverlay } from '../overlay.js';
+import { clearPendingTools } from '../state.js';
 import { askCloneName, confirmClone, resetUIAfterClone } from './clone.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -24,14 +25,14 @@ export function showThreadLockPrompt(
       options: [
         { label: 'Switch thread', description: 'Pick a different thread' },
         { label: 'New thread', description: 'Start a fresh thread' },
-        ...(lockedThreadId ? [{ label: 'Fork thread', description: 'Fork from this thread' }] : []),
+        ...(lockedThreadId ? [{ label: 'Clone thread', description: 'Fork from this thread' }] : []),
         { label: 'Exit', description: 'Exit' },
       ],
     });
 
     if (answer === 'Switch thread') {
       await handleThreadsCommand(ctx);
-    } else if (answer === 'Fork thread' && lockedThreadId) {
+    } else if (answer === 'Clone thread' && lockedThreadId) {
       try {
         const customTitle = await askCloneName(ctx.state);
         const clonedThread = await ctx.state.session.thread.clone({
@@ -41,7 +42,7 @@ export function showThreadLockPrompt(
         ctx.state.pendingNewThread = false;
         await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
       } catch (error) {
-        ctx.showError(`Failed to fork thread: ${error instanceof Error ? error.message : String(error)}`);
+        ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
       }
     } else if (answer === 'New thread') {
       // pendingNewThread is already true from the caller
@@ -118,11 +119,14 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
           return;
         }
 
-        if (thread.resourceId !== currentResourceId) {
-          await state.controller.setResourceId(state.session, { resourceId: thread.resourceId });
+        if (state.local && thread.resourceId !== currentResourceId) {
+          await state.local.controller.setResourceId(state.local.session, { resourceId: thread.resourceId });
         }
         try {
           await state.session.thread.switch({ threadId: thread.id });
+          if (state.options.backgroundToolsEnabled) {
+            await state.waitForAgentControllerEvents?.();
+          }
         } catch (error) {
           if (error instanceof ThreadLockError) {
             showThreadLockPrompt(ctx, thread.title || thread.id, error.ownerPid, thread.id);
@@ -140,8 +144,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         state.allSystemReminderComponents = [];
         state.messageComponentsById.clear();
         state.allShellComponents = [];
-        state.pendingTools.clear();
-        state.pendingTaskToolIds?.clear();
+        clearPendingTools(state);
         await ctx.renderExistingMessages();
 
         ctx.showInfo(`Switched to: ${thread.title || thread.id}`);
@@ -162,7 +165,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
           state.pendingNewThread = false;
           await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
         } catch (error) {
-          ctx.showError(`Failed to fork thread: ${error instanceof Error ? error.message : String(error)}`);
+          ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
         }
         resolve();
       },

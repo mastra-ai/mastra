@@ -21,11 +21,16 @@
  * ```
  */
 
+import type { IMastraLogger } from '../../logger';
+import { DirectoryNotFoundError, NotDirectoryError } from '../errors';
 import type { WorkspaceFilesystem, FileEntry } from '../filesystem';
 import type { IgnoreFilter } from '../gitignore';
-import { loadGitignore } from '../gitignore';
+import { loadWorkspaceIgnore } from '../gitignore';
 import { createGlobMatcher } from '../glob';
 import type { GlobMatcher } from '../glob';
+
+/** Maximum concurrent `readdir` calls while walking the tree. */
+const TREE_FILESYSTEM_CONCURRENCY = 8;
 
 // =============================================================================
 // Types
@@ -44,10 +49,12 @@ export interface TreeOptions {
   extension?: string | string[];
   /** Glob pattern(s) to filter files. Matches against paths relative to the listed directory. Directories always pass through so their contents can be checked. */
   pattern?: string | string[];
-  /** Filter function that returns true if a relative path should be ignored (e.g., from .gitignore). */
+  /** Filter function that returns true if a relative path should be ignored. Replaces the `.gitignore` rules when provided. */
   ignoreFilter?: IgnoreFilter;
-  /** Respect .gitignore entries in the listed directory (default: true). */
+  /** Respect `.gitignore` files (each relative to its own directory) and skip `node_modules` unless the listing targets one (default: true). */
   respectGitignore?: boolean;
+  /** Logger used to report when a native `walk` capability fails and the slower readdir walk is used instead. */
+  logger?: Pick<IMastraLogger, 'warn'>;
 }
 
 export interface TreeResult {
@@ -86,18 +93,21 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
   const pattern = options?.pattern;
   const respectGitignore = options?.respectGitignore ?? true;
 
-  // Use provided ignoreFilter, or load from .gitignore if respectGitignore is enabled.
-  // If the user explicitly targets an ignored path (e.g. "/dist"), skip filtering
-  // so they can still list there.
-  let ignoreFilter = options?.ignoreFilter;
-  if (!ignoreFilter && respectGitignore) {
-    const rawFilter = await loadGitignore(fs);
-    if (rawFilter) {
-      const normalizedPath = path.replace(/^\.\//, '').replace(/^\//, '').replace(/\/$/, '');
-      const targetIsIgnored = normalizedPath && rawFilter(normalizedPath + '/');
-      ignoreFilter = targetIsIgnored ? undefined : rawFilter;
-    }
-  }
+  // Ignore rules: every .gitignore relative to its own directory, plus
+  // node_modules unless the listing targets one. A caller-provided
+  // ignoreFilter replaces the .gitignore rules. If the user explicitly
+  // targets an ignored path (e.g. "/dist"), nothing below it is filtered.
+  const customFilter = options?.ignoreFilter;
+  const workspaceIgnore = respectGitignore
+    ? await loadWorkspaceIgnore(fs, path, { gitignore: !customFilter })
+    : undefined;
+  const isIgnored = (entryPath: string, isDirectory: boolean): boolean => {
+    if (workspaceIgnore?.ignores(entryPath, isDirectory)) return true;
+    if (!customFilter) return false;
+    const relativePath = getRelativePath('', '', entryPath);
+    return customFilter(isDirectory ? `${relativePath}/` : relativePath);
+  };
+  const skipNodeModules = respectGitignore && !/(^|\/)node_modules(\/|$)/.test(path);
 
   // Compile glob matcher once before the walk (if pattern provided)
   let globMatcher: GlobMatcher | undefined;
@@ -112,10 +122,136 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
   let fileCount = 0;
   let truncated = false;
 
+  // Parse exclude patterns once (like tree's -I flag, supports pipe-separated patterns)
+  const excludePatterns = exclude
+    ? Array.isArray(exclude)
+      ? exclude
+      : exclude
+          .split('|')
+          .map(p => p.trim())
+          .filter(Boolean)
+    : undefined;
+
+  /**
+   * Whether the walk should descend into a directory entry. Mirrors the
+   * filtering applied before recursion in `buildTree` — directories filtered
+   * out there are never listed, so their contents are never needed.
+   */
+  function shouldDescend(currentPath: string, entry: FileEntry): boolean {
+    if (entry.type !== 'directory' || entry.isSymlink) return false;
+    if (entry.name === '.git') return false;
+    if (!showHidden && entry.name.startsWith('.')) return false;
+    if (excludePatterns && excludePatterns.some(pattern => entry.name.includes(pattern))) return false;
+    if (isIgnored(joinPath(currentPath, entry.name), true)) return false;
+    return true;
+  }
+
+  // Prefetch all directory listings level-by-level with bounded concurrency,
+  // instead of one sequential readdir per directory during tree construction.
+  // On remote filesystems each readdir is a network round trip, so a serial
+  // walk costs D × RTT for D directories.
+  const entriesByPath = new Map<string, FileEntry[]>();
+  let rootError: unknown;
+
+  const normalizedRoot = path.replace(/\/$/, '');
+  const rootIsGit = normalizedRoot === '.git' || normalizedRoot.endsWith('/.git');
+  const shouldWalk = !rootIsGit && maxDepth > 0;
+
+  // If the filesystem implements the native bulk `walk` capability, fetch the
+  // whole subtree in one provider call and group entries by parent directory.
+  // On any failure, fall back to the readdir walk below (which reproduces
+  // root-level errors like DirectoryNotFoundError naturally).
+  let prefetched = false;
+  if (shouldWalk && typeof fs.walk === 'function') {
+    try {
+      const walkEntries = await fs.walk(path, {
+        maxDepth: Number.isFinite(maxDepth) ? maxDepth : undefined,
+        includeHidden: showHidden,
+        ...(workspaceIgnore && !customFilter ? { includeGitignoreFiles: true } : {}),
+        ...(skipNodeModules ? { skipDirectoryNames: ['node_modules'] } : {}),
+      });
+      entriesByPath.set(path, []);
+      for (const entry of walkEntries) {
+        const separatorIndex = entry.path.lastIndexOf('/');
+        const parentPath = separatorIndex === -1 ? path : joinPath(path, entry.path.slice(0, separatorIndex));
+        let siblings = entriesByPath.get(parentPath);
+        if (!siblings) {
+          siblings = [];
+          entriesByPath.set(parentPath, siblings);
+        }
+        siblings.push(entry);
+        // Ensure empty directories have an entry list so recursion terminates cleanly
+        if (entry.type === 'directory' && !entry.isSymlink) {
+          const dirPath = joinPath(path, entry.path);
+          if (!entriesByPath.has(dirPath)) entriesByPath.set(dirPath, []);
+        }
+      }
+      prefetched = true;
+    } catch (error) {
+      entriesByPath.clear();
+      // A missing or non-directory root is a caller error that the readdir
+      // fallback re-raises with the same type; only warn about a real
+      // provider failure, since the fallback costs one round trip per directory.
+      if (!(error instanceof DirectoryNotFoundError) && !(error instanceof NotDirectoryError)) {
+        options?.logger?.warn(
+          `Native walk failed on "${fs.provider}" filesystem; falling back to per-directory readdir walk for "${path}"`,
+          { error: error instanceof Error ? error.message : String(error) },
+        );
+      }
+    }
+  }
+  if (prefetched) await workspaceIgnore?.addListings([...entriesByPath.entries()]);
+
+  let frontier: Array<{ path: string; depth: number }> = !shouldWalk || prefetched ? [] : [{ path, depth: 0 }];
+
+  const pMap = (await import('p-map')).default;
+  while (frontier.length > 0) {
+    const results = await pMap(
+      frontier,
+      async dir => {
+        try {
+          return { entries: await fs.readdir(dir.path) };
+        } catch (error) {
+          return { error };
+        }
+      },
+      { concurrency: TREE_FILESYSTEM_CONCURRENCY },
+    );
+
+    // Read each listed directory's .gitignore before deciding what to descend into.
+    await workspaceIgnore?.addListings(
+      frontier.map((dir, i) => {
+        const result = results[i]!;
+        return [dir.path, 'entries' in result ? result.entries : undefined];
+      }),
+    );
+
+    const nextFrontier: Array<{ path: string; depth: number }> = [];
+    for (let i = 0; i < frontier.length; i++) {
+      const { path: dirPath, depth } = frontier[i]!;
+      const result = results[i]!;
+      if ('error' in result) {
+        // At root level (depth 0), propagate errors so users see auth/access issues.
+        // For subdirectories, silently skip (permission issues on nested dirs are common).
+        if (depth === 0) rootError = result.error;
+        continue;
+      }
+      entriesByPath.set(dirPath, result.entries);
+      // Children at depth + 1 >= maxDepth are never listed (only marked truncated)
+      if (depth + 1 >= maxDepth) continue;
+      for (const entry of result.entries) {
+        if (shouldDescend(dirPath, entry)) {
+          nextFrontier.push({ path: joinPath(dirPath, entry.name), depth: depth + 1 });
+        }
+      }
+    }
+    frontier = nextFrontier;
+  }
+
   /**
    * Build tree recursively using tab indentation
    */
-  async function buildTree(currentPath: string, depth: number): Promise<void> {
+  function buildTree(currentPath: string, depth: number): void {
     // Never descend into .git even when explicitly targeted as root
     const normalizedCurrentPath = currentPath.replace(/\/$/, '');
     if (normalizedCurrentPath === '.git' || normalizedCurrentPath.endsWith('/.git')) {
@@ -127,14 +263,10 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
       return;
     }
 
-    let entries: FileEntry[];
-    try {
-      entries = await fs.readdir(currentPath);
-    } catch (error) {
-      // At root level (depth 0), propagate errors so users see auth/access issues
-      // For subdirectories, silently skip (permission issues on nested dirs are common)
-      if (depth === 0) {
-        throw error;
+    const entries = entriesByPath.get(currentPath);
+    if (!entries) {
+      if (depth === 0 && rootError !== undefined) {
+        throw rootError;
       }
       return;
     }
@@ -152,27 +284,14 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     }
 
     // Filter by exclude pattern (like tree's -I flag, supports pipe-separated patterns)
-    if (exclude) {
-      const patterns = Array.isArray(exclude)
-        ? exclude
-        : exclude
-            .split('|')
-            .map(p => p.trim())
-            .filter(Boolean);
+    if (excludePatterns) {
       filtered = filtered.filter(e => {
-        return !patterns.some(pattern => e.name.includes(pattern));
+        return !excludePatterns.some(pattern => e.name.includes(pattern));
       });
     }
 
-    // Filter by gitignore rules (paths must be relative to workspace root, not listing root)
-    if (ignoreFilter) {
-      filtered = filtered.filter(e => {
-        const relativePath = getRelativePath('', currentPath, e.name);
-        // Append trailing slash for directories so gitignore dir patterns match
-        const checkPath = e.type === 'directory' ? `${relativePath}/` : relativePath;
-        return !ignoreFilter(checkPath);
-      });
-    }
+    // Filter by .gitignore rules, node_modules, and any caller-provided ignoreFilter
+    filtered = filtered.filter(e => !isIgnored(joinPath(currentPath, e.name), e.type === 'directory'));
 
     // Filter to directories only (like tree's -d flag)
     if (dirsOnly) {
@@ -226,7 +345,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
         // This also prevents infinite loops from circular symlinks
         if (!entry.isSymlink) {
           const childPath = joinPath(currentPath, entry.name);
-          await buildTree(childPath, depth + 1);
+          buildTree(childPath, depth + 1);
         }
       } else {
         fileCount++;
@@ -234,7 +353,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     }
   }
 
-  await buildTree(path, 0);
+  buildTree(path, 0);
 
   // Build summary
   const dirPart = dirCount === 1 ? '1 directory' : `${dirCount} directories`;

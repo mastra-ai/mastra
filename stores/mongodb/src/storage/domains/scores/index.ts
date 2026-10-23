@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
@@ -190,7 +188,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       // Caller-supplied ids give scores a stable identity: retried writes for
       // the same id replace the previous document (latest wins).
       const suppliedId = validatedScore.id;
-      const scoreId = suppliedId ?? randomUUID();
+      const scoreId = suppliedId ?? globalThis.crypto.randomUUID();
 
       const scorer =
         typeof validatedScore.scorer === 'string' ? safelyParseJSON(validatedScore.scorer) : validatedScore.scorer;

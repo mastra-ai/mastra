@@ -78,6 +78,14 @@ export class MessagePartSpans {
     }
   }
 
+  openTextSpan(parts: MastraMessagePart[], id: string): TextPart {
+    return this.#textParts.get(id) ?? this.#openTextPart(parts, id, this.#textMetadata.get(id));
+  }
+
+  openReasoningSpan(parts: MastraMessagePart[], id: string): ReasoningPart {
+    return this.#reasoningParts.get(id) ?? this.#openReasoningPart(parts, id, this.#reasoningMetadata.get(id));
+  }
+
   fold(parts: MastraMessagePart[], chunk: SpanChunk): FoldedSpan | undefined {
     const providerMetadata = this.#carriesProviderMetadata ? chunk.payload.providerMetadata : undefined;
     switch (chunk.type) {

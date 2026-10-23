@@ -1,3 +1,4 @@
+import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
 import { addPendingUserMessage, removePendingUserMessage } from '../render-messages.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -23,6 +24,10 @@ export async function sendSlashCommandMessage(
       await signal.accepted;
     } catch (error) {
       removePendingUserMessage(ctx.state, signal.id);
+      if (isSessionStartupCancelledError(error)) {
+        ctx.showInfo('Interrupted');
+        return;
+      }
       throw error;
     }
     return;
@@ -37,5 +42,13 @@ export async function sendSlashCommandMessage(
     });
     ctx.state.ui.requestRender();
   }
-  await ctx.state.session.sendMessage({ content });
+  try {
+    await ctx.state.session.sendMessage({ content });
+  } catch (error) {
+    if (isSessionStartupCancelledError(error)) {
+      ctx.showInfo('Interrupted');
+      return;
+    }
+    throw error;
+  }
 }

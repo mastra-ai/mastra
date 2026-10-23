@@ -13,7 +13,7 @@ export interface VisibilitySelectProps {
 
 export function VisibilitySelect({ skillId }: VisibilitySelectProps) {
   const formMethods = useFormContext<SkillEditFormValues>();
-  const value = (useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private') as Visibility;
+  const value = useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private';
   const { requestChange, dialog } = useVisibilityChange(skillId);
 
   return (
@@ -24,8 +24,8 @@ export function VisibilitySelect({ skillId }: VisibilitySelectProps) {
           variant="default"
           onClick={() => requestChange('public')}
           data-testid="skill-builder-visibility-add"
+          icon={<Globe />}
         >
-          <Globe className="h-3.5 w-3.5" />
           Add to library
         </Button>
       ) : (
@@ -34,8 +34,8 @@ export function VisibilitySelect({ skillId }: VisibilitySelectProps) {
           variant="ghost"
           onClick={() => requestChange('private')}
           data-testid="skill-builder-visibility-remove"
+          icon={<LockIcon />}
         >
-          <LockIcon className="h-3.5 w-3.5" />
           Remove from library
         </Button>
       )}

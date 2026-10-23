@@ -45,11 +45,11 @@ export const requestSandboxAccessTool = createTool({
         | undefined;
 
       // Resolve to absolute path (expand ~ first since Node path APIs don't handle it)
+      const projectRoot = agentControllerCtx?.getState()?.projectPath ?? process.cwd();
       const expanded = expandTilde(requestedPath);
-      const absolutePath = path.isAbsolute(expanded) ? expanded : path.resolve(process.cwd(), expanded);
+      const absolutePath = path.isAbsolute(expanded) ? expanded : path.resolve(projectRoot, expanded);
 
       // Check if already allowed
-      const projectRoot = process.cwd();
       const allowedPaths = getAllowedPathsFromContext(context);
       if (isPathAllowed(absolutePath, projectRoot, allowedPaths)) {
         return {

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://v2-9-16.turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build:lib": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "tsdown.config.ts",
+        "tsconfig.json",
+        "tsconfig.build.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/__tests__/**"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "build": {
+      "dependsOn": ["build:lib", "generate:provider-docs"],
+      "inputs": ["package.json"]
+    },
+    "generate:provider-docs": {
+      // Regenerates the docs provider-toolsets reference from src/providers.
+      // Writes outside the package (docs/), so it cannot be cached.
+      "inputs": ["src/providers/**", "scripts/generate-provider-docs.ts"],
+      "cache": false
+    }
+  }
+}

@@ -572,7 +572,7 @@ describe('MessageScroller older history', () => {
     });
   });
 
-  it('does not request older history before the transcript has settled at the end', () => {
+  it('does not request older history for a mount that lands at the top without the reader moving', () => {
     const onReachStart = vi.fn();
     render(<HistoryHarness messageIds={['message-1']} onReachStart={onReachStart} />);
 
@@ -586,7 +586,7 @@ describe('MessageScroller older history', () => {
     expect(onReachStart).not.toHaveBeenCalled();
   });
 
-  it('requests older history once the reader settles at the end and returns to the start', () => {
+  it('requests older history once the reader scrolls back from the end to the start', () => {
     const onReachStart = vi.fn();
     render(<HistoryHarness messageIds={['message-1']} onReachStart={onReachStart} />);
 
@@ -603,6 +603,25 @@ describe('MessageScroller older history', () => {
 
     // Still at the start with the fetch in flight — no second request.
     fireEvent.scroll(viewport);
+    expect(onReachStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('requests older history from a transcript that opened above its bottom, with no trip to the end', () => {
+    const onReachStart = vi.fn();
+    render(<HistoryHarness messageIds={['message-1']} onReachStart={onReachStart} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+
+    // A last turn taller than the viewport parks the reader short of the bottom,
+    // so the end is never reached — scrolling up must still ask for older messages.
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 300 });
+    fireEvent.scroll(viewport);
+    expect(onReachStart).not.toHaveBeenCalled();
+
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+    fireEvent.scroll(viewport);
+
     expect(onReachStart).toHaveBeenCalledTimes(1);
   });
 
@@ -793,6 +812,33 @@ describe('MessageScroller autoScroll', () => {
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'auto' });
   });
 
+  it('follows the first reply of a fresh thread, which has nothing to scroll yet', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => frames.push(callback));
+    stubLayout({ 'message-1': 0 });
+    const { rerender } = render(<HistoryHarness autoScroll defaultScrollPosition="last-anchor" messageIds={[]} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    const scrollTo = installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 400, clientHeight: 400, scrollTop: 0 });
+    rerender(<HistoryHarness autoScroll defaultScrollPosition="last-anchor" messageIds={['message-1']} />);
+    act(() => frames.shift()?.(0));
+    act(() => frames.shift()?.(16));
+
+    scrollTo.mockClear();
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1000 });
+    rerender(
+      <HistoryHarness
+        autoScroll
+        defaultScrollPosition="last-anchor"
+        messageIds={['message-1']}
+        replyIds={['reply-1']}
+      />,
+    );
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 600, behavior: 'auto' });
+  });
+
   it('stays attached when a scroll lands behind a reply that is still growing', async () => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
     render(<HistoryHarness autoScroll messageIds={['message-1']} />);
@@ -823,6 +869,9 @@ describe('MessageScroller autoScroll', () => {
 
   it('leaves a reopened thread on the turn it restored instead of following the stream', () => {
     stubLayout({ 'message-1': 0, 'message-2': 300 });
+    // Sized before mount: jsdom's empty box would read as a fresh thread at its end.
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1000);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(400);
     const { rerender } = render(
       <HistoryHarness autoScroll defaultScrollPosition="last-anchor" messageIds={['message-1', 'message-2']} />,
     );

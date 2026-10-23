@@ -1,7 +1,17 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { InputGroupAddon, InputGroupText } from '@mastra/playground-ui/components/InputGroup';
+import {
+  InputNumber,
+  InputNumberDecrement,
+  InputNumberGroup,
+  InputNumberIncrement,
+  InputNumberInput,
+} from '@mastra/playground-ui/components/InputNumber';
+import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
+import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import {
@@ -13,9 +23,9 @@ import {
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
-import { Segmented } from './SettingsFields';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
+type OMRole = 'observer' | 'reflector';
 
 function attachmentToChoice(value: 'auto' | boolean): AttachmentChoice {
   if (value === true) return 'on';
@@ -23,83 +33,87 @@ function attachmentToChoice(value: 'auto' | boolean): AttachmentChoice {
   return 'auto';
 }
 
-const ATTACHMENT_OPTIONS: { value: AttachmentChoice; label: string }[] = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'on', label: 'On' },
-  { value: 'off', label: 'Off' },
-];
-
 function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   if (choice === 'on') return true;
   if (choice === 'off') return false;
   return 'auto';
 }
 
-function ThresholdInput({
-  value,
-  disabled,
-  onCommit,
-}: {
-  value: number;
-  disabled: boolean;
-  onCommit: (value: number) => void;
-}) {
-  const [draft, setDraft] = useState(String(value));
+// Stays editable while saving: disabling would drop focus mid-edit.
+function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (value: number) => void }) {
+  const [draft, setDraft] = useState<number | null>(value);
+  // Compared with what was sent, not a saved value whose response may still be in flight.
+  const [sent, setSent] = useState(value);
+  const [editing, setEditing] = useState(false);
+  const [syncedValue, setSyncedValue] = useState(value);
+  // Follows outside saves without remounting, and never overwrites a draft being typed.
+  if (syncedValue !== value) {
+    setSyncedValue(value);
+    if (!editing) {
+      setDraft(value);
+      setSent(value);
+    }
+  }
 
-  const commit = () => {
-    const parsed = Number(draft);
-    const rounded = Number.isFinite(parsed) ? Math.round(parsed) : NaN;
+  const commit = (next: number | null) => {
+    const rounded = next == null ? NaN : Math.round(next);
     if (!Number.isFinite(rounded) || rounded <= 0) {
-      setDraft(String(value));
+      setDraft(sent);
       return;
     }
-    setDraft(String(rounded));
-    if (rounded !== value) onCommit(rounded);
+    setDraft(rounded);
+    if (rounded === sent) return;
+    setSent(rounded);
+    onCommit(rounded);
   };
 
   return (
-    <Input
-      size="sm"
-      type="number"
+    <InputNumber
+      value={draft}
       min={1}
       step={1000}
-      value={draft}
-      disabled={disabled}
-      onChange={event => setDraft(event.target.value)}
-      onBlur={commit}
-    />
+      largeStep={10000}
+      format={{ maximumFractionDigits: 0 }}
+      onValueChange={setDraft}
+      onValueCommitted={(next, details) => {
+        // Typing and arrow-key stepping save once on blur; a stepper press saves when released.
+        if (details.reason === 'increment-press' || details.reason === 'decrement-press') commit(next);
+      }}
+      className="w-full"
+    >
+      <InputNumberGroup
+        size="sm"
+        onFocus={() => setEditing(true)}
+        onBlur={event => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setEditing(false);
+        }}
+      >
+        <InputNumberInput onBlur={() => commit(draft)} />
+        <InputGroupAddon align="inline-end" variant="flush">
+          <InputGroupText className="mr-2">tokens</InputGroupText>
+          <InputNumberDecrement />
+          <InputNumberIncrement />
+        </InputGroupAddon>
+      </InputNumberGroup>
+    </InputNumber>
   );
 }
 
-/**
- * Persisted observational-memory settings, optionally synchronized to an
- * active session. With `factoryId` set, the section edits the factory
- * project's shared settings (used by board runs and channel sessions) instead
- * of the caller's personal row.
- */
 export function OMSection({
-  resourceId,
-  scope,
+  sessionId,
   factoryId,
   models,
 }: {
-  resourceId?: string;
-  scope?: string;
+  sessionId?: string;
   factoryId?: string;
   models: AvailableModelOption[];
 }) {
-  const omQuery = useOMQuery(resourceId, scope, factoryId);
-  const observerMutation = useUpdateOMModel(resourceId, 'observer', scope, factoryId);
-  const reflectorMutation = useUpdateOMModel(resourceId, 'reflector', scope, factoryId);
-  const thresholdsMutation = useUpdateOMThresholds(resourceId, scope, factoryId);
-  const attachmentsMutation = useUpdateOMObserveAttachments(resourceId, scope, factoryId);
+  const omQuery = useOMQuery(sessionId, factoryId);
+  const observerMutation = useUpdateOMModel(sessionId, 'observer', factoryId);
+  const reflectorMutation = useUpdateOMModel(sessionId, 'reflector', factoryId);
+  const thresholdsMutation = useUpdateOMThresholds(sessionId, factoryId);
+  const attachmentsMutation = useUpdateOMObserveAttachments(sessionId, factoryId);
 
-  const config = omQuery.data?.config;
-  const configuredModelIds = new Set(models.map(model => model.id));
-  const observerAvailable = config !== undefined && configuredModelIds.has(config.observerModelId);
-  const reflectorAvailable = config !== undefined && configuredModelIds.has(config.reflectorModelId);
-  const modelsAvailable = observerAvailable && reflectorAvailable;
-  const loading = omQuery.isPending;
   const busy =
     observerMutation.isPending ||
     reflectorMutation.isPending ||
@@ -113,119 +127,180 @@ export function OMSection({
   ].find(error => error instanceof Error);
   const error = mutationError?.message ?? (omQuery.error instanceof Error ? omQuery.error.message : undefined);
 
-  const switchModel = (role: 'observer' | 'reflector', modelId: string) => {
+  const switchModel = (role: OMRole, modelId: string) => {
     if (!modelId) return;
     const mutation = role === 'observer' ? observerMutation : reflectorMutation;
     mutation.mutate({ modelId });
   };
 
-  if (loading) {
+  if (omQuery.isPending) {
+    return <SkeletonRows label="Loading observational-memory settings" rows={2} rowClassName="h-14 w-full" />;
+  }
+
+  if (omQuery.data === undefined) {
     return (
-      <div className="px-4 py-3">
-        <SkeletonRows label="Loading observational-memory settings" rows={4} rowClassName="h-10 w-full" />
-      </div>
+      <Txt as="p" variant="caption" className="text-destructive-foreground">
+        {omQuery.error.message}
+      </Txt>
     );
   }
 
-  const attachmentChoice = attachmentToChoice(config?.observeAttachments ?? 'auto');
+  const { config } = omQuery.data;
+  const modelsAvailable =
+    config.observer.providerStatus === 'available' && config.reflector.providerStatus === 'available';
+
+  const attachmentChoice = attachmentToChoice(config.observeAttachments);
   return (
-    <>
+    <div className="flex flex-col gap-4">
       {error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg px-4 py-3">
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}
         </Txt>
       )}
 
-      {config && !modelsAvailable && (
-        <div className="flex items-center gap-2 px-4 py-3">
-          <Badge size="md" variant="yellow">
+      {!modelsAvailable && (
+        <div className="flex items-center gap-2">
+          <Badge size="md" variant="warning">
             Model credentials required
           </Badge>
-          <Txt as="p" variant="ui-xs" className="text-icon3">
+          <Txt tone="muted" as="p" variant="meta">
             Observational-memory model calls may fail until credentials are configured.
           </Txt>
         </div>
       )}
 
-      <SettingsRow variant="factory" label="Observer model" description="Summarizes the conversation into observations">
-        <div className="w-full max-w-72">
-          <ModelCombobox
-            models={models}
-            value={config?.observerModelId ?? ''}
-            placeholder="Select observer model…"
-            disabled={busy}
-            onValueChange={modelId => switchModel('observer', modelId)}
-          />
-        </div>
-      </SettingsRow>
-
-      <SettingsRow
-        variant="factory"
-        label="Reflector model"
-        description="Distills observations into longer-term memory"
-      >
-        <div className="w-full max-w-72">
-          <ModelCombobox
-            models={models}
-            value={config?.reflectorModelId ?? ''}
-            placeholder="Select reflector model…"
-            disabled={busy}
-            onValueChange={modelId => switchModel('reflector', modelId)}
-          />
-        </div>
-      </SettingsRow>
-
-      <SettingsRow
-        variant="factory"
-        label="Messages before observation"
-        description="Message tokens processed before the observer runs."
-      >
-        {config && (
-          <div className="w-full max-w-40">
-            <ThresholdInput
-              key={config.observationThreshold}
+      <div className="@container flex flex-col gap-3">
+        <ol className="flex flex-col">
+          <OMRow as="li" rail="node" label="Messages" />
+          <OMRow as="li" rail="edge" label="Observe after" info="Message tokens processed before the observer runs.">
+            <TokenThresholdInput
               value={config.observationThreshold}
-              disabled={busy}
-              onCommit={observationThreshold => {
-                thresholdsMutation.mutate({ observationThreshold });
-              }}
+              onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
             />
-          </div>
-        )}
-      </SettingsRow>
-
-      <SettingsRow
-        variant="factory"
-        label="Observations before reflection"
-        description="Observation tokens accumulated before the reflector runs."
-      >
-        {config && (
-          <div className="w-full max-w-40">
-            <ThresholdInput
-              key={config.reflectionThreshold}
+          </OMRow>
+          <OMRow as="li" rail="node" label="Observer" info="Summarizes the conversation into observations.">
+            <ModelCombobox
+              models={models}
+              value={config.observer.model}
+              auto={{ effectiveModelId: config.observer.effectiveModelId }}
+              placeholder="Select observer model…"
+              aria-label="Observer model"
+              size="sm"
+              disabled={busy}
+              onValueChange={modelId => switchModel('observer', modelId)}
+            />
+          </OMRow>
+          <OMRow
+            as="li"
+            rail="edge"
+            label="Reflect after"
+            info="Observation tokens accumulated before the reflector runs."
+          >
+            <TokenThresholdInput
               value={config.reflectionThreshold}
-              disabled={busy}
-              onCommit={reflectionThreshold => {
-                thresholdsMutation.mutate({ reflectionThreshold });
-              }}
+              onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
             />
-          </div>
-        )}
-      </SettingsRow>
+          </OMRow>
+          <OMRow as="li" rail="node" label="Reflector" info="Distills observations into longer-term memory.">
+            <ModelCombobox
+              models={models}
+              value={config.reflector.model}
+              auto={{ effectiveModelId: config.reflector.effectiveModelId }}
+              placeholder="Select reflector model…"
+              aria-label="Reflector model"
+              size="sm"
+              disabled={busy}
+              onValueChange={modelId => switchModel('reflector', modelId)}
+            />
+          </OMRow>
+        </ol>
+        <OMRow
+          rail="none"
+          label="Attachments"
+          info="Whether attached files are included in observations."
+          controlNamesItself
+        >
+          <SegmentedControl
+            aria-label="Observe attachments"
+            size="sm"
+            value={attachmentChoice}
+            disabled={busy}
+            onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
+          >
+            <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
+            <SegmentedControlItem value="on">On</SegmentedControlItem>
+            <SegmentedControlItem value="off">Off</SegmentedControlItem>
+          </SegmentedControl>
+        </OMRow>
+      </div>
+    </div>
+  );
+}
 
-      <SettingsRow
-        variant="factory"
-        label="Observe attachments"
-        description="Whether attached files are included in observations"
-      >
-        <Segmented
-          ariaLabel="Observe attachments"
-          value={attachmentChoice}
-          options={ATTACHMENT_OPTIONS}
-          disabled={busy || !config}
-          onChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
-        />
-      </SettingsRow>
+type RailMark = 'node' | 'edge' | 'none';
+
+const RAIL_MARKS: Record<RailMark, ReactNode> = {
+  node: (
+    <>
+      <span className="bg-border-strong h-1.5 w-px shrink-0 group-first/row:invisible @min-[30rem]:h-auto @min-[30rem]:flex-1" />
+      <span className="bg-muted-foreground size-2 shrink-0 rounded-full" />
+      <span className="bg-border-strong w-px flex-1 group-last/row:invisible" />
     </>
+  ),
+  edge: <span className="bg-border-strong w-px flex-1" />,
+  none: null,
+};
+
+type OMRowCellsProps = {
+  label: string;
+  info?: string;
+  controlNamesItself?: boolean;
+  children?: ReactNode;
+};
+
+function OMRow({ as: Row = 'div', rail, ...cells }: { as?: 'li' | 'div'; rail: RailMark } & OMRowCellsProps) {
+  return (
+    <Row className="group/row grid min-h-10 grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 @min-[30rem]:grid-cols-[2rem_6.5rem_minmax(0,20rem)]">
+      <span aria-hidden="true" className="row-span-2 flex flex-col items-center self-stretch @min-[30rem]:row-span-1">
+        {RAIL_MARKS[rail]}
+      </span>
+      <OMRowCells muted={rail !== 'node'} {...cells} />
+    </Row>
+  );
+}
+
+function OMRowCells({
+  label,
+  info,
+  muted,
+  controlNamesItself = false,
+  children,
+}: OMRowCellsProps & { muted: boolean }) {
+  const plainLabel = (
+    <span className="flex w-fit items-center gap-1">
+      <Txt as="span" variant="column" tone={muted ? 'muted' : undefined}>
+        {label}
+      </Txt>
+      {info ? <InfoTooltip aria-label={`About ${label}`}>{info}</InfoTooltip> : null}
+    </span>
+  );
+  if (!children) return plainLabel;
+
+  const control = <div className="col-start-2 pb-2 @min-[30rem]:col-start-auto @min-[30rem]:pb-0">{children}</div>;
+  if (controlNamesItself) {
+    return (
+      <>
+        {plainLabel}
+        {control}
+      </>
+    );
+  }
+  return (
+    <Field className="contents">
+      <FieldLabel size="smaller" info={info} className={muted ? 'text-muted-foreground' : undefined}>
+        {label}
+      </FieldLabel>
+      {control}
+    </Field>
   );
 }

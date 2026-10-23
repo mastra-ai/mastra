@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
+import * as storage from '../../..';
 import {
+  assertKnowledgeCeilingRaised,
   assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
   expandKnowledgeScope,
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
+  knowledgeVisibleScopeKeys,
 } from '../base';
 
 const context = ['thread:t1', 'org:o1', 'resource:r1'];
@@ -23,10 +26,33 @@ describe('knowledge scopes', () => {
     expect(() => expandKnowledgeScope(['org:o1'], 'thread')).toThrow('context has no thread entry');
   });
 
+  it('accepts opaque uncurated companion addresses without legacy ancestors', () => {
+    expect(canonicalizeKnowledgeScope(['thread:t1:uncurated'])).toEqual(['thread:t1:uncurated']);
+    expect(canonicalizeKnowledgeScope(['resource:r1:uncurated', 'thread:t1:uncurated'])).toEqual([
+      'resource:r1:uncurated',
+      'thread:t1:uncurated',
+    ]);
+  });
+
   it('uses subset visibility and excludes sibling scopes', () => {
     expect(isKnowledgeScopeVisible(['org:o1'], context)).toBe(true);
     expect(isKnowledgeScopeVisible(['org:o1', 'resource:r1'], context)).toBe(true);
     expect(isKnowledgeScopeVisible(['org:o1', 'resource:r2'], context)).toBe(false);
+  });
+
+  it('enumerates persisted scope subsets including uncurated companions', () => {
+    const resourceCompanion = 'resource:r1:uncurated';
+    const threadCompanion = 'thread:t1:uncurated';
+    const keys = knowledgeVisibleScopeKeys([...context, resourceCompanion, threadCompanion]);
+
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        knowledgeScopeKey(context),
+        knowledgeScopeKey([resourceCompanion]),
+        knowledgeScopeKey([threadCompanion]),
+        knowledgeScopeKey([resourceCompanion, threadCompanion]),
+      ]),
+    );
   });
 
   it('rejects malformed, partial, and cross-chain scopes', () => {
@@ -38,9 +64,35 @@ describe('knowledge scopes', () => {
     expect(() => canonicalizeKnowledgeScope(['tenant:t1'])).toThrow('Invalid knowledge scope entry');
   });
 
-  it('enforces scope ceilings using the narrowest reserved level', () => {
-    expect(() => assertKnowledgeScopeWithinCeiling(['org:o1', 'resource:r1'], 'resource')).not.toThrow();
-    expect(() => assertKnowledgeScopeWithinCeiling(context, 'resource')).not.toThrow();
-    expect(() => assertKnowledgeScopeWithinCeiling(['org:o1'], 'resource')).toThrow('exceeds resource ceiling');
+  it('keeps the deprecated ceiling assertions as no-ops for published memory and store versions', () => {
+    expect(() => assertKnowledgeScopeWithinCeiling(['org:o1'], 'resource')).not.toThrow();
+    expect(() => assertKnowledgeScopeWithinCeiling(['org:o1'], 'thread')).not.toThrow();
+    expect(() => assertKnowledgeCeilingRaised('resource', 'thread')).not.toThrow();
+  });
+
+  it('keeps every Knowledge @mastra/core/storage export that published memory and store packages import', () => {
+    // Imported by @mastra/memory 1.36.0, @mastra/libsql 1.25.1, @mastra/pg 1.30.0,
+    // @mastra/mysql 0.12.1, and @mastra/mongodb 1.22.0.
+    for (const name of [
+      'InMemoryStore',
+      'KnowledgeConflictError',
+      'KnowledgeNotFoundError',
+      'KnowledgeStorage',
+      'MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH',
+      'assertKnowledgeCeilingRaised',
+      'assertKnowledgeScopeWithinCeiling',
+      'canonicalizeKnowledgeScope',
+      'createKnowledgeNodeCursor',
+      'createKnowledgeUlid',
+      'expandKnowledgeScope',
+      'isKnowledgeScopeVisible',
+      'knowledgeScopeKey',
+      'knowledgeSemanticDocumentId',
+      'knowledgeSemanticIdempotencyKey',
+      'parseKnowledgeNodeCursor',
+      'parseKnowledgeWikilinks',
+    ]) {
+      expect(storage, name).toHaveProperty(name);
+    }
   });
 });

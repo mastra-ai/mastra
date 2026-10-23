@@ -13,6 +13,7 @@ import {
   listChannelInstallationsResponseSchema,
   connectChannelResponseSchema,
   disconnectChannelResponseSchema,
+  reconcileChannelResponseSchema,
 } from '../schemas/channels';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
@@ -29,8 +30,21 @@ function assertChannelsAvailable(): void {
   }
 }
 
-function getChannelOrThrow(mastra: Mastra, platform: string): ChannelProvider {
-  const channels = Object.values(mastra.channels ?? {});
+/**
+ * Resolves the current channel providers. Prefers `resolveChannels()` so a
+ * live resolver (e.g. `channels()` from @mastra/connect) is consulted —
+ * connections added after boot are picked up without a restart. Falls back to
+ * the static snapshot on older @mastra/core versions without the method.
+ */
+async function resolveChannelProviders(mastra: Mastra): Promise<ChannelProvider[]> {
+  const resolveChannels = (mastra as Mastra & { resolveChannels?: () => Promise<Record<string, ChannelProvider>> })
+    .resolveChannels;
+  const record = typeof resolveChannels === 'function' ? await resolveChannels.call(mastra) : (mastra.channels ?? {});
+  return Object.values(record);
+}
+
+async function getChannelOrThrow(mastra: Mastra, platform: string): Promise<ChannelProvider> {
+  const channels = await resolveChannelProviders(mastra);
   const channel = channels.find(c => c.id === platform);
   if (!channel) {
     const available = channels.map(c => c.id).join(', ');
@@ -115,7 +129,7 @@ export const LIST_CHANNEL_PLATFORMS_ROUTE = createRoute({
   handler: async ({ mastra }) => {
     assertChannelsAvailable();
     try {
-      const channels = Object.values(mastra.channels ?? {});
+      const channels = await resolveChannelProviders(mastra);
       return channels.map(channel => {
         if (channel.getInfo) {
           return channel.getInfo();
@@ -148,7 +162,7 @@ export const LIST_CHANNEL_INSTALLATIONS_ROUTE = createRoute({
   handler: async ({ mastra, platform }) => {
     assertChannelsAvailable();
     try {
-      const channel = getChannelOrThrow(mastra, platform);
+      const channel = await getChannelOrThrow(mastra, platform);
 
       if (!channel.listInstallations) {
         return [];
@@ -178,7 +192,7 @@ export const CONNECT_CHANNEL_ROUTE = createRoute({
   handler: async ({ mastra, requestContext, platform, agentId, options }) => {
     assertChannelsAvailable();
     try {
-      const channel = getChannelOrThrow(mastra, platform);
+      const channel = await getChannelOrThrow(mastra, platform);
 
       if (!channel.connect) {
         throw new HTTPException(400, {
@@ -191,6 +205,46 @@ export const CONNECT_CHANNEL_ROUTE = createRoute({
       return await channel.connect(agentId, options);
     } catch (error) {
       return handleError(error, 'Error connecting agent to channel');
+    }
+  },
+});
+
+/**
+ * POST /channels/:platform/:agentId/reconcile - Reconcile an agent's installation
+ *
+ * The explicit write path for connect flows that complete out-of-band (e.g.
+ * Discord's bot invite has no redirect back to the server). Listing stays a
+ * pure read; Studio calls this on window focus while a connect is in flight.
+ * Gated on the same write access as connect — reconciliation can activate the
+ * agent's installation.
+ */
+export const RECONCILE_CHANNEL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/channels/:platform/:agentId/reconcile',
+  responseType: 'json',
+  pathParamSchema: channelAgentPathParams,
+  responseSchema: reconcileChannelResponseSchema,
+  summary: 'Reconcile channel installation',
+  description:
+    'Checks a pending installation against platform state and activates it if its connect flow has completed. Returns the installation, or null when the agent has none or the platform does not support reconciliation.',
+  tags: ['Channels'],
+  requiresAuth: true,
+  handler: async ({ mastra, requestContext, platform, agentId }) => {
+    assertChannelsAvailable();
+    try {
+      const channel = await getChannelOrThrow(mastra, platform);
+
+      // Resolve the agent (404 on unknown) and authorize the write before the
+      // capability check so unknown agents never read as a successful no-op.
+      await assertChannelAgentWriteAccess(mastra, requestContext, agentId, 'connect');
+
+      if (!channel.reconcileInstallation) {
+        return null;
+      }
+
+      return await channel.reconcileInstallation(agentId);
+    } catch (error) {
+      return handleError(error, 'Error reconciling channel installation');
     }
   },
 });
@@ -211,7 +265,7 @@ export const DISCONNECT_CHANNEL_ROUTE = createRoute({
   handler: async ({ mastra, requestContext, platform, agentId }) => {
     assertChannelsAvailable();
     try {
-      const channel = getChannelOrThrow(mastra, platform);
+      const channel = await getChannelOrThrow(mastra, platform);
 
       if (!channel.disconnect) {
         throw new HTTPException(400, {

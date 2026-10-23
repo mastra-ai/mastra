@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -22,6 +21,7 @@ import xxhash from 'xxhash-wasm';
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PgVectorConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
+import { parseSchemaName } from '../shared/schema-name';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery, buildDeleteFilterQuery } from './sql-builder';
@@ -321,11 +321,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
   }
 
-  /**
-   * Checks if the installed pgvector version supports halfvec type.
-   * halfvec was introduced in pgvector 0.7.0.
-   */
-  private supportsHalfvec(): boolean {
+  /** Checks if the installed pgvector version is at least the given major.minor version. */
+  private isVectorExtensionAtLeast(minMajor: number, minMinor: number): boolean {
     if (!this.vectorExtensionVersion) {
       return false;
     }
@@ -333,12 +330,24 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     const parts = this.vectorExtensionVersion.split('.');
     const major = parseInt(parts[0] ?? '', 10);
     const minor = parseInt(parts[1] ?? '', 10);
-    // If parsing failed (NaN), assume version doesn't support halfvec
+    // If parsing failed (NaN), assume the version is too old
     if (isNaN(major) || isNaN(minor)) {
       return false;
     }
-    // halfvec was introduced in pgvector 0.7.0
-    return major > 0 || (major === 0 && minor >= 7);
+    return major > minMajor || (major === minMajor && minor >= minMinor);
+  }
+
+  /**
+   * Checks if the installed pgvector version supports halfvec type.
+   * halfvec was introduced in pgvector 0.7.0.
+   */
+  private supportsHalfvec(): boolean {
+    return this.isVectorExtensionAtLeast(0, 7);
+  }
+
+  /** Checks if pgvector >= 0.8.0 (required for the hnsw.iterative_scan setting). */
+  private supportsIterativeScan(): boolean {
+    return this.isVectorExtensionAtLeast(0, 8);
   }
 
   /** Checks if pgvector >= 0.7.0 (required for bit type). */
@@ -371,8 +380,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
       // Issue #10061: Always qualify with schema where vector extension is installed
       // This ensures the type is found regardless of the session's search_path
-      const validatedSchema = parseSqlIdentifier(this.vectorExtensionSchema, 'vector extension schema');
-      return `${validatedSchema}.${vectorType}`;
+      // Plain identifiers stay unquoted; other names (e.g. `my-tenant`) must be quoted.
+      const extensionSchema = parseSchemaName(this.vectorExtensionSchema, 'vector extension schema');
+      const qualifier = /^[A-Za-z_][A-Za-z0-9_]*$/.test(extensionSchema) ? extensionSchema : `"${extensionSchema}"`;
+      return `${qualifier}.${vectorType}`;
     }
 
     // Fallback to unqualified (will use search_path)
@@ -475,7 +486,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   private getSchemaName() {
-    return this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
+    return this.schema ? `"${parseSchemaName(this.schema)}"` : undefined;
   }
 
   private async ensureNamespaceSchema(indexName: string, client: pg.PoolClient): Promise<void> {
@@ -501,7 +512,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     const state = await this.getNamespaceSchemaState(tableName, client);
     if (!state.composite_index) {
-      const namespaceIndexName = this.getNamespaceIndexName(parsedIndexName);
+      const namespaceIndexName = await this.getNamespaceIndexName(parsedIndexName);
       await client.query(
         `CREATE UNIQUE INDEX IF NOT EXISTS "${namespaceIndexName}" ON ${tableName} (namespace, vector_id)`,
       );
@@ -522,12 +533,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
   }
 
-  private getNamespaceIndexName(parsedIndexName: string): string {
+  private async getNamespaceIndexName(parsedIndexName: string): Promise<string> {
     const fullName = `${parsedIndexName}_namespace_vector_id_idx`;
     if (fullName.length <= 63) {
       return fullName;
     }
-    const hash = createHash('sha256').update(parsedIndexName).digest('hex').slice(0, 32);
+    const hash = Buffer.from(
+      await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(parsedIndexName)),
+    )
+      .toString('hex')
+      .slice(0, 32);
     const suffix = `_ns_${hash}_idx`;
     return `${parsedIndexName.slice(0, 63 - suffix.length)}${suffix}`;
   }
@@ -731,6 +746,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       let client;
       try {
         await this.ensureNamespaceReady(indexName);
+        // Load metadata before holding a connection so a cold cache cannot exhaust the pool.
+        const indexInfo = includeVector ? await this.getIndexMetadata({ indexName }) : undefined;
+        const ops = indexInfo && this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
         client = await this.pool.connect();
         const translatedFilter = this.transformFilter(filter);
         const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
@@ -754,7 +772,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           id,
           score: 0,
           metadata,
-          ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
+          ...(ops && embedding && { vector: ops.parseEmbedding(embedding) }),
         }));
       } catch (error) {
         if (error instanceof MastraError) {
@@ -804,7 +822,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         const calculatedEf = ef ?? Math.max(topK, (indexInfo?.config?.m ?? 16) * topK);
         const searchEf = Math.min(1000, Math.max(1, calculatedEf));
         await client.query(`SET LOCAL hnsw.ef_search = ${searchEf}`);
-        await client.query(`SET LOCAL hnsw.iterative_scan = strict_order`);
+        if (this.supportsIterativeScan()) {
+          await client.query(`SET LOCAL hnsw.iterative_scan = strict_order`);
+        }
       }
 
       if (indexInfo.type === 'ivfflat' && probes) {

@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { expect } from './expect.js';
 import type { McE2ePrepareContext, McE2eScenario } from './types.js';
 
 const prFixture = {
@@ -174,12 +175,11 @@ values
     terminal.write('incremental subscription');
     await runtime.waitForScreenText(/E2E GitHub incremental subscription fixture/i, terminal);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Switched to: E2E GitHub incremental subscription fixture/i, terminal);
 
     terminal.submit('/github sync');
     await runtime.waitForScreenText(/notification from github/i, terminal, 30_000);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17638 CI recovered/i, terminal, 30_000);
-    await runtime.waitForScreenText(/medium · pull-request-ci-recovered · delivered/i, terminal, 30_000);
+    expect(terminal.serialize().view).not.toMatch(/pull-request-ci-recovered · delivered/i);
     runtime.printScreen('github incremental notification', terminal);
   },
 } satisfies McE2eScenario;

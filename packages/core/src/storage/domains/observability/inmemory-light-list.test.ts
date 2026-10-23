@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EntityType, SpanType } from '../../../observability/types';
 import { InMemoryStore } from '../../mock';
+import { parseTraceQueryRequest, planTraceQuery } from './trace-query';
 
 function makeRootSpan(traceId: string, startedAt: Date) {
   return {
@@ -39,6 +40,19 @@ function makeRootSpan(traceId: string, startedAt: Date) {
 const T0 = new Date('2026-01-01T00:00:00.000Z');
 
 describe('ObservabilityInMemory listTracesLight', () => {
+  it('keeps advanced delta queries explicitly unsupported', async () => {
+    const obs = (await new InMemoryStore().getStore('observability'))!;
+    await expect(
+      obs.queryTraces(
+        planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            mode: 'delta',
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({ id: 'OBSERVABILITY_STORAGE_QUERY_TRACES_NOT_IMPLEMENTED' });
+  });
   it('returns light rows with inputPreview in page mode', async () => {
     const store = new InMemoryStore();
     const obs = (await store.getStore('observability'))!;

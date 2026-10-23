@@ -1,7 +1,6 @@
 import type { FavoriteToggleResponse, StoredAgentResponse, ListStoredAgentsResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 type FavoriteContext = {
   previousDetail?: StoredAgentResponse | null;
@@ -21,10 +20,9 @@ const applyFavoriteToAgent = (agent: StoredAgentResponse, favorited: boolean): S
  * detail cache (`['stored-agent', id, ...]`) and any list caches
  * (`['stored-agents', ...]`) and rolls back on error.
  */
-export const useToggleStoredAgentFavorite = (agentId?: string) => {
+export const useToggleStoredAgentFavorite = (agentId?: string, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<FavoriteToggleResponse, Error, { favorited: boolean }, FavoriteContext>({
     mutationFn: async ({ favorited }) => {
@@ -48,7 +46,7 @@ export const useToggleStoredAgentFavorite = (agentId?: string) => {
       for (const [key, value] of listQueries) {
         previousLists.push([key, value]);
         if (!value?.agents) continue;
-        queryClient.setQueryData<ListStoredAgentsResponse>(key as readonly unknown[], {
+        queryClient.setQueryData<ListStoredAgentsResponse>(key, {
           ...value,
           agents: value.agents.map(a => (a.id === agentId ? applyFavoriteToAgent(a, favorited) : a)),
         });

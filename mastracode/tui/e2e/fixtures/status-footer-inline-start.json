@@ -1,0 +1,29 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "User: Animate the status footer.",
+        "systemMessage": "you will generate a short title",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Status footer title"
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Animate the status footer.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Status footer animation complete."
+      },
+      "streamingProfile": {
+        "ttft": 3000,
+        "tps": 20
+      }
+    }
+  ]
+}

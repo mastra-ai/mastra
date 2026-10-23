@@ -83,6 +83,7 @@
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["major", "minor", "patch", "digest"],
       "dependencyDashboardApproval": false,
+      "pinDigests": true,
       "automerge": true
     },
     {
@@ -270,7 +271,7 @@
     {
       "groupName": "typescript",
       "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
-      "matchPackageNames": ["typescript", "/^@typescript-eslint//", "typescript-eslint"],
+      "matchPackageNames": ["typescript"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
@@ -280,7 +281,7 @@
       "groupName": "formatting & linting",
       "commitMessageTopic": "Formatting & linting",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["eslint", "oxfmt", "/^eslint-/", "@vitest/eslint-plugin", "!@typescript-eslint/"],
+      "matchPackageNames": ["oxfmt", "oxlint", "oxlint-tsgolint", "oxlint-tailwindcss", "eslint-plugin-storybook"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
@@ -426,6 +427,11 @@
       "description": "Disable @opencode-ai/plugin updates. Newer plugin versions pull effect@4.0.0-beta.83, which pnpm rejects as a trust downgrade under trustPolicy: no-downgrade. The plugin is exact-pinned to 1.14.48 (effect@4.0.0-beta.59) until upstream publishes a version that does not trigger ERR_PNPM_TRUST_DOWNGRADE.",
       "matchPackageNames": ["@opencode-ai/plugin"],
       "enabled": false
+    },
+    {
+      "description": "Keep agent-browser below 0.20.0. From 0.20.0 it ships only a native CLI with no JavaScript entry point, so @mastra/agent-browser and @mastra/browser-firecrawl can no longer import BrowserManager from it.",
+      "matchPackageNames": ["agent-browser"],
+      "allowedVersions": "<0.20.0"
     },
     {
       "groupName": "OpenCode",

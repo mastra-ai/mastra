@@ -1,16 +1,28 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowLeft, FileDiff, Folder, FolderOpen, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowLeft, ChevronDown, ChevronRight, FileDiff, Folder, FolderOpen, RefreshCw } from 'lucide-react';
+import { lazy, Suspense, useState } from 'react';
+import type { ReactNode } from 'react';
 
-import type { WorkspaceChange, WorkspaceChanges, WorkspaceChangeStatus } from '../../../../api/types';
+import type {
+  WorkspaceChange,
+  WorkspaceChanges,
+  WorkspaceChangesRepository,
+  WorkspaceChangeStatus,
+} from '../../../../api/types';
 import { useWorkspaceDiff } from '../../../../hooks/use-fs';
-import { WorkspaceDiffLines } from './WorkspaceDiffLines';
+import { GitLabIcon } from '../../../ui/icons';
 import { treeRowContainmentClass } from '../layout';
+import { WakeSandbox } from './WakeSandbox';
+
+const CodeDiff = lazy(() =>
+  import('@mastra/playground-ui/components/CodeDiff').then(({ CodeDiff }) => ({ default: CodeDiff })),
+);
 
 const STATUS_LABELS: Record<WorkspaceChangeStatus, string> = {
   modified: 'Modified',
@@ -23,41 +35,52 @@ const STATUS_LABELS: Record<WorkspaceChangeStatus, string> = {
 };
 
 const STATUS_CLASSES: Record<WorkspaceChangeStatus, string> = {
-  modified: 'text-notice-info/70!',
-  added: 'text-notice-success/70!',
-  deleted: 'text-notice-destructive/70!',
-  renamed: 'text-notice-info/70!',
-  copied: 'text-notice-success/70!',
-  untracked: 'text-notice-success/70!',
-  conflicted: 'text-notice-destructive/70!',
+  modified: 'text-info-indicator!',
+  added: 'text-success-indicator!',
+  deleted: 'text-destructive-foreground!',
+  renamed: 'text-info-indicator!',
+  copied: 'text-success-indicator!',
+  untracked: 'text-success-indicator!',
+  conflicted: 'text-destructive-foreground!',
 };
-const FOLDER_CLASS = 'text-neutral4!';
+const FOLDER_CLASS = 'text-muted-foreground!';
 
 function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'additions' | 'deletions' | 'binary'>) {
   if (binary) {
-    return <span className="text-ui-xs text-icon3 shrink-0 font-medium">Binary</span>;
+    return (
+      <Txt as="span" variant="meta" tone="muted" className="shrink-0">
+        Binary
+      </Txt>
+    );
   }
   if (additions === undefined || deletions === undefined) return null;
 
   return (
-    <span
-      className="text-ui-xs flex shrink-0 items-center gap-1 font-mono tabular-nums"
+    <Txt
+      as="span"
+      variant="meta"
+      font="mono"
+      className="flex shrink-0 items-center gap-1 tabular-nums"
       aria-label={`${additions} ${additions === 1 ? 'addition' : 'additions'} and ${deletions} ${
         deletions === 1 ? 'deletion' : 'deletions'
       }`}
     >
-      <span className="text-notice-success/70">+{additions}</span>
-      <span className="text-notice-destructive/70">−{deletions}</span>
-    </span>
+      <span className="text-success-indicator">+{additions}</span>
+      <span className="text-destructive-foreground">−{deletions}</span>
+    </Txt>
   );
 }
 
-function ChangesEmptyState({ available }: { available: boolean }) {
+function ChangesEmptyState({ workspacePath }: { workspacePath?: string }) {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
-      <Txt variant="ui-sm" className="text-icon3">
-        {available ? 'No changes' : 'No sandbox running. Changes appear once the session sandbox starts.'}
-      </Txt>
+      {workspacePath ? (
+        <WakeSandbox workspacePath={workspacePath} />
+      ) : (
+        <Txt tone="muted" variant="caption">
+          No changes
+        </Txt>
+      )}
     </div>
   );
 }
@@ -85,13 +108,13 @@ function ensureChangeDirectory(nodes: ChangeTreeNode[], path: string, name: stri
   return directory;
 }
 
-function addChange(nodes: ChangeTreeNode[], change: WorkspaceChange) {
-  const segments = change.path.split('/').filter(Boolean);
+function addChange(nodes: ChangeTreeNode[], change: WorkspaceChange, prefix: string) {
+  const segments = change.path.slice(prefix.length).split('/').filter(Boolean);
   let siblings = nodes;
-  let currentPath = '';
+  let currentPath = prefix;
 
   segments.forEach((segment, index) => {
-    currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+    currentPath = currentPath && !currentPath.endsWith('/') ? `${currentPath}/${segment}` : `${currentPath}${segment}`;
     if (index === segments.length - 1) {
       siblings.push({ path: change.path, name: segment, change, children: [] });
       return;
@@ -105,7 +128,7 @@ function addChange(nodes: ChangeTreeNode[], change: WorkspaceChange) {
 function compactChangeTree(node: ChangeTreeNode): ChangeTreeNode {
   let compacted = { ...node, children: sortChangeTree(node.children) };
   while (!compacted.change && compacted.children.length === 1 && !compacted.children[0]?.change) {
-    const child = compacted.children[0]!;
+    const child = compacted.children[0];
     compacted = {
       path: child.path,
       name: `${compacted.name}/${child.name}`,
@@ -122,10 +145,63 @@ function sortChangeTree(nodes: ChangeTreeNode[]): ChangeTreeNode[] {
   });
 }
 
-function buildChangeTree(changes: WorkspaceChange[]): ChangeTreeNode[] {
+/**
+ * Build the folder tree of a change list. `prefix` is the repository
+ * directory the paths carry in a multi-repository session: it is stripped
+ * for display only, every node keeps the prefixed path the routes expect.
+ */
+function buildChangeTree(changes: WorkspaceChange[], prefix = ''): ChangeTreeNode[] {
   const nodes: ChangeTreeNode[] = [];
-  changes.forEach(change => addChange(nodes, change));
+  changes.forEach(change => addChange(nodes, change, prefix));
   return sortChangeTree(nodes);
+}
+
+export type RepositoryProvider = 'github' | 'gitlab';
+
+/** Source control provider per repository slug, from the factory's linked repositories. */
+export type RepositoryProviders = Record<string, RepositoryProvider | undefined>;
+
+interface RepositoryGroupHeaderProps {
+  /** What the row names: the repository slug on Changes, the checkout directory on Files. */
+  label: string;
+  /** Shown before the label when known; the Changes tab passes it, the Files tab does not. */
+  provider?: RepositoryProvider;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children?: ReactNode;
+}
+
+/** The collapsible row a repository's files sit under when the session holds several repositories. */
+export function RepositoryGroupHeader({ label, provider, open, onOpenChange, children }: RepositoryGroupHeaderProps) {
+  return (
+    <button
+      type="button"
+      className="flex min-h-8 w-full items-center gap-1.5 px-2 text-left"
+      aria-expanded={open}
+      aria-label={`${open ? 'Hide' : 'Show'} files in ${label}`}
+      data-testid="workspace-repository-group"
+      onClick={() => onOpenChange(!open)}
+    >
+      {open ? (
+        <ChevronDown className="text-muted-foreground shrink-0" size={14} />
+      ) : (
+        <ChevronRight className="text-muted-foreground shrink-0" size={14} />
+      )}
+      {provider ? (
+        <span aria-hidden="true" className="flex shrink-0 items-center" data-testid={`repository-provider-${provider}`}>
+          {provider === 'gitlab' ? (
+            <GitLabIcon className="text-foreground size-3.5 shrink-0" />
+          ) : (
+            <GithubIcon className="text-foreground size-3.5 shrink-0" />
+          )}
+        </span>
+      ) : null}
+      <Txt as="span" tone="ink" variant="column" font="mono" className="min-w-0 flex-1 truncate">
+        {label}
+      </Txt>
+      {children}
+    </button>
+  );
 }
 
 interface ChangeTreeItemProps {
@@ -168,13 +244,13 @@ function ChangeTreeItem({ node, openFolders, onFolderOpenChange }: ChangeTreeIte
       <Tree.Icon>
         <FileDiff className={colorClass} />
       </Tree.Icon>
-      <Tree.Label className={cn('font-mono', colorClass)}>
+      <Tree.Label className={cn(colorClass, 'text-body-sm font-mono')}>
         {node.change.previousPath ? `${splitPath(node.change.previousPath).name} → ${node.name}` : node.name}
       </Tree.Label>
       <span className="ml-auto flex shrink-0 items-center gap-2">
-        <span className={cn('text-ui-xs shrink-0 font-medium', STATUS_CLASSES[node.change.status])}>
+        <Txt as="span" variant="meta" className={cn('shrink-0', STATUS_CLASSES[node.change.status])}>
           {STATUS_LABELS[node.change.status]}
-        </span>
+        </Txt>
         <ChangeCounts {...node.change} />
       </span>
     </Tree.File>
@@ -209,27 +285,27 @@ function DiffViewer({
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Workspace change diff">
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
-        <Button size="icon-xs" variant="ghost" onClick={onBack} aria-label="Back to changed files">
+        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to changed files">
           <ArrowLeft />
         </Button>
         <div className="min-w-0 flex-1">
-          <Txt variant="ui-sm" font="mono" className="text-icon6 truncate font-medium">
+          <Txt tone="ink" variant="column" font="mono" className="truncate">
             {name}
           </Txt>
-          <Txt variant="ui-xs" font="mono" className="text-icon3 truncate">
+          <Txt tone="muted" variant="meta" font="mono" className="truncate">
             {directory || 'Repository root'}
           </Txt>
         </div>
         {change ? (
           <span className="flex shrink-0 items-center gap-2">
-            <span className={cn('text-ui-xs shrink-0 font-medium', STATUS_CLASSES[change.status])}>
+            <Txt as="span" variant="meta" className={cn('shrink-0', STATUS_CLASSES[change.status])}>
               {STATUS_LABELS[change.status]}
-            </span>
+            </Txt>
             <ChangeCounts {...change} />
           </span>
         ) : null}
         <Button
-          size="icon-xs"
+          size="icon-sm"
           variant="ghost"
           onClick={onRefresh}
           disabled={isRefreshing}
@@ -245,17 +321,24 @@ function DiffViewer({
       ) : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="ui-sm" className="text-error">
+          <Txt variant="caption" className="text-destructive-foreground">
             {error.message}
           </Txt>
         </div>
       ) : null}
       {!isLoading && !error && patch ? (
-        <ScrollArea className="min-h-0 flex-1 font-mono text-xs leading-5">
-          <WorkspaceDiffLines patch={patch} truncated={truncated} />
-        </ScrollArea>
+        <div className="min-h-0 flex-1 overflow-auto p-2">
+          <Suspense fallback={<Spinner size="sm" />}>
+            <CodeDiff patch={patch} />
+          </Suspense>
+          {truncated ? (
+            <Txt tone="muted" variant="meta" className="block p-3">
+              Diff truncated at 512 KB.
+            </Txt>
+          ) : null}
+        </div>
       ) : null}
-      {!isLoading && !error && !patch ? <ChangesEmptyState available /> : null}
+      {!isLoading && !error && !patch ? <ChangesEmptyState /> : null}
     </section>
   );
 }
@@ -264,6 +347,8 @@ interface WorkspaceChangesPanelProps {
   workspacePath: string;
   visible: boolean;
   changes?: WorkspaceChanges;
+  /** Provider per repository slug for the group icons; absent while the factory loads (no icon), a slug without one gets the GitHub icon. */
+  repositoryProviders?: RepositoryProviders;
   isLoading: boolean;
   isRefreshing: boolean;
   error?: Error;
@@ -277,6 +362,7 @@ export function WorkspaceChangesPanel({
   workspacePath,
   visible,
   changes,
+  repositoryProviders,
   isLoading,
   isRefreshing,
   error,
@@ -290,7 +376,12 @@ export function WorkspaceChangesPanel({
   const selectedPath = selectedChange?.path;
   const diff = useWorkspaceDiff(workspacePath, selectedPath, selectedChange?.previousPath, { enabled: visible });
   const selectedDiff = diff.data?.path === selectedPath ? diff.data : undefined;
-  const changeTree = buildChangeTree(changes?.changes ?? []);
+  const repositories = changes?.repositories && changes.repositories.length > 1 ? changes.repositories : undefined;
+  const changeTree = repositories ? [] : buildChangeTree(changes?.changes ?? []);
+  const onFolderOpenChange = (path: string, open: boolean) =>
+    setOpenFolders(previous => ({ ...previous, [path]: open }));
+  const treeSelectedId = view.type === 'list' ? view.selectedPath : undefined;
+  const selectForDiff = (path: string) => setView({ type: 'diff', path });
 
   if (selectedPath) {
     return (
@@ -317,15 +408,15 @@ export function WorkspaceChangesPanel({
       data-testid="workspace-changes-panel"
     >
       <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
-        <Button size="icon-xs" variant="ghost" onClick={onBack} aria-label="Back to workspace">
+        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
           <ArrowLeft />
         </Button>
-        <FileDiff className="text-icon3" size={14} />
-        <Txt as="h2" variant="ui-sm" className="text-icon6">
+        <FileDiff className="text-muted-foreground" size={14} />
+        <Txt tone="ink" as="h2" variant="column">
           Changes
         </Txt>
         {!isLoading && !error ? (
-          <Txt variant="ui-xs" className="text-icon3 ml-auto">
+          <Txt tone="muted" variant="meta" className="ml-auto">
             {changes?.changes.length ?? 0} {changes?.changes.length === 1 ? 'file' : 'files'}
           </Txt>
         ) : null}
@@ -334,7 +425,7 @@ export function WorkspaceChangesPanel({
         ) : null}
         <Button
           className={isLoading || error ? 'ml-auto' : undefined}
-          size="icon-xs"
+          size="icon-sm"
           variant="ghost"
           onClick={onRefresh}
           disabled={isRefreshing}
@@ -350,32 +441,100 @@ export function WorkspaceChangesPanel({
       ) : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="ui-sm" className="text-error">
+          <Txt variant="caption" className="text-destructive-foreground">
             {error.message}
           </Txt>
         </div>
       ) : null}
-      {!isLoading && !error && changeTree.length === 0 ? (
-        <ChangesEmptyState available={changes?.available ?? false} />
+      {!isLoading && !error && !repositories && changeTree.length === 0 ? (
+        <ChangesEmptyState workspacePath={changes?.available ? undefined : workspacePath} />
       ) : null}
-      {!isLoading && !error && changeTree.length > 0 ? (
+      {!isLoading && !error && !repositories && changeTree.length > 0 ? (
         <ScrollArea className="min-h-0 flex-1">
-          <Tree
-            selectedId={view.type === 'list' ? view.selectedPath : undefined}
-            onSelect={path => setView({ type: 'diff', path })}
-            className="p-2"
-          >
+          <Tree selectedId={treeSelectedId} onSelect={selectForDiff} className="p-2">
             {changeTree.map(node => (
               <ChangeTreeItem
                 key={node.path}
                 node={node}
                 openFolders={openFolders}
-                onFolderOpenChange={(path, open) => setOpenFolders(previous => ({ ...previous, [path]: open }))}
+                onFolderOpenChange={onFolderOpenChange}
               />
             ))}
           </Tree>
         </ScrollArea>
       ) : null}
+      {!isLoading && !error && repositories ? (
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="flex flex-col p-2">
+            {repositories.map(repository => (
+              <RepositoryChangesGroup
+                key={repository.prefix}
+                repository={repository}
+                provider={
+                  repositoryProviders ? (repositoryProviders[repository.slug.toLowerCase()] ?? 'github') : undefined
+                }
+                open={openFolders[repository.prefix] ?? true}
+                onOpenChange={open => onFolderOpenChange(repository.prefix, open)}
+                openFolders={openFolders}
+                onFolderOpenChange={onFolderOpenChange}
+                selectedId={treeSelectedId}
+                onSelect={selectForDiff}
+              />
+            ))}
+          </div>
+        </ScrollArea>
+      ) : null}
     </aside>
+  );
+}
+
+interface RepositoryChangesGroupProps {
+  repository: WorkspaceChangesRepository;
+  provider?: RepositoryProvider;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  openFolders: Record<string, boolean>;
+  onFolderOpenChange: (path: string, open: boolean) => void;
+  selectedId?: string;
+  onSelect: (path: string) => void;
+}
+
+function RepositoryChangesGroup({
+  repository,
+  provider,
+  open,
+  onOpenChange,
+  openFolders,
+  onFolderOpenChange,
+  selectedId,
+  onSelect,
+}: RepositoryChangesGroupProps) {
+  const tree = buildChangeTree(repository.changes, repository.prefix);
+
+  return (
+    <section aria-label={`Changes in ${repository.slug}`}>
+      <RepositoryGroupHeader label={repository.slug} provider={provider} open={open} onOpenChange={onOpenChange}>
+        <Txt as="span" tone="muted" variant="meta" className="shrink-0">
+          {!repository.available
+            ? 'Unavailable'
+            : `${repository.changes.length} ${repository.changes.length === 1 ? 'file' : 'files'}`}
+        </Txt>
+        {repository.changes.length ? (
+          <ChangeCounts additions={repository.additions} deletions={repository.deletions} />
+        ) : null}
+      </RepositoryGroupHeader>
+      {open && tree.length > 0 ? (
+        <Tree selectedId={selectedId} onSelect={onSelect} className="pl-2">
+          {tree.map(node => (
+            <ChangeTreeItem
+              key={node.path}
+              node={node}
+              openFolders={openFolders}
+              onFolderOpenChange={onFolderOpenChange}
+            />
+          ))}
+        </Tree>
+      ) : null}
+    </section>
   );
 }

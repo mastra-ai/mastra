@@ -1,8 +1,10 @@
+import { Code } from '@mastra/playground-ui/components/Code';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronRight, Check, X, Loader2 } from 'lucide-react';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { BrowserToolCallEntry } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
+import { Check, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
-import type { BrowserToolCallEntry } from '../../context/browser-tool-calls-context';
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   // AgentBrowser tools
@@ -85,38 +87,47 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
   };
 
   return (
-    <div className="border-border1 border-b last:border-b-0">
+    <div className="border-b border-border last:border-b-0">
       <button
         type="button"
         onClick={() => setIsExpanded(prev => !prev)}
         aria-expanded={isExpanded}
-        className="hover:bg-surface3 flex w-full items-center gap-2 px-3 py-0.5 text-left transition-colors"
+        className="flex w-full items-center gap-2 px-3 py-0.5 text-left hover:bg-fill-subtle"
       >
-        <ChevronRight
-          className={cn('h-3 w-3 text-neutral3 transition-transform shrink-0', isExpanded && 'rotate-90')}
-        />
+        <DisclosureChevron direction="right" className="size-3 text-muted-foreground" />
 
         <StatusDot status={entry.status} />
 
-        <span className="text-neutral6 text-ui-sm shrink-0 font-medium">{displayName}</span>
+        <Txt as="span" variant="column" tone="ink" className="shrink-0">
+          {displayName}
+        </Txt>
 
-        {keyArg && <span className="text-neutral3 text-ui-sm truncate">{keyArg}</span>}
+        {keyArg && (
+          <Txt as="span" variant="caption" tone="muted" className="truncate">
+            {keyArg}
+          </Txt>
+        )}
       </button>
 
       {isExpanded && (
         <div className="space-y-2 px-3 pb-2">
           <div>
-            <p className="text-neutral4 text-ui-sm pb-1 font-medium">Arguments</p>
+            <Txt variant="column" tone="muted" className="pb-1">
+              Arguments
+            </Txt>
             <CodeEditor data={displayArgs} data-testid="browser-tool-args" />
           </div>
 
           {entry.result !== undefined && entry.result !== null && (
             <div>
-              <p className="text-neutral4 text-ui-sm pb-1 font-medium">Result</p>
+              <Txt variant="column" tone="muted" className="pb-1">
+                Result
+              </Txt>
               {typeof entry.result === 'string' ? (
-                <pre className="bg-surface4 text-ui-sm max-h-40 overflow-x-auto overflow-y-auto rounded-md p-2 whitespace-pre">
-                  {entry.result}
-                </pre>
+                <Code
+                  className="max-h-40 overflow-x-auto overflow-y-auto rounded-md bg-muted p-2 text-caption whitespace-pre"
+                  code={entry.result}
+                />
               ) : (
                 <CodeEditor
                   data={entry.result as Record<string, unknown> | Record<string, unknown>[]}
@@ -134,10 +145,10 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
 function StatusDot({ status }: { status: BrowserToolCallEntry['status'] }) {
   switch (status) {
     case 'pending':
-      return <Loader2 className="text-neutral4 h-3 w-3 shrink-0 animate-spin" />;
+      return <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />;
     case 'complete':
-      return <Check className="h-3 w-3 shrink-0 text-green-500" />;
+      return <Check className="h-3 w-3 shrink-0 text-success-indicator" />;
     case 'error':
-      return <X className="h-3 w-3 shrink-0 text-red-500" />;
+      return <X className="h-3 w-3 shrink-0 text-destructive-foreground" />;
   }
 }

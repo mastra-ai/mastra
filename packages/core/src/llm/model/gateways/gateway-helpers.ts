@@ -20,18 +20,21 @@ export function serializeGatewayForSpan(
 }
 
 /**
- * Find the gateway that handles a specific model ID based on gateway ID
- * Gateway ID is used as the prefix (e.g., "netlify" for netlify gateway)
- * Exception: models.dev is a provider registry and doesn't use a prefix
+ * Find the gateway the model router would use for a model ID.
+ * Disabled gateways are skipped. A gateway ID is used as the prefix (e.g.,
+ * "netlify" for netlify gateway); gateways may also claim a model through
+ * `handlesModel`. models.dev is a provider registry and doesn't use a prefix.
  */
 export function findGatewayForModel(
-  gatewayId: string,
-  gateways: MastraModelGatewayInterface[],
+  modelId: string,
+  allGateways: MastraModelGatewayInterface[],
 ): MastraModelGatewayInterface {
+  const gateways = allGateways.filter(shouldEnableGateway);
+
   // First, check for gateways whose ID matches the prefix (true gateways like netlify, openrouter, vercel)
   const prefixedGateway = gateways.find(g => {
     const id = getGatewayId(g);
-    return id !== 'models.dev' && (id === gatewayId || gatewayId.startsWith(`${id}/`));
+    return id !== 'models.dev' && (id === modelId || modelId.startsWith(`${id}/`));
   });
   if (prefixedGateway) {
     return prefixedGateway;
@@ -39,7 +42,7 @@ export function findGatewayForModel(
 
   // Then check gateways that explicitly claim this (possibly unprefixed) model
   // id, e.g. a gateway that authenticates a bare `anthropic/...` id via OAuth.
-  const claimingGateway = gateways.find(g => getGatewayId(g) !== 'models.dev' && g.handlesModel?.(gatewayId) === true);
+  const claimingGateway = gateways.find(g => getGatewayId(g) !== 'models.dev' && g.handlesModel?.(modelId) === true);
   if (claimingGateway) {
     return claimingGateway;
   }
@@ -54,6 +57,6 @@ export function findGatewayForModel(
     id: 'MODEL_ROUTER_NO_GATEWAY_FOUND',
     category: 'USER',
     domain: 'MODEL_ROUTER',
-    text: `No Mastra model router gateway found for model id ${gatewayId}`,
+    text: `No Mastra model router gateway found for model id ${modelId}`,
   });
 }

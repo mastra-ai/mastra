@@ -43,6 +43,14 @@ const processor = new PromptInjectionDetector({
             isOptional: false,
           },
           {
+            name: 'errorStrategy',
+            type: "'warn' | 'strict'",
+            description:
+              "How to handle failures from the internal model call. 'warn' is fail-open: it logs the failure and allows the content through unchanged. 'strict' is fail-closed: it stops processing with a tripwire.",
+            isOptional: true,
+            default: "'warn'",
+          },
+          {
             name: 'detectionTypes',
             type: 'string[]',
             description: 'Detection types to check for. If not specified, uses default categories',
@@ -125,12 +133,12 @@ const processor = new PromptInjectionDetector({
   {
     name: 'name',
     type: 'string',
-    description: 'Optional processor display name',
-    isOptional: true,
+    description: "Processor display name, always 'Prompt Injection Detector'",
+    isOptional: false,
   },
   {
     name: 'processInput',
-    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>',
+    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; requestContext?: RequestContext; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>',
     description: 'Processes input messages to detect prompt injection attempts before sending to LLM',
     isOptional: false,
   },

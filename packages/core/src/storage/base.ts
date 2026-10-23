@@ -29,6 +29,8 @@ import type {
 import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy } from './retention';
 
+const knowledgeInitializations = new WeakMap<KnowledgeStorage, Promise<void>>();
+
 /** Map of all storage domain interfaces available in a composite store. */
 export type StorageDomains = {
   workflows?: WorkflowsStorage;
@@ -117,22 +119,70 @@ const _domainKeysExhaustive: MissingDomainKeys extends never ? true : never = tr
 void _domainKeysExhaustive;
 
 /**
+ * Resolve a caller-supplied `orderBy` into a concrete `{ field, direction }`,
+ * falling back to the defaults and rejecting fields outside `allowedFields`.
+ * Storage adapters must interpolate only the returned values into SQL.
+ */
+export function resolveListOrderBy<TField extends string>(
+  orderBy: { field?: TField; direction?: 'ASC' | 'DESC' } | undefined,
+  allowedFields: readonly TField[],
+  defaults: { field: TField; direction: 'ASC' | 'DESC' },
+): { field: TField; direction: 'ASC' | 'DESC' } {
+  const field = orderBy?.field ?? defaults.field;
+  if (!allowedFields.includes(field)) {
+    throw new Error(`Invalid orderBy field: ${String(field)}. Allowed: ${allowedFields.join(', ')}`);
+  }
+  const direction = orderBy?.direction ?? defaults.direction;
+  if (direction !== 'ASC' && direction !== 'DESC') {
+    throw new Error(`Invalid orderBy direction: ${String(direction)}`);
+  }
+  return { field, direction };
+}
+
+/**
+ * Build a comparator for in-memory list sorting. Sorts by `field` in `direction`
+ * (Dates compare by time, strings by locale-aware compare, nulls last) and breaks
+ * ties by `id ASC` so pagination is stable across pages.
+ */
+export function compareByField<T extends { id: string }>(
+  field: keyof T,
+  direction: 'ASC' | 'DESC' = 'ASC',
+): (a: T, b: T) => number {
+  const sign = direction === 'DESC' ? -1 : 1;
+  const compare = (left: unknown, right: unknown): number => {
+    if (left == null && right == null) return 0;
+    if (left == null) return 1;
+    if (right == null) return -1;
+    if (left instanceof Date && right instanceof Date) return left.getTime() - right.getTime();
+    if (typeof left === 'number' && typeof right === 'number') return left - right;
+    return String(left).localeCompare(String(right));
+  };
+  return (a, b) => {
+    const result = compare(a[field], b[field]);
+    // Nulls stay last regardless of direction.
+    if (a[field] == null || b[field] == null) return result || a.id.localeCompare(b.id);
+    return result * sign || a.id.localeCompare(b.id);
+  };
+}
+
+/**
  * Normalizes perPage input for pagination queries.
  *
  * @param perPageInput - The raw perPage value from the user
  * @param defaultValue - The default perPage value to use when undefined (typically 40 for messages, 100 for threads)
  * @returns A numeric perPage value suitable for queries (false becomes MAX_SAFE_INTEGER)
- * @throws Error if perPage is a negative number
+ * @throws Error if numeric perPage is not a finite, nonnegative integer
  */
 export function normalizePerPage(perPageInput: number | false | undefined, defaultValue: number): number {
   if (perPageInput === false) {
     return Number.MAX_SAFE_INTEGER; // Get all results
   } else if (perPageInput === 0) {
     return 0; // Return zero results
-  } else if (typeof perPageInput === 'number' && perPageInput > 0) {
-    return perPageInput; // Valid positive number
-  } else if (typeof perPageInput === 'number' && perPageInput < 0) {
-    throw new Error('perPage must be >= 0');
+  } else if (typeof perPageInput === 'number') {
+    if (!Number.isInteger(perPageInput) || perPageInput < 0) {
+      throw new Error('perPage must be >= 0');
+    }
+    return perPageInput;
   }
   // For undefined, use default
   return defaultValue;
@@ -152,6 +202,9 @@ export function calculatePagination(
   perPageInput: number | false | undefined,
   normalizedPerPage: number,
 ): { offset: number; perPage: number | false } {
+  if (!Number.isInteger(page) || page < 0) {
+    throw new Error('page must be >= 0');
+  }
   return {
     offset: perPageInput === false ? 0 : page * normalizedPerPage,
     perPage: perPageInput === false ? false : normalizedPerPage,
@@ -239,6 +292,7 @@ export interface MastraCompositeStoreConfig {
    * When disableInit is true:
    * - The storage will not automatically create/alter tables on first use
    * - You must call `storage.init()` explicitly in your CI/CD scripts
+   * - If using Knowledge, also call `storage.initKnowledge()` to activate its schema
    *
    * @example
    * // In CI/CD script:
@@ -487,7 +541,37 @@ export class MastraCompositeStore extends MastraBase {
    * ```
    */
   async getStore<K extends keyof StorageDomains>(storeName: K): Promise<StorageDomains[K] | undefined> {
+    const knowledge = this.stores?.knowledge;
+    if (
+      storeName === 'knowledge' &&
+      knowledge &&
+      !this.disableInit &&
+      process.env.MASTRA_DISABLE_STORAGE_INIT !== 'true'
+    ) {
+      await this.initKnowledge();
+    }
     return this.stores?.[storeName];
+  }
+
+  /**
+   * Explicitly activate Knowledge, including when automatic initialization is disabled.
+   * Ordinary `init()` does not activate this opt-in domain.
+   */
+  async initKnowledge(): Promise<void> {
+    const knowledge = this.stores?.knowledge;
+    if (!knowledge) return;
+    let initialization = knowledgeInitializations.get(knowledge);
+    if (!initialization) {
+      initialization = Promise.resolve()
+        .then(() => this.init())
+        .then(() => knowledge.init())
+        .catch(error => {
+          knowledgeInitializations.delete(knowledge);
+          throw error;
+        });
+      knowledgeInitializations.set(knowledge, initialization);
+    }
+    await initialization;
   }
 
   /**
@@ -609,12 +693,8 @@ export class MastraCompositeStore extends MastraBase {
     };
 
     if (this.stores) {
-      // Iterate every registered domain instead of naming them one by one, so
-      // a domain added to the stores map can never silently dodge init. The
-      // typeof guard skips subclass-set entries that don't expose an init
-      // method.
-      for (const domain of Object.values(this.stores)) {
-        if (typeof domain?.init === 'function') maybeInit(domain);
+      for (const [name, domain] of Object.entries(this.stores)) {
+        if (name !== 'knowledge' && typeof domain?.init === 'function') maybeInit(domain);
       }
     }
 

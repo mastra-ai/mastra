@@ -1,46 +1,189 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
-import { fastembed } from '@mastra/fastembed';
+import type { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
-import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
+import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
+import { MASTRACODE_AUTO_OM_MODELS, resolveAutoOMModelId } from '../onboarding/packs.js';
+import { loadSettings } from '../onboarding/settings.js';
+import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
-import { resolveModel } from './model.js';
+import { canUseProvider, getActiveMemoryRoute, resolveModel } from './model.js';
 
 /**
- * Read controller state from requestContext.
- * Used by both the memory factory and the OM model functions.
+ * `fastembed.small`, loaded on the first embedding. Importing `@mastra/fastembed` up front loads ONNX
+ * Runtime and a native tokenizer (~11 MB) into every session, including ones that never embed.
  */
-function getAgentControllerState(requestContext: RequestContext): MastraCodeState | undefined {
-  const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
-  return ctx?.getState() as MastraCodeState | undefined;
+const lazyFastembedSmall: typeof fastembed.small = {
+  specificationVersion: 'v3',
+  provider: 'fastembed',
+  modelId: 'bge-small-en-v1.5',
+  maxEmbeddingsPerCall: 256,
+  supportsParallelCalls: true,
+  async doEmbed(options) {
+    const { fastembed } = await import('@mastra/fastembed');
+    return fastembed.small.doEmbed(options);
+  },
+};
+
+/** Route-backed OM fallback entry. */
+type MemoryModelRouteEntry = { id: string; model: ReturnType<typeof resolveModel> };
+
+/**
+ * Resolve the active model route's memory models, starting at a same-thread
+ * pending fallback hop. Returns `'auto'` when the route's first memory model is
+ * Auto, and `undefined` when the route sets no memory model.
+ */
+function resolveRouteMemoryModels(
+  state: MastraCodeState | undefined,
+  threadId: string | null | undefined,
+  resolve: (modelId: string) => ReturnType<typeof resolveModel>,
+): MemoryModelRouteEntry[] | 'auto' | undefined {
+  const memoryRoute = getActiveMemoryRoute(state, threadId);
+  if (memoryRoute[0]?.memoryModelId === 'auto') return 'auto';
+  const seenModelIds = new Set<string>();
+  const appearances = new Map<string, number>();
+  const entries: MemoryModelRouteEntry[] = [];
+  for (const entry of memoryRoute) {
+    if (!entry.memoryModelId || entry.memoryModelId === 'auto' || seenModelIds.has(entry.memoryModelId)) continue;
+    seenModelIds.add(entry.memoryModelId);
+    const occurrence = (appearances.get(entry.id) ?? 0) + 1;
+    appearances.set(entry.id, occurrence);
+    try {
+      entries.push({
+        id: `${entry.id}:memory${occurrence === 1 ? '' : `#${occurrence}`}`,
+        model: resolve(entry.memoryModelId),
+      });
+    } catch {
+      break;
+    }
+  }
+  return entries.length > 0 ? entries : undefined;
 }
 
 /**
- * Observer model function — reads the current observer model ID from
- * controller state via requestContext (now propagated by OM's agent.generate).
+ * The authoritative per-caller Factory memory-settings row, placed on the request
+ * context before Factory's model-dependent processors run. `null` means the row
+ * exists but is empty (every role auto). An unavailable sentinel or a missing
+ * value on a Factory-owned session falls back to Auto roles and default
+ * thresholds/attachments, so memory keeps working while Factory reports the error.
  */
-function getObserverModel({ requestContext }: { requestContext: RequestContext }) {
-  const state = getAgentControllerState(requestContext);
-  return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID, {
-    remapForCodexOAuth: true,
-    requestContext,
-  });
+interface FactoryMemorySettings {
+  observerModelId: string | null;
+  reflectorModelId: string | null;
+  observationThreshold: number | null;
+  reflectionThreshold: number | null;
+  observeAttachments: 'auto' | boolean | null;
+}
+
+type FactoryMemorySettingsContext =
+  | FactoryMemorySettings
+  | null
+  | { status: 'unavailable'; reason: string }
+  | undefined;
+
+function getFactoryMemorySettingsContext(requestContext: RequestContext): FactoryMemorySettingsContext {
+  return requestContext.get('mastra__factoryMemorySettings') as FactoryMemorySettingsContext;
+}
+
+function isFactoryMemorySettingsUnavailable(
+  settings: FactoryMemorySettingsContext,
+): settings is { status: 'unavailable'; reason: string } {
+  return settings !== null && typeof settings === 'object' && 'status' in settings && settings.status === 'unavailable';
+}
+
+function getMainModelId(requestContext: RequestContext): string | undefined {
+  const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+  return controller?.session.modelId || (controller?.getState()?.currentModelId as string | undefined);
 }
 
 /**
- * Reflector model function — reads the current reflector model ID from
- * controller state via requestContext (now propagated by OM's agent.generate).
+ * Resolve one OM role's model for this invocation. Returns `'auto'` for Memory's
+ * auto policy, or a concrete model. Factory's DB row is authoritative for
+ * Factory sessions (an unreadable row falls back to auto). Otherwise the active
+ * model route's memory models win, then the per-role selection, then legacy
+ * concrete settings.
  */
-function getReflectorModel({ requestContext }: { requestContext: RequestContext }) {
-  const state = getAgentControllerState(requestContext);
-  return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID, {
-    remapForCodexOAuth: true,
-    requestContext,
-  });
+function resolveOmRoleModelForRequest(
+  role: 'observer' | 'reflector',
+  requestContext: RequestContext,
+  settingsPath?: string,
+  options?: { disableSettingsOmSeed?: boolean },
+): 'auto' | ReturnType<typeof resolveModel> | MemoryModelRouteEntry[] {
+  const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+  const state = controller?.getState() as MastraCodeState | undefined;
+  const resolveOptions = { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' } as const;
+  const factorySettingsContext = getFactoryMemorySettingsContext(requestContext);
+  const isFactory = typeof state?.factoryProjectId === 'string';
+
+  const useModel = (modelId: string) => {
+    requestContext.set(`om.${role}.selectionMode`, 'model');
+    requestContext.set(`om.${role}.effectiveModelId`, modelId);
+    return resolveModel(modelId, resolveOptions);
+  };
+  const useAuto = () => {
+    requestContext.set(`om.${role}.selectionMode`, 'auto');
+    // These two keys are declared in the span-context allowlist
+    // (`mastracode/sdk/src/index.ts`), so traces can report intent separately from
+    // the effective concrete model without either being mistaken for a model ID.
+    requestContext.set(
+      `om.${role}.effectiveModelId`,
+      resolveAutoOMModelId(getMainModelId(requestContext), providerId =>
+        canUseProvider(providerId, { requestContext }),
+      ),
+    );
+    return 'auto' as const;
+  };
+
+  if (
+    isFactoryMemorySettingsUnavailable(factorySettingsContext) ||
+    (factorySettingsContext === undefined && isFactory)
+  ) {
+    return useAuto();
+  }
+  if (factorySettingsContext !== undefined) {
+    const factoryModelId = factorySettingsContext?.[`${role}ModelId`];
+    return factoryModelId ? useModel(factoryModelId) : useAuto();
+  }
+
+  // The configured settings file, not the default one: a caller that points the
+  // agent at another settings path must get the same override resolution for
+  // observational memory as it does for the main model. Hosts that disable the
+  // settings seed never read it.
+  const settings = options?.disableSettingsOmSeed ? undefined : loadSettings(settingsPath);
+  const routeMemory = resolveRouteMemoryModels(state, controller?.threadId, modelId =>
+    resolveModel(modelId, resolveOptions),
+  );
+  if (routeMemory === 'auto') return useAuto();
+  if (routeMemory) {
+    requestContext.set(`om.${role}.selectionMode`, 'model');
+    requestContext.set(`om.${role}.effectiveModelId`, routeMemory[0]?.model.modelId);
+    return routeMemory.length === 1 ? routeMemory[0]!.model : routeMemory;
+  }
+
+  const selection: unknown = state?.[`${role}ModelSelection`];
+  if (selection === 'auto') return useAuto();
+  if (typeof selection === 'string' && selection) return useModel(selection);
+  if (
+    selection &&
+    typeof selection === 'object' &&
+    'modelId' in selection &&
+    typeof selection.modelId === 'string' &&
+    selection.modelId
+  ) {
+    return useModel(selection.modelId);
+  }
+
+  const roleOverride =
+    role === 'observer' ? settings?.models?.observerModelOverride : settings?.models?.reflectorModelOverride;
+  if (roleOverride) return useModel(roleOverride);
+  const legacyModelId = state?.[`${role}ModelId`];
+  if (typeof legacyModelId === 'string' && legacyModelId) return useModel(legacyModelId);
+  return useAuto();
 }
 
 const DYNAMIC_AGENTS_MD_INSTRUCTION =
@@ -125,13 +268,34 @@ export function hasSubconsciousTools(vector: MastraVector | undefined, state: Ma
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
  */
-export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
+export function getDynamicMemory(
+  storage: MastraCompositeStore,
+  vector?: MastraVector,
+  settingsPath?: string,
+  options?: { disableSettingsOmSeed?: boolean },
+  knowledge?: Knowledge,
+) {
   // Cache is scoped per storage instance (per getDynamicMemory call) so a
   // Memory bound to one storage is never reused after storage changes.
   let cachedMemory: Memory | null = null;
   let cachedMemoryKey: string | null = null;
+  // Instances replaced by a config change may still have background work in flight.
+  const retiredMemories = new Set<Memory>();
 
-  return ({ requestContext }: { requestContext: RequestContext }) => {
+  // Observer/reflector model functions — read the current model ID from
+  // controller state via requestContext (propagated by OM's agent.generate).
+  // Bound here so the configured settings path reaches role overrides and pack
+  // memory-model resolution.
+  const getObserverModel = ({ requestContext }: { requestContext: RequestContext }) =>
+    resolveOmRoleModelForRequest('observer', requestContext, settingsPath, options);
+  const getReflectorModel = ({ requestContext }: { requestContext: RequestContext }) =>
+    resolveOmRoleModelForRequest('reflector', requestContext, settingsPath, options);
+  // Routes the concrete model Memory's `'auto'` picks through Mastra Code's
+  // credential-aware resolver, like every other Mastra Code model.
+  const resolveMemoryModel = (modelId: string, { requestContext }: { requestContext?: RequestContext }) =>
+    resolveModel(modelId, { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' });
+
+  const resolveMemory = ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const state = controller?.getState() as MastraCodeState | undefined;
     const subconsciousEnabled = isSubconsciousEnabled(vector);
@@ -158,16 +322,38 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const subconsciousAvailable = subconsciousEnabled && !orgUnresolvedRefusal;
 
-    const omScope = state?.omScope ?? getOmScope(state?.projectPath);
+    // Factory sessions share a memory resource across a Factory's runs and a
+    // user's sessions, so their scope is fixed to thread: one shared record would
+    // hand every run the others' work and invalidate their prompt caches. Recall
+    // search still reaches the whole resource. Neither session state, the env
+    // var, nor a repository's database.json can switch it.
+    const omScope = isFactory ? 'thread' : (state?.omScope ?? getOmScope(state?.projectPath));
 
-    const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
-    const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
+    // The Factory row is authoritative and read per invocation, so a stored
+    // threshold/attachment change reaches the running Memory without a session.
+    const factorySettingsContext = getFactoryMemorySettingsContext(requestContext);
+    const factorySettingsUnavailable =
+      isFactoryMemorySettingsUnavailable(factorySettingsContext) || (factorySettingsContext === undefined && isFactory);
+    const factorySettings = factorySettingsUnavailable ? null : factorySettingsContext;
+    const obsThreshold =
+      factorySettings !== undefined
+        ? (factorySettings?.observationThreshold ?? DEFAULT_OBS_THRESHOLD)
+        : (state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD);
+    const refThreshold =
+      factorySettings !== undefined
+        ? (factorySettings?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD)
+        : (state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD);
     const caveman = state?.cavemanObservations ?? false;
 
     const observerPreviousObservationTokens = 1000;
-    const observeAttachments = state?.observeAttachments;
+    // The row is authoritative: an absent value means the user left it on Auto,
+    // which the config API reports as 'auto' and Memory resolves by model
+    // capability.
+    const observeAttachments =
+      factorySettings !== undefined ? (factorySettings?.observeAttachments ?? 'auto') : state?.observeAttachments;
     // Factory sessions get a factory-only Subconscious config, so the cache key
-    // carries a factory presence bit to keep the two configs from cross-serving.
+    // carries Factory presence and settings availability to keep those configs
+    // from cross-serving.
     const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
@@ -181,52 +367,99 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       : DYNAMIC_AGENTS_MD_INSTRUCTION;
     const reflectionInstruction = caveman ? CAVEMAN_OM_INSTRUCTION : undefined;
 
+    if (cachedMemory) {
+      const retired = cachedMemory;
+      retiredMemories.add(retired);
+      // settled() rejects if the instance's OM engine failed to start; that must not surface as
+      // an unhandled rejection from a background retirement.
+      void retired
+        .settled()
+        .catch(() => {})
+        .finally(() => retiredMemories.delete(retired));
+    }
+
     cachedMemory = new Memory({
       storage,
+      ...(knowledge ? { knowledge } : {}),
       vector: vector || false,
-      embedder: vector ? fastembed.small : undefined,
+      embedder: vector ? lazyFastembedSmall : undefined,
       options: {
         // Generate a durable title from the first user message. Every client uses
-        // the same title in its thread list and active-session chrome.
-        generateTitle: { model: getObserverModel },
-        observationalMemory: {
-          enabled: true,
-          temporalMarkers: true,
-          retrieval: vector ? { vector: true } : true,
-          experimental_subconscious: subconsciousAvailable
-            ? new Subconscious({
-                defaultScope: 'resource',
-                maxScope: 'resource',
-                pins: true,
-                ...(isFactory ? { maxSteps: 25 } : {}),
-              })
-            : undefined,
-          scope: omScope,
-          activateAfterIdle: 'auto',
-          activateOnProviderChange: true,
-          observation: {
-            bufferTokens: isResourceScope ? false : 1 / 5,
-            bufferActivation: isResourceScope ? undefined : 2000,
-            model: getObserverModel,
-            messageTokens: obsThreshold,
-            blockAfter: 2,
-            previousObserverTokens: observerPreviousObservationTokens,
-            threadTitle: true,
-            instruction: observerInstruction,
-            observeAttachments,
-          },
-          reflection: {
-            bufferActivation: isResourceScope ? undefined : 1 / 2,
-            blockAfter: 1.1,
-            model: getReflectorModel,
-            observationTokens: refThreshold,
-            instruction: reflectionInstruction,
-          },
-        },
+        // the same title in its thread list and active-session chrome. Title
+        // generation takes the primary OM model only — its model field does not
+        // accept fallback arrays.
+        generateTitle:
+          process.env.MASTRACODE_DISABLE_TITLE_GENERATION === '1'
+            ? false
+            : {
+                model: ({ requestContext }) => {
+                  const resolved = getObserverModel({ requestContext });
+                  if (resolved === 'auto') {
+                    return resolveMemoryModel(
+                      resolveAutoOMModelId(getMainModelId(requestContext), providerId =>
+                        canUseProvider(providerId, { requestContext }),
+                      ),
+                      { requestContext },
+                    );
+                  }
+                  return Array.isArray(resolved) ? resolved[0]!.model : resolved;
+                },
+              },
+        observationalMemory:
+          process.env.MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY === '1'
+            ? false
+            : {
+                enabled: true,
+                autoModels: MASTRACODE_AUTO_OM_MODELS,
+                canUseProvider,
+                resolveModel: resolveMemoryModel,
+                temporalMarkers: true,
+                retrieval: vector ? { vector: true } : true,
+                experimental_subconscious: subconsciousAvailable
+                  ? new Subconscious({
+                      defaultScope: 'resource',
+                      pins: true,
+                      ...(isFactory ? { maxSteps: 25 } : {}),
+                    })
+                  : undefined,
+                scope: omScope,
+                // The main agent writes Anthropic cache entries with this TTL; 'auto' can't see it.
+                activateAfterIdle: { default: 'auto', anthropic: ANTHROPIC_PROMPT_CACHE_TTL },
+                activateOnProviderChange: true,
+                observation: {
+                  bufferTokens: isResourceScope ? false : 1 / 5,
+                  bufferActivation: isResourceScope ? undefined : 2000,
+                  model: getObserverModel,
+                  messageTokens: obsThreshold,
+                  blockAfter: 2,
+                  previousObserverTokens: observerPreviousObservationTokens,
+                  threadTitle: true,
+                  instruction: observerInstruction,
+                  observeAttachments,
+                },
+                reflection: {
+                  bufferActivation: isResourceScope ? undefined : 1 / 2,
+                  blockAfter: 1.1,
+                  model: getReflectorModel,
+                  observationTokens: refThreshold,
+                  instruction: reflectionInstruction,
+                },
+              },
       },
     });
     cachedMemoryKey = cacheKey;
 
     return cachedMemory;
   };
+
+  return Object.assign(resolveMemory, {
+    /**
+     * Wait for background memory work (buffered observations, reflections, indexing) in every
+     * instance this factory created. Await before closing storage.
+     */
+    async settled(): Promise<void> {
+      // Drain every instance even if one rejects, so teardown can still close storage.
+      await Promise.allSettled([cachedMemory?.settled(), ...[...retiredMemories].map(memory => memory.settled())]);
+    },
+  });
 }

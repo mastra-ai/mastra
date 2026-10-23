@@ -10,7 +10,11 @@ let client: PostHog | null = null;
 
 export type EEEventName = 'ee_license_check' | 'ee_feature_used';
 
-export type TelemetryEventName = EEEventName | 'mastra_model_token_usage' | 'mastra_feature_usage';
+export type TelemetryEventName =
+  | EEEventName
+  | 'mastra_model_token_usage'
+  | 'mastra_model_token_usage_v2'
+  | 'mastra_feature_usage';
 
 export function isTelemetryEnabled(): boolean {
   const value = process.env['MASTRA_TELEMETRY_DISABLED'];
@@ -60,27 +64,44 @@ function getSystemProperties(): Record<string, unknown> {
   };
 }
 
+function buildMessage(event: TelemetryEventName, distinctId: string | undefined, properties?: Record<string, unknown>) {
+  return {
+    distinctId: distinctId || getEETelemetryFallbackDistinctId(),
+    event,
+    properties: {
+      ...getSystemProperties(),
+      ...properties,
+    },
+  };
+}
+
 export function captureTelemetryEvent(
   event: TelemetryEventName,
   distinctId: string | undefined,
   properties?: Record<string, unknown>,
 ): void {
   try {
-    const posthog = getClient();
-    if (!posthog) {
-      return;
-    }
-
-    posthog.capture({
-      distinctId: distinctId || getEETelemetryFallbackDistinctId(),
-      event,
-      properties: {
-        ...getSystemProperties(),
-        ...properties,
-      },
-    });
+    getClient()?.capture(buildMessage(event, distinctId, properties));
   } catch {
     // Telemetry must never affect auth or EE feature behavior.
+  }
+}
+
+/**
+ * Sends the event right away and resolves once the request has finished, so callers
+ * can wait for delivery before the process exits. Never rejects: PostHog retries
+ * failed requests internally and reports what still fails through its own error
+ * channel.
+ */
+export async function captureTelemetryEventImmediate(
+  event: TelemetryEventName,
+  distinctId: string | undefined,
+  properties?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await getClient()?.captureImmediate(buildMessage(event, distinctId, properties));
+  } catch {
+    // Telemetry must never affect server behavior.
   }
 }
 

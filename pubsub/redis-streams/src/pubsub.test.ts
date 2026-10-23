@@ -405,9 +405,13 @@ describe('RedisStreamsPubSub', () => {
       };
       await ps.subscribe(topic, cbB, { group: groupName });
 
-      // Wait for autoclaim to fire (idleMs=500, intervalMs=250 + a margin).
+      // Wait for the reclaim loop to fire (idleMs=500, intervalMs=250 + a margin).
       await waitFor(() => seenB.length >= 1, { timeoutMs: 6000 });
       expect(seenB[0]!.type).toBe('sticky');
+
+      // A's own reclaim loop must not have handed the entry back to A: that
+      // would reset the idle clock and starve B forever.
+      expect(seenA).toHaveLength(1);
     });
   });
 

@@ -30,6 +30,8 @@ describe('RedisServerCache Integration', () => {
 
   beforeAll(async () => {
     redis = new Redis(REDIS_URL, {
+      // ioredis 6 defaults to RESP3; keep RESP2 for the v5-compatible test client.
+      protocol: 2,
       maxRetriesPerRequest: 3,
       retryStrategy: times => {
         if (times > 3) {
@@ -185,6 +187,7 @@ describe('CachingPubSub with Redis Integration', () => {
 
   beforeAll(async () => {
     redis = new Redis(REDIS_URL, {
+      protocol: 2,
       maxRetriesPerRequest: 3,
       retryStrategy: times => {
         if (times > 3) {

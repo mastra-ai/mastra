@@ -1,14 +1,29 @@
 export { BoardDefinitionError, defineBoard } from './define-board.js';
 export type {
   BoardDefinition,
+  BoardEventIntegration,
+  BoardEventRules,
   BoardPhaseDefinition,
   BoardPhaseKind,
+  BoardSourceClosed,
   BoardToolResultRuleHandler,
   BoardToolRule,
   BoardToolRules,
   BoardTransition,
 } from './define-board.js';
-export { boardForWorkItem, resolveBoardToolRule, resolvePhaseSemantics, workItemPhaseSemantics } from './semantics.js';
+export {
+  boardEventHandlers,
+  boardForWorkItem,
+  eventBoardId,
+  isTerminalWorkItem,
+  resolveBoardClosure,
+  resolveBoardToolRule,
+  rulePhaseContext,
+  rulePhaseField,
+  resolvePhaseSemantics,
+  withBoardClosure,
+  workItemPhaseSemantics,
+} from './semantics.js';
 export type { PhaseSemantics } from './semantics.js';
 export type {
   BoardTransitionPolicy,

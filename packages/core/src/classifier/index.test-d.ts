@@ -1,0 +1,72 @@
+import { expectTypeOf } from 'vitest';
+
+import { Classifier } from './index';
+import type {
+  MastraEvaluationModelInterface,
+  BooleanAnswer,
+  ChoiceAnswer,
+  ClassifierInterface,
+  RefusalAnswer,
+  ScoreAnswer,
+} from './index';
+
+declare const model: ConstructorParameters<typeof Classifier>[0]['model'];
+
+const configured = new Classifier({
+  id: 'configured',
+  model,
+  questions: {
+    route: {
+      type: 'choice',
+      criteria: { support: 'Support', sales: 'Sales' },
+    },
+    quality: {
+      type: 'score',
+      criteria: ['Low', 'High'],
+    },
+    unsafe: {
+      type: 'boolean',
+      criteria: { true: 'Unsafe', false: 'Safe' },
+    },
+  },
+});
+
+const configuredInterface: ClassifierInterface<(typeof configured)['questions']> = configured;
+const configuredResult = await configuredInterface.decide({ state: 'content' });
+expectTypeOf(configuredResult.answers.route).toEqualTypeOf<ChoiceAnswer<'support' | 'sales'> | RefusalAnswer>();
+expectTypeOf(configuredResult.answers.quality).toEqualTypeOf<ScoreAnswer | RefusalAnswer>();
+expectTypeOf(configuredResult.answers.unsafe).toEqualTypeOf<BooleanAnswer | RefusalAnswer>();
+// @ts-expect-error configured classifiers cannot receive per-call questions
+void configured.decide({ state: 'content', questions: { unsafe: { type: 'boolean' } } });
+
+const perCall = new Classifier({ id: 'per-call', model });
+const perCallResult = await perCall.decide({
+  state: { content: 'hello' },
+  questions: {
+    route: {
+      type: 'choice',
+      criteria: { docs: 'Documentation', support: 'Support' },
+    },
+  },
+});
+expectTypeOf(perCallResult.answers.route).toEqualTypeOf<ChoiceAnswer<'docs' | 'support'> | RefusalAnswer>();
+// @ts-expect-error per-call classifiers require questions
+void perCall.decide({ state: 'content' });
+
+// The deprecated interface must stay implementable with only doEvaluate.
+export class LegacyEvaluationModel implements MastraEvaluationModelInterface {
+  readonly specificationVersion = 'v4' as const;
+  readonly provider = 'legacy';
+  readonly modelId = 'legacy';
+  readonly supportedQuestionTypes = ['boolean' as const];
+  doEvaluate: MastraEvaluationModelInterface['doEvaluate'] = async () => {
+    throw new Error('not implemented');
+  };
+}
+
+const routeAnswer = configuredResult.answers.route;
+if (routeAnswer.type === 'choice') {
+  expectTypeOf(routeAnswer.choice).toEqualTypeOf<'support' | 'sales'>();
+} else {
+  expectTypeOf(routeAnswer).toEqualTypeOf<RefusalAnswer>();
+}

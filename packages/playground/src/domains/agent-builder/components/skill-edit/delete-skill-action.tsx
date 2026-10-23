@@ -57,7 +57,8 @@ const DeleteSkillDialog = ({ open, onOpenChange, skillName, isPending, onConfirm
           Cancel
         </AlertDialog.Cancel>
         <Button
-          variant="primary"
+          icon={<Trash2 />}
+          variant="destructive"
           data-testid="skill-builder-delete-skill-confirm"
           disabled={isPending}
           onClick={() => {
@@ -91,8 +92,8 @@ export const DeleteSkillPanelButton = ({ skillId, skillName, disabled = false }:
         disabled={disabled || isPending}
         className="w-full"
         data-testid="skill-builder-delete-skill"
+        icon={<Trash2 />}
       >
-        <Trash2 />
         <span>Delete skill</span>
       </Button>
       <DeleteSkillDialog
@@ -114,7 +115,7 @@ export const DeleteSkillMenuItem = ({ skillId, skillName, disabled = false }: De
       <DropdownMenu.Item
         data-testid="skill-builder-mobile-menu-delete"
         disabled={disabled}
-        className="text-red-500 focus:text-red-400"
+        variant="destructive"
         onSelect={event => {
           event.preventDefault();
           setOpen(true);

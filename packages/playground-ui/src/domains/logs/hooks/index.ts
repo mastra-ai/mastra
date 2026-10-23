@@ -1,4 +1,4 @@
-export { useLogs } from './use-logs';
+export { useLogs } from '@mastra/react/hooks/logs';
 export {
   useLogsUrlState,
   type UseLogsUrlStateResult,

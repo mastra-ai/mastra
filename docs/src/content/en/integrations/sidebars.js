@@ -245,6 +245,15 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'sandboxes/sprites',
+          label: 'Fly.io Sprites',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/flydotio/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/flydotio/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'sandboxes/vercel',
           label: 'Vercel',
           customProps: {
@@ -366,6 +375,12 @@ const sidebars = {
           type: 'doc',
           id: 'databases/clickhouse',
           label: 'ClickHouse',
+          customProps: { icon: 'https://cdn.simpleicons.org/clickhouse?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'databases/clickhouse-managed-postgres',
+          label: 'ClickHouse Managed Postgres',
           customProps: { icon: 'https://cdn.simpleicons.org/clickhouse?viewbox=auto&size=28' },
         },
         {
@@ -883,6 +898,12 @@ const sidebars = {
           id: 'file-storage/mesa',
           label: 'Mesa',
           customProps: { icon: '/img/integrations/mesa.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
+          id: 'file-storage/neon',
+          label: 'Neon Object Storage',
+          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
         },
         {
           type: 'doc',

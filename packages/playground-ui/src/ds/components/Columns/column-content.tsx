@@ -6,5 +6,5 @@ export type ColumnProps = {
 };
 
 export function ColumnContent({ children, className }: ColumnProps) {
-  return <div className={cn(`grid content-start gap-8 overflow-y-auto`, className)}>{children}</div>;
+  return <div className={cn(`grid content-start gap-4 overflow-y-auto`, className)}>{children}</div>;
 }

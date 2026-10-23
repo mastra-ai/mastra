@@ -516,6 +516,45 @@ describe('managed observability', () => {
     expect(JSON.stringify(trackEvent.mock.calls)).not.toContain('platform-project-id');
   });
 
+  it('shows a spinner after platform setup while the background install finishes', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const { installDependencies } = await import('../../utils/clone-template');
+    const trackEvent = vi.fn();
+    let finishInstall: (() => void) | undefined;
+
+    vi.mocked(prompts.select)
+      .mockResolvedValueOnce('openai')
+      .mockResolvedValueOnce('skip')
+      .mockResolvedValueOnce('yes');
+    vi.mocked(installDependencies).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          finishInstall = resolve;
+        }),
+    );
+    const spinnerStart = vi.fn();
+    const spinnerStop = vi.fn();
+    vi.mocked(prompts.spinner).mockReturnValue({ start: spinnerStart, stop: spinnerStop } as never);
+
+    const createPromise = create({
+      projectName: 'my-project',
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+      analytics: { trackEvent } as never,
+    });
+
+    // Auth resolves immediately (mocked); the install is still running, so the
+    // terminal must show a spinner instead of going silent.
+    await vi.waitFor(() => {
+      expect(spinnerStart).toHaveBeenCalledWith('Cloning template and installing dependencies...');
+    });
+    expect(spinnerStop).not.toHaveBeenCalled();
+    finishInstall?.();
+    await createPromise;
+
+    expect(spinnerStop).toHaveBeenCalledWith('Default template cloned and dependencies installed.');
+  });
+
   it('keeps the published project and writes placeholders when provisioning fails', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
@@ -644,10 +683,14 @@ describe('managed observability', () => {
         projectName: 'my-project',
         resolveVersionTag: vi.fn().mockResolvedValue('latest'),
         analytics: { trackEvent } as never,
+        loginSource: 'create-mastra',
       }),
     ).resolves.toBeUndefined();
 
-    expect(credentials.getToken).toHaveBeenCalledWith(expect.any(AbortSignal), { skipOnInput: true });
+    expect(credentials.getToken).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      skipOnInput: true,
+      source: 'create-mastra',
+    });
     expect(prompts.log.info).toHaveBeenCalledWith('Skipping Mastra platform setup.');
     expect(publishStagedProject).toHaveBeenCalledOnce();
     expect(observability.provisionObservabilityProject).not.toHaveBeenCalled();
@@ -890,8 +933,8 @@ describe('create materialization lifecycle', () => {
     const { adaptDefaultTemplate } = await import('./provider-adapter');
     vi.mocked(adaptDefaultTemplate).mockResolvedValueOnce({
       displayName: 'Anthropic',
-      primaryModel: 'anthropic/claude-sonnet-5',
-      observationalModel: 'anthropic/claude-haiku-4-5',
+      primaryModel: 'anthropic/claude-sonnet-5-5',
+      observationalModel: 'anthropic/claude-haiku-5-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       apiKeyWritten: false,
       adaptationFailed: false,
@@ -913,8 +956,8 @@ describe('create materialization lifecycle', () => {
     const { adaptDefaultTemplate } = await import('./provider-adapter');
     vi.mocked(adaptDefaultTemplate).mockResolvedValueOnce({
       displayName: 'Anthropic',
-      primaryModel: 'anthropic/claude-sonnet-5',
-      observationalModel: 'anthropic/claude-haiku-4-5',
+      primaryModel: 'anthropic/claude-sonnet-5-5',
+      observationalModel: 'anthropic/claude-haiku-5-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       apiKeyWritten: false,
       adaptationFailed: true,

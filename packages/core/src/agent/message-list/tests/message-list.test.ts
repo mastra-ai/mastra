@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { UIMessage, CoreMessage, Message } from '@internal/ai-sdk-v4';
 import { appendClientMessage, appendResponseMessages } from '@internal/ai-sdk-v4';
 import { describe, expect, it } from 'vitest';
@@ -775,7 +774,7 @@ describe('MessageList', () => {
       // msg2
       messages = appendResponseMessages({
         messages,
-        responseMessages: [{ ...msg2, id: randomUUID() }],
+        responseMessages: [{ ...msg2, id: globalThis.crypto.randomUUID() }],
       });
       // Filter out tool invocations with state="call" from expected UI messages
       const expectedUIMessages = messages.map(m => {
@@ -794,7 +793,10 @@ describe('MessageList', () => {
       expect(list.get.all.ui()).toEqual(expectedUIMessages);
 
       // msg3
-      messages = appendResponseMessages({ messages, responseMessages: [{ id: randomUUID(), ...msg3 }] });
+      messages = appendResponseMessages({
+        messages,
+        responseMessages: [{ id: globalThis.crypto.randomUUID(), ...msg3 }],
+      });
       expect(new MessageList().add(messages, 'response').get.all.ui()).toMatchObject([
         expect.objectContaining({
           role: 'user',
@@ -1268,6 +1270,62 @@ describe('MessageList', () => {
           resourceId,
         } satisfies MastraDBMessage,
       ]);
+    });
+
+    describe('steps that open with a tool call', () => {
+      const call = (toolCallId: string, toolName: string) =>
+        ({ type: 'tool-call', toolCallId, toolName, input: {} }) as const;
+      const result = (toolCallId: string, toolName: string) =>
+        ({ type: 'tool-result', toolCallId, toolName, output: { type: 'json', value: {} } }) as const;
+      const describePrompt = (list: MessageList) =>
+        list.get.all.aiV5
+          .model()
+          .map(
+            m =>
+              `${m.role}[${typeof m.content === 'string' ? 'text' : m.content.map(p => ('toolName' in p ? p.toolName : p.type))}]`,
+          );
+
+      it('keeps a step that opens with a tool call separate from the previous step', () => {
+        const list = new MessageList({ threadId, resourceId });
+        list.add({ role: 'user', content: 'list my items, then check the first one' }, 'input');
+        list.add({ role: 'assistant', content: [call('A', 'list_items')] } satisfies AIV5Type.ModelMessage, 'response');
+        list.add({ role: 'tool', content: [result('A', 'list_items')] } satisfies AIV5Type.ModelMessage, 'response');
+        list.add({ role: 'assistant', content: [call('B', 'get_item')] } satisfies AIV5Type.ModelMessage, 'response');
+        list.add({ role: 'tool', content: [result('B', 'get_item')] } satisfies AIV5Type.ModelMessage, 'response');
+
+        expect(describePrompt(list)).toEqual([
+          'user[text]',
+          'assistant[list_items]',
+          'tool[list_items]',
+          'assistant[get_item]',
+          'tool[get_item]',
+        ]);
+      });
+
+      it('keeps parallel tool calls from one step together', () => {
+        const list = new MessageList({ threadId, resourceId });
+        list.add({ role: 'user', content: 'check both items' }, 'input');
+        list.add(
+          {
+            role: 'assistant',
+            content: [call('A', 'get_item'), call('B', 'get_status')],
+          } satisfies AIV5Type.ModelMessage,
+          'response',
+        );
+        list.add(
+          {
+            role: 'tool',
+            content: [result('A', 'get_item'), result('B', 'get_status')],
+          } satisfies AIV5Type.ModelMessage,
+          'response',
+        );
+
+        expect(describePrompt(list)).toEqual([
+          'user[text]',
+          'assistant[get_item,get_status]',
+          'tool[get_item,get_status]',
+        ]);
+      });
     });
 
     it.each(['https://example.com/leads.csv', 'data:text/csv;base64,bmFtZQpBY21l', 'bmFtZQpBY21l'])(
@@ -2206,7 +2264,7 @@ describe('MessageList', () => {
       ];
       expect(uiMessages).toEqual(expectedMessages);
 
-      let newId = randomUUID();
+      let newId = globalThis.crypto.randomUUID();
       const responseMessages = [
         {
           id: newId,
@@ -2241,7 +2299,7 @@ describe('MessageList', () => {
       ]);
 
       const newClientMessage = {
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         role: 'user',
         createdAt: new Date(),
         content: 'Do it anyway please',
@@ -2261,14 +2319,14 @@ describe('MessageList', () => {
       );
 
       const responseMessages2 = [
-        { id: randomUUID(), role: 'assistant', content: "Ok fine I'll call a tool then" },
+        { id: globalThis.crypto.randomUUID(), role: 'assistant', content: "Ok fine I'll call a tool then" },
         {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           role: 'assistant',
           content: [{ type: 'tool-call', args: { ok: 'fine' }, toolCallId: 'ok-fine-1', toolName: 'okFineTool' }],
         },
         {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           role: 'tool',
           content: [{ type: 'tool-result', toolName: 'okFineTool', toolCallId: 'ok-fine-1', result: { lets: 'go' } }],
         },
@@ -2556,6 +2614,7 @@ describe('MessageList', () => {
             result: 123,
             step: undefined,
           },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2609,6 +2668,7 @@ describe('MessageList', () => {
             result: 42,
             step: undefined,
           },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2709,6 +2769,7 @@ describe('MessageList', () => {
             result: 100,
             step: undefined,
           },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2754,6 +2815,7 @@ describe('MessageList', () => {
         {
           type: 'tool-invocation',
           toolInvocation: { state: 'result', toolCallId: 'B', toolName: 'bar', args: {}, result: 7 },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2801,6 +2863,7 @@ describe('MessageList', () => {
         {
           type: 'tool-invocation',
           toolInvocation: { state: 'result', toolCallId: 'call-4', toolName: 'baz', args: {}, result: 5 },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2867,6 +2930,7 @@ describe('MessageList', () => {
         {
           type: 'tool-invocation',
           toolInvocation: { state: 'result', toolCallId: 'call-5', toolName: 'foo', args: {}, result: 123 },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -4423,6 +4487,76 @@ describe('MessageList', () => {
       const uiMessages = list.get.all.ui();
       expect(uiMessages).toHaveLength(1);
       expect(uiMessages[0].content).toBe('Content with empty parts');
+    });
+  });
+
+  describe('response iteration splitting', () => {
+    const createSplitList = () => {
+      const list = new MessageList({ generateMessageId: () => 'current-response' });
+      list.add(
+        {
+          id: 'response',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              { type: 'reasoning', reasoning: 'thinking' },
+              { type: 'text', text: 'answer' },
+            ],
+          },
+        },
+        'response',
+      );
+      return list;
+    };
+
+    it('keeps the original id on persisted parts while the processor split is live', () => {
+      const list = createSplitList();
+
+      expect(list.splitResponseMessageAtPartOffset('response', 1)).toEqual({
+        earlierMessageId: 'response',
+        currentMessageId: 'current-response',
+      });
+      expect(list.get.response.db().map(message => message.id)).toEqual(['response', 'current-response']);
+
+      const persistenceList = list.cloneForPersistence();
+      expect(persistenceList.get.response.db()).toMatchObject([
+        {
+          id: 'response',
+          content: {
+            parts: [
+              { type: 'reasoning', reasoning: 'thinking' },
+              { type: 'text', text: 'answer' },
+            ],
+          },
+        },
+      ]);
+    });
+
+    it('keeps the original id when the current iteration is removed', () => {
+      const list = createSplitList();
+      const split = list.splitResponseMessageAtPartOffset('response', 1)!;
+
+      list.removeByIds([split.currentMessageId]);
+      list.coalesceSplitResponseMessages(split.earlierMessageId, split.currentMessageId);
+
+      expect(list.get.response.db().map(message => message.id)).toEqual(['response']);
+    });
+
+    it('hands the original id to the current iteration when earlier parts are removed', () => {
+      const list = createSplitList();
+      const split = list.splitResponseMessageAtPartOffset('response', 1)!;
+
+      list.removeByIds([split.earlierMessageId]);
+      list.coalesceSplitResponseMessages(split.earlierMessageId, split.currentMessageId);
+
+      expect(list.get.response.db()).toMatchObject([
+        {
+          id: 'response',
+          content: { parts: [{ type: 'text', text: 'answer' }] },
+        },
+      ]);
     });
   });
 });

@@ -7,7 +7,9 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
 
@@ -60,26 +62,24 @@ function stubSessions(
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
   );
 }
 
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
     </MemoryRouter>,
   );
 }
 
 describe('user session attribution', () => {
-  it("sorts the viewer's own sessions first and marks sessions owned by others", async () => {
-    // The server lists the other user's org-visible session before the
-    // viewer's own; the sidebar must re-order and attribute it.
+  it('marks sessions owned by others', async () => {
     stubSessions(
       [
         userSession({
@@ -104,13 +104,8 @@ describe('user session attribution', () => {
     await waitForMutationsIdle(client);
     const user = userEvent.setup();
 
-    const mine = await screen.findByRole('button', { name: 'mine' });
-    const other = screen.getByRole('button', { name: 'alpha' });
-    const labels = screen
-      .getAllByRole('button')
-      .map(button => button.getAttribute('aria-label'))
-      .filter(label => label === 'mine' || label === 'alpha');
-    expect(labels).toEqual(['mine', 'alpha']);
+    const mine = await screen.findByRole('link', { name: 'mine' });
+    const other = screen.getByRole('link', { name: 'alpha' });
     expect(screen.queryByText('Ada Lovelace')).not.toBeInTheDocument();
     expect(screen.queryByText('Grace Hopper')).not.toBeInTheDocument();
 
@@ -132,9 +127,6 @@ describe('user session attribution', () => {
   });
 
   it('offers delete only on the viewer-owned session', async () => {
-    // The DELETE route is owner-only and 404s for non-owners, and the delete
-    // service treats 404 as an idempotent success, so a non-owned row must not
-    // offer a delete action that would fake-succeed.
     stubSessions(
       [
         userSession({ id: 'row-other', sessionId: 'sess-other', userId: 'user-owner-1', branch: 'user/alpha' }),
@@ -147,7 +139,7 @@ describe('user session attribution', () => {
     await waitForMutationsIdle(client);
     const user = userEvent.setup();
 
-    const other = await screen.findByRole('button', { name: 'alpha' });
+    const other = await screen.findByRole('link', { name: 'alpha' });
     await user.hover(other);
     const card = await screen.findByLabelText('alpha session details');
     expect(within(card).getByText('user-owner-1')).toBeInTheDocument();

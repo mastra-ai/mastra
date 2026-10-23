@@ -1,14 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Loader2, Settings, X } from 'lucide-react';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
+import type { AuthenticatedUser, CurrentUser } from '@mastra/react/hooks/auth';
+import { Loader2, Settings, X, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
-import { useAuthCapabilities, useLogout } from '../hooks';
+import { useLogout } from '../hooks';
 import { useRoleImpersonation } from '../hooks/use-role-impersonation';
-import { isAuthenticated } from '../types';
-import type { AuthenticatedUser, CurrentUser } from '../types';
 import { UserAvatar } from './user-avatar';
 
 export type UserMenuProps = {
@@ -23,7 +23,7 @@ export type UserMenuProps = {
  */
 export function UserMenu({ user }: UserMenuProps) {
   const [open, setOpen] = useState(false);
-  const { mutate: logout, isPending } = useLogout();
+  const { mutate: logout, isPending, error: logoutError } = useLogout();
   const { data: capabilities } = useAuthCapabilities();
   const { isImpersonating, impersonatedRole, startImpersonation, stopImpersonation, isSwitching } =
     useRoleImpersonation();
@@ -31,15 +31,18 @@ export function UserMenu({ user }: UserMenuProps) {
   if (!user) return null;
 
   const handleLogout = () => {
-    logout(undefined, {
-      onSuccess: data => {
-        if (data.redirectTo) {
-          window.location.href = data.redirectTo;
-        } else {
-          window.location.reload();
-        }
+    logout(
+      { userId: user.id },
+      {
+        onSuccess: data => {
+          if (data.redirectTo) {
+            window.location.href = data.redirectTo;
+          } else {
+            window.location.reload();
+          }
+        },
       },
-    });
+    );
   };
 
   const availableRoles = capabilities && isAuthenticated(capabilities) ? capabilities.availableRoles : undefined;
@@ -49,20 +52,20 @@ export function UserMenu({ user }: UserMenuProps) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className="hover:bg-surface2 flex items-center gap-2 rounded-md p-1 transition-colors">
+        <button type="button" className="flex items-center gap-2 rounded-md p-1 hover:bg-fill-subtle">
           <UserAvatar user={user} size="sm" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-0">
-        <div className="border-border1 border-b p-3">
+        <div className="border-b border-border p-3">
           <div className="flex items-center gap-3">
             <UserAvatar user={user} size="md" />
             <div className="flex flex-col overflow-hidden">
-              <Txt variant="ui-md" className="truncate font-medium">
+              <Txt variant="subheading" className="truncate">
                 {displayName}
               </Txt>
               {user.email && (
-                <Txt variant="ui-sm" className="text-neutral3 truncate">
+                <Txt variant="caption" tone="muted" className="truncate">
                   {user.email}
                 </Txt>
               )}
@@ -72,8 +75,8 @@ export function UserMenu({ user }: UserMenuProps) {
 
         {/* Preview as role section — only for admins with available roles */}
         {availableRoles && availableRoles.length > 0 && (
-          <div className="border-border1 border-b p-2">
-            <Txt variant="ui-xs" className="text-neutral3 px-2 py-1 tracking-wider uppercase">
+          <div className="border-b border-border p-2">
+            <Txt variant="meta" tone="muted" className="px-2 py-1 uppercase">
               Preview as role
             </Txt>
             {availableRoles.map(role => {
@@ -91,13 +94,15 @@ export function UserMenu({ user }: UserMenuProps) {
                     }
                     setOpen(false);
                   }}
-                  className={`text-ui-md flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
-                    isActive ? 'bg-surface2' : 'hover:bg-surface2'
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left ${
+                    isActive ? 'bg-fill-hover' : 'hover:bg-fill-subtle'
                   } ${isSwitching ? 'cursor-not-allowed opacity-50' : ''}`}
                 >
                   {isSwitching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  <span className="flex-1 capitalize">{role.name}</span>
-                  {isActive && <X className="text-neutral3 hover:text-neutral1 h-3.5 w-3.5" />}
+                  <Txt as="span" variant="body" className="flex-1 capitalize">
+                    {role.name}
+                  </Txt>
+                  {isActive && <X className="h-3.5 w-3.5 text-muted-foreground" />}
                 </button>
               );
             })}
@@ -105,17 +110,28 @@ export function UserMenu({ user }: UserMenuProps) {
         )}
 
         <div className="flex flex-col gap-1 p-2">
+          {logoutError && (
+            <Txt variant="caption" role="alert">
+              {logoutError.message}
+            </Txt>
+          )}
           <Button
-            as={Link}
-            to="/settings"
+            render={<Link to="/settings" />}
+
             variant="ghost"
             className="w-full justify-start"
             onClick={() => setOpen(false)}
+            icon={<Settings />}
           >
-            <Settings className="h-4 w-4" />
             Settings
           </Button>
-          <Button variant="ghost" onClick={handleLogout} disabled={isPending} className="w-full justify-start">
+          <Button
+            icon={<LogOut />}
+            variant="ghost"
+            onClick={() => handleLogout()}
+            disabled={isPending}
+            className="w-full justify-start"
+          >
             {isPending ? 'Signing out...' : 'Sign out'}
           </Button>
         </div>

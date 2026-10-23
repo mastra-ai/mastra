@@ -43,17 +43,16 @@ mastra env list
 
 The output shows each environment's name, region, active deploy status, and the managed environment variables injected by attached databases. Pass `--json` for machine-readable output in CI.
 
-All `mastra env` commands resolve their project from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` file written by your first deploy, in that order. Run them from your project directory and you never need to name the project.
+All `mastra env` commands resolve their project from the `--project` flag, the `MASTRA_PROJECT_ID` environment variable, or the `.mastra-project.json` file written by your first deploy, in that order. Run them from your project directory and you never need to name the project.
 
 ## Environment variables
 
-An environment resolves its variables from three scopes:
+An environment resolves its variables from two scopes:
 
-- **Managed variables**: Injected by attached [hosted databases](/docs/mastra-platform/database) (for example `TURSO_DATABASE_URL`). The platform defines these, and you can't edit them.
-- **Environment-scoped variables**: Stored on one environment through the dashboard. Use these for values that differ between environments, like API keys for staging and production services.
-- **Project-scoped variables**: Stored on the project and shared by all environments.
+- **Managed variables**: Injected by attached [hosted databases](/docs/mastra-platform/database) (for example `TURSO_DATABASE_URL`) and by the platform itself. The platform defines these, and you can't edit them. See [System environment variables](/docs/mastra-platform/system-environment-variables) for the full list.
+- **Environment-scoped variables**: Stored on each environment through the dashboard. When you apply one variable to several environments, each environment keeps its own copy. Use these for values that differ between environments, like API keys for staging and production services.
 
-Environment-scoped and project-scoped variables together are the stored variables described on the [Deploy](/docs/mastra-platform/deploy#environment-variables) page.
+Environment-scoped variables are the stored variables described on the [Deploy](/docs/mastra-platform/deploy#environment-variables) page. A deploy of one environment uses only that environment's variables. Projects still on the [legacy pipeline](/docs/mastra-platform/deploy#migrating-from-server-and-studio-deploys) store their variables on the project instead, and every deploy of that project uses them.
 
 Variables are applied when a deploy starts. To apply changed variables to a running service without a full redeploy:
 
@@ -61,7 +60,7 @@ Variables are applied when a deploy starts. To apply changed variables to a runn
 mastra env restart staging
 ```
 
-To see the full set an environment's deploys actually run with, environment-scoped and project-scoped values merged, with managed variables listed by name, pull them into a local env file:
+To see the set an environment's deploys actually run with, with managed variables listed by name, pull them into a local env file. Each environment is pulled on its own. The file never mixes in another environment's values:
 
 ```bash
 mastra env vars pull staging --output .env.staging
@@ -82,7 +81,7 @@ mastra env deploys
 mastra env deploys staging
 ```
 
-Each row shows the deploy status, environment, timestamp, and which deploy is currently active. A deploy transitions through **queued → uploading → building → deploying → running**, and the platform reports **running** only when the new version is serving traffic.
+Each row shows the deploy status, environment, timestamp, and which deploy is currently active. A deploy transitions through **queued → uploading → starting → deploying → running**, and the platform reports **running** only when the new version is serving traffic. Deploys triggered from GitHub first build from source, so they pass through **building** between **queued** and **uploading**.
 
 ## Isolate an environment's data
 

@@ -40,7 +40,7 @@ tokens:
   # ---- "This/That/It + copula + adjective" emphatic declarations ----
   # "This is key." "That's intentional." "It was deliberate."
   - "\\b(?:It|This|That)(?:'s| is| was) (?:key|crucial|critical|intentional|deliberate|powerful|elegant|subtle|clean|simple|clear|important|significant|telling|striking|notable|profound|revealing|transformative|remarkable|essential|fundamental|beautiful|paramount|vital|obvious|neat|real|enough)\\."
-  - "\\b(?:It|This|That)(?:'s| is| was) (?:by design|on purpose|no accident|no coincidence|worth it|worth noting|not optional)\\."
+  - "\\b(?:It|This|That)(?:'s| is| was) (?:by design|on purpose|no accident|no coincidence|not optional)\\."
 
   # ---- "They/These/Those + copula + adjective" ----
   # "These are thin." "Those were deliberate."
@@ -123,7 +123,8 @@ tokens:
   - "\\bWith \\w+(?:[ -]\\w+)?, \\w+\\."
 
   # ---- Dramatic codas: "And [short clause]." ----
-  # "And it shows." "And that's okay."
+  # "And it shows." "And that's okay." "And that's the point." is
+  # PointVerdict's.
   - "\\bAnd it shows\\."
   - "\\bAnd it works\\."
   - "\\bAnd it matters\\."
@@ -133,7 +134,6 @@ tokens:
   - "\\bAnd that'?s fine\\."
   - "\\bAnd that'?s enough\\."
   - "\\bAnd that'?s it\\."
-  - "\\bAnd that'?s the point\\."
 
   # ---- "Full stop" / "Period" as emphasis ----
   # Standalone one-word emphatic "Period." only; anchored to a sentence

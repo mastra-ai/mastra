@@ -11,6 +11,7 @@ interface PiTuiInternals {
   previousWidth: number;
   previousHeight: number;
   previousViewportTop: number;
+  hardwareCursorRow: number;
   renderRequested: boolean;
   stopped: boolean;
   hasOverlay(): boolean;
@@ -68,15 +69,11 @@ export class FooterAnimationRenderer {
       return false;
     }
 
-    const changedLines: Array<{ screenRow: number; line: string; index: number }> = [];
+    const changedLines: Array<{ line: string; index: number }> = [];
     for (let index = 0; index < nextFooterLines.length; index += 1) {
       const line = nextFooterLines[index]!;
       if (line === this.previousFooterLines[index]) continue;
-      changedLines.push({
-        screenRow: firstFooterLine + index - ui.previousViewportTop + 1,
-        line,
-        index,
-      });
+      changedLines.push({ line, index });
     }
 
     if (changedLines.length === 0) {
@@ -84,9 +81,17 @@ export class FooterAnimationRenderer {
       return true;
     }
 
+    // pi-tui renders inline from wherever the shell cursor was, so logical rows
+    // have no fixed screen position. Move relative to its hardware cursor instead.
+    let cursorRow = ui.hardwareCursorRow;
     let output = '\x1b[?2026h\x1b7';
-    for (const { screenRow, line } of changedLines) {
-      output += `\x1b[${screenRow};1H\x1b[2K${line}`;
+    for (const { index, line } of changedLines) {
+      const targetRow = firstFooterLine + index;
+      const rowDelta = targetRow - cursorRow;
+      if (rowDelta > 0) output += `\x1b[${rowDelta}B`;
+      else if (rowDelta < 0) output += `\x1b[${-rowDelta}A`;
+      output += `\r\x1b[2K${line}`;
+      cursorRow = targetRow;
     }
     output += '\x1b8\x1b[?2026l';
     this.terminal.write(output);

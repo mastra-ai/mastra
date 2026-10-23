@@ -12,7 +12,6 @@ import { PwaInstallBanner } from './lib/pwa';
 import { createAppRouter } from './router';
 import '@fontsource-variable/mona-sans/standard.css';
 import '@fontsource-variable/mona-sans/standard-italic.css';
-import '@mastra/playground-ui/style.css';
 import './tailwind.css';
 
 // The web app talks to the Mastra server same-origin (`baseUrl=""`): in prod

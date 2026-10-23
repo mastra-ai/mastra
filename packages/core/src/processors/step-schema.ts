@@ -115,6 +115,7 @@ export type ProcessorInputStepPhaseType = {
   messages: ProcessorMessageType[];
   messageList: MessageList;
   stepNumber: number;
+  runId?: string;
   systemMessages?: CoreMessageType[];
   retryCount?: number;
   model?: ProcessorStepModelConfig;
@@ -202,6 +203,7 @@ export type ProcessorStepOutputType = {
   messageList?: MessageList;
   systemMessages?: CoreMessageType[];
   stepNumber?: number;
+  runId?: string;
   part?: unknown | null;
   streamParts?: unknown[];
   state?: Record<string, unknown>;
@@ -556,6 +558,7 @@ export const ProcessorInputStepPhaseSchema = z.object({
   messages: messagesSchema,
   messageList: messageListSchema,
   stepNumber: z.number().describe('The current step number (0-indexed)'),
+  runId: z.string().optional().describe('The active agent run ID'),
   systemMessages: systemMessagesSchema.optional(),
   retryCount: retryCountSchema,
   messageId: z.string().optional().describe('The active assistant response message ID for this step'),
@@ -699,6 +702,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
 
   // Step-based fields
   stepNumber: z.number().optional(),
+  runId: z.string().optional(),
 
   // Stream-based fields
   part: z.unknown().nullable().optional(),

@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { ClipboardCheck } from 'lucide-react';
+import { ClipboardPlus, X } from 'lucide-react';
 
 import type { ExperimentResultsSelection } from '../hooks/use-experiment-results-selection';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
@@ -9,28 +8,38 @@ export interface ExperimentResultsBulkActionsProps {
   selection: ExperimentResultsSelection;
 }
 
-/** Actions acting on the selected results; renders nothing while the selection is empty. */
+/** Selection count (a button clearing the selection once non-empty), plus the actions acting on the selected results. */
 export function ExperimentResultsBulkActions({ selection }: ExperimentResultsBulkActionsProps) {
   const { selectedIds, selectedResults, tagVocabulary, isFlagging, isTagging } = selection;
-  if (selectedIds.size === 0) return null;
-
   const busy = isFlagging || isTagging;
+  const isEmpty = selectedIds.size === 0;
 
   return (
-    <ButtonsGroup className="whitespace-nowrap">
-      <Button variant="outline" disabled={busy} onClick={selection.flagSelectedForReview}>
-        <ClipboardCheck />
-        Flag {selectedIds.size} to review
+    <div className="flex min-h-8 items-center gap-2 whitespace-nowrap">
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={isEmpty}
+        iconEnd={isEmpty ? undefined : <X />}
+        onClick={selection.clearSelection}
+        tooltip={isEmpty ? undefined : 'Clear selection'}
+        className="tabular-nums"
+      >
+        {selectedIds.size} selected
       </Button>
-      <ExperimentResultsTagPicker
-        selectedResults={selectedResults}
-        vocabulary={tagVocabulary}
-        onAddTag={selection.addTagToSelected}
-        disabled={busy}
-      />
-      <Button variant="ghost" onClick={selection.clearSelection}>
-        Clear
-      </Button>
-    </ButtonsGroup>
+      {!isEmpty && (
+        <>
+          <Button size="sm" disabled={busy} onClick={selection.flagSelectedForReview} icon={<ClipboardPlus />}>
+            Request review
+          </Button>
+          <ExperimentResultsTagPicker
+            selectedResults={selectedResults}
+            vocabulary={tagVocabulary}
+            onAddTag={selection.addTagToSelected}
+            disabled={busy}
+          />
+        </>
+      )}
+    </div>
   );
 }

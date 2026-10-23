@@ -26,6 +26,8 @@ export interface MessagesContextValue {
 export interface RunningContextValue {
   /** True while streaming OR awaiting a tool approval. Gates composer send/cancel state. */
   isRunning: boolean;
+  /** Matches the runId on streamed message metadata; absent before execution starts. */
+  activeRunId?: string;
   /** Cancels the in-flight run (abort + OM reset + cancelRun). */
   cancelRun: () => void | Promise<void>;
   /** Whether the composer may send a new message mid-stream (thread signals). */
@@ -33,7 +35,11 @@ export interface RunningContextValue {
 }
 
 export interface SendContextValue {
-  send: (args: ChatSendArgs) => void;
+  /**
+   * Resolves to `false` when the server can't have stored the message (no response, or a refusal such
+   * as a body too large), so the composer can put it back.
+   */
+  send: (args: ChatSendArgs) => void | Promise<boolean>;
 }
 
 export interface TasksContextValue {

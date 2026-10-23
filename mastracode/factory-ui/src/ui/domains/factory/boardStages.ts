@@ -59,7 +59,7 @@ export function boardLoadingStages({
 }
 
 export function itemBoard(item: WorkItem): string {
-  return item.board ?? (item.source === 'github-pr' ? 'review' : 'work');
+  return item.board ?? (item.source === 'github-pr' || item.source === 'gitlab-pr' ? 'review' : 'work');
 }
 
 export function itemStageOptions(item: WorkItem): ReadonlyArray<BoardStage> {

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "source": "studio-demo",
+  "sourceEventId": "studio-demo",
+  "occurredAt": "2026-09-06T12:00:00.000Z",
+  "tenantId": "studio-demo-tenant",
+  "subjectId": "studio-demo-user",
+  "sessionId": "studio-demo-session",
+  "actor": {
+    "id": "studio-demo-user",
+    "type": "user"
+  },
+  "target": {
+    "id": "studio-demo-user",
+    "type": "user"
+  },
+  "kind": "disallowed_country_login",
+  "ip": "200.160.2.3"
+}

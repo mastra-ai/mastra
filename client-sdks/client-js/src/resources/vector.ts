@@ -1,4 +1,5 @@
 import type { RequestContext } from '@mastra/core/request-context';
+import type { PathParams, RouteResponse } from '../route-types.generated.js';
 import type {
   CreateIndexParams,
   GetVectorIndexResponse,
@@ -25,7 +26,10 @@ export class Vector extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing vector index details
    */
-  details(indexName: string, requestContext?: RequestContext | Record<string, any>): Promise<GetVectorIndexResponse> {
+  details(
+    indexName: PathParams<'GET /vector/:vectorName/indexes/:indexName'>['indexName'],
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<GetVectorIndexResponse> {
     return this.request(
       `/vector/${encodeURIComponent(this.vectorName)}/indexes/${encodeURIComponent(indexName)}${requestContextQueryString(requestContext)}`,
     );
@@ -36,7 +40,9 @@ export class Vector extends BaseResource {
    * @param indexName - Name of the index to delete
    * @returns Promise indicating deletion success
    */
-  delete(indexName: string): Promise<{ success: boolean }> {
+  delete(
+    indexName: PathParams<'DELETE /vector/:vectorName/indexes/:indexName'>['indexName'],
+  ): Promise<RouteResponse<'DELETE /vector/:vectorName/indexes/:indexName'>> {
     return this.request(`/vector/${encodeURIComponent(this.vectorName)}/indexes/${encodeURIComponent(indexName)}`, {
       method: 'DELETE',
     });
@@ -58,7 +64,7 @@ export class Vector extends BaseResource {
    * @param params - Parameters for index creation including dimension and metric
    * @returns Promise indicating creation success
    */
-  createIndex(params: CreateIndexParams): Promise<{ success: boolean }> {
+  createIndex(params: CreateIndexParams): Promise<RouteResponse<'POST /vector/:vectorName/create-index'>> {
     return this.request(`/vector/${encodeURIComponent(this.vectorName)}/create-index`, {
       method: 'POST',
       body: params,
@@ -70,7 +76,7 @@ export class Vector extends BaseResource {
    * @param params - Parameters containing vectors, metadata, and optional IDs
    * @returns Promise containing the inserted vector IDs
    */
-  upsert(params: UpsertVectorParams): Promise<{ ids: string[] }> {
+  upsert(params: UpsertVectorParams): Promise<RouteResponse<'POST /vector/:vectorName/upsert'>> {
     return this.request(`/vector/${encodeURIComponent(this.vectorName)}/upsert`, {
       method: 'POST',
       body: params,

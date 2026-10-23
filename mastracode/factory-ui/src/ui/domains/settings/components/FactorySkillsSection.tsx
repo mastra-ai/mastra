@@ -1,16 +1,19 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Code } from '@mastra/playground-ui/components/Code';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChevronRight, Code, FileText } from 'lucide-react';
+import { Code as CodeIcon, FileText } from 'lucide-react';
 import { useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
-import { SettingsCard } from './SettingsCard';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { SettingsSubsection } from './SettingsSubsection';
 
 interface DisplayedSkill {
@@ -18,12 +21,6 @@ interface DisplayedSkill {
   title: string;
 }
 
-/**
- * The built-in skills shown on the Skills page, grouped by the built-in board
- * whose lifecycle invokes them. This is an explicit association: the board
- * code names these skills directly, so the UI does not infer anything from
- * role names or lifecycle functions.
- */
 const BUILT_IN_BOARD_SKILLS: Record<'work' | 'review', DisplayedSkill[]> = {
   work: [
     { name: 'factory-triage', title: 'Triage' },
@@ -46,12 +43,14 @@ function SkillContent({ content }: { content: string }) {
 
   return (
     <div className="group/content relative">
-      <ScrollArea maxHeight="24rem" viewPortClassName="px-4 pb-4" revealScrollbarOnHover={false}>
-        {raw ? (
-          <pre className="text-ui-sm text-icon4 m-0 font-mono whitespace-pre-wrap">{content}</pre>
-        ) : (
-          <MarkdownRenderer className="text-ui-sm text-icon4">{content}</MarkdownRenderer>
-        )}
+      <ScrollArea maxHeight="24rem" revealScrollbarOnHover={false}>
+        <ScrollAreaViewport className="px-4 pb-4">
+          {raw ? (
+            <Code className="text-caption text-muted-foreground m-0 font-mono whitespace-pre-wrap" code={content} />
+          ) : (
+            <MarkdownRenderer className="text-muted-foreground text-caption">{content}</MarkdownRenderer>
+          )}
+        </ScrollAreaViewport>
       </ScrollArea>
       <Button
         size="icon-sm"
@@ -59,7 +58,7 @@ function SkillContent({ content }: { content: string }) {
         onClick={() => setRaw(shown => !shown)}
         className="absolute top-1 right-4 opacity-0 transition-opacity group-hover/content:opacity-100 focus-visible:opacity-100"
       >
-        {raw ? <FileText /> : <Code />}
+        {raw ? <FileText /> : <CodeIcon />}
       </Button>
     </div>
   );
@@ -67,30 +66,36 @@ function SkillContent({ content }: { content: string }) {
 
 function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo }) {
   return (
-    <SettingsCard>
+    <SettingsContainer>
       <Collapsible>
-        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 py-3 text-left">
+        <CollapsibleTrigger className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left">
           <div className="flex min-w-0 flex-col gap-0.5">
-            <Txt as="span" variant="ui-md" className="text-icon5">
-              {title}
-              <Txt as="span" variant="ui-sm" className="text-icon3 ml-2 font-mono">
-                {skill.name}
+            <span className="flex items-center gap-2">
+              <Txt tone="ink" as="span" variant="body">
+                {title}
+                <Txt font="mono" tone="muted" as="span" variant="caption" className="ml-2">
+                  {skill.name}
+                </Txt>
               </Txt>
-            </Txt>
-            <Txt as="span" variant="ui-sm" className="text-icon3">
-              {skill.description}
-            </Txt>
+              {skill.error && <Badge variant="destructive">Failed to load</Badge>}
+            </span>
+            {skill.error ? (
+              <Txt as="span" variant="caption" className="text-destructive-foreground whitespace-pre-wrap">
+                Agents cannot load this skill: {skill.error}
+              </Txt>
+            ) : (
+              <Txt tone="muted" as="span" variant="caption">
+                {skill.description}
+              </Txt>
+            )}
           </div>
-          <ChevronRight
-            aria-hidden="true"
-            className="text-icon3 size-4 shrink-0 transition-transform group-data-[state=open]:rotate-90"
-          />
+          <DisclosureChevron direction="right" className="text-muted-foreground size-4" />
         </CollapsibleTrigger>
         <CollapsibleContent>
           <SkillContent content={skill.content} />
         </CollapsibleContent>
       </Collapsible>
-    </SettingsCard>
+    </SettingsContainer>
   );
 }
 
@@ -105,40 +110,39 @@ function SkillCards({ displayed, skills }: { displayed: DisplayedSkill[]; skills
   );
 }
 
-/** Working roles a code-defined board declares; its kickoff instructions live in code, not a skill. */
 function CustomBoardRoles({ board }: { board: InstalledBoardInfo }) {
   const roles = [...new Set(board.phases.flatMap(phase => (phase.role ? [phase.role] : [])))];
   return (
-    <SettingsCard>
+    <SettingsContainer>
       <div className="flex flex-col gap-2 px-4 py-3">
         {roles.length === 0 ? (
-          <Txt as="p" variant="ui-sm" className="text-icon3">
+          <Txt tone="muted" as="p" variant="caption">
             This board declares no working roles.
           </Txt>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {roles.map(role => (
               <li key={role}>
-                <Txt as="span" variant="ui-sm" className="text-icon4 font-mono">
+                <Txt font="mono" tone="muted" as="span" variant="caption">
                   {role}
                 </Txt>
               </li>
             ))}
           </ul>
         )}
-        <Txt as="p" variant="ui-sm" className="text-icon3">
+        <Txt tone="muted" as="p" variant="caption">
           Kickoff instructions for this board are defined in code by its board definition; there is no skill to show
           here.
         </Txt>
       </div>
-    </SettingsCard>
+    </SettingsContainer>
   );
 }
 
 function BoardGroup({ board, skills }: { board: InstalledBoardInfo; skills: FactorySkillInfo[] }) {
   return (
     <section aria-label={`${board.title} board`} className="flex flex-col gap-2">
-      <Txt as="h4" variant="ui-md" className="text-icon5 m-0">
+      <Txt tone="ink" as="h4" variant="body" className="m-0">
         {board.title}
       </Txt>
       {isBuiltInBoard(board.id) ? (
@@ -150,11 +154,6 @@ function BoardGroup({ board, skills }: { board: InstalledBoardInfo; skills: Fact
   );
 }
 
-/**
- * Read-only view of the Factory skills — the playbooks automated Factory runs
- * follow at each stage (Settings › Agent › Skills), grouped by installed board
- * when a factory is selected.
- */
 export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
   const skillsQuery = useFactorySkillsQuery();
   const catalog = useBoardCatalog(factoryId);
@@ -168,24 +167,24 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
       description="The built-in playbooks Factory agents follow when working your items, shipped with the server and read-only. Expand a skill to read the exact instructions the agent receives."
     >
       {skillsQuery.isPending && (
-        <Txt as="p" variant="ui-sm" role="status" className="text-icon3">
+        <Txt tone="muted" as="p" variant="caption" role="status">
           Loading skills…
         </Txt>
       )}
       {skillsQuery.error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
           {skillsQuery.error instanceof Error ? skillsQuery.error.message : 'Failed to load skills'}
         </Txt>
       )}
       {catalog.error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
           Installed boards could not be loaded; showing built-in skills ungrouped.
         </Txt>
       )}
       {boards === undefined ? (
         <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} />
       ) : boards.length === 0 ? (
-        <Txt as="p" variant="ui-sm" className="text-icon3">
+        <Txt tone="muted" as="p" variant="caption">
           No boards are installed, so no board skills apply.
         </Txt>
       ) : (

@@ -1,7 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover, quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useStoredWorkspaces } from '@mastra/react/hooks/workspace';
 import { ArrowUpIcon, BookOpen, FileText, GraduationCap, Wrench } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useMemo, useRef, useState } from 'react';
@@ -9,7 +15,6 @@ import { useNavigate } from 'react-router';
 import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useCreateSkill } from '@/domains/agents/hooks/use-create-skill';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
-import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 const EXAMPLES = [
   {
@@ -59,9 +64,7 @@ export const SkillBuilderStarter = () => {
   );
 
   const builderDefaultWorkspaceId = useMemo(() => {
-    const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
-      | { type: string; workspaceId?: string }
-      | undefined;
+    const ws = builderSettings?.configuration?.agent?.workspace as { type: string; workspaceId?: string } | undefined;
     return ws?.type === 'id' ? ws.workspaceId : undefined;
   }, [builderSettings]);
 
@@ -108,28 +111,28 @@ export const SkillBuilderStarter = () => {
   };
 
   return (
-    <div className="starter-aurora bg-surface1 flex min-h-full flex-col items-center justify-center px-6 py-24">
-      <div className="relative z-10 flex w-full max-w-3xl flex-col gap-12">
-        <h1 className="starter-heading text-neutral6 text-header-lg md:text-header-xl text-center font-serif tracking-tight">
+    <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-sidebar px-4 py-16">
+      <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
+        <Txt font="display" as="h1" variant="title" tone="ink" className="starter-heading text-center">
           What skill do you want to build?
-        </h1>
+        </Txt>
 
-        <form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit}>
           <div
-            className="starter-prompt border-border1 bg-surface2 duration-normal ease-out-custom focus-within:border-neutral3 rounded-2xl border transition-colors"
+            className="starter-prompt rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
             style={{ viewTransitionName: 'skill-chat-composer' }}
           >
             <Textarea
               ref={textareaRef}
               testId="skill-builder-starter-input"
-              size="default"
+              size="md"
               variant="unstyled"
               placeholder="Describe the skill you want to build…"
               value={message}
               onChange={e => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isCreating}
-              className="text-ui-md placeholder:text-neutral3 min-h-[112px] resize-none px-5 py-4 outline-none focus:outline-none focus-visible:outline-none"
+              className="min-h-[112px] resize-none px-5 py-4 text-body outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
               rows={3}
             />
             <div className="flex items-center justify-end px-3 pb-2.5">
@@ -140,7 +143,6 @@ export const SkillBuilderStarter = () => {
                 tooltip="Start building"
                 disabled={trimmed.length === 0 || isCreating}
                 data-testid="skill-builder-starter-submit"
-                className="rounded-full"
               >
                 {isCreating ? (
                   <span data-testid="skill-builder-starter-submit-spinner">
@@ -152,7 +154,7 @@ export const SkillBuilderStarter = () => {
               </Button>
             </div>
           </div>
-        </form>
+        </Form>
 
         <div className="flex flex-wrap justify-center gap-2">
           {EXAMPLES.map((example, i) => {
@@ -164,10 +166,16 @@ export const SkillBuilderStarter = () => {
                 onClick={() => handleExampleClick(example.prompt)}
                 data-testid={`skill-builder-starter-example-${example.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + i * 40}ms` }}
-                className="starter-chip group border-border1 text-ui-sm text-neutral4 duration-normal ease-out-custom hover:border-border2 hover:bg-surface2 hover:text-neutral6 inline-flex items-center gap-2 rounded-full border bg-transparent px-4 py-2 transition-colors"
+                className={cn(
+                  'starter-chip group inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-4 py-2 hover:border-border-strong hover:bg-fill-subtle',
+                  quietTextHover,
+                  controlStateColorTransition,
+                )}
               >
-                <Icon className="text-neutral3 group-hover:text-neutral5 h-3.5 w-3.5 transition-colors" />
-                {example.title}
+                <Icon className={cn('h-3.5 w-3.5', quietTextHoverInGroup, controlStateColorTransition)} />
+                <Txt as="span" variant="caption" className="block">
+                  {example.title}
+                </Txt>
               </button>
             );
           })}

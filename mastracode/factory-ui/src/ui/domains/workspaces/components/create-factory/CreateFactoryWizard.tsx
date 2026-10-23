@@ -1,3 +1,4 @@
+import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -5,11 +6,12 @@ import { useApiConfig } from '../../../../../api/config';
 import { useGithubReposQuery } from '../../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
 import { connectLinear } from '../../../factory/services/linear';
-import { useCreateFactoryFlow, type CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
+import { useCreateFactoryFlow } from '../../hooks/useCreateFactoryFlow';
+import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
 import { useCreateFactoryFromDraft } from '../../hooks/useCreateFactoryFromDraft';
 import { factoryHomePath } from '../../services/factoryPaths';
 import { connectGithub, manageGithubConnection } from '../../services/github';
-import { useKeyDown } from '../../../../lib/hooks';
+import { CreateFactoryJiraRows } from './CreateFactoryJiraRows';
 import { CreateFactoryLinearRows } from './CreateFactoryLinearRows';
 import { CreateFactoryModelStep } from './CreateFactoryModelStep';
 import { CreateFactoryNameRows } from './CreateFactoryNameRows';
@@ -19,7 +21,6 @@ import { CreateFactoryRepositoryRows } from './CreateFactoryRepositoryRows';
 interface StepChrome {
   title: string;
   placeholder: string;
-  searchLabel: string;
   searchable?: boolean;
 }
 
@@ -27,23 +28,19 @@ const STEP_CHROME: Record<CreateFactoryFlowStep, StepChrome> = {
   name: {
     title: 'Name your new Factory',
     placeholder: 'e.g. Mastra',
-    searchLabel: 'Factory name',
     searchable: false,
   },
   vcs: {
     title: 'Choose your codebase',
     placeholder: 'Search repositories…',
-    searchLabel: 'Search repositories',
   },
   'project-management': {
     title: 'Connect the work behind the code',
     placeholder: 'Search options…',
-    searchLabel: 'Search project management options',
   },
   'model-provider': {
     title: 'Choose your Factory model',
     placeholder: 'Search models and providers…',
-    searchLabel: 'Search models and providers',
   },
 };
 
@@ -80,35 +77,41 @@ export function CreateFactoryWizard() {
     },
   });
 
-  // The commit is one move: while it runs, and once one of its stages landed on
-  // the server, the picks behind it are settled — no step back to edit them.
   const committing = createFactory.isPending;
-  const picksSettled = committing || Boolean(draft?.factoryId);
 
   const leave = () => {
     if (location.key === 'default') void navigate(factoryId ? `/factories/${factoryId}` : '/');
     else void navigate(-1);
   };
-  useKeyDown({ escape: leave }, { enabled: !committing });
+  useKeydown({ Escape: leave }, { enabled: !committing, insideFields: true });
 
   const step = draft?.step;
   if (!step) return null;
-
-  const goBack = step === 'name' ? leave : () => void flow.back();
 
   // Each step starts from its own field value — the name step from the name already given.
   const typedOnThisStep = typed?.step === step ? typed.value : undefined;
   const value = typedOnThisStep ?? (step === 'name' ? (draft.name ?? '') : '');
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col justify-center">
+    <div className="flex min-h-0 flex-col gap-2 pt-6">
       <CreateFactoryPalette
         {...STEP_CHROME[step]}
         step={step}
         value={value}
         onValueChange={nextValue => setTyped({ step, value: nextValue })}
-        onBack={picksSettled ? undefined : goBack}
-        onSkip={step === 'project-management' ? () => void flow.skipLinear() : undefined}
+        onBack={
+          // Once the final commit has written any server state (a Factory row or
+          // a linked repository), stepping back would let the user pick a new
+          // name or repository while the retry still resumes the prior IDs, so
+          // the Back affordance is dropped until the wizard completes.
+          step === 'name' || committing || Boolean(draft.factoryId) || Boolean(draft.linkedRepositoryId)
+            ? undefined
+            : () => {
+                setTyped(undefined);
+                void flow.back();
+              }
+        }
+        onSkip={step === 'project-management' ? () => void flow.skipProjectManagement() : undefined}
       >
         {step === 'name' && <CreateFactoryNameRows name={value} onSubmit={flow.startVcs} />}
         {step === 'vcs' && (
@@ -128,22 +131,28 @@ export function CreateFactoryWizard() {
           />
         )}
         {step === 'project-management' && (
-          <CreateFactoryLinearRows
-            query={value}
-            onConnect={() => {
-              flow.persistBeforeRedirect(factoryId);
-              connectLinear(baseUrl);
-            }}
-            onSelectProject={projectId => void flow.chooseLinearProject(projectId)}
-            onSkip={() => void flow.skipLinear()}
-          />
+          <>
+            <CreateFactoryLinearRows
+              query={value}
+              onConnect={() => {
+                flow.persistBeforeRedirect(factoryId);
+                connectLinear(baseUrl);
+              }}
+              onSelectProject={projectId => void flow.chooseLinearProject(projectId)}
+              onSkip={() => void flow.skipProjectManagement()}
+            />
+            <CreateFactoryJiraRows
+              query={value}
+              onSelectProject={projectId => void flow.chooseJiraProject(projectId)}
+            />
+          </>
         )}
         {step === 'model-provider' && (
           <CreateFactoryModelStep
             query={value}
             savingModelId={createFactory.isPending ? createFactory.variables?.modelId : undefined}
             error={createFactory.error ? errorMessage(createFactory.error) : undefined}
-            onPick={(providerId, modelId) => createFactory.mutate({ providerId, modelId })}
+            onPick={(_providerId, modelId) => createFactory.mutate({ modelId })}
           />
         )}
       </CreateFactoryPalette>

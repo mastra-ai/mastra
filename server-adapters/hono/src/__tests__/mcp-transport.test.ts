@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
-import { createMCPTransportTestSuite } from '@internal/server-adapter-test-utils';
 import type { Mastra } from '@mastra/core/mastra';
+import { createMCPTransportTestSuite } from '@mastra/server-adapters-test-suite';
 import { Hono } from 'hono';
 import { describe } from 'vitest';
 import { MastraServer } from '../index';

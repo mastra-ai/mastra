@@ -11,6 +11,8 @@ export type {
 } from './agent-controller-channels';
 export { ChannelSessionRejectedError } from './errors';
 export { ChatChannelProcessor } from './processor';
+export { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
+export type { ChatChannelRenderContext } from './output-processor';
 export { MastraStateAdapter } from './state-adapter';
 export { defaultTypingStatus } from './typing-status';
 export type { TypingStatusContext, TypingStatusFn, TypingStatusReturn } from './typing-status';
@@ -39,6 +41,8 @@ export type {
   ChannelInstallationInfo,
   ChannelPlatformInfo,
   ChannelProvider,
+  ChannelsResolver,
+  ChannelsResolverContext,
   InlineLinkEntry,
   PostableMessage,
   ResolveResourceId,

@@ -1,4 +1,6 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { getOverallLatency } from '@mastra/playground-ui/domains/traces/utils/span-timing';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ExperimentUISpan } from '../types';
 import { ExperimentTraceTimelineSpan } from './experiment-trace-timeline-span';
@@ -24,7 +26,7 @@ export function ExperimentTraceTimeline({
   setExpandedSpanIds,
   featuredSpanIds,
 }: ExperimentTraceTimelineProps) {
-  const overallLatency = hierarchicalSpans?.[0]?.latency || 0;
+  const overallLatency = getOverallLatency(hierarchicalSpans);
   const overallStartTime = hierarchicalSpans?.[0]?.startTime || '';
   const overallEndTime = hierarchicalSpans?.[0]?.endTime || '';
 
@@ -33,11 +35,16 @@ export function ExperimentTraceTimeline({
       {isLoading ? (
         <div
           className={cn(
-            'flex items-center text-ui-md gap-4 bg-surface3/50 rounded-md p-6 justify-center text-neutral3',
-            '[&_svg]:w-[1.25em] [&_svg]:h-[1.25em] [&_svg]:opacity-50',
+            'text-muted-foreground',
+            'flex items-center justify-center gap-4 rounded-md bg-card/50 p-4',
+            '[&_svg]:h-[1.25em] [&_svg]:w-[1.25em] [&_svg]:opacity-50',
           )}
         >
-          <Spinner /> Loading Trace Timeline ...
+          <Spinner />
+          <Txt as="span" variant="body" className="block">
+            {' '}
+            Loading Trace Timeline ...
+          </Txt>
         </div>
       ) : (
         <div

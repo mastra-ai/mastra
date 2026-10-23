@@ -5,7 +5,7 @@ import { safeSlice } from './string-utils';
 const ENCRYPTED_CONTENT_KEY = 'encryptedContent';
 const ENCRYPTED_CONTENT_REDACTION_THRESHOLD = 256;
 
-export const DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS = 10_000;
+export const DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS = 5_000;
 
 function isObjectLike(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -80,9 +80,12 @@ export function resolveToolResultValue(
   usingStoredModelOutput: boolean;
 } {
   const mastraMetadata = part?.providerMetadata?.mastra;
-  if (mastraMetadata && typeof mastraMetadata === 'object' && 'modelOutput' in mastraMetadata) {
+  // A nullish `modelOutput` means no mapping applied (e.g. completed background
+  // tasks clear the dispatch placeholder with `null`); fall back to the raw result.
+  const modelOutput = mastraMetadata && typeof mastraMetadata === 'object' ? mastraMetadata.modelOutput : undefined;
+  if (modelOutput != null) {
     return {
-      value: (mastraMetadata as Record<string, unknown>).modelOutput,
+      value: modelOutput,
       usingStoredModelOutput: true,
     };
   }

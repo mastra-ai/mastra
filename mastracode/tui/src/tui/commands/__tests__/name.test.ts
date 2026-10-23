@@ -15,12 +15,12 @@ describe('handleNameCommand', () => {
     expect(ctx.showInfo).toHaveBeenCalledWith('Thread renamed to: Demo thread');
   });
 
-  it('shows /rename usage when the title is empty', async () => {
+  it('shows /name usage when the title is empty', async () => {
     const ctx = { showInfo: vi.fn() } as any;
 
     await handleNameCommand(ctx, []);
 
-    expect(ctx.showInfo).toHaveBeenCalledWith('Usage: /rename <title>');
+    expect(ctx.showInfo).toHaveBeenCalledWith('Usage: /name <title>');
   });
 
   it('does not save a title before the first prompt creates a thread', async () => {

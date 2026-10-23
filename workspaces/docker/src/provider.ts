@@ -52,6 +52,8 @@ export interface DockerProviderConfig {
   ulimits?: DockerSandboxOptions['ulimits'];
   /** tmpfs mount paths with options */
   tmpfs?: DockerSandboxOptions['tmpfs'];
+  /** Mounts mapped 1:1 onto Docker HostConfig.Mounts (supports volume subpath) */
+  mounts?: DockerSandboxOptions['mounts'];
 }
 
 export const dockerSandboxProvider: SandboxProvider<DockerProviderConfig> = {
@@ -156,6 +158,73 @@ export const dockerSandboxProvider: SandboxProvider<DockerProviderConfig> = {
         type: 'object',
         description: 'tmpfs mount paths with options',
         additionalProperties: { type: 'string' },
+      },
+      mounts: {
+        type: 'array',
+        description: 'Mounts mapped 1:1 onto Docker HostConfig.Mounts (supports volume subpath)',
+        items: {
+          oneOf: [
+            {
+              type: 'object',
+              required: ['type', 'target', 'source'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'volume' },
+                target: { type: 'string' },
+                source: { type: 'string' },
+                readOnly: { type: 'boolean' },
+                volumeOptions: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    subpath: { type: 'string' },
+                    noCopy: { type: 'boolean' },
+                    labels: { type: 'object', additionalProperties: { type: 'string' } },
+                  },
+                },
+              },
+            },
+            {
+              type: 'object',
+              required: ['type', 'target', 'source'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'bind' },
+                target: { type: 'string' },
+                source: { type: 'string' },
+                readOnly: { type: 'boolean' },
+                bindOptions: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    propagation: {
+                      type: 'string',
+                      enum: ['private', 'rprivate', 'shared', 'rshared', 'slave', 'rslave'],
+                    },
+                  },
+                },
+              },
+            },
+            {
+              type: 'object',
+              required: ['type', 'target'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'tmpfs' },
+                target: { type: 'string' },
+                readOnly: { type: 'boolean' },
+                tmpfsOptions: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    sizeBytes: { type: 'number' },
+                    mode: { type: 'number' },
+                  },
+                },
+              },
+            },
+          ],
+        },
       },
     },
   },

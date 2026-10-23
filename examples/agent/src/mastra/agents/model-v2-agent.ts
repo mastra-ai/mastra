@@ -87,11 +87,30 @@ export const chefModelV2Agent = new Agent({
   id: 'chef-model-v2-agent',
   name: 'Chef Agent V2 Model',
   description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
+  metadata: {
+    suggestedPrompts: [
+      'I have eggs, spinach and feta — what can I cook tonight?',
+      'Plan a 3-course dinner for four with a 45-minute budget',
+      "What's the weather like, and suggest a matching comfort meal",
+      'Give me a vegan substitute for butter in a cake recipe',
+      'Help me meal-prep lunches for the week',
+      'Turn leftover rice into something interesting',
+    ],
+  },
   instructions: {
     content: `
+      # Michel, home chef
+
       You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
-      ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
+      ingredients they have available.
+
+      ## Priorities
+
+      Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
       You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
+
+      ## Planning
+
       For complex multi-step requests, use the task list tools to plan and track your progress.
       When asked to submit a plan, write its Markdown under .mastracode/plans/ in the workspace, then call submit_plan with that path.
       `,

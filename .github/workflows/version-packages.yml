@@ -8,11 +8,17 @@ on:
     branches:
       - main
 
+# Only the newest main matters: a newer run rebuilds or closes the release PR from it, so an
+# older run must never finish after it and push a release branch built from stale main.
+concurrency:
+  group: version-packages-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   version:
     # Only run on the main repository, not on forks
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     steps:
       - name: Initial checkout
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -41,6 +47,9 @@ jobs:
           # Fetch entire git history so Changesets can generate changelogs
           # with the correct commits
           fetch-depth: 0
+          # Partial clone: changelogs need commits and trees, not every historical
+          # file version. Cuts the full-history fetch from minutes to seconds.
+          filter: blob:none
           persist-credentials: true
 
       - name: Setup pnpm and Node.js
@@ -64,7 +73,8 @@ jobs:
           git commit -m "chore: bump @mastra/mcp-docs-server prerelease version"
 
       - name: Create Release Pull Request
-        uses: changesets/action@v1
+        id: changesets
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           # husky precommit runs linting and typechecking - those are handled by other GH actions already
@@ -73,3 +83,17 @@ jobs:
           title: 'chore: version packages'
           commit: 'chore: version packages'
           version: pnpm changeset-cli version
+
+      # Cron Alpha Version versions changesets directly on main. Afterwards no changesets are
+      # left to release, so changesets/action leaves the old release PR alone, and it conflicts
+      # with main. Deleting the branch closes that PR; the next push with a changeset reopens it.
+      - name: Close stale release PR
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        env:
+          RELEASE_BRANCH: changeset-release/${{ github.ref_name }}
+        run: |
+          if git ls-remote --exit-code --heads origin "${RELEASE_BRANCH}" > /dev/null; then
+            git push origin --delete "${RELEASE_BRANCH}"
+          else
+            echo "No ${RELEASE_BRANCH} branch to delete"
+          fi

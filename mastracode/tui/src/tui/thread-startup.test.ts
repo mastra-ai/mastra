@@ -34,61 +34,129 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state, 'thread-requested');
 
-    expect(state.session.thread.list).toHaveBeenCalledWith({ allResources: true });
     expect(setResourceId).toHaveBeenCalledWith(state.session, { resourceId: 'resource-2' });
     expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-requested' });
     expect(state.pendingNewThread).toBe(false);
   });
 
-  it('reports an unknown requested thread', async () => {
+  it('reports an unknown requested thread and unbinds the auto-selected thread', async () => {
+    const latest = createThread('thread-latest', 'Latest', '2026-08-28T11:00:00Z');
+    const clearAndReleaseLock = vi.fn().mockResolvedValue(undefined);
     const state = {
       projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
       session: {
         thread: {
-          getId: vi.fn(() => null),
-          list: vi.fn().mockResolvedValue([]),
+          getId: vi.fn(() => 'thread-latest'),
+          list: vi.fn().mockResolvedValue([latest]),
+          cleanupSubscription: vi.fn(),
+          clearAndReleaseLock,
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
-    await expect(resumeThreadOnStartup(state, 'missing-thread')).rejects.toThrow('Thread not found: missing-thread');
+    await expect(resumeThreadOnStartup(state, 'missing-thread')).resolves.toEqual({
+      kind: 'missing',
+      threadId: 'missing-thread',
+    });
+    expect(state.session.thread.cleanupSubscription).toHaveBeenCalled();
+    expect(clearAndReleaseLock).toHaveBeenCalled();
+    expect(state.pendingNewThread).toBe(true);
   });
 
-  it('does not resume a requested thread from another project', async () => {
+  it('reports a locked requested thread and unbinds the auto-selected thread', async () => {
+    const latest = createThread('thread-latest', 'Latest', '2026-08-28T11:00:00Z');
+    const requested = createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z');
+    const switchThread = vi.fn().mockRejectedValue(new ThreadLockError('thread-requested', 4321));
+    const clearAndReleaseLock = vi.fn().mockResolvedValue(undefined);
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      controller: { setResourceId: vi.fn() },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: {
+          getId: vi.fn(() => 'thread-latest'),
+          list: vi.fn().mockResolvedValue([latest, requested]),
+          switch: switchThread,
+          cleanupSubscription: vi.fn(),
+          clearAndReleaseLock,
+        },
+      },
+    } as any;
+    state.local = { controller: state.controller, session: state.session };
+
+    await expect(resumeThreadOnStartup(state, 'thread-requested')).resolves.toEqual({
+      kind: 'locked',
+      threadId: 'thread-requested',
+      title: 'Requested',
+      ownerPid: 4321,
+    });
+    expect(state.controller.setResourceId).not.toHaveBeenCalled();
+    expect(clearAndReleaseLock).toHaveBeenCalled();
+    expect(state.pendingNewThread).toBe(true);
+  });
+
+  it('restores the original resource when a cross-resource requested thread is locked', async () => {
     const requested = {
       ...createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z'),
       resourceId: 'resource-2',
-      metadata: { projectPath: '/tmp/other-project' },
     };
-    const setResourceId = vi.fn().mockResolvedValue(undefined);
-    const switchThread = vi.fn().mockResolvedValue(undefined);
+    let resourceId = 'resource-1';
+    const setResourceId = vi.fn(async (_session: unknown, input: { resourceId: string }) => {
+      resourceId = input.resourceId;
+    });
     const state = {
       projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
       controller: { setResourceId },
       session: {
+        identity: { getResourceId: vi.fn(() => resourceId) },
         thread: {
           getId: vi.fn(() => null),
           list: vi.fn().mockResolvedValue([requested]),
-          switch: switchThread,
+          switch: vi.fn().mockRejectedValue(new ThreadLockError('thread-requested', 4321)),
+          cleanupSubscription: vi.fn(),
+          clearAndReleaseLock: vi.fn().mockResolvedValue(undefined),
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
-    await expect(resumeThreadOnStartup(state, 'thread-requested')).rejects.toThrow(
-      'Thread not found: thread-requested',
-    );
-    expect(setResourceId).not.toHaveBeenCalled();
-    expect(switchThread).not.toHaveBeenCalled();
+    await expect(resumeThreadOnStartup(state, 'thread-requested')).resolves.toMatchObject({ kind: 'locked' });
+    expect(setResourceId.mock.calls.map(([, input]) => input.resourceId)).toEqual(['resource-2', 'resource-1']);
+    expect(resourceId).toBe('resource-1');
+    expect(state.pendingNewThread).toBe(true);
   });
 
-  it('deletes an unsent startup thread before resuming saved work', async () => {
+  it('rethrows unexpected errors when switching to the requested thread', async () => {
+    const requested = createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z');
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn().mockResolvedValue([requested]),
+          switch: vi.fn().mockRejectedValue(new Error('storage offline')),
+        },
+      },
+    } as any;
+    state.local = { controller: state.controller, session: state.session };
+
+    await expect(resumeThreadOnStartup(state, 'thread-requested')).rejects.toThrow('storage offline');
+  });
+
+  it('keeps an active persisted thread without deleting it', async () => {
     const blank = createThread('thread-blank', '', '2026-08-28T11:01:00Z');
     const saved = createThread('thread-saved', 'Saved thread', '2026-08-28T11:00:00Z');
-    const deleteThread = vi.fn().mockResolvedValue(undefined);
-    const switchThread = vi.fn().mockResolvedValue(undefined);
+    const deleteThread = vi.fn();
+    const switchThread = vi.fn();
     const state = {
       projectInfo: { rootPath: '/tmp/project' },
       pendingNewThread: false,
@@ -97,48 +165,17 @@ describe('resumeThreadOnStartup', () => {
         thread: {
           getId: vi.fn(() => 'thread-blank'),
           list: vi.fn().mockResolvedValue([blank, saved]),
-          listMessages: vi.fn().mockResolvedValue([]),
-          delete: deleteThread,
-          switch: switchThread,
-          setSetting: vi.fn(),
-        },
-      },
-    } as any;
-
-    await resumeThreadOnStartup(state);
-
-    expect(deleteThread).toHaveBeenCalledWith({ threadId: 'thread-blank' });
-    expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-saved' });
-  });
-
-  it('keeps an explicit blank /new thread active across restart', async () => {
-    const explicitBlank = {
-      ...createThread('thread-new', '', '2026-08-28T11:01:00Z'),
-      metadata: { projectPath: '/tmp/project', explicitNewThread: true },
-    };
-    const saved = createThread('thread-saved', 'Saved thread', '2026-08-28T11:00:00Z');
-    const deleteThread = vi.fn().mockResolvedValue(undefined);
-    const switchThread = vi.fn().mockResolvedValue(undefined);
-    const state = {
-      projectInfo: { rootPath: '/tmp/project' },
-      pendingNewThread: false,
-      session: {
-        identity: { getResourceId: vi.fn(() => 'resource-1') },
-        thread: {
-          getId: vi.fn(() => 'thread-new'),
-          list: vi.fn().mockResolvedValue([saved, explicitBlank]),
-          listMessages: vi.fn().mockResolvedValue([]),
           delete: deleteThread,
           switch: switchThread,
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state);
 
     expect(deleteThread).not.toHaveBeenCalled();
     expect(switchThread).not.toHaveBeenCalled();
-    expect(state.pendingNewThread).toBe(false);
   });
 
   it('resumes the latest unlocked thread for the current directory', async () => {
@@ -159,6 +196,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state);
 
@@ -182,6 +220,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state);
 
@@ -189,30 +228,29 @@ describe('resumeThreadOnStartup', () => {
     expect(state.pendingNewThread).toBe(false);
   });
 
-  it('ignores leftover empty threads when resuming saved work', async () => {
-    const activeBlank = createThread('thread-active-blank', '', '2026-08-28T11:02:00Z');
-    const leftoverBlank = createThread('thread-leftover-blank', '', '2026-08-28T11:01:00Z');
+  it('resumes the latest persisted thread without deleting it', async () => {
+    const blank = createThread('thread-blank', '', '2026-08-28T11:01:00Z');
     const saved = createThread('thread-saved', 'Saved thread', '2026-08-28T11:00:00Z');
-    const deleteThread = vi.fn().mockResolvedValue(undefined);
+    const deleteThread = vi.fn();
     const switchThread = vi.fn().mockResolvedValue(undefined);
     const state = {
       projectInfo: { rootPath: '/tmp/project' },
       pendingNewThread: false,
       session: {
         thread: {
-          getId: vi.fn(() => 'thread-active-blank'),
-          list: vi.fn().mockResolvedValue([saved, leftoverBlank, activeBlank]),
-          listMessages: vi.fn().mockResolvedValue([]),
+          getId: vi.fn(() => null),
+          list: vi.fn().mockResolvedValue([saved, blank]),
           delete: deleteThread,
           switch: switchThread,
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state);
 
-    expect(deleteThread).toHaveBeenCalledWith({ threadId: 'thread-active-blank' });
-    expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-saved' });
+    expect(deleteThread).not.toHaveBeenCalled();
+    expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-blank' });
   });
 
   it('resumes the next thread when the latest is locked', async () => {
@@ -234,6 +272,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state);
 
@@ -261,6 +300,7 @@ describe('resumeThreadOnStartup', () => {
         },
       },
     } as any;
+    state.local = { controller: state.controller, session: state.session };
 
     await resumeThreadOnStartup(state);
 

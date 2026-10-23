@@ -18,27 +18,21 @@ CompositeVoice supports both Mastra voice providers and AI SDK model providers
 <PropertiesTable
   content={[
   {
-    name: 'config',
-    type: 'object',
-    description: 'Configuration object for the composite voice service',
-    isOptional: false,
-  },
-  {
-    name: 'config.input',
+    name: 'input',
     type: 'MastraVoice | TranscriptionModel',
     description:
       'Voice provider or AI SDK transcription model to use for speech-to-text operations. AI SDK models are automatically wrapped.',
     isOptional: true,
   },
   {
-    name: 'config.output',
+    name: 'output',
     type: 'MastraVoice | SpeechModel',
     description:
       'Voice provider or AI SDK speech model to use for text-to-speech operations. AI SDK models are automatically wrapped.',
     isOptional: true,
   },
   {
-    name: 'config.realtime',
+    name: 'realtime',
     type: 'MastraVoice',
     description: 'Voice provider to use for real-time speech-to-speech operations',
     isOptional: true,
@@ -71,9 +65,10 @@ Converts text to speech using the configured speaking provider.
 
 Notes:
 
-- If no speaking provider is configured, this method will throw an error
-- Options are passed through to the configured speaking provider
-- Returns a stream of audio data
+- If a realtime provider is configured, it handles the call; otherwise the speaking provider is used
+- Throws a `MastraError` only when neither a realtime nor a speaking provider is configured
+- Options are passed through to the provider that handles the call
+- Returns a stream of audio data, or `void` when a realtime provider handles the call
 
 ### `listen()`
 
@@ -98,13 +93,14 @@ Converts speech to text using the configured listening provider.
 
 Notes:
 
-- If no listening provider is configured, this method will throw an error
-- Options are passed through to the configured listening provider
-- Returns either a string or a stream of transcribed text, depending on the provider
+- If a realtime provider is configured, it handles the call; otherwise the listening provider is used
+- Throws a `MastraError` only when neither a realtime nor a listening provider is configured
+- Options are passed through to the provider that handles the call
+- Returns a string or a stream of transcribed text, depending on the provider, or `void` when a realtime provider emits results through events
 
 ### `getSpeakers()`
 
-Returns a list of available voices from the speaking provider, where each node contains:
+Returns a list of available voices from the realtime provider, or from the speaking provider when no realtime provider is configured, where each node contains:
 
 <PropertiesTable
   content={[
@@ -125,10 +121,10 @@ Returns a list of available voices from the speaking provider, where each node c
 
 Notes:
 
-- Returns voices from the speaking provider only
-- If no speaking provider is configured, returns an empty array
+- Returns voices from the realtime provider when one is configured, otherwise from the speaking provider
+- Throws a `MastraError` when neither a realtime nor a speaking provider is configured
 - Each voice object will have at least a voiceId property
-- Additional voice properties depend on the speaking provider
+- Additional voice properties depend on the provider
 
 ## Usage examples
 

@@ -126,6 +126,40 @@ describe('Mastra — file-based agent schedules', () => {
     await second.shutdown();
   });
 
+  it('registers a declared schedule with no future occurrence as completed, and re-arms it when the cron can fire again', async () => {
+    const storage = new MockStore();
+    const rowId = fsAgentScheduleRowId('support', 'heartbeat');
+
+    // A year-pinned cadence whose only occurrence is in the past: the row is
+    // registered as completed instead of being skipped on every boot.
+    const first = makeMastra(
+      {
+        support: makeFsAgent('support', [{ key: 'heartbeat', schedule: { cron: '0 0 10 23 9 * 2020', prompt: 'hi' } }]),
+      },
+      storage,
+    );
+    await first.startWorkers();
+    await waitUntil(async () => (await listSchedules(first)).some(r => r.id === rowId));
+    const exhausted = (await listSchedules(first)).find(r => r.id === rowId)!;
+    expect(exhausted.status).toBe('completed');
+    expect(exhausted.cron).toBe('0 0 10 23 9 * 2020');
+    await first.shutdown();
+
+    // Editing the declared cron to something that can fire reactivates it.
+    const second = makeMastra(
+      {
+        support: makeFsAgent('support', [{ key: 'heartbeat', schedule: { cron: '0 3 * * *', prompt: 'hi' } }]),
+      },
+      storage,
+    );
+    await second.startWorkers();
+    await waitUntil(async () => (await listSchedules(second)).find(r => r.id === rowId)?.status === 'active');
+    const reactivated = (await listSchedules(second)).find(r => r.id === rowId)!;
+    expect(reactivated.cron).toBe('0 3 * * *');
+    expect(reactivated.nextFireAt).toBeGreaterThan(Date.now());
+    await second.shutdown();
+  });
+
   it('deletes rows for schedules that code no longer declares', async () => {
     const storage = new MockStore();
     const first = makeMastra(

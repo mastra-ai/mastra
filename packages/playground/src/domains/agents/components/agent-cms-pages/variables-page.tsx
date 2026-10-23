@@ -26,7 +26,7 @@ function RecursiveFieldRenderer({
             <JSONSchemaForm.FieldType placeholder="Type" />
             <JSONSchemaForm.FieldOptional />
             <JSONSchemaForm.FieldNullable />
-            <JSONSchemaForm.FieldRemove aria-label="Remove Variable" />
+            <JSONSchemaForm.FieldRemove aria-label="Remove variable" />
           </div>
         </div>
 
@@ -68,7 +68,7 @@ export function VariablesPage() {
 
   return (
     <ScrollArea className="h-full">
-      <section className="flex flex-col gap-6">
+      <section className="flex flex-col gap-4">
         <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
           <JSONSchemaForm.Root onChange={handleVariablesChange} defaultValue={initialFields} maxDepth={5}>
             <JSONSchemaForm.FieldList>

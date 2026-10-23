@@ -1,7 +1,8 @@
-import { randomUUID } from 'node:crypto';
-import { emitErrorEvent } from '@mastra/core/agent/durable';
+import { DURABLE_STOP_WHEN_ERROR_ID, emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
-import type { PubSub } from '@mastra/core/events';
+import { getErrorFromUnknown } from '@mastra/core/error';
+import { PubSub } from '@mastra/core/events';
+import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
@@ -33,6 +34,46 @@ import type {
   InngestWorkflowConfig,
 } from './types';
 
+function durableAgentWorkflowError(error: unknown): { error: Error; delivery?: 'reject' } {
+  const serialized = error as {
+    code?: unknown;
+    id?: unknown;
+    name?: unknown;
+    message?: unknown;
+    stepId?: unknown;
+    details?: { name?: unknown; message?: unknown };
+    cause?: { name?: unknown; message?: unknown };
+  };
+  const isMarkedStopWhenError =
+    serialized?.code === DURABLE_STOP_WHEN_ERROR_ID || serialized?.id === DURABLE_STOP_WHEN_ERROR_ID;
+  // Inngest's serve transport serializes predicate failures as StepErrors and drops
+  // the MastraError id/details. Keep this prefix in sync with the memoized step id
+  // in create-inngest-agentic-workflow.ts; any failure in that step is classified
+  // as a stopWhen failure.
+  const isStopWhenStepError = typeof serialized?.stepId === 'string' && serialized.stepId.startsWith('stop-when-');
+  if (isMarkedStopWhenError || isStopWhenStepError) {
+    const normalized = new Error(
+      typeof serialized.details?.message === 'string'
+        ? serialized.details.message
+        : typeof serialized.cause?.message === 'string'
+          ? serialized.cause.message
+          : typeof serialized.message === 'string'
+            ? serialized.message
+            : 'Workflow execution failed',
+    );
+    normalized.name =
+      typeof serialized.details?.name === 'string'
+        ? serialized.details.name
+        : typeof serialized.cause?.name === 'string'
+          ? serialized.cause.name
+          : typeof serialized.name === 'string'
+            ? serialized.name
+            : 'Error';
+    return { error: normalized, delivery: 'reject' };
+  }
+  return { error: getErrorFromUnknown(error, { fallbackMessage: 'Workflow execution failed' }) };
+}
+
 /**
  * Resolves the nested `InngestWorkflow` wrapped by a graph entry, if any.
  * Handles both plain single-step entries and `loop` / `foreach` entries whose
@@ -47,6 +88,60 @@ function getNestedInngestWorkflow(entry: StepFlowEntry): InngestWorkflow | null 
     nested = getEntryWorkflow(entry);
   }
   return nested instanceof InngestWorkflow ? nested : null;
+}
+
+class WorkflowEventPolicyPubSub extends PubSub {
+  constructor(
+    private readonly pubsub: PubSub,
+    private readonly emitWorkflowEvents: boolean,
+  ) {
+    super();
+  }
+
+  publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }): Promise<void> {
+    if (!this.emitWorkflowEvents && topic.startsWith('workflow.events.v2.')) return Promise.resolve();
+    return this.pubsub.publish(topic, event, options);
+  }
+
+  subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    return this.pubsub.subscribe(topic, cb, options);
+  }
+
+  unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    return this.pubsub.unsubscribe(topic, cb);
+  }
+
+  flush(): Promise<void> {
+    return this.pubsub.flush();
+  }
+
+  clearTopic(topic: string): Promise<void> {
+    return this.pubsub.clearTopic(topic);
+  }
+
+  get supportedModes() {
+    return this.pubsub.supportedModes;
+  }
+
+  get supportsNativeBatching(): boolean {
+    return this.pubsub.supportsNativeBatching;
+  }
+
+  get supportsOffsets(): boolean {
+    return this.pubsub.supportsOffsets;
+  }
+
+  getHistory(topic: string, offset?: number): Promise<Event[]> {
+    return this.pubsub.getHistory(topic, offset);
+  }
+
+  subscribeWithReplay(topic: string, cb: EventCallback): Promise<void> {
+    return this.pubsub.subscribeWithReplay(topic, cb);
+  }
+
+  subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
+    return this.pubsub.subscribeFromOffset(topic, offset, cb);
+  }
 }
 
 export class InngestWorkflow<
@@ -74,15 +169,14 @@ export class InngestWorkflow<
   private function: ReturnType<Inngest['createFunction']> | undefined;
   private cronFunction: ReturnType<Inngest['createFunction']> | undefined;
   private readonly flowControlConfig?: InngestFlowControlConfig;
+  private readonly functionRetries: NonNullable<InngestFlowControlConfig['retries']>;
   private readonly cronConfig?: InngestFlowCronConfig<TInput, TState>;
   /**
-   * Optional override that lets a host (e.g. `createInngestAgent`) provide the
-   * PubSub instance used by workflow steps for publishing chunk/finish events.
-   * When set, the workflow function uses this factory instead of constructing
-   * a fresh `InngestPubSub`. This is what lets `DurableAgent.observe()` see
-   * cached history when the agent wraps its PubSub in a `CachingPubSub`.
+   * Optional override that lets a host (e.g. `createInngestAgent`) route topics
+   * while retaining the workflow-local `InngestPubSub` as the default.
    */
   #pubsubFactory?: (defaultPubsub: PubSub) => PubSub;
+  #emitWorkflowEvents = true;
 
   constructor(
     params: InngestWorkflowConfig<
@@ -95,8 +189,18 @@ export class InngestWorkflow<
     >,
     inngest: Inngest,
   ) {
-    const { concurrency, rateLimit, throttle, debounce, priority, cron, inputData, initialState, ...workflowParams } =
-      params;
+    const {
+      concurrency,
+      rateLimit,
+      throttle,
+      debounce,
+      priority,
+      retries,
+      cron,
+      inputData,
+      initialState,
+      ...workflowParams
+    } = params;
 
     super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>);
 
@@ -107,6 +211,7 @@ export class InngestWorkflow<
     );
 
     this.flowControlConfig = flowControlEntries.length > 0 ? Object.fromEntries(flowControlEntries) : undefined;
+    this.functionRetries = retries ?? 0;
 
     this.#mastra = params.mastra!;
     this.inngest = inngest;
@@ -137,22 +242,13 @@ export class InngestWorkflow<
   }
 
   /**
-   * Override the PubSub used inside the durable workflow function. Callers like
-   * `createInngestAgent` use this to route workflow event publishes through the
-   * agent's `CachingPubSub`, so `observe()` can replay cached history.
-   *
-   * The factory receives the workflow's own default `InngestPubSub` (constructed
-   * with this workflow's id) as input. Hosts should wrap that instance rather
-   * than substitute it, so workflow-event channels (which encode the workflow
-   * id) remain workflow-local. Returning a `CachingPubSub` wrapping the default
-   * is the canonical pattern.
+   * Override the PubSub used inside the durable workflow function. The factory
+   * receives the workflow's own default `InngestPubSub`, allowing hosts to route
+   * selected topics elsewhere while preserving workflow-local channels.
    *
    * The factory is propagated to every nested `InngestWorkflow` in the step
-   * graph. Nested workflows run as their own Inngest functions and resolve
-   * their own pubsub at runtime; each invocation passes its own workflow-local
-   * default into the same factory, so the host can share cross-workflow state
-   * (e.g. a single agent-scoped cache) without collapsing per-workflow channel
-   * isolation.
+   * graph. Nested workflows resolve their own default pubsub at runtime and pass
+   * it through the same factory.
    */
   __setPubsubFactory(factory: (defaultPubsub: PubSub) => PubSub) {
     this.#pubsubFactory = factory;
@@ -171,6 +267,32 @@ export class InngestWorkflow<
     }
   }
 
+  override commit() {
+    const committed = super.commit();
+    if (this.#pubsubFactory) {
+      this.__setPubsubFactory(this.#pubsubFactory);
+    }
+    this.__setEmitWorkflowEvents(this.#emitWorkflowEvents);
+    return committed;
+  }
+
+  __setEmitWorkflowEvents(enabled: boolean) {
+    this.#emitWorkflowEvents = enabled;
+    const updateNested = (step: StepFlowEntry) => {
+      const nested = getNestedInngestWorkflow(step);
+      if (nested) {
+        nested.__setEmitWorkflowEvents(enabled);
+      } else if (step.type === 'parallel' || step.type === 'conditional') {
+        for (const subStep of step.steps) {
+          updateNested(subStep);
+        }
+      }
+    };
+    for (const step of this.executionGraph.steps) {
+      updateNested(step);
+    }
+  }
+
   /**
    * Test-only accessor for the configured pubsub factory. Lets tests verify that
    * a host (e.g. `createInngestAgent`) wired the workflow to its agent pubsub
@@ -178,6 +300,11 @@ export class InngestWorkflow<
    */
   __getPubsubFactory(): ((defaultPubsub: PubSub) => PubSub) | undefined {
     return this.#pubsubFactory;
+  }
+
+  /** @internal Exposed for focused wiring tests. */
+  __getEmitWorkflowEvents(): boolean {
+    return this.#emitWorkflowEvents;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -208,7 +335,7 @@ export class InngestWorkflow<
     disableScorers?: boolean;
     pubsub?: PubSub;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
-    const runIdToUse = options?.runId || randomUUID();
+    const runIdToUse = options?.runId || globalThis.crypto.randomUUID();
 
     // Return a new Run instance with object parameters
     const existingInMemoryRun = this.runs.get(runIdToUse);
@@ -280,7 +407,7 @@ export class InngestWorkflow<
     this.cronFunction = this.inngest.createFunction(
       {
         id: `workflow.${this.id}.cron`,
-        retries: 0,
+        retries: this.functionRetries,
         // Not scoped by `match` like the event-triggered function above: a cron
         // trigger carries no event data to match a runId against, and the run
         // is created inside the function, so the canceller has no id to name.
@@ -311,14 +438,15 @@ export class InngestWorkflow<
       return this.function;
     }
 
-    // Always set function-level retries to 0, since retries are handled at the step level via executeStepWithRetry
-    // which uses either step.retries or retryConfig.attempts (step.retries takes precedence).
-    // step.retries is not accessible at function level, so we handle retries manually in executeStepWithRetry.
-    // This is why we set retries to 0 here.
+    // Step-code errors are retried at the step level via executeStepWithRetry (step.retries or
+    // retryConfig.attempts) and fail their step.run() as NonRetriableError, so function-level retries
+    // never re-run failed step code. Function-level retries cover failed SDK requests (process restart,
+    // OOM, 5xx/timeout) and transient errors in other durable operations such as spans and event
+    // publishing; they default to 0 and are configurable via `retries`.
     this.function = this.inngest.createFunction(
       {
         id: `workflow.${this.id}`,
-        retries: 0,
+        retries: this.functionRetries,
         // `match` scopes the cancellation to the run the cancel event names.
         // Without it Inngest cancels every in-flight run of this function, and
         // since all durable agents share one function, cancelling a single run
@@ -364,7 +492,7 @@ export class InngestWorkflow<
           // run. Warn rather than reject: an unnamed run is still a valid way to
           // start a workflow, it just can't be cancelled by id afterwards.
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
-            return randomUUID();
+            return globalThis.crypto.randomUUID();
           });
           this.logger.warn?.(
             `Workflow "${this.id}" was triggered without a runId, so run "${runId}" cannot be cancelled by id. ` +
@@ -394,8 +522,9 @@ export class InngestWorkflow<
         // Hosts (e.g. `createInngestAgent`) can override via `__setPubsubFactory` to
         // wrap this default - typically with a `CachingPubSub` so `observe()` can replay
         // cached history - without disturbing per-workflow channel isolation.
-        const defaultPubsub = new InngestPubSub(this.inngest, this.id);
-        const pubsub: PubSub = this.#pubsubFactory?.(defaultPubsub) ?? defaultPubsub;
+        const defaultPubsub = new InngestPubSub(this.inngest, this.id, this.logger);
+        const configuredPubsub: PubSub = this.#pubsubFactory?.(defaultPubsub) ?? defaultPubsub;
+        const pubsub = new WorkflowEventPolicyPubSub(configuredPubsub, this.#emitWorkflowEvents);
 
         // Create requestContext before execute so we can reuse it in finalize
         const requestContext: RequestContext = new RequestContext(Object.entries(event.data.requestContext ?? {}));
@@ -426,7 +555,7 @@ export class InngestWorkflow<
             requestContext,
           });
 
-          return span?.exportSpan();
+          return span?.snapshot?.() ?? span?.exportSpan();
         });
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
@@ -472,7 +601,7 @@ export class InngestWorkflow<
               }
               // Nested functions have workflow-local channels; send writer chunks
               // directly to the outermost run without forwarding lifecycle events.
-              if (parentStream) {
+              if (this.#emitWorkflowEvents && parentStream) {
                 try {
                   await defaultPubsub.publishWorkflowWatchTo(parentStream.workflowId, parentStream.runId, chunk);
                 } catch (err) {
@@ -508,9 +637,9 @@ export class InngestWorkflow<
             // For durable agent workflows, emit error event on failure so the
             // client's stream can receive the error and close properly.
             if (result.status === 'failed' && inputData?.__workflowKind === 'durable-agent' && inputData?.runId) {
-              const error = result.error instanceof Error ? result.error : new Error(String(result.error));
+              const { error, delivery } = durableAgentWorkflowError(result.error);
               try {
-                await emitErrorEvent(pubsub, inputData.runId, error);
+                await emitErrorEvent(pubsub, inputData.runId, error, undefined, delivery);
               } catch (e) {
                 this.logger.debug?.('Failed to emit error event:', e);
               }
@@ -543,7 +672,7 @@ export class InngestWorkflow<
 
                 if (result.status === 'failed') {
                   workflowSpan.error({
-                    error: result.error instanceof Error ? result.error : new Error(String(result.error)),
+                    error: getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' }),
                     attributes: { status: 'failed' },
                   });
                 } else {
@@ -577,32 +706,36 @@ export class InngestWorkflow<
                     })) ?? undefined;
                 }
 
+                const finalSnapshot: WorkflowRunState = {
+                  runId,
+                  status: result.status,
+                  value: result.state ?? initialState ?? {},
+                  context: toSnapshotContext(result.steps),
+                  activePaths: [],
+                  activeStepsPath: {},
+                  serializedStepGraph: this.serializedStepGraph,
+                  suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
+                  waitingPaths: {},
+                  resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
+                  result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
+                  error: result.status === 'failed' ? result.error : undefined,
+                  requestContext: requestContext.toJSON(),
+                  tracingContext: workflowSpanData
+                    ? {
+                        traceId: workflowSpanData.traceId,
+                        spanId: workflowSpanData.id,
+                      }
+                    : undefined,
+                  timestamp: Date.now(),
+                };
+
                 await workflowsStore.persistWorkflowSnapshot({
                   workflowName: this.id,
                   runId,
                   resourceId,
-                  snapshot: {
-                    runId,
-                    status: result.status,
-                    value: result.state ?? initialState ?? {},
-                    context: toSnapshotContext(result.steps),
-                    activePaths: [],
-                    activeStepsPath: {},
-                    serializedStepGraph: this.serializedStepGraph,
-                    suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
-                    waitingPaths: {},
-                    resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
-                    result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
-                    error: result.status === 'failed' ? result.error : undefined,
-                    requestContext: requestContext.toJSON(),
-                    tracingContext: workflowSpanData
-                      ? {
-                          traceId: workflowSpanData.traceId,
-                          spanId: workflowSpanData.id,
-                        }
-                      : undefined,
-                    timestamp: Date.now(),
-                  },
+                  snapshot: this.options.pruneSnapshot
+                    ? this.options.pruneSnapshot({ snapshot: finalSnapshot, workflowStatus: result.status })
+                    : finalSnapshot,
                 });
               }
             }

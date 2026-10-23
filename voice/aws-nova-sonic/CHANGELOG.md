@@ -1,5 +1,41 @@
 # @mastra/voice-aws-nova-sonic
 
+## 0.2.5
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 0.2.5-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 0.2.4
+
+### Patch Changes
+
+- Transcripts that contain the word "interrupted" are no longer swallowed as a barge-in. Only Nova Sonic's JSON `{ "interrupted": true }` marker emits `interrupt`; ordinary text now emits `writing` as usual. Fixes [#26504](https://github.com/mastra-ai/mastra/issues/26504). ([#26623](https://github.com/mastra-ai/mastra/pull/26623))
+
+## 0.2.4-alpha.0
+
+### Patch Changes
+
+- Transcripts that contain the word "interrupted" are no longer swallowed as a barge-in. Only Nova Sonic's JSON `{ "interrupted": true }` marker emits `interrupt`; ordinary text now emits `writing` as usual. Fixes [#26504](https://github.com/mastra-ai/mastra/issues/26504). ([#26623](https://github.com/mastra-ai/mastra/pull/26623))
+
+## 0.2.3
+
+### Patch Changes
+
+- Generate workspace, integration, channel, and voice identifiers with Web Crypto without changing synchronous APIs. ([#25462](https://github.com/mastra-ai/mastra/pull/25462))
+
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- Generate workspace, integration, channel, and voice identifiers with Web Crypto without changing synchronous APIs. ([#25462](https://github.com/mastra-ai/mastra/pull/25462))
+
 ## 0.2.2
 
 ### Patch Changes

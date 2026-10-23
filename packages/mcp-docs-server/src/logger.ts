@@ -1,8 +1,8 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { MCPServer } from '@mastra/mcp';
-import type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+
+type LoggingLevel = 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency';
 
 // Simplified log levels matching MCP client (debug, info, warn, error, none)
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'none';
@@ -94,33 +94,13 @@ export const writeErrorLog = (message: string, data?: any) => {
   }
 };
 
-// Create logger factory to inject server instance
-export function createLogger(server?: MCPServer): Logger {
+// MCP 2026-07-28 has no server-level log stream: log delivery is per request through
+// `context.mcp.log`. This process-wide logger writes to stderr, which stdio hosts capture.
+export function createLogger(): Logger {
   const sendLog = async (level: LoggingLevel, message: string, data?: any) => {
-    if (!server) return;
     if (!shouldLog(level)) return;
-
-    try {
-      const sdkServer = server.getServer();
-      if (!sdkServer) return;
-      await sdkServer.sendLoggingMessage({
-        level,
-        data: {
-          message,
-          ...(data ? (typeof data === 'object' ? data : { data }) : {}),
-        },
-      });
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        (error.message === 'Not connected' ||
-          error.message.includes('does not support logging') ||
-          error.message.includes('Connection closed'))
-      ) {
-        return;
-      }
-      console.error(`Failed to send ${level} log:`, error instanceof Error ? error.message : error);
-    }
+    const entry = data === undefined ? { level, message } : { level, message, data };
+    console.error(JSON.stringify(entry));
   };
 
   return {

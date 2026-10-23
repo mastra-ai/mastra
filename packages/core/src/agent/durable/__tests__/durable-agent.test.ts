@@ -3,6 +3,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import type { EventCallback } from '../../../events/types';
 import { RequestContext } from '../../../request-context';
 import { createTool } from '../../../tools';
 import type { MCPToolExecutionContext } from '../../../tools';
@@ -407,7 +408,7 @@ describe('DurableAgent', () => {
         model: mockModel as LanguageModelV2,
       });
 
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, id: 'public-prepare-agent' });
       const mcp: MCPToolExecutionContext = {
         extra: {
           signal: new AbortController().signal,
@@ -424,6 +425,9 @@ describe('DurableAgent', () => {
       expect(globalRunRegistry.has(result.runId)).toBe(true);
 
       const entry = globalRunRegistry.get(result.runId);
+      expect(durableAgent.id).not.toBe(baseAgent.id);
+      expect(entry?.agentId).toBe(durableAgent.id);
+      expect(durableAgent.runRegistry.get(result.runId)?.agentId).toBe(durableAgent.id);
       expect(entry).toBeDefined();
       expect(entry!.model).toBeDefined();
       expect(entry!.mcp).toBe(mcp);
@@ -713,7 +717,7 @@ describe('createDurableAgentStream', () => {
     const runId = 'test-run-456';
     const receivedChunks: any[] = [];
 
-    const { output, cleanup } = createDurableAgentStream({
+    const { output, cleanup, ready } = createDurableAgentStream({
       pubsub,
       runId,
       messageId: 'msg-123',
@@ -727,10 +731,199 @@ describe('createDurableAgentStream', () => {
       },
     });
 
+    await ready;
     expect(output).toBeDefined();
 
-    // Clean up
     cleanup();
+  });
+
+  it('should wait for delivered pubsub callbacks to finish', async () => {
+    const { createDurableAgentStream, emitChunkEvent } = await import('../stream-adapter');
+
+    let releaseCallback!: () => void;
+    const callbackBlocked = new Promise<void>(resolve => {
+      releaseCallback = resolve;
+    });
+    const onChunk = vi.fn(async () => {
+      await callbackBlocked;
+    });
+    const { cleanup, ready, waitForEventDelivery } = createDurableAgentStream({
+      pubsub,
+      runId: 'test-delivery-barrier',
+      messageId: 'msg-delivery-barrier',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onChunk,
+    });
+    await ready;
+
+    await emitChunkEvent(pubsub, 'test-delivery-barrier', {
+      type: 'text-delta',
+      payload: { text: 'test' },
+    } as any);
+    await vi.waitFor(() => expect(onChunk).toHaveBeenCalledOnce());
+
+    let settled = false;
+    const delivery = waitForEventDelivery().then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    releaseCallback();
+    await delivery;
+    expect(settled).toBe(true);
+    cleanup();
+  });
+
+  it('should wait for onChunk before FINISH without waiting for transport acknowledgement', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+    let subscribedCallback!: EventCallback;
+    vi.spyOn(pubsub, 'subscribeWithReplay').mockImplementation(async (_topic, callback) => {
+      subscribedCallback = callback;
+    });
+
+    let releaseAck!: () => void;
+    const ackBlocked = new Promise<void>(resolve => {
+      releaseAck = resolve;
+    });
+    let releaseCallback!: () => void;
+    const callbackBlocked = new Promise<void>(resolve => {
+      releaseCallback = resolve;
+    });
+    const onChunk = vi.fn(() => callbackBlocked);
+    const onFinish = vi.fn();
+    const runId = 'test-finish-chunk-delivery';
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-finish-chunk-delivery',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onChunk,
+      onFinish,
+    });
+
+    try {
+      await ready;
+      const ack = vi.fn(() => ackBlocked);
+      const chunkDelivery = subscribedCallback(
+        {
+          type: AgentStreamEventTypes.CHUNK,
+          runId,
+          data: { type: 'text-delta', payload: { text: 'test' } },
+        },
+        ack,
+      );
+      await vi.waitFor(() => expect(onChunk).toHaveBeenCalledOnce());
+
+      const finishDelivery = subscribedCallback({
+        type: AgentStreamEventTypes.FINISH,
+        runId,
+        data: {
+          output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+          stepResult: { reason: 'stop', warnings: [], isContinued: false },
+        },
+      });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(onFinish).not.toHaveBeenCalled();
+
+      releaseCallback();
+      await vi.waitFor(() => {
+        expect(ack).toHaveBeenCalledOnce();
+        expect(onFinish).toHaveBeenCalledOnce();
+      });
+      await finishDelivery;
+      for await (const _chunk of output.fullStream) {
+        // Drain the stream while the transport acknowledgement is still blocked.
+      }
+      releaseAck();
+      await chunkDelivery;
+    } finally {
+      releaseCallback();
+      releaseAck();
+      cleanup();
+    }
+  });
+
+  it('should stop the idle timer while FINISH waits for chunk delivery', async () => {
+    vi.useFakeTimers();
+    const { createDurableAgentStream, emitChunkEvent, emitFinishEvent } = await import('../stream-adapter');
+
+    let releaseCallback!: () => void;
+    let markCallbackStarted!: () => void;
+    const callbackBlocked = new Promise<void>(resolve => {
+      releaseCallback = resolve;
+    });
+    const callbackStarted = new Promise<void>(resolve => {
+      markCallbackStarted = resolve;
+    });
+    const onChunk = vi.fn(async () => {
+      markCallbackStarted();
+      await callbackBlocked;
+    });
+    const onFinish = vi.fn();
+    const onError = vi.fn();
+    const runId = 'test-finish-delivery-idle-timer';
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-finish-delivery-idle-timer',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      idleTimeoutMs: 20,
+      onChunk,
+      onFinish,
+      onError,
+    });
+
+    try {
+      await ready;
+      await emitChunkEvent(pubsub, runId, {
+        type: 'text-delta',
+        payload: { text: 'test' },
+      } as any);
+      await callbackStarted;
+      await emitFinishEvent(pubsub, runId, {
+        output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+        stepResult: { reason: 'stop', warnings: [], isContinued: false },
+      });
+      await Promise.resolve();
+
+      await vi.advanceTimersByTimeAsync(20);
+      expect(onError).not.toHaveBeenCalled();
+      expect(onFinish).not.toHaveBeenCalled();
+
+      releaseCallback();
+      for await (const _chunk of output.fullStream) {
+        // Drain the stream after FINISH completes.
+      }
+      expect(onFinish).toHaveBeenCalledOnce();
+      expect(onError).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
+  });
+
+  it('should terminate when subscription setup fails', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+    const subscribeError = new Error('subscription failed');
+    vi.spyOn(pubsub, 'subscribeWithReplay').mockRejectedValueOnce(subscribeError);
+
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId: 'test-subscription-failure',
+      messageId: 'msg-subscription-failure',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+    });
+    const onError = vi.fn();
+    const consumption = output.consumeStream({ onError });
+
+    await expect(ready).rejects.toBe(subscribeError);
+    await consumption;
+    expect(onError).toHaveBeenCalledWith(subscribeError);
+    expect(() => {
+      cleanup();
+      cleanup();
+    }).not.toThrow();
   });
 
   it('should live-tail when resuming with a pubsub that does not support offsets', async () => {
@@ -775,6 +968,29 @@ describe('createDurableAgentStream', () => {
       3,
       expect.any(Function),
     );
+    cleanup();
+  });
+
+  it('should live-tail when cached history is unavailable', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+    vi.spyOn(pubsub, 'supportsOffsets', 'get').mockReturnValue(true);
+    const subscribeSpy = vi.spyOn(pubsub, 'subscribe');
+    const subscribeFromOffsetSpy = vi.spyOn(pubsub, 'subscribeFromOffset');
+
+    const { cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId: 'test-cache-miss-resume',
+      messageId: 'msg-cache-miss',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      offset: 'latest',
+    });
+
+    await ready;
+
+    expect(subscribeSpy).toHaveBeenCalledWith(AGENT_STREAM_TOPIC('test-cache-miss-resume'), expect.any(Function), {
+      startFrom: 'latest',
+    });
+    expect(subscribeFromOffsetSpy).not.toHaveBeenCalled();
     cleanup();
   });
 
@@ -839,6 +1055,135 @@ describe('createDurableAgentStream', () => {
     expect(chunks.length).toBe(1);
     expect(stepFinishes.length).toBe(1);
 
+    cleanup();
+  });
+
+  it('fires onFinish once when FINISH is published twice', async () => {
+    // A recovered run can publish FINISH while an observer that replays the
+    // topic has already seen the pre-crash one.
+    const { createDurableAgentStream, emitFinishEvent } = await import('../stream-adapter');
+
+    const runId = 'test-duplicate-finish';
+    const onFinish = vi.fn();
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-duplicate-finish',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onFinish,
+    });
+    await ready;
+
+    const finishData = {
+      output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+      stepResult: { reason: 'stop' as const, warnings: [], isContinued: false },
+    };
+    await emitFinishEvent(pubsub, runId, finishData);
+    await emitFinishEvent(pubsub, runId, finishData);
+
+    const chunks: any[] = [];
+    for await (const chunk of output.fullStream) chunks.push(chunk);
+
+    expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it('emits an abort chunk and calls only onAbort for an aborted FINISH event', async () => {
+    const { createDurableAgentStream, emitFinishEvent } = await import('../stream-adapter');
+
+    const runId = 'test-finish-abort';
+    const onAbort = vi.fn();
+    const onFinish = vi.fn();
+    const onError = vi.fn();
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-finish-abort',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onAbort,
+      onFinish,
+      onError,
+    });
+    await ready;
+
+    await emitFinishEvent(pubsub, runId, {
+      output: { text: 'partial', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+      stepResult: { reason: 'abort', warnings: [], isContinued: false },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of output.fullStream) chunks.push(chunk);
+
+    expect(chunks.map(chunk => chunk.type)).toEqual(['abort', 'finish']);
+    await expect(output.text).resolves.toBe('');
+    expect(await output.finishReason).toBe('aborted');
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onFinish).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('calls only onError for a failed FINISH event', async () => {
+    const { createDurableAgentStream, emitChunkEvent, emitFinishEvent } = await import('../stream-adapter');
+
+    const runId = 'test-finish-error';
+    const onAbort = vi.fn();
+    const onFinish = vi.fn();
+    const onError = vi.fn();
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-finish-error',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onAbort,
+      onFinish,
+      onError,
+    });
+    await ready;
+
+    await emitChunkEvent(pubsub, runId, {
+      type: 'error',
+      payload: { error: new Error('terminal failure') },
+    } as any);
+    await emitFinishEvent(pubsub, runId, {
+      output: { text: 'partial', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+      stepResult: { reason: 'error', warnings: [], isContinued: false },
+    });
+
+    for await (const _chunk of output.fullStream) {
+      // Drain the stream so terminal callbacks complete.
+    }
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]?.[0].error).toMatchObject({ message: 'terminal failure' });
+    expect(onFinish).not.toHaveBeenCalled();
+    expect(onAbort).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('emits an abort chunk for a separate ABORT event', async () => {
+    const { createDurableAgentStream, emitAbortEvent } = await import('../stream-adapter');
+
+    const runId = 'test-abort-event';
+    const onAbort = vi.fn();
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-abort-event',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onAbort,
+    });
+    await ready;
+
+    await emitAbortEvent(pubsub, runId, { steps: [], text: 'partial' });
+
+    const chunks: any[] = [];
+    for await (const chunk of output.fullStream) chunks.push(chunk);
+
+    expect(chunks.map(chunk => chunk.type)).toEqual(['abort', 'finish']);
+    await expect(output.text).resolves.toBe('');
+    expect(onAbort).toHaveBeenCalledWith({ steps: [], text: 'partial' });
     cleanup();
   });
 });
@@ -1269,6 +1614,33 @@ describe('DurableAgent resume model metadata', () => {
       expect(Object.keys(await fork.listTools())).toEqual(expect.arrayContaining(['ping', 'extra']));
       // …while the original singleton is untouched.
       expect(Object.keys(await durableAgent.listTools())).not.toContain('extra');
+
+      await pubsub.close();
+    });
+
+    it('preserves a custom shouldPersistSnapshot policy on the fork', async () => {
+      const pubsub = new EventEmitterPubSub();
+      const baseAgent = new Agent({
+        id: 'fork-persist-agent',
+        name: 'Fork Persist Agent',
+        instructions: 'Code instructions',
+        model: 'openai/gpt-4o',
+      });
+      const customPredicate = ({ workflowStatus }: { workflowStatus: string }) => workflowStatus === 'suspended';
+      const durableAgent = createDurableAgent({
+        agent: baseAgent,
+        pubsub,
+        shouldPersistSnapshot: customPredicate,
+      });
+
+      const fork = durableAgent.__fork();
+
+      // The fork keeps the caller's persistence policy instead of reverting to
+      // the recovery-aware default (which would persist `pending`).
+      const forkPolicy = (fork as any).resolveShouldPersistSnapshot();
+      expect(forkPolicy).toBe(customPredicate);
+      expect(forkPolicy({ workflowStatus: 'pending', stepResults: {} })).toBe(false);
+      expect(forkPolicy({ workflowStatus: 'suspended', stepResults: {} })).toBe(true);
 
       await pubsub.close();
     });
