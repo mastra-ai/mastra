@@ -112,7 +112,7 @@ function resolveTraceQueryPath(fieldId: string): { scope?: TraceQueryRelatedScop
   return { path: fieldId };
 }
 
-function scalarPredicate(
+export function scalarPredicate(
   op: TraceFilterOperatorId,
   path: string,
   values: (string | number)[],

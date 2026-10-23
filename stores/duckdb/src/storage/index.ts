@@ -275,6 +275,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.aggregateTraces(...args);
   }
 
+  async aggregateSpans(
+    ...args: Parameters<ObservabilityStoreImpl['aggregateSpans']>
+  ): ReturnType<ObservabilityStoreImpl['aggregateSpans']> {
+    const delegate = await this.requireDelegate();
+    return delegate.aggregateSpans(...args);
+  }
+
   async querySpans(
     ...args: Parameters<ObservabilityStoreImpl['querySpans']>
   ): ReturnType<ObservabilityStoreImpl['querySpans']> {

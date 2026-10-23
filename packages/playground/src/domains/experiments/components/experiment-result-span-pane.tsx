@@ -39,7 +39,7 @@ export function ExperimentResultSpanPane({
           previousAriaLabel="View previous span details"
           nextAriaLabel="View next span details"
         />
-        <Button onClick={onClose} aria-label="Close span details">
+        <Button size="icon-md" onClick={onClose} aria-label="Close span details">
           <XIcon />
         </Button>
       </Column.Toolbar>

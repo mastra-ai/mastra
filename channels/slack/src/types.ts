@@ -36,6 +36,14 @@ interface SlackAdapterChannelConfigBase {
   textFormat?: ChannelAdapterConfig['textFormat'];
 
   /**
+   * Whether the agent's reply text is posted to Slack. See `ChannelAdapterConfig['textDisplay']`.
+   * `'hidden'` keeps it out of the thread, so the agent's own messages reach it only through tools you give it.
+   *
+   * @default 'show'
+   */
+  textDisplay?: ChannelAdapterConfig['textDisplay'];
+
+  /**
    * Control Slack typing indicators and Assistant-mode status text.
    *
    * - `true` — use built-in defaults: `"is typing…"` while generating text,

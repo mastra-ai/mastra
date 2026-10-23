@@ -62,6 +62,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
     formatError,
     streaming: topLevelStreaming,
     textFormat,
+    textDisplay,
     typingStatus,
     toolDisplay: topLevelToolDisplay,
   } = channelConfig;
@@ -71,6 +72,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
     formatError,
     streaming: topLevelStreaming,
     textFormat,
+    textDisplay,
     typingStatus,
     toolDisplay: topLevelToolDisplay,
   };

@@ -50,13 +50,33 @@ describe('SlackIntegration.channels', () => {
 
     expect(typingStatus({ type: 'reasoning-delta' } as any, context())).toBe('is thinking...');
     expect(typingStatus({ type: 'reasoning-delta' } as any, context('is thinking...'))).toBe('is thinking...');
-    expect(typingStatus({ type: 'text-delta' } as any, context())).toBe('is typing...');
+    // Reply text is hidden by default, so streamed text sets no status.
+    expect(typingStatus({ type: 'text-delta' } as any, context())).toBeUndefined();
+    // ...but the reply tool's text, which streams into the thread, does.
+    expect(
+      typingStatus({ type: 'tool-call-input-streaming-start', payload: { toolName: 'reply_in_thread' } } as any, context()),
+    ).toBe('is typing...');
+    expect(
+      typingStatus({ type: 'tool-call-input-streaming-start', payload: { toolName: 'search' } } as any, context()),
+    ).toBeUndefined();
+    // When the reply's args finish it is still typing, not "working".
+    expect(
+      typingStatus({ type: 'tool-call', payload: { toolName: 'reply_in_thread', args: { text: 'hi' } } } as any, context()),
+    ).toBe('is typing...');
     expect(typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context())).toBe(
       'is working...',
     );
     expect(typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context('is working...'))).toBe(
       'is working...',
     );
+  });
+
+  it('shows "is typing..." for streamed text when reply text is shown', () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret', adapterOptions: { textDisplay: 'show' } });
+    const typingStatus = integration.channels(ctxWith()).adapters.slack.typingStatus;
+    if (typeof typingStatus !== 'function') throw new Error('Expected a typing status function');
+    const ctx = { currentStatus: undefined, channelTools: new Set<string>() } as any;
+    expect(typingStatus({ type: 'text-delta' } as any, ctx)).toBe('is typing...');
   });
 
   it("names the tool's current step in the typing status when its args describe it", () => {
@@ -107,6 +127,14 @@ describe('SlackIntegration.channels', () => {
 
     expect(config.adapters.slack.toolDisplay).toBe('hidden');
     expect(config.adapters.slack.typingStatus).toBeTypeOf('function');
+  });
+
+  it('keeps reply text out of Slack by default, so the agent posts through reply_in_thread', () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+    expect(integration.channels(ctxWith()).adapters.slack.textDisplay).toBe('hidden');
+
+    const shown = new SlackIntegration({ signingSecret: 'secret', adapterOptions: { textDisplay: 'show' } });
+    expect(shown.channels(ctxWith()).adapters.slack.textDisplay).toBe('show');
   });
 
   it('lets a caller opt into the Thinking Steps widget', () => {

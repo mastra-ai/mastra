@@ -3,7 +3,7 @@
   "temperature": ["bee-brood", "bee-buzz", "bee-cell", "bee-comb", "bee-hive"],
   "structuredOutput": ["bee-buzz", "bee-comb", "bee-hive"],
   "reasoning": {
-    "bee-brood": [
+    "bee-hive": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -15,19 +15,19 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "bee-swarm": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "bee-hive": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "bee-comb": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "bee-brood": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "bee-swarm": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]

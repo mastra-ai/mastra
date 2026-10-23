@@ -425,6 +425,15 @@ export interface WorkflowRunState {
    * @internal
    */
   resumeClaimedAt?: number;
+  /**
+   * The `resumeClaimedAt` of an agent resume that started running while holding a run-ownership
+   * lease on its claim. Only such a `running` claim can be taken over once its lease lapses, so a
+   * resume started by a process that holds no lease is never taken over.
+   * @internal
+   */
+  resumeLeasedClaimAt?: number;
+  /** @internal Snapshot created only to guard evented step deliveries. */
+  guardedOnlySnapshot?: boolean;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
   stepExecutionPath?: string[];
@@ -574,6 +583,14 @@ export interface WorkflowOptions {
    * for reduced snapshot writes and serialize their own resumes.
    */
   allowUnclaimedResumes?: boolean;
+
+  /**
+   * Writes the resume claim (`suspended -> running`) even when `shouldPersistSnapshot`
+   * excludes `running`, so a resumed run stops reading back as `suspended` while it runs.
+   *
+   * @internal Set by durable agent loops, whose suspended-run listing reads the stored status.
+   */
+  persistResumeClaim?: boolean;
 
   /**
    * Identifies step errors raised because this execution lost, or could not

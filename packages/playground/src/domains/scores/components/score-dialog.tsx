@@ -105,7 +105,7 @@ export function ScoreDialog({
             onClick={() => setDatasetDialogOpen(true)}
             icon={<SaveIcon />}
           >
-            Save as Dataset Item
+            Save as dataset item
           </Button>
         </SideDialog.Top>
 

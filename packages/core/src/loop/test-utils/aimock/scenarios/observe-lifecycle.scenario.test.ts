@@ -12,10 +12,27 @@
  * observe() exists only on the durable engines, so `normal` and `fs` are skipped.
  */
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { InMemoryServerCache } from '../../../../cache/inmemory';
+import { RUN_LOG_TTL_MS } from '../../../../events/topics';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
+
+/** Records the TTL each run-log append asks for, so a parked run's log lifetime is assertable. */
+class RecordingCache extends InMemoryServerCache {
+  appends: Array<[string, number | undefined]> = [];
+
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlMs?: number,
+  ): Promise<number> {
+    this.appends.push([listKey, ttlMs]);
+    return super.listPushIndexed(listKey, counterKey, value, ttlMs);
+  }
+}
 
 /** Long enough that a hanging observation is unambiguous, short enough for CI. */
 const CLOSE_WITHIN_MS = 3_000;
@@ -218,17 +235,20 @@ describeForAllEngines(
         { toolCalls: [{ id: 'call_abort', name: 'lookup_status', arguments: { query: 'alpha' } }] },
       );
       llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Should never be generated.' });
+      const executed: string[] = [];
       const lookup = createTool({
         id: 'lookup_status',
         description: 'Look up a status.',
         inputSchema: z.object({ query: z.string() }),
-        execute: async ({ query }) => ({ status: `OK:${query}` }),
+        execute: async ({ query }) => {
+          executed.push(query);
+          return { status: `OK:${query}` };
+        },
       });
       const { agent } = await createSharedAgent(llm, { engine, tools: { lookup_status: lookup } });
       const run = await agent.stream('Look up alpha', { requireToolApproval: true, maxSteps: 5 });
       for await (const chunk of run.fullStream) if (chunk.type === 'tool-call-approval') break;
 
-      let resumed: any;
       try {
         let closed = false;
         const observing = drain(await agent.observe(run.runId), 20_000).finally(() => (closed = true));
@@ -239,8 +259,11 @@ describeForAllEngines(
         await new Promise(resolve => setTimeout(resolve, SILENCE_MS));
         expect(closed).toBe(false);
 
-        resumed = await agent.approveToolCall({ runId: run.runId, toolCallId: 'call_abort' });
-        await resumed.consumeStream();
+        // The abort fenced the run (#27617): the approval is rejected, and the observer
+        // still attached to the parked run closes on the abort finish.
+        await expect(agent.approveToolCall({ runId: run.runId, toolCallId: 'call_abort' })).rejects.toMatchObject({
+          id: 'AGENT_RESUME_ABORTED_RUN',
+        });
         const acrossAbort = await observing;
 
         expect(acrossAbort.timedOut).toBe(false);
@@ -249,6 +272,7 @@ describeForAllEngines(
         expect(acrossAbort.types.at(-1)).toBe('finish');
         expect(textOf(acrossAbort.chunks)).toBe('');
         expect(llm.getRequests()).toHaveLength(1);
+        expect(executed).toEqual([]);
 
         // Observing the aborted run afterwards replays it and closes.
         const replay = await drain(await agent.observe(run.runId), CLOSE_WITHIN_MS);
@@ -256,7 +280,41 @@ describeForAllEngines(
         expect(replay.types).toContain('abort');
         expect(replay.types.at(-1)).toBe('finish');
       } finally {
-        resumed?.cleanup?.();
+        run.cleanup?.();
+      }
+    }, 30_000);
+
+    it('keeps the run log for the run-log TTL while the run waits for approval', async () => {
+      const llm = getMock();
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'call_retain', name: 'lookup_status', arguments: { query: 'alpha' } }] },
+      );
+      const lookup = createTool({
+        id: 'lookup_status',
+        description: 'Look up a status.',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async ({ query }) => ({ status: `OK:${query}` }),
+      });
+      const cache = new RecordingCache();
+      const { agent } = await createSharedAgent(llm, { engine, cache, tools: { lookup_status: lookup } });
+
+      const run = await agent.stream('Look up alpha', { requireToolApproval: true, maxSteps: 5 });
+      try {
+        for await (const chunk of run.fullStream) if (chunk.type === 'tool-call-approval') break;
+
+        // The suspension frame is the run's last append before it parks, so every
+        // append (that one included) must ask for the long run-log TTL; the cache's
+        // 300s default is shorter than an approval wait.
+        await vi.waitFor(
+          () => {
+            const runAppends = cache.appends.filter(([key]) => key.includes(run.runId));
+            expect(runAppends.length).toBeGreaterThan(0);
+            expect(runAppends.every(([, ttl]) => ttl === RUN_LOG_TTL_MS)).toBe(true);
+          },
+          { timeout: 5_000 },
+        );
+      } finally {
         run.cleanup?.();
       }
     }, 30_000);

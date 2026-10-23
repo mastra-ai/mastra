@@ -77,7 +77,7 @@ export async function mountGCS(mountPath: string, config: BlaxelGCSMountConfig, 
     );
     if (prepResult.exitCode !== 0) {
       throw new Error(
-        `Failed to install gcsfuse prerequisites.\n` + `Error details: ${prepResult.stderr || prepResult.stdout}`,
+        `Failed to install gcsfuse prerequisites.\nError details: ${prepResult.stderr || prepResult.stdout}`,
       );
     }
 

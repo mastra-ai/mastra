@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
+import type { FactoryUserSession } from '../../domains/workspaces/services/user-sessions';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
@@ -17,12 +18,13 @@ const REPOSITORY_ID = 'repository-draft-handoff';
 const DRAFT_SESSION_ID = '30000000-0000-4000-8000-000000000001';
 const AGENT_CONTROLLER_API = `${TEST_BASE_URL}/api/agent-controller/code`;
 
-const createdSession = {
+const createdSession: FactoryUserSession = {
   id: 'row-draft',
   sessionId: DRAFT_SESSION_ID,
   projectRepositoryId: REPOSITORY_ID,
   orgId: 'org-1',
   userId: 'user-1',
+  visibility: 'private',
   title: 'fix the login bug',
   branch: `user/session-${DRAFT_SESSION_ID}`,
   baseBranch: 'main',
@@ -119,7 +121,9 @@ function stubDraftRoute({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: defaultModelId })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: defaultModelId, thinkingLevel: null }),
+    ),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({
         models: [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true }],
@@ -210,7 +214,9 @@ describe('a user session draft on the real thread route', () => {
     await user.keyboard('{Enter}');
 
     await waitFor(() =>
-      expect(route.createBodies).toEqual([{ sessionId: DRAFT_SESSION_ID, title: 'fix the login bug' }]),
+      expect(route.createBodies).toEqual([
+        { sessionId: DRAFT_SESSION_ID, title: 'fix the login bug', visibility: 'private' },
+      ]),
     );
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),

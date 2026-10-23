@@ -254,7 +254,7 @@ async function fireScheduleIntoEvictedSession(resume: 'owner' | 'unresolvable') 
     requestContext: ownerContext(),
   });
   const threadId = session.thread.getId()!;
-  await code.controller.deleteSession({ resourceId: SESSION_ID });
+  await code.controller.deleteSession({ sessionId: SESSION_ID });
   const schedule = code.threadScheduler.create(
     { prompt: 'check the build', trigger: { kind: 'every', interval: { ms: 60_000 } } },
     { resourceId: SESSION_ID, threadId },

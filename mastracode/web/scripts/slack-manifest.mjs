@@ -86,6 +86,7 @@ const manifest = {
         'users:read',
         'reactions:write',
         'files:read',
+        'files:write',
         'assistant:write',
       ],
     },

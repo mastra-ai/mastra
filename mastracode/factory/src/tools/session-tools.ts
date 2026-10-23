@@ -33,6 +33,7 @@ import type { FactoryMessaging } from './messaging-tools.js';
 import { findWorkItem, workItemNotFound, workItemNumber, workItemRefSchema } from './read-tools.js';
 import { heartbeatOpenRunUntilEnd } from './run-watch.js';
 import type { FactoryToolScope } from './scope.js';
+import { sessionModel } from './side-sessions.js';
 
 const TITLE_LENGTH = 120;
 
@@ -154,14 +155,28 @@ export function createFactorySessionTools(
     return { usable, known, scopeLabel: modelScope === 'factory' ? 'Factory' : 'session owner' };
   }
 
+  function unrunnableModelError(
+    modelId: string,
+    catalog: { usable: string[]; known: Set<string>; scopeLabel: string },
+  ) {
+    const options = catalog.usable.length
+      ? ` Models available to it: ${catalog.usable.slice(0, LISTED_MODELS).join(', ')}${catalog.usable.length > LISTED_MODELS ? ', …' : ''}.`
+      : ' No models are available to it; connect a provider credential first.';
+    return new Error(
+      catalog.known.has(modelId)
+        ? `Model ${modelId} exists, but this session's credential scope (${catalog.scopeLabel}) has no credential for its provider.${options}`
+        : `Unknown model ${modelId}.${options}`,
+    );
+  }
+
   const switchModel = createTool({
     id: 'factory_switch_session_model',
     description:
-      'Switch the model of a session you own in this Factory (side, work item, or review session) without recreating it. A running session switches immediately; a stopped one uses the model on its next run. The model must be one the session credentials can run: the owner credentials for a user-scoped session, the Factory credentials for a Factory-scoped one. Use a session ID from the Factory session or work item tools.',
+      'Look up or switch the model of a session you own in this Factory (side, work item, or review session). When someone describes a model by purpose, family, or preference rather than an exact ID, call with sessionId alone first to list models the target session can actually use. Interpret their intent against that list, then call with the chosen exact modelId to switch; do not use their words as a guessed model ID. A running session switches immediately; a stopped one uses the model on its next run. User-scoped sessions use their owner credentials; Factory-scoped sessions use Factory credentials. Use a session ID from the Factory session or work item tools.',
     inputSchema: z
       .object({
         sessionId: z.string().trim().min(1).max(200),
-        modelId: z.string().trim().min(1).max(200),
+        modelId: z.string().trim().min(1).max(200).optional().describe('Omit to list usable models without switching.'),
       })
       .strict(),
     execute: async ({ sessionId, modelId }) => {
@@ -192,16 +207,8 @@ export function createFactorySessionTools(
       // The thread's resource, not the session id: sessions share their Factory's or owner's resource.
       const resourceId = (await messaging.controller.queryThreadById({ threadId }))?.resourceId ?? sessionId;
       const catalog = await sessionModelCatalog(messaging.controller, sessionId, threadId, resourceId);
-      if (!catalog.usable.includes(modelId)) {
-        const options = catalog.usable.length
-          ? ` Models available to it: ${catalog.usable.slice(0, LISTED_MODELS).join(', ')}${catalog.usable.length > LISTED_MODELS ? ', …' : ''}.`
-          : ' No models are available to it; connect a provider credential first.';
-        throw new Error(
-          catalog.known.has(modelId)
-            ? `Model ${modelId} exists, but this session's credential scope (${catalog.scopeLabel}) has no credential for its provider.${options}`
-            : `Unknown model ${modelId}.${options}`,
-        );
-      }
+      if (modelId === undefined) return { sessionId, models: catalog.usable };
+      if (!catalog.usable.includes(modelId)) throw unrunnableModelError(modelId, catalog);
       const { live } = await messaging.controller.setThreadModel({ resourceId, threadId, modelId });
       return { sessionId, threadId, modelId, live };
     },
@@ -211,6 +218,7 @@ export function createFactorySessionTools(
     id: 'factory_start_session',
     description: [
       'Start a side session in this Factory with a prompt. It runs on its own sandbox and branch as you, and reports back to this session with `factory-session` notifications.',
+      'A side session uses this session’s model. Pass `model` to start it on another model the session credentials can run.',
       'Use it for self-contained investigations; when the result should land as a pull request, file a work item instead.',
       'With `workItem` and `role` it starts that role on the work item instead, without moving the card, and this session follows the item.',
       "A role that already has a session on the item (current or past) can't be started again from here: message that session with factory_signal_session, or ask the person to use the board.",
@@ -219,6 +227,15 @@ export function createFactorySessionTools(
       .object({
         prompt: z.string().trim().min(1).max(8000).describe('The first message the new session receives.'),
         title: z.string().trim().min(1).max(TITLE_LENGTH).optional(),
+        model: z
+          .string()
+          .trim()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe(
+            'Model id for a side session. Omit it to inherit this session’s model. The session credentials must be able to run it.',
+          ),
         workItem: workItemRefSchema.optional(),
         role: z.string().trim().min(1).max(64).optional(),
       })
@@ -227,7 +244,7 @@ export function createFactorySessionTools(
         message: 'Pass workItem together with role.',
         path: ['role'],
       }),
-    execute: async ({ prompt, title, workItem, role }) => {
+    execute: async ({ prompt, title, model, workItem, role }) => {
       if (workItem !== undefined) {
         // A role start records a run as the person, so it waits for a turn the person started.
         if (!scope.interactive) {
@@ -244,6 +261,29 @@ export function createFactorySessionTools(
       const messaging = await deps.messaging();
       if (!messaging) throw new Error('Starting sessions is not available on this server.');
 
+      // The child runs with the same credentials as this session, so validate against those.
+      const parentThreadId = await resolveSessionThread({
+        controller: messaging.controller,
+        sessions: deps.sessions,
+        workItems: deps.workItems,
+        sessionId: scope.sessionId,
+      });
+      const parentResourceId = parentThreadId
+        ? ((await messaging.controller.queryThreadById({ threadId: parentThreadId }))?.resourceId ?? scope.sessionId)
+        : scope.sessionId;
+      const catalog = await sessionModelCatalog(
+        messaging.controller,
+        scope.sessionId,
+        parentThreadId ?? scope.threadId,
+        parentResourceId,
+      );
+      const inherited = model
+        ? null
+        : await sessionModel(messaging.controller, deps.sessions, deps.workItems, scope.sessionId);
+      const requestedModel = model ?? (inherited && catalog.usable.includes(inherited) ? inherited : undefined);
+      if (requestedModel && !catalog.usable.includes(requestedModel))
+        throw unrunnableModelError(requestedModel, catalog);
+
       const sessionId = globalThis.crypto.randomUUID();
       const ensured = await ensureFactorySourceSession({
         sourceControl,
@@ -258,7 +298,7 @@ export function createFactorySessionTools(
         visibility: parent.visibility,
         origin: { sessionId: scope.sessionId, threadId: scope.threadId },
       });
-      const sessionModel = await resolveFactorySessionModel({
+      const resolvedModel = await resolveFactorySessionModel({
         ...deps.sessionModel,
         factoryProjectId: scope.factoryProjectId,
         orgId: scope.orgId,
@@ -286,9 +326,9 @@ export function createFactorySessionTools(
       await session.state.set(tags);
       await hydrateFactorySession(session, {
         orgId: scope.orgId,
-        modelScope: sessionModel.modelScope,
+        modelScope: resolvedModel.modelScope,
         ownerUserId: scope.userId,
-        defaultModelId: sessionModel.modelId,
+        defaultModelId: requestedModel ?? resolvedModel.modelId,
       });
 
       const threadId = session.thread.requireId();
@@ -301,7 +341,7 @@ export function createFactorySessionTools(
       await primeTenantCredentialsForTenant({
         orgId: scope.orgId,
         userId: scope.userId,
-        credentialScope: sessionModel.modelScope,
+        credentialScope: resolvedModel.modelScope,
       });
       // How its runs end reaches this session through the listener every Factory
       // session gets (`observeSessionRunReports`), which follows the row's origin.
@@ -361,7 +401,9 @@ export function createFactorySessionTools(
       branch: `${USER_SESSION_BRANCH_PREFIX}${sessionId}`,
       projectRepositoryId,
       attributeToUserId: scope.userId,
-      visibility: parent.visibility,
+      // A run works a shared card, so the org can open it and answer its approvals even when the session that
+      // started it is private.
+      visibility: 'org',
     });
 
     // Follow first, so a fast run's first report already has somewhere to go.

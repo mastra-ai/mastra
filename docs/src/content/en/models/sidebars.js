@@ -491,11 +491,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/iflowcn',
-          label: 'iFlow',
-        },
-        {
-          type: 'doc',
           id: 'providers/impossibl',
           label: 'Impossibl',
         },
@@ -596,8 +591,8 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/llama',
-          label: 'Llama',
+          id: 'providers/liquid',
+          label: 'Liquid Inference',
         },
         {
           type: 'doc',

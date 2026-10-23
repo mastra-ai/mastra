@@ -29,7 +29,7 @@ export const agent = new Agent({
       model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
       choices: [
         {
-          model: '__GATEWAY_OPENAI_MODEL_MINI__',
+          model: '__GATEWAY_OPENAI_MODEL_LUNA__',
           criteria:
             'Answerable in one or two sentences from general knowledge, with no reasoning steps',
         },
@@ -162,7 +162,7 @@ const logger = new PinoLogger({ name: 'model-selection' })
 new ModelSelectionProcessor({
   model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   choices: [
-    { model: '__GATEWAY_OPENAI_MODEL_MINI__', criteria: 'Simple lookups' },
+    { model: '__GATEWAY_OPENAI_MODEL_LUNA__', criteria: 'Simple lookups' },
     { model: '__GATEWAY_OPENAI_MODEL__', criteria: 'Multi-step reasoning' },
   ],
   onDecision: decision => {
@@ -228,7 +228,7 @@ const triage = new Classifier({
 new ModelSelectionProcessor({
   classifier: triage,
   select: ({ complexity }) =>
-    complexity.choice === 'trivial' ? '__GATEWAY_OPENAI_MODEL_MINI__' : undefined,
+    complexity.choice === 'trivial' ? '__GATEWAY_OPENAI_MODEL_LUNA__' : undefined,
 })
 ```
 
@@ -279,7 +279,7 @@ new ModelSelectionProcessor({
   select: ({ complexity, sensitive }) => {
     // Never downgrade a sensitive request, however simple it looks.
     if (sensitive.probability >= 0.3) return undefined
-    return complexity.choice === 'trivial' ? '__GATEWAY_OPENAI_MODEL_MINI__' : undefined
+    return complexity.choice === 'trivial' ? '__GATEWAY_OPENAI_MODEL_LUNA__' : undefined
   },
 })
 ```

@@ -27,20 +27,20 @@ describe('LatencyCard', () => {
     expect(screen.getByRole('tab', { name: 'Workflows' })).toBeDefined();
   });
 
-  it('has no "View in Traces" button without a handler', async () => {
+  it('has no "View in traces" button without a handler', async () => {
     seedMetrics();
     renderInMetrics(<LatencyCard />);
     await screen.findByText('4.50s');
-    expect(screen.queryByRole('button', { name: 'View in Traces' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'View in traces' })).toBeNull();
   });
 
-  it('reports the open tab from "View in Traces"', async () => {
+  it('reports the open tab from "View in traces"', async () => {
     seedMetrics();
     const onViewTraces = vi.fn();
     renderInMetrics(<LatencyCard onViewTraces={onViewTraces} />);
     await screen.findByText('4.50s');
     fireEvent.click(screen.getByRole('tab', { name: 'Workflows' }));
-    fireEvent.click(screen.getByRole('button', { name: 'View in Traces' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View in traces' }));
     expect(onViewTraces).toHaveBeenCalledWith(EntityType.WORKFLOW_RUN);
   });
 });
