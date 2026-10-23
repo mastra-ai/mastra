@@ -125,7 +125,7 @@ At the rebase, #28318's `canonicalizeKnowledgeScope` conflicts with the alpha's 
 
 **Factory routes read the scope array, so they change too.** `mastracode/factory/src/routes/knowledge.ts`:
 - `deepestRung` (`:316-325`) returns `org` for any scope without `resource`/`thread`, so a record at `[org:x, project:p]` would be reported as org-level in the UI payload.
-- `view.scope.slice(0, 1)` and `slice(0, 2)` (`:636-640`) assume the org comes first and the resource second, which no longer holds for a scope without an org tag.
+- `selectedView` (`:636-648`) takes `view.scope.slice(0, 1)` for the org level and `slice(0, 2)` for the resource level, assuming org then resource. With org optional and `project:` its own tag it returns the wrong entries (a view with no org tag returns `[resource:r]` as "org"). It is rewritten to filter by level name, and the route test covers a view with `project:` and no `org:`.
 - `withinViewBoundary` (`:327-334`) tests an index-by-index prefix of the canonical array. `project:` sorts after `thread`, so `[org:x, project:p]` is not a prefix of the view `[org:x, resource:r, thread:t, project:p]` even though subset containment makes it visible. Sibling-project filtering in the member lens would hide content it should show.
 - All three are rewritten to subset containment, with a Factory route test that uses a project tag.
 
@@ -210,7 +210,7 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 | Importer-claim guard (remove, rescope, merge) | Wave 2 | Port into the moved core `knowledge-write-tools`; the guard in `curate.ts` disappears with Subconscious |
 | Run-scope reader `getRunAgentScopes` and tag-accepting store | Alpha | Keep one copy of the reader (Wave 2 has the same function). Wave 2's scope nodes, grants and importer scopes build on the alpha's tags, and its own `canonicalizeKnowledgeScope` changes conflict with the alpha's |
 | Token limits | Alpha | Recheck importers that write long record text against the 250-token limit |
-| Factory Knowledge routes (`deepestRung`, `withinViewBoundary`, org-tag refusal) | Alpha | Wave 2's Factory routes and UI scope lens rebase onto subset containment |
+| Factory Knowledge routes (`deepestRung`, `withinViewBoundary`, `selectedView`, org-tag refusal) | Alpha | Wave 2's Factory routes and UI scope lens rebase onto subset containment |
 
 **Kayle's Director dogfood plan.** It works on the alpha as-is. Each run passes its tags through `scopes` (`org:…`, `team:director`, `agent:<name>`, `request:r25`), and the store accepts them. Nothing is stamped through `organizationId` or `knowledgeResourceId`. Pins need Memory, which Director sessions already have.
 
