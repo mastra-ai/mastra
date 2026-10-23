@@ -261,6 +261,28 @@ describe('RedisServerCache', () => {
       expect(mockClient.eval).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps the requested run-log TTL on both keys after a CROSSSLOT fallback', async () => {
+      mockClient.eval.mockRejectedValue(new Error("CROSSSLOT Keys in request don't hash to the same slot"));
+      mockClient.incr.mockResolvedValue(1);
+      mockClient.rpush.mockResolvedValue(1);
+
+      await cache.listPushIndexed('events', 'events:counter', { type: 'x' }, 24 * 60 * 60 * 1000);
+
+      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:events:counter', 86400);
+      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:events', 86400);
+      expect(mockClient.expire).not.toHaveBeenCalledWith(expect.anything(), 300);
+    });
+
+    it('keeps a cache without expiry persistent on the fallback path', async () => {
+      const { eval: _eval, ...clientWithoutEval } = mockClient;
+      const noTtlCache = new RedisServerCache({ client: clientWithoutEval as RedisClient }, { ttlSeconds: 0 });
+      mockClient.incr.mockResolvedValue(1);
+
+      await noTtlCache.listPushIndexed('events', 'events:counter', { type: 'x' }, 24 * 60 * 60 * 1000);
+
+      expect(mockClient.expire).not.toHaveBeenCalled();
+    });
+
     it('rethrows non-CROSSSLOT script errors', async () => {
       mockClient.eval.mockRejectedValue(new Error('connection lost'));
       await expect(cache.listPushIndexed('events', 'events:counter', { type: 'x' })).rejects.toThrow('connection lost');

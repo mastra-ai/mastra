@@ -242,8 +242,11 @@ export class RedisServerCache extends MastraServerCache {
     value: Record<string, unknown>,
     ttlMs?: number,
   ): Promise<number> {
+    // A cache without expiry stays that way; otherwise `ttlMs` can only raise
+    // the default.
+    const ttlSeconds = this.ttlSeconds > 0 ? Math.max(this.ttlSeconds, Math.ceil((ttlMs ?? 0) / 1000)) : 0;
     if (this.scriptingDisabled) {
-      return super.listPushIndexed(listKey, counterKey, value, ttlMs);
+      return this.composedPushIndexed(listKey, counterKey, value, ttlSeconds);
     }
 
     const { index: _ignored, ...body } = value;
@@ -252,12 +255,7 @@ export class RedisServerCache extends MastraServerCache {
         this.client,
         LIST_PUSH_INDEXED_SCRIPT,
         [this.getKey(listKey), this.getKey(counterKey)],
-        [
-          this.serialize(body),
-          // A cache without expiry stays that way; otherwise `ttlMs` can only
-          // raise the default.
-          String(this.ttlSeconds > 0 ? Math.max(this.ttlSeconds, Math.ceil((ttlMs ?? 0) / 1000)) : 0),
-        ],
+        [this.serialize(body), String(ttlSeconds)],
       );
       return Number(result);
     } catch (error) {
@@ -270,10 +268,31 @@ export class RedisServerCache extends MastraServerCache {
         this.logger.warn(
           '[RedisServerCache] listPushIndexed script rejected with CROSSSLOT; falling back to increment + listPush',
         );
-        return super.listPushIndexed(listKey, counterKey, value, ttlMs);
+        return this.composedPushIndexed(listKey, counterKey, value, ttlSeconds);
       }
       throw error;
     }
+  }
+
+  /**
+   * `INCR` then `RPUSH`, each followed by the same `EXPIRE` the script applies.
+   * Not atomic: concurrent writers can interleave, so a list position may not
+   * match its index (Redis Cluster atomicity is tracked in COR-1491).
+   */
+  private async composedPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlSeconds: number,
+  ): Promise<number> {
+    const fullCounterKey = this.getKey(counterKey);
+    const index = (await this.client.incr(fullCounterKey)) - 1;
+    if (ttlSeconds > 0) await this.client.expire(fullCounterKey, ttlSeconds);
+
+    const fullListKey = this.getKey(listKey);
+    await this.pushToList(this.client, fullListKey, this.serialize({ ...value, index }));
+    if (ttlSeconds > 0) await this.client.expire(fullListKey, ttlSeconds);
+    return index;
   }
 }
 
