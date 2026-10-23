@@ -2,7 +2,7 @@
 '@mastra/pg': minor
 ---
 
-Added support for the workflow `storageVersion: 2` option. Runs of workflows that set it are stored as a run header plus one row per step, and each write saves only the steps that changed instead of rewriting the whole run. This keeps writes small for long-running workflows and loops.
+Added support for the experimental workflow `storageVersion: 2` option. Runs of workflows that set it are stored as a run header plus one row per step, and each write saves only the steps that changed instead of rewriting the whole run. This keeps writes small for long-running workflows and loops.
 
 ```ts
 const workflow = createWorkflow({

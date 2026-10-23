@@ -618,6 +618,8 @@ export interface WorkflowOptions {
    * combined with `pruneSnapshot`. Steps read earlier results with
    * `getStepResultAsync`; sync `getStepResult` throws. Runs keep the version
    * they were created with: resuming a run after changing this option throws.
+   *
+   * @experimental
    */
   storageVersion?: 1 | 2;
 
