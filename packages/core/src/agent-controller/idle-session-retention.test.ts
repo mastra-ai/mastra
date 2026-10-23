@@ -1,4 +1,6 @@
 import { setImmediate } from 'node:timers/promises';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
@@ -6,10 +8,20 @@ import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
 
-// The unit project exposes GC to exercise V8's real reachability.
+// The changed-test gate uses the base branch's Vitest config, without --expose-gc.
+// Enable real GC there too so the gate fails on retention, not missing test setup.
+function getGarbageCollector(): () => void {
+  if (globalThis.gc) return globalThis.gc;
+  setFlagsFromString('--expose-gc');
+  const gc: unknown = runInNewContext('gc');
+  setFlagsFromString('--no-expose-gc');
+  if (typeof gc !== 'function') throw new Error('Expected V8 garbage collection to be available');
+  return () => gc();
+}
+
 describe('idle Session retention (#28230)', () => {
   it('releases finished run contexts while keeping the session usable', async () => {
-    expect(globalThis.gc).toBeTypeOf('function');
+    const collectGarbage = getGarbageCollector();
     const contexts: WeakRef<object>[] = [];
     const agent = new Agent({
       id: 'test-agent',
@@ -65,7 +77,7 @@ describe('idle Session retention (#28230)', () => {
         // dereference between collections, and let stream teardown finish first.
         for (let attempt = 0; attempt < 10; attempt++) {
           await setImmediate();
-          globalThis.gc?.();
+          collectGarbage();
         }
         expect(contexts).toHaveLength(turn + 1);
         expect(contexts.map(context => context.deref())).toEqual(contexts.map(() => undefined));
