@@ -11,6 +11,7 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
+import { CachingPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import type { ApiRoute } from '@mastra/core/server';
 import { createHonoServer } from '@mastra/deployer/server';
@@ -237,6 +238,16 @@ export async function setupSharedTestInfrastructure({
   // Create the shared workflow
   const { createInngestDurableAgenticWorkflow } = await import('../durable-agent/create-inngest-agentic-workflow');
   const workflow = createInngestDurableAgenticWorkflow({ inngest, retries });
+  // Mastra serves the first workflow registered under this id, so this one
+  // shadows each agent's own copy. Wire it the way `createInngestAgent` wires
+  // that copy: agent stream events go through a CachingPubSub over the shared
+  // server cache, so `observe()` and resume offsets can replay run history.
+  workflow.__setPubsubFactory(
+    defaultPubsub =>
+      new CachingPubSub(defaultPubsub, getSharedMastra().serverCache, {
+        shouldCache: topic => topic.startsWith('agent.stream.'),
+      }),
+  );
 
   // Create shared Mastra instance with the workflow pre-registered
   // This is required because Inngest reads workflows at serve() time

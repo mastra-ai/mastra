@@ -131,6 +131,7 @@ export {
   emitStepFinishEvent,
   emitFinishEvent,
   emitErrorEvent,
+  emitAbortEvent,
   emitSuspendedEvent,
   type DurableAgentStreamOptions as StreamAdapterOptions,
   type DurableAgentStreamResult as StreamAdapterResult,

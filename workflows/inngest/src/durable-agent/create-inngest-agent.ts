@@ -39,11 +39,13 @@
 import type { Agent, AgentExecutionOptions, StructuredOutputOptions } from '@mastra/core/agent';
 import {
   AGENT_STREAM_TOPIC,
+  AgentStreamEventTypes,
   agentThreadStreamRuntime,
   prepareForDurableExecution,
   createDurableAgentStream,
   emitChunkEvent,
   emitErrorEvent,
+  emitAbortEvent,
   runDurableStreamUntilIdle,
   runResumeDurableStreamUntilIdle,
   globalRunRegistry,
@@ -497,18 +499,24 @@ export interface InngestAgent<TOutput = undefined> {
    *
    * @param runId - The run ID to observe
    * @param options.offset - Resume from this event index (0-based). If omitted, replays all events.
+   * @param options.idleTimeoutMs - End the observation after this much silence, unless `isAlive` reports the run is still live.
+   * @param options.isAlive - Liveness probe consulted when `idleTimeoutMs` elapses.
    */
   observe(
     runId: string,
     options?: {
       offset?: number;
+      idleTimeoutMs?: number;
+      isAlive?: () => boolean | Promise<boolean>;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData & { runId: string }) => void | Promise<void>;
       onFinish?: MastraOnFinishCallback<TOutput>;
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
-  ): Promise<Omit<InngestAgentStreamResult<TOutput>, 'threadId' | 'resourceId'> & { runId: string }>;
+  ): Promise<
+    Omit<InngestAgentStreamResult<TOutput>, 'threadId' | 'resourceId'> & { runId: string; detach: () => void }
+  >;
 
   /**
    * Not supported. Inngest owns durability for this agent (see the `retries`
@@ -817,6 +825,64 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   async function getPubsubOffset(runId: string): Promise<number> {
     const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId));
     return history.length;
+  }
+
+  /**
+   * Whether nothing will publish to the run again, so an observer can close.
+   * Mirrors core `DurableAgent.#isObservationComplete`, minus run fencing and
+   * execution leases, which the Inngest engine does not use.
+   */
+  async function isObservationComplete(runId: string): Promise<boolean> {
+    try {
+      const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId), 0);
+      const latest = history.at(-1);
+      if (latest) {
+        const type = latest.type === AgentStreamEventTypes.CHUNK ? latest.data?.type : latest.type;
+        return type === 'finish' || type === 'error' || type === 'abort';
+      }
+      if (getRunRegistryEntry(runId, mastra)) return false;
+      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+      if (!workflowsStore) return true;
+      for (const workflowName of [InngestDurableStepIds.AGENTIC_LOOP, InngestDurableStepIds.AGENTIC_EXECUTION]) {
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ runId, workflowName });
+        if (!snapshot) continue;
+        // Unknown statuses stay observable, including suspension.
+        if (!['success', 'failed', 'tripwire', 'canceled', 'bailed', 'skipped'].includes(snapshot.status)) {
+          return false;
+        }
+      }
+      return true;
+    } catch {
+      // Unavailable lifecycle evidence cannot prove that the producer is gone.
+      return false;
+    }
+  }
+
+  /**
+   * A run parked on a suspension has no prepared run in this process, so a
+   * fenced resume is the first point where it is known it can never continue.
+   * Delete its still-suspended snapshot rows and publish the abort terminal so
+   * observers attached to the parked run close. Mirrors core
+   * `DurableAgent.#deleteFencedSuspendedRun`.
+   */
+  async function deleteFencedSuspendedRun(runId: string): Promise<void> {
+    try {
+      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        runId,
+        workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+      });
+      if (snapshot?.status !== 'suspended') return;
+      await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_LOOP });
+      await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_EXECUTION });
+      await emitAbortEvent(getPubsub(), runId, { steps: [], text: '' });
+    } catch (error) {
+      mastra?.getLogger?.()?.warn?.('Failed to delete snapshot of aborted suspended Inngest run', {
+        agentId,
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**
@@ -1240,6 +1306,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
     async resume(runId, resumeData, resumeOptions): Promise<InngestAgentStreamResult<TOutput>> {
       if (agentThreadStreamRuntime.isResumeFenced(runId, agent.getPubSub())) {
+        await deleteFencedSuspendedRun(runId);
         throw new MastraError({
           id: 'AGENT_RESUME_ABORTED_RUN',
           domain: ErrorDomain.AGENT,
@@ -1652,11 +1719,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
     async observe(runId, observeOptions) {
       // Create the stream subscription with offset support
-      const {
-        output,
-        cleanup: streamCleanup,
-        ready,
-      } = createDurableAgentStream<TOutput>({
+      const stream = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
         runId,
         messageId: crypto.randomUUID(),
@@ -1666,6 +1729,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           version: 'v3',
         },
         offset: observeOptions?.offset,
+        idleTimeoutMs: observeOptions?.idleTimeoutMs,
+        isAlive: observeOptions?.isAlive,
         structuredOutput: getRunRegistryEntry(runId, mastra)?.structuredOutput as
           | StructuredOutputOptions<TOutput>
           | undefined,
@@ -1675,14 +1740,56 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         onError: observeOptions?.onError,
         onSuspended: observeOptions?.onSuspended,
       });
+      const { output, cleanup: streamCleanup, ready, detach } = stream;
 
-      await ready;
+      // As in core `DurableAgent.observe()`: this output belongs to this
+      // observer alone, so a consumer that stops reading fullStream detaches
+      // the pubsub subscription instead of leaving it open.
+      const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
+      Object.defineProperty(output, 'fullStream', {
+        configurable: true,
+        get() {
+          const reader = (baseFullStream.call(output) as ReadableStream<ChunkType<TOutput>>).getReader();
+          return new ReadableStream<ChunkType<TOutput>>({
+            async pull(controller) {
+              let result: ReadableStreamReadResult<ChunkType<TOutput>>;
+              try {
+                result = await reader.read();
+              } catch (error) {
+                detach();
+                throw error;
+              }
+              if (result.done) {
+                detach();
+                controller.close();
+              } else {
+                controller.enqueue(result.value);
+              }
+            },
+            cancel(reason) {
+              detach();
+              return reader.cancel(reason);
+            },
+          });
+        },
+      });
 
-      // `observe()` does not own the run, but it can still stop it: closing the
-      // local subscription and publishing an abort request, which reaches the
-      // worker actually executing it.
+      // Reconcile only after subscribing, so a completion racing attachment is
+      // not lost: close at once when nothing will publish to the run again.
+      try {
+        await ready;
+        await stream.waitForEventDelivery();
+        const reconciledVersion = stream.activityVersion;
+        if ((await isObservationComplete(runId)) && stream.activityVersion === reconciledVersion) detach();
+      } catch (error) {
+        detach();
+        throw error;
+      }
+
+      // `observe()` does not own the run, but it can still stop it by publishing
+      // an abort request, which reaches the worker actually executing it. The
+      // observation stays open until the run publishes its abort finish.
       const abort = async (_reason?: unknown) => {
-        streamCleanup();
         await requestRemoteAbort(runId);
       };
 
@@ -1693,6 +1800,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         },
         runId,
         cleanup: streamCleanup,
+        detach,
         abort,
       };
     },
