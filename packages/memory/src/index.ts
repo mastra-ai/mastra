@@ -558,6 +558,9 @@ export class Memory extends MastraMemory {
   }
 
   /** @internal Creates isolated memory for a derived subconscious agent. */
+  /** Set on the Subconscious agents' own Memory: they carry their own fixed Knowledge tools. */
+  #withoutKnowledgeTools = false;
+
   createSubconsciousMemory(): Memory {
     const memory = new Memory({
       storage: this.storage,
@@ -567,6 +570,8 @@ export class Memory extends MastraMemory {
       embedderOptions: this.embedderOptions,
       options: { observationalMemory: false },
     });
+    // Memory tools override an agent's own tools, so the flag's tools would replace the curator's.
+    memory.#withoutKnowledgeTools = true;
     if (this._mastraInstance) memory.__registerMastra(this._mastraInstance);
     return memory;
   }
@@ -695,7 +700,9 @@ export class Memory extends MastraMemory {
 
   /** The tools flag of the configured Knowledge instance; a key is read once Mastra can resolve it. */
   private getKnowledgeToolsConfig(): { read: boolean; write: boolean } {
-    if (this._knowledge === undefined || this._knowledge === false) return { read: false, write: false };
+    if (this.#withoutKnowledgeTools || this._knowledge === undefined || this._knowledge === false) {
+      return { read: false, write: false };
+    }
     if (typeof this._knowledge === 'string' && !this._mastraInstance) return { read: false, write: false };
     return this.getKnowledgeInstance()!.tools;
   }
