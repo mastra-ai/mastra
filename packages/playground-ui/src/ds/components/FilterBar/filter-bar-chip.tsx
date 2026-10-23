@@ -1,11 +1,12 @@
 /* eslint-disable react-refresh/only-export-components */
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
+import { CircleAlertIcon, LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AnimationEvent, CSSProperties, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { emptyValueFor, useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
+import { isOperatorImplied } from './filter-bar-tree';
 import { matchesQueryFilter } from './match-query';
 import type {
   DraftStage,
@@ -116,6 +117,8 @@ type ChipContext = {
   openSegment: FilterBarSegment | null;
   setOpenSegment: (segment: FilterBarSegment | null) => void;
   readOnly: boolean;
+  /** Filter the consumer can't run: segments are inert labels, the remove button stays. */
+  unsupported: boolean;
   /** Filter still being built in the input: segments are inert labels. */
   draft: boolean;
   /** Filter already removed from the value, playing its exit: segments are inert labels. */
@@ -138,6 +141,11 @@ export type FilterBarChipProps = {
   /** `false` keeps the chip editable but drops the remove button and ignores Backspace/Delete. */
   removable?: boolean;
   /**
+   * Why this filter can't be applied, e.g. the backend doesn't support it. The chip shows muted
+   * with the reason and can only be removed, so a filter is never dropped without a trace.
+   */
+  unsupported?: string;
+  /**
    * Render the filter being built in the input (see `FilterBarContextValue.draft`): only
    * the picked segments show, as inert labels. Keyed by the draft id, the same element
    * carries on as the editable chip once the value is committed.
@@ -156,6 +164,7 @@ export function FilterBarChip({
   item,
   readOnly = false,
   removable = true,
+  unsupported,
   draft = false,
   className,
   children,
@@ -198,7 +207,11 @@ export function FilterBarChip({
     };
   }, [leaving, item.id, settleRemove]);
 
-  const operatorImplied = field ? ctx.getFieldOperators(field).length === 1 : false;
+  // A field with one operator doesn't show it, unless the chip holds another one (e.g. a filter
+  // made against a backend that offered more operators), which must stay visible.
+  const fieldOperators = field ? ctx.getFieldOperators(field) : [];
+  // A draft has no operator yet: it takes the field's only one.
+  const operatorImplied = (draft && fieldOperators.length === 1) || isOperatorImplied(fieldOperators, item.operatorId);
   const label = [
     field?.label ?? item.fieldId,
     operatorImplied ? '' : (operator?.label ?? item.operatorId),
@@ -249,9 +262,22 @@ export function FilterBarChip({
     [readOnly, draft, leaving, removable, ctx, index, item.id],
   );
 
+  const isUnsupported = unsupported !== undefined;
   const chipValue = useMemo<ChipContext>(
-    () => ({ item, index, field, operator, openSegment, setOpenSegment, readOnly, draft, leaving, operatorImplied }),
-    [item, index, field, operator, openSegment, readOnly, draft, leaving, operatorImplied],
+    () => ({
+      item,
+      index,
+      field,
+      operator,
+      openSegment,
+      setOpenSegment,
+      readOnly,
+      unsupported: isUnsupported,
+      draft,
+      leaving,
+      operatorImplied,
+    }),
+    [item, index, field, operator, openSegment, readOnly, isUnsupported, draft, leaving, operatorImplied],
   );
   const content = children ?? (
     <>
@@ -266,16 +292,17 @@ export function FilterBarChip({
       <div
         ref={rootRef}
         role="group"
-        aria-label={label}
+        aria-label={isUnsupported ? `${label}, ${unsupported}` : label}
         // The input already announces the draft's progress through its placeholder.
         aria-hidden={draft || leaving || undefined}
+        title={unsupported}
         data-slot="filter-bar-chip"
         data-draft={draft || undefined}
         data-initial={initial || undefined}
         data-readonly={readOnly || undefined}
         data-leaving={leaving || undefined}
         data-shine={(shine && !leaving) || undefined}
-        className={cn(chipClass, leaving && 'pointer-events-none', className)}
+        className={cn(chipClass, isUnsupported && 'text-muted-foreground', leaving && 'pointer-events-none', className)}
         style={
           {
             '--filter-bar-segments-settled': settled,
@@ -294,6 +321,11 @@ export function FilterBarChip({
             title="This filter is locked"
           >
             <LockIcon className="size-[1.1em]" />
+          </span>
+        )}
+        {isUnsupported && (
+          <span className={cn(segmentClass, 'pr-0 text-warning-foreground [--filter-bar-segment-padding:0.5rem_0]')}>
+            <CircleAlertIcon className="size-[1.1em]" aria-hidden />
           </span>
         )}
         {content}
@@ -387,11 +419,13 @@ function SegmentCombobox<T>({
     <span className="truncate">{label}</span>
   );
 
-  if (chip.readOnly || chip.draft || chip.leaving) {
+  if (chip.readOnly || chip.unsupported || chip.draft || chip.leaving) {
+    // An unsupported chip stays muted throughout, field accent included.
+    const accented = isField && !chip.unsupported;
     return (
       <span
-        className={cn(segmentClass, isField && 'text-foreground')}
-        style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
+        className={cn(segmentClass, accented && 'text-foreground')}
+        style={accented ? fieldSegmentAccentStyle(chip.field) : undefined}
         title={fullLabel}
       >
         {content}

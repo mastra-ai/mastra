@@ -149,8 +149,10 @@ export const unsupportedTraceFilterReason = (node: FilterBarNode, support: Trace
 
 /**
  * Drops what this server can't run, so it's left out of the list query: top-level tokens, and
- * every group on the legacy endpoint. With the trace query API, `buildTracesQueryRequest` leaves a
- * group's unqueryable conditions out. Returns the same object when nothing is dropped.
+ * every group on the legacy endpoint. The filter bar still shows them, muted (see
+ * `unsupportedTraceFilterReason`), and edits keep them. With the trace query API,
+ * `buildTracesQueryRequest` leaves a group's unqueryable conditions out. Returns the same object
+ * when nothing is dropped.
  */
 export const sanitizeTracesFilters = (filters: TracesFilters, support: TracesQuerySupport): TracesFilters => {
   const tokens = filters.tokens.filter(

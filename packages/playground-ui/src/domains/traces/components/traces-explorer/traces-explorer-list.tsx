@@ -3,6 +3,7 @@ import { TracesListView } from '../traces-list-view';
 import type { TracesListViewTrace } from '../traces-list-view';
 import {
   useTraceUsageColumns,
+  useTracesColumns,
   useTracesConfig,
   useTracesFilters,
   useTracesList,
@@ -26,6 +27,7 @@ export function TracesExplorerList() {
   const { onFilterByField } = useTracesFilterBar();
   const { selectedTraceId, selectTrace, closeTrace } = useTracesSelection();
   const { displayedPreferences, usageEnabled } = useTraceUsageColumns();
+  const { order, onOrderChange } = useTracesColumns();
 
   const { data: usageByTraceId } = useTraceUsage({
     traceIds: rows.map(row => row.traceId),
@@ -42,6 +44,8 @@ export function TracesExplorerList() {
   return (
     <TracesListView
       listId={listId}
+      columnOrder={order}
+      onColumnOrderChange={onOrderChange}
       traces={rows}
       isLoading={isLoading}
       isFetchingNextPage={isFetchingNextPage}

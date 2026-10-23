@@ -1,7 +1,7 @@
-import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { TracesExplorer } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import { memo } from 'react';
 import { useNavigate } from 'react-router';
+import { TracesToolbar } from './traces-toolbar';
 import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { LiveKitRecordingReview } from '@/domains/voice/components/livekit-recording-review';
 import { traceScoreLink } from '@/lib/app-routing';
@@ -11,16 +11,7 @@ import { traceScoreLink } from '@/lib/app-routing';
 export const TracesPageContent = memo(function TracesPageContent({ isScoped }: { isScoped: boolean }) {
   const navigate = useNavigate();
 
-  const toolbar = (
-    <ActionRow>
-      <ActionRow.Start>
-        <TracesExplorer.FilterBar />
-      </ActionRow.Start>
-      <ActionRow.End>
-        <TracesExplorer.ColumnsMenu />
-      </ActionRow.End>
-    </ActionRow>
-  );
+  const toolbar = <TracesToolbar />;
   const content = (
     <>
       <TracesExplorer.List />

@@ -7,7 +7,7 @@ packages:
 
 # Saved Views API
 
-The Saved Views API stores named setups for Studio pages, such as the filters and table settings of the **Traces** page. Views live in the `savedViews` domain of your [Mastra storage](/reference/storage/overview). They're shared between users: on servers with auth, anyone with the `saved-views:read` permission can list them, and anyone with `saved-views:write` can change them. Each view records who created it and who last changed it.
+The Saved Views API stores named setups for Studio pages, such as the filters and table settings of the **Traces** page, where Studio shows them as view tabs. Views live in the `savedViews` domain of your [Mastra storage](/reference/storage/overview). They're shared between users: on servers with auth, anyone with the `saved-views:read` permission can list them, and anyone with `saved-views:write` can change them. Each view records who created it and who last changed it.
 
 Saved views need a storage adapter with the `savedViews` domain: `@mastra/pg`, `@mastra/libsql`, `@mastra/mongodb`, `@mastra/mysql`, `@mastra/mssql`, `@mastra/spanner`, or the in-memory store. Other stores answer `501`, and servers that predate saved views answer `404`.
 

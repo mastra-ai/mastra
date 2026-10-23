@@ -6,7 +6,7 @@ import { FilterBarClear } from './filter-bar-clear';
 import { FILTER_BAR_SCOPE_ATTR, FilterBarProvider, useFilterBarContext } from './filter-bar-context';
 import { FilterBarInput } from './filter-bar-input';
 import { isFilterBarGroup } from './types';
-import type { FilterBarExpression, FilterBarField, FilterBarItem, FilterBarOperator } from './types';
+import type { FilterBarExpression, FilterBarField, FilterBarGroup, FilterBarItem, FilterBarOperator } from './types';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
@@ -34,7 +34,10 @@ export type FilterBarProps = FilterBarValueProps & {
    * draft chip and the committed chip are the same element.
    */
   createItemId?: (fieldId: string) => string;
-  /** How deep advanced-filter groups may nest (root-level group = 1). Defaults to 3. */
+  /**
+   * How deep advanced-filter groups may nest (root-level group = 1). Defaults to 3. 0 offers no
+   * groups; groups in `value` still render, e.g. as unsupported chips when the backend can't run them.
+   */
   maxDepth?: number;
   'aria-label'?: string;
   /**
@@ -133,13 +136,16 @@ export function FilterBar({
  * group, in order, then the chip of the filter being built in the bar's input (which
  * becomes the last item's chip once committed).
  */
-export function FilterBarChips({ renderChip = defaultRenderChip }: FilterBarChipsProps) {
+export function FilterBarChips({
+  renderChip = defaultRenderChip,
+  renderGroup = defaultRenderGroup,
+}: FilterBarChipsProps) {
   const ctx = useFilterBarContext();
   // One keyed array: the draft chip and the item it becomes share a key, so React
   // keeps the element across the commit instead of mounting a new chip.
   const chips: ReactNode[] = [];
   for (const node of ctx.expression.nodes) {
-    const chip = isFilterBarGroup(node) ? <FilterBarAdvancedChip group={node} /> : renderChip(node);
+    const chip = isFilterBarGroup(node) ? renderGroup(node) : renderChip(node);
     if (chip !== null) chips.push(<Fragment key={node.id}>{chip}</Fragment>);
   }
   if (ctx.draft && !ctx.draft.groupId) {
@@ -160,9 +166,12 @@ export type FilterBarChipsProps = {
    * value for scoping). Defaults to a plain editable `FilterBar.Chip`.
    */
   renderChip?: (item: FilterBarItem) => ReactNode;
+  /** Chip for a root-level group. Defaults to a plain `FilterBar.AdvancedChip`. */
+  renderGroup?: (group: FilterBarGroup) => ReactNode;
 };
 
 const defaultRenderChip = (item: FilterBarItem) => <FilterBarChip item={item} />;
+const defaultRenderGroup = (group: FilterBarGroup) => <FilterBarAdvancedChip group={group} />;
 
 FilterBar.Chips = FilterBarChips;
 FilterBar.Chip = FilterBarChip;

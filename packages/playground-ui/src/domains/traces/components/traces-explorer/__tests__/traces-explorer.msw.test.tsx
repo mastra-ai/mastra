@@ -581,6 +581,50 @@ describe('TracesExplorer', () => {
       expect(JSON.stringify(onTraceQuery.mock.calls.at(-1)?.[0])).not.toContain('durationMs');
     });
 
+    describe('and the host holds a top-level duration filter', () => {
+      const durationToken = { fieldId: 'durationMs', operatorId: 'gt' as const, value: '1000' };
+      const renderWithDuration = async (onChange?: (next: TracesExplorerState) => void) => {
+        setExplorerHandlers(noRootDurationCapabilities);
+        const rendered = renderExplorer({
+          onChange,
+          initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: [durationToken] },
+        });
+        await settle(rendered.queryClient);
+        return rendered;
+      };
+      const durationChip = () => screen.findByRole('group', { name: /, Not supported on this storage$/ });
+
+      it('shows it muted in the filter bar with the reason', async () => {
+        await renderWithDuration();
+
+        const chip = await durationChip();
+        expect(chip.getAttribute('title')).toBe('Not supported on this storage');
+        expect(within(chip).queryAllByRole('combobox')).toHaveLength(0);
+      });
+
+      it('keeps it in the host value when another filter is edited', async () => {
+        const onChange = vi.fn<(next: TracesExplorerState) => void>();
+        await renderWithDuration(onChange);
+
+        fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: 'Value: Last 7 days', hidden: true }));
+        fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
+
+        expect(onChange.mock.calls.at(-1)?.[0].filters).toMatchObject({
+          datePreset: 'last-24h',
+          tokens: [durationToken],
+        });
+      });
+
+      it('drops it from the host value once removed', async () => {
+        const onChange = vi.fn<(next: TracesExplorerState) => void>();
+        await renderWithDuration(onChange);
+
+        fireEvent.click(within(await durationChip()).getByRole('button', { name: /^Remove .* filter$/ }));
+
+        expect(onChange.mock.calls.at(-1)?.[0].filters.tokens).toEqual([]);
+      });
+    });
+
     describe('and a filter group holds a duration condition', () => {
       const durationGroup = {
         id: 'group-duration',
@@ -713,6 +757,64 @@ describe('TracesExplorer', () => {
       await renderWithoutTraceQuery();
 
       expect(onTraceQuery).not.toHaveBeenCalled();
+    });
+
+    describe('and the host holds filters only the trace query API can run', () => {
+      it('shows them muted and leaves them out of the list request, keeping the ones it can run', async () => {
+        setExplorerHandlers();
+        const lightListUrls: string[] = [];
+        server.use(
+          http.get(`${TEST_BASE_URL}/api/observability/traces/light`, ({ request }) => {
+            lightListUrls.push(decodeURIComponent(request.url));
+            return HttpResponse.json(emptyLightTraces);
+          }),
+        );
+        const { queryClient } = renderExplorer({
+          features: { traceQuery: false },
+          initialFilters: {
+            ...DEFAULT_TRACES_FILTERS,
+            tokens: [
+              { fieldId: 'runId', value: 'run-1' },
+              { fieldId: 'environment', operatorId: 'in', value: ['development'] },
+            ],
+          },
+        });
+        await settle(queryClient);
+
+        expect(
+          screen.getByRole('group', { name: 'Environment is any of development, Not supported on this storage' }),
+        ).toBeTruthy();
+        expect(screen.getByRole('group', { name: 'Run ID run-1' })).toBeTruthy();
+        expect(lightListUrls.at(-1)).toContain('run-1');
+        expect(lightListUrls.at(-1)).not.toContain('development');
+      });
+    });
+
+    describe('and the host holds an AND/OR group', () => {
+      const group = {
+        id: 'group-status',
+        logic: 'or' as const,
+        nodes: [
+          { fieldId: 'status', operatorId: 'is' as const, value: 'error' },
+          { fieldId: 'environment', operatorId: 'is' as const, value: 'production' },
+        ],
+      };
+
+      it('shows it muted with the reason and offers no new advanced filter', async () => {
+        setExplorerHandlers();
+        const { queryClient } = renderExplorer({
+          features: { traceQuery: false },
+          initialFilters: { ...DEFAULT_TRACES_FILTERS, groups: [group] },
+        });
+        await settle(queryClient);
+
+        expect(
+          screen.getByRole('group', { name: 'Advanced filter, 2 conditions, Not supported on this storage' }),
+        ).toBeTruthy();
+        fireEvent.focus(screen.getByRole('combobox', { name: 'Add filter' }));
+        await screen.findAllByRole('option');
+        expect(screen.queryByRole('option', { name: 'Advanced filter…' })).toBeNull();
+      });
     });
   });
 

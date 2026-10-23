@@ -16,7 +16,7 @@ const savedViewFilterSchema = z.object({
 
 export const savedViewNameSchema = z.string().trim().min(1).max(MAX_SAVED_VIEW_NAME_CHARS);
 
-const storedSavedViewSchema = z.object({
+export const storedSavedViewSchema = z.object({
   id: z.string().min(1),
   name: savedViewNameSchema,
   filters: z.array(savedViewFilterSchema),

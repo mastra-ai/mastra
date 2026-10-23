@@ -50,6 +50,7 @@ function Harness({
   onChange,
   readOnlyIds = [],
   nonRemovableIds = [],
+  unsupported = {},
   describeSuggestionsError,
 }: {
   initial?: FilterBarItem[];
@@ -58,6 +59,8 @@ function Harness({
   onChange?: (items: FilterBarItem[]) => void;
   readOnlyIds?: string[];
   nonRemovableIds?: string[];
+  /** Reason per item id. */
+  unsupported?: Record<string, string>;
   describeSuggestionsError?: (error: unknown) => string | undefined;
 }) {
   const [items, setItems] = useState<FilterBarItem[]>(initial);
@@ -72,13 +75,14 @@ function Harness({
         onChange?.(next);
       }}
     >
-      {readOnlyIds.length > 0 || nonRemovableIds.length > 0 ? (
+      {readOnlyIds.length > 0 || nonRemovableIds.length > 0 || Object.keys(unsupported).length > 0 ? (
         <FilterBar.Chips
           renderChip={item => (
             <FilterBar.Chip
               item={item}
               readOnly={readOnlyIds.includes(item.id)}
               removable={!nonRemovableIds.includes(item.id)}
+              unsupported={unsupported[item.id]}
             />
           )}
         />
@@ -993,6 +997,35 @@ describe('FilterBar', () => {
       expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove Status filter' }));
     });
 
+    describe('when a chip is unsupported', () => {
+      const REASON = 'Not supported on this storage';
+
+      it('shows the reason and offers no editors, only its remove button', () => {
+        render(<Harness initial={INITIAL} unsupported={{ b: REASON }} />);
+        const chip = screen.getByRole('group', { name: `Trace ID is x, ${REASON}` });
+        expect(chip.getAttribute('title')).toBe(REASON);
+        expect(within(chip).queryAllByRole('combobox')).toHaveLength(0);
+        expect(within(chip).getByRole('button', { name: 'Remove Trace ID filter' })).not.toBeNull();
+      });
+
+      it('is removed with its remove button', () => {
+        const onChange = vi.fn();
+        render(<Harness initial={INITIAL} unsupported={{ b: REASON }} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Trace ID filter' }));
+        expect(onChange).toHaveBeenCalledWith([INITIAL[0]]);
+      });
+
+      it('is reached by keyboard on its remove button and removed with Backspace', () => {
+        const onChange = vi.fn();
+        render(<Harness initial={INITIAL} unsupported={{ b: REASON }} onChange={onChange} />);
+        getInput().focus();
+        key('ArrowLeft');
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove Trace ID filter' }));
+        pressActive({ key: 'Backspace' });
+        expect(onChange).toHaveBeenCalledWith([INITIAL[0]]);
+      });
+    });
+
     describe('when a chip is not removable', () => {
       it('stays editable but has no remove button', () => {
         render(<Harness initial={INITIAL} nonRemovableIds={['b']} />);
@@ -1333,10 +1366,13 @@ describe('FilterBar', () => {
       initial,
       onChange,
       maxDepth,
+      unsupportedGroup,
     }: {
       initial: FilterBarExpression;
       onChange?: (expression: FilterBarExpression) => void;
       maxDepth?: number;
+      /** Reason given to every root group. */
+      unsupportedGroup?: string;
     }) {
       const [value, setValue] = useState<FilterBarExpression>(initial);
       return (
@@ -1350,7 +1386,9 @@ describe('FilterBar', () => {
             onChange?.(next);
           }}
         >
-          <FilterBar.Chips />
+          <FilterBar.Chips
+            renderGroup={group => <FilterBar.AdvancedChip group={group} unsupported={unsupportedGroup} />}
+          />
           <FilterBar.Input placeholder="Filter…" />
         </FilterBar>
       );
@@ -1380,6 +1418,36 @@ describe('FilterBar', () => {
         await screen.findByRole('option', { name: 'Status' });
         expect(screen.queryByRole('option', { name: 'Advanced filter…' })).toBeNull();
         expect(getAdvancedChips()).toHaveLength(0);
+      });
+    });
+
+    describe('when groups are turned off with a max depth of 0', () => {
+      it('still renders the groups in the value but offers no new one', async () => {
+        render(<ExpressionHarness initial={EXPRESSION} maxDepth={0} />);
+        expect(screen.getByRole('group', { name: 'Advanced filter, 2 conditions' })).toBeTruthy();
+        getInput().focus();
+        await screen.findByRole('option', { name: 'Status' });
+        expect(screen.queryByRole('option', { name: 'Advanced filter…' })).toBeNull();
+      });
+    });
+
+    describe('when a group is unsupported', () => {
+      const REASON = 'This storage can’t run AND/OR groups';
+
+      it('shows the reason and never opens its editor', () => {
+        render(<ExpressionHarness initial={EXPRESSION} unsupportedGroup={REASON} />);
+        const chip = screen.getByRole('group', { name: `Advanced filter, 2 conditions, ${REASON}` });
+        expect(chip.getAttribute('title')).toBe(REASON);
+        expect(screen.queryByRole('button', { name: /^Advanced filter/ })).toBeNull();
+        fireEvent.click(within(chip).getByText('Advanced filter'));
+        expect(screen.queryByRole('group', { name: /^Conditions joined with/ })).toBeNull();
+      });
+
+      it('is removed with its remove button', () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} unsupportedGroup={REASON} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove advanced filter' }));
+        expect(argAt(onChange, 0, 0)).toMatchObject({ nodes: [{ id: 'a' }, { id: 'd' }] });
       });
     });
 

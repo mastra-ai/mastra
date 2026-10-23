@@ -53,6 +53,12 @@ function drag(source: HTMLElement, target: HTMLElement) {
   fireEvent.drop(target, { dataTransfer });
 }
 
+function draggableHeader(name: string): HTMLElement {
+  const header = screen.getByText(name).closest<HTMLElement>('[draggable]');
+  if (!header) throw new Error(`Expected the ${name} header to be draggable`);
+  return header;
+}
+
 describe('DataList reorderable', () => {
   it('leaves the list untouched without reorderable', () => {
     const { container } = render(<List />);
@@ -97,6 +103,38 @@ describe('DataList reorderable', () => {
 
     fireEvent.keyDown(status, { key: 'ArrowRight', altKey: true });
     expect(getGrid(container).style.gridTemplateColumns).toBe('10rem auto minmax(0, 1fr)');
+  });
+
+  it('follows a controlled column order and reports moves without persisting them', () => {
+    const onColumnOrderChange = vi.fn<(order: string[]) => void>();
+    const { container } = render(
+      <List
+        reorderable
+        columnKeys={['name', 'status', 'date']}
+        columnOrder={['name', 'date', 'status']}
+        onColumnOrderChange={onColumnOrderChange}
+      />,
+    );
+    expect(getGrid(container).style.gridTemplateColumns).toBe('10rem auto minmax(0, 1fr)');
+
+    drag(draggableHeader('Status'), draggableHeader('Date'));
+
+    expect(onColumnOrderChange).toHaveBeenCalledWith(['name', 'status', 'date']);
+    expect(localStorage.length).toBe(0);
+    expect(getGrid(container).style.gridTemplateColumns).toBe('10rem auto minmax(0, 1fr)');
+  });
+
+  it('persists a keyed move and reports it', () => {
+    const onColumnOrderChange = vi.fn<(order: string[]) => void>();
+    const { container } = render(
+      <List reorderable id="runs" columnKeys={['name', 'status', 'date']} onColumnOrderChange={onColumnOrderChange} />,
+    );
+
+    drag(draggableHeader('Date'), draggableHeader('Status'));
+
+    expect(getGrid(container).style.gridTemplateColumns).toBe('10rem auto minmax(0, 1fr)');
+    expect(onColumnOrderChange).toHaveBeenCalledWith(['name', 'date', 'status']);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')).toEqual(['name', 'date', 'status']);
   });
 
   it('ignores a stale stored order whose length no longer matches', () => {

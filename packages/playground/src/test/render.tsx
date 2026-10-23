@@ -5,6 +5,8 @@ import { render, renderHook, waitFor } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { expect } from 'vitest';
+import { TestDataRouter } from './data-router';
+import type { MemoryRouterEntry } from './data-router';
 
 /**
  * Shared test rendering helpers for the playground package.
@@ -23,11 +25,12 @@ export const TEST_BASE_URL = 'http://localhost:4111';
 export interface ProvidersOptions {
   /** Base URL handed to `MastraReactProvider`; must match MSW handler URLs. */
   baseUrl?: string;
-  /** Wrap children in a `MemoryRouter`. Pass entries to seed the history/state. */
-  router?: boolean | { initialEntries?: MemoryRouterEntry[] };
+  /**
+   * Wrap children in a `MemoryRouter`. Pass entries to seed the history/state, and `dataRouter`
+   * for UI that needs a data router (e.g. `useBlocker`), as Studio's own router is.
+   */
+  router?: boolean | { initialEntries?: MemoryRouterEntry[]; dataRouter?: boolean };
 }
-
-type MemoryRouterEntry = string | { pathname: string; state?: unknown };
 
 const makeQueryClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -51,6 +54,9 @@ export const makeWrapper = (options: ProvidersOptions = {}) => {
     }
 
     const initialEntries = typeof router === 'object' ? router.initialEntries : undefined;
+    if (typeof router === 'object' && router.dataRouter) {
+      return <TestDataRouter initialEntries={initialEntries}>{tree}</TestDataRouter>;
+    }
     return <MemoryRouter initialEntries={initialEntries}>{tree}</MemoryRouter>;
   };
 

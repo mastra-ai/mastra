@@ -116,7 +116,7 @@ export function TracesExplorerRoot({
   const { enabled: withDeltaPolling } = useTraceQueryDeltaPollingAvailable();
   const withDiscovery = useTraceQueryDiscoveryAvailable().enabled && withQueryTrace;
 
-  // Entries the server can't query are ignored, never written back: the host keeps its raw value.
+  // Entries the server can't query are left out of the list query; the bar still shows them.
   const filters = useMemo(
     () => sanitizeTracesFilters(rawFilters, { withQueryTrace, withRootDuration }),
     [rawFilters, withQueryTrace, withRootDuration],
@@ -240,12 +240,13 @@ export function TracesExplorerRoot({
     () => ({
       ...filtersActions,
       filters,
+      rawFilters,
       dateFrom,
       dateTo,
       filtersApplied,
       contentFiltersApplied,
     }),
-    [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied],
+    [filtersActions, filters, rawFilters, dateFrom, dateTo, filtersApplied, contentFiltersApplied],
   );
 
   // Not memoized: the selection consumers (Layout, List, Panel) also re-render on filter and list

@@ -57,8 +57,10 @@ export type TracesFiltersActions = {
 };
 
 export type TracesFiltersContextValue = TracesFiltersActions & {
-  /** The host's filters with the entries this server can't query dropped. */
+  /** The host's filters with the entries this server can't query dropped: what the list queries. */
   filters: TracesFilters;
+  /** The host's filters as given. The filter bar shows them all, the ones the server can't run muted. */
+  rawFilters: TracesFilters;
   dateFrom?: Date;
   dateTo?: Date;
   filtersApplied: boolean;

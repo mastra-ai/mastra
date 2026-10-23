@@ -38,6 +38,18 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }
 
+// jsdom does not implement Element.prototype.scrollIntoView, used e.g. by the trace timeline to
+// reveal the selected span row on mount.
+if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
+// jsdom ships no PointerEvent, and Base UI constructs one on press.
+if (typeof globalThis.window !== 'undefined' && typeof window.PointerEvent === 'undefined') {
+  class PointerEventStub extends MouseEvent {}
+  Object.defineProperty(window, 'PointerEvent', { configurable: true, value: PointerEventStub });
+}
+
 // jsdom does not implement Element.prototype.getAnimations, used by Radix UI
 // primitives (e.g. Switch) when reconciling presence/animation state, and by
 // @base-ui/react's ScrollAreaViewport inside a deferred timer.
