@@ -92,8 +92,9 @@ export async function resolveFactoryModelPolicy(
 /** The personal defaults a policy's tenant runs on; none on Factory routing. */
 export async function routedPersonalDefaults(
   tenant: CredentialTenant,
-  modelDefaults: Pick<ModelDefaultsStorage, 'get'>,
+  modelDefaults: Pick<ModelDefaultsStorage, 'ensureReady' | 'get'>,
 ): Promise<ModelDefaultRecord | null> {
   if (tenant.credentialScope === 'factory') return null;
+  await modelDefaults.ensureReady();
   return modelDefaults.get({ orgId: tenantOrgId(tenant), userId: tenant.userId });
 }

@@ -166,9 +166,10 @@ describe('resolveFactoryThinkingLevel', () => {
     const failing = {
       ...deps,
       modelDefaults: {
-        get: async () => {
-          throw new Error('domain not ready');
+        ensureReady: async () => {
+          throw new Error('model defaults init failed');
         },
+        get: deps.modelDefaults.get.bind(deps.modelDefaults),
       },
     };
     const chat = contextFor({ sessionId: 'session-1', resourceId: 'session-1', threadId: 'chat-thread' });

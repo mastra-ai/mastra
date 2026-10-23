@@ -11,7 +11,7 @@ import type { FactoryModelPolicyDependencies } from './credential-policy.js';
 const FACTORY_PROJECT_ID = new RegExp(UUID_PATTERN);
 
 interface FactoryThinkingDefaultDependencies extends FactoryModelPolicyDependencies {
-  modelDefaults: Pick<ModelDefaultsStorage, 'get'>;
+  modelDefaults: Pick<ModelDefaultsStorage, 'ensureReady' | 'get'>;
 }
 
 function sessionlessFactoryProjectId(controller: AgentControllerRequestContext): string | undefined {

@@ -1086,7 +1086,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 let personalThinkingLevel: ThinkingLevelSetting | null = null;
                 if (modelScope === 'user') {
                   if (!options.modelDefaults) return c.json({ error: 'model_defaults_unavailable' }, 503);
-                  await options.modelDefaults.ensureReady();
                   const ownerDefaults = await routedPersonalDefaults(policy.tenant, options.modelDefaults);
                   defaultModelId = ownerDefaults?.modelId ?? null;
                   personalThinkingLevel = ownerDefaults?.thinkingLevel ?? null;
