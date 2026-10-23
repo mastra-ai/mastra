@@ -28,12 +28,8 @@ import type {
 } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { KnowledgeConfig } from './config';
-import {
-  KnowledgeImporterRegistry,
-  type KnowledgeImporterBindingInput,
-  type KnowledgeImporterDefinition,
-  type KnowledgeImporterResolver,
-} from './imports';
+import { KnowledgeImporterRegistry } from './imports';
+import type { KnowledgeImporterBindingInput, KnowledgeImporterDefinition, KnowledgeImporterResolver } from './imports';
 import { KnowledgeImporterRunner } from './imports/runner';
 import {
   materializeKnowledgeScopePlan,
