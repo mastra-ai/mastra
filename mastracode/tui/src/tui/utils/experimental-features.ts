@@ -1,3 +1,3 @@
-export function isSubconsciousEnabled(): boolean {
-  return process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+export function isKnowledgeEnabled(): boolean {
+  return process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE === '1';
 }
