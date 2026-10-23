@@ -22,4 +22,4 @@ const written = await store.persistWorkflowSnapshot({
 // `written` is false when the stored status is not in the list
 ```
 
-Added `loadWorkflowRunStatus()`, which reads only a run's status. The in-memory, LibSQL, PostgreSQL, MySQL, MSSQL, DSQL, and Cloudflare D1 stores read the status column directly; other stores fall back to loading the snapshot.
+Added `loadWorkflowRunStatus()`, which reads only a run's status. The in-memory, LibSQL, PostgreSQL, MySQL, MSSQL, DSQL, and Cloudflare D1 stores read only the stored status instead of the whole snapshot; other stores fall back to loading the snapshot.

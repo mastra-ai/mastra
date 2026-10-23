@@ -233,6 +233,20 @@ describe('WorkflowsLibSQL — guarded snapshot writes', () => {
     expect(await workflows.loadWorkflowRunStatus({ workflowName, runId })).toBe('success');
   });
 
+  it('never overwrites an existing row when expectedStatus is an empty list', async () => {
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshotWith('running') });
+
+    const written = await workflows.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      snapshot: snapshotWith('success'),
+      expectedStatus: [],
+    });
+
+    expect(written).toBe(false);
+    expect(await workflows.loadWorkflowRunStatus({ workflowName, runId })).toBe('running');
+  });
+
   it('returns null status for an unknown run', async () => {
     expect(await workflows.loadWorkflowRunStatus({ workflowName, runId: 'missing' })).toBeNull();
   });

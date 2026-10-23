@@ -484,9 +484,13 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     // statement and a concurrent status change can't land between the check and the write.
     const expected =
       expectedStatus === undefined ? [] : Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
-    const guard = expected.length
-      ? ` WHERE json_extract(${TABLE_WORKFLOW_SNAPSHOT}.snapshot, '$.status') IN (${expected.map(() => '?').join(', ')})`
-      : '';
+    // An explicit empty list matches no status, so an existing row is never overwritten.
+    const guard =
+      expectedStatus === undefined
+        ? ''
+        : expected.length
+          ? ` WHERE json_extract(${TABLE_WORKFLOW_SNAPSHOT}.snapshot, '$.status') IN (${expected.map(() => '?').join(', ')})`
+          : ' WHERE 0';
     const check = this.#runFenceCheck(fence, runId, 'persistWorkflowSnapshot');
     const result = await this.executeWithRetry(
       () =>

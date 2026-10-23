@@ -884,21 +884,23 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             phase: 'executor-aborted',
           });
 
-          workflowSpan?.end({ attributes: { status: 'waiting' } });
+          if (!this.writeRejectedByCancellation(runId, 'waiting')) {
+            workflowSpan?.end({ attributes: { status: 'waiting' } });
 
-          const formattedResult = await this.fmtReturnValue<any>(
-            params.pubsub,
-            stepResults,
-            { status: 'waiting', payload: undefined, startedAt: Date.now() },
-            undefined,
-            stepExecutionPath,
-          );
+            const formattedResult = await this.fmtReturnValue<any>(
+              params.pubsub,
+              stepResults,
+              { status: 'waiting', payload: undefined, startedAt: Date.now() },
+              undefined,
+              stepExecutionPath,
+            );
 
-          return {
-            ...formattedResult,
-            runId,
-            ...(params.outputOptions?.includeState ? { state: lastState } : {}),
-          } as any;
+            return {
+              ...formattedResult,
+              runId,
+              ...(params.outputOptions?.includeState ? { state: lastState } : {}),
+            } as any;
+          }
         }
 
         await this.persistStepUpdate({
