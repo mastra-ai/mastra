@@ -572,36 +572,40 @@ describe('DurableAgent crash recovery', () => {
     120_000,
   );
 
-  it('runs defaultOptions.hooks.beforeToolCall on a tool call executed after recovery', async () => {
-    const hookCalls: number[] = [];
-    processDefaultHooks = {
-      beforeToolCall: ({ input }) => {
-        hookCalls.push((input as { index: number }).index);
-      },
-    };
-    try {
-      const { checkpoints, runId } = await captureCheckpoints('durable');
-      expect(hookCalls).toEqual([0, 1]);
+  it.each(['durable', 'evented-fallback'] as const)(
+    'runs defaultOptions.hooks.beforeToolCall on a tool call executed after %s recovery',
+    async kind => {
+      const hookCalls: number[] = [];
+      processDefaultHooks = {
+        beforeToolCall: ({ input }) => {
+          hookCalls.push((input as { index: number }).index);
+        },
+      };
+      try {
+        const { checkpoints, runId } = await captureCheckpoints(kind);
+        expect(hookCalls).toEqual([0, 1]);
 
-      // Recover from the last checkpoint taken before the second tool call ran,
-      // so that call executes in the recovering process.
-      const beforeSecondTool = checkpoints.filter(
-        c =>
-          !knownUnrecoverable(c) &&
-          c.inner?.status === 'running' &&
-          activeStepIds(c.inner).includes(DurableStepIds.TOOL_CALL) &&
-          JSON.stringify(c.inner).includes('call-1') &&
-          !JSON.stringify(c.inner).includes('"toolCallId":"call-1","result"'),
-      );
-      expect(beforeSecondTool.length).toBeGreaterThan(0);
+        // Recover from the last checkpoint taken before the second tool call ran,
+        // so that call executes in the recovering process.
+        const beforeSecondTool = checkpoints.filter(
+          c =>
+            !knownUnrecoverable(c) &&
+            c.inner?.status === 'running' &&
+            activeStepIds(c.inner).includes(DurableStepIds.TOOL_CALL) &&
+            JSON.stringify(c.inner).includes('call-1') &&
+            !JSON.stringify(c.inner).includes('"toolCallId":"call-1","result"'),
+        );
+        expect(beforeSecondTool.length).toBeGreaterThan(0);
 
-      hookCalls.length = 0;
-      expect(await recoverFrom(beforeSecondTool.at(-1)!, runId, 'durable')).toBe('ok');
-      expect(hookCalls).toContain(1);
-    } finally {
-      processDefaultHooks = undefined;
-    }
-  }, 60_000);
+        hookCalls.length = 0;
+        expect(await recoverFrom(beforeSecondTool.at(-1)!, runId, kind)).toBe('ok');
+        expect(hookCalls).toContain(1);
+      } finally {
+        processDefaultHooks = undefined;
+      }
+    },
+    60_000,
+  );
 
   it('preserves unknown usage from before recovery', async () => {
     const unknownUsage: TestUsage = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
