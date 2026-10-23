@@ -51,7 +51,7 @@ export function SessionsSection() {
     resetView,
   } = useSessionListView();
   const viewerUserId = useFactoryAuth().data?.user?.userId;
-  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
+  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
   const deletion = useSessionDeletion(factoryId);
 
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
@@ -71,8 +71,6 @@ export function SessionsSection() {
     rowCount: rows.length,
     filteredCount: filteredRows.length,
     groupCount: groups.length,
-    activeFilterCount,
-    viewerKnown: Boolean(viewerUserId),
   });
 
   const nothingToList = !hasRepositories && rows.length === 0 && !loadFailed;
@@ -197,17 +195,12 @@ function emptyListMessage({
   rowCount,
   filteredCount,
   groupCount,
-  activeFilterCount,
-  viewerKnown,
 }: {
   rowCount: number;
   filteredCount: number;
   groupCount: number;
-  activeFilterCount: number;
-  viewerKnown: boolean;
 }): string | undefined {
   if (filteredCount > 0) return groupCount === 0 ? 'All groups with sessions are hidden' : undefined;
   if (rowCount === 0) return 'No sessions yet';
-  if (activeFilterCount === 0 && viewerKnown) return 'No sessions of your own.';
   return 'No sessions match these filters';
 }

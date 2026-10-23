@@ -5,7 +5,6 @@ import {
   EMPTY_SESSION_FILTERS,
   MY_SESSIONS,
   activeSessionFilterCount,
-  defaultSessionFilters,
   filterSessionRows,
   sessionOwnerFilterValue,
 } from '../sessionFilters';
@@ -61,16 +60,8 @@ describe('session filters', () => {
     expect(activeSessionFilterCount(filters({ owner: MY_SESSIONS, status: 'working', updated: '7d' }))).toBe(3);
   });
 
-  it("defaults a known viewer to their own sessions and an unknown viewer to everyone's", () => {
-    expect(defaultSessionFilters('user-1')).toEqual(filters({ owner: MY_SESSIONS }));
-    expect(defaultSessionFilters(undefined)).toEqual(EMPTY_SESSION_FILTERS);
-  });
-
-  it('counts controls against the defaults, so the resting view is not active', () => {
-    const defaults = defaultSessionFilters('user-1');
-
-    expect(activeSessionFilterCount(defaults, defaults)).toBe(0);
-    expect(activeSessionFilterCount(filters({ owner: ALL_SESSION_OWNERS }), defaults)).toBe(1);
-    expect(activeSessionFilterCount({ ...defaults, status: 'working' }, defaults)).toBe(1);
+  it('defaults to every owner, so choosing Mine counts as an active filter', () => {
+    expect(EMPTY_SESSION_FILTERS.owner).toBe(ALL_SESSION_OWNERS);
+    expect(activeSessionFilterCount(filters({ owner: MY_SESSIONS }))).toBe(1);
   });
 });
