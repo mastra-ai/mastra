@@ -109,20 +109,23 @@ const dtsSrcDir = resolve(distDir, 'src');
 // tsc writes to a temp dir because Vite empties `dist` when it writes the bundle. Type errors fail the build.
 const typeDeclarations = (): Plugin => {
   let entries: Record<string, string> = {};
-  let tsc: Promise<number>;
+  let tsc: Promise<number> | undefined;
 
   return {
     name: 'playground-ui:dts',
     configResolved(config) {
       if (config.build.lib) entries = config.build.lib.entry as Record<string, string>;
     },
+    // Rolldown runs buildStart once per output format but closeBundle once, so start tsc only once.
     buildStart() {
-      tsc = rm(dtsTempDir, { recursive: true, force: true }).then(() =>
+      tsc ??= rm(dtsTempDir, { recursive: true, force: true }).then(() =>
         runTsc(['-p', 'tsconfig.build.json', '--declarationDir', dtsTempDir]),
       );
     },
     async closeBundle() {
-      if ((await tsc) !== 0) throw new Error('tsc found type errors; see log above.');
+      const exitCode = await tsc;
+      tsc = undefined;
+      if (exitCode !== 0) throw new Error('tsc found type errors; see log above.');
 
       await rm(dtsSrcDir, { recursive: true, force: true });
       await rename(resolve(dtsTempDir, 'src'), dtsSrcDir);
