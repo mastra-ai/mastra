@@ -13,8 +13,60 @@ import type {
   SSOLoginConfig,
   User,
 } from '..';
+import type { MastraUser } from '..';
 import type { AuthorizeUserFn, MastraAuthConfig, MastraAuthRequest } from '../types';
 import { getRequestHeader } from '../types';
+
+function pickString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value;
+  }
+  return undefined;
+}
+
+/**
+ * Normalize an arbitrary provider-specific user object to the stable
+ * {@link MastraUser} shape surfaced to `DynamicArgument` callbacks.
+ *
+ * Picks `id` from `id`/`sub`/`userId` (numeric ids are stringified),
+ * `avatarUrl` from `avatarUrl`/`picture`, and passes `name`/`email`/`role`
+ * through when they are non-empty strings.
+ *
+ * @throws when no id can be derived — override `toMastraUser()` on the auth
+ * provider for user shapes this default cannot handle.
+ */
+export function normalizeMastraUser(user: unknown): MastraUser {
+  if (typeof user === 'string' && user.trim()) {
+    return { id: user };
+  }
+
+  if (user === null || typeof user !== 'object') {
+    throw new Error(
+      `Unable to normalize authenticated user of type "${typeof user}" to a MastraUser. Override toMastraUser() on your auth provider to supply a normalized user.`,
+    );
+  }
+
+  const record = user as Record<string, unknown>;
+  const rawId = [record.id, record.sub, record.userId].find(
+    value => (typeof value === 'string' && value.trim()) || typeof value === 'number',
+  );
+  if (rawId === undefined) {
+    throw new Error(
+      'Unable to derive a user id (looked at `id`, `sub`, and `userId`) while normalizing the authenticated user. Override toMastraUser() on your auth provider to supply a normalized user.',
+    );
+  }
+
+  const normalized: MastraUser = { id: typeof rawId === 'number' ? String(rawId) : (rawId as string) };
+  const name = pickString(record.name);
+  const email = pickString(record.email);
+  const avatarUrl = pickString(record.avatarUrl, record.picture);
+  const role = pickString(record.role);
+  if (name) normalized.name = name;
+  if (email) normalized.email = email;
+  if (avatarUrl) normalized.avatarUrl = avatarUrl;
+  if (role) normalized.role = role;
+  return normalized;
+}
 
 export interface MastraAuthProviderOptions<TUser = unknown> {
   name?: string;
@@ -67,6 +119,11 @@ export interface IMastraAuthProvider<TUser = unknown> {
    */
   mapUserToResourceId?(user: TUser): string | undefined | null;
   /**
+   * Normalize the authenticated provider-specific user to the stable
+   * `MastraUser` shape surfaced to `DynamicArgument` callbacks.
+   */
+  toMastraUser?(user: TUser): MastraUser;
+  /**
    * Return response headers (typically `Set-Cookie` for a rotated session)
    * that the provider accumulated while handling this request and clear them
    * from the provider's per-request state. The server middleware appends them
@@ -110,6 +167,19 @@ export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase imp
    * @returns The authorization result
    */
   abstract authorizeUser(user: TUser, request: MastraAuthRequest): Promise<boolean> | boolean;
+
+  /**
+   * Normalize the authenticated provider-specific user to the stable
+   * {@link MastraUser} shape surfaced to `DynamicArgument` callbacks as the
+   * optional `user` argument.
+   *
+   * The default implementation handles common user shapes (see
+   * {@link normalizeMastraUser}); override it when your provider's user type
+   * needs custom mapping.
+   */
+  toMastraUser(user: TUser): MastraUser {
+    return normalizeMastraUser(user);
+  }
 
   protected registerOptions(opts?: MastraAuthProviderOptions<TUser>) {
     if (opts?.authorizeUser) {
@@ -268,6 +338,26 @@ export class CompositeAuth
     const provider = this.authenticatedProviderByPrimitive.get(primitiveUser);
     this.authenticatedProviderByPrimitive.delete(primitiveUser);
     return provider;
+  }
+
+  private peekAuthenticatedProvider(user: unknown): IMastraAuthProvider | undefined {
+    if (isObjectLike(user)) {
+      return this.authenticatedProviderByObject.get(user);
+    }
+    return this.authenticatedProviderByPrimitive.get(user as PrimitiveAuthUser);
+  }
+
+  /**
+   * Delegate normalization to the provider that authenticated this user.
+   * Falls back to the default normalization when the winning provider is
+   * unknown or predates `toMastraUser`.
+   */
+  override toMastraUser(user: unknown): MastraUser {
+    const provider = this.peekAuthenticatedProvider(user);
+    if (provider && typeof provider.toMastraUser === 'function') {
+      return provider.toMastraUser(user);
+    }
+    return normalizeMastraUser(user);
   }
 
   private mapAuthenticatedUserToResourceId(user: unknown): string | undefined | null {

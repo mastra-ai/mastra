@@ -142,6 +142,34 @@ describe('MastraJwtAuth', () => {
     });
   });
 
+  describe('toMastraUser', () => {
+    it('normalizes the payload through mapUser', () => {
+      const auth = new MastraJwtAuth({ secret: SECRET });
+      expect(auth.toMastraUser({ sub: 'user-1', email: 'a@b.co', picture: 'https://img.test/p.png' })).toEqual({
+        id: 'user-1',
+        email: 'a@b.co',
+        name: undefined,
+        avatarUrl: 'https://img.test/p.png',
+      });
+    });
+
+    it('uses a custom mapUser when provided', () => {
+      const auth = new MastraJwtAuth({
+        secret: SECRET,
+        mapUser: payload => ({ id: `custom-${payload.sub}`, role: 'member' }),
+      });
+      expect(auth.toMastraUser({ sub: 'u1' })).toEqual({ id: 'custom-u1', role: 'member' });
+    });
+
+    it('falls back to shared normalization when mapUser returns null', () => {
+      const auth = new MastraJwtAuth({
+        secret: SECRET,
+        mapUser: () => null,
+      });
+      expect(auth.toMastraUser({ userId: 'uid-7' })).toEqual({ id: 'uid-7' });
+    });
+  });
+
   describe('getUser', () => {
     it('returns null (JWT is stateless)', async () => {
       const auth = new MastraJwtAuth({ secret: SECRET });

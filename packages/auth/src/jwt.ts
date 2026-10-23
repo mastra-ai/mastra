@@ -1,5 +1,5 @@
 import type { User, IUserProvider } from '@internal/auth';
-import { MastraAuthProvider } from '@internal/auth/provider';
+import { MastraAuthProvider, normalizeMastraUser } from '@internal/auth/provider';
 import type { MastraAuthProviderOptions } from '@internal/auth/provider';
 
 import jwt from 'jsonwebtoken';
@@ -51,6 +51,15 @@ export class MastraJwtAuth extends MastraAuthProvider<JwtUser> implements IUserP
 
   async authorizeUser(user: JwtUser) {
     return !!user;
+  }
+
+  /**
+   * Reuse the configured `mapUser` (or its default) to normalize the JWT
+   * payload; fall back to the shared normalization when `mapUser` returns
+   * null.
+   */
+  override toMastraUser(payload: JwtUser): User {
+    return this.mapUser(payload) ?? normalizeMastraUser(payload);
   }
 
   async getCurrentUser(request: Request): Promise<User | null> {
