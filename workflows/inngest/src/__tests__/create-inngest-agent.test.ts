@@ -1540,6 +1540,93 @@ describe('InngestAgent parity surface', () => {
     }
   });
 
+  it('does not dispatch when suspended tool history is missing, and can resume after it appears', async () => {
+    const durableAgent = makeIsolatedAgent('resume-tool-history-retry');
+    const runId = 'resume-tool-history-retry-run';
+    const outerSnapshot = {
+      status: 'suspended',
+      suspendedPaths: { [InngestDurableStepIds.AGENTIC_EXECUTION]: ['durable-tool-call'] },
+      resumeLabels: { 'purchase-1': { stepId: InngestDurableStepIds.AGENTIC_EXECUTION } },
+      context: {
+        [InngestDurableStepIds.AGENTIC_EXECUTION]: {
+          suspendPayload: { __workflow_meta: { runId: 'nested-tool-history-run' } },
+        },
+      },
+    };
+    let nestedSnapshot: any = null;
+    const loadWorkflowSnapshot = vi.fn(async ({ workflowName, runId: snapshotRunId }) => {
+      if (workflowName === InngestDurableStepIds.AGENTIC_LOOP) return outerSnapshot;
+      expect(workflowName).toBe(InngestDurableStepIds.AGENTIC_EXECUTION);
+      expect(snapshotRunId).toBe('nested-tool-history-run');
+      return nestedSnapshot;
+    });
+    (durableAgent as any).__setMastra({
+      getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot }) }),
+    });
+    const sendSpy = stubInngestSend();
+    try {
+      vi.useFakeTimers();
+      const pending = durableAgent.resume(runId, { approved: true }, { toolCallId: 'purchase-1' });
+      const failure = expect(pending).rejects.toThrow(
+        'Cannot resume run resume-tool-history-retry-run: the nested iteration snapshot does not contain suspended tool calls purchase-1.',
+      );
+      await vi.advanceTimersByTimeAsync(10_100);
+      await failure;
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(globalRunRegistry.has(runId)).toBe(false);
+
+      const pendingUntilIdle = durableAgent.resume(
+        runId,
+        { approved: true },
+        { toolCallId: 'purchase-1', untilIdle: true },
+      );
+      const untilIdleFailure = expect(pendingUntilIdle).rejects.toThrow(
+        'the nested iteration snapshot does not contain suspended tool calls purchase-1.',
+      );
+      await vi.advanceTimersByTimeAsync(10_100);
+      await untilIdleFailure;
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(globalRunRegistry.has(runId)).toBe(false);
+      vi.useRealTimers();
+
+      nestedSnapshot = {
+        status: 'suspended',
+        resumeLabels: { 'purchase-1': { stepId: 'durable-tool-call' } },
+        context: {
+          input: { accumulatedSteps: [{ toolCalls: [{ toolCallId: 'lookup-1', toolName: 'lookup', args: {} }] }] },
+        },
+      };
+      await expect(durableAgent.resume(runId, { approved: true }, { toolCallId: 'purchase-1' })).rejects.toThrow(
+        'Cannot resume run resume-tool-history-retry-run: the nested iteration snapshot does not contain completed LLM tool calls.',
+      );
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(globalRunRegistry.has(runId)).toBe(false);
+
+      nestedSnapshot.context['durable-llm-execution'] = {
+        status: 'success',
+        output: { toolCalls: [{ toolCallId: 'purchase-1', toolName: 'purchase', args: {} }] },
+      };
+      const resumed = await durableAgent.resume(runId, { approved: true }, { toolCallId: 'purchase-1' });
+      try {
+        expect(sendSpy).toHaveBeenCalledTimes(1);
+        await publishStreamEvent(durableAgent, runId, {
+          type: AgentStreamEventTypes.FINISH,
+          data: { output: { text: 'Purchased item A.', steps: [] }, stepResult: { reason: 'stop' } },
+        });
+        expect((await resumed.output.toolCalls).map(call => call.payload.toolCallId)).toEqual([
+          'lookup-1',
+          'purchase-1',
+        ]);
+      } finally {
+        resumed.cleanup();
+      }
+    } finally {
+      vi.useRealTimers();
+      globalRunRegistry.delete(runId);
+      sendSpy.mockRestore();
+    }
+  });
+
   it('resume() starts after cached history', async () => {
     const durableAgent = makeIsolatedAgent('resume-stream-boundary');
     setSuspendedSnapshot(durableAgent);
@@ -1753,7 +1840,17 @@ describe('InngestAgent parity surface', () => {
   describe('resume targeting by toolCallId', () => {
     function makeAgentWithSnapshot(id: string, snapshot: any) {
       const durableAgent = makeIsolatedAgent(id);
-      const loadWorkflowSnapshot = vi.fn().mockResolvedValue(snapshot);
+      const loadWorkflowSnapshot = vi.fn(async ({ workflowName }) =>
+        workflowName === InngestDurableStepIds.AGENTIC_EXECUTION
+          ? {
+              resumeLabels: snapshot.resumeLabels,
+              context: {
+                input: { accumulatedSteps: [] },
+                'durable-llm-execution': { status: 'success', output: { toolCalls: [] } },
+              },
+            }
+          : snapshot,
+      );
       (durableAgent as any).__setMastra({
         getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot }) }),
       });
@@ -1832,7 +1929,19 @@ describe('InngestAgent parity surface', () => {
       };
       const freshSnapshot = { ...staleSnapshot, resumeLabels: { 'tool-call-b': { stepId: 'agentic-loop' } } };
       const durableAgent = makeIsolatedAgent('resume-label-lands-late');
-      const loadSpy = vi.fn().mockResolvedValueOnce(staleSnapshot).mockResolvedValue(freshSnapshot);
+      const loadSpy = vi.fn(async ({ workflowName }) =>
+        workflowName === InngestDurableStepIds.AGENTIC_EXECUTION
+          ? {
+              resumeLabels: freshSnapshot.resumeLabels,
+              context: {
+                input: { accumulatedSteps: [] },
+                'durable-llm-execution': { status: 'success', output: { toolCalls: [] } },
+              },
+            }
+          : loadSpy.mock.calls.filter(([args]) => args.workflowName === InngestDurableStepIds.AGENTIC_LOOP).length === 1
+            ? staleSnapshot
+            : freshSnapshot,
+      );
       (durableAgent as any).__setMastra({
         getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot: loadSpy }) }),
       });
