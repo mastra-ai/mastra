@@ -228,7 +228,7 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
     sourcemap: true,
     target: 'esnext',
     minify: false,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         hoistTransitiveImports: false,
         // Stable module URLs let React Fast Refresh retain state across watch builds.
