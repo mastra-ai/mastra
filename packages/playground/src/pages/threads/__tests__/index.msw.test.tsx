@@ -6,7 +6,7 @@ import type {
 } from '@mastra/client-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
-import { useLocation } from 'react-router';
+import { Outlet, Route, Routes, useLocation } from 'react-router';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ThreadsPage from '..';
 import {
@@ -24,6 +24,7 @@ import {
   threadsLastPage,
   THREADS_PAGE_TWO_CURSOR,
 } from './fixtures/threads';
+import { ObservabilityLayout } from '@/domains/observability/observability-layout';
 import { useMockIntersectionObserver } from '@/test/intersection-observer';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -44,7 +45,17 @@ const LocationProbe = () => {
 const renderPage = (initialEntry = '/threads') =>
   renderWithProviders(
     <TestLinkProvider>
-      <ThreadsPage />
+      <Routes>
+        <Route
+          element={
+            <ObservabilityLayout>
+              <Outlet />
+            </ObservabilityLayout>
+          }
+        >
+          <Route path="/threads" element={<ThreadsPage />} />
+        </Route>
+      </Routes>
       <LocationProbe />
     </TestLinkProvider>,
     { router: { initialEntries: [initialEntry] } },
