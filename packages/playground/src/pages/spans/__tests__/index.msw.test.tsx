@@ -5,13 +5,15 @@ import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { useEffect, useImperativeHandle } from 'react';
-import { Link, useLocation } from 'react-router';
+import { Link, Outlet, Route, Routes, useLocation } from 'react-router';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SpansPage from '..';
+import ThreadsPage from '../../threads';
 import {
   emptyEntityNames,
   emptyEnvironments,
   emptySpans,
+  emptyThreads,
   noSpanQueryCapabilities,
   spanAndThreadRowsCapabilities,
   spanDetailById,
@@ -21,6 +23,7 @@ import {
   spansLastPage,
   SPANS_PAGE_TWO_CURSOR,
 } from './fixtures/spans';
+import { ObservabilityLayout } from '@/domains/observability/observability-layout';
 import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { useMockIntersectionObserver } from '@/test/intersection-observer';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -29,6 +32,7 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const CAPABILITIES_URL = `${TEST_BASE_URL}/api/observability/capabilities`;
 const SPANS_QUERY_URL = `${TEST_BASE_URL}/api/observability/spans/query`;
+const THREADS_QUERY_URL = `${TEST_BASE_URL}/api/observability/threads/query`;
 const SPAN_DETAIL_URL = `${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`;
 const ENTITY_NAMES_URL = `${TEST_BASE_URL}/api/observability/discovery/entity-names`;
 const ENVIRONMENTS_URL = `${TEST_BASE_URL}/api/observability/discovery/environments`;
@@ -57,7 +61,17 @@ const renderPage = (initialEntry = '/spans') =>
     <TestLinkProvider>
       <RouteSidePanelProvider>
         <FakeLayoutPanel />
-        <SpansPage />
+        <Routes>
+          <Route
+            element={
+              <ObservabilityLayout>
+                <Outlet />
+              </ObservabilityLayout>
+            }
+          >
+            <Route path="/spans" element={<SpansPage />} />
+          </Route>
+        </Routes>
         <RouteSidePanelSlot data-testid="side-panel" />
         <LocationProbe />
         <BarePageLink />
@@ -304,6 +318,39 @@ describe('Spans page', () => {
       fireEvent.click(await views.findByRole('tab', { name: 'Threads' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/threads'));
+    });
+  });
+
+  describe('when the view switch moves from Spans to Threads', () => {
+    it('keeps the same header mounted', async () => {
+      setSpansHandlers(spanAndThreadRowsCapabilities, { first: spansFirstPage });
+      server.use(http.post(THREADS_QUERY_URL, () => HttpResponse.json(emptyThreads)));
+
+      renderWithProviders(
+        <TestLinkProvider>
+          <RouteSidePanelProvider>
+            <Routes>
+              <Route
+                element={
+                  <ObservabilityLayout>
+                    <Outlet />
+                  </ObservabilityLayout>
+                }
+              >
+                <Route path="/spans" element={<SpansPage />} />
+                <Route path="/threads" element={<ThreadsPage />} />
+              </Route>
+            </Routes>
+          </RouteSidePanelProvider>
+        </TestLinkProvider>,
+        { router: { initialEntries: ['/spans'] } },
+      );
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      const header = screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header');
+      fireEvent.click(await views.findByRole('tab', { name: 'Threads' }));
+
+      await screen.findByPlaceholderText('Filter threads…');
+      expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header')).toBe(header);
     });
   });
 
