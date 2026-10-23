@@ -47,7 +47,13 @@ export function useSetDefaultThinkingLevel() {
       return { previous };
     },
     onError: (_error, _thinkingLevel, context) => {
-      if (context?.previous) queryClient.setQueryData(key, context.previous);
+      if (context?.previous) {
+        const { thinkingLevel } = context.previous;
+        queryClient.setQueryData<DefaultModelResponse>(key, current =>
+          current ? { ...current, thinkingLevel } : current,
+        );
+      }
+      return queryClient.invalidateQueries({ queryKey: key, exact: true });
     },
     onSuccess: ({ thinkingLevel }) => {
       queryClient.setQueryData<DefaultModelResponse>(key, previous =>

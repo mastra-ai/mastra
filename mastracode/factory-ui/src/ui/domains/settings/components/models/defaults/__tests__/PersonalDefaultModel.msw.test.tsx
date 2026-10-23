@@ -1,7 +1,7 @@
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { Field } from '@mastra/playground-ui/components/Field';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -217,5 +217,38 @@ describe('PersonalDefaultModel', () => {
 
     expect(await screen.findByText('default_model_not_set')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: FOLLOWING_FACTORY_LOW })).toBeInTheDocument();
+  });
+
+  it('keeps a cleared personal model cleared when a thinking change still in flight then fails', async () => {
+    let modelId: DefaultModelResponse['modelId'] = 'openai/gpt-5';
+    let releaseThinkingPut = () => {};
+    const thinkingPutHeld = new Promise<void>(resolve => {
+      releaseThinkingPut = resolve;
+    });
+    stubPersonalCatalog(models);
+    server.use(
+      http.get(DEFAULT_MODEL_URL, () => HttpResponse.json({ modelId, thinkingLevel: null })),
+      http.put(THINKING_URL, async () => {
+        await thinkingPutHeld;
+        return HttpResponse.json({ error: 'default_model_not_set' }, { status: 400 });
+      }),
+      http.delete(DEFAULT_MODEL_URL, () => {
+        modelId = null;
+        return HttpResponse.json({ ok: true, modelId });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderInField();
+    const modelPicker = await screen.findByRole('combobox', { name: 'Personal default model' });
+
+    await dragThinkingTo(user, FOLLOWING_FACTORY_LOW, 3);
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    await waitFor(() => expect(modelPicker).toHaveValue(''));
+    releaseThinkingPut();
+    await waitForMutationsIdle(client);
+
+    expect(await screen.findByText('default_model_not_set')).toBeInTheDocument();
+    expect(modelPicker).toHaveValue('');
   });
 });

@@ -46,7 +46,11 @@ export async function resolveFactoryThinkingLevel(
     const project = factoryProjectId ? await deps.projects.getById({ id: factoryProjectId }) : null;
     const factoryLevel = project?.defaultThinkingLevel ?? DEFAULT_FACTORY_THINKING_LEVEL;
     if (!policy) return factoryLevel;
-    return (await routedPersonalDefaults(policy.tenant, deps.modelDefaults))?.thinkingLevel ?? factoryLevel;
+    const personalDefaults = await routedPersonalDefaults(policy.tenant, deps.modelDefaults).catch(error => {
+      console.warn('[factory] Could not read the personal thinking default; using the Factory level.', error);
+      return null;
+    });
+    return personalDefaults?.thinkingLevel ?? factoryLevel;
   } catch (error) {
     // A missed lookup costs reasoning depth, not the run.
     console.warn('[factory] Could not read the thinking default; using medium.', error);

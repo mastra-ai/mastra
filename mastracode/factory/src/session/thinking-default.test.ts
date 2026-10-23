@@ -160,6 +160,21 @@ describe('resolveFactoryThinkingLevel', () => {
     expect(await resolveFactoryThinkingLevel(unsigned, deps)).toBe('low');
   });
 
+  it("keeps the Factory level when the personal defaults can't be read", async () => {
+    const { deps } = await setup('hybrid');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const failing = {
+      ...deps,
+      modelDefaults: {
+        get: async () => {
+          throw new Error('domain not ready');
+        },
+      },
+    };
+    const chat = contextFor({ sessionId: 'session-1', resourceId: 'session-1', threadId: 'chat-thread' });
+    expect(await resolveFactoryThinkingLevel(chat, failing)).toBe('low');
+  });
+
   it('uses medium outside any Factory and when the lookup fails', async () => {
     const { deps } = await setup('hybrid', { withSourceSession: false });
     expect(await resolveFactoryThinkingLevel(undefined, deps)).toBe('medium');
