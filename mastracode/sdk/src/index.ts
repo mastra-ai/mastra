@@ -18,7 +18,7 @@ import type {
 } from '@mastra/core/agent-controller';
 import { createCodingAgent } from '@mastra/core/coding-agent';
 import type { PubSub } from '@mastra/core/events';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
@@ -62,7 +62,7 @@ import {
   withCredentialTenantPreparation,
 } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
-import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
+import { getDynamicMemory, getKnowledgeAgentScopes, hasSubconsciousTools } from './agents/memory.js';
 import {
   canUseProvider,
   createMastraCodeGateway,
@@ -854,7 +854,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const knowledge =
     config?.knowledge?.instance ??
     (process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
-      ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage })
+      ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage, scopes: memoryScopeTypes })
       : undefined);
   const knowledgeKey = configuredKnowledgeKey ?? 'default';
   const dynamicMemory =
@@ -1307,6 +1307,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const baseCodeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
+    // The session's org and Factory project, as trusted run scopes Subconscious reads.
+    scopes: config?.memory === undefined ? getKnowledgeAgentScopes(vector) : undefined,
     // Workspace is wired per-request at the AgentController level (see
     // `config.workspace` below), so opt out of the factory's default local
     // workspace. An explicit `undefined` is required: the factory only builds a

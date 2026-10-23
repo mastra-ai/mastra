@@ -28,7 +28,7 @@ import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
-import type { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
@@ -72,6 +72,7 @@ import { PlatformIncidentioIntegration } from './integrations/platform/incidenti
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
+import { factoryKnowledgeScopeTypes } from './knowledge/scope-types.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
@@ -80,6 +81,7 @@ import {
   primeCustomProvidersForRequestContext,
   registerCustomProvidersSource,
 } from './routes/custom-provider-source.js';
+import type { KnowledgeImportOperatorRule } from './routes/knowledge.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { tenantOrgId } from './routes/provider-credentials.js';
 import { createSessionAccessGuard } from './routes/session-access.js';
@@ -207,7 +209,15 @@ export interface MastraFactoryConfig {
    * Host-owned Knowledge runtime. Factory registers this exact instance under `key` and uses that
    * key for its read surfaces. Omitted leaves Mastra Code's experimental default wiring in place.
    */
-  knowledge?: { key: string; instance: Knowledge };
+  knowledge?: {
+    key: string;
+    instance: Knowledge;
+    /**
+     * Who may see a project's importers, import runs, and transcripts. Omitted: anyone who can open
+     * the project's Knowledge page. Set it to narrow that, e.g. to organization administrators.
+     */
+    importOperator?: KnowledgeImportOperatorRule;
+  };
   /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
@@ -774,8 +784,21 @@ export class MastraFactory {
         }
       });
     }
-    const knowledgeEnabled =
-      this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    // Without a host Knowledge, the experimental flag gives sessions one on Factory's org → project → thread scopes.
+    const knowledge =
+      this.#config.knowledge ??
+      (process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
+        ? {
+            key: 'default',
+            instance: new Knowledge({
+              id: 'mastracode',
+              name: 'MastraCode Knowledge',
+              storage: storage.getMastraStorage(),
+              scopes: factoryKnowledgeScopeTypes,
+            }),
+          }
+        : undefined);
+    const knowledgeEnabled = knowledge !== undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
@@ -1374,7 +1397,7 @@ export class MastraFactory {
         },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
-        ...(this.#config.knowledge ? { knowledge: this.#config.knowledge } : {}),
+        ...(knowledge ? { knowledge } : {}),
         // The environment signal tells the agent which repositories its
         // sandbox holds and where; the phase signal, when work items are on,
         // comes after it.
@@ -1662,7 +1685,8 @@ export class MastraFactory {
             knowledgeEnabled,
             mcpEnabled,
             deploymentModelProviders,
-            knowledgeKey: this.#config.knowledge?.key,
+            knowledgeKey: knowledge?.key,
+            knowledgeImportOperator: this.#config.knowledge?.importOperator,
             configVersion,
             boardRegistry: this.#boards,
             factoryTransitionService: transitionService,

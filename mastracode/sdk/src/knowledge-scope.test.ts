@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from './knowledge-scope.js';
+import { knowledgeAgentScopes, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from './knowledge-scope.js';
 
 describe('resolveKnowledgeScopeIdentity', () => {
   it('defaults TUI/studio sessions to the fixed local org regardless of project or machine', () => {
@@ -15,7 +15,7 @@ describe('resolveKnowledgeScopeIdentity', () => {
     expect(resolveKnowledgeScopeIdentity({ factoryOrgId: 'org-1', factoryProjectId: 'proj-1' } as never)).toEqual({
       resolved: true,
       organizationId: 'org-1',
-      knowledgeResourceId: 'proj-1',
+      projectId: 'proj-1',
     });
   });
 
@@ -23,7 +23,6 @@ describe('resolveKnowledgeScopeIdentity', () => {
     expect(resolveKnowledgeScopeIdentity({ factoryOrgId: ' org-1 ' } as never)).toEqual({
       resolved: true,
       organizationId: 'org-1',
-      knowledgeResourceId: undefined,
     });
   });
 
@@ -31,22 +30,35 @@ describe('resolveKnowledgeScopeIdentity', () => {
     expect(resolveKnowledgeScopeIdentity({ factoryOrgId: 'org-1' } as never)).toEqual({
       resolved: true,
       organizationId: 'org-1',
-      knowledgeResourceId: undefined,
     });
   });
 
   it('fails closed for Factory-owned sessions without a resolved org', () => {
     expect(resolveKnowledgeScopeIdentity({ factoryProjectId: 'proj-1' } as never)).toEqual({
       resolved: false,
-      knowledgeResourceId: 'proj-1',
+      projectId: 'proj-1',
     });
     expect(resolveKnowledgeScopeIdentity({ factoryProjectId: 'proj-1', factoryOrgId: '   ' } as never)).toEqual({
       resolved: false,
-      knowledgeResourceId: 'proj-1',
+      projectId: 'proj-1',
     });
     expect(resolveKnowledgeScopeIdentity({ factoryOrgUnresolved: true } as never)).toEqual({
       resolved: false,
-      knowledgeResourceId: undefined,
     });
+  });
+});
+
+describe('knowledgeAgentScopes', () => {
+  it('holds the org, plus the Factory project when the session has one', () => {
+    expect(knowledgeAgentScopes(resolveKnowledgeScopeIdentity(undefined))).toEqual(['org:local']);
+    expect(
+      knowledgeAgentScopes(
+        resolveKnowledgeScopeIdentity({ factoryOrgId: 'org-1', factoryProjectId: 'proj-1' } as never),
+      ),
+    ).toEqual(['org:org-1', 'project:proj-1']);
+  });
+
+  it('holds nothing for an unresolved identity, so Subconscious fails closed', () => {
+    expect(knowledgeAgentScopes(resolveKnowledgeScopeIdentity({ factoryProjectId: 'proj-1' } as never))).toEqual([]);
   });
 });

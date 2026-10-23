@@ -96,6 +96,7 @@ vi.mock('./agents/instructions.js', () => ({
 
 vi.mock('./agents/memory.js', () => ({
   getDynamicMemory: vi.fn(),
+  getKnowledgeAgentScopes: () => () => [],
 }));
 
 vi.mock('./agents/model.js', () => ({
