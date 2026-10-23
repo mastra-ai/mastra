@@ -317,6 +317,17 @@ trustPolicyExclude:
   # Sandbox.filesystem). 0.10.1 is published by Modal's GitHub Actions workflow but
   # pnpm reports it without the trust evidence older modal versions had.
   - 'modal@0.10.1'
+  # Vanta 2026-10-23: storybook 9.1.21 fixes CVE-2026-114125 (Critical) and
+  # CVE-2026-114126 (High) for client-sdks/react, which stays on the storybook 9 line.
+  # The 9.1.21 backport was published without the trusted-publisher evidence that
+  # earlier 9.1.x releases had, so pnpm reports a trust downgrade. Excluded only at
+  # these exact versions (react-vite and the 9.1.21 siblings it pulls in).
+  - '@storybook/react-vite@9.1.21'
+  - '@storybook/csf-plugin@9.1.21'
+  - '@storybook/react-dom-shim@9.1.21'
+  - '@storybook/react@9.1.21'
+  - '@storybook/builder-vite@9.1.21'
+  - 'storybook@9.1.21'
 overrides:
   # Temporarily pinning to 7.2.0; will unpin shortly.
   bson: 7.2.0
@@ -328,6 +339,12 @@ overrides:
   jsondiffpatch: '>=0.7.6'
   ssri: '>=6.0.2'
   jws: ^4.0.1
+  # Vanta 2026-10-23: GHSA-67mh-4wv8-2f99. drizzle-kit (dev CLI) -> @esbuild-kit/core-utils
+  # pins esbuild ~0.18.20 and has no newer release; core-utils only uses the transform API.
+  '@esbuild-kit/core-utils>esbuild': 0.25.12
+  # Vanta 2026-10-23: AIKIDO-2026-886499 (fixed in 4.1.1). deepeval -> open@9 ->
+  # default-browser@4 pins bundle-name ^3; 4.x keeps the same bundleName() API.
+  'default-browser@4.0.0>bundle-name': 4.1.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
   client-js-e2e-tests-zod-v4>zod: ^4.6.7
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
