@@ -31,7 +31,9 @@ const LIFECYCLE = ['start', 'step-start', 'tool-call', 'tool-result', 'finish'];
 describeForAllEngines('AIMock loop scenario: a failed run delivers its chunks before the error', engine => {
   const getMock = useLoopScenarioAimock();
 
-  async function runThrowingStopWhen(opts: { readDelayMs?: number; slowBus?: boolean }) {
+  async function runThrowingStopWhen(opts: { readAfterFailure?: boolean; slowBus?: boolean }) {
+    let failed!: () => void;
+    const failure = new Promise<void>(resolve => (failed = resolve));
     const { output } = await runLoopScenario({
       engine,
       llm: getMock(),
@@ -46,6 +48,7 @@ describeForAllEngines('AIMock loop scenario: a failed run delivers its chunks be
       },
       maxSteps: 10,
       stopWhen: (() => {
+        failed();
         throw new Error('stopWhen failure');
       }) as any,
       ...(opts.slowBus
@@ -60,7 +63,12 @@ describeForAllEngines('AIMock loop scenario: a failed run delivers its chunks be
       },
     });
 
-    if (opts.readDelayMs) await delay(opts.readDelayMs);
+    if (opts.readAfterFailure) {
+      // Start reading only once the run has failed and the failure has had time to
+      // reach every stream layer, so the chunks are all queued behind the error.
+      await failure;
+      await delay(50);
+    }
 
     const types: string[] = [];
     let error: unknown;
@@ -72,8 +80,8 @@ describeForAllEngines('AIMock loop scenario: a failed run delivers its chunks be
     return { types: types.filter(t => LIFECYCLE.includes(t)), error: error as Error | undefined };
   }
 
-  it('a caller that starts reading 200ms late still gets the tool step before the rejection', async () => {
-    const { types, error } = await runThrowingStopWhen({ readDelayMs: 200 });
+  it('a caller that starts reading after the run failed still gets the tool step before the rejection', async () => {
+    const { types, error } = await runThrowingStopWhen({ readAfterFailure: true });
     expect(error?.message).toBe('stopWhen failure');
     expect(types).toEqual(['start', 'step-start', 'tool-call', 'tool-result']);
   });
