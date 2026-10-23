@@ -52,6 +52,24 @@ function toRunOwnershipRecord(runId: string, row: Record<string, SqliteValue>): 
   };
 }
 
+const WORKFLOW_RUN_STATUSES: Record<WorkflowRunStatus, true> = {
+  running: true,
+  success: true,
+  failed: true,
+  tripwire: true,
+  suspended: true,
+  waiting: true,
+  pending: true,
+  canceled: true,
+  bailed: true,
+  paused: true,
+  skipped: true,
+};
+
+function isWorkflowRunStatus(value: unknown): value is WorkflowRunStatus {
+  return typeof value === 'string' && Object.hasOwn(WORKFLOW_RUN_STATUSES, value);
+}
+
 export class WorkflowsLibSQL extends WorkflowsStorage {
   /**
    * Workflow run snapshots accumulate as runs execute. Anchored on `updatedAt`
@@ -506,7 +524,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       args: [workflowName, runId],
     });
     const status = result.rows?.[0]?.status;
-    return typeof status === 'string' ? (status as WorkflowRunStatus) : null;
+    return isWorkflowRunStatus(status) ? status : null;
   }
 
   async loadWorkflowSnapshot({

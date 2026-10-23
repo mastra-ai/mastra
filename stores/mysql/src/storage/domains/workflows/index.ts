@@ -33,7 +33,7 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { assertRunFence, claimTransaction, DB_NOW_MS, inTransaction, withRunFence } from '../../db/run-fencing';
 import type { Queryable } from '../../db/run-fencing';
@@ -96,6 +96,24 @@ function mapWorkflowRow(row: WorkflowRow): WorkflowRun {
     createdAt: parseDateTime(row.createdAt) ?? new Date(),
     updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
   };
+}
+
+const WORKFLOW_RUN_STATUSES: Record<WorkflowRunStatus, true> = {
+  running: true,
+  success: true,
+  failed: true,
+  tripwire: true,
+  suspended: true,
+  waiting: true,
+  pending: true,
+  canceled: true,
+  bailed: true,
+  paused: true,
+  skipped: true,
+};
+
+function isWorkflowRunStatus(value: unknown): value is WorkflowRunStatus {
+  return typeof value === 'string' && Object.hasOwn(WORKFLOW_RUN_STATUSES, value);
 }
 
 export class WorkflowsMySQL extends WorkflowsStorage {
@@ -561,6 +579,33 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       throw new MastraError(
         {
           id: 'MYSQL_WORKFLOWS_PERSIST_SNAPSHOT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
+        },
+        error,
+      );
+    }
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    try {
+      const [rows] = await this.pool.execute<RowDataPacket[]>(
+        `SELECT JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('snapshot', 'column name')}, '$.status')) AS status FROM ${formatTableName(TABLE_WORKFLOW_SNAPSHOT)} WHERE ${quoteIdentifier('workflow_name', 'column name')} = ? AND ${quoteIdentifier('run_id', 'column name')} = ? LIMIT 1`,
+        [workflowName, runId],
+      );
+      const status: unknown = rows[0]?.status;
+      return isWorkflowRunStatus(status) ? status : null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'LOAD_WORKFLOW_RUN_STATUS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },

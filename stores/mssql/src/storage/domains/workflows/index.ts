@@ -32,7 +32,7 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 import sql from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
@@ -52,6 +52,24 @@ function toRunOwnershipRecord(runId: string, row: Record<string, unknown>): RunO
     leaseExpiresAt: leaseExpiresAt === null ? null : new Date(leaseExpiresAt),
     live: leaseExpiresAt !== null && leaseExpiresAt > Number(row.nowMs),
   };
+}
+
+const WORKFLOW_RUN_STATUSES: Record<WorkflowRunStatus, true> = {
+  running: true,
+  success: true,
+  failed: true,
+  tripwire: true,
+  suspended: true,
+  waiting: true,
+  pending: true,
+  canceled: true,
+  bailed: true,
+  paused: true,
+  skipped: true,
+};
+
+function isWorkflowRunStatus(value: unknown): value is WorkflowRunStatus {
+  return typeof value === 'string' && Object.hasOwn(WORKFLOW_RUN_STATUSES, value);
 }
 
 export class WorkflowsMSSQL extends WorkflowsStorage {
@@ -567,6 +585,35 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
             workflowName,
             runId,
           },
+        },
+        error,
+      );
+    }
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    try {
+      const request = this.pool.request();
+      request.input('workflow_name', workflowName);
+      request.input('run_id', runId);
+      const result = await request.query(
+        `SELECT TOP 1 JSON_VALUE([snapshot], '$.status') AS status FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) })} WHERE workflow_name = @workflow_name AND run_id = @run_id`,
+      );
+      const status: unknown = result.recordset?.[0]?.status;
+      return isWorkflowRunStatus(status) ? status : null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'LOAD_WORKFLOW_RUN_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
         },
         error,
       );

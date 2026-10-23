@@ -96,39 +96,38 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * was in-flight (`running`) after crash will show `running` in storage
    * because we now persist that status — which is exactly what boot-time
    * recovery relies on.
+   *
+   * `replayingCanceled` marks a run time traveled while its stored status was
+   * already `canceled` (the claim that flips it to `running` was skipped). That
+   * status is the run's starting point, not a cancellation of this execution,
+   * so it is not honored until the replay writes a status of its own.
    */
-  protected lastPersistedStatusByRun = new Map<string, WorkflowRunStatus>();
+  protected lastPersistedStatusByRun = new Map<string, { status?: WorkflowRunStatus; replayingCanceled: boolean }>();
 
   /** Returns the last status persisted for a given run in this process, if any. */
   getLastPersistedStatus(runId: string): WorkflowRunStatus | undefined {
-    return this.lastPersistedStatusByRun.get(runId);
+    return this.lastPersistedStatusByRun.get(runId)?.status;
   }
 
   /** Records the last status persisted for a given run in this process. */
   setLastPersistedStatus(runId: string, status: WorkflowRunStatus): void {
-    if (status !== 'canceled') {
-      // The replay has replaced the stored `canceled`, so a later one is a real cancel.
-      this.replayedCanceledRuns.delete(runId);
-    }
-    this.lastPersistedStatusByRun.set(runId, status);
+    const replayingCanceled = status === 'canceled' && this.lastPersistedStatusByRun.get(runId)?.replayingCanceled;
+    this.lastPersistedStatusByRun.set(runId, { status, replayingCanceled: replayingCanceled === true });
   }
 
   /** Clears the last-persisted-status entry for a run (used on run cleanup). */
   clearLastPersistedStatus(runId: string): void {
     this.lastPersistedStatusByRun.delete(runId);
-    this.replayedCanceledRuns.delete(runId);
   }
-
-  /**
-   * Runs time traveled while their stored status was already `canceled` (the
-   * claim that flips it to `running` was skipped). That status is the run's
-   * starting point, not a cancellation of this execution, so it is not honored.
-   */
-  protected replayedCanceledRuns = new Set<string>();
 
   /** Whether stored `canceled` status should stop this run's execution. */
   honorsStoredCancellation(runId: string): boolean {
-    return !this.replayedCanceledRuns.has(runId);
+    return this.lastPersistedStatusByRun.get(runId)?.replayingCanceled !== true;
+  }
+
+  /** True when the store refused a non-canceled write because the run was canceled meanwhile. */
+  private writeRejectedByCancellation(runId: string, attemptedStatus: WorkflowRunStatus): boolean {
+    return attemptedStatus !== 'canceled' && this.getLastPersistedStatus(runId) === 'canceled';
   }
 
   /** Returns the current step's zero-based retry attempt, or zero outside an attempt. */
@@ -822,9 +821,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       throw empty_graph_error;
     }
 
-    this.replayedCanceledRuns.delete(runId);
-    if (timeTravel && (await isWorkflowRunCanceled(this, workflowId, runId))) {
-      this.replayedCanceledRuns.add(runId);
+    const replayingCanceled = !!timeTravel && (await isWorkflowRunCanceled(this, workflowId, runId));
+    const tracked = this.lastPersistedStatusByRun.get(runId);
+    if (tracked || replayingCanceled) {
+      this.lastPersistedStatusByRun.set(runId, { status: tracked?.status, replayingCanceled });
     }
 
     let startIdx = 0;
@@ -1044,6 +1044,53 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         } as any;
       }
 
+      if (perStep && lastOutput.result.status === 'success') {
+        const result = (await this.fmtReturnValue(
+          params.pubsub,
+          stepResults,
+          lastOutput.result,
+          undefined,
+          stepExecutionPath,
+        )) as any;
+        await this.persistStepUpdate({
+          workflowId,
+          runId,
+          resourceId,
+          stepResults: lastOutput.stepResults,
+          serializedStepGraph: params.serializedStepGraph,
+          executionContext: lastExecutionContext,
+          workflowStatus: 'paused',
+          requestContext: currentRequestContext,
+          phase: 'per-step',
+        });
+
+        if (!this.writeRejectedByCancellation(runId, 'paused')) {
+          await params.pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: { type: 'workflow-paused', payload: {} },
+          });
+
+          workflowSpan?.end({
+            attributes: {
+              status: 'paused',
+            },
+          });
+
+          delete result.result;
+
+          return {
+            ...result,
+            runId,
+            status: 'paused',
+            ...(params.outputOptions?.includeState ? { state: lastState } : {}),
+          };
+        }
+
+        // The store rejected the pause because the run was canceled meanwhile.
+        lastOutput.result = { status: 'canceled' };
+      }
+
       // if step result is not success, stop and return
       if (lastOutput.result.status !== 'success') {
         if (lastOutput.result.status === 'bailed') {
@@ -1092,7 +1139,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           phase: 'terminal',
         });
 
-        if (result.status !== 'canceled' && this.getLastPersistedStatus(runId) === 'canceled') {
+        if (this.writeRejectedByCancellation(runId, result.status)) {
           // The store rejected the write because the run was canceled meanwhile.
           lastOutput.result = { status: 'canceled' };
           result = await this.fmtReturnValue(
@@ -1164,80 +1211,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           ...(params.outputOptions?.includeState ? { state: lastState } : {}),
         };
       }
-
-      if (perStep) {
-        const result = (await this.fmtReturnValue(
-          params.pubsub,
-          stepResults,
-          lastOutput.result,
-          undefined,
-          stepExecutionPath,
-        )) as any;
-        await this.persistStepUpdate({
-          workflowId,
-          runId,
-          resourceId,
-          stepResults: lastOutput.stepResults,
-          serializedStepGraph: params.serializedStepGraph,
-          executionContext: lastExecutionContext,
-          workflowStatus: 'paused',
-          requestContext: currentRequestContext,
-          phase: 'per-step',
-        });
-
-        if (this.getLastPersistedStatus(runId) === 'canceled') {
-          // The store rejected the pause because the run was canceled meanwhile.
-          const canceledResult = await this.fmtReturnValue<any>(
-            params.pubsub,
-            stepResults,
-            { status: 'canceled' },
-            undefined,
-            stepExecutionPath,
-          );
-          workflowSpan?.end({ attributes: { status: 'canceled' } });
-          await this.invokeLifecycleCallbacks({
-            status: canceledResult.status,
-            result: canceledResult.result,
-            error: canceledResult.error,
-            steps: canceledResult.steps,
-            tripwire: canceledResult.tripwire,
-            runId,
-            workflowId,
-            resourceId,
-            input,
-            requestContext: currentRequestContext,
-            state: lastState,
-            stepExecutionPath,
-          });
-          this.clearLastPersistedStatus(runId);
-          return {
-            ...canceledResult,
-            runId,
-            ...(params.outputOptions?.includeState ? { state: lastState } : {}),
-          };
-        }
-
-        await params.pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: { type: 'workflow-paused', payload: {} },
-        });
-
-        workflowSpan?.end({
-          attributes: {
-            status: 'paused',
-          },
-        });
-
-        delete result.result;
-
-        return {
-          ...result,
-          runId,
-          status: 'paused',
-          ...(params.outputOptions?.includeState ? { state: lastState } : {}),
-        };
-      }
     }
 
     if (lastOutput === undefined) {
@@ -1294,7 +1267,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       phase: 'workflow-end',
     });
 
-    if (result.status !== 'canceled' && this.getLastPersistedStatus(runId) === 'canceled') {
+    if (this.writeRejectedByCancellation(runId, result.status)) {
       // The store rejected the final write because the run was canceled meanwhile.
       result = await this.fmtReturnValue(
         params.pubsub,

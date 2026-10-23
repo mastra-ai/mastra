@@ -540,6 +540,18 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
       expect(result).toBeNull();
     });
 
+    it('should load only the run status', async () => {
+      const workflowName = 'test-workflow';
+      const { snapshot, runId } = createSampleWorkflowSnapshot('canceled');
+
+      await workflowsStorage.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+      await expect(workflowsStorage.loadWorkflowRunStatus({ workflowName, runId })).resolves.toBe('canceled');
+      await expect(
+        workflowsStorage.loadWorkflowRunStatus({ workflowName, runId: `run-${randomUUID()}` }),
+      ).resolves.toBeNull();
+    });
+
     it('should update existing workflow snapshot', async () => {
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;

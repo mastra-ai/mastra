@@ -1,6 +1,11 @@
 ---
 '@mastra/core': patch
 '@mastra/libsql': patch
+'@mastra/pg': patch
+'@mastra/mysql': patch
+'@mastra/mssql': patch
+'@mastra/dsql': patch
+'@mastra/cloudflare-d1': patch
 ---
 
 Fixed default workflow runs continuing to later steps and overwriting their status with success after another process canceled the run through shared storage.
@@ -17,4 +22,4 @@ const written = await store.persistWorkflowSnapshot({
 // `written` is false when the stored status is not in the list
 ```
 
-Added `loadWorkflowRunStatus()`, which reads only a run's status. The in-memory and LibSQL stores override it; other stores fall back to loading the snapshot.
+Added `loadWorkflowRunStatus()`, which reads only a run's status. The in-memory, LibSQL, PostgreSQL, MySQL, MSSQL, DSQL, and Cloudflare D1 stores read the status column directly; other stores fall back to loading the snapshot.
