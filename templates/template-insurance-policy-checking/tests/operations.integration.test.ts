@@ -14,9 +14,12 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
   const wire = await reportWire(documents);
   const failed = await reportWire(documents, 'normal', { ...evaluationCases[0]!, documents, behavior: 'unavailable' });
   const invalid = await reportWire(documents, 'invalid-structured-target');
+  const incomplete = await reportWire(documents, 'incomplete');
+  const interrupted = await reportWire(documents, 'interrupted');
   const logs: string[] = [];
+  let invalidLogs = '';
   try {
-    for (const mode of ['create', 'revise', 'approve', 'failure', 'invalid-output']) {
+    for (const mode of ['create', 'revise', 'approve', 'failure', 'invalid-output', 'incomplete', 'interrupted']) {
       const result = await promisify(execFile)(
         process.execPath,
         [
@@ -25,9 +28,17 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
           './tests/operations-worker.mjs',
           JSON.stringify({
             mode,
-            root: join(root, ['failure', 'invalid-output'].includes(mode) ? mode : 'case'),
+            root: join(root, ['failure', 'invalid-output', 'incomplete', 'interrupted'].includes(mode) ? mode : 'case'),
             endpoint:
-              mode === 'failure' ? failed.endpoint : mode === 'invalid-output' ? invalid.endpoint : wire.endpoint,
+              mode === 'failure'
+                ? failed.endpoint
+                : mode === 'invalid-output'
+                  ? invalid.endpoint
+                  : mode === 'incomplete'
+                    ? incomplete.endpoint
+                    : mode === 'interrupted'
+                      ? interrupted.endpoint
+                      : wire.endpoint,
           }),
         ],
         {
@@ -36,6 +47,7 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
         },
       );
       logs.push(result.stdout, result.stderr);
+      if (mode === 'invalid-output') invalidLogs = result.stdout + result.stderr;
     }
     const captured = logs.join('\n');
     expect(captured).toContain('insurance.operation');
@@ -54,6 +66,28 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
     expect(captured).toContain("failurePhase: 'schema_validation'");
     expect(captured).toContain("finishReason: 'unknown'");
     expect(captured).toContain("nativeErrorKind: 'MastraError'");
+    expect(captured).toContain("nativeErrorCode: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED'");
+    expect(captured).toContain("code: 'custom'");
+    expect(captured).toMatch(/sourceId: '[a-f0-9-]{36}'/);
+    expect(captured).toMatch(/reservationId: '[a-f0-9-]{36}'/);
+    expect(captured).toContain("failurePhase: 'transport_interruption'");
+    expect(captured).toContain("errorCode: 'MODEL_REQUEST_INTERRUPTED'");
+    const invalidSources = invalid.requests.map(request => {
+      const input = (request as { input: { role: string; content: { text: string }[] }[] }).input;
+      return JSON.parse(
+        input
+          .find(item => item.role === 'user')!
+          .content.map(item => item.text)
+          .join(''),
+      ).data.source;
+    });
+    const rejectedSource = invalidSources.find(source => source.displayName === documents[1]!.name)!;
+    const schemaFailures = (invalidLogs.match(/insurance\.operation \{[\s\S]*?\n\}/g) ?? []).filter(event =>
+      event.includes("nativeErrorCode: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED'"),
+    );
+    expect(schemaFailures).toHaveLength(1);
+    expect(schemaFailures[0]).toContain(`sourceId: '${rejectedSource.sourceId}'`);
+    expect(invalidSources).toHaveLength(3);
     for (const secret of [
       'SENTINEL_PRIVATE',
       'data:application/pdf',
@@ -74,6 +108,8 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
     await wire.close();
     await failed.close();
     await invalid.close();
+    await incomplete.close();
+    await interrupted.close();
     await rm(root, { recursive: true, force: true });
   }
 });

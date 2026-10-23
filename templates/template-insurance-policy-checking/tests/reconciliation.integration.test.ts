@@ -8,6 +8,10 @@ import { spawn } from 'node:child_process';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { noopObserve } from '@mastra/core/tools';
+import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/core/schema';
+import { Agent } from '@mastra/core/agent';
+import { createOpenAI } from '@ai-sdk/openai';
+import { extractionSchema, semanticSchema } from '../src/mastra/domain/reconciliation-contracts.js';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { z } from 'zod';
@@ -64,6 +68,7 @@ type WireRequest = {
   model: string;
   store: boolean;
   max_output_tokens: number;
+  reasoning?: { effort: string };
   input: { role: string; content: string | { type: string; text: string }[] }[];
   text: { format: { type: string; strict: boolean; schema: Record<string, unknown> } };
 };
@@ -448,6 +453,8 @@ function assertStrictSchema(schema: unknown) {
 
 describe('Evidence-backed insurance reconciliation through agent tools, workflows, files, LibSQL and Responses HTTP', () => {
   it('reconciles_omitted_location_and_authorized_deductible', async () => {
+    const originalExtractionSchema = standardSchemaToJSONSchema(toStandardSchema(extractionSchema));
+    const originalSemanticSchema = standardSchemaToJSONSchema(toStandardSchema(semanticSchema));
     const app = await setup();
     const result = await app.submit();
     expect(result).toMatchObject({ conclusion: 'INCOMPLETE' });
@@ -495,6 +502,29 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       classification: 'REQUIRES_REVIEW',
     });
     expect(app.wire.requests).toHaveLength(4);
+    // Compare actual SDK requests against a native Agent using each original,
+    // unobserved schema; provider compatibility conversion remains native.
+    const originalWire = await controlledResponses(propertyDocuments());
+    const originalAgent = new Agent({
+      id: 'original-schema-proof',
+      name: 'Original schema proof',
+      instructions: 'Return only the required structured result.',
+      model: createOpenAI({ baseURL: originalWire.endpoint, apiKey: 'local-test-only' }).responses('gpt-6.1-sol'),
+      maxRetries: 0,
+      maxProcessorRetries: 0,
+      errorProcessorDefaults: false,
+    });
+    await originalAgent.generate(JSON.stringify({ stage: 'extraction', data: { source: app.sources[0] } }), {
+      maxSteps: 1,
+      providerOptions: { openai: { store: false, strictJsonSchema: true } },
+      structuredOutput: { schema: extractionSchema, errorStrategy: 'strict', jsonPromptInjection: false },
+    });
+    await originalAgent.generate(JSON.stringify({ stage: 'semantic', data: { clauses: [] } }), {
+      maxSteps: 1,
+      providerOptions: { openai: { store: false, strictJsonSchema: true } },
+      structuredOutput: { schema: semanticSchema, errorStrategy: 'strict', jsonPromptInjection: false },
+    });
+    expect(originalWire.requests).toHaveLength(2);
     for (const request of app.wire.requests) {
       expect(request.path).toBe('/v1/responses');
       expect(request.body).toMatchObject({
@@ -504,6 +534,12 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
         text: { format: { type: 'json_schema', strict: true } },
       });
       assertStrictSchema(request.body.text.format.schema);
+      const content = request.body.input.find(item => item.role === 'user')!.content;
+      const stage = JSON.parse(typeof content === 'string' ? content : content.map(item => item.text).join('')).stage;
+      expect(request.body.reasoning?.effort).toBe(stage === 'semantic' ? 'medium' : 'low');
+      expect(request.body.text.format.schema).toEqual(
+        originalWire.requests[stage === 'semantic' ? 1 : 0]!.body.text.format.schema,
+      );
       expect(request.body.input.some(item => item.role === 'user' && Array.isArray(item.content))).toBe(true);
     }
     const reserved = await app.cases.client.execute('SELECT tokens,data FROM insurance_reservations');
@@ -511,6 +547,8 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       app.wire.requests.map(request => Buffer.byteLength(request.raw, 'utf8') + 512).sort((a, b) => a - b),
     );
     expect(reserved.rows.every(row => JSON.parse(String(row.data)).usage.total_tokens === 600)).toBe(true);
+    expect(standardSchemaToJSONSchema(toStandardSchema(extractionSchema))).toEqual(originalExtractionSchema);
+    expect(standardSchemaToJSONSchema(toStandardSchema(semanticSchema))).toEqual(originalSemanticSchema);
     const workflowStore = await app.storage.getStore('workflows');
     expect(
       await workflowStore!.getWorkflowRunById({ runId: attempts[0]!.runId, workflowName: 'policy-checking-workflow' }),
@@ -825,6 +863,17 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       const before = await app.repository.status(context);
       expect(before.analyses).toEqual([]);
       expect(before.attempts[0]!.state).toBe('FAILED');
+      if (['incomplete', 'contentFilter'].includes(mode)) {
+        const charged = await app.cases.client.execute('SELECT tokens,cost_micros,data FROM insurance_reservations');
+        expect(charged.rows).toHaveLength(3);
+        for (const row of charged.rows) {
+          const saved = JSON.parse(String(row.data));
+          expect(saved.usage).toEqual({ input_tokens: 400, output_tokens: 200, total_tokens: 600 });
+          expect(saved.billingCost).toBeNull();
+          expect(Number(row.tokens)).toBe(saved.reservedInputTokens + testBudget.maxOutputTokensPerRequest);
+          expect(Number(row.cost_micros)).toBe(saved.reservedInputTokens + 2 * testBudget.maxOutputTokensPerRequest);
+        }
+      }
       if (['overInput', 'overReservation', 'invalidTotal'].includes(mode)) {
         expect(rejected).toMatchObject({ code: 'MODEL_USAGE_LIMIT' });
         const charged = await app.cases.client.execute('SELECT tokens,cost_micros,data FROM insurance_reservations');
@@ -884,7 +933,7 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       const timedOut = await setup(propertyDocuments(), { ...testBudget, timeoutMs: 100 });
       timedOut.wire.state.mode = mode;
       timedOut.wire.state.delay = 1000;
-      expect(await timedOut.submit()).toMatchObject({ ok: false, code: 'MODEL_INVALID_OUTPUT' });
+      expect(await timedOut.submit()).toMatchObject({ ok: false, code: 'MODEL_REQUEST_INTERRUPTED' });
       expect(timedOut.wire.requests).toHaveLength(3);
       expect(await Promise.all(timedOut.wire.requests.map(request => request.canceled))).toEqual([true, true, true]);
       const timeoutReservations = await timedOut.cases.client.execute(

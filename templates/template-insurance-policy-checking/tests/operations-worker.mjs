@@ -1,18 +1,29 @@
 import { mkdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { reportRuntime, reportContext } from './report-runtime.js';
+import { reportRuntime, reportContext, reportTestBudget } from './report-runtime.js';
 import { evaluationCases } from './evaluation-cases.js';
 import { fixtureFiles } from './reconciliation-fixtures.js';
 import { runEvaluationCase } from '../scripts/evaluation-runtime.js';
 import { operation } from '../src/mastra/runtime/operations.js';
 const input = JSON.parse(process.argv[2]);
 await mkdir(input.root, { recursive: true, mode: 0o700 });
-if (input.mode === 'failure' || input.mode === 'invalid-output') {
-  const result = await runEvaluationCase(evaluationCases[0], input.root, input.endpoint);
+if (['failure', 'invalid-output', 'incomplete', 'interrupted'].includes(input.mode)) {
+  const result = await runEvaluationCase(
+    evaluationCases[0],
+    input.root,
+    input.endpoint,
+    input.mode === 'interrupted' ? { ...reportTestBudget, timeoutMs: 100 } : undefined,
+  );
   if (
     result.state !== 'failed' ||
     result.caseState !== 'FAILED' ||
-    result.failure?.code !== (input.mode === 'failure' ? 'MODEL_UNAVAILABLE' : 'MODEL_INVALID_OUTPUT') ||
+    result.failure?.code !==
+      {
+        failure: 'MODEL_UNAVAILABLE',
+        'invalid-output': 'MODEL_INVALID_OUTPUT',
+        incomplete: 'MODEL_INCOMPLETE',
+        interrupted: 'MODEL_REQUEST_INTERRUPTED',
+      }[input.mode] ||
     result.unauthorizedFinal ||
     (input.mode === 'invalid-output' && result.extractions.length !== 2)
   )

@@ -1,5 +1,7 @@
 import type { OperationContext } from '../domain/contracts.js';
 import { IntakeError } from '../domain/errors.js';
+import { operation } from '../runtime/operations.js';
+import { z } from 'zod';
 import type { ProcessingAttempt, ReconciliationRepository } from '../storage/reconciliation.js';
 
 export interface ProcessingReservation {
@@ -20,6 +22,7 @@ export function createBoundedModelTransport(
   let failure: IntakeError | undefined;
   let reservation: ProcessingReservation | undefined;
   const boundedFetch: typeof fetch = async (url, init) => {
+    const startedAt = Date.now();
     try {
       if (reservation) throw new Error('Unexpected additional native request');
       if (String(url) !== `${endpoint}/responses` || init?.method !== 'POST' || typeof init.body !== 'string')
@@ -66,14 +69,31 @@ export function createBoundedModelTransport(
       }
       return new Response(Buffer.concat(chunks), { status: response.status, headers: response.headers });
     } catch (error) {
+      const interrupted = init?.signal?.aborted === true;
       failure =
         error instanceof IntakeError
           ? error
           : new IntakeError(
-              'MODEL_INVALID_OUTPUT',
-              'The bounded provider request was interrupted or invalid.',
+              interrupted ? 'MODEL_REQUEST_INTERRUPTED' : 'MODEL_INVALID_OUTPUT',
+              interrupted
+                ? 'The bounded provider request was interrupted before a complete response was available.'
+                : 'The bounded provider request was interrupted or invalid.',
               'Read the failed attempt; explicitly retry its unchanged inputs if budget remains.',
             );
+      operation({
+        stage: 'provider',
+        outcome: 'failed',
+        caseId: attempt.caseId,
+        attemptId: attempt.id,
+        runId: attempt.runId,
+        sourceId: z.uuid().safeParse(stage.startsWith('extract:') ? stage.slice(8) : undefined).data,
+        reservationId: reservation?.id,
+        processingStage: stage === 'semantic' ? 'semantic' : 'extraction',
+        failurePhase: interrupted ? 'transport_interruption' : 'transport_request',
+        errorCode: failure.code,
+        durationMs: Date.now() - startedAt,
+        costMicros: null,
+      });
       throw failure;
     }
   };

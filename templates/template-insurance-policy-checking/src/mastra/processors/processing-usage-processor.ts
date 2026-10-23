@@ -16,7 +16,6 @@ const consistentUsageSchema = reportedUsageSchema.refine(
 );
 const responseMetadataSchema = z.object({
   status: z.literal('completed'),
-  usage: reportedUsageSchema.nullish(),
 });
 
 /** Validate raw counters: the SDK's normalized usage recomputes provider totals. */
@@ -24,27 +23,34 @@ export function createProcessingUsageProcessor(
   repository: ReconciliationRepository,
   budget: ProcessingBudget,
   reservation: () => ProcessingReservation | undefined,
-  correlation?: { caseId: string; attemptId: string; runId: string },
+  correlation?: { caseId: string; attemptId: string; runId: string; sourceId?: string },
 ): InputProcessor {
   return {
     id: 'processing-usage',
     async processLLMResponse({ rawResponse, abortSignal }) {
-      const metadata = responseMetadataSchema.safeParse(
-        rawResponse && typeof rawResponse === 'object' && 'body' in rawResponse ? rawResponse.body : undefined,
-      );
+      const body =
+        rawResponse && typeof rawResponse === 'object' && 'body' in rawResponse ? rawResponse.body : undefined;
+      const metadata = responseMetadataSchema.safeParse(body);
+      const counters = reportedUsageSchema
+        .nullish()
+        .safeParse(body && typeof body === 'object' && 'usage' in body ? body.usage : undefined);
       const reserved = reservation();
-      if (!metadata.success || !reserved)
+      if (!reserved)
         throw new IntakeError(
           'MODEL_INCOMPLETE',
           'The model returned incomplete processing metadata.',
           'Inspect the failed attempt before an explicit bounded retry.',
         );
-      const usage = metadata.data.usage ?? null;
+      // Completed output and reported usage are separate facts. Even rejected output
+      // may have consumed tokens; keep valid raw counters without releasing its ceiling.
+      const usage = counters.success ? (counters.data ?? null) : null;
       await repository.usage(reserved.id, usage);
       operation({
         ...correlation,
         stage: 'provider',
-        outcome: 'completed',
+        reservationId: reserved.id,
+        outcome: metadata.success && counters.success ? 'completed' : 'failed',
+        ...(!metadata.success || !counters.success ? { errorCode: 'MODEL_INCOMPLETE' } : {}),
         inputTokens: usage?.input_tokens ?? null,
         outputTokens: usage?.output_tokens ?? null,
         costMicros: null,
@@ -52,6 +58,12 @@ export function createProcessingUsageProcessor(
           ? usage.input_tokens * budget.inputMicrosPerToken + usage.output_tokens * budget.outputMicrosPerToken
           : null,
       });
+      if (!metadata.success || !counters.success)
+        throw new IntakeError(
+          'MODEL_INCOMPLETE',
+          'The model returned incomplete processing metadata.',
+          'Inspect the failed attempt before an explicit bounded retry.',
+        );
       abortSignal?.throwIfAborted();
       if (
         usage &&

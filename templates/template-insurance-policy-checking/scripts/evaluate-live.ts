@@ -114,6 +114,10 @@ export async function main() {
         ...aggregateEvaluation(evaluationCases.map(c => results.find(r => r.caseId === c.id) ?? evaluateCase(c))),
         pending: evaluationCases.slice(results.length).map(c => c.id),
       });
+      if (observation.state !== 'completed')
+        throw Error(
+          'A scheduled case did not complete. Further dispatch stopped because full case completion is required.',
+        );
     }
     const aggregate = aggregateEvaluation(results);
     const failures = metricNames.filter(name => {
@@ -155,6 +159,7 @@ export async function main() {
       passed: false,
       failure: error instanceof Error ? error.message : 'Evaluation interrupted.',
       ...aggregateEvaluation(evaluationCases.map(c => results.find(r => r.caseId === c.id) ?? evaluateCase(c))),
+      pending: evaluationCases.slice(results.length).map(c => c.id),
     });
     throw error;
   } finally {

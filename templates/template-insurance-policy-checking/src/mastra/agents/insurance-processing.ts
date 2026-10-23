@@ -3,10 +3,10 @@ import {
   operation,
   processingFailurePhaseSchema,
   finishReasonSchema,
-  nativeErrorKindSchema,
+  processingDiagnostics,
 } from '../runtime/operations.js';
 import { Agent } from '@mastra/core/agent';
-import { MastraError } from '@mastra/core/error';
+import { toStandardSchema } from '@mastra/core/schema';
 import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { IntakeError } from '../domain/errors.js';
@@ -41,11 +41,13 @@ export function createInsuranceProcessingModel(
           'Configure OPENAI_API_KEY after approving explicit processing budgets.',
         );
       const startedAt = Date.now();
+      const sourceId = z.uuid().safeParse(stage.startsWith('extract:') ? stage.slice(8) : undefined).data;
       const transport = createBoundedModelTransport(repository, context, attempt, stage, endpoint);
       const usageProcessor = createProcessingUsageProcessor(repository, attempt.input.budget, transport.reservation, {
         caseId: attempt.caseId,
         attemptId: attempt.id,
         runId: attempt.runId,
+        sourceId,
       });
       // The public model router cannot inject fetch; the supported SDK provider supplies only that extension.
       const provider = createOpenAI({ baseURL: endpoint, apiKey, fetch: transport.fetch });
@@ -65,6 +67,21 @@ export function createInsuranceProcessingModel(
       agent.__setLogger(privateFrameworkLogger);
       let failurePhase: z.infer<typeof processingFailurePhaseSchema> = 'native_generation';
       let finishReason: z.infer<typeof finishReasonSchema> = 'unknown';
+      let validationIssues: ReturnType<typeof processingDiagnostics>['issues'] = [];
+      const standard = toStandardSchema(schema);
+      const observedSchema = Object.create(standard) as typeof standard;
+      // Preserve native validation/JSON conversion. Zod4 issues otherwise disappear
+      // when the native error wrapper serializes a non-Error ZodError.
+      Object.defineProperty(observedSchema, '~standard', {
+        value: {
+          ...standard['~standard'],
+          async validate(value: unknown) {
+            const result = await standard['~standard'].validate(value);
+            if (result.issues) validationIssues = processingDiagnostics({ issues: result.issues }).issues;
+            return result;
+          },
+        },
+      });
       try {
         const result = await agent.generate(
           JSON.stringify({ stage, promptVersion: attempt.input.promptVersion, data }),
@@ -76,8 +93,14 @@ export function createInsuranceProcessingModel(
               maxOutputTokens: attempt.input.budget.maxOutputTokensPerRequest,
               timeout: { totalMs: attempt.input.budget.timeoutMs, stepMs: attempt.input.budget.timeoutMs },
             },
-            providerOptions: { openai: { store: false, strictJsonSchema: true } },
-            structuredOutput: { schema, errorStrategy: 'strict', jsonPromptInjection: false },
+            providerOptions: {
+              openai: {
+                store: false,
+                strictJsonSchema: true,
+                reasoningEffort: stage === 'semantic' ? 'medium' : 'low',
+              },
+            },
+            structuredOutput: { schema: observedSchema, errorStrategy: 'strict', jsonPromptInjection: false },
           },
         );
         if (transport.failure()) throw transport.failure();
@@ -96,26 +119,30 @@ export function createInsuranceProcessingModel(
       } catch (error) {
         if (transport.failure()) throw transport.failure();
         if (error instanceof IntakeError) throw error;
-        const nativeErrorKind =
-          nativeErrorKindSchema.safeParse(
-            error instanceof MastraError ? 'MastraError' : error instanceof Error ? error.name : undefined,
-          ).data ?? 'unknown';
+        const diagnostic = processingDiagnostics(error);
+        if (!diagnostic.issues.length) diagnostic.issues = validationIssues;
         if (
-          error instanceof z.ZodError ||
-          nativeErrorKind === 'ZodError' ||
-          (error instanceof MastraError && error.id === 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED')
+          diagnostic.nativeErrorKind === 'ZodError' ||
+          diagnostic.issues.length ||
+          diagnostic.nativeErrorCode === 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED'
         )
           failurePhase = 'schema_validation';
+        else if (diagnostic.nativeErrorCode === 'STRUCTURED_OUTPUT_TRUNCATED') failurePhase = 'finish_reason';
+        else if (['AbortError', 'TimeoutError'].includes(diagnostic.nativeErrorKind))
+          failurePhase = 'transport_interruption';
+        finishReason = diagnostic.finishReason ?? finishReason;
         operation({
           stage: 'provider',
           outcome: 'failed',
           caseId: attempt.caseId,
           attemptId: attempt.id,
           runId: attempt.runId,
+          sourceId,
+          reservationId: transport.reservation()?.id,
           processingStage: stage === 'semantic' ? 'semantic' : 'extraction',
           failurePhase,
+          ...diagnostic,
           finishReason,
-          nativeErrorKind,
           errorCode: 'MODEL_INVALID_OUTPUT',
           durationMs: Date.now() - startedAt,
           costMicros: null,
@@ -123,7 +150,7 @@ export function createInsuranceProcessingModel(
         throw new IntakeError(
           'MODEL_INVALID_OUTPUT',
           'The provider returned invalid structured output or the bounded request was interrupted.',
-          `Read the failed attempt (${failurePhase}; ${nativeErrorKind}; finish reason: ${finishReason}); explicitly retry its unchanged inputs if budget remains.`,
+          `Read the failed attempt (${failurePhase}; ${diagnostic.nativeErrorKind}; ${diagnostic.nativeErrorCode ?? 'no native code'}; finish reason: ${finishReason}; issues: ${diagnostic.issues.map(i => i.code + ':' + i.path.join('.')).join(', ') || 'none'}); explicitly retry its unchanged inputs if budget remains.`,
         );
       }
     },

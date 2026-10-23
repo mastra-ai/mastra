@@ -8,7 +8,15 @@ import type { EvaluationCase } from './evaluation-cases.js';
 import { fixtureExtraction, type DocumentFixture } from './reconciliation-fixtures.js';
 export async function reportWire(
   documents: DocumentFixture[],
-  mode: 'normal' | 'long' | 'zero' | 'partial' | 'match' | 'invalid-structured-target' = 'normal',
+  mode:
+    | 'normal'
+    | 'long'
+    | 'zero'
+    | 'partial'
+    | 'match'
+    | 'invalid-structured-target'
+    | 'incomplete'
+    | 'interrupted' = 'normal',
   evaluation?: EvaluationCase,
 ) {
   const requests: unknown[] = [];
@@ -121,22 +129,26 @@ export async function reportWire(
         })),
       };
     outgoing.writeHead(200, { 'Content-Type': 'application/json' });
-    outgoing.end(
-      JSON.stringify({
-        id: 'resp_report_' + requests.length,
-        status: 'completed',
-        output: [
-          {
-            type: 'message',
-            id: 'msg_report',
-            role: 'assistant',
-            status: 'completed',
-            content: [{ type: 'output_text', text: JSON.stringify(result), annotations: [] }],
-          },
-        ],
-        usage: { input_tokens: 400, output_tokens: 200, total_tokens: 600 },
-      }),
-    );
+    const payload = JSON.stringify({
+      id: 'resp_report_' + requests.length,
+      status: mode === 'incomplete' ? 'incomplete' : 'completed',
+      ...(mode === 'incomplete' ? { incomplete_details: { reason: 'max_output_tokens' } } : {}),
+      output: [
+        {
+          type: 'message',
+          id: 'msg_report',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text: JSON.stringify(result), annotations: [] }],
+        },
+      ],
+      usage: { input_tokens: 400, output_tokens: 200, total_tokens: 600 },
+    });
+    if (mode === 'interrupted') {
+      outgoing.write(payload.slice(0, 20));
+      await new Promise(resolve => setTimeout(resolve, 300));
+      outgoing.end(payload.slice(20));
+    } else outgoing.end(payload);
   });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);

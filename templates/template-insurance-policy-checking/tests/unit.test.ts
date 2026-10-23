@@ -16,6 +16,47 @@ import { failureText } from '../src/mastra/domain/errors.js';
 import { sourceBundleSchema } from '../src/mastra/domain/contracts.js';
 import { recordProvider } from './fixtures.js';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { processingDiagnostics } from '../src/mastra/runtime/operations.js';
+
+it('native_diagnostics_survive_serialization_without_copying_error_content', () => {
+  const validationError = new z.ZodError([
+    { code: 'custom', path: ['terms', 0, 'evidence'], message: 'SENTINEL_PRIVATE_ISSUE' },
+    { code: 'custom', path: ['SENTINEL_PRIVATE_DYNAMIC_KEY'], message: 'private' },
+  ]);
+  const error = new MastraError(
+    {
+      id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.SYSTEM,
+      text: 'SENTINEL_PRIVATE_ERROR',
+    },
+    validationError,
+  );
+  const direct = processingDiagnostics(validationError);
+  expect(direct.issues).toEqual([{ code: 'custom', path: ['terms', 0, 'evidence'] }]);
+  expect(processingDiagnostics(error).nativeErrorCode).toBe('STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED');
+  expect(processingDiagnostics(JSON.parse(JSON.stringify(error)))).toMatchObject({
+    nativeErrorCode: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
+    nativeErrorKind: 'MastraError',
+    nativeErrorShape: 'object',
+  });
+  for (const name of [
+    'AI_NoOutputGeneratedError',
+    'AI_InvalidResponseDataError',
+    'AI_APICallError',
+    'AI_NoContentGeneratedError',
+    'AbortError',
+    'TimeoutError',
+  ])
+    expect(processingDiagnostics({ name }).nativeErrorKind).toBe(name);
+  expect(processingDiagnostics({ cause: { name: 'AI_NoObjectGeneratedError', finishReason: 'length' } })).toMatchObject(
+    { nativeErrorKind: 'AI_NoObjectGeneratedError', finishReason: 'length' },
+  );
+  expect(processingDiagnostics({ cause: { cause: { cause: error } } }).nativeErrorCode).toBeUndefined();
+  expect(JSON.stringify(direct)).not.toContain('SENTINEL_PRIVATE');
+});
 
 describe('Intake contract invariants', () => {
   it('rejects invalid local runtime settings before storage or model work', () => {
