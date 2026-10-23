@@ -469,7 +469,7 @@ Returns:
     name: 'skipped',
     type: 'number',
     description:
-      'Runs skipped because they are already active, recovery is already in progress, or the recovery wait timed out. Only ownership skips eligible for re-checks are checked again; recovery timeouts are not automatically retried.',
+      'Runs skipped because they are already active, recovery is already in progress, or the recovery wait timed out. Skips with a future `retryAt`, including recovery timeouts, are automatically re-checked. Timeout re-checks wait for the original attempt to settle before deciding whether to retry.',
   },
 ]}
 />
