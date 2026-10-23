@@ -1,10 +1,15 @@
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 
 import { GitLabIcon } from '../../../../../ui/icons';
 import type { RepositoryProvider } from './change-tree';
+
+const PROVIDER_ICONS: Record<RepositoryProvider, ComponentType<{ className?: string }>> = {
+  github: GithubIcon,
+  gitlab: GitLabIcon,
+};
 
 interface RepositoryGroupHeaderProps {
   label: string;
@@ -14,8 +19,8 @@ interface RepositoryGroupHeaderProps {
   children?: ReactNode;
 }
 
-/** The collapsible row a repository's files sit under when the session holds several repositories. */
 export function RepositoryGroupHeader({ label, provider, open, onOpenChange, children }: RepositoryGroupHeaderProps) {
+  const ProviderIcon = provider && PROVIDER_ICONS[provider];
   return (
     <button
       type="button"
@@ -25,18 +30,10 @@ export function RepositoryGroupHeader({ label, provider, open, onOpenChange, chi
       data-testid="workspace-repository-group"
       onClick={() => onOpenChange(!open)}
     >
-      {open ? (
-        <ChevronDown className="text-muted-foreground shrink-0" size={14} />
-      ) : (
-        <ChevronRight className="text-muted-foreground shrink-0" size={14} />
-      )}
-      {provider ? (
+      <DisclosureChevron direction="right" className="text-muted-foreground size-3.5" />
+      {ProviderIcon ? (
         <span aria-hidden="true" className="flex shrink-0 items-center" data-testid={`repository-provider-${provider}`}>
-          {provider === 'gitlab' ? (
-            <GitLabIcon className="text-foreground size-3.5 shrink-0" />
-          ) : (
-            <GithubIcon className="text-foreground size-3.5 shrink-0" />
-          )}
+          <ProviderIcon className="text-foreground size-3.5 shrink-0" />
         </span>
       ) : null}
       <Txt as="span" tone="ink" variant="column" font="mono" className="min-w-0 flex-1 truncate">

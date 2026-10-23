@@ -144,10 +144,8 @@ export interface WorkspaceChanges {
   repositories?: WorkspaceChangesRepository[];
 }
 
-/** What the changes are measured against: the base branch the session forked from, or its last commit. */
 export type WorkspaceChangesScope = 'branch' | 'uncommitted';
 
-/** Why a change has no diff: its own diff passes 512 KB, or the diffs before it already filled 8 MB. */
 export type WorkspacePatchOmission = 'file-too-large' | 'total-too-large';
 
 export interface WorkspaceChangePatches extends WorkspaceChanges {
@@ -173,10 +171,7 @@ export interface ArtifactListing {
 const MAX_TEXT_FILE_BYTES = 512 * 1024;
 const MAX_DIFF_BYTES = 512 * 1024;
 const MAX_PATCH_SET_BYTES = 8 * 1024 * 1024;
-/**
- * The working tree against `$2`, then every untracked file as added (staged
- * into a throwaway index), in the diff format the remaining arguments give.
- */
+/** Diffs the worktree against `$2`, untracked files as added through a throwaway index so the real one stays untouched. */
 const WORKSPACE_DIFF_SCRIPT = `
 set -e
 workdir=$1
@@ -1029,8 +1024,7 @@ function assembleWorkspaceChanges(workspacePath: string, inspected: InspectedRep
     return { workspacePath, ...changes };
   }
 
-  // Several: a failing checkout (missing, git error) is unavailable on its
-  // own, the others still answer.
+  // A failing checkout is unavailable on its own; the others still answer.
   const groups: WorkspaceChangesRepository[] = inspected.map(({ repo, changes }) => ({
     slug: repo.slug,
     prefix: repo.prefix,
@@ -1106,11 +1100,6 @@ interface KeyedPatches {
   omitted: Map<string, WorkspacePatchOmission>;
 }
 
-/**
- * Each change's section of one checkout's patch, matched by its `diff --git`
- * header. A section larger than one file's limit, or cut by the size budget,
- * is left out with the reason.
- */
 function keyWorkspacePatches(patch: string, changes: readonly WorkspaceChange[]): KeyedPatches {
   const sections = patch.split(/^(?=diff --git )/m);
   const budgetSpent = Buffer.byteLength(patch) > MAX_PATCH_SET_BYTES;

@@ -322,11 +322,6 @@ async function requestSessionRoute(path: string, sessionFs: ReturnType<typeof ma
 }
 
 /**
- * A real git checkout on the host behind a sandbox whose commands run on the
- * host and whose native filesystem is the host's, so the tree and file routes
- * run real `git check-ignore`, real directory listings and real symlink checks.
- */
-/**
  * Answers the tree's checks for a mocked sandbox with no symlinks and nothing
  * ignored: `realpath` maps each path under the root, `check-ignore` matches none.
  */
@@ -356,27 +351,39 @@ async function seedHostCheckouts(repos: string[] = ['acme/repo']) {
     await writeFile(join(dir, 'dist', 'out.js'), '');
     await execFileAsync('git', ['init', '-q', dir]);
   }
+  const executeCommand = attachHostSandbox(parent, repos);
+  return { parent, executeCommand };
+}
+
+function failedHostCommand(error: unknown) {
+  if (!(error instanceof Error)) throw error;
+  return {
+    exitCode: 'code' in error && typeof error.code === 'number' ? error.code : 1,
+    stdout: 'stdout' in error && typeof error.stdout === 'string' ? error.stdout : '',
+    stderr: 'stderr' in error && typeof error.stderr === 'string' ? error.stderr : '',
+  };
+}
+
+function attachHostSandbox(parent: string, slugs: string[]) {
   const executeCommand = vi.fn(async (command: string, args: string[] = [], options?: { cwd?: string }) => {
     try {
-      const { stdout, stderr } = await execFileAsync(command, args, { cwd: options?.cwd ?? parent });
+      const { stdout, stderr } = await execFileAsync(command, args, {
+        cwd: options?.cwd ?? parent,
+        maxBuffer: 64 * 1024 * 1024,
+      });
       return { exitCode: 0, stdout, stderr };
     } catch (error) {
-      const failed = error as { code?: number; stdout?: string; stderr?: string };
-      return {
-        exitCode: typeof failed.code === 'number' ? failed.code : 1,
-        stdout: failed.stdout ?? '',
-        stderr: failed.stderr ?? '',
-      };
+      return failedHostCommand(error);
     }
   });
   const filesystem = new LocalFilesystem({ basePath: '/', contained: false });
   getSessionSandbox(
     'row-1',
-    repos[0]!,
+    slugs[0]!,
     () => ({ id: 'sbx-1', provider: 'local', workingDirectory: parent, executeCommand, filesystem }) as never,
-    repos.length > 1 ? repos : undefined,
+    slugs.length > 1 ? slugs : undefined,
   );
-  return { parent, executeCommand };
+  return executeCommand;
 }
 
 describe('live session file tree', () => {
@@ -918,33 +925,11 @@ describe('workspace patches', () => {
     'commit.gpgsign=false',
   ];
 
-  /**
-   * Real checkouts behind a sandbox whose commands run on the host, each with
-   * its base branch `main` pushed to `origin/main`.
-   */
   async function seedRepositories(slugs: string[] = ['acme/repo']) {
     const parent = await realpath(await mkdtemp(join(tmpdir(), 'factory-patches-')));
     const dirs = slugs.map(slug => join(parent, slug.split('/')[1]!));
     for (const dir of dirs) await execFileAsync('git', ['init', '-q', '-b', 'main', dir]);
-    const executeCommand = vi.fn(async (command: string, args: string[] = []) => {
-      try {
-        const { stdout, stderr } = await execFileAsync(command, args, { cwd: parent, maxBuffer: 64 * 1024 * 1024 });
-        return { exitCode: 0, stdout, stderr };
-      } catch (error) {
-        const failed = error as { code?: number; stdout?: string; stderr?: string };
-        return {
-          exitCode: typeof failed.code === 'number' ? failed.code : 1,
-          stdout: failed.stdout ?? '',
-          stderr: failed.stderr ?? '',
-        };
-      }
-    });
-    getSessionSandbox(
-      'row-1',
-      slugs[0]!,
-      () => ({ id: 'sbx-1', provider: 'local', workingDirectory: parent, executeCommand }) as never,
-      slugs.length > 1 ? slugs : undefined,
-    );
+    attachHostSandbox(parent, slugs);
     return dirs;
   }
 
@@ -957,7 +942,6 @@ describe('workspace patches', () => {
     await execFileAsync('git', ['-C', dir, 'update-ref', 'refs/remotes/origin/main', 'HEAD']);
   }
 
-  /** A session branch with one commit on top of `origin/main`, then uncommitted work of every kind. */
   async function seedSessionWork() {
     const [dir] = await seedRepositories();
     await writeFile(join(dir!, 'keep.txt'), 'a\nb\nc\n');

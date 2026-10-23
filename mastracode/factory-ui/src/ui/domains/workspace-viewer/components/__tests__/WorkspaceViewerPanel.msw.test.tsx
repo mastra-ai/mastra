@@ -110,7 +110,6 @@ function pendingChangesHandler() {
 type ScopedChanges = Pick<WorkspaceChangePatches, 'changes' | 'patches'> &
   Partial<Pick<WorkspaceChangePatches, 'omittedPatches'>>;
 
-/** Answers the Changes panel with the files and diffs of the scope it asks for. */
 function patchesHandler(byScope: Record<WorkspaceChangesScope, ScopedChanges>) {
   return http.get(PATCHES_URL, ({ request }) => {
     const scope = new URL(request.url).searchParams.get('scope') === 'uncommitted' ? 'uncommitted' : 'branch';

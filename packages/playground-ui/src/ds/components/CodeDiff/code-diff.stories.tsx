@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SquareArrowRight, SquareDot, SquarePlus } from 'lucide-react';
+import { DiffStat } from '../DiffStat';
+import type { DiffStatProps } from '../DiffStat';
 import { Txt } from '../Txt';
 import { CodeDiff } from './code-diff';
 import { CodeDiffList } from './code-diff-list';
@@ -83,11 +85,10 @@ const guidePatch = [
   '+Run the researcher agent with `pnpm dev`.',
 ].join('\n');
 
-function LineCounts({ additions, deletions }: { additions: number; deletions: number }) {
+function LineCounts(counts: DiffStatProps) {
   return (
-    <Txt as="span" variant="meta" font="mono" className="flex gap-1 tabular-nums">
-      <span className="text-success-indicator">+{additions}</span>
-      <span className="text-destructive-foreground">−{deletions}</span>
+    <Txt as="span" variant="meta" font="mono">
+      <DiffStat {...counts} />
     </Txt>
   );
 }

@@ -1,5 +1,5 @@
+import { DiffStat } from '@mastra/playground-ui/components/DiffStat';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { pluralize } from '@mastra/playground-ui/utils/string';
 
 import type { WorkspaceChange } from '../../../../../api/types';
 
@@ -18,15 +18,8 @@ export function ChangeCounts({
   if (additions === undefined || deletions === undefined) return null;
 
   return (
-    <Txt
-      as="span"
-      variant="meta"
-      font="mono"
-      className="flex shrink-0 items-center gap-1 tabular-nums"
-      aria-label={`${pluralize(additions, 'addition')} and ${pluralize(deletions, 'deletion')}`}
-    >
-      <span className="text-success-indicator">+{additions}</span>
-      <span className="text-destructive-foreground">−{deletions}</span>
+    <Txt as="span" variant="meta" font="mono" className="shrink-0">
+      <DiffStat additions={additions} deletions={deletions} />
     </Txt>
   );
 }

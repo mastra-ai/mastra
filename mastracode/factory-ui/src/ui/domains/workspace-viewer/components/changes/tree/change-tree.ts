@@ -9,7 +9,6 @@ export interface ChangeTreeNode {
 
 export type RepositoryProvider = 'github' | 'gitlab';
 
-/** Source control provider per repository slug, from the factory's linked repositories. */
 export type RepositoryProviders = Record<string, RepositoryProvider | undefined>;
 
 function ensureChangeDirectory(nodes: ChangeTreeNode[], path: string, name: string): ChangeTreeNode {
@@ -58,11 +57,6 @@ function sortChangeTree(nodes: ChangeTreeNode[]): ChangeTreeNode[] {
   });
 }
 
-/**
- * Build the folder tree of a change list. `prefix` is the repository
- * directory the paths carry in a multi-repository session: it is stripped
- * for display only, every node keeps the prefixed path the routes expect.
- */
 export function buildChangeTree(changes: WorkspaceChange[], prefix = ''): ChangeTreeNode[] {
   const nodes: ChangeTreeNode[] = [];
   changes.forEach(change => addChange(nodes, change, prefix));
@@ -77,14 +71,12 @@ export function groupedRepositories(changes: WorkspaceChanges) {
   return changes.repositories && changes.repositories.length > 1 ? changes.repositories : undefined;
 }
 
-/** The changes in the order the tree lists them: repository by repository, folders before files. */
 export function changesInTreeOrder(changes: WorkspaceChanges): WorkspaceChange[] {
   const repositories = groupedRepositories(changes);
   if (!repositories) return treeChanges(buildChangeTree(changes.changes));
   return repositories.flatMap(repository => treeChanges(buildChangeTree(repository.changes, repository.prefix)));
 }
 
-/** Unknown while the factory loads (no icon); a slug the factory doesn't list is shown as GitHub. */
 export function repositoryProvider(
   repositoryProviders: RepositoryProviders | undefined,
   slug: string,

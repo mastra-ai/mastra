@@ -14,7 +14,6 @@ interface ChangeTreeProps extends ChangeTreeFolderState {
   onSelect: (path: string) => void;
 }
 
-/** The changed files as a folder tree, grouped by repository when the session holds several. */
 export function ChangeTree({
   changes,
   repositoryProviders,

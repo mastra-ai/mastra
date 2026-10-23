@@ -8,9 +8,14 @@ Added `CodeDiffList`, a scroll container for many `CodeDiff`s. It stacks them ed
 
 ```tsx
 import { CodeDiff, CodeDiffList } from '@mastra/playground-ui/components/CodeDiff';
+import { DiffStat } from '@mastra/playground-ui/components/DiffStat';
 
 <CodeDiffList className="h-[640px]">
-  <CodeDiff patch={agentPatch} overflow="scroll" header={{ path: 'src/agent.ts', meta: <span>+4 −1</span> }} />
+  <CodeDiff
+    patch={agentPatch}
+    overflow="scroll"
+    header={{ path: 'src/agent.ts', meta: <DiffStat additions={4} deletions={1} /> }}
+  />
   <CodeDiff
     header={{
       path: 'src/agents/helper.ts',
@@ -22,3 +27,5 @@ import { CodeDiff, CodeDiffList } from '@mastra/playground-ui/components/CodeDif
 ```
 
 `CodeDiff` also takes `overflow`. `wrap` (default, as before) breaks long lines, which suits prose. `scroll` keeps each line on one row behind a horizontal scroll, which suits source code; in the split layout each side scrolls on its own.
+
+Added `DiffStat`, the green `+N` and red `−N` line counts of a change. It takes the surrounding text style, and screen readers hear "4 additions and 1 deletion" instead of the symbols.
