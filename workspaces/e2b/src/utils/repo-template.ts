@@ -53,8 +53,11 @@ const execFileAsync = promisify(execFile);
 // silently reusing one built at the old size. v5 picked up the v3 default
 // mountable base (pinned current Node LTS + corepack) — base contents are
 // not part of this hash, so the bump is what forces existing repo
-// templates to rebuild on the new base.
-const ALIAS_VERSION = 'v5';
+// templates to rebuild on the new base. v6 added the default base
+// template's id to the hash, so a base change (e.g. a Node security
+// release) moves every repo template to a new name instead of letting
+// cached sha or `current` builds keep serving the old runtime.
+const ALIAS_VERSION = 'v6';
 
 /**
  * Stable tag assigned to every successful repo-template build. Points at the
@@ -310,6 +313,9 @@ function repoTemplateName(identity: Omit<RepoTemplateIdentity, 'sha'>): string {
   // build env's own keys from the hash.
   const config = [
     ALIAS_VERSION,
+    // The base image every repo template builds on: its id covers the
+    // pinned Node version, so a runtime bump can't reuse an old build.
+    createDefaultMountableTemplate().id,
     cloneUrl,
     identity.setupCommand ?? null,
     // Sorted, since key order isn't identity. Values participate: env that

@@ -95,6 +95,31 @@ describe('repoTemplateRef', () => {
     expect(a.split(':')[1]).toBe(`sha-${'a'.repeat(12)}`);
   });
 
+  it('moves to a new template name when the base runtime changes, so cached sha and current builds are not reused', async () => {
+    // Same repo identity, built on the previous default Node: the name must
+    // differ, or `:sha-<head>` and `:current` would keep resolving to
+    // builds on the unpatched runtime.
+    vi.resetModules();
+    vi.doMock('./template', async importOriginal => {
+      const actual = await importOriginal<typeof import('./template')>();
+      return {
+        ...actual,
+        createDefaultMountableTemplate: (options?: Parameters<typeof actual.createDefaultMountableTemplate>[0]) =>
+          actual.createDefaultMountableTemplate({ nodeVersion: '24.20.0', ...options }),
+      };
+    });
+    onTestFinished(() => {
+      vi.doUnmock('./template');
+      vi.resetModules();
+    });
+    const { repoTemplateRef: refOnOldBase } = await import('./repo-template');
+    const name = (ref: string) => ref.split(':')[0];
+
+    expect(name(refOnOldBase(IDENTITY))).not.toBe(name(repoTemplateRef(IDENTITY)));
+    const { sha: _sha, ...unpinned } = IDENTITY;
+    expect(refOnOldBase(unpinned)).not.toBe(repoTemplateRef(unpinned));
+  });
+
   it('changes when the setup command changes', () => {
     expect(repoTemplateRef(IDENTITY)).not.toBe(repoTemplateRef({ ...IDENTITY, setupCommand: 'npm ci' }));
   });
@@ -240,11 +265,13 @@ describe('createRepoTemplate', () => {
     expect(await serializedSteps(resolved)).toContain(`checkout ${head}`);
   });
 
-  it('keeps the single-form name and tag byte-identical to the pre-list release', async () => {
-    // Computed at SEG1_SHA 19b98752b77 before `repos` existed: a drift here
-    // means every existing template silently loses its warm builds.
-    expect(repoTemplateRef(IDENTITY)).toBe('mastra-repo-octocat-hello-c93a3d90:sha-aaaaaaaaaaaa');
-    expect((await resolve(BASE)).ref).toBe('mastra-repo-octocat-hello-c93a3d90:sha-aaaaaaaaaaaa');
+  it('pins the single-form name and tag, retiring the pre-Node-24.22.1 name', async () => {
+    // A drift here means every existing template silently loses its warm
+    // builds; change it only together with a deliberate base or identity
+    // bump. `c93a3d90` was the v5 name, built on Node 24.20.0.
+    expect(repoTemplateRef(IDENTITY)).toBe('mastra-repo-octocat-hello-ce749b29:sha-aaaaaaaaaaaa');
+    expect((await resolve(BASE)).ref).toBe('mastra-repo-octocat-hello-ce749b29:sha-aaaaaaaaaaaa');
+    expect(repoTemplateRef(IDENTITY)).not.toContain('c93a3d90');
   });
 
   it('clones, pins the commit, then runs setup in the checkout and writes the marker', async () => {
