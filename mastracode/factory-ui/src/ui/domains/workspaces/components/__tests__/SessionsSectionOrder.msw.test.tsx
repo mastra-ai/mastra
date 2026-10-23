@@ -249,6 +249,9 @@ describe('Sessions sidebar order', () => {
 
     const remounted = renderSection();
     expect(await reviewRowLabels(remounted.client)).toEqual(byLastUpdate);
-    expect(JSON.parse(localStorage.getItem('mastracode.sessionListView') ?? '{}')).toEqual({ groupBy: 'board', sort: 'updated' });
+    expect(JSON.parse(localStorage.getItem('mastracode.sessionListView') ?? '{}')).toEqual({
+      groupBy: 'board',
+      sort: 'updated',
+    });
   });
 });
