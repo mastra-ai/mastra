@@ -31,8 +31,9 @@ export const knowledgeBrowserScenario: McE2eScenario = {
 
         const orgAddress = `org:${LOCAL_KNOWLEDGE_ORG_ID}`;
         const resourceAddress = `resource:${resourceId}`;
-        const primaryAddress = `${resourceAddress}:thread:${primary.id}`;
-        const secondaryAddress = `${resourceAddress}:thread:${secondary.id}`;
+        // Thread scopes use the `thread:<id>` address Subconscious writes under and /knowledge reads.
+        const primaryAddress = `thread:${primary.id}`;
+        const secondaryAddress = `thread:${secondary.id}`;
         const foreignAddress = 'resource:foreign-project';
         const reconciliation = await knowledge.reconcileStructure({
           scopes: [
