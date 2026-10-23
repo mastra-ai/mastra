@@ -101,6 +101,8 @@ const manifest = {
         'message.im',
         'message.mpim',
         'agent_session_stopped',
+        // Recommended by Slack's validator for `agent_view` apps.
+        'app_home_opened',
       ],
     },
     interactivity: {

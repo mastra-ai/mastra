@@ -58,6 +58,7 @@ describe('buildManifest', () => {
     for (const event of DEFAULT_BOT_EVENTS) {
       expect(events).toContain(event);
     }
+    expect(events).not.toContain('app_home_opened');
   });
 
   it('enables app_home messages tab', () => {
@@ -86,6 +87,7 @@ describe('buildManifest', () => {
 
   it('declares agent_view instead of assistant_view under agentView', () => {
     const manifest = buildManifest({ ...baseOptions, description: 'Helps', agentView: true });
+    expect(manifest.settings?.event_subscriptions?.bot_events).toContain('app_home_opened');
     expect(manifest.features?.agent_view).toEqual({ agent_description: 'Helps' });
     // Slack rejects a manifest that declares both views.
     expect(manifest.features?.assistant_view).toBeUndefined();

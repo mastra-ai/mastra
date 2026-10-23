@@ -102,6 +102,11 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
     scopes.push('commands');
   }
 
+  // Slack's manifest validator recommends this event for `agent_view` apps.
+  if (agentView) {
+    events.push('app_home_opened');
+  }
+
   // Slack docs say 140 but the API rejects at that length for short_desc.
   const MAX_DESC = 139;
   const rawDescription = description ?? `${name} - Powered by Mastra`;
