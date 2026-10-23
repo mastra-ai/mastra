@@ -896,13 +896,28 @@ export class AgentThreadStreamRuntime {
   async #holdsThreadLeaseThroughRetake(pubsub: PubSub, key: string, runId: string): Promise<boolean> {
     const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
     if (isFallback) return true;
-    const owner = await provider.getLeaseOwner(key).catch(() => undefined);
+    // A backend that fails or doesn't answer in time is no proof the run holds the thread.
+    const owner = await this.#readLeaseOwnerInTime(provider, key).catch(() => undefined);
     if (owner === runId) return true;
     if (!owner?.startsWith(`${runId}${RETAKE_LEASE_MARKER}`)) return false;
     const retake = this.#getState(pubsub).leaseRetakes.get(runId);
     if (retake) return retake.catch(() => false);
     // The retake may have settled between the two reads; the owner then names the run again.
-    return (await provider.getLeaseOwner(key).catch(() => undefined)) === runId;
+    return (await this.#readLeaseOwnerInTime(provider, key).catch(() => undefined)) === runId;
+  }
+
+  /** The lease owner of `key`, rejecting when the backend doesn't answer within one renewal interval. */
+  async #readLeaseOwnerInTime(provider: LeaseProvider, key: string): Promise<string | undefined> {
+    let giveUp: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+      provider.getLeaseOwner(key),
+      new Promise<never>((_, reject) => {
+        giveUp = setTimeout(
+          () => reject(new Error('Thread lease backend did not answer')),
+          AGENT_THREAD_LEASE_RENEW_INTERVAL_MS,
+        );
+      }),
+    ]).finally(() => clearTimeout(giveUp));
   }
 
   /**
@@ -933,16 +948,7 @@ export class AgentThreadStreamRuntime {
   ): Promise<string | undefined> {
     const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
     if (isFallback) return undefined;
-    let giveUp: ReturnType<typeof setTimeout> | undefined;
-    const owner = await Promise.race([
-      provider.getLeaseOwner(this.#threadKey(options.resourceId, options.threadId)),
-      new Promise<never>((_, reject) => {
-        giveUp = setTimeout(
-          () => reject(new Error('Thread lease backend did not answer')),
-          AGENT_THREAD_LEASE_RENEW_INTERVAL_MS,
-        );
-      }),
-    ]).finally(() => clearTimeout(giveUp));
+    const owner = await this.#readLeaseOwnerInTime(provider, this.#threadKey(options.resourceId, options.threadId));
     // A run retaking its lease holds it under a token prefixed with its run id.
     return owner?.split(RETAKE_LEASE_MARKER)[0] || undefined;
   }
