@@ -6,6 +6,9 @@ import { describe, expect, it, vi } from 'vitest';
 import Metrics from '..';
 import {
   aggregate,
+  aggregateStorage,
+  emptyTraceAggregate,
+  traceAggregateOnlyStorage,
   breakdown,
   percentiles,
   supportedStorage,
@@ -247,6 +250,34 @@ describe('Metrics storage support', () => {
       const url = new URL(screen.getByTestId('location').textContent ?? '', 'http://localhost');
       expect(url.searchParams.get('datePreset')).toBe('last-7d');
       expect(url.searchParams.get('filterEnvironment')).toBe('production');
+    });
+  });
+
+  describe('when the server answers trace and span aggregates', () => {
+    it('shows the Resources and threads card', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(aggregateStorage)),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, () => HttpResponse.json(emptyTraceAggregate)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      expect(await screen.findByText('Resources and threads')).toBeTruthy();
+    });
+  });
+
+  describe('when the server answers trace aggregates but not span aggregates', () => {
+    it('keeps the page as it was, without Resources and threads', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceAggregateOnlyStorage)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      await screen.findAllByRole('button', { name: 'View in traces' });
+      expect(screen.queryByText('Resources and threads')).toBeNull();
     });
   });
 });

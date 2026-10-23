@@ -20,6 +20,7 @@ import {
 import { MetricsProvider, isValidPreset } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
+import { useMetricsLayout } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-layout';
 import {
   applyMetricsPropertyFilterTokens,
   createMetricsFilterBarFields,
@@ -241,6 +242,7 @@ function MetricsContent() {
 function MetricsCards() {
   const { openTraces, openLogs } = useMetricsDrilldownNavigation();
   const agent = EntityType.AGENT;
+  const layout = useMetricsLayout();
 
   return (
     <div className="grid content-start gap-4 pb-6">
@@ -280,7 +282,7 @@ function MetricsCards() {
           />
         </MetricsGrid.Item>
       </MetricsGrid>
-      <DistinctIdsCard onTimeRangeClick={openTraces} />
+      {layout === 'unified' && <DistinctIdsCard onTimeRangeClick={openTraces} />}
       <ScoresCard />
     </div>
   );

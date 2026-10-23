@@ -10,6 +10,18 @@ export const supportedStorage: GetObservabilityCapabilitiesResponse = {
   capabilities: { metrics: true, logs: true, traceQueryDiscovery: false },
 };
 
+export const traceAggregateOnlyStorage: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageClickhouseVNext',
+  capabilities: { metrics: true, logs: true, traceQueryDiscovery: true, traceAggregate: true },
+};
+
+export const aggregateStorage: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageClickhouseVNext',
+  capabilities: { metrics: true, logs: true, traceQueryDiscovery: true, traceAggregate: true, spanAggregate: true },
+};
+
+export const emptyTraceAggregate: Awaited<ReturnType<MastraClient['aggregateTraces']>> = { groups: [] };
+
 export const aggregate: Awaited<ReturnType<MastraClient['getMetricAggregate']>> = { value: 0 };
 export const breakdown: Awaited<ReturnType<MastraClient['getMetricBreakdown']>> = { groups: [] };
 export const timeSeries: Awaited<ReturnType<MastraClient['getMetricTimeSeries']>> = { series: [] };
