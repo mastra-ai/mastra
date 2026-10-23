@@ -11,6 +11,7 @@ import {
   legacyTraceCapabilities,
   noFeedbackCapabilities,
   noRootDurationCapabilities,
+  threadRowsCapabilities,
   traceQueryCapabilities,
   traceQueryFieldsWithRegion,
   traceQueryFieldsWithNestedTenant,
@@ -560,6 +561,42 @@ describe('Traces page view switch', () => {
       fireEvent.click(views.getByRole('tab', { name: 'Spans' }));
 
       await waitFor(() => expect(screen.getByTestId('pathname').textContent).toBe('/spans'));
+    });
+  });
+
+  describe('when the store does not return thread rows', () => {
+    it('does not offer the Threads view', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      expect(views.queryByRole('tab', { name: 'Threads' })).toBeNull();
+    });
+  });
+
+  describe('when the store returns thread rows', () => {
+    it('offers the Threads view after Spans', async () => {
+      setTracePageHandlers(threadRowsCapabilities);
+
+      renderPage();
+
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      await waitFor(() =>
+        expect(views.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Traces', 'Spans', 'Threads']),
+      );
+    });
+  });
+
+  describe('when Threads is clicked in the view switch', () => {
+    it('navigates to the threads page', async () => {
+      setTracePageHandlers(threadRowsCapabilities);
+
+      renderPage();
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      fireEvent.click(await views.findByRole('tab', { name: 'Threads' }));
+
+      await waitFor(() => expect(screen.getByTestId('pathname').textContent).toBe('/threads'));
     });
   });
 });
