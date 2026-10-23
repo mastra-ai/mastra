@@ -1,5 +1,5 @@
 import type { WorkflowsStorage, WorkflowRun, WorkflowRunHeader } from '@mastra/core/storage';
-import { getSnapshotMemoryInfo, isRunFenceConflictError } from '@mastra/core/storage';
+import { getSnapshotMemoryInfo, isRunFenceConflictError, summarizeStepResult } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -202,6 +202,30 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect((await store.getWorkflowRunById({ workflowName, runId: id }))!.resourceId).toBe('res');
       });
 
+      it('keeps every concurrent append to one run, each under its own seq', async () => {
+        const stored = runId();
+        const unstored = runId();
+        await checkpoint(stored, makeSnapshot(stored, { context: { input: {} } }));
+        const stepIds = Array.from({ length: 20 }, (_, i) => `s${i}`);
+
+        await Promise.all(
+          [stored, unstored].flatMap(id =>
+            stepIds.map(stepId =>
+              store.appendWorkflowRunEntries({
+                workflowName,
+                runId: id,
+                header: makeHeader(id),
+                steps: { [stepId]: ok(stepId) },
+              }),
+            ),
+          ),
+        );
+
+        const expected = Object.fromEntries(stepIds.map(stepId => [stepId, ok(stepId)]));
+        expect(await loadRun(stored)).toMatchObject({ lastSeq: 22, steps: { input: {}, ...expected } });
+        expect(await loadRun(unstored)).toMatchObject({ lastSeq: 20, steps: expected });
+      });
+
       it('copies on write and read, so later edits do not reach storage', async () => {
         const id = runId();
         const a = ok({ list: [1] }) as any;
@@ -277,6 +301,24 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
           d: running,
         });
         expect(Object.keys(stored!.steps)).toEqual(['input', 'a', 'b', 'c', 'd']);
+      });
+
+      it('summarizes exactly like summarizeStepResult, keeping nulls and value types', async () => {
+        const id = runId();
+        const result = {
+          status: 'success',
+          output: { big: 'x' },
+          payload: {},
+          startedAt: 0,
+          endedAt: 2,
+          suspendedAt: null,
+          metadata: { flag: false, n: 0, s: '', none: null, list: [], nested: { t: true } },
+        };
+        await checkpoint(id, makeSnapshot(id, { context: { a: result } }));
+
+        const stored = await loadRun(id, 'summary');
+        expect(stored!.steps.a).toStrictEqual(summarizeStepResult(result as any));
+        expect(Object.keys(stored!.steps.a!)).not.toContain('resumedAt');
       });
 
       it('summarizes the latest result of each step', async () => {
