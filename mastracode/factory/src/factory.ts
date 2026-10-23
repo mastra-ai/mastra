@@ -159,7 +159,7 @@ import {
   createStageChangeNotifier,
   createWorkItemRunEndReporter,
 } from './tools/reports.js';
-import type { FactoryReporting, FactoryStageChange } from './tools/reports.js';
+import type { FactoryReporting } from './tools/reports.js';
 import { observeSessionRunReports } from './tools/run-watch.js';
 import { createFactorySandboxTools } from './tools/sandbox-tools.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
@@ -931,22 +931,6 @@ export class MastraFactory {
             ...(args.actor.type === 'agent' ? { initiatingBindingId: args.actor.bindingId } : {}),
           })
       : retireTerminalSessions;
-    const notifyStageChange = createStageChangeNotifier({ workItems: workItemsStorage, reporting: factoryReporting });
-    const tellIntegrationsStageChanged = async (change: FactoryStageChange): Promise<void> => {
-      const observers = integrations.filter(integration => integration.onStageChange);
-      if (observers.length === 0) return;
-      const item = await workItemsStorage.getForProject(change.orgId, change.factoryProjectId, change.workItemId);
-      if (!item) return;
-      await Promise.all(
-        observers.map(async integration => {
-          try {
-            await integration.onStageChange?.({ item, fromStage: change.fromStage, toStage: change.toStage });
-          } catch (error) {
-            console.warn(`[factory] Integration '${integration.id}' stage observer failed:`, error);
-          }
-        }),
-      );
-    };
     const transitionService = workItemsReady
       ? new FactoryTransitionService({
           configVersion,
@@ -964,9 +948,10 @@ export class MastraFactory {
             return project?.selfReviewEnabled ?? false;
           },
           ...(onTerminalStage ? { onTerminalStage } : {}),
-          onTransitionCommitted: async change => {
-            await Promise.all([notifyStageChange(change), tellIntegrationsStageChanged(change)]);
-          },
+          onTransitionCommitted: createStageChangeNotifier({
+            workItems: workItemsStorage,
+            reporting: factoryReporting,
+          }),
           ...(githubIntegration
             ? {
                 onAccepted: (args: { orgId: string; factoryProjectId: string; item: WorkItemRow }) =>

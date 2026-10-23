@@ -43,7 +43,7 @@ import type { MemorySettingsStorage } from '../storage/domains/memory-settings/b
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /** A push to a repository linked to a project, as a version-control integration reports it. */
 export interface RepositoryPushEvent {
@@ -254,12 +254,6 @@ export interface FactoryIntegration {
    * integration cannot prevent another from observing the same tool result.
    */
   postToolObserver?(args: { toolContext: IntegrationPostToolContext; requestContext?: RequestContext }): Promise<void>;
-  /**
-   * Called after a card moves to another stage, so the integration can show
-   * the move where the card came from. Best-effort: a failure is logged and
-   * never affects the transition.
-   */
-  onStageChange?(change: { item: WorkItemRow; fromStage: string | undefined; toStage: string }): Promise<void>;
   /**
    * Background workers the integration needs running for its lifecycle
    * (e.g. polling an upstream that doesn't support webhooks). Optional

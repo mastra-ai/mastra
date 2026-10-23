@@ -305,35 +305,3 @@ describe('SlackIntegration.postToolObserver', () => {
     expect(linked.post).not.toHaveBeenCalled();
   });
 });
-
-describe('SlackIntegration.onStageChange', () => {
-  function setup() {
-    const adapter = { addReaction: vi.fn(async () => {}), removeReaction: vi.fn(async () => {}) };
-    const integration = new SlackIntegration({ signingSecret: 'secret' });
-    integration.initialize({ channels: () => ({ adapters: { slack: adapter } }) as any });
-    return { integration, adapter };
-  }
-  const card = (externalSource: unknown) => ({ id: 'wi-1', externalSource }) as any;
-  const thread = 'slack:C123:1792771853.363419';
-
-  it('swaps the reaction on the Slack thread a card was filed from to match its new stage', async () => {
-    const { integration, adapter } = setup();
-
-    await integration.onStageChange({
-      item: card({ integrationId: 'slack', type: 'slack-thread', workspaceId: 'T1', externalId: thread }),
-      fromStage: 'triage',
-      toStage: 'planning',
-    });
-
-    expect(adapter.removeReaction).toHaveBeenCalledWith(thread, '1792771853.363419', 'eyes');
-    expect(adapter.addReaction).toHaveBeenCalledWith(thread, '1792771853.363419', 'memo');
-  });
-
-  it('leaves cards that did not come from a Slack thread alone', async () => {
-    const { integration, adapter } = setup();
-
-    await integration.onStageChange({ item: card(null), fromStage: 'triage', toStage: 'done' });
-
-    expect(adapter.addReaction).not.toHaveBeenCalled();
-  });
-});

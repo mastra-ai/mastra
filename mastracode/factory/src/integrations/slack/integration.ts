@@ -27,6 +27,7 @@ import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
 
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { announcePullRequest } from '../channel-thread-announcements.js';
 import { parseCreatedPullRequest } from '../github/session-subscriptions.js';
 import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
 import { FactoryChannelSessionLinkProcessor } from './channel-session-link-processor.js';
@@ -37,7 +38,6 @@ import { createReplyTool, FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from '.
 import { createShareFileTool, isSlackThread } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
-import { announcePullRequest, STAGE_REACTIONS, swapThreadReaction } from './thread-status.js';
 
 /**
  * Slack app credentials, read from env ONCE by the deploy entry. `signingSecret`
@@ -224,8 +224,7 @@ export class SlackIntegration implements FactoryIntegration {
 
   /**
    * When a run opens a pull request, post its link into the session's Slack
-   * thread and remember it, so later replies don't mark the thread done
-   * before the pull request merges.
+   * thread.
    */
   async postToolObserver({
     toolContext,
@@ -238,22 +237,6 @@ export class SlackIntegration implements FactoryIntegration {
     void announcePullRequest(this.#channels?.(), threadId, 'opened', url).catch(error =>
       console.warn('[slack] pull request opened announcement failed', error),
     );
-  }
-
-  /** Shows a card's stage as a reaction on the Slack thread it was filed from. */
-  async onStageChange({
-    item,
-    fromStage,
-    toStage,
-  }: Parameters<NonNullable<FactoryIntegration['onStageChange']>>[0]): Promise<void> {
-    const source = item.externalSource;
-    if (source?.integrationId !== 'slack' || source.type !== 'slack-thread') return;
-    const adapter = this.#channels?.()?.adapters.slack;
-    if (!adapter) return;
-    await swapThreadReaction(adapter, source.externalId, {
-      remove: fromStage ? STAGE_REACTIONS[fromStage] : undefined,
-      add: STAGE_REACTIONS[toStage],
-    });
   }
 
   channels(ctx: IntegrationContext): FactoryChannelsConfig {

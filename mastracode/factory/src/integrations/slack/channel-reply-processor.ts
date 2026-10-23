@@ -32,7 +32,7 @@ export class FactoryChannelReplyProcessor implements Processor {
       messageList.addSystem(
         {
           role: 'system',
-          content: `Post to that thread with \`${REPLY_TOOL}\`. This request came from outside it, so don't post an opener or progress there; post the outcome when the people in the thread asked for this work or are waiting on it, or when you're asked to. Don't write a note about what you posted.`,
+          content: `Post to that thread with \`${REPLY_TOOL}\`. This request came from outside it, so don't post an opener or progress there; post the outcome when the people in the thread asked for this work or are waiting on it, or when you're asked to. Don't write a note about what you posted. When you open a pull request, its link is posted to this thread for you, and again when it merges, so don't post the link yourself.`,
         },
         ID,
       );

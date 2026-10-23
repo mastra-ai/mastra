@@ -3,7 +3,7 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
 import { requestsChangesVerdict } from '../../review-verdict.js';
-import { announcePullRequest } from '../slack/thread-status.js';
+import { announcePullRequest } from '../channel-thread-announcements.js';
 import { resolveSubscriptionSession, subscriptionRunContext } from '../subscription-session.js';
 import type { FactorySessionOwner } from '../subscription-session.js';
 import type { GithubAppIdentity } from './app-identity.js';
@@ -484,9 +484,9 @@ async function isAuthorizedGithubSender(
 }
 
 /**
- * Tell the Slack thread that asked for this work that its pull request merged,
+ * Tell the chat thread that asked for this work that its pull request merged,
  * which closes the thread out. Best effort: the agent already has the
- * notification, so a Slack failure must not turn it into a redelivery.
+ * notification, so a chat failure must not turn it into a redelivery.
  */
 function announceMerged(
   dependencies: GithubWebhookDispatchDependencies,
