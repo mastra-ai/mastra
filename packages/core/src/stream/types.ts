@@ -17,7 +17,7 @@ import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UI
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { StoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
-import type { AgentSignalType } from '../agent/signals';
+import type { AgentSignalDataPart, AgentSignalType } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
@@ -855,6 +855,20 @@ interface ToolCallResumedPayload {
   resumeSchema?: string;
 }
 
+/** Subscription-only presentation of admitted input, not the step-boundary delivery echo. */
+export type UserMessagePendingChunk = BaseChunkType & {
+  type: 'data-user-message-pending';
+  transient: true;
+  data: AgentSignalDataPart['data'] & { metadata: Record<string, unknown> & { status: 'pending' | 'queued' } };
+};
+
+/** Emitted only for input actually removed before delivery, never for a cancellation request. */
+export type UserMessageCancelledChunk = BaseChunkType & {
+  type: 'data-user-message-cancelled';
+  transient: true;
+  data: { id: string };
+};
+
 export type DataChunkType = {
   type: `data-${string}`;
   data: any;
@@ -1093,6 +1107,8 @@ export type TypedChunkType<OUTPUT = undefined> =
   | AgentChunkType<OUTPUT>
   | WorkflowStreamEvent
   | NetworkChunkType<OUTPUT>
+  | UserMessagePendingChunk
+  | UserMessageCancelledChunk
   | (DataChunkType & {
       from: never;
       runId: never;

@@ -13,6 +13,7 @@ import { ConsoleLogger } from '../../logger';
 import { useLoopScenarioAimock } from '../../loop/test-utils/aimock/aimock-scenario';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { createTool } from '../../tools';
 import { AgentChannels } from '../agent-channels';
@@ -571,4 +572,52 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
     },
     20_000,
   );
+});
+
+describe('reaction guidance reaches the model only with the reaction tool', () => {
+  async function systemPromptSent(withReactionTools: boolean): Promise<string> {
+    const channels = new AgentChannels({ adapters: { slack: createMockAdapter('slack') } });
+    let prompt: unknown;
+    const agent = new Agent({
+      id: `reaction-guidance-${withReactionTools}`,
+      name: 'reaction-guidance',
+      instructions: 'You are a test agent',
+      model: new MockLanguageModelV2({
+        doStream: async options => {
+          prompt = options.prompt;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 0, totalTokens: 1 } },
+            ]),
+          };
+        },
+      }),
+      tools: withReactionTools ? { ...(channels.getTools() as Record<string, any>) } : {},
+    });
+    agent.setChannels(channels);
+
+    const requestContext = new RequestContext();
+    requestContext.set('channel', { platform: 'slack', isDM: false });
+    const result = await agent.stream('hey team', { requestContext });
+    await result.consumeStream();
+
+    return (prompt as Array<{ role: string; content: unknown }>)
+      .filter(m => m.role === 'system')
+      .map(m => String(m.content))
+      .join('\n');
+  }
+
+  it('tells the model to react when add_reaction is mounted', async () => {
+    expect(await systemPromptSent(true)).toContain('use the `add_reaction` tool');
+  });
+
+  it('never mentions add_reaction when the agent lacks it', async () => {
+    const system = await systemPromptSent(false);
+    expect(system).toContain('You are in a public channel or thread.');
+    expect(system).not.toContain('add_reaction');
+  });
 });

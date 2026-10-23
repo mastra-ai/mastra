@@ -1023,7 +1023,7 @@ Both routes require `observability:read` and use the configured observability st
 
 ## Limitations
 
-The query and aggregate APIs consider completed traces and spans only, not running ones. Trace queries can't return custom projections, embedded evidence, or summaries, and numbered trace pages include a total count. Trace aggregation can't group by span fields other than the root span's `name`, `spanType`, and `entityId`, or by `traceId` or `attributes.*`. Aggregation can't compute numeric measures over metadata, paginate groups, or zero-fill empty buckets. Span aggregation can't group by `model` or `provider`, and it attributes tokens only to the span that recorded them. The CLI's `mastra api trace aggregate` covers trace aggregation. Span aggregation has no CLI command, so use the SDK or the HTTP endpoint.
+The query and aggregate APIs consider completed traces and spans only, not running ones. Trace queries can't return custom projections, embedded evidence, or summaries, and numbered trace pages include a total count. Trace aggregation can't group by span fields other than the root span's `name`, `spanType`, and `entityId`, or by `traceId` or `attributes.*`. Aggregation can't compute numeric measures over metadata, paginate groups, or zero-fill empty buckets. Span aggregation can't group by `model` or `provider`, and it attributes tokens only to the span that recorded them. The CLI's `mastra api trace aggregate` covers trace aggregation, and `mastra api span query` and `mastra api span aggregate` cover span queries and span aggregation.
 
 ## Related
 

@@ -61,6 +61,11 @@ export type MetricsShareListProps = MetricsShareListHeaderProps & {
   activeKey?: string;
   /** Header row above the strip. Off when the card shows `MetricsShareList.Header` elsewhere (e.g. beside tabs). */
   showHeader?: boolean;
+  /**
+   * Where the column headers sit. `top`: above the strip. `below-strip`: between the strip and the
+   * rows, right above the values they label, with the rows packed tighter under the strip.
+   */
+  headerPlacement?: 'top' | 'below-strip';
   /** Shown when there are no rows. */
   emptyState?: ReactNode;
   /** Skeleton rows in the list's own markup, so the card keeps its height when data lands. */

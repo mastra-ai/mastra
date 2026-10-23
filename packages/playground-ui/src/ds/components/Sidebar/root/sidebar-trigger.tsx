@@ -20,7 +20,7 @@ export function SidebarTrigger({ className, onClick, ...props }: SidebarTriggerP
       size="icon-sm"
       aria-label="Toggle sidebar"
       aria-expanded={!isCollapsed}
-      tooltip={<SidebarButtonHint label="Toggle Sidebar" shortcut="[" />}
+      tooltip={<SidebarButtonHint label="Toggle sidebar" shortcut="[" />}
       tooltipPosition="bottom"
       {...props}
       onClick={event => {

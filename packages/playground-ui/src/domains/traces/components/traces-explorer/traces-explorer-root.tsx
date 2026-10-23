@@ -40,6 +40,8 @@ import type {
 import { TracesListProvider } from './traces-explorer-list-provider';
 import {
   useFeedbackAvailable,
+  useSpanQueryAvailable,
+  useThreadQueryAvailable,
   useTraceQueryAvailable,
   useTraceQueryDeltaPollingAvailable,
   useTraceQueryDiscoveryAvailable,
@@ -96,6 +98,10 @@ export function TracesExplorerRoot({
   const traceQuery = useTraceQueryAvailable();
   const withQueryTrace = traceQuery.enabled && features?.traceQuery !== false;
   const withFeedback = useFeedbackAvailable().enabled && features?.feedback !== false;
+  // Opt-in: span queries need both the server capability and the host turning them on.
+  const withSpanQuery = useSpanQueryAvailable().enabled && features?.spanQuery === true;
+  // Opt-in like span queries: thread rows need the server capability and the host turning them on.
+  const withThreadQuery = useThreadQueryAvailable().enabled && features?.threadQuery === true;
   const { enabled: withRootDuration } = useTraceQueryRootDurationAvailable();
   const { enabled: withDeltaPolling } = useTraceQueryDeltaPollingAvailable();
   const withDiscovery = useTraceQueryDiscoveryAvailable().enabled && withQueryTrace;
@@ -189,6 +195,8 @@ export function TracesExplorerRoot({
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
+      withSpanQuery,
+      withThreadQuery,
       withRootDuration,
       withDeltaPolling,
       withDiscovery,
@@ -202,6 +210,8 @@ export function TracesExplorerRoot({
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
+      withSpanQuery,
+      withThreadQuery,
       withRootDuration,
       withDeltaPolling,
       withDiscovery,

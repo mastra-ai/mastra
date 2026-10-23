@@ -189,7 +189,7 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
           variant="primary"
           disabled={updateDataset.isPending || !formState.name.trim()}
         >
-          {updateDataset.isPending ? 'Saving...' : 'Save Changes'}
+          {updateDataset.isPending ? 'Saving...' : 'Save changes'}
         </Button>
       </div>
     </Form>

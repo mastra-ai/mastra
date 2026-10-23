@@ -57,39 +57,7 @@
     "@cf/zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "@cf/zai-org/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "@cf/zai-org/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "@cf/zai-org/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "@cf/zai-org/glm-4.7-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "@cf/nvidia/nemotron-3-120b-a12b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
-    "@cf/deepseek-ai/deepseek-v4.1-flash-1017": [
+    "@cf/deepseek-ai/deepseek-v4-pro-0813": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -101,7 +69,7 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "@cf/deepseek-ai/deepseek-v4-pro-0813": [
+    "@cf/deepseek-ai/deepseek-v4.1-flash-1017": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -121,6 +89,44 @@
         "type": "toggle"
       }
     ],
+    "@cf/zai-org/glm-4.7-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "@cf/zai-org/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "@cf/zai-org/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "@cf/zai-org/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "@cf/nvidia/nemotron-3-120b-a12b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "@cf/moonshotai/kimi-k2.6": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "@cf/openai/gpt-oss-20b": [
       {
         "type": "effort",
@@ -131,12 +137,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "@cf/moonshotai/kimi-k2.6": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ]
   }

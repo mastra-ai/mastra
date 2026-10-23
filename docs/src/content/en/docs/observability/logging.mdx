@@ -36,7 +36,7 @@ Visit [PinoLogger](/reference/logging/pino-logger) for all available configurati
 
 ## Logging to observability storage
 
-When [observability](/docs/observability/overview) is configured, by default all logger calls are automatically forwarded to your observability storage. Every `debug`, `info`, `warn`, `error`, and `trackException` call from your application and from Mastra's internal components is stored alongside your traces.
+When [observability](/docs/observability/overview) is configured, logger calls are automatically forwarded to your observability storage. Every `debug`, `info`, `warn`, `error`, and `trackException` call from your application and from Mastra's internal components is stored alongside your traces, subject to `logging.level`, which filters out anything below the configured minimum level.
 
 No code changes are required. Loggers with adapter support (`PinoLogger` and `ConsoleLogger`) write each record to their own destinations and derive the exported log from that same record. Custom loggers without adapter support are wrapped so they write to both the original logger and the observability system simultaneously.
 
@@ -161,7 +161,7 @@ In this example, the console logger outputs all levels starting from `debug`, bu
 | Option | Type | Default | Description |
 | - | - | - | - |
 | `enabled` | `boolean` | `true` | Set to `false` to disable all log forwarding to observability storage. |
-| `level` | `LogLevel` | `'debug'` | Minimum severity level. Logs below this level are discarded. |
+| `level` | `LogLevel` | `'warn'` | Minimum severity level. Logs below this level are discarded. |
 
 ### Querying logs
 

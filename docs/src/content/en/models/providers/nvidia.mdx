@@ -7,7 +7,7 @@ description: "Browse Nvidia model IDs, capabilities, and context windows. Learn 
 
 # <img src="https://models.dev/logos/nvidia.svg" alt="Nvidia logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nvidia
 
-Access 107 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
+Access 52 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
 
 Learn more in the [Nvidia documentation](https://docs.api.nvidia.com/nim/).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "nvidia/abacusai/dracarys-llama-3.1-70b-instruct"
+  model: "nvidia/black-forest-labs/flux.1-dev"
 });
 
 // Generate a response
@@ -186,6 +186,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/minimaxai/minimax-m3.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
     "inputCost": null,
     "outputCost": null
   },
@@ -431,7 +443,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "nvidia/qwen/qwen-image",
-    "imageInput": true,
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
@@ -504,7 +516,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://integrate.api.nvidia.com/v1",
-    id: "nvidia/abacusai/dracarys-llama-3.1-70b-instruct",
+    id: "nvidia/black-forest-labs/flux.1-dev",
     apiKey: process.env.NVIDIA_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -523,7 +535,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "nvidia/z-ai/glm-5.3-flash"
-      : "nvidia/abacusai/dracarys-llama-3.1-70b-instruct";
+      : "nvidia/black-forest-labs/flux.1-dev";
   }
 });
 ```

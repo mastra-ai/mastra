@@ -53,6 +53,20 @@ export function parseSkillBody(name: string, text: string): SkillActivation | un
   return splitSkillBody(name, body, feedMatch?.[1]);
 }
 
+/**
+ * Parses a skill as the model sees it in a user message: the legacy envelope (feed trailing it) or
+ * a typed skill signal rendered as `<skill name="…">contents</skill>`, whose contents may end
+ * with the work-item feed.
+ */
+export function parseSkillMarkup(text: string): SkillActivation | undefined {
+  const activation = parseSkillActivation(text);
+  if (!activation || activation.feed !== undefined) return activation;
+  const body = activation.arguments
+    ? `${activation.instructions}${ARGUMENTS_MARKER}${activation.arguments}`
+    : activation.instructions;
+  return parseSkillBody(activation.name, body);
+}
+
 function splitSkillBody(name: string, body: string, feed: string | undefined): SkillActivation | undefined {
   if (!body.trim()) return undefined;
 

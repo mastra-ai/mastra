@@ -1,7 +1,8 @@
 {
   "name": "@mastra/mongodb",
-  "version": "1.24.0",
+  "version": "1.24.1-alpha.0",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -45,11 +46,11 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

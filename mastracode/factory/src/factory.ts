@@ -24,6 +24,7 @@ import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
+import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
@@ -107,8 +108,6 @@ import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
-import { FactoryChannelReplyProcessor } from './session/channel-reply-processor.js';
-import { FactoryChannelSessionLinkProcessor } from './session/channel-session-link-processor.js';
 import { resolveFactoryCredentialTenant } from './session/credential-policy.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
@@ -124,9 +123,8 @@ import { FactoryReplyCredentialProcessor } from './session/reply-credential-proc
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
-import { createShareFileTool } from './session/share-file-tool.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
-import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
+import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
@@ -164,6 +162,7 @@ import {
 } from './tools/reports.js';
 import type { FactoryReporting } from './tools/reports.js';
 import { observeSessionRunReports } from './tools/run-watch.js';
+import { createFactorySandboxTools } from './tools/sandbox-tools.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
@@ -246,6 +245,8 @@ export interface MastraFactoryConfig {
    * disabled.
    */
   sandbox?: MastraFactorySandboxOption;
+  /** Browser automation provider for Factory agent sessions. */
+  browser?: MastraBrowser;
   /**
    * When a session's sandbox boots: on the agent's first command (`'lazy'`,
    * the default) or as soon as the session's workspace is first resolved
@@ -347,6 +348,13 @@ export interface MastraFactoryDispatcherConfig {
 
 const CONTROLLER_ID = 'code';
 
+/**
+ * Providers whose sandbox a session's agent may recreate itself. Each needs
+ * its `destroy()` to leave the instance able to start a fresh VM, proven
+ * against the real provider.
+ */
+const SELF_RECREATE_SANDBOX_PROVIDERS: ReadonlySet<string> = new Set(['platform']);
+
 /** Why a wake couldn't be run as its Factory session's owner. */
 const WAKE_OWNER_UNRESOLVED = {
   'session-not-found': 'no Factory session row names its owner',
@@ -363,64 +371,18 @@ function hasPlatformCredentials(): boolean {
 
 /**
  * Default auth provider — `MastraAuthStudio`, which proxies identity to the
- * shared Mastra platform API. `MastraAuthStudio` resolves `MASTRA_SHARED_API_URL`,
- * `MASTRA_ORGANIZATION_ID`, and `MASTRA_COOKIE_DOMAIN` from env on its own —
- * this helper only derives a cookie-domain fallback from the factory's
- * `publicUrl`.
+ * shared Mastra platform API and resolves its own env (`MASTRA_SHARED_API_URL`,
+ * `MASTRA_ORGANIZATION_ID`, ...).
  *
- * Cookie-domain resolution (Studio picks the first that wins):
- *   1. explicit `MASTRA_COOKIE_DOMAIN` env, if set;
- *   2. `.mastra.ai` when `sharedApiUrl` is on `.mastra.ai`;
- *   3. this parent-domain fallback derived from `publicUrl` — so a deploy on
- *      `https://foo.mastra.cloud` mints cookies with `Domain=.mastra.cloud`
- *      without the caller wiring the env var by hand.
- *   4. otherwise host-only (no `Domain=`), which is correct for `localhost`.
+ * The session cookie is **host-only** (`__Host-wos-session` on secure
+ * deployments). No parent `Domain` (e.g. `.mastra.cloud`) is derived from
+ * `publicUrl`: a parent-scoped session cookie is sent by the browser to every
+ * host under that parent, including other tenants' deployments. Callers that
+ * really want a domain-scoped cookie pass their own `MastraAuthStudio` (with
+ * `cookieDomain`) via `auth:`.
  */
-function buildDefaultStudioAuth(publicUrl: string): IMastraAuthProvider {
-  return new MastraAuthStudio({
-    cookieDomain: parentDomainFromPublicUrl(publicUrl),
-  });
-}
-
-/**
- * Derive a parent cookie domain from `publicUrl` by stripping the leftmost
- * label — the same shape platform-API's env injection uses (see
- * `platform/servers/api/src/lib/studio-env-vars.ts`: `.${routingDomain.replace(/^[^.]+\./, '')}`).
- *
- * Rather than a generic `strip-left-label` heuristic — which either emits
- * cookies scoped to a public suffix (`sub.example.co.uk` → `.example.co.uk`
- * requires PSL data to be safe) or misclassifies numeric hostnames like
- * `3scale.example.com` as IPv4 — we only derive a parent domain when the
- * host sits under one of the platform's known registrable domains. Anything
- * else (custom domains, arbitrary tenant hostnames, IPs, `localhost`)
- * falls through to host-only cookies. Callers that need a different scope
- * pass `MASTRA_COOKIE_DOMAIN` explicitly (Studio honors that first).
- */
-const KNOWN_PLATFORM_COOKIE_PARENTS = ['mastra.cloud', 'mastra.ai'] as const;
-
-function isIpLiteral(hostname: string): boolean {
-  // IPv6 addresses in URLs are bracketed; `URL.hostname` strips the brackets
-  // but the address itself still contains `:`. IPv4 is four dot-separated
-  // numeric octets — trust the parser to have already validated shape.
-  if (hostname.includes(':')) return true;
-  return /^\d+(?:\.\d+){3}$/.test(hostname);
-}
-
-function parentDomainFromPublicUrl(publicUrl: string): string | undefined {
-  let hostname: string;
-  try {
-    hostname = new URL(publicUrl).hostname.toLowerCase();
-  } catch {
-    return undefined;
-  }
-  if (hostname === 'localhost' || isIpLiteral(hostname)) return undefined;
-  for (const parent of KNOWN_PLATFORM_COOKIE_PARENTS) {
-    // Exact match → we're already on the parent, host-only is correct.
-    // Subdomain match → mint the parent-scoped cookie.
-    if (hostname === parent) return undefined;
-    if (hostname.endsWith(`.${parent}`)) return `.${parent}`;
-  }
-  return undefined;
+function buildDefaultStudioAuth(): IMastraAuthProvider {
+  return new MastraAuthStudio();
 }
 
 /** A session parking or being answered is inbox news, so the registry bumps the project's feed. */
@@ -539,7 +501,7 @@ export class MastraFactory {
     // cookies without the caller wiring `MASTRA_COOKIE_DOMAIN` explicitly.
     const configuredAuth = this.#config.auth;
     const auth: IMastraAuthProvider | undefined =
-      configuredAuth === null ? undefined : (configuredAuth ?? buildDefaultStudioAuth(publicOrigin));
+      configuredAuth === null ? undefined : (configuredAuth ?? buildDefaultStudioAuth());
     if (auth && !this.#config.secretEncryption) {
       console.warn(
         "[factory] auth is enabled but 'secretEncryption' is not configured. Persisted model credentials, " +
@@ -555,6 +517,9 @@ export class MastraFactory {
     const mcpConfig = this.#config.mcp;
     const mcpAuthorizationServers =
       mcpConfig === false || mcpConfig?.enabled === false ? [] : resolveMcpAuthorizationServers(auth?.name, mcpConfig);
+    // The MCP endpoint authenticates callers itself, so it needs an auth
+    // provider and somewhere for clients to get tokens.
+    const mcpEnabled = Boolean(auth) && mcpAuthorizationServers.length > 0;
 
     // Explicit integrations win. Platform credentials fill only missing
     // provider slots so callers can override each integration independently.
@@ -732,6 +697,7 @@ export class MastraFactory {
         auth: routeAuth,
         intake: intakeStorage,
         ...(integrationSourceControl ? { sourceControl: integrationSourceControl } : {}),
+        channels: () => this.#prepared?.base.controller.getChannels(),
       });
       if (integration.versionControl && integrationSourceControl) {
         integration.versionControl.initialize({ storage: integrationSourceControl });
@@ -1181,13 +1147,21 @@ export class MastraFactory {
         layerPersonalMemorySettings(record, personal) satisfies MemorySettingsRecord | null,
       );
     };
+    // Thinking defaults come from the session's defaults set, never the host's settings.json.
+    const resolveDefaultThinkingLevel = (requestContext: RequestContext | undefined) =>
+      resolveFactoryThinkingLevel(requestContext, {
+        projects: factoryProjectsStorage,
+        sourceControl: sourceControlSessions,
+        workItems: workItemsStorage,
+        modelDefaults: modelDefaultsStorage,
+      });
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
           configVersion,
           storage: workItemsStorage,
           boards: this.#boards,
           loadMemorySettings,
-          factoryThinkingLevel: factoryProjectId => readFactoryThinkingLevel(factoryProjectsStorage, factoryProjectId),
+          defaultThinkingLevel: resolveDefaultThinkingLevel,
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -1236,6 +1210,7 @@ export class MastraFactory {
       return undefined;
     })();
 
+    const integrationInputProcessors = integrations.flatMap(integration => integration.processors?.input ?? []);
     // Integrations contributing tools to agent sessions: org-scoped
     // `agentTools` (resolved per request) + session-scoped `sessionTools`.
     const toolIntegrations = integrationRegistrations.filter(
@@ -1260,17 +1235,13 @@ export class MastraFactory {
     const prepared = await timedPhase('prepare.controllerMount', () =>
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
+        browser: this.#config.browser,
         coAuthor: { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
         modes: false,
         // Subagents are disabled, matching the Mastra Code TUI default.
         subagents: [],
-        // Thinking defaults are stored per Factory, not in the host's settings.json.
-        resolveDefaultThinkingLevel: ({ requestContext }) =>
-          resolveFactoryThinkingLevel(requestContext, {
-            projects: factoryProjectsStorage,
-            sourceControl: sourceControlSessions,
-          }),
+        resolveDefaultThinkingLevel: ({ requestContext }) => resolveDefaultThinkingLevel(requestContext),
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
@@ -1422,7 +1393,6 @@ export class MastraFactory {
         // sandbox holds and where; the phase signal, when work items are on,
         // comes after it.
         inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
-          const channelReplyProcessor = new FactoryChannelReplyProcessor();
           const environmentProcessor = new FactoryEnvironmentStateProcessor();
           const sessionsProcessor =
             workItemsStorage && storage.isDomainReady('source-control')
@@ -1447,7 +1417,7 @@ export class MastraFactory {
               : [];
           if (factoryProcessor) {
             await factoryProcessor.prepareMemorySettings(requestContext);
-            return [channelReplyProcessor, environmentProcessor, ...sessionsProcessor, factoryProcessor];
+            return [...integrationInputProcessors, environmentProcessor, ...sessionsProcessor, factoryProcessor];
           }
           // Without work items there is no run binding, so the caller's row applies.
           try {
@@ -1455,9 +1425,12 @@ export class MastraFactory {
           } catch (error) {
             reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
           }
-          return [channelReplyProcessor, environmentProcessor, ...sessionsProcessor];
+          return [...integrationInputProcessors, environmentProcessor, ...sessionsProcessor];
         },
-        outputProcessors: [new FactoryChannelSessionLinkProcessor(), new FactoryReplyCredentialProcessor()],
+        outputProcessors: [
+          ...integrations.flatMap(integration => integration.processors?.output ?? []),
+          new FactoryReplyCredentialProcessor(),
+        ],
         ...(vector ? { vector } : {}),
         extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
           const tools: IntegrationTools = {};
@@ -1474,15 +1447,6 @@ export class MastraFactory {
               tools[name] = tool;
             }
           };
-          // Channel runs get attach_file so a produced file can go to the sender
-          // rather than a sandbox path. Signal-woken runs rebuild the thread from
-          // the controller's channels.
-          mergeTools(
-            'factory-attach-file',
-            await createShareFileTool(requestContext, {
-              channels: () => this.#prepared?.base.controller.getChannels(),
-            }),
-          );
           if (storage.isDomainReady('source-control')) {
             mergeTools(
               'source-control',
@@ -1601,6 +1565,15 @@ export class MastraFactory {
                     deps: factoryToolDeps,
                   }),
                 );
+                if (sessionRetirement && sandboxConfig && SELF_RECREATE_SANDBOX_PROVIDERS.has(sandboxConfig.provider)) {
+                  mergeTools(
+                    'factory-sandbox-tools',
+                    createFactorySandboxTools(scope, {
+                      sessions: sourceControlSessions,
+                      resetSandbox: input => sessionRetirement.resetSessionSandbox(input),
+                    }),
+                  );
+                }
               }
             }
           }
@@ -1658,7 +1631,7 @@ export class MastraFactory {
           // Hono app the deployer generates. `requiresAuth: false`; the gate
           // skips `/auth/*`. Auth-disabled mode still answers `/auth/me` (404).
           ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
-          ...(auth && mcpAuthorizationServers.length > 0
+          ...(mcpEnabled
             ? buildFactoryMcpRoutes({
                 auth: routeAuth,
                 publicOrigin,
@@ -1701,6 +1674,7 @@ export class MastraFactory {
             intakeReady,
             factoryReady,
             knowledgeEnabled,
+            mcpEnabled,
             deploymentModelProviders,
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
@@ -1781,7 +1755,16 @@ export class MastraFactory {
             : []),
         ],
         buildServerConfig: () => {
-          const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};
+          // MCP 2026-07-28 clients send `Mcp-*` headers on every request and
+          // read the OAuth challenge from `WWW-Authenticate`; the deployer
+          // merges these into its default allow/expose lists.
+          const mcpCors = {
+            allowHeaders: ['Mcp-Protocol-Version', 'Mcp-Method', 'Mcp-Name'],
+            exposeHeaders: ['WWW-Authenticate'],
+          };
+          const cors = {
+            cors: allowedOrigins.length ? { origin: allowedOrigins, credentials: true, ...mcpCors } : mcpCors,
+          };
           // Log route errors with method/path/stack and answer with structured
           // JSON instead of an opaque `Internal Server Error`. Applied by the
           // deployer to both the top-level app and the custom-route sub-app.

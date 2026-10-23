@@ -10,9 +10,10 @@ import { isRunLocalTopic } from '../../events/topics';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
-import { createTimeoutAbortSignal } from '../../loop/timeout';
+import { createTimeoutAbortSignal, isMastraTimeoutError } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../../mastra/run-with-concurrency';
+import type { MemoryConfig } from '../../memory';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
@@ -40,6 +41,7 @@ import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopesSnapshot } from '../scopes';
 import { applyResolvedAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
+import type { AgentSignalInput } from '../signals';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
@@ -837,6 +839,7 @@ export class DurableAgent<
   #activeStreamUntilIdle = new Map<string, () => void>();
   /** The stream segment (stream() or resume()) that currently owns each run id's shared state. */
   #segmentOwner = new Map<string, symbol>();
+  #timedOutExecutions = new WeakSet<ExecutionFence>();
 
   /** Timeout for auto-cleanup after stream finishes (0 = disabled) */
   readonly #cleanupTimeoutMs: number;
@@ -1281,7 +1284,16 @@ export class DurableAgent<
       });
       streamCleanup = stream.cleanup;
       streamOutput = stream.output;
-      await this.#raceFenceLoss(stream.ready, executionFence);
+      await this.#raceFenceLoss(stream.ready, executionFence).catch(error => {
+        if (this.#timedOutExecutions.has(executionFence)) return stream.ready;
+        throw error;
+      });
+      if (
+        (await this.#redeliverDeadlineError(registryEntry, executionFence)) ||
+        this.#timedOutExecutions.has(executionFence)
+      ) {
+        return { stream, threadRegistration };
+      }
       this.#assertRecoveryActive();
 
       const recoverStreamOptions: AgentExecutionOptions<TOutput> = {
@@ -1630,8 +1642,8 @@ export class DurableAgent<
       // originals ended above.
       resumeAgentSpan: recoverAgentSpan,
       resumeModelSpan: recoverModelSpan,
-      resumeAgentSpanData: recoverAgentSpan?.exportSpan(),
-      resumeModelSpanData: recoverModelSpan?.exportSpan(),
+      resumeAgentSpanData: recoverAgentSpan?.snapshot?.() ?? recoverAgentSpan?.exportSpan(),
+      resumeModelSpanData: recoverModelSpan?.snapshot?.() ?? recoverModelSpan?.exportSpan(),
       // abortController/abortSignal are installed by
       // #installAbortWithTotalTimeout below, with the run-level budget
       // composed in.
@@ -1655,9 +1667,11 @@ export class DurableAgent<
       processorStates,
       drainPendingSignals: (scope?: 'pending' | 'pre-run') => wrapped.__getDrainPendingSignals()(runId, scope),
       subscribePendingSignals: (listener: () => void) => wrapped.__getSubscribePendingSignals()(runId, listener),
+      enqueuePendingSignal: (signalInput: AgentSignalInput) =>
+        wrapped.__getEnqueuePendingSignal()({ runId, resourceId, threadId }, signalInput),
       cleanup: () => {},
     };
-    this.#installAbortWithTotalTimeout(registryEntry as unknown as RunRegistryEntry, abortController);
+    this.#installAbortWithTotalTimeout(registryEntry as unknown as RunRegistryEntry, abortController, executionFence);
 
     return {
       requestContext,
@@ -2654,6 +2668,9 @@ export class DurableAgent<
     outcome: { status?: string; error?: Error },
   ): Promise<void> {
     const { status, error } = outcome;
+    if (fence && this.#timedOutExecutions.has(fence)) return;
+    const totalTimeout = isMastraTimeoutError(error) && error.timeoutType === 'total';
+    if (fence && totalTimeout) this.#timedOutExecutions.add(fence);
     const reportError = async (reported: Error) => {
       try {
         await this.emitError(runId, reported, fence?.generation);
@@ -2665,20 +2682,29 @@ export class DurableAgent<
     // persisted snapshot rows will never be resumed. Suspended runs keep their
     // snapshots (and owner records) so `resume()` / `recoverActiveRuns()` can
     // find them.
-    const finished = status !== undefined && status !== 'suspended';
+    const finished = totalTimeout || (status !== undefined && status !== 'suspended');
     let wrote = false;
     const writeTerminalState = async () => {
       wrote = true;
+      if (totalTimeout && fence) fence.deadlineError = error;
+      // The observable deadline must not wait for snapshot I/O.
       if (error) await reportError(error);
       if (finished) await this.deleteRunSnapshots(runId);
     };
 
     if (!fence) return writeTerminalState();
-    const settlement = await fence.settle(writeTerminalState);
-    // `wrote` is false when the fence could not verify ownership, or when it
-    // was already settled by this segment's normal completion and a later step
-    // (for example goal bookkeeping) failed.
-    if (!wrote && error && settlement !== 'superseded') await reportError(error);
+    let settlement;
+    try {
+      settlement = await fence.settle(writeTerminalState, totalTimeout);
+    } catch (settlementError) {
+      if (totalTimeout && !wrote && error) await reportError(error);
+      throw settlementError;
+    }
+    // A deadline losing to normal completion or suspension must not publish a
+    // second terminal event. Non-timeout bookkeeping failures still surface.
+    if (!wrote && error && (settlement === 'orphaned' || (!totalTimeout && settlement === 'owned'))) {
+      await reportError(error);
+    }
   }
 
   /**
@@ -2820,6 +2846,15 @@ export class DurableAgent<
     }
   }
 
+  async #redeliverDeadlineError(entry: RunRegistryEntry, fence: ExecutionFence): Promise<boolean> {
+    if (!fence.deadlineError) return false;
+    if (!entry.deadlineErrorRedelivered) {
+      entry.deadlineErrorRedelivered = true;
+      await this.emitError(fence.runId, fence.deadlineError, fence.generation);
+    }
+    return true;
+  }
+
   /**
    * Install `abortController` on a registry entry with the run-level execution
    * budget (`modelSettings.timeout.totalMs`, #21724 parity port) composed in.
@@ -2831,8 +2866,13 @@ export class DurableAgent<
    * each session gets a fresh timer. The timer is torn down via the entry's
    * `cleanup` slot, which every settle path invokes through the run registry.
    */
-  #installAbortWithTotalTimeout(entry: RunRegistryEntry, abortController: AbortController): void {
+  #installAbortWithTotalTimeout(
+    entry: RunRegistryEntry,
+    abortController: AbortController,
+    executionFence: ExecutionFence,
+  ): void {
     entry.abortController = abortController;
+    entry.deadlineErrorRedelivered = false;
     const totalTimeout = createTimeoutAbortSignal({
       parentSignal: abortController.signal,
       timeoutMs: entry.timeoutTotalMs,
@@ -2843,6 +2883,18 @@ export class DurableAgent<
       detachParentOnCleanup: false,
     });
     entry.abortSignal = totalTimeout.signal;
+    if (totalTimeout.timeoutPromise) {
+      void totalTimeout.timeoutPromise
+        .catch(async error => {
+          if (!isMastraTimeoutError(error) || error.timeoutType !== 'total' || totalTimeout.signal?.reason !== error)
+            return;
+          await this.settleExecution(executionFence.runId, executionFence, { status: 'failed', error });
+        })
+        .catch(error => {
+          this.logger.warn('Failed to settle durable agent at its total deadline', { error });
+        });
+    }
+    void executionFence.whenSettled.then(() => totalTimeout.cleanup());
     const previousCleanup = entry.cleanup;
     entry.cleanup = () => {
       totalTimeout.cleanup();
@@ -2987,7 +3039,7 @@ export class DurableAgent<
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
-    this.#installAbortWithTotalTimeout(registryEntry, abortController);
+    this.#installAbortWithTotalTimeout(registryEntry, abortController, executionFence);
 
     // 2. Register non-serializable state (both local and global registries)
     registryEntry.agentId = this.id;
@@ -3031,7 +3083,7 @@ export class DurableAgent<
         }
         if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
           globalRunRegistry.delete(runId);
-          if (!globalRegistryEntry.executionFence?.isLost()) this.#clearPubsubTopic(runId);
+          if (globalRegistryEntry.executionFence?.ownsRunTopics() ?? true) this.#clearPubsubTopic(runId);
         }
       }
       cleanedUp = true;
@@ -3109,6 +3161,7 @@ export class DurableAgent<
     const workflowExecution = executionFence.run(() =>
       ready
         .then(async () => {
+          if (await this.#redeliverDeadlineError(registryEntry, executionFence)) return;
           // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
           // Only the initial stream() path emits 'start'; resume() does not.
           await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {
@@ -3176,7 +3229,7 @@ export class DurableAgent<
     // output unsettled and the thread busy forever (#25974).
     const cleanup = () => {
       if (cleanedUp || output.status !== 'running') return performCleanup();
-      void workflowExecution
+      void Promise.race([workflowExecution, executionFence.whenSettled])
         .then(() => this.pubsub.flush())
         .then(() => waitForEventDelivery())
         .catch(() => {})
@@ -3692,7 +3745,7 @@ export class DurableAgent<
     if (resumeTotalMs !== undefined) {
       entry.timeoutTotalMs = resumeTotalMs;
     }
-    this.#installAbortWithTotalTimeout(entry, abortController);
+    this.#installAbortWithTotalTimeout(entry, abortController, executionFence);
     const globalEntryForAbort = getRunRegistryEntry(runId, this.#mastra);
     if (globalEntryForAbort) {
       globalEntryForAbort.abortController = abortController;
@@ -3735,7 +3788,7 @@ export class DurableAgent<
         }
         if (getRunRegistryEntry(runId, this.#mastra) === globalEntryForAbort) {
           globalRunRegistry.delete(runId);
-          if (!lostResumeRace && !(globalEntryForAbort?.executionFence ?? executionFence).isLost()) {
+          if (!lostResumeRace && (globalEntryForAbort?.executionFence ?? executionFence).ownsRunTopics()) {
             this.#clearPubsubTopic(runId);
           }
         }
@@ -3798,8 +3851,8 @@ export class DurableAgent<
           if (!reg) continue;
           reg.resumeAgentSpan = resumeAgentSpan;
           reg.resumeModelSpan = resumeModelSpan;
-          reg.resumeAgentSpanData = resumeAgentSpan?.exportSpan();
-          reg.resumeModelSpanData = resumeModelSpan?.exportSpan();
+          reg.resumeAgentSpanData = resumeAgentSpan?.snapshot?.() ?? resumeAgentSpan?.exportSpan();
+          reg.resumeModelSpanData = resumeModelSpan?.snapshot?.() ?? resumeModelSpan?.exportSpan();
           // Fresh spans capture their own first-chunk clock, never a prior segment's.
           reg.resumeCompletionStartTime = undefined;
         }
@@ -3875,6 +3928,7 @@ export class DurableAgent<
     const workflowExecution = executionFence.run(() =>
       ready
         .then(async () => {
+          if (await this.#redeliverDeadlineError(entry, executionFence)) return;
           // Looked up inside the chain so a throw settles (releases) the claim.
           const workflow = this.getWorkflow();
           // The prior segment was settled above (before the event-offset
@@ -4241,7 +4295,7 @@ export class DurableAgent<
         globalRunRegistry.delete(runId);
         // The topic stays when the run's latest execution here (this one or a
         // later resume()) lost the run: whoever took it over writes to it.
-        if (!registryEntry.executionFence?.isLost()) this.#clearPubsubTopic(runId);
+        if (registryEntry.executionFence?.ownsRunTopics() ?? true) this.#clearPubsubTopic(runId);
       }
       cleanedUp = true;
     };
@@ -4374,7 +4428,10 @@ export class DurableAgent<
             // the same runId and owns the run's topic: leave both to it.
             await threadRegistration?.rollback({ releaseLease: false });
             performCleanup();
-          } else if (!(await this.#reportRecoveryFailure(runId, executionError, executionFence.generation))) {
+          } else if (
+            !this.#timedOutExecutions.has(executionFence) &&
+            !(await this.#reportRecoveryFailure(runId, executionError, executionFence.generation))
+          ) {
             await threadRegistration?.rollback();
             performCleanup();
           }
@@ -4581,7 +4638,7 @@ export class DurableAgent<
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
-    this.#installAbortWithTotalTimeout(registryEntry, abortController);
+    this.#installAbortWithTotalTimeout(registryEntry, abortController, executionFence);
 
     // 2. Register non-serializable state (both local and global registries)
     registryEntry.agentId = this.id;
@@ -4603,7 +4660,7 @@ export class DurableAgent<
       }
       if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
         globalRunRegistry.delete(runId);
-        if (!globalRegistryEntry.executionFence?.isLost()) this.#clearPubsubTopic(runId);
+        if (globalRegistryEntry.executionFence?.ownsRunTopics() ?? true) this.#clearPubsubTopic(runId);
       }
     };
 
@@ -4671,6 +4728,7 @@ export class DurableAgent<
     const workflowExecution = executionFence.run(() =>
       ready
         .then(async () => {
+          if (await this.#redeliverDeadlineError(registryEntry, executionFence)) return;
           // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
           // Only the initial generate()/stream() path emits 'start'; resume() does not.
           await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {

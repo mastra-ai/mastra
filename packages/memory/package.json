@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "1.39.0",
+  "version": "1.39.1-alpha.0",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -83,11 +83,11 @@
     "@mastra/core": "workspace:*",
     "@types/json-schema": "^7.0.15",
     "@types/lru-cache": "^7.10.10",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "tokenx": "^1.6.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:ts6",
     "vitest": "catalog:"

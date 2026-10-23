@@ -115,7 +115,7 @@ const intakeRule = context =>
     : undefined;
 ```
 
-**Migration:** Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred; there is no built-in override or replacement API. Define custom-board handlers on their phases instead. Deployments that relied on automatic issue triage or review proposals on arrival should add an appropriate custom-board handler.
+**Migration:** Remove former global `rules.work` and `rules.review` configuration. To customize Work or Review, set `includeDefaultBoards: false` and install a same-ID replacement, following the compatibility guidance above. Define lifecycle handlers on the replacement board's phases. Deployments that relied on automatic issue triage or review proposals on arrival should add an appropriate handler to the installed board.
 
 There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, tool-result rules, and how their cards react to integration events; integrations own their default event handlers. The runtime only executes rules.
 
@@ -166,7 +166,7 @@ const releaseBoard = defineBoard({
 
 The handler receives the bound item, actor, board, tool name, normalized result, and `configVersion`, and returns one decision or `undefined`. Tool names follow the identifier rules for decision roles; `onResult` must be a function and the leaf may contain nothing else. Violations are `BoardDefinitionError`s at definition time.
 
-Work declares one rule: `submit_plan`. When a `plan`-seated agent on a Planning card reports a result starting with `Plan approved.`, the card transitions to Execute. Review declares none. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule — a custom board inherits nothing from Work even if it reuses Work's phase names.
+The default Work board declares one rule: `submit_plan`. In an interactive session, a successful result whose content starts with `Plan approved.` transitions a Planning card to Execute when the actor is an agent in the `plan` role. Review declares none. Rules resolve from the installed board, so a replacement `work` board can declare its own `tools.submit_plan.onResult`. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule. Other boards inherit nothing from Work even if they reuse its phase names.
 
 ### Board event rules
 
@@ -236,7 +236,7 @@ new MastraFactory({ storage, rules: defaultFactoryRules({ version: 'v2', overrid
 new MastraFactory({ storage, configVersion: 'v2', boards: [defineBoard({ ..., tools: { my_tool: { onResult } } })] });
 ```
 
-Contexts that carried `ruleSetVersion` now carry `configVersion`. Work's `submit_plan` rule cannot be replaced from config; built-in customization remains deferred.
+Contexts that carried `ruleSetVersion` now carry `configVersion`. To customize Work's `submit_plan` rule, declare `tools.submit_plan.onResult` on the installed replacement `work` board.
 
 ### Board transition policy
 
@@ -274,8 +274,6 @@ Return `undefined` for no additional restriction, `{ type: 'allow' }` with optio
 Policies must be side-effect-free. They run on initial entry, reentry, and same-stage requests, but completed replays use the stored result. Concurrent attempts can evaluate more than once. Policy and lifecycle evaluation share one timeout budget; a timeout does not cancel arbitrary work started by a callback.
 
 A policy cannot bypass topology, ingress authorization, board ownership, external-author safety, revision checks, decision validation, replay handling, or atomic persistence. Returning `allow` is not an authorization override.
-
-**Remaining limitations:** Built-in board replacement and customization remain unsupported.
 
 ### Board phase semantics
 
@@ -316,7 +314,7 @@ phases: {
 }
 ```
 
-**Remaining limitations:** Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline. Built-in board replacement and customization remain unsupported.
+**Remaining limitations:** Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline.
 
 ### Execute a custom board
 
@@ -727,7 +725,7 @@ Spawned sessions get a one-line signal instead: a side session sees which sessio
 
 The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
 
-### MCP server (ChatGPT and other MCP clients)
+### MCP server (Claude, ChatGPT and other MCP clients)
 
 A Factory with an auth provider and an OAuth authorization server serves an MCP endpoint over Streamable HTTP:
 
@@ -735,11 +733,20 @@ A Factory with an auth provider and an OAuth authorization server serves an MCP 
 https://<your-factory>/web/factory/projects/<projectId>/mcp
 ```
 
+Copy it from **Settings → Connections → MCP clients** in the Factory UI. The card only appears when the endpoint is served (`/web/config/features` reports `mcp: true`).
+
 It exposes the Factory tools a signed-in web session has (list, inspect, create, update and transition work items, start and signal sessions, decisions, approvals), plus `search` and `fetch` over work items for ChatGPT. Each tool carries MCP annotations (read-only, destructive, idempotent) so clients can ask before changes.
 
-Callers must sign in. Requests without a valid bearer token get `401` with a `WWW-Authenticate` header pointing to the RFC 9728 metadata at `/.well-known/oauth-protected-resource/web/factory/projects/<projectId>/mcp`. Tokens go through the same auth provider and org checks as the web UI. Each user gets one private connector session per Factory that the session tools act from.
+Callers must sign in. Requests without a valid bearer token get `401` with a `WWW-Authenticate` header pointing to the RFC 9728 metadata at `/.well-known/oauth-protected-resource/web/factory/projects/<projectId>/mcp`. Tokens go through the same auth provider and org checks as the web UI. When the Factory has a linked repository, each user gets one private connector session per Factory that the session tools act from.
 
-To connect ChatGPT, open **Settings → Connectors → Create**, paste the endpoint URL, and choose OAuth. Factories on Mastra Platform auth advertise Platform's AuthKit (`https://auth-kit.mastra.ai`) automatically. With other auth providers, set the authorization server the metadata advertises, or the endpoint isn't served:
+To connect a client:
+
+- **Claude** (claude.ai and Claude Desktop): open **Settings → Connectors → Add custom connector**, paste the endpoint URL, then sign in when asked. Claude connects from Anthropic's servers, so the Factory must be reachable over public HTTPS.
+- **ChatGPT**: open **Plugins**, select **+ → Add custom MCP server**, paste the endpoint URL, and choose OAuth. ChatGPT also connects from its own servers and speaks MCP `2026-07-28`.
+
+The endpoint speaks MCP `2026-07-28` (clients open with `server/discover`). Clients that still open with a 2025-era `initialize` request, such as VS Code and Cursor, are served too, statelessly: they sign in the same way and get the same tools, but no session id, no `GET` event stream and no activity events. CORS allows the `Mcp-Protocol-Version`, `Mcp-Method` and `Mcp-Name` request headers and exposes `WWW-Authenticate`, so browser-based clients can connect too, from any origin the server's CORS settings accept.
+
+Factories on Mastra Platform auth advertise Platform's AuthKit (`https://auth-kit.mastra.ai`) automatically. With other auth providers, set the authorization server the metadata advertises, or the endpoint isn't served:
 
 ```ts
 new MastraFactory({
@@ -749,6 +756,26 @@ new MastraFactory({
 ```
 
 or set `MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER`. Pass `mcp: false` to turn the endpoint off.
+
+#### Activity events (experimental)
+
+The endpoint serves one MCP event type (SEP-3415, experimental in `@mastra/mcp`), `factory.activity`, so clients can notice changes without re-reading work items. It is poll-only: call `events/poll`; `events/stream` and webhooks aren't offered.
+
+Claude and ChatGPT don't consume these events yet: Claude connectors have no events support, and ChatGPT only uses webhook delivery. Today they're for clients that call `events/poll` themselves.
+
+```json
+{
+  "method": "events/poll",
+  "params": { "name": "factory.activity", "arguments": { "workItemId": "<id>" }, "cursor": null }
+}
+```
+
+- `arguments` are optional: `workItemId` narrows to one work item, `actions` to specific audit actions (for example `factory.work_item.updated`).
+- A `null` or missing cursor starts from now and returns no events. Pass back the returned `cursor` on each poll. Any other cursor the Factory can't read, including `""`, restarts from now and marks the result `truncated`.
+- An event is delivered once it is 5 seconds old, so events written while a poll runs aren't skipped.
+- With `maxAgeMs`, older events are skipped and the result is marked `truncated`.
+- Each event's `eventId` is its audit row id, and the payload has `action`, `occurredAt`, `actor`, a one-line `summary`, and `workItemId` and `sessionId` when the event is about a work item or session.
+- Work item and session activity is served: item changes, runs, approvals, signals, and agents' commits, pushes and pull requests. Sessions follow the same rule as everywhere else in the Factory: you see your own sessions and shared ones, never another member's private session. Work item activity always shows up: when it happened in a session you can't see, the event says `privateSession: true` and the summary ends with "(in a private session)", but it doesn't say which session. Activity on such a session alone is left out.
 
 ### Development
 

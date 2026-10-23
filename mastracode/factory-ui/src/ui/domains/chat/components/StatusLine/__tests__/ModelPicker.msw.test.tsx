@@ -1,3 +1,4 @@
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -82,7 +83,11 @@ function renderPicker({
   /** Mount on a Factory route whose project has this model scope. */
   modelScope?: 'factory' | 'user' | 'hybrid';
   factoryDefaultModelId?: string;
-  sessionPolicy?: { modelScope: 'factory' | 'user'; defaultModelId: string | null };
+  sessionPolicy?: {
+    modelScope: 'factory' | 'user';
+    defaultModelId: string | null;
+    personalThinkingLevel?: ThinkingLevelSetting | null;
+  };
   /** The Factory's scope has no credentials, so its catalog is empty. */
   emptyCatalog?: boolean;
   /** The session catalog request fails. */
@@ -91,7 +96,9 @@ function renderPicker({
   const modelSwitches: unknown[] = [];
   const stateUpdates: unknown[] = [];
   server.use(
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: defaultModelId })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: defaultModelId, thinkingLevel: null }),
+    ),
     http.get(`${TEST_BASE_URL}/web/config/models`, async ({ request }) => {
       await catalogLoaded;
       if (!modelScope) return HttpResponse.json({ models });
@@ -111,6 +118,7 @@ function renderPicker({
             : effectiveScope === 'factory'
               ? (factoryDefaultModelId ?? null)
               : defaultModelId,
+          personalThinkingLevel: sessionPolicy?.personalThinkingLevel ?? null,
           models: emptyCatalog
             ? []
             : models.filter(model => model.provider === (effectiveScope === 'factory' ? 'openai' : 'anthropic')),
@@ -256,6 +264,22 @@ describe('ModelPicker', () => {
     expect(await screen.findByRole('note')).toHaveTextContent(
       "Showing models this Factory's organization credentials can run.",
     );
+  });
+
+  it("starts a chat on personal defaults at its owner's personal thinking level", async () => {
+    const user = userEvent.setup();
+    renderPicker({
+      modelScope: 'user',
+      modelId: 'anthropic/claude-sonnet-4-6',
+      sessionPolicy: {
+        modelScope: 'user',
+        defaultModelId: 'anthropic/claude-sonnet-4-6',
+        personalThinkingLevel: 'high',
+      },
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Thinking: High · Personal default' }));
+    expect(screen.getByText('Follows the Personal default.')).toBeInTheDocument();
   });
 
   it('uses personal credentials to show a hybrid user session model as configured', async () => {

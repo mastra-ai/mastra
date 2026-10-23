@@ -705,7 +705,7 @@ const agent = new Agent({
 })
 ```
 
-Only one task can be `in_progress` at a time. The list is stored in the thread-scoped `threadState` storage domain and projected onto the agent's [state-signal](/docs/harness/signals) lane, so it survives observational-memory truncation. See the [Task tools reference](/reference/tools/task-tools) for full schemas.
+Only one task can be `in_progress` at a time. The list is stored in the thread-scoped `threadState` storage domain and projected onto the agent's [state-signal](/docs/signals/state-signals) lane, so it survives observational-memory truncation. See the [Task tools reference](/reference/tools/task-tools) for full schemas.
 
 The [AgentController](/docs/harness/agent-controller) automatically includes all built-in tools in every mode, you don't need to add them manually. See [Tool approvals](/docs/harness/agent-controller#approve-tools-and-resume-suspensions) for AgentController-specific behavior.
 

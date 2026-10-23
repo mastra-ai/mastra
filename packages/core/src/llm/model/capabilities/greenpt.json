@@ -89,19 +89,7 @@
     "qwen3.6-35b-a3b"
   ],
   "reasoning": {
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "glm-5.2-honey-ultra": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "glm-5.2-ponytail": [
+    "qwen3.5-397b-a17b": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
@@ -113,19 +101,19 @@
         "values": ["none", "high"]
       }
     ],
-    "deepseek-v4-flash-0731": [
+    "glm-5.2-honey": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "minimax-m2.5": [
+    "gemma4": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "kimi-k2.6": [
+    "deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
@@ -143,31 +131,7 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "glm-5.2-ponytail-lite": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "qwen3.6-35b-a3b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "kimi-k3": [
+    "deepseek-v4-flash-0731": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
@@ -179,19 +143,25 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "kimi-k2.6": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "glm-5.2-honey": [
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "gemma4": [
+    "glm-5.2-ponytail": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "glm-5.2": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
@@ -201,24 +171,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen3.5-397b-a17b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "glm-5.2-ponytail-ultra": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "glm-5.2-caveman": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "green-r": [
@@ -233,6 +185,24 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "qwen3.6-35b-a3b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "glm-5.2-caveman": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "glm-5.2-ponytail-ultra": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
     "kimi-k2.7-code": [
       {
         "type": "effort",
@@ -243,6 +213,36 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "minimax-m2.5": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "glm-5.2-honey-ultra": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "glm-5.2-ponytail-lite": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ]
   }
