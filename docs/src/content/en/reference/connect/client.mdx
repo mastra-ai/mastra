@@ -31,12 +31,12 @@ Prefer this client over [`credential()`](/reference/connect/credential), which r
 
 ## Required context
 
-The client fails closed: it throws before making any request when the context it needs is missing.
+The client fails closed and throws before making any request when the context it needs is missing.
 
 | Context | Source | When missing |
 | - | - | - |
 | Platform access token | `accessToken`, or `MASTRA_PLATFORM_ACCESS_TOKEN` / `MASTRA_PLATFORM_SECRET_KEY`. Use a project service token for background work. | `resolveClient()` throws `missing_access_token` |
-| Project | The `projectId` argument of `listProjectConnections()`. Pass it explicitly; don't derive it from untrusted input. | Throws `missing_project_id` |
+| Project | The `projectId` argument of `listProjectConnections()`. Pass it explicitly. Don't derive it from untrusted input. | Throws `missing_project_id` |
 | Connection | The `connectionId` argument of `getConnectionContext()`, `proxyRequest()` and `proxyRequestWithResponse()`. Use an ID returned by `listProjectConnections()` for the same project. | Throws `missing_connection_id` |
 | Organization | `orgId`, or `MASTRA_ORG_ID`. Sent as `x-organization-id` when set. | Optional; omitted from the request |
 
