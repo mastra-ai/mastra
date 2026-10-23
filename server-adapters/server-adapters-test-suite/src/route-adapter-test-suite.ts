@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { registerApiRoute } from '@mastra/core/server';
 import { handleError } from '@mastra/server/handlers/error';
 import { createRoute, HTTPException, SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
@@ -374,15 +375,12 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     const deprecatedRoutes = SERVER_ROUTES.filter(r => r.deprecated);
 
     // Group deprecated routes by first path segment
-    const deprecatedByCategory = deprecatedRoutes.reduce(
-      (acc, route) => {
-        const category = route.path.split('/')[1] || 'root';
-        if (!acc[category]) acc[category] = [];
-        acc[category].push(route);
-        return acc;
-      },
-      {} as Record<string, typeof deprecatedRoutes>,
-    );
+    const deprecatedByCategory = deprecatedRoutes.reduce<Record<string, typeof deprecatedRoutes>>((acc, route) => {
+      const category = route.path.split('/')[1] || 'root';
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(route);
+      return acc;
+    }, {});
 
     Object.entries(deprecatedByCategory).forEach(([category, routes]) => {
       describe(category, () => {
@@ -516,15 +514,12 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     const devOnlyRoutes = ['/mcp/:serverId/events/:eventName/emit'];
 
     // Group routes by first path segment (e.g., /agents/:id/tools -> 'agents')
-    const routesByCategory = activeRoutes.reduce(
-      (acc, route) => {
-        const category = route.path.split('/')[1] || 'root';
-        if (!acc[category]) acc[category] = [];
-        acc[category].push(route);
-        return acc;
-      },
-      {} as Record<string, typeof activeRoutes>,
-    );
+    const routesByCategory = activeRoutes.reduce<Record<string, typeof activeRoutes>>((acc, route) => {
+      const category = route.path.split('/')[1] || 'root';
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(route);
+      return acc;
+    }, {});
 
     Object.entries(routesByCategory).forEach(([category, routes]) => {
       describe(category, () => {
@@ -948,6 +943,87 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       });
     });
 
+    describe('Studio-only RBAC', () => {
+      // RBAC lives only under `studio`; `server.rbac` is unset. Studio requests must
+      // still be checked against `studio.rbac` on both built-in and custom API routes.
+      const rolePermissions: Record<string, string[]> = {
+        viewer: ['agents:read'],
+        member: ['agents:read', 'tools:execute'],
+      };
+      const studioAuth = {
+        authenticateToken: async (token: string) =>
+          rolePermissions[token] ? { id: `user_${token}`, role: token } : null,
+        authorize: async () => true,
+      };
+      const studioRbac = {
+        getPermissions: async (user: { role: string }) => rolePermissions[user.role] ?? [],
+        getRoles: async (user: { role: string }) => [user.role],
+      };
+
+      async function setupStudioRbac(options: { withServerAuth: boolean }) {
+        const ctx = await createDefaultTestContext();
+        const originalGetServer = ctx.mastra.getServer.bind(ctx.mastra);
+        const customRoute = registerApiRoute('/studio-rbac/custom', {
+          method: 'GET',
+          requiresPermission: 'tools:execute',
+          handler: async c => c.json({ ok: true }),
+        });
+        ctx.mastra.getServer = () =>
+          ({
+            ...originalGetServer(),
+            apiRoutes: [customRoute],
+            ...(options.withServerAuth ? { auth: studioAuth } : {}),
+          }) as any;
+        (ctx.mastra as any).getStudio = () => ({ auth: studioAuth, rbac: studioRbac });
+        ctx.customRouteAuthConfig = new Map([['GET:/studio-rbac/custom', true]]);
+
+        const route: ServerRoute = {
+          method: 'GET',
+          path: '/test/studio-rbac',
+          responseType: 'json',
+          requiresPermission: 'tools:execute',
+          handler: async () => ({ ok: true }),
+        };
+        const mutableServerRoutes = SERVER_ROUTES as ServerRoute[];
+        const originalLength = mutableServerRoutes.length;
+        mutableServerRoutes.push(route);
+        try {
+          return (await setupAdapter(ctx)).app;
+        } finally {
+          mutableServerRoutes.splice(originalLength);
+        }
+      }
+
+      const studioRequest = (path: string, role: string): HttpRequest => ({
+        method: 'GET',
+        path,
+        headers: { Authorization: `Bearer ${role}`, 'x-mastra-client-type': 'studio' },
+      });
+
+      describe.each([
+        { label: 'studio auth only', withServerAuth: false },
+        { label: 'studio auth + server auth without server RBAC', withServerAuth: true },
+      ])('$label', ({ withServerAuth }) => {
+        it.each(['/api/test/studio-rbac', '/studio-rbac/custom'])(
+          'denies a studio user without the required permission on %s',
+          async path => {
+            const studioApp = await setupStudioRbac({ withServerAuth });
+            const response = await executeHttpRequest(studioApp, studioRequest(path, 'viewer'));
+            expect(response.status).toBe(403);
+          },
+        );
+
+        it.each(['/api/test/studio-rbac', '/studio-rbac/custom'])(
+          'allows a studio user with the required permission on %s',
+          async path => {
+            const studioApp = await setupStudioRbac({ withServerAuth });
+            const response = await executeHttpRequest(studioApp, studioRequest(path, 'member'));
+            expect(response.status).toBe(200);
+          },
+        );
+      });
+    });
+
     describe('Custom HTTPException responses', () => {
       async function setupCustomErrorRoutes() {
         let handlerCalls = 0;
@@ -986,6 +1062,42 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             handler: async () => {
               handlerCalls++;
               throw new HTTPException(404, { message: 'Legacy fallback' });
+            },
+          },
+          {
+            method: 'GET',
+            path: '/custom/http-error-failing-items',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw new HTTPException(400, {
+                message: 'Existing items fail the new schema',
+                cause: { failingItems: [{ index: 0, data: {}, field: 'input' }] },
+              });
+            },
+          },
+          {
+            method: 'GET',
+            path: '/custom/http-error-unsafe-cause',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw new HTTPException(400, {
+                message: 'Unsafe cause',
+                cause: { secret: 'do-not-leak', failingItems: 'not-an-array' },
+              });
+            },
+          },
+          {
+            method: 'GET',
+            path: '/custom/details-status-error',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw Object.assign(new Error('Details status'), {
+                details: { status: 422 },
+                cause: { failingItems: [{ index: 0 }] },
+              });
             },
           },
         ];
@@ -1044,6 +1156,73 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         expect(response.status).toBe(404);
         expect(response.data).toEqual({ error: 'Legacy fallback' });
         expect(custom.getHandlerCalls()).toBe(1);
+      });
+
+      it('includes failingItems from the HTTPException cause in the JSON body', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/http-error-failing-items',
+        });
+
+        expect(response.status).toBe(400);
+        expect((response.data as any).error).toBe('Existing items fail the new schema');
+        expect((response.data as any).cause).toEqual({ failingItems: [{ index: 0, data: {}, field: 'input' }] });
+      });
+
+      it('never forwards an arbitrary HTTPException cause', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/http-error-unsafe-cause',
+        });
+
+        expect(response.status).toBe(400);
+        expect((response.data as any).error).toBe('Unsafe cause');
+        expect(response.data).not.toHaveProperty('cause');
+        expect(JSON.stringify(response.data)).not.toContain('do-not-leak');
+      });
+
+      it('keeps details.status errors as a message-only body', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/details-status-error',
+        });
+
+        expect(response.status).toBe(422);
+        expect((response.data as any).error).toBe('Details status');
+        expect(response.data).not.toHaveProperty('cause');
+      });
+    });
+
+    describe('Dataset schema update rejected by existing items', () => {
+      it('returns the failing items so clients can report how many items fail', async () => {
+        const context = await createDefaultTestContext();
+        const dataset = await context.mastra.datasets.create({ name: 'schema-update-parity' });
+        await dataset.addItem({ input: { prompt: 'hello' } });
+        const setup = await setupAdapter(context);
+
+        const response = await executeHttpRequest(setup.app, {
+          method: 'PATCH',
+          path: `/api/datasets/${dataset.id}`,
+          body: {
+            inputSchema: {
+              type: 'object',
+              properties: { question: { type: 'string' } },
+              required: ['question'],
+            },
+          },
+        });
+
+        expect(response.status).toBe(400);
+        const failingItems = (response.data as any)?.cause?.failingItems;
+        expect(Array.isArray(failingItems)).toBe(true);
+        expect(failingItems).toHaveLength(1);
+        expect(failingItems[0]).toMatchObject({ index: 0, field: 'input' });
       });
     });
 

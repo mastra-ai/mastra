@@ -108,8 +108,6 @@ import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
-import { FactoryChannelReplyProcessor } from './session/channel-reply-processor.js';
-import { FactoryChannelSessionLinkProcessor } from './session/channel-session-link-processor.js';
 import { resolveFactoryCredentialTenant } from './session/credential-policy.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
@@ -122,12 +120,9 @@ import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
-import { FactoryReplyReminderProcessor } from './session/reply-reminder-processor.js';
-import { createReplyTool, FactoryReplyStreamProcessor } from './session/reply-tool.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
-import { createShareFileTool } from './session/share-file-tool.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
@@ -702,6 +697,7 @@ export class MastraFactory {
         auth: routeAuth,
         intake: intakeStorage,
         ...(integrationSourceControl ? { sourceControl: integrationSourceControl } : {}),
+        channels: () => this.#prepared?.base.controller.getChannels(),
       });
       if (integration.versionControl && integrationSourceControl) {
         integration.versionControl.initialize({ storage: integrationSourceControl });
@@ -1206,6 +1202,7 @@ export class MastraFactory {
       return undefined;
     })();
 
+    const integrationInputProcessors = integrations.flatMap(integration => integration.processors?.input ?? []);
     // Integrations contributing tools to agent sessions: org-scoped
     // `agentTools` (resolved per request) + session-scoped `sessionTools`.
     const toolIntegrations = integrationRegistrations.filter(
@@ -1393,8 +1390,6 @@ export class MastraFactory {
         // sandbox holds and where; the phase signal, when work items are on,
         // comes after it.
         inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
-          const channelReplyProcessor = new FactoryChannelReplyProcessor();
-          const replyReminderProcessor = new FactoryReplyReminderProcessor();
           const environmentProcessor = new FactoryEnvironmentStateProcessor();
           const sessionsProcessor =
             workItemsStorage && storage.isDomainReady('source-control')
@@ -1419,13 +1414,7 @@ export class MastraFactory {
               : [];
           if (factoryProcessor) {
             await factoryProcessor.prepareMemorySettings(requestContext);
-            return [
-              channelReplyProcessor,
-              replyReminderProcessor,
-              environmentProcessor,
-              ...sessionsProcessor,
-              factoryProcessor,
-            ];
+            return [...integrationInputProcessors, environmentProcessor, ...sessionsProcessor, factoryProcessor];
           }
           // Without work items there is no run binding, so the caller's row applies.
           try {
@@ -1433,11 +1422,10 @@ export class MastraFactory {
           } catch (error) {
             reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
           }
-          return [channelReplyProcessor, replyReminderProcessor, environmentProcessor, ...sessionsProcessor];
+          return [...integrationInputProcessors, environmentProcessor, ...sessionsProcessor];
         },
         outputProcessors: [
-          new FactoryChannelSessionLinkProcessor(),
-          new FactoryReplyStreamProcessor({ channels: () => this.#prepared?.base.controller.getChannels() }),
+          ...integrations.flatMap(integration => integration.processors?.output ?? []),
           new FactoryReplyCredentialProcessor(),
         ],
         ...(vector ? { vector } : {}),
@@ -1456,12 +1444,6 @@ export class MastraFactory {
               tools[name] = tool;
             }
           };
-          // Channel runs get attach_file so a produced file can go to the sender
-          // rather than a sandbox path. Signal-woken runs rebuild the thread from
-          // the controller's channels.
-          const channels = () => this.#prepared?.base.controller.getChannels();
-          mergeTools('factory-attach-file', await createShareFileTool(requestContext, { channels }));
-          mergeTools('factory-reply', await createReplyTool(requestContext, { channels }));
           if (storage.isDomainReady('source-control')) {
             mergeTools(
               'source-control',

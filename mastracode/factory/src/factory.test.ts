@@ -45,9 +45,8 @@ import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
 import type * as transitionServiceModule from './rules/transition-service.js';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
-import { FactoryChannelReplyProcessor } from './session/channel-reply-processor.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
-import { FactoryReplyReminderProcessor } from './session/reply-reminder-processor.js';
+import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import type * as resourceMigrationModule from './session/resource-migration.js';
 import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
@@ -392,11 +391,9 @@ describe('MastraFactory.prepare', () => {
     const requestContext = new RequestContext();
 
     const first = await inputProcessors({ requestContext });
-    expect(first).toHaveLength(5);
-    expect(first[0]).toBeInstanceOf(FactoryChannelReplyProcessor);
-    expect(first[1]).toBeInstanceOf(FactoryReplyReminderProcessor);
-    expect(first[2]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
-    expect(first[3]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(first).toHaveLength(3);
+    expect(first[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(first[1]).toBeInstanceOf(FactorySessionsStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -412,6 +409,29 @@ describe('MastraFactory.prepare', () => {
     });
   });
 
+  it("runs an integration's processors ahead of Factory's own, in the order integrations are listed", async () => {
+    const processor = (id: string) => ({ id, processInputStep: () => undefined, processOutputStep: () => undefined });
+    const first = processor('first');
+    const second = processor('second');
+    const out = processor('out');
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: null,
+      integrations: [
+        fakeIntegration({ id: 'one', processors: { input: [first], output: [out] } }),
+        fakeIntegration({ id: 'two', processors: { input: [second] } }),
+      ],
+    });
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+
+    const input = await inputProcessors({ requestContext: new RequestContext() });
+    expect(input.slice(0, 3)).toEqual([first, second, expect.any(FactoryEnvironmentStateProcessor)]);
+    const output = config.outputProcessors as unknown[];
+    expect(output).toHaveLength(2);
+    expect(output[0]).toBe(out);
+    expect(output[1]).toBeInstanceOf(FactoryReplyCredentialProcessor);
+  });
+
   it('still loads the saved memory settings when work items are unavailable', async () => {
     const storage = fakeStorage();
     vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
@@ -425,11 +445,9 @@ describe('MastraFactory.prepare', () => {
     const requestContext = new RequestContext();
 
     const processors = await inputProcessors({ requestContext });
-    expect(processors).toHaveLength(4);
-    expect(processors[0]).toBeInstanceOf(FactoryChannelReplyProcessor);
-    expect(processors[1]).toBeInstanceOf(FactoryReplyReminderProcessor);
-    expect(processors[2]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
-    expect(processors[3]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(processors).toHaveLength(2);
+    expect(processors[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(processors[1]).toBeInstanceOf(FactorySessionsStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -449,11 +467,9 @@ describe('MastraFactory.prepare', () => {
     requestContext.set('controller', { getState: () => ({}), emitEvent });
 
     const processors = await inputProcessors({ requestContext });
-    expect(processors).toHaveLength(4);
-    expect(processors[0]).toBeInstanceOf(FactoryChannelReplyProcessor);
-    expect(processors[1]).toBeInstanceOf(FactoryReplyReminderProcessor);
-    expect(processors[2]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
-    expect(processors[3]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(processors).toHaveLength(2);
+    expect(processors[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(processors[1]).toBeInstanceOf(FactorySessionsStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toEqual({
       status: 'unavailable',
       reason: 'storage unavailable',

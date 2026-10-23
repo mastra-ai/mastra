@@ -10,6 +10,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
+  getHTTPErrorResponse,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -123,21 +124,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         // Default error handling
         const error = err instanceof Error ? err : new Error(String(err));
-        let status = 500;
-        if (err && typeof err === 'object') {
-          if ('status' in err) {
-            status = (err as any).status;
-          } else if (
-            'details' in err &&
-            (err as any).details &&
-            typeof (err as any).details === 'object' &&
-            'status' in (err as any).details
-          ) {
-            status = (err as any).details.status;
-          }
-        }
+        const routeErrorResponse = (ctx as any)._mastraRouteErrorResponse;
+        const { status, body } =
+          routeErrorResponse?.error === err ? routeErrorResponse.response : getHTTPErrorResponse(err);
         ctx.status = status;
-        ctx.body = { error: error.message || 'Unknown error' };
+        ctx.body = { ...body, error: error.message || 'Unknown error' };
 
         // The route handler already logged this 501 at warn level. Skip the emit when only
         // Koa's default listener would receive it, since that prints to console.error.
@@ -538,6 +529,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         ctx.body = Buffer.from(await customResponse.arrayBuffer());
         return;
       }
+
+      // Computed before the status is copied onto the error below, so a MastraError's
+      // details.status keeps its message-only body when it reaches the error boundary.
+      (ctx as any)._mastraRouteErrorResponse = { error, response: getHTTPErrorResponse(error) };
 
       // Attach status code to the error for upstream middleware
       if (error && typeof error === 'object') {
@@ -997,12 +992,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           }
 
           // Check FGA authorization (EE feature)
+          // Path params last: the custom handler reads them from the URL, so query/body
+          // values must not be able to change which resource FGA checks.
           const fgaError = await checkRouteFGA(server.mastra, serverRoute, ctx.state.requestContext, {
-            ...(matchedRoute?.params ?? {}),
             ...(ctx.query as Record<string, string>),
             ...(typeof ctx.request.body === 'object' && ctx.request.body !== null
               ? (ctx.request.body as Record<string, unknown>)
               : {}),
+            ...(matchedRoute?.params ?? {}),
           });
           if (fgaError) {
             ctx.status = fgaError.status;
