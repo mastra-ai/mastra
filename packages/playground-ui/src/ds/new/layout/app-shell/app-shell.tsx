@@ -1,5 +1,6 @@
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 
+import { useMaybeSidebarState } from '@/ds/components/Sidebar/root/sidebar-context';
 import { cn } from '@/lib/utils';
 
 import './app-shell.css';
@@ -11,6 +12,9 @@ export interface AppShellProps extends Omit<ComponentPropsWithRef<'div'>, 'child
 }
 
 export function AppShell({ children, className, mobileHeader, ref, sidebar, ...props }: AppShellProps) {
+  const sidebarState = useMaybeSidebarState();
+  const sidebarHidden = Boolean(sidebar) && Boolean(sidebarState?.isHidden);
+
   return (
     <div
       ref={ref}
@@ -29,11 +33,14 @@ export function AppShell({ children, className, mobileHeader, ref, sidebar, ...p
           data-slot="app-shell-body"
           className={cn(
             'flex min-h-0 flex-1 flex-col',
+            'transition-[padding] duration-(--resize-dur) ease-(--resize-ease) motion-reduce:transition-none!',
+            'in-data-[sidebar-gesture=active]:transition-none!',
             // Below lg the sidebar is a drawer and the content runs edge to edge under the mobile header.
             // From lg it's inset on every side; with a sidebar column the sidebar's own padding provides the left gap.
+            // A hidden sidebar leaves nothing to inset against, so the content runs edge to edge as below lg.
             // Longhands only: consumer CSS that also emits a padding shorthand can't override the lg inset.
-            'lg:py-2 lg:pr-2',
-            sidebar ? 'lg:pl-0' : 'lg:pl-2',
+            !sidebarHidden && 'lg:py-2 lg:pr-2',
+            !sidebarHidden && (sidebar ? 'lg:pl-0' : 'lg:pl-2'),
           )}
         >
           {children}

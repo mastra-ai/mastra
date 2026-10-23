@@ -11,6 +11,7 @@ type SidebarContextValue = {
   maxWidth: number;
   collapseBelow: number;
   collapsedWidth: number;
+  isHidden: boolean;
   isMobile: boolean;
   openMobile: boolean;
   mobileTriggerRef: React.RefObject<HTMLButtonElement | null>;
