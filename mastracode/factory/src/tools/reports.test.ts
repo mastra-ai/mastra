@@ -11,7 +11,7 @@ import {
   reportNotification,
   sendRunEndReport,
 } from './reports.js';
-import type { FactoryReporting } from './reports.js';
+import type { FactoryReporting, FactoryRunOutcome } from './reports.js';
 
 const SENDER = { sessionId: 'session-w', threadId: 'thread-session-w', userId: 'user-1' };
 const PARENT = { sessionId: 'session-1', threadId: 'thread-session-1' };
@@ -222,6 +222,35 @@ describe('sendRunEndReport', () => {
     await env.agentReport('progress');
     await fail('provider overloaded');
     expect(env.deliveries).toHaveLength(3);
+  });
+
+  it('says a session finished once, not again for each later run that ends with nothing new', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: 0 });
+    onTestFinished(() => void vi.useRealTimers());
+    const tick = () => vi.setSystemTime(Date.now() + 1000);
+    const env = reporting();
+    const runEnds = (outcome: FactoryRunOutcome) => {
+      tick();
+      return sendRunEndReport(env.reporting, {
+        sender: SENDER,
+        recipients: [PARENT],
+        since: new Date(),
+        outcome,
+        subject: 'The work session for #7',
+      });
+    };
+    // The agent says it opened the PR, then comments, reviews and CI results wake it again.
+    tick();
+    await env.agentReport('done');
+    await runEnds({ status: 'done' });
+    await runEnds({ status: 'done' });
+    await runEnds({ status: 'done' });
+    expect(env.deliveries).toHaveLength(0);
+    // A failure still goes out after a "done", and a later "done" goes out after it.
+    await runEnds({ status: 'failed', reason: 'boom' });
+    await runEnds({ status: 'done' });
+    await runEnds({ status: 'done' });
+    expect(env.deliveries.map(entry => entry.notification.kind)).toEqual(['failed', 'done']);
   });
 
   it('still reports a repeat failure when the earlier one was read after a newer report', async () => {
