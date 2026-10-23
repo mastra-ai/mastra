@@ -2402,11 +2402,16 @@ export class AgentThreadStreamRuntime {
         // The sender asked for an idle wake only because it cannot see this run from
         // its process. Hand the input to the run in flight, the way a local send does,
         // so it reaches the next model request instead of waiting for the run to end.
+        // Tracked before it is queued: queuing can cut the run's request short at once, and
+        // whatever cancels the input from there must find it.
+        const queued: ClaimedQueuedMessage = { identity: messageIdentity, runId: activeRecord.runId };
+        state.claimedQueuedMessages.set(signal.id, queued);
         this.#queueForActiveRun(state, pubsub, key, activeRecord, signal);
-        settleMessageIdentity?.({ runId: activeRecord.runId });
-        if (messageIdentity) {
-          state.claimedQueuedMessages.set(signal.id, { identity: messageIdentity, runId: activeRecord.runId });
-        }
+        settleMessageIdentity?.(
+          queued.cancelled
+            ? { runId: activeRecord.runId, terminalReason: CANCELLED_BEFORE_RUN }
+            : { runId: activeRecord.runId },
+        );
         return { runId: activeRecord.runId };
       }
       if (activeRunId && (!activeRecord || this.#isThreadBlockingRun(state, activeRecord))) {
