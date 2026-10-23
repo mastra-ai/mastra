@@ -1,9 +1,13 @@
-# Knowledge alpha scope, v5 (report 20261023T223907)
+# Knowledge alpha scope, v6 (report 20261023T223907)
 
 Everything here was checked against main `b1244bd3bc0`. v5 follows Tyler's three comments (thread ans-2026-10-23T22:58:30.509Z):
 - Knowledge reads the run's tagged scopes, including the `scopes` key agent methods already take.
 - `organizationId` and `knowledgeResourceId` are deleted.
 - Pins stay a prompt-cacheable state signal.
+
+v6 adds two things:
+- Knowledge's own usage instructions, Tyler's decision (section 3b).
+- The store-widening details Fayth asked for (section 3a).
 
 ## 1. Delete Subconscious
 
@@ -63,31 +67,63 @@ const tools = company.createTools({ write: true }); // explicit wiring
 
 **Knowledge reads the run's tagged scopes, and nothing else.**
 - On main, agent methods already take `scopes: string[]` (`agent.types.ts:467-472` for generate/stream, `:620-625`), Agents take `scopes` (`types.ts:838-841`), and `mastra__scopes` carries them in the request context. `resolveAgentScopes` (`agent/scopes.ts:201`) unions the three. Each tag is `<type>:<value>`, e.g. `org:acme`, `team:director`, `request:r25`.
-- The run hands its non-identity tags downstream in a trusted copy of the request context (`deriveAgentRunRequestContext`, `scopes.ts:286`; values marked in a WeakSet at `:51-59`). Nothing on main reads them back. **The alpha adds the reader `getRunAgentScopes(requestContext)`, about 10 lines in `agent/scopes.ts`.** It returns the tags only when the WeakSet marks them as the run's own, so a caller can't forge them by writing `mastra__scopes` into a request context. Wave 2 has the same function (section 5).
+- `setRunAgentScopes` (`scopes.ts:59`, from #26593) writes the run's non-identity tags onto the run's copy of the request context under `MASTRA_SCOPES_KEY` (`mastra__scopes`), via `deriveAgentRunRequestContext` (`:286`). The array object goes into a WeakSet (`runScopeValues`, `:51-56`). `restoreRunAgentScopes` (`:68`) re-marks it after a durable resume.
+- **How tools read them:** a new reader, `getRunAgentScopes(requestContext)`, about 10 lines in `agent/scopes.ts`. It reads `requestContext.get(MASTRA_SCOPES_KEY)` and returns the tags only if that exact array is in the WeakSet; otherwise it returns `[]`. So only Core-marked values are trusted: a caller that writes `mastra__scopes` into its own request context, or one that arrives as JSON in a request body, gets nothing. Tools and the pins processor call it on every execution. Wave 2 has the same function (section 5).
 - **A run's Knowledge scope** = those tags, plus `resource:<resourceId>` and `thread:<threadId>` from the run's identity when it has them. Tools and the pins processor compute it per call from trusted context; the model never supplies a scope.
 - **`organizationId` and `knowledgeResourceId` are deleted** as Knowledge inputs: the request-context keys, the SDK stamping (`sdk/agents/memory.ts:306-319`), `subconscious/scope.ts`, and the overrides v4 proposed for `createMastraCode`. An org is just an `org:` tag. D3 (refuse without an org) goes away: a run without an `org:` tag simply holds fewer tags.
 
-**The store accepts any tag type.**
-- On main, `canonicalizeKnowledgeScope` (`storage/domains/knowledge/base.ts:685`) rejects any type except `org|resource|thread`. It also requires `thread` to have `resource` and `org` ancestors, and `resource` to have `org`. `KnowledgeScopeLevel` is that union (`base.ts:6`).
-- The alpha relaxes it so any `<type>:<value>` matching the agent scope pattern (`SCOPE_TYPE_PATTERN`, `agent/scopes.ts`) is accepted, one value per type. The ancestor rules go, since tags don't form a chain.
-- **Visibility doesn't change.** A record is visible when its scope is a subset of the run's (`isKnowledgeScopeVisible`, `base.ts:728`), and that works for any tags.
-- **Stored keys don't change.** The sort keeps `org`, `resource`, `thread` first and orders other types by name, so every scope key already written stays the same.
-- Adapters import `canonicalizeKnowledgeScope` from `@mastra/core` at runtime (e.g. libsql `knowledge/index.ts:47`), so LibSQL, PG, MySQL and Mongo need no code change. An adapter running against an older core still rejects new tag types, so it fails closed.
-- **Limit: 8 tags per run.** Visible-scope lookup enumerates every subset of the run's tags (libsql `visibleScopeKeys`, `:139`; core `knowledgeVisibleScopeKeys`, `base.ts:733`), so 8 tags means 255 keys. A run with more than 8 tags gets no Knowledge tools or pins, and the error says why.
-- The `:uncurated` companion entries were Subconscious-only, so their handling goes.
-- `expandKnowledgeScope(context, level)` and `KnowledgeScopeLevel` are replaced by a tag subset: "keep these tag types" instead of "widen to this rung".
+## 3a. Widening the store to accept any tag
+
+On main, `canonicalizeKnowledgeScope` (`storage/domains/knowledge/base.ts:685`) throws `Invalid knowledge scope entry` (`:693`) for any level except `org|resource|thread`. Every adapter calls it on reads as well as writes (e.g. LibSQL `knowledge/index.ts:719, 775, 779, 783`; MySQL and Mongo the same), so the alpha has to widen it. The rules:
+
+1. **One entry per level, kept** (`:697-700`). A run can't hold `team:a` and `team:b` at once. Two values of one type would make "which one does a write land at" ambiguous, and `resolveAgentScopes` doesn't dedupe by type, so the reader refuses such a run.
+2. **New tags don't join the ancestor chain** (`:706-711`). Tags are independent of each other. One rule stays: `thread` requires `resource`, because Memory always sets both. "`resource` requires `org`" goes, so a plain agent without an `org:` tag can still use Knowledge.
+3. **A fixed order, so stored keys never move.** The scope key is the sorted entries joined (`knowledgeScopeKey`, `:724`), so the sort has to be a total order that never changes:
+
+   | Position | Levels |
+   |---|---|
+   | 0, 1, 2 | `org`, `resource`, `thread` (unchanged, `SCOPE_ORDER` `:680`) |
+   | then | every other level, by level name, then value, compared by UTF-16 code unit (not `localeCompare`, which depends on locale) |
+
+   No existing key changes: every stored scope holds only `org`/`resource`/`thread`, whose order is unchanged. A new level can't move a key either. Its position comes from its own name, so a key containing only older levels is unaffected, and a key containing it is new. Today's `localeCompare` (`:719`) is replaced by plain code-unit comparison so keys can't differ between machines.
+4. **Subset containment narrows** (`isKnowledgeScopeVisible`, `:728-731`). A record is visible only to runs holding every one of its tags, so every extra tag narrows who can read it. That's the intended model:
+   - A record at `org:acme` + `team:director` is visible to every run holding both, whatever else it holds.
+   - A record that also carries `request:r25` is visible only to runs tagged `request:r25`.
+   - Writes default to every tag the run holds, which is the most private placement. Sharing wider means dropping tags (section 3).
+5. **Limit: 8 tags per run.** Visible-scope lookup enumerates every subset of the run's tags (core `knowledgeVisibleScopeKeys`, `:733`; LibSQL `visibleScopeKeys`, `:139`; PG/MySQL/Mongo the same), so 8 tags means 255 keys in one `IN (...)`. Over 8, the agent gets no Knowledge tools or pins and the error says why.
+6. The `:uncurated` companion entries (`:690-692`) were Subconscious-only, so their handling goes. `expandKnowledgeScope(context, level)` (`:748`) and `KnowledgeScopeLevel` (`:6`) are replaced by a tag subset ("keep these levels"). Their callers are all in the moved tool files.
+
+**Adapters.** LibSQL, PG, MySQL and Mongo import `canonicalizeKnowledgeScope`, `knowledgeScopeKey` and `isKnowledgeScopeVisible` from `@mastra/core/storage` at runtime (PG `knowledge/index.ts:46-63`, MySQL `:2-23`, Mongo `:2-18`). None of them name a level, so none needs a code change. Each stores the scope as JSON plus its key string, and both just carry the new tags. Clickhouse and Turso have no Knowledge domain. The shared store contract tests (`stores/_test-utils`) gain the tag cases, which runs them against every adapter.
+
+**Storage version.**
+- **No schema change:** no table, column or index changes, and every existing key is byte-identical, so `KNOWLEDGE_STORAGE_SCHEMA_VERSION` stays 2 (`base.ts:14`).
+- **The contract version (`:12`) stays 2:** adapters report it from core, and the rule lives in core, so an adapter can't support tags while its core doesn't.
+- **Mixed versions fail closed.** A database with tagged rows opened by an older core can't build a query scope that includes them, so those rows are just invisible to it. Updating one through the older core throws `Invalid knowledge scope entry`. Nothing is lost or rewritten. The feature is experimental, so that's acceptable.
+
+**How much of #28318 this pulls forward.** Only two pieces:
+- the reader `getRunAgentScopes`, which is identical to #28318's;
+- a one-function change to `canonicalizeKnowledgeScope`.
+
+#28318's scope model stays in Wave 2:
+- addressable scope nodes, `scopes`/`node_scopes`;
+- grants and roles (readonly/append/edit/owner);
+- `record_scopes`, `memoryScopeTypes` and parent patterns;
+- storage schema 3 (`619868abb10`).
+
+At the rebase, #28318's `canonicalizeKnowledgeScope` conflicts with the alpha's and must keep the alpha's order table, so keys written under the alpha stay valid.
 
 **Where writes land.**
 - A write lands at every tag the run holds by default, which is the most private placement. The model can name a subset of the run's tag types to share wider (e.g. drop `thread` and `resource` to write at `org` + `team`). It can't add a tag or write with none.
 - Agent tools are resolved per run, so each tool schema's enum of tag types is built from that run's tags. That also fixes the per-run baking in today's write tools (`knowledge-write-tools.ts:12-20`).
 - Pins default to every tag except `thread`, so a pin follows the user across threads. That matches today's resource-level pins when a run holds org, resource and thread.
 
-**What Mastra Code passes.**
-- Local TUI/studio sessions keep `org:local`, so existing local Knowledge stays visible.
-- Factory sessions pass `org:<factoryOrg>` and `project:<projectId>`. The project used to sit in the resource slot through `knowledgeResourceId`. A `resource:` tag must equal the Memory resource (`resolveAgentScopes` throws otherwise), so the project becomes its own tag.
+**What Mastra Code passes.** The API is `createMastraCode({ knowledge: { instance, scopes? } })`. The `key` goes away with Memory's `knowledge` option (D4), and so do v4's `organizationId`/`resourceId` overrides.
+- The SDK sets the agent's `scopes` to the caller's `scopes` plus the session's own tags.
+- Local TUI/studio sessions add `org:local`, so existing local Knowledge stays visible.
+- Factory sessions add `org:<factoryOrg>` and `project:<projectId>`. The project used to sit in the resource slot through `knowledgeResourceId`. A `resource:` tag must equal the Memory resource (`resolveAgentScopes` throws otherwise), so the project becomes its own tag.
 - Factory Knowledge already written under `resource:<projectId>` will no longer be visible. It was only written with the experimental Subconscious flag on (D9).
 - A Factory session whose org can't be resolved still gets no Knowledge, as today.
-- The Director dogfood just passes its tags (`org:…`, `team:director`, `agent:<name>`, `request:r25`). Per-request scopes therefore work in the alpha, without Wave 2.
+- The Director dogfood passes `scopes: ['team:director', 'agent:<name>', 'request:r25', …]`. Per-request scopes therefore work in the alpha, without Wave 2.
 
 **Pins stay a state signal, so pins need Memory.**
 - The pins processor stays `PinnedStateProcessor` on the state-signal lane: a snapshot first, then deltas, and nothing when the pins are unchanged. That keeps the prompt cacheable, as it is today. v4's system-prompt block is gone.
@@ -95,8 +131,33 @@ const tools = company.createTools({ write: true }); // explicit wiring
 - So **pins are on only when the agent has both a Knowledge with `pins` and a Memory.** The Agent, not Memory, adds the processor, de-duplicated by its state id.
 - An agent with Knowledge and no Memory gets read/write tools but no pin tools and no pins processor, and logs one warning if `pins` is set. Pin tools never show up where nothing could read the pins back.
 - Pins also need a resourceId and threadId, as on main (`runner.ts:503-510` skips without them).
+- **Running the lane without Memory** would need a different store for signals and their tracking. Today the runner loads the thread (`getThreadById`), reads signal history (`resolveStateSignalHistory`, `agent/state-signals.ts:149`), and persists each signal plus `lastSnapshotSignalId` in the thread's metadata, all through Memory. Making that store pluggable changes the core processor API and gets its own PR. **For the alpha, pins require Memory.**
 
 **Tools without Memory.** `agent.ts:8731-8745` resolves the thread and resource from call options and the reserved request-context ids, and the tool builder passes them through (`tool-builder/builder.ts:637-644, 739-740`). Write tools need a thread, as on main. Their records come from runs with no Memory history, which is fine.
+
+## 3b. Knowledge ships its own usage instructions
+
+**Today.** The rules for using Knowledge exist only inside the Subconscious agents being deleted: curator `DEFAULT_INSTRUCTIONS` (`curate.ts:21`), `PINNED_INSTRUCTIONS` (`curate.ts:54`) and the remind agent's (`remind-agent.ts:15`). The main agent gets none.
+
+**The block.** Whenever Knowledge attaches tools to an agent, it also adds a short instruction block for them, the way Memory adds OM's (`observational-memory.ts:2103`). Each part is included only when its tools are on:
+- **Read** (read tools on): search before answering from Knowledge; read the node before relying on it; cite the record you used; say plainly when nothing was found; when records disagree, show both with their dates.
+- **Write** (write tools on): one durable fact per record; append to an existing node before creating a new one; record a change as a new dated record rather than rewriting; remove only records that are wrong.
+- **Pins** (pin tools on): `PINNED_INSTRUCTIONS` from `curate.ts:54`, reused verbatim. Its first sentence addresses the curator ("Maintain the pin set…"), but it already speaks to whoever holds the pin tools, so it fits the main agent unchanged.
+
+**Where it's injected.** A `KnowledgeInstructionsProcessor` in `core/knowledge`, modelled on `WorkspaceInstructionsProcessor` (`processors/processors/workspace-instructions.ts:77-95`): `processInputStep` calls `messageList.addSystem(...)`. The Agent adds it next to the workspace-instructions processor (`agent.ts:1836-1856`), with the same de-duplication by processor id, so an app that configures its own copy isn't doubled.
+
+**Caching.** The block is static: its text depends only on which tool groups are on and the app's override. It never depends on run scopes, pins, search results or time. So it's identical every turn and the cached prefix holds. Pins stay in their own state-signal lane (section 3), not here.
+
+**Override API.**
+```ts
+new Knowledge({
+  instructions: false,                                             // no block
+  // or a string replacing the whole block,
+  // or ({ read, write, pins }) => `${read}\n${write}\nOur extra rule…`   // extend or replace parts
+});
+company.getInstructions({ write: true, pins: false }); // the block for explicit createTools() wiring
+```
+The function receives the default text for each enabled part, and `''` for a disabled one. It must return a deterministic string for the cache to hold; the docs say so.
 
 **Search.**
 - `KnowledgeSemanticIndexCoordinator` moves into core and runs on the Knowledge's own vector store and embedder. Its index name stays `knowledge_documents_dimension_N`, which can't collide with Memory's `memory_messages`.
@@ -151,6 +212,8 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 - OM still strips old Subconscious signals from observer input, and `deleteThread` still removes owned remind threads.
 - A Mastra Code agent still has its knowledge tools and pins after the SDK rewire.
 - The TUI renders an old thread containing `subconscious-activity` signals without printing them.
+- Instructions: an agent with read tools only gets the read part and no write or pin parts. With write tools it also gets the write part. With pins it also gets `PINNED_INSTRUCTIONS`, byte-equal to `curate.ts:54`. The block is byte-identical across two turns with different scopes and pin changes. `instructions: false` removes it, a string replaces it, and a function extends it. An app-configured processor with the same id isn't doubled.
+- Store: new-level keys sort by code unit independent of locale. Two values of one level are refused. A `thread` tag without `resource` is refused, and one without `org` is accepted.
 - For each, a red control showing the test fails without the change.
 
 ## Open decisions
@@ -158,10 +221,10 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 | # | Decision | My pick | Alternative |
 |---|---|---|---|
 | D1 | Name of the token-limit options | `maxTokens` (matches `messageTokens`/`observationTokens` in OM) | `tokenCount`, from Tyler's comment |
-| D2 | Defaults when an agent has `knowledge` | read on, write off, pins off | everything off until set |
+| D2 | Defaults when an agent has `knowledge` | read on, write off, pins off; instructions follow the tools that are on | everything off until set |
 | D3 | ~~No `organizationId`~~ | removed: `organizationId` is gone, an org is an `org:` tag | |
 | D4 | Memory's `knowledge` option | remove it; attach to the agent | keep it as a shortcut |
-| D5 | Mastra Code switch | rename `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS` (`sdk/agents/memory.ts:~250`) to `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1`; it attaches a Knowledge with read, write and pins on and no longer requires a vector store (without one, search is keyword-only) | keep the old flag name |
+| D5 | Mastra Code switch | rename `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS` (`sdk/agents/memory.ts:~250`) to `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1`. It attaches a default Knowledge with read, write and pins on, tagged `org:local` (or the Factory org and project), and no longer requires a vector store (without one, search is keyword-only). `createMastraCode({ knowledge: { instance, scopes } })` needs no flag | keep the old flag name |
 | D6 | Release note | Tyler's fixed wording, "Changes to an experimental, upcoming memory feature.", plus one line: "`experimental_subconscious` is removed; attach Knowledge to the agent instead." | wording only, no removal line |
 | D7 | Pins without Memory | settled by Tyler: pins stay a state signal, so they need Memory; a Knowledge-only agent gets no pins | |
 | D9 | Factory Knowledge already written under `resource:<projectId>` | accept that it goes out of view; it exists only where the experimental Subconscious flag was on | migrate those rows to `project:<id>` tags |
