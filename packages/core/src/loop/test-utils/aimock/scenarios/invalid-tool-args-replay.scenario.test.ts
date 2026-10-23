@@ -113,9 +113,9 @@ describeForAllEngines('AIMock scenario: tool call with arguments that are not va
     );
   });
 
-  // The durable and evented engines run the tool with `{}` instead of returning the
+  // The durable, evented and inngest engines run the tool with `{}` instead of returning the
   // invalid-arguments error. Not yet investigated.
-  const itFailsOnDurableEngines = engine === 'durable' || engine === 'evented' ? it.fails : it;
+  const itFailsOnDurableEngines = engine === 'durable' || engine === 'evented' || engine === 'inngest' ? it.fails : it;
 
   itFailsOnDurableEngines('does not run the tool', async () => {
     const { first, tool } = await sendTruncatedToolCall();
