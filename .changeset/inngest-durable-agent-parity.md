@@ -13,3 +13,14 @@ Brought Inngest durable agents (`createInngestAgent`) in line with core's durabl
 - `approveToolCall` and `resumeStream` now run the tool with the request context you pass, not the one the run suspended with.
 - `stopWhen` now gets the same step content as `stream.steps`.
 - A resumed stream's `toolCalls` now includes the resumed call, `generateTitle.emitEvent` streams the title, step `response.messages` is populated, and a processor retry no longer drops the earlier tool call from the prompt.
+
+```ts
+const observation = await agent.observe(runId, { idleTimeoutMs: 30_000 });
+
+for await (const chunk of observation.fullStream) {
+  if (chunk.type === 'finish') break;
+}
+
+// Stop listening without aborting the run.
+observation.detach();
+```
