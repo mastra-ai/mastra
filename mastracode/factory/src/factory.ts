@@ -65,11 +65,6 @@ import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
-import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
-import { PlatformGitLabIntegration } from './integrations/platform/gitlab/integration.js';
-import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.js';
-import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
-import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { prepareSessionRunContext } from './integrations/subscription-session.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
@@ -550,6 +545,7 @@ export class MastraFactory {
         // itself. `slug` falls back to the sibling `githubAppSlug` so existing
         // deploys keep working; the constructor validates and freezes `rules`,
         // so invalid ones fail boot.
+        const { PlatformGithubIntegration } = await import('./integrations/platform/github/integration.js');
         integrations.push(
           new PlatformGithubIntegration({
             rules: this.#config.platform?.github?.rules,
@@ -559,15 +555,19 @@ export class MastraFactory {
         installedPlatformGithub = true;
       }
       if (!integrations.some(integration => integration.id === 'incidentio')) {
+        const { PlatformIncidentioIntegration } = await import('./integrations/platform/incidentio/integration.js');
         integrations.push(new PlatformIncidentioIntegration());
       }
       if (!integrations.some(integration => integration.id === 'jira')) {
+        const { PlatformJiraIntegration } = await import('./integrations/platform/jira/integration.js');
         integrations.push(new PlatformJiraIntegration());
       }
       if (!integrations.some(integration => integration.id === 'gitlab')) {
+        const { PlatformGitLabIntegration } = await import('./integrations/platform/gitlab/integration.js');
         integrations.push(new PlatformGitLabIntegration());
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
+        const { PlatformLinearIntegration } = await import('./integrations/platform/linear/integration.js');
         integrations.push(new PlatformLinearIntegration());
       }
     }
