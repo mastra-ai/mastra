@@ -247,4 +247,30 @@ describe('synchronous observation indexing delta (#27930)', () => {
     expect(vector.writes).toHaveLength(1);
     expect(engine!.unindexedObservations.size).toBe(0);
   });
+
+  it('keeps both groups indexable when the lineage check for a retried group fails once', async () => {
+    const { memory, observe, vector, headGroups } = await setup();
+    vector.failNextUpsert = true;
+    await expect(observe(memory, 1)).rejects.toThrow('vector store unavailable');
+    const { head, store, groups } = await headGroups();
+    await store.createReflectionGeneration({
+      currentRecord: head,
+      reflection: head.activeObservations,
+      tokenCount: 10,
+    });
+    const readHistory = store.getObservationalMemoryHistory.bind(store);
+    let failHistoryRead = true;
+    store.getObservationalMemoryHistory = async (...args) => {
+      if (failHistoryRead) {
+        failHistoryRead = false;
+        throw new Error('storage unavailable');
+      }
+      return readHistory(...args);
+    };
+    await observe(memory, 2);
+    expect(vector.writes.map(row => row.text)).toEqual([expect.stringContaining('Observed fact 2.')]);
+    await observe(memory, 3);
+    expect(vector.writes.map(row => row.group_id)).toContain(groups[0]?.id);
+    expect(vector.writes).toHaveLength(3);
+  });
 });

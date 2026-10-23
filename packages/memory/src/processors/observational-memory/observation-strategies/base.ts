@@ -569,19 +569,10 @@ export abstract class ObservationStrategy {
       return;
     }
 
+    // Queue this commit's groups first, so a failed lookup below cannot lose them.
     const pending = this.deps.unindexedObservations;
-    const retries: UnindexedObservation[] = [];
-    for (const entry of pending.values()) {
-      if (entry.record.threadId !== record.threadId || entry.record.resourceId !== record.resourceId) continue;
-      if (entry.record.id === record.id || (await getLineageHead(this.storage, entry.record))) {
-        retries.push(entry);
-      } else {
-        pending.delete(entry.write.groupId);
-      }
-    }
-    const entries: UnindexedObservation[] = [
-      ...retries,
-      ...groups.map(({ group, threadId, observedAt }) => ({
+    for (const { group, threadId, observedAt } of groups) {
+      pending.set(group.id, {
         write: {
           text: group.content,
           groupId: group.id,
@@ -592,8 +583,20 @@ export abstract class ObservationStrategy {
           recordId: record.id,
         },
         record,
-      })),
-    ];
+      });
+    }
+    const entries: UnindexedObservation[] = [];
+    for (const entry of [...pending.values()]) {
+      if (entry.record.threadId !== record.threadId || entry.record.resourceId !== record.resourceId) continue;
+      if (entry.record.id === record.id) {
+        entries.push(entry);
+        continue;
+      }
+      const lineageHead = await getLineageHead(this.storage, entry.record).catch(() => undefined);
+      // undefined: the lookup failed, so keep the entry for a later cycle.
+      if (lineageHead) entries.push(entry);
+      else if (lineageHead === null) pending.delete(entry.write.groupId);
+    }
     if (entries.length === 0) {
       return;
     }
