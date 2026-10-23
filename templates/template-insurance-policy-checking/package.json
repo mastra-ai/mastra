@@ -9,20 +9,31 @@
     "node": "^22.19.0 || >=24.11.0"
   },
   "scripts": {
-    "dev": "mastra dev",
-    "build": "mastra build",
-    "start": "mastra start",
+    "dev": "node scripts/mastra.mjs dev",
+    "build": "node scripts/mastra.mjs build",
+    "start": "node scripts/mastra.mjs start",
     "typecheck": "tsc --noEmit",
     "format": "oxfmt .",
-    "format:check": "oxfmt --check ."
+    "format:check": "oxfmt --check .",
+    "test:unit": "vitest run tests/unit.test.ts",
+    "test:integration": "vitest run tests/intake.integration.test.ts",
+    "test:studio": "playwright test"
   },
   "dependencies": {
-    "@mastra/core": "latest"
+    "@libsql/client": "^0.18.0",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "latest",
+    "pdfjs-dist": "^6.4.299",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/node": "^24.10.9",
     "mastra": "latest",
     "oxfmt": "0.59.0",
-    "typescript": "^5.9.3"
+    "pdf-lib": "^1.17.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
   }
 }

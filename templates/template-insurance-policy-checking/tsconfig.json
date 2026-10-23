@@ -14,6 +14,6 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"],
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "config/**/*.ts", "providers.ts"],
   "exclude": ["node_modules", "dist", ".mastra"]
 }
