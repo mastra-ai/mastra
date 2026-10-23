@@ -1061,7 +1061,10 @@ describe('InngestAgent parity surface', () => {
         await vi.waitFor(() => expect(sendSpy).toHaveBeenCalled());
         await publishStepAndFinish(durableAgent, runId);
         await vi.waitFor(() => expect(fired).toEqual(['onFinish:acme']));
-        expect(loadWorkflowSnapshot).toHaveBeenCalledTimes(2);
+        const loopReads = loadWorkflowSnapshot.mock.calls.filter(
+          ([args]) => args.workflowName === InngestDurableStepIds.AGENTIC_LOOP,
+        );
+        expect(loopReads).toHaveLength(2);
       } finally {
         result.cleanup();
         sendSpy.mockRestore();

@@ -52,8 +52,13 @@ import {
   publishAbortRequest,
   normalizeResumeGenerateArgs,
   validateModelTimeoutSettings,
+  DurableStepIds,
 } from '@mastra/core/agent/durable';
-import type { AgentStepFinishEventData, AgentSuspendedEventData } from '@mastra/core/agent/durable';
+import type {
+  AgentStepFinishEventData,
+  AgentSuspendedEventData,
+  DurableToolCallInput,
+} from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import { InMemoryServerCache } from '@mastra/core/cache';
@@ -64,7 +69,13 @@ import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { ChunkFrom } from '@mastra/core/stream';
-import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
+import type {
+  MastraModelOutput,
+  ChunkType,
+  FullOutput,
+  MastraOnFinishCallback,
+  ToolCallChunk,
+} from '@mastra/core/stream';
 import { deepMerge } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
@@ -808,6 +819,45 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     return history.length;
   }
 
+  /**
+   * Tool calls of the suspended iteration, seeded into the resumed stream so its
+   * `toolCalls` includes the call being resumed. Mirrors core
+   * `DurableAgent.#loadSuspendedToolCalls`; the Inngest engine runs the nested
+   * iteration workflow under the outer run id.
+   */
+  async function loadSuspendedToolCalls(runId: string): Promise<ToolCallChunk[]> {
+    const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+      runId,
+      workflowName: InngestDurableStepIds.AGENTIC_EXECUTION,
+    });
+    if (!snapshot) return [];
+    const llmStep = snapshot.context?.[DurableStepIds.LLM_EXECUTION];
+    if (llmStep?.status !== 'success') return [];
+    // The nested input holds completed iterations; the LLM output holds the
+    // current iteration, which has not reached the accumulator yet.
+    const toolCalls: DurableToolCallInput[] = [
+      ...(
+        (snapshot.context.input as { accumulatedSteps?: { toolCalls?: DurableToolCallInput[] }[] } | undefined)
+          ?.accumulatedSteps ?? []
+      ).flatMap(step => step.toolCalls ?? []),
+      ...(llmStep.output.toolCalls ?? []),
+    ];
+    return toolCalls.map(toolCall => ({
+      type: 'tool-call',
+      runId,
+      from: ChunkFrom.AGENT,
+      payload: {
+        toolCallId: toolCall.toolCallId,
+        toolName: toolCall.toolName,
+        args: toolCall.args,
+        providerMetadata: toolCall.providerMetadata as ToolCallChunk['payload']['providerMetadata'],
+        providerExecuted: toolCall.providerExecuted,
+        output: toolCall.output,
+      },
+    }));
+  }
+
   // Route agent stream and control events through the exact PubSub exposed to
   // durable-agent consumers. All other topics keep using each workflow's local
   // InngestPubSub so ordinary workflow channel isolation is preserved.
@@ -1267,6 +1317,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ]),
       });
       validateModelTimeoutSettings(callbackOptions.modelSettings?.timeout);
+      // Read the suspended iteration only once its snapshot is persisted.
+      await resumableSnapshot.catch(() => undefined);
+      const initialToolCalls = await loadSuspendedToolCalls(runId);
       const resumeOffset = await getPubsubOffset(runId);
 
       // Install a fresh abort controller scoped to the resumed segment and
@@ -1326,6 +1379,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         runId,
         offset: resumeOffset,
         messageId: crypto.randomUUID(),
+        initialToolCalls,
         model: {
           modelId: undefined,
           provider: undefined,
