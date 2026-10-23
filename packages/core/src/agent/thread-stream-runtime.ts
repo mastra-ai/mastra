@@ -588,6 +588,12 @@ type AgentThreadRuntimeState = {
   leaseFences: Map<string, () => Promise<void>>;
   /** A run's in-flight attempt to take back a lease that lapsed, so the renewal, deadline and fence share one. */
   leaseRetakes: Map<string, Promise<boolean>>;
+  /**
+   * Runs whose retake gave up while its handoff was still in flight. That handoff may yet install the run id on
+   * a lease this execution no longer renews, so a run that ends must leave such a lease alone: under a reused run
+   * id it may be a successor's.
+   */
+  lateRetakeHandoffs: Set<string>;
   /** Runs this runtime stopped because another run holds their thread lease, until their abort is broadcast. */
   leaseLostRunIds: Set<string>;
   threadEventListeners: Set<ThreadEventListenerRegistration>;
@@ -801,6 +807,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     leaseDeadlines: new Map(),
     leaseFences: new Map(),
     leaseRetakes: new Map(),
+    lateRetakeHandoffs: new Set(),
     leaseLostRunIds: new Set(),
     threadEventListeners: new Set(),
     threadControlSubscriptions: new Map(),
@@ -916,9 +923,14 @@ export class AgentThreadStreamRuntime {
   #releaseThreadLease(pubsub: PubSub | undefined, key: string, runId: string): void {
     const resolved = this.#getPubSub(pubsub);
     this.#stopLeaseRenewal(resolved, runId);
-    void this.#getLeaseProvider(resolved)
-      .releaseLease(key, runId)
-      .catch(() => {});
+    // A retake that gave up while its handoff was in flight may have installed this run id on the lease after
+    // this execution stopped renewing it. Under a reused run id the holder can be a successor, so leave it to
+    // expire rather than release someone else's lease.
+    if (!this.#getState(resolved).lateRetakeHandoffs.has(runId)) {
+      void this.#getLeaseProvider(resolved)
+        .releaseLease(key, runId)
+        .catch(() => {});
+    }
     this.#releaseUnusedThreadControlSubscription(this.#getState(resolved), key);
   }
 
@@ -1016,6 +1028,14 @@ export class AgentThreadStreamRuntime {
         () => clearTimeout(expired),
       );
       if (owner === runId) return;
+      // This run's own retake holds the lease under a temporary token until it hands it to the run id, which a
+      // queued tool call can still catch in flight. Nobody else took the thread, so the run keeps it.
+      if (typeof owner === 'string' && owner.startsWith(`${runId}${RETAKE_LEASE_MARKER}`)) {
+        const retake = state.leaseRetakes.get(runId);
+        if (await (retake ?? Promise.resolve(false))) return;
+        // A retake that settled before this check may have handed the lease over already.
+        if (!retake && (await leaseProvider.getLeaseOwner(key).catch(() => undefined)) === runId) return;
+      }
       // A backend error only passes while the last confirmed renewal still covers this call.
       if (owner === unreachable) {
         const covering = state.leaseDeadlines.get(runId);
@@ -1090,20 +1110,22 @@ export class AgentThreadStreamRuntime {
       return (await leaseProvider.acquireLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)).acquired ? 'run' : undefined;
     };
     const retake = (async () => {
-      let giveUp: ReturnType<typeof setTimeout> | undefined;
-      let gaveUp = false;
+      // One renewal interval bounds the whole attempt, handoff included: a thread this process can't take back
+      // within it counts as lost, so the deadline, renewal and fence paths never wait on a silent backend.
+      const giveUpAt = sentAt + AGENT_THREAD_LEASE_RENEW_INTERVAL_MS;
+      const gaveUp = Symbol('gave-up');
+      const remaining = <T>(work: Promise<T>) => {
+        const left = giveUpAt - Date.now();
+        if (left <= 0) return Promise.resolve<T | typeof gaveUp>(gaveUp);
+        let giveUp: ReturnType<typeof setTimeout> | undefined;
+        return Promise.race([
+          work,
+          new Promise<typeof gaveUp>(resolve => (giveUp = setTimeout(() => resolve(gaveUp), left))),
+        ]).finally(() => clearTimeout(giveUp)) as Promise<T | typeof gaveUp>;
+      };
       const taking = take().catch(() => undefined);
-      const taken = await Promise.race([
-        taking,
-        new Promise<undefined>(
-          resolve =>
-            (giveUp = setTimeout(() => {
-              gaveUp = true;
-              resolve(undefined);
-            }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
-        ),
-      ]).finally(() => clearTimeout(giveUp));
-      if (gaveUp) {
+      const taken = await remaining(taking);
+      if (taken === gaveUp) {
         // The run stops now, but the backend may still grant the acquire. Nothing would renew that lease.
         void taking.then(late => {
           if (late === 'token') releaseToken();
@@ -1117,9 +1139,21 @@ export class AgentThreadStreamRuntime {
           releaseToken();
           return false;
         }
-        const handedOver = await leaseProvider
+        const transferring = leaseProvider
           .transferLease(key, token, runId, AGENT_THREAD_LEASE_TTL_MS)
           .catch(() => false);
+        const handedOver = await remaining(transferring);
+        if (handedOver === gaveUp) {
+          // The run stops now. A handoff that lands after this installs the run id on a lease this execution no
+          // longer renews, so a run ending under a reused run id must leave that lease to expire instead of
+          // releasing a successor's.
+          state.lateRetakeHandoffs.add(runId);
+          releaseToken();
+          void transferring.then(late => {
+            if (!late) state.lateRetakeHandoffs.delete(runId);
+          });
+          return false;
+        }
         if (!handedOver) {
           releaseToken();
           return false;
@@ -3431,6 +3465,7 @@ export class AgentThreadStreamRuntime {
     state.sweptLeasedRunIds.clear();
     state.pendingLeaseRenewals.clear();
     state.leaseRetakes.clear();
+    state.lateRetakeHandoffs.clear();
     state.leaseLostRunIds.clear();
     state.drainingPendingSignalsByThread.clear();
     state.pendingContinuationsByThread.clear();
