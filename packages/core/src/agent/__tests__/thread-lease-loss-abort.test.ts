@@ -1196,8 +1196,8 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         return super.transferLease(k, from, to);
       }
       override async releaseLease(k: string, owner: string) {
-        if (k !== key) return super.releaseLease(k, owner);
         released.push(owner);
+        if (k !== key) return super.releaseLease(k, owner);
         // A backend whose release of the temporary token loses the race with the handoff still grants it.
         if (owner.includes('\u0000retake\u0000')) return;
         return super.releaseLease(k, owner);
@@ -1215,7 +1215,8 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         return 'ticked';
       },
     });
-    const { output, drain } = await startStream(replica(shared, new MockMemory(), { tick }, pubsub), prompt, {
+    const agent = replica(shared, new MockMemory(), { tick }, pubsub);
+    const { output, drain } = await startStream(agent, prompt, {
       runId,
       maxSteps: 3,
       memory: { thread, resource: RESOURCE },
@@ -1241,7 +1242,21 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     // Ending under that run id must leave the lease to expire: whatever runs next under the same id owns it.
     await new Promise(resolve => setTimeout(resolve, 200));
     expect(released.slice(releasedBefore)).not.toContain(runId);
-  }, 30_000);
+
+    // The marker belongs to this record, so a later execution that reuses the id on the same thread still frees
+    // the lease it acquires. Checking a different thread would pass without ever consulting the marker.
+    released.length = 0;
+    const laterPrompt = `reused id later run ${engine}`;
+    llm.on({ userMessage: laterPrompt }, { content: 'later finished' });
+    const later = await startStream(agent, laterPrompt, {
+      runId,
+      maxSteps: 2,
+      memory: { thread, resource: RESOURCE },
+    });
+    const releasesBeforeLater = released.length;
+    await later.drain();
+    await vi.waitFor(() => expect(released.slice(releasesBeforeLater)).toContain(runId), { timeout: 5_000 });
+  }, 40_000);
 
   it.each([false, true])(
     'never acknowledges delivery to a temporary retake lease token (stuck=%s)',
