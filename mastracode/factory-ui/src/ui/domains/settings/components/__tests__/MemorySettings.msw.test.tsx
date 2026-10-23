@@ -99,6 +99,29 @@ describe('MemorySettings', () => {
     expect(within(factory).getByText('Work-item runs')).toBeInTheDocument();
   });
 
+  it.each([
+    { modelScope: 'user', used: 'Personal memory', unused: 'Factory memory' },
+    { modelScope: 'factory', used: 'Factory memory', unused: 'Personal memory' },
+  ] as const)(
+    'labels $used as used by every thread under $modelScope routing',
+    async ({ modelScope, used, unused }) => {
+      stubProviders([{ provider: 'openai', source: 'stored' }]);
+      server.use(
+        http.get(OM_URL, () => HttpResponse.json({ config: omConfig(30_000) })),
+        http.get(`${TEST_BASE_URL}/auth/me`, () =>
+          HttpResponse.json({ authenticated: true, user: { id: 'user-1', organizationId: 'org-1' } }),
+        ),
+      );
+      renderMemory(modelScope);
+
+      const usedRegion = screen.getByRole('region', { name: used });
+      const unusedRegion = screen.getByRole('region', { name: unused });
+      expect(await within(unusedRegion).findByText('Not used in this scope')).toBeInTheDocument();
+      expect(within(usedRegion).getByText('Chats')).toBeInTheDocument();
+      expect(within(usedRegion).getByText('Work-item runs')).toBeInTheDocument();
+    },
+  );
+
   it('labels Factory memory as used by every thread while sign-in is off, whatever the routing', async () => {
     stubProviders([{ provider: 'openai', source: 'stored' }]);
     server.use(http.get(OM_URL, () => HttpResponse.json({ config: omConfig(30_000) })));
