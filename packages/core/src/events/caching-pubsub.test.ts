@@ -1552,6 +1552,70 @@ describe('CachingPubSub', () => {
       expect(inner.acked.map(event => event.index)).toEqual([0]);
     });
 
+    it('delivers nothing for an offset past the end of a finished log', async () => {
+      // The transport replays its whole backlog, frame 0 included, to the new subscriber.
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const frames = [await append(shared, 0), await append(shared, 1), await append(shared, 2)];
+      inner.retained.set(topic, frames);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 19, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      // Retained frame 0 is not a log restart: the log is intact, the offset is just past its end.
+      expect(received).toEqual([]);
+      expect(warn).not.toHaveBeenCalled();
+
+      // Frames appended after the end still arrive.
+      await inner.publish(topic, await append(shared, 3));
+      await flush();
+      expect(received).toEqual([3]);
+    });
+
+    it('resumes from an offset inside a short log without resyncing from the start', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const frames = [await append(shared, 0), await append(shared, 1)];
+      inner.retained.set(topic, frames);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 1, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      expect(received).toEqual([1]);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('warns once when frames reaching an offset subscriber are not numbered', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: unknown[] = [];
+      await subscriber.subscribeFromOffset(topic, 2, event => {
+        received.push(event.data);
+      });
+
+      // Published straight on the transport, as a process without a shared log does.
+      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 0 } });
+      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 1 } });
+      await flush();
+
+      expect(received).toEqual([{ n: 0 }, { n: 1 }]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toContain('not numbered');
+      expect(warn.mock.calls[0]![0]).toContain('RedisServerCache');
+    });
+
     it('backfills a gap the transport skipped from the log', async () => {
       const inner = new RetainingPubSub();
       const shared = new InMemoryServerCache();

@@ -244,8 +244,13 @@ export class CachingPubSub extends PubSub {
   async subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
     const cacheKey = this.getCacheKey(topic);
 
-    let next = offset;
+    // The counter is the log's length. Starting past it would make the
+    // transport's retained frame 0 look like a log restart (see `reconcile`)
+    // and replay the whole run, so an offset past the end starts at the end.
+    const logLength = offset > 0 ? await this.cache.get(this.getCounterKey(topic)).catch(() => undefined) : undefined;
+    let next = typeof logLength === 'number' ? Math.min(offset, logLength) : offset;
     let closed = false;
+    let warnedUnnumbered = false;
     // Set only while a backfill (or the initial history read) is in flight.
     // Frames delivered meanwhile must wait, or the cursor could advance past a
     // frame that has not been handed to the consumer yet. In the common case
@@ -282,7 +287,16 @@ export class CachingPubSub extends PubSub {
 
       const seq = event.index;
       if (typeof seq !== 'number') {
-        // No numbering (the frame failed to cache): live-only delivery.
+        // No numbering (the frame failed to cache, or the publisher has no
+        // shared log): live-only delivery.
+        if (offset > 0 && !warnedUnnumbered) {
+          warnedUnnumbered = true;
+          this.logWarn(
+            `[CachingPubSub] Frames on ${topic} are not numbered, so resuming from offset ${offset} cannot ` +
+              `replay or skip them by position. Configure a server cache shared by every process ` +
+              `(for example RedisServerCache) to resume streams reliably.`,
+          );
+        }
         return cb(event, ack, nack);
       }
 
