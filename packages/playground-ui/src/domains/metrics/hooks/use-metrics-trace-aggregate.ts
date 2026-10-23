@@ -4,9 +4,10 @@ import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
 import { useTraceAggregate } from '@mastra/react/hooks/traces';
 import { keepPreviousData } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
+import type { AggregatePriority } from '../lib/request-limiter';
 import { buildTraceAggregateWhere, toTraceAggregateTimeRange, traceAggregateInterval } from '../lib/trace-aggregate';
+import { useLimitedQueryFn } from './use-aggregate-limiter';
 import { useMetricsFilters } from './use-metrics-filters';
-import { useTraceAggregateLimiter } from './use-trace-aggregate-limiter';
 
 /** What every card's request shares: the page's frozen window and filters. */
 export type TraceAggregateScope = Pick<AggregateTracesArgs, 'timeRange' | 'where'> & {
@@ -51,18 +52,20 @@ export function useTraceAggregateGate({ requiresRootSpanFields = false } = {}): 
 }
 
 /**
- * `aggregateTraces()` for one card, queued behind the page's three-request cap. The request carries
- * the frozen window, so it is also the cache key. Retries come from the client only. Unmounting
- * aborts the request, whether it is queued or already sent.
+ * `aggregateTraces()` for one card, queued by `priority` behind the page's three-request cap. The
+ * request carries the frozen window, so it is also the cache key: cards sending the same request
+ * share one, and its answer never goes stale: a card mounting later, or a tab opened again, reuses it.
+ * Retries come from the client only. A request already sent runs to the end, even if its
+ * card unmounts; a queued one nobody observes any more is skipped.
  */
-export function useMetricsTraceAggregate(request: AggregateTracesArgs): UseQueryResult<AggregateTracesResponse> {
+export function useMetricsTraceAggregate(
+  request: AggregateTracesArgs,
+  { priority }: { priority?: AggregatePriority } = {},
+): UseQueryResult<AggregateTracesResponse> {
   const client = useMastraClient();
-  const limiter = useTraceAggregateLimiter();
+  const queryFn = useLimitedQueryFn(() => client.aggregateTraces(request), priority);
   return useTraceAggregate({
     request,
-    queryOptions: {
-      queryFn: ({ signal }) => limiter.run(() => client.aggregateTraces(request, { signal }), signal),
-      placeholderData: keepPreviousData,
-    },
+    queryOptions: { queryFn, placeholderData: keepPreviousData, staleTime: Infinity },
   });
 }

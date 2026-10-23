@@ -28,7 +28,7 @@ describe('@mastra/playground-ui/domains/metrics/components', () => {
 
   it('exports what a page outside Studio needs to run the trace aggregate cards', () => {
     expect(entry).toMatchObject({
-      TraceAggregateLimiterProvider: expect.any(Function),
+      AggregateLimiterProvider: expect.any(Function),
       ChartCardError: expect.any(Function),
     });
   });

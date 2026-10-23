@@ -1,6 +1,10 @@
-import type { AggregateTracesResponse, GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
-import { traceAggregateRequestSchema } from '@mastra/core/storage';
-import type { NormalizedTraceAggregateRequest } from '@mastra/core/storage';
+import type {
+  AggregateSpansResponse,
+  AggregateTracesResponse,
+  GetObservabilityCapabilitiesResponse,
+} from '@mastra/client-js';
+import { spanAggregateRequestSchema, traceAggregateRequestSchema } from '@mastra/core/storage';
+import type { NormalizedSpanAggregateRequest, NormalizedTraceAggregateRequest } from '@mastra/core/storage';
 import { http, HttpResponse, delay } from 'msw';
 import type { ReactNode } from 'react';
 import { MetricsProvider } from '../../hooks/use-metrics';
@@ -29,6 +33,7 @@ const API = `${TEST_BASE_URL}/api/observability/metrics`;
 const SCORES_API = `${TEST_BASE_URL}/api/observability/scores`;
 export const CAPABILITIES_API = `${TEST_BASE_URL}/api/observability/capabilities`;
 export const TRACE_AGGREGATE_API = `${TEST_BASE_URL}/api/observability/traces/aggregate`;
+export const SPAN_AGGREGATE_API = `${TEST_BASE_URL}/api/observability/spans/aggregate`;
 
 /** Capabilities the server reports; `'missing'` is a server without the capabilities route. */
 export function serveCapabilities(capabilities: GetObservabilityCapabilitiesResponse | 'missing') {
@@ -61,6 +66,24 @@ export function serveTraceAggregate(
   server.use(
     http.post(TRACE_AGGREGATE_API, async ({ request }) => {
       const parsed = traceAggregateRequestSchema.safeParse(await request.json());
+      if (!parsed.success) return HttpResponse.json({ error: parsed.error.message }, { status: 400 });
+      const result = await respond(parsed.data);
+      return result instanceof Response ? result : HttpResponse.json(result);
+    }),
+  );
+}
+
+export type SpanAggregateRequest = NormalizedSpanAggregateRequest;
+
+/** Answers `aggregateSpans()` from the request body, parsed with the server's own schema. */
+export function serveSpanAggregate(
+  respond: (
+    request: SpanAggregateRequest,
+  ) => AggregateSpansResponse | Response | Promise<AggregateSpansResponse | Response>,
+) {
+  server.use(
+    http.post(SPAN_AGGREGATE_API, async ({ request }) => {
+      const parsed = spanAggregateRequestSchema.safeParse(await request.json());
       if (!parsed.success) return HttpResponse.json({ error: parsed.error.message }, { status: 400 });
       const result = await respond(parsed.data);
       return result instanceof Response ? result : HttpResponse.json(result);
