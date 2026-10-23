@@ -5,7 +5,7 @@ import { AppShell } from './app-shell';
 import { MainCard } from './main-card';
 
 function renderShell({
-  edgeToEdge = false,
+  edgeToEdge,
   mobileHeader = true,
   sidebar = false,
 }: { edgeToEdge?: boolean; mobileHeader?: boolean; sidebar?: boolean } = {}) {
@@ -22,6 +22,10 @@ function renderShell({
 
 function bodyClassName(markup: string) {
   return markup.match(/data-slot="app-shell-body" class="([^"]*)"/)?.[1] ?? '';
+}
+
+function transitionClasses(classes: string[]) {
+  return classes.filter(className => className.includes('transition'));
 }
 
 describe('AppShell', () => {
@@ -109,9 +113,19 @@ describe('AppShell', () => {
       expect(padding).toEqual([]);
     });
   });
+
+  describe('inset animation', () => {
+    it('stays static for apps that leave edgeToEdge out', () => {
+      expect(transitionClasses(bodyClassName(renderShell({ sidebar: true })).split(/\s+/))).toEqual([]);
+    });
+
+    it.each([true, false])('animates both ways for apps that pass edgeToEdge, edgeToEdge: %s', edgeToEdge => {
+      expect(transitionClasses(bodyClassName(renderShell({ edgeToEdge, sidebar: true })).split(/\s+/))).not.toEqual([]);
+    });
+  });
 });
 
-function mainCardClasses({ edgeToEdge = false }: { edgeToEdge?: boolean } = {}) {
+function mainCardClasses({ edgeToEdge }: { edgeToEdge?: boolean } = {}) {
   return (
     renderToStaticMarkup(<MainCard edgeToEdge={edgeToEdge}>Content</MainCard>)
       .match(/data-slot="main-card" class="([^"]*)"/)?.[1]
@@ -136,5 +150,13 @@ describe('MainCard', () => {
       /^(lg:)?(rounded|p-|shadow)/.test(className),
     );
     expect(frameClasses).toEqual([]);
+  });
+
+  it('stays static for apps that leave edgeToEdge out', () => {
+    expect(transitionClasses(classes)).toEqual([]);
+  });
+
+  it.each([true, false])('animates the frame both ways for apps that pass edgeToEdge, edgeToEdge: %s', edgeToEdge => {
+    expect(transitionClasses(mainCardClasses({ edgeToEdge }))).not.toEqual([]);
   });
 });
