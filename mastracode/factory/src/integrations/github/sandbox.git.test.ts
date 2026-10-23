@@ -2,9 +2,12 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
+import { PlatformGithubIntegration } from '../platform/github/integration.js';
+import { GithubIntegration } from './integration.js';
+
 import { checkoutSessionBranch, runSetupCommand, syncEnvironmentRepository } from './sandbox.js';
 import type { GitIdentity } from './sandbox.js';
 
@@ -78,6 +81,7 @@ describe('environment branch selection with real Git', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     if (root) await rm(root, { recursive: true, force: true });
   });
 
@@ -89,6 +93,18 @@ describe('environment branch selection with real Git', () => {
       token: 'test-token',
       repoFullName: 'test/repo',
     });
+
+  async function commitAndCheckIdentity({ name, email }: { name: string; email: string }) {
+    await runSetupCommand(sandbox, checkout, 'git commit --allow-empty -m "Setup commit"');
+    await writeFile(path.join(checkout, 'agent.txt'), 'Agent work\n');
+    git(checkout, 'add', '.');
+    git(checkout, 'commit', '-m', 'Agent commit');
+    expect(git(checkout, 'log', '-2', '--format=%an <%ae>|%cn <%ce>')).toBe(
+      Array(2).fill(`${name} <${email}>|${name} <${email}>`).join('\n'),
+    );
+    expect(git(checkout, 'config', '--local', 'user.name')).toBe(name);
+    expect(git(checkout, 'config', '--local', 'user.email')).toBe(email);
+  }
 
   describe.each([
     { label: 'fallback', identity: undefined, name: 'Mastra Code', email: 'mastra-code@users.noreply.github.com' },
@@ -136,18 +152,57 @@ describe('environment branch selection with real Git', () => {
             await sync(identity);
           }
 
-          await runSetupCommand(sandbox, checkout, 'git commit --allow-empty -m "Setup commit"');
-          await writeFile(path.join(checkout, 'agent.txt'), 'Agent work\n');
-          git(checkout, 'add', '.');
-          git(checkout, 'commit', '-m', 'Agent commit');
-          expect(git(checkout, 'log', '-2', '--format=%an <%ae>|%cn <%ce>')).toBe(
-            Array(2).fill(`${name} <${email}>|${name} <${email}>`).join('\n'),
-          );
-          expect(git(checkout, 'config', '--local', 'user.name')).toBe(name);
-          expect(git(checkout, 'config', '--local', 'user.email')).toBe(email);
+          await commitAndCheckIdentity({ name, email });
         },
       );
     });
+  });
+
+  describe.each(['primary', 'secondary'] as const)('%s provider authorship', role => {
+    it.each(['self-hosted', 'platform', 'platform with deployment slug', 'platform observed writer'])(
+      'uses the actual %s App identity when startup resumes a session (#28233)',
+      async provider => {
+        vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', 'https://platform.example.com');
+        vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'test-platform-key');
+        vi.stubEnv('MASTRA_PLATFORM_GITHUB_APP_SLUG', '');
+        const integration =
+          provider === 'self-hosted'
+            ? new GithubIntegration({
+                appId: '1',
+                privateKey: 'test-key',
+                clientId: 'test-client',
+                clientSecret: 'test-secret',
+                slug: 'deployment-app',
+              })
+            : new PlatformGithubIntegration(
+                provider === 'platform with deployment slug' ? { slug: 'different-deployment-app' } : {},
+              );
+        if (provider === 'platform observed writer' && integration instanceof PlatformGithubIntegration) {
+          integration.identity.observeSelfAuthor('actual-platform[bot]');
+        }
+        const name =
+          provider === 'self-hosted'
+            ? 'deployment-app[bot]'
+            : provider === 'platform observed writer'
+              ? 'actual-platform[bot]'
+              : 'mastra-platform[bot]';
+        git(checkout, 'checkout', '-b', 'session/task');
+        git(checkout, 'config', '--unset-all', 'user.name');
+        git(checkout, 'config', '--unset-all', 'user.email');
+        if (role === 'primary') {
+          await checkoutSessionBranch(sandbox, checkout, {
+            identity: integration.gitIdentity,
+            branch: 'session/task',
+            baseBranch: 'main',
+            token: 'test-token',
+            repoFullName: 'test/repo',
+          });
+        } else {
+          await sync(integration.gitIdentity);
+        }
+        await commitAndCheckIdentity({ name, email: `${name}@users.noreply.github.com` });
+      },
+    );
   });
 
   it.each(['main', 'detached'])('creates from the remote tip when starting on %s', async start => {

@@ -621,9 +621,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
     const factorySandbox = sandboxConfig;
     const githubProvider = sourceControl.github;
-    const gitIdentity = githubProvider
-      ? { login: `${githubProvider.slug}[bot]` }
-      : { name: user.name, email: user.email };
+    const gitIdentity = githubProvider?.gitIdentity ?? { name: user.name, email: user.email };
 
     const storage = sourceControl.storage;
     const projectRepository = session.projectRepositoryId
