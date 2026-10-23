@@ -269,8 +269,10 @@ function backgroundScenario(
             description: 'Research a topic',
             inputSchema: z.object({ topic: z.string() }),
             execute: async ({ topic }) => {
-              if (executeDelayMs) await new Promise(resolve => setTimeout(resolve, executeDelayMs));
+              // Count on entry: plain does not wait for the task, so host shutdown
+              // can cut the delay short.
               if (executions) executions[engine] = (executions[engine] ?? 0) + 1;
+              if (executeDelayMs) await new Promise(resolve => setTimeout(resolve, executeDelayMs));
               return { summary: `Research on ${topic}` };
             },
             background: { enabled: true },
