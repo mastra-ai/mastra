@@ -1195,6 +1195,91 @@ describe('Agent signals: claimed thread ownership', () => {
     }
   });
 
+  it('reports the terminal cancellation to a retry of a message cancelled as it reaches a request in flight', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = agentThreadStreamRuntime;
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'abort-cancelled-user', threadId: 'abort-cancelled-thread' };
+    const attributes = { messageId: 'abort-cancelled-message', sourcePeerId: 'abort-cancelled-peer' };
+    let cancelOnAbort: (() => void) | undefined;
+    const prompts: string[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt, abortSignal }) => {
+        prompts.push(JSON.stringify(prompt));
+        const call = prompts.length;
+        // The first request holds before any response content, so queued input cuts it short.
+        abortSignal?.addEventListener('abort', () => cancelOnAbort?.(), { once: true });
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              if (call === 1) await new Promise(resolve => abortSignal?.addEventListener('abort', resolve));
+              controller.enqueue({ type: 'text-start', id: `text-${call}` });
+              controller.enqueue({ type: 'text-delta', id: `text-${call}`, delta: `answer ${call}.` });
+              controller.enqueue({ type: 'text-end', id: `text-${call}` });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const ownerAgent = new Agent({ id: 'abort-cancelled-owner', name: 'Owner', instructions: 'Test', model, pubsub });
+    const senderAgent = new Agent({
+      id: 'abort-cancelled-sender',
+      name: 'Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const firstRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+    const sendRemote = (contents: string, signalAttributes?: Record<string, string>) =>
+      senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents, ...(signalAttributes ? { attributes: signalAttributes } : {}) },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+
+    try {
+      await expect(sendRemote('start the run').accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => prompts.length === 1);
+
+      // The input cuts the held request short, and the request's abort cancels the input at once,
+      // before its delivery has finished.
+      let cancelledIds: string[] | undefined;
+      const queued = sendRemote('cancel me as I arrive', attributes);
+      cancelOnAbort = () => {
+        cancelOnAbort = undefined;
+        cancelledIds = ownerRuntime.cancelQueuedMessages(
+          ownerAgent,
+          { ...target, signalIds: [queued.signal.id] },
+          pubsub,
+        ).cancelledSignalIds;
+      };
+      await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
+      expect(cancelledIds).toEqual([queued.signal.id]);
+
+      const retry = sendRemote('cancel me as I arrive', attributes);
+      await expect(retry.accepted).rejects.toThrow('cancelled before it ran');
+
+      await firstRun;
+      await pubsub.flush();
+      expect(prompts.some(prompt => prompt.includes('cancel me as I arrive'))).toBe(false);
+    } finally {
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
   it('releases the logical message reservation when the owner rejects its stream options, so a retry can route', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
