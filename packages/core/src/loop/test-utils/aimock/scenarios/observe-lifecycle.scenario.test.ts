@@ -14,6 +14,7 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
@@ -262,6 +263,56 @@ describeForAllEngines(
         expect(replay.timedOut).toBe(false);
         expect(replay.types).toContain('abort');
         expect(replay.types.at(-1)).toBe('finish');
+      } finally {
+        run.cleanup?.();
+      }
+    }, 30_000);
+
+    it('an observer that aborts a run parked on approval releases it, so the approval is rejected', async () => {
+      const llm = getMock();
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'call_observer_abort', name: 'lookup_status', arguments: { query: 'beta' } }] },
+      );
+      llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Should never be generated.' });
+      const executed: string[] = [];
+      const lookup = createTool({
+        id: 'lookup_status',
+        description: 'Look up a status.',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async ({ query }) => {
+          executed.push(query);
+          return { status: `OK:${query}` };
+        },
+      });
+      // The run needs a thread: the thread runtime is what knows a run is parked.
+      const { agent } = await createSharedAgent(llm, {
+        engine,
+        tools: { lookup_status: lookup },
+        memory: new MockMemory(),
+      });
+      const run = await agent.stream('Look up beta', {
+        requireToolApproval: true,
+        maxSteps: 5,
+        memory: { thread: 'observer-abort-thread', resource: 'observer-abort-user' },
+      });
+      for await (const chunk of run.fullStream) if (chunk.type === 'tool-call-approval') break;
+
+      try {
+        const observation = await agent.observe(run.runId);
+        const observing = drain(observation, CLOSE_WITHIN_MS);
+
+        await observation.abort();
+
+        await expect(
+          agent.approveToolCall({ runId: run.runId, toolCallId: 'call_observer_abort' }),
+        ).rejects.toMatchObject({ id: 'AGENT_RESUME_ABORTED_RUN' });
+        // Releasing the parked run publishes no abort terminal (core's stream abort behaves
+        // the same), so the observer is detached rather than awaited to close.
+        observation.detach();
+        await observing;
+        expect(llm.getRequests()).toHaveLength(1);
+        expect(executed).toEqual([]);
       } finally {
         run.cleanup?.();
       }

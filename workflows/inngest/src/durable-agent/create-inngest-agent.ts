@@ -1938,6 +1938,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // observation stays open until the run publishes its abort finish.
       const abort = async (_reason?: unknown) => {
         await requestRemoteAbort(runId);
+        // Release a run parked on a suspension, as the stream abort does.
+        if (agentThreadStreamRuntime.isRunParked(runId, agent.getPubSub())) agent.abortRunStream(runId);
       };
 
       return {

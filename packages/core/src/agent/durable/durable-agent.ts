@@ -5767,6 +5767,9 @@ export class DurableAgent<
         controller.abort(reason);
       }
       await this.requestRemoteAbort(runId);
+      // A run parked on a suspension has no steps left to stop; release it so
+      // it is no longer listed as suspended, as the stream abort does.
+      if (agentThreadStreamRuntime.isRunParked(runId, this.getPubSub())) super.abortRunStream(runId);
     };
 
     return {
