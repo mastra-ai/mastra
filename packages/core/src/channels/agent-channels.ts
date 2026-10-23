@@ -80,7 +80,7 @@ export interface ChannelLogContext {
 
 type ChannelAgent = Pick<
   Agent<any, any, any, any>,
-  'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory'
+  'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory' | 'abortThreadStream'
 >;
 
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
@@ -417,6 +417,18 @@ export class AgentChannels {
     // Drive the run to completion so serverless runtimes don't kill it.
     void resumed.consumeStream().catch(err => {
       this.log('error', 'Error consuming resumed decline stream', { error: err });
+    });
+  }
+
+  /**
+   * Stop the active run on a mapped thread, e.g. when the user clicks the
+   * platform's native stop button. Returns whether a run was aborted.
+   */
+  protected async dispatchStop(args: { thread: StorageThreadType }): Promise<boolean> {
+    return this.agent.abortThreadStream({
+      threadId: args.thread.id,
+      resourceId: args.thread.resourceId,
+      clearPendingSignals: true,
     });
   }
 
@@ -943,6 +955,27 @@ export class AgentChannels {
           return defaultHandler();
         });
       }
+
+      chat.onAgentSessionStopped(async event => {
+        const platform = event.adapter.name;
+        const logContext = { platform, threadId: event.threadId, actorId: event.userId };
+        try {
+          const { thread } = await this.findThreadMapping({
+            externalThreadId: event.threadId,
+            channelId: event.adapter.channelIdFromThreadId(event.threadId),
+            platform,
+            mastra,
+          });
+          if (!thread) {
+            this.log('debug', 'No mapped channel thread for stop request', logContext);
+            return;
+          }
+          const stopped = await this.dispatchStop({ thread });
+          this.log('info', stopped ? 'Stopped run from chat' : 'No active run to stop', logContext);
+        } catch (err) {
+          this.log('error', 'Error handling stop request', { ...logContext, error: err });
+        }
+      });
       await chat.initialize();
       this.chat = chat;
 
@@ -1321,6 +1354,27 @@ export class AgentChannels {
       await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped, batchIds);
     } catch (err) {
       await this.handleRunError(chatThread, message, err);
+      await this.endTyping(chatThread);
+    }
+  }
+
+  /**
+   * End a typing session the run never got to close. Status the run sets is
+   * cleared when its stream ends, but a host handler can set one before
+   * dispatch (Factory's early "is thinking..."). Under Slack's Agent Sessions
+   * that status keeps the session `processing` — Stop shown, posts don't clear
+   * it — for up to an hour. Adapters without sessions don't implement
+   * `endTyping`, and Slack's is a no-op outside `agentView`.
+   */
+  private async endTyping(chatThread: Thread): Promise<void> {
+    try {
+      await chatThread.adapter.endTyping?.(chatThread.id);
+    } catch (err) {
+      this.log('debug', 'Ending typing session failed (best-effort)', {
+        platform: chatThread.adapter.name,
+        threadId: chatThread.id,
+        error: err,
+      });
     }
   }
 

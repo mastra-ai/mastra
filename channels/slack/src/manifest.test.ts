@@ -58,6 +58,12 @@ describe('buildManifest', () => {
     for (const event of DEFAULT_BOT_EVENTS) {
       expect(events).toContain(event);
     }
+    expect(events).not.toContain('agent_session_stopped');
+  });
+
+  it('subscribes to the stop event under agentSessions', () => {
+    const manifest = buildManifest({ ...baseOptions, agentSessions: true });
+    expect(manifest.settings?.event_subscriptions?.bot_events).toContain('agent_session_stopped');
   });
 
   it('enables app_home messages tab', () => {
