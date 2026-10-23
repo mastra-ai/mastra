@@ -17,7 +17,7 @@ describe('buildHelpText', () => {
     expect(text).toMatch(/\/resume\s+Alias for \/threads/);
     expect(text).toMatch(/\/name\s+Rename current thread/);
     expect(text).toMatch(/\/rename\s+Alias for \/name/);
-    expect(text).not.toMatch(/\/fork\b/);
+    expect(text).toMatch(/\/fork\s+Alias for \/clone/);
     expect(text).toContain('/settings');
     expect(text).toMatch(/\/model\s+Change the current mode model/);
     expect(text).toMatch(/\/models\s+Switch model pack/);

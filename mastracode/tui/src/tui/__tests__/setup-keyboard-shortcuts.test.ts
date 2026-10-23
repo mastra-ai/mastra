@@ -272,7 +272,6 @@ describe('setupKeyboardShortcuts', () => {
     const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
     expect(commandNames[0]).toBe('new');
     expect(commandNames).toContain('thread');
-    expect(commandNames).not.toContain('fork');
     expect(commandNames).toContain('resume');
     expect(commandNames).toContain('rename');
     expect(autocompleteProviders[0]?.commands.find(command => command.name === 'name')?.description).toBe(
@@ -283,6 +282,9 @@ describe('setupKeyboardShortcuts', () => {
     );
     expect(autocompleteProviders[0]?.commands.find(command => command.name === 'clone')?.description).toBe(
       'Clone the current thread',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'fork')?.description).toBe(
+      'Alias for /clone',
     );
     expect(autocompleteProviders[0]?.commands.find(command => command.name === 'threads')?.description).toBe(
       'Switch between threads',

@@ -84,6 +84,7 @@ const TRACKED_COMMANDS = new Set([
   'threads',
   'resume',
   'clone',
+  'fork',
   'new',
 ]);
 
@@ -177,6 +178,7 @@ export async function dispatchSlashCommand(
       await handleNewCommand(ctx);
       return true;
     case 'clone':
+    case 'fork':
       await handleCloneCommand(ctx);
       return true;
     case 'threads':

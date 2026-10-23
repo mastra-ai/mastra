@@ -27,6 +27,7 @@ function getCommands(modes: number): HelpEntry[] {
   const cmds: HelpEntry[] = [
     { key: '/new', description: 'Start a new thread' },
     { key: '/clone', description: 'Clone the current thread' },
+    { key: '/fork', description: 'Alias for /clone' },
     { key: '/threads', description: 'Switch between threads' },
     { key: '/resume', description: 'Alias for /threads' },
     { key: '/thread', description: 'Show current thread info' },

@@ -420,6 +420,7 @@ export function setupAutocomplete(state: TUIState): void {
   const slashCommands: SlashCommand[] = [
     { name: 'new', description: 'Start a new thread' },
     { name: 'clone', description: 'Clone the current thread' },
+    { name: 'fork', description: 'Alias for /clone' },
     { name: 'thread', description: 'Show current thread info' },
     { name: 'threads', description: 'Switch between threads' },
     { name: 'resume', description: 'Alias for /threads' },
