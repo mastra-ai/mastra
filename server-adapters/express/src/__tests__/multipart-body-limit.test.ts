@@ -58,6 +58,7 @@ describe('Express multipart body limit without Content-Length', () => {
 
   function sendChunked(port: number, body: string) {
     return new Promise<{ status: number; body: string; connection?: string }>((resolve, reject) => {
+      let responded = false;
       const req = createHttpRequest(
         {
           hostname: '127.0.0.1',
@@ -67,16 +68,27 @@ describe('Express multipart body limit without Content-Length', () => {
           headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Transfer-Encoding': 'chunked' },
         },
         res => {
+          responded = true;
           let text = '';
           res.setEncoding('utf8');
           res.on('data', chunk => (text += chunk));
           res.on('end', () => resolve({ status: res.statusCode ?? 0, body: text, connection: res.headers.connection }));
         },
       );
-      // The server closes the connection on 413, so later writes may fail with EPIPE.
-      req.on('error', err => ((err as NodeJS.ErrnoException).code === 'EPIPE' ? undefined : reject(err)));
-      for (let i = 0; i < body.length; i += 256) req.write(body.slice(i, i + 256));
-      req.end();
+      // The server answers 413 with Connection: close, so once a response has started,
+      // a broken pipe or reset from our pending writes is expected.
+      req.on('error', err => {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (responded && (code === 'EPIPE' || code === 'ECONNRESET')) return;
+        reject(err);
+      });
+      // Write one chunk at a time and stop as soon as the server responds.
+      const writeFrom = (offset: number) => {
+        if (responded || req.destroyed) return;
+        if (offset >= body.length) return void req.end();
+        req.write(body.slice(offset, offset + 256), () => writeFrom(offset + 256));
+      };
+      writeFrom(0);
     });
   }
 
