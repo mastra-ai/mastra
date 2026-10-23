@@ -9,6 +9,17 @@ import type { Extractor } from '../extractor';
 import type { ObservationGroup } from '../observation-groups';
 import type { ObservationModelContext, ObserveHooks, ObserveTrigger } from '../types';
 
+/** One observation group's vector write, as handed to `onIndexObservations`. */
+export interface ObservationIndexWrite {
+  text: string;
+  groupId: string;
+  range: string;
+  threadId: string;
+  resourceId: string;
+  observedAt?: Date;
+  recordId?: string;
+}
+
 /** Parameters for running an observation via a strategy. */
 export interface ObservationRunOpts {
   record: ObservationalMemoryRecord;

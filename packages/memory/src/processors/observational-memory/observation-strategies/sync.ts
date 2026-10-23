@@ -16,7 +16,6 @@ import {
 } from '../markers';
 import { getLastObservedMessageCursor } from '../message-utils';
 
-import { generateAnchorId, parseObservationGroups } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
 import { getLineageHead } from '../record-lineage';
@@ -196,20 +195,15 @@ export class SyncObservationStrategy extends ObservationStrategy {
     const { threadId, messages } = this.opts;
 
     const lastObservedAt = this.getMaxMessageTimestamp(messages);
-    const messageRange = this.retrieval ? buildMessageRange(messages) : undefined;
-    // Name the new group before merging it, so the commit carries exactly what this cycle added.
-    const groupId = messageRange ? generateAnchorId() : undefined;
+    // Build the group this cycle adds before merging it, so the commit carries exactly that group.
+    const newObservationGroup = this.createObservationGroup(output.observations, buildMessageRange(messages));
     const newObservations = await this.wrapObservations(
       output.observations,
       existingObservations,
       threadId,
       lastObservedAt,
-      messageRange,
-      groupId,
+      newObservationGroup,
     );
-    const newObservationGroup = groupId
-      ? parseObservationGroups(newObservations).find(group => group.id === groupId)
-      : undefined;
     const observationTokens = this.tokenCounter.countObservations(newObservations);
     const cycleObservationTokens = this.tokenCounter.countObservations(output.observations);
 
@@ -305,15 +299,13 @@ export class SyncObservationStrategy extends ObservationStrategy {
 
     // Index only the group this commit added. Earlier groups were indexed by the cycle that
     // added them, and reflected groups are not observation output. A covered cycle added nothing.
-    if (!committed.alreadyCovered && processed.newObservationGroup) {
-      await this.indexGroups(
-        [processed.newObservationGroup],
-        threadId,
-        resourceId,
-        processed.lastObservedAt,
-        committed.record.id,
-      );
-    }
+    // Earlier groups of this record whose write failed are retried here as well.
+    const added = committed.alreadyCovered ? undefined : processed.newObservationGroup;
+    await this.indexGroups(
+      added ? [{ group: added, threadId, observedAt: processed.lastObservedAt }] : [],
+      resourceId,
+      committed.record.id,
+    );
 
     return { status: 'committed', processed, record: committed.record, alreadyCovered: committed.alreadyCovered };
   }

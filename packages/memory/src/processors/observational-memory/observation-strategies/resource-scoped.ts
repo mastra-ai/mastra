@@ -18,6 +18,7 @@ import {
   createThreadUpdateMarker,
 } from '../markers';
 import { getLastObservedMessageCursor, sortThreadsByOldestMessage } from '../message-utils';
+import type { ObservationGroup } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
 import { getLineageHead } from '../record-lineage';
@@ -68,6 +69,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   private priorMetadataByThread = new Map<string, ThreadOMMetadata>();
   /** Each observed thread's wrapped section from the last composition. */
   private threadSections = new Map<string, string>();
+  /** Each observed thread's new observation group, when retrieval is on. */
+  private newGroups = new Map<string, ObservationGroup | undefined>();
   /** Head text the processed observations were composed from (the commit's expected text). */
   private composedFrom = '';
 
@@ -404,8 +407,14 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     for (const { threadId, threadMessages, result } of this.observationResults) {
       cycleObservationTokens += this.tokenCounter.countObservations(result.observations);
 
-      const messageRange = this.retrieval ? buildMessageRange(threadMessages) : undefined;
-      const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
+      // Each thread's new group is built once, so a recomposed commit indexes the group it wrote.
+      if (!this.newGroups.has(threadId)) {
+        this.newGroups.set(
+          threadId,
+          this.createObservationGroup(result.observations, buildMessageRange(threadMessages)),
+        );
+      }
+      const threadSection = await this.wrapWithThreadTag(threadId, result.observations, this.newGroups.get(threadId));
       this.threadSections.set(threadId, threadSection);
       const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
       currentObservations = this.replaceOrAppendThreadSection(
@@ -517,19 +526,15 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       await this.streamMarker(marker);
     }
 
-    if (resourceId && !committed.alreadyCovered) {
-      await Promise.all(
-        this.observationResults.map(({ threadId, threadMessages, result }) =>
-          this.indexObservationGroups(
-            result.observations,
-            threadId,
-            resourceId,
-            this.getMaxMessageTimestamp(threadMessages),
-            committed.record.id,
-          ),
-        ),
-      );
-    }
+    // Index only the groups this commit added; a covered cycle added nothing. Earlier groups of
+    // this record whose write failed are retried here as well.
+    const added = committed.alreadyCovered
+      ? []
+      : this.observationResults.flatMap(({ threadId, threadMessages }) => {
+          const group = this.newGroups.get(threadId);
+          return group ? [{ group, threadId, observedAt: this.getMaxMessageTimestamp(threadMessages) }] : [];
+        });
+    await this.indexGroups(added, resourceId, committed.record.id);
 
     return { status: 'committed', processed, record: committed.record, alreadyCovered: committed.alreadyCovered };
   }

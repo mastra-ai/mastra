@@ -10,11 +10,16 @@ import { parseObservationGroups } from '../observation-groups';
 
 class CountingVector extends MastraVector {
   writes: NonNullable<UpsertVectorParams['metadata']> = [];
+  failNextUpsert = false;
   constructor() {
     super({ id: 'sync-delta-vector' });
   }
   async createIndex() {}
   async upsert({ ids = [], metadata = [] }: UpsertVectorParams) {
+    if (this.failNextUpsert) {
+      this.failNextUpsert = false;
+      throw new Error('vector store unavailable');
+    }
     this.writes.push(...metadata);
     return ids;
   }
@@ -33,7 +38,9 @@ class CountingVector extends MastraVector {
   async deleteVectors() {}
 }
 
-async function setup() {
+async function setup({ scope = 'thread' }: { scope?: 'thread' | 'resource' } = {}) {
+  const threadId = crypto.randomUUID();
+  const resourceId = crypto.randomUUID();
   const storage = new InMemoryStore();
   const vector = new CountingVector();
   const embedded: string[] = [];
@@ -42,7 +49,9 @@ async function setup() {
   let hold: { reached: () => void; release: Promise<void> } | undefined;
   const observer = new MockLanguageModelV2({
     doStream: async () => {
-      const text = `<observations>\n- Observed fact ${++fact}.\n</observations>`;
+      const facts = `Date: Jan 1, 2026\n- Observed fact ${++fact}.`;
+      // The resource-scope Observer answers per thread.
+      const text = `<observations>\n${scope === 'resource' ? `<thread id="${threadId}">\n${facts}\n</thread>` : facts}\n</observations>`;
       const held = hold;
       hold = undefined;
       if (held) {
@@ -80,15 +89,13 @@ async function setup() {
         generateTitle: false,
         workingMemory: { enabled: false },
         observationalMemory: {
-          scope: 'thread',
+          scope,
           retrieval: { vector: true },
           observation: { model: observer, bufferTokens: false, messageTokens: 1 },
           reflection: { model: observer, observationTokens: 1_000_000 },
         },
       },
     });
-  const threadId = crypto.randomUUID();
-  const resourceId = crypto.randomUUID();
   const memory = open();
   await memory.createThread({ threadId, resourceId, title: 'Index delta' });
   const observe = async (instance: Memory, cycle: number) => {
@@ -116,7 +123,7 @@ async function setup() {
   };
   const headGroups = async () => {
     const store = await storage.getStore('memory');
-    const head = await store?.getObservationalMemory(threadId, resourceId);
+    const head = await store?.getObservationalMemory(scope === 'resource' ? null : threadId, resourceId);
     if (!head) throw new Error('OM head unavailable');
     return { head, store: store!, groups: parseObservationGroups(head.activeObservations) };
   };
@@ -178,5 +185,37 @@ describe('synchronous observation indexing delta (#27930)', () => {
     expect(groups).toHaveLength(3);
     expect(vector.writes).toHaveLength(3);
     expect(new Set(vector.writes.map(row => row.group_id))).toEqual(new Set(groups.map(group => group.id)));
+  });
+
+  it('writes and embeds only the new group when resource scope merges a same-date thread section', async () => {
+    const { memory, observe, vector, embedded, headGroups } = await setup({ scope: 'resource' });
+    await observe(memory, 1);
+    await observe(memory, 2);
+    // The second cycle merges into the first cycle's same-date thread section, so its group must
+    // keep its opening tag there for the vector's group ID to resolve when paging.
+    const { groups } = await headGroups();
+    expect(groups.map(group => group.content)).toEqual([
+      'Date: Jan 1, 2026\n- Observed fact 1.',
+      'Date: Jan 1, 2026\n- Observed fact 2.',
+    ]);
+    expect(vector.writes.map(row => row.group_id)).toEqual(groups.map(group => group.id));
+    expect(embedded).toHaveLength(2);
+    expect(embedded[1]).toContain('Observed fact 2.');
+    expect(embedded[1]).not.toContain('Observed fact 1.');
+  });
+
+  it('retries a committed group whose vector write failed on the next cycle', async () => {
+    const { memory, observe, vector, headGroups } = await setup();
+    vector.failNextUpsert = true;
+    // The observations committed, but the failed write still fails the cycle.
+    await expect(observe(memory, 1)).rejects.toThrow('vector store unavailable');
+    expect((await headGroups()).groups).toHaveLength(1);
+    expect(vector.writes).toHaveLength(0);
+    await observe(memory, 2);
+    const { groups } = await headGroups();
+    expect(groups).toHaveLength(2);
+    expect(vector.writes.map(row => row.group_id).sort()).toEqual(groups.map(group => group.id).sort());
+    await observe(memory, 3);
+    expect(vector.writes).toHaveLength(3);
   });
 });
