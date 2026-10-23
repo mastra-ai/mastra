@@ -39,10 +39,10 @@
 import type { Agent, AgentExecutionOptions, StructuredOutputOptions } from '@mastra/core/agent';
 import {
   AGENT_STREAM_TOPIC,
+  DurableStepIds,
   agentThreadStreamRuntime,
   prepareForDurableExecution,
   createDurableAgentStream,
-  DurableStepIds,
   emitChunkEvent,
   emitErrorEvent,
   runDurableStreamUntilIdle,
@@ -67,7 +67,13 @@ import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { ChunkFrom } from '@mastra/core/stream';
-import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
+import type {
+  MastraModelOutput,
+  ChunkType,
+  FullOutput,
+  MastraOnFinishCallback,
+  ToolCallChunk,
+} from '@mastra/core/stream';
 import { deepMerge } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
@@ -811,6 +817,82 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     return history.length;
   }
 
+  /**
+   * Tool calls and text from before the suspension, seeded into the resumed stream
+   * so its `toolCalls` and `text` include them without replaying their chunks.
+   * Mirrors core `DurableAgent.#loadSuspendedIteration`. The outer suspension can persist
+   * before the nested execution snapshot catches up, so wait until the nested
+   * snapshot carries every suspended call rather than reading an earlier iteration.
+   */
+  async function loadSuspendedIteration(
+    runId: string,
+    suspendedSnapshot: { context?: Record<string, any>; resumeLabels?: Record<string, unknown> } | undefined,
+  ): Promise<{ toolCalls: ToolCallChunk[]; resumedText?: { priorText: string; stepText: string } }> {
+    const suspendedToolCallIds = Object.keys(suspendedSnapshot?.resumeLabels ?? {});
+    if (suspendedToolCallIds.length === 0) return { toolCalls: [] };
+    const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore) return { toolCalls: [] };
+    const nestedRunId =
+      suspendedSnapshot?.context?.[InngestDurableStepIds.AGENTIC_EXECUTION]?.suspendPayload?.__workflow_meta?.runId ??
+      runId;
+    const load = () =>
+      workflowsStore.loadWorkflowSnapshot({
+        workflowName: InngestDurableStepIds.AGENTIC_EXECUTION,
+        runId: nestedRunId,
+      });
+    const isCurrent = (s: Awaited<ReturnType<typeof load>>) =>
+      !!s && suspendedToolCallIds.every(id => !!s.resumeLabels?.[id]);
+    let snapshot = await load();
+    const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
+    while (!isCurrent(snapshot) && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
+      snapshot = await load();
+    }
+    if (!snapshot || !isCurrent(snapshot)) {
+      throw new Error(
+        `Cannot resume run ${runId}: the nested iteration snapshot does not contain suspended tool calls ` +
+          `${suspendedToolCallIds.join(', ')}.`,
+      );
+    }
+    const llmStep = snapshot.context?.[DurableStepIds.LLM_EXECUTION];
+    if (llmStep?.status !== 'success') {
+      throw new Error(
+        `Cannot resume run ${runId}: the nested iteration snapshot does not contain completed LLM tool calls.`,
+      );
+    }
+    // The nested input holds completed iterations; the LLM output holds the
+    // current iteration, which has not reached the accumulator yet.
+    const accumulatedSteps: { text?: string; finishReason?: string; toolCalls?: ToolCallChunk['payload'][] }[] =
+      snapshot.context.input?.accumulatedSteps ?? [];
+    const toolCalls: ToolCallChunk['payload'][] = [
+      ...accumulatedSteps.flatMap(step => step.toolCalls ?? []),
+      ...(llmStep.output?.toolCalls ?? []),
+    ];
+    const resumedText = {
+      priorText: accumulatedSteps
+        .filter(step => step.finishReason !== 'retry')
+        .map(step => step.text ?? '')
+        .join(''),
+      stepText: llmStep.output?.text ?? '',
+    };
+    return {
+      resumedText,
+      toolCalls: toolCalls.map(toolCall => ({
+        type: 'tool-call',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          args: toolCall.args,
+          providerMetadata: toolCall.providerMetadata,
+          providerExecuted: toolCall.providerExecuted,
+          output: toolCall.output,
+        },
+      })),
+    };
+  }
+
   // Route agent stream and control events through the exact PubSub exposed to
   // durable-agent consumers. All other topics keep using each workflow's local
   // InngestPubSub so ordinary workflow channel isolation is preserved.
@@ -1276,56 +1358,51 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ]),
       });
       validateModelTimeoutSettings(callbackOptions.modelSettings?.timeout);
-      // The resumed segment only receives new pubsub chunks, so output state from
-      // before the suspension is restored from the suspended iteration's snapshot.
-      // The outer suspension can be persisted before the nested iteration snapshot
-      // catches up, so wait until it carries every suspended tool call; seeding
-      // from an earlier iteration would silently drop the pre-approval text.
-      let iterationNotReady = false;
-      const suspendedIteration = resumableSnapshot.then(async ({ hasStore, snapshot: outerSnapshot }) => {
-        if (!hasStore || outerSnapshot?.status !== 'suspended') return undefined;
-        const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
-        const nestedRunId =
-          outerSnapshot.context?.[InngestDurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId ?? runId;
-        const loadIteration = async (): Promise<any> =>
-          workflowsStore?.loadWorkflowSnapshot({
-            workflowName: InngestDurableStepIds.AGENTIC_EXECUTION,
-            runId: nestedRunId,
-          });
-        const suspendedToolIds = Object.keys(outerSnapshot.resumeLabels ?? {});
-        const isCaughtUp = (s: any) => suspendedToolIds.every(id => s?.resumeLabels?.[id]);
-        let iteration = await loadIteration();
-        const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
-        while (!isCaughtUp(iteration) && Date.now() < deadline) {
-          await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
-          iteration = await loadIteration();
-        }
-        if (!isCaughtUp(iteration)) {
-          iterationNotReady = true;
-          throw new Error(
-            `Cannot resume run ${runId}: the nested iteration snapshot does not contain suspended tool calls ` +
-              `${suspendedToolIds.join(', ')}.`,
+      const { hasStore, snapshot: suspendedSnapshot } = await resumableSnapshot;
+      if (hasStore && suspendedSnapshot?.status !== 'suspended') {
+        throw new NonRetriableError(
+          `Cannot resume run ${runId}: it is not suspended` +
+            (suspendedSnapshot?.status ? ` (status: ${suspendedSnapshot.status}).` : ' (no snapshot found).'),
+        );
+      }
+      // Resolve the suspended leaf before loading its history. Invalid or ambiguous
+      // tool IDs should fail as non-resumable, not as missing nested history.
+      const suspendedStepIds = suspendedSnapshot?.suspendedPaths ? Object.keys(suspendedSnapshot.suspendedPaths) : [];
+      const resumeLabels: Record<string, { stepId?: string } | undefined> = suspendedSnapshot?.resumeLabels ?? {};
+      const expandToLeafPath = (stepId: string): string[] => {
+        const stepResult = (suspendedSnapshot?.context ?? {})[stepId];
+        const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
+        return Array.isArray(nestedPath) ? [stepId, ...nestedPath] : [stepId];
+      };
+      const toolCallId = resumeOptions?.toolCallId;
+      let steps: string[];
+      if (toolCallId) {
+        const targetStepId = resumeLabels[toolCallId]?.stepId;
+        if (!targetStepId) {
+          const available = Object.keys(resumeLabels);
+          throw new NonRetriableError(
+            `Cannot resume run ${runId}: no suspended tool call with id "${toolCallId}". ` +
+              (available.length > 0
+                ? `Suspended tool call ids: ${available.join(', ')}.`
+                : `No tool calls are currently suspended.`),
           );
         }
-        return iteration;
-      });
-      // Read failures surface through dispatch; don't let them go unhandled meanwhile.
-      suspendedIteration.catch(() => {});
-      const iterationSnapshot = await suspendedIteration.catch(() => undefined);
-      const llmStep = iterationSnapshot?.context?.[DurableStepIds.LLM_EXECUTION];
-      const accumulatedSteps: Array<{ text?: string; finishReason?: string }> =
-        iterationSnapshot?.context?.input?.accumulatedSteps ?? [];
-      const resumedText =
-        llmStep?.status === 'success'
-          ? {
-              priorText: accumulatedSteps
-                .filter(step => step.finishReason !== 'retry')
-                .map(step => step.text ?? '')
-                .join(''),
-              stepText: llmStep.output.text ?? '',
-            }
-          : undefined;
+        steps = expandToLeafPath(targetStepId);
+      } else {
+        const available = Object.keys(resumeLabels);
+        if (suspendedStepIds.length > 1 || available.length > 1) {
+          throw new NonRetriableError(
+            `Cannot resume run ${runId}: more than one suspension is parked. ` +
+              `Pass "toolCallId" to choose which suspended tool call to resume.` +
+              (available.length > 0 ? ` Suspended tool call ids: ${available.join(', ')}.` : ''),
+          );
+        }
+        steps = suspendedStepIds[0] ? expandToLeafPath(suspendedStepIds[0]) : [];
+      }
       const resumeOffset = await getPubsubOffset(runId);
+      // The resumed segment only receives new pubsub chunks, so output state from
+      // before the suspension is restored from the suspended iteration snapshot.
+      const { toolCalls: initialToolCalls, resumedText } = await loadSuspendedIteration(runId, suspendedSnapshot);
 
       // Install a fresh abort controller scoped to the resumed segment and
       // attach it to the run-registry entry so the durable LLM step (when
@@ -1384,6 +1461,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         pubsub: getPubsub(),
         runId,
         offset: resumeOffset,
+        initialToolCalls,
         messageId: crypto.randomUUID(),
         resumedText,
         model: {
@@ -1433,9 +1511,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         closeOnSuspend: false,
       });
 
-      // Load the workflow snapshot to build proper resume data
-      // This mirrors InngestRun._resume() which loads the snapshot, finds the suspended step,
-      // and sends an event to the same trigger name (not a .resume suffix)
+      // Dispatch to the same trigger name, not a .resume suffix.
       const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
       // Set when the run is not resumable: that rejection belongs to this caller only
@@ -1448,68 +1524,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       );
 
       const dispatch = ready.then(async () => {
-        const { hasStore, snapshot } = await resumableSnapshot;
-        const toolCallId = resumeOptions?.toolCallId;
-        if (hasStore && snapshot?.status !== 'suspended') {
-          notResumable = true;
-          throw new NonRetriableError(
-            `Cannot resume run ${runId}: it is not suspended` +
-              (snapshot?.status ? ` (status: ${snapshot.status}).` : ' (no snapshot found).'),
-          );
-        }
-        try {
-          await suspendedIteration;
-        } catch (error) {
-          // A lagging iteration snapshot leaves the run parked and resumable, so this
-          // rejection belongs to this caller and must not close the run's shared stream.
-          notResumable = iterationNotReady;
-          throw error;
-        }
-
-        // Resolve which suspended leaf to resume. `resume.steps` is a path: the outer
-        // step id followed by the nested step ids beneath it, so a nested suspension has
-        // to be expanded from the outer step's recorded `__workflow_meta.path` rather
-        // than left as a bare step id (see `Workflow._resume` in
-        // packages/core/src/workflows/workflow.ts, which builds the same path).
-        const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
-        const resumeLabels: Record<string, { stepId?: string } | undefined> = snapshot?.resumeLabels ?? {};
-
-        const expandToLeafPath = (stepId: string): string[] => {
-          const stepResult = (snapshot?.context ?? {})[stepId];
-          const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
-          return Array.isArray(nestedPath) ? [stepId, ...nestedPath] : [stepId];
-        };
-
-        let steps: string[];
-
-        if (toolCallId) {
-          // The agentic loop registers each suspended tool call under `resumeLabel:
-          // toolCallId`, so a named tool call resolves to exactly one outer step.
-          const targetStepId = resumeLabels[toolCallId]?.stepId;
-          if (!targetStepId) {
-            const available = Object.keys(resumeLabels);
-            throw new NonRetriableError(
-              `Cannot resume run ${runId}: no suspended tool call with id "${toolCallId}". ` +
-                (available.length > 0
-                  ? `Suspended tool call ids: ${available.join(', ')}.`
-                  : `No tool calls are currently suspended.`),
-            );
-          }
-          steps = expandToLeafPath(targetStepId);
-        } else {
-          // Without a `toolCallId` there is nothing to disambiguate with, so refuse
-          // instead of silently resuming whichever suspension happens to be first.
-          const available = Object.keys(resumeLabels);
-          if (suspendedStepIds.length > 1 || available.length > 1) {
-            throw new NonRetriableError(
-              `Cannot resume run ${runId}: more than one suspension is parked. ` +
-                `Pass "toolCallId" to choose which suspended tool call to resume.` +
-                (available.length > 0 ? ` Suspended tool call ids: ${available.join(', ')}.` : ''),
-            );
-          }
-          steps = suspendedStepIds[0] ? expandToLeafPath(suspendedStepIds[0]) : [];
-        }
-
+        const snapshot = suspendedSnapshot;
         const requestContext = mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext);
         try {
           keepSuspendedRunScopes(snapshot, requestContext, resumeOptions);
