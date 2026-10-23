@@ -1,5 +1,80 @@
 # @mastra/playground-ui
 
+## 66.0.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`7662736`](https://github.com/mastra-ai/mastra/commit/7662736615043b8f4d0d2e7277094936ff2c88d6)]:
+  - @mastra/core@1.80.0-alpha.2
+  - @mastra/client-js@1.57.0-alpha.2
+  - @mastra/react@1.13.0-alpha.2
+
+## 66.0.0-alpha.1
+
+### Minor Changes
+
+- Added composable `ComposerHeader`, `ComposerHeaderRow`, `ComposerHeaderContent`, and `ComposerHeaderActions` components for connection status, ownership controls, and other context above a chat input. The header handles the joined surface and collapses when its children render nothing. Set `open` to animate visibility with reduced-motion support; rows support destructive and success tones. ([#27960](https://github.com/mastra-ai/mastra/pull/27960))
+
+  ```tsx
+  <Composer>
+    <ComposerHeader>
+      <ComposerHeaderRow>
+        <ComposerHeaderContent>You're viewing Sam's session.</ComposerHeaderContent>
+        <ComposerHeaderActions>
+          <Button type="button" onClick={takeOwnership}>
+            Take ownership
+          </Button>
+        </ComposerHeaderActions>
+      </ComposerHeaderRow>
+    </ComposerHeader>
+    <ComposerBox>
+      <ComposerInput aria-label="Message" />
+    </ComposerBox>
+  </Composer>
+  ```
+
+- Added shared building blocks so any React Router app can show the Traces, Spans and Threads pages under one header that stays mounted when switching views. ([#28270](https://github.com/mastra-ai/mastra/pull/28270))
+
+  **New exports**
+
+  - `ObservabilityPageLayout` from `@mastra/playground-ui/domains/observability`: breadcrumbs plus the Traces / Spans / Threads switch. Wrap your page routes with it and pass your router's outlet as children.
+  - `SpansExplorerBody` and `ThreadsExplorerBody`: the full spans and threads page bodies (filters, list, panel). They take the selection and callbacks as props, so they work with any router.
+  - `TracesExplorer.Body`: the traces list without its own page header, for use inside `ObservabilityPageLayout`. `TracesExplorer.Layout` is unchanged.
+  - Helpers: `ObservabilityCapabilityGate`, `ObservabilityListBody`, `useObservabilityViews`, `useObservabilityListFilters`, `observabilityViewCrumbLabel` and URL selection helpers (`readSpanSelection`, `withSpanSelection`, `readThreadSelection`, `withThreadSelection`, `spanTraceSearch`).
+
+  ```tsx
+  function ObservabilityRoute() {
+    const navigate = useNavigate();
+    return (
+      <ObservabilityPageLayout
+        current={viewFromPathname(useLocation().pathname)}
+        features={{ spanQuery: true, threadQuery: true }}
+        onViewChange={view => navigate('/' + view)}
+        breadcrumbs={state => <MyBreadcrumbs label={observabilityViewCrumbLabel(state)} />}
+      >
+        <Outlet />
+      </ObservabilityPageLayout>
+    );
+  }
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#28138](https://github.com/mastra-ai/mastra/pull/28138))
+
+  - Updated dependency [`storybook@^10.6.2` ↗︎](https://www.npmjs.com/package/storybook/v/10.6.2) (from `^10.6.0`, in `devDependencies`)
+  - Updated dependency [`@storybook/addon-mcp@^10.6.2` ↗︎](https://www.npmjs.com/package/@storybook/addon-mcp/v/10.6.2) (from `^10.6.0`, in `devDependencies`)
+  - Updated dependency [`@storybook/addon-a11y@^10.6.2` ↗︎](https://www.npmjs.com/package/@storybook/addon-a11y/v/10.6.2) (from `^10.6.0`, in `devDependencies`)
+  - Updated dependency [`@storybook/addon-docs@^10.6.2` ↗︎](https://www.npmjs.com/package/@storybook/addon-docs/v/10.6.2) (from `^10.6.0`, in `devDependencies`)
+  - Updated dependency [`@storybook/react-vite@^10.6.2` ↗︎](https://www.npmjs.com/package/@storybook/react-vite/v/10.6.2) (from `^10.6.0`, in `devDependencies`)
+
+- Thread panel now loads 3 turns at a time instead of 10, both when it opens and when you scroll up to load older turns. Threads open faster because fewer turns and their spans are fetched up front. ([#28305](https://github.com/mastra-ai/mastra/pull/28305))
+
+- Updated dependencies [[`f396b43`](https://github.com/mastra-ai/mastra/commit/f396b435c72042fc6d9e82c361fa047675995812), [`f396b43`](https://github.com/mastra-ai/mastra/commit/f396b435c72042fc6d9e82c361fa047675995812), [`f396b43`](https://github.com/mastra-ai/mastra/commit/f396b435c72042fc6d9e82c361fa047675995812), [`0d7d5cb`](https://github.com/mastra-ai/mastra/commit/0d7d5cbdccacc0b03697b3400579ea520e382061), [`f5ebbf3`](https://github.com/mastra-ai/mastra/commit/f5ebbf3b2dc935b8fc068996b4db478815f05bd5), [`0d7d5cb`](https://github.com/mastra-ai/mastra/commit/0d7d5cbdccacc0b03697b3400579ea520e382061), [`11c83d5`](https://github.com/mastra-ai/mastra/commit/11c83d53331588e06623d5d4a35baa606bbaa424), [`703b0a1`](https://github.com/mastra-ai/mastra/commit/703b0a1cb342d3a6fce72b5b07685fbb31695674), [`0d7d5cb`](https://github.com/mastra-ai/mastra/commit/0d7d5cbdccacc0b03697b3400579ea520e382061), [`0d7d5cb`](https://github.com/mastra-ai/mastra/commit/0d7d5cbdccacc0b03697b3400579ea520e382061), [`1283717`](https://github.com/mastra-ai/mastra/commit/1283717ecfc652da293aafe6ff582afa07ca84a5), [`4bd8079`](https://github.com/mastra-ai/mastra/commit/4bd80797e4bb6638afb4d374a1caed42c7888913), [`3be96ae`](https://github.com/mastra-ai/mastra/commit/3be96ae2f65a2ff3b2189fb79fd03b7eedee3dbe)]:
+  - @mastra/client-js@1.57.0-alpha.1
+  - @mastra/core@1.80.0-alpha.1
+  - @mastra/react@1.13.0-alpha.1
+
 ## 66.0.0-alpha.0
 
 ### Minor Changes

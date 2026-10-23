@@ -2,7 +2,19 @@
   "temperature": ["solar-mini", "solar-mini4", "solar-pro2", "solar-pro3", "solar-pro4"],
   "structuredOutput": ["solar-mini4", "solar-pro4"],
   "reasoning": {
+    "solar-pro3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "solar-pro4": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "solar-mini4": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
@@ -12,18 +24,6 @@
       {
         "type": "effort",
         "values": ["minimal", "high"]
-      }
-    ],
-    "solar-mini4": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "solar-pro3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ]
   }

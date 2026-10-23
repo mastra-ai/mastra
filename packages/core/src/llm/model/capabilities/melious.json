@@ -34,7 +34,7 @@
     "kimi-k3"
   ],
   "reasoning": {
-    "deepseek-v3.2": [
+    "deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -46,7 +46,7 @@
         "values": ["none", "high"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "deepseek-v4-flash-0731": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -64,13 +64,7 @@
         "values": ["none", "high"]
       }
     ],
-    "kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "glm-5.3": [
+    "deepseek-v3.2": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -82,7 +76,13 @@
         "values": ["none", "high"]
       }
     ],
-    "deepseek-v4-flash-0731": [
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "kimi-k3": [
       {
         "type": "effort",
         "values": ["none", "high"]

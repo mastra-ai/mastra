@@ -32,6 +32,12 @@
         "values": ["none", "default", "low", "medium", "high"]
       }
     ],
+    "openai/gpt-oss-safeguard-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
@@ -39,12 +45,6 @@
       }
     ],
     "openai/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-oss-safeguard-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

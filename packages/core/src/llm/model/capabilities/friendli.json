@@ -17,22 +17,6 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "google/gemma-4-31B-it": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V3.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "zai-org/GLM-5.1": [
       {
         "type": "toggle"
@@ -66,6 +50,22 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "google/gemma-4-31B-it": [
+      {
+        "type": "toggle"
       },
       {
         "type": "budget_tokens"

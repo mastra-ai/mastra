@@ -37,12 +37,7 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "minimax/minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "z-ai/glm-5.2": [
+    "ambient/large": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -54,7 +49,12 @@
         "values": ["high", "max"]
       }
     ],
-    "ambient/large": [
+    "minimax/minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai/glm-5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]

@@ -1,3 +1,5 @@
+import type { WorkspaceChangesScope } from './types';
+
 /**
  * Stable, scoped React Query keys for the settings API.
  *
@@ -160,11 +162,8 @@ export const queryKeys = {
   planFile: (workspacePath: string | undefined, filePath: string | undefined, toolCallId: string | undefined) =>
     ['plan-file', workspacePath ?? null, filePath ?? null, toolCallId ?? null] as const,
   workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
-  workspaceDiff: (
-    workspacePath: string | undefined,
-    filePath: string | undefined,
-    previousFilePath: string | undefined,
-  ) => ['workspace-changes', workspacePath ?? null, 'diff', filePath ?? null, previousFilePath ?? null] as const,
+  workspacePatches: (workspacePath: string | undefined, scope: WorkspaceChangesScope) =>
+    ['workspace-changes', workspacePath ?? null, 'patches', scope] as const,
   // Session-derived keys are addressed by the session id: sessions that share a
   // memory resource (a Factory's runs, a user's sessions) keep independent state.
   agentControllerSession: (agentControllerId: string | undefined, sessionId: string | undefined) =>

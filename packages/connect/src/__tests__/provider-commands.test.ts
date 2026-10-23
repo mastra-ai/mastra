@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
@@ -21,6 +21,31 @@ const action = createAction({
   scopes: [],
   exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
     const response = await nango.post({ endpoint: '/echo', data: input });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
+const getUserDriveActionTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({
+  userId: z.string().describe('User ID or user principal name.'),
+});
+const OutputSchema = z.object({ id: z.string() });
+
+const action = createAction({
+  description: "Get a user's personal OneDrive (drive).",
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.get({
+      endpoint: \`/v1.0/users/\${encodeURIComponent(input.userId)}/drive\`,
+    });
     return OutputSchema.parse(response.data);
   },
 });
@@ -97,6 +122,74 @@ const action = createAction({
     });
     const buffer = Buffer.isBuffer(response.data) ? response.data : Buffer.from(response.data as ArrayBuffer);
     return { base64: buffer.toString('base64') };
+  },
+});
+
+export default action;
+`;
+
+const genericTypedRequestTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ itemId: z.string() });
+const OutputSchema = z.object({ id: z.string() });
+
+const action = createAction({
+  description: 'Fetch an item with a typed response.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.get<unknown>({ endpoint: '/items/' + encodeURIComponent(input.itemId) });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
+const genericProxyRequestTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ fileId: z.string() });
+const OutputSchema = z.object({ base64: z.string() });
+
+const action = createAction({
+  description: 'Fetch binary content through the generic proxy helper.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.proxy({
+      endpoint: '/files/' + encodeURIComponent(input.fileId),
+      responseType: 'arraybuffer',
+    });
+    return { base64: Buffer.from(response.data as ArrayBuffer).toString('base64') };
+  },
+});
+
+export default action;
+`;
+
+const randomUuidImportTemplate = `import { randomUUID } from 'crypto';
+import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ id: z.string() });
+
+const action = createAction({
+  description: 'Create an item with a unique id.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const id = randomUUID();
+    await nango.post({ endpoint: '/items', data: { id, value: input.value } });
+    return { id };
   },
 });
 
@@ -301,9 +394,20 @@ describe('maintainer provider commands', () => {
         writeFileSync(resolve(actionDir, 'parenthesized-credentials.ts'), parenthesizedCredentialsTemplate);
         writeFileSync(resolve(actionDir, 'unsupported-no-proxy.ts'), noProxyCallTemplate);
         writeFileSync(resolve(actionDir, 'arraybuffer-response-type.ts'), arrayBufferResponseTypeTemplate);
+        writeFileSync(resolve(actionDir, 'generic-typed-request.ts'), genericTypedRequestTemplate);
+        writeFileSync(resolve(actionDir, 'generic-proxy-request.ts'), genericProxyRequestTemplate);
+        writeFileSync(resolve(actionDir, 'random-uuid-import.ts'), randomUuidImportTemplate);
       }
     }
-    const openaiActionDir = resolve(packageRoot, '.templates', 'integrations', 'openai', 'actions');
+    const integrationsDir = resolve(packageRoot, '.templates', 'integrations');
+    symlinkSync('first-provider', resolve(integrationsDir, 'first-provider-alias'), 'dir');
+
+    const microsoftExcelActionDir = resolve(integrationsDir, 'microsoft-excel-oauth2-cc', 'actions');
+    mkdirSync(microsoftExcelActionDir, { recursive: true });
+    writeFileSync(resolve(microsoftExcelActionDir, 'get-user-drive.ts'), getUserDriveActionTemplate);
+    symlinkSync('microsoft-excel-oauth2-cc', resolve(integrationsDir, 'microsoft-excel'), 'dir');
+
+    const openaiActionDir = resolve(integrationsDir, 'openai', 'actions');
     mkdirSync(openaiActionDir, { recursive: true });
     writeFileSync(resolve(openaiActionDir, 'create-image.ts'), imageActionTemplate);
 
@@ -543,8 +647,66 @@ export default action;
       'first-provider (1 action templates) [installed as custom]',
     ]);
     expect(listProviders({ installedOnly: false, search: 'second' })).toEqual([
-      'second-provider (10 action templates)',
+      'second-provider (13 action templates)',
     ]);
+  });
+
+  it('discovers and generates providers exposed as template symlinks', async () => {
+    expect(listProviders({ installedOnly: false, search: 'first-provider-alias' })).toEqual([
+      'first-provider-alias (1 action templates)',
+    ]);
+
+    await addProvider({
+      providerId: 'first-provider-alias',
+      localId: 'first-provider-alias',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const manifest = JSON.parse(
+      readFileSync(resolve(packageRoot, 'src/providers/first-provider-alias/.manifest.json'), 'utf8'),
+    ) as { providerId: string; localId: string };
+    expect(manifest).toMatchObject({
+      providerId: 'first-provider-alias',
+      localId: 'first-provider-alias',
+    });
+  });
+
+  it('adapts shared Office templates for delegated OAuth without changing client-credentials providers', async () => {
+    await addProvider({
+      providerId: 'microsoft-excel',
+      localId: 'microsoft-excel',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+    await addProvider({
+      providerId: 'microsoft-excel-oauth2-cc',
+      localId: 'microsoft-excel-oauth2-cc',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const delegatedTool = readFileSync(
+      resolve(packageRoot, 'src/providers/microsoft-excel/tools/get-user-drive.ts'),
+      'utf8',
+    );
+    expect(delegatedTool).toContain('userId: z.string().optional().describe');
+    expect(delegatedTool).toMatch(
+      /endpoint: input\.userId\s*\? `\/v1\.0\/users\/\$\{encodeURIComponent\(input\.userId\)\}\/drive`\s*: ["']\/v1\.0\/me\/drive["']/,
+    );
+    expect(delegatedTool).toContain(
+      "Get the connected user's OneDrive, or another user's drive when userId is provided.",
+    );
+
+    const clientCredentialsTool = readFileSync(
+      resolve(packageRoot, 'src/providers/microsoft-excel-oauth2-cc/tools/get-user-drive.ts'),
+      'utf8',
+    );
+    expect(clientCredentialsTool).toMatch(
+      /userId: z\.string\(\)\.describe\(["']User ID or user principal name\.["']\)/,
+    );
+    expect(clientCredentialsTool).toContain('endpoint: `/v1.0/users/${encodeURIComponent(input.userId)}/drive`');
+    expect(clientCredentialsTool).not.toContain("'/v1.0/me/drive'");
   });
 
   it('rewrites proxy request types and skips actions the platform proxy cannot execute', async () => {
@@ -617,10 +779,30 @@ export default action;
     );
     expect(arrayBufferTool).toMatch(/responseType:\s*['"]arraybuffer['"]/);
 
+    const genericTypedRequestTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/generic-typed-request.ts'),
+      'utf8',
+    );
+    expect(genericTypedRequestTool).toContain('await platformProxy.get<unknown>');
+
+    const genericProxyRequestTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/generic-proxy-request.ts'),
+      'utf8',
+    );
+    expect(genericProxyRequestTool).toContain('await platformProxy.proxy({');
+    expect(genericProxyRequestTool).toMatch(/responseType:\s*['"]arraybuffer['"]/);
+
+    const randomUuidImportTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/random-uuid-import.ts'),
+      'utf8',
+    );
+    expect(randomUuidImportTool).toContain('const randomUUID = () => globalThis.crypto.randomUUID();');
+    expect(randomUuidImportTool).not.toContain("from 'crypto'");
+
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/second-provider/.manifest.json'), 'utf8'),
     ) as { toolCount: number; skippedActions: { action: string; reason: string }[] };
-    expect(manifest.toolCount).toBe(9);
+    expect(manifest.toolCount).toBe(12);
     expect(manifest.skippedActions).toEqual([
       {
         action: 'unsupported-no-proxy',
@@ -679,7 +861,7 @@ export default action;
     expect(providerIndex).not.toContain('.stale.generate-123');
     expect(listProviders({ installedOnly: true })).toEqual([
       'local <- first-provider (1 tools, 0 skipped)',
-      'other <- second-provider (9 tools, 1 skipped)',
+      'other <- second-provider (12 tools, 1 skipped)',
     ]);
   });
 
