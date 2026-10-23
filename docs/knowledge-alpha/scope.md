@@ -1,4 +1,4 @@
-# Knowledge alpha scope, v14 (report 20261023T223907)
+# Knowledge alpha scope, v15 (report 20261023T223907)
 
 Everything here was checked against main `b1244bd3bc0`.
 
@@ -9,7 +9,7 @@ v12 follows Tyler's comment on Kayle's dogfood plan (v45), which supersedes v5�
 - A scope can own other scopes (org owns teams) through the structure.
 - Everything Knowledge leaves Memory for core, including the pins state-signal provider, and pins work without Memory.
 
-v14 removes the built-in project scope (Tyler) and adds D13, how org-owns-team is held. v13 added the Director dogfood gap list (Kayle): a scope per message on long-lived sessions, many processes on one LibSQL file, an explicit off switch, and undeclared tag types (D12).
+v15 folds Fayth's v12 review (ownership binding, runner in-run path, remaining Factory readers). v14 removes the built-in project scope (Tyler) and adds D13, how org-owns-team is held. v13 added the Director dogfood gap list (Kayle): a scope per message on long-lived sessions, many processes on one LibSQL file, an explicit off switch, and undeclared tag types (D12).
 
 Carried from earlier versions: Knowledge reads the run's tagged scopes; `organizationId` and `knowledgeResourceId` are deleted; pins stay a prompt-cacheable state signal; Knowledge ships its own usage instructions (section 3b).
 
@@ -93,11 +93,20 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
     'org:$orgId': { description: 'The company' },
     // tenant-bound: the team address carries its org, so only that org owns it
     'team:$orgId:$teamId': { access: [{ principal: 'org:$orgId', role: 'owner' }] },
-    // single-tenant shorthand: any org tag owns every project
+    // single-tenant only: any org tag owns every project. Cross-tenant by
+    // construction (org:A owns project:B), so a multi-tenant app such as
+    // Factory must never declare it.
     'project:*': { access: [{ principal: 'org:*', role: 'edit' }] },
   }
   ```
 - **The check** (new, in core Knowledge, about 30 lines): a run may use scope `S` if it holds `S`, or it holds a tag that matches an `access` principal on `S`'s type, with `$params` bound from `S`'s own address. `org:acme` owns `team:acme:director` but not `team:other:director`. Reads need any role; writes need `append` or more; remove, rescope and merge need `edit` or more.
+- **Binding rules**, so a named scope can't manufacture ownership:
+  - `*` and `$…` are refused as a whole segment in any run tag or `scope` value (shape check in canonicalize and in the tools' `scope` validator). `*` is a wildcard only when written in config.
+  - After `$params` are bound from `S`, the principal is compared to the held tag by **exact string equality**. A principal with a config-written `*` (`org:*`) is matched as a pattern against held tags, never against the named scope. So naming `team:*:director` is refused, and a held `org:*` tag is refused at the shape check.
+  - `validateKnowledgeScopeTypes` refuses, at construction, a principal that uses a `$param` absent from its type's pattern, so `substituteParameters` (`reconcile.ts`) can't throw at call time.
+  - The `self` and `parent` principals resolve against materialization input (`resolvePrincipal`), which the call-time check doesn't have. The check ignores them: holding the scope already covers `self`, and `parent` stays a materialization-only notion.
+  - Tags with extra `:` in the value (`resource:x:uncurated`) don't match a pattern by segment count and fall to `custom`.
+  - Run tags plus named owned scopes can exceed the 8-entry cap. The tool reports that as a tool error naming the cap rather than letting the store throw.
 - **No stored grants.** Ownership is computed from the instance's config at call time, so it works on LibSQL and PG today. Main's materialized structure (scope nodes and grants in storage) is only implemented on InMemory (`supportsV2`), and the alpha doesn't use it. Wave 2's stored grants build on the same `access` config later.
 - **Director dogfood:** the director's run holds `org:self`; members hold `org:self` + `team:self:<team>`. With `'team:$orgId:$teamId'` owned by `org:$orgId`, the director can read and write every team's Knowledge by naming the team scope (next).
 
@@ -106,7 +115,7 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
   - **Reads** query `run tags ∪ scope`. Each extra tag must be one the run owns. Naming `team:self:director` lets the director search that team's records; it can't name a scope it neither holds nor owns.
   - **Writes** land at exactly `scope` when given, else at every tag the run holds (the most private placement). Each tag in `scope` must be held or owned with `append`+. Writing at fewer tags shares wider; writing at an owned tag places the record in that scope.
   - **Pins** default to every run tag except `thread`, so a pin follows the user across threads.
-- **Who supplies it.** "Threaded through from the agent": the run's tags arrive through the agent (`scopes` config, per-call `scopes`, `mastra__scopes`) and bound what `scope` may name, so a model can never reach outside its run and what the run owns. Within that bound the model fills `scope`, because the model is what decides whether a fact is team-wide or private. An app that wants to fix it passes `knowledge.createTools({ scope })`, and then the argument is not exposed. D10 asks Tyler whether he meant the model or only the harness.
+- **Who supplies it.** "Threaded through from the agent": the run's tags arrive through the agent (`scopes` config, per-call `scopes`, `mastra__scopes`) and bound what `scope` may name, so a model can never reach outside its run and what the run owns. Within that bound the model fills `scope`, because the model is what decides whether a fact is team-wide or private. An app that wants to fix it passes `knowledge.createTools({ scope })`, and then the argument is not exposed. **Factory always fixes it** to its required tags: its tools don't expose `scope`, so a Factory run can't name another project's or org's scope through a tool argument (required tags alone guard only the run's scopes, not tool arguments). D10 asks Tyler whether he meant the model or only the harness.
 - Tool schemas list the run's held and owned scope *patterns* in the description, not values, so they stay stable across runs with the same tag types.
 
 **A scope per message, for long-lived sessions.** A Director member is one Mastra Code session for life, and tasks arrive as messages (`session.sendMessage({ content })`, `agent-controller/session.ts:5380`). Scopes fixed at `createMastraCode` can carry `org:self`, `team:…` and `agent:<name>`, but not `request:<rN>`, which changes per task. Recreating the session per task would lose the conversation.
@@ -134,13 +143,19 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
 - `deepestRung` (`:316-325`) returns `org` for any scope without `resource`/`thread`. "Rungs" go: the payload reports the record's tags, and the UI groups by tag type.
 - `selectedView` (`:636-648`) takes `view.scope.slice(0, 1)` / `slice(0, 2)` as org and resource levels. Rewritten to pick by tag type.
 - `withinViewBoundary` (`:327-334`) is an index-by-index prefix test. Rewritten to subset containment.
-- A Factory route test covers a view with `project:` and no `org:`.
+- `selectedView`'s `pinRungs` filter (`:636-648`) uses rung names. Same rewrite: by tag type.
+- `scopeKindLabel` (`:395-401`) maps `resource:` to "project" and everything else to "topic". Rewritten to label by tag type (`resource:` keeps its label for old rows; a declared `project:` type is labelled project).
+- `#vouchIdentityScopes` (`:660-690`) materializes an `org:` → `resource:<projectId>` → `thread:` chain. With no built-in project and `knowledgeResourceId` gone, it vouches only `org:<factoryOrg>` plus the run's `resource:`/`thread:`; it vouches no project node, so the tree it builds matches the tags Factory runs hold.
+- A Factory route test covers a view with `project:` and no `org:`, labels, and that the vouched tree equals the run's tags.
 
 **Pins move into core and work without Memory.**
 - `PinnedStateProcessor` (the pins state-signal provider) moves to `core/knowledge` and stays a state signal: a snapshot first, then deltas, nothing when unchanged. The Agent adds it when its Knowledge has `pins`, de-duplicated by state id.
 - **With Memory**, nothing changes: the runner persists signals and `lastSnapshotSignalId` in the thread (`runner.ts:486-560`, `agent/state-signals.ts:149`).
 - **Without Memory**, the runner throws today (`runner.ts:496`). The alpha adds an in-run path to the runner: a processor that declares `stateSignalWithoutMemory = true` gets its history from the in-run `messageList` only, its signal is added to the message list and not persisted, and its tracking lives in processor state for the run. Pins declare it; task, goal and browser providers don't, so their behaviour (throw without Memory) is unchanged.
-  - Effect: a memoryless agent gets a pin snapshot on every call. The caller owns history, so there's nothing earlier to diff against. The snapshot text is deterministic, so repeated calls with the same pins produce the same tokens.
+  - Placement in the runner: today it throws at the top when there's no Memory (`if (!resolvedMemory) throw`). The in-run branch sits before that throw, keyed on `processor.stateSignalWithoutMemory`, so every other provider still reaches the throw unchanged. The branch also bypasses the next guard (no `threadId`/`resourceId` ⇒ skip), which would otherwise silently skip pins for the common memoryless run without ids.
+  - It doesn't call `applyStateSignal`, which persists through Memory and thread metadata. A new add-to-`messageList`-only function applies the signal and still emits `writer.custom`; `sendStateSignal` (mid-step signals) gets the same in-run branch.
+  - Effect: a memoryless agent gets a full snapshot on the **first step** of every call. Steps 2+ of the same run find that snapshot in the `messageList` and emit deltas, including a pin changed by a pin tool mid-run. The snapshot text is deterministic, so repeated calls with the same pins produce the same tokens.
+  - Replay: the signal is part of the run's `response.messages`, as with Memory. A caller that replays them carries the old snapshot into the next call; the next call still finds it in the `messageList` and sends a delta against it. A caller that doesn't replay gets a fresh snapshot.
   - Pin scope without a resource/thread: every run tag. Pins never need an `org`.
 - That is a core processor API addition (one optional flag plus the runner branch). It lands in the alpha because Tyler wants plain Knowledge usable, pins included, without Memory.
 
@@ -156,11 +171,15 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
 
 **No existing key moves.** Every stored scope holds one `org`, one `resource` and one `thread` entry at most, and code-unit order already puts them `org < resource < thread` (`o` < `r` < `t`), which is what `SCOPE_ORDER` produced. `:uncurated` companions (`resource:x:uncurated`) sort after `resource:x` under both orders (prefix). They're now just a tag of type `resource` with value `x:uncurated` that no run holds: invisible, but rescoping one no longer throws (D9).
 
+The doc comment at `base.ts:207` ("Avoid identity-style addresses such as `org:*`, `resource:*`") now contradicts wildcard patterns and is rewritten.
+
 **Visibility is unchanged:** a record is visible to a query scope that contains every one of its tags (`isKnowledgeScopeVisible`, `:728-731`). The read path passes `run tags ∪ named owned scopes` as the query scope, and the 8-entry cap applies to it.
 
 **Adapters.** LibSQL, PG, MySQL and Mongo import `canonicalizeKnowledgeScope`, `knowledgeScopeKey` and `isKnowledgeScopeVisible` from `@mastra/core/storage` at runtime (PG `knowledge/index.ts:46-63`, MySQL `:2-23`, Mongo `:2-18`) and name no levels (Fayth grepped all four), so none needs a code change. The shared contract tests (`stores/_test-utils`) gain the tag cases and run against every adapter.
 
 **Storage version.** No table, column or index change, and existing keys are byte-identical, so schema version and contract version stay 2 (`base.ts:12, 14`). An older core opening a database with new tags can't build a query scope for them, so those rows are invisible to it, and updating one throws. Nothing is rewritten.
+
+**Wave 2 private importers** (`importers.ts:29,167`) do their own org-id validation for org destinations; whether any of them leans on core's ancestor rule is checked at rebase.
 
 **From #28318 this pulls forward** the reader `getRunAgentScopes` and the canonicalize change. Its stored scope nodes, `record_scopes`, stored grants and schema 3 stay in Wave 2, built on the alpha's `access` config and order.
 
@@ -262,6 +281,10 @@ For each, a red control showing the test fails without the change.
 - `*` matches: `'project:*'` matches `project:p`, not `project` or `project:a:b`; `org:*` and `org:$orgId` are reported as overlapping.
 - Ownership: with `'team:$orgId:$teamId'` owned by `org:$orgId`, a run holding `org:acme` reads and writes `team:acme:director` through `scope`, and is refused `team:other:director`. With `'project:*'` owned by `org:*` at role `edit`, a run holding any `org:` tag can rescope a project record; with role `readonly` it can read but its write is refused.
 - Ownership on LibSQL and PG, not only InMemory.
+- Naming `team:*:director` is refused; a run tag `org:*` is refused at the shape check; `$x` as a segment is refused.
+- A principal using a `$param` missing from its type pattern fails at `new Knowledge(...)`, not at the first read.
+- `self`/`parent` principals grant nothing at call time.
+- Run tags plus named scopes over 8 return a tool error naming the cap.
 
 **Store** (shared contract, so InMemory, LibSQL, PG, MySQL, Mongo)
 - `canonicalizeKnowledgeScope` accepts any well-shaped `type:value`; it rejects only a malformed entry and more than 8 entries, called directly and through each adapter's read and write.
@@ -272,13 +295,16 @@ For each, a red control showing the test fails without the change.
 
 **Pins**
 - With Memory: a snapshot, then deltas, nothing when unchanged. One user's pin shows in their other threads and never in another user's.
-- Without Memory: pin tools are present, and every call gets the same snapshot for the same pins. The task, goal and browser state-signal providers still throw without Memory.
+- Without Memory: pin tools are present, and every call's first step gets the same snapshot for the same pins, with and without `threadId`/`resourceId`. The task, goal and browser state-signal providers still throw without Memory.
+- Without Memory, multi-step: a pin tool changes a pin in step 1; step 2 gets a delta, not a second snapshot.
+- Without Memory, replay: replaying `response.messages` gives a delta on the next call; not replaying gives a snapshot.
 - Pin limits are enforced in tokens.
 
 **Factory**
-- A record at `[org:x, project:p]` is reported with its tags, not as `org`, and is shown in a view `[org:x, resource:r, thread:t, project:p]`; `selectedView` on a view with `project:` and no `org:` picks by type. A Factory-called read or write with no `org:` tag is refused.
+- A record at `[org:x, project:p]` is reported with its tags, not as `org`, and is shown in a view `[org:x, resource:r, thread:t, project:p]`; `selectedView` on a view with `project:` and no `org:` picks by type. A Factory-called read or write with no `org:` tag is refused. A Factory run's tools have no `scope` argument, and naming another project's scope through the explicit API is refused. `scopeKindLabel` labels by tag type, and `#vouchIdentityScopes` vouches exactly the run's org/resource/thread.
 
 **Leftovers and instructions**
+- A repo-wide `git grep -n "org:\|organizationId"` on the alpha tip is attached to the PR, each remaining hit explained (Factory auth/session plumbing, tests, docs).
 - OM still strips old Subconscious signals from observer input, and `deleteThread` still removes owned remind threads.
 - A Mastra Code agent still has its knowledge tools and pins after the SDK rewire. The TUI renders an old thread containing `subconscious-activity` signals without printing them.
 - Instructions: read tools only → read part only; write adds the write part; pins add `PINNED_INSTRUCTIONS`, byte-equal to `curate.ts:54`. The block is byte-identical across two turns with different scopes and pin changes. `instructions: false` removes it, a string replaces it, a function extends it. An app-configured processor with the same id isn't doubled.
