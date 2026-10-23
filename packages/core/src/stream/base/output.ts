@@ -2760,7 +2760,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   /** Resolves the result promises with what the run produced before it suspended. */
-  #resolveSuspendedPromises({ includeUsage = true }: { includeUsage?: boolean } = {}) {
+  #resolveSuspendedPromises() {
     const reasoningText =
       this.#bufferedReasoning.length > 0
         ? this.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
@@ -2775,12 +2775,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       sources: this.#bufferedSources,
       files: this.#bufferedFiles,
       steps: this.#bufferedSteps,
-      ...(includeUsage
-        ? {
-            usage: this.#getUsageCountWithSuspendedStep(),
-            totalUsage: this.#getTotalUsage(this.#getUsageCountWithSuspendedStep()),
-          }
-        : {}),
+      usage: this.#getUsageCountWithSuspendedStep(),
+      totalUsage: this.#getTotalUsage(this.#getUsageCountWithSuspendedStep()),
       warnings: this.#warnings,
       finishReason: 'suspended',
       content: this.messageList.get.response.aiV5.stepContent(),
