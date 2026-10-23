@@ -19,16 +19,6 @@
         "type": "toggle"
       }
     ],
-    "glm-5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3.5-plus": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen3.7-plus": [
       {
         "type": "toggle"
@@ -39,7 +29,17 @@
         "type": "toggle"
       }
     ],
+    "qwen3.5-plus": [
+      {
+        "type": "toggle"
+      }
+    ],
     "glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5": [
       {
         "type": "toggle"
       }

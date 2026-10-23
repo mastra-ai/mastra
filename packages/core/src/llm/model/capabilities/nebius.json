@@ -54,28 +54,10 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "zai-org/GLM-5.3-Flash": [
+    "reflection/beam": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V4-Pro-0813": [
@@ -96,10 +78,28 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "nvidia/Nemotron-3_5-Lightning": [
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.2": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "nvidia/Nemotron-3.5-Super-VL": [
@@ -114,10 +114,15 @@
         "values": ["none", "high"]
       }
     ],
-    "meta-models/muse-spark-open": [
+    "nvidia/Nemotron-3_5-Lightning": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["none", "high"]
+      }
+    ],
+    "Qwen/Qwen3.5-397B-A17B": [
+      {
+        "type": "toggle"
       }
     ],
     "Qwen/Qwen3.8-27B": [
@@ -126,27 +131,22 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "Qwen/Qwen3.5-397B-A17B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "reflection/beam": [
+    "meta-models/muse-spark-open": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "moonshotai/Kimi-K3": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

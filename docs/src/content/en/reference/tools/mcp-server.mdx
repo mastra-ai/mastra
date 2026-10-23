@@ -1636,7 +1636,7 @@ Events implement [SEP-3415](https://github.com/modelcontextprotocol/modelcontext
 
 :::
 
-For an end-to-end walkthrough, see the [MCP events guide](/docs/guides/mcp-events).
+For an end-to-end walkthrough, see [MCP events](/docs/connections/mcp#mcp-events).
 
 The `events` option lets clients subscribe to things that happen on your server, such as a ticket being created or a build finishing. The server advertises the `io.modelcontextprotocol/events` extension and answers `events/list`, `events/poll` and `events/stream` over both stdio and Streamable HTTP. With [`eventsOptions.webhook`](#webhook-delivery) set, it also answers `events/subscribe` and `events/unsubscribe` and POSTs occurrences to client webhook URLs.
 
@@ -1724,7 +1724,7 @@ const ticketCreated = defineEvent({
     type: '(context) => Promise<MCPServerEventPollResult>',
     isOptional: true,
     description:
-      'Pull source for `events/poll`. Receives `arguments`, `cursor` (`null` means start from now), `maxEvents`, `maxAgeMs`, `requestContext` and `signal`. Returns `{ events, cursor, hasMore?, nextPollMs?, truncated? }`. Each event needs `data` and a stable `eventId` (clients dedupe by it, so return the same id whenever the same occurrence is polled); a missing `timestamp` defaults to now. If `poll` or `match` throws, the client gets a generic `-32603` error and the details are logged on the server.',
+      'Pull source for `events/poll`. Receives `arguments`, `cursor` (`null` means start from now), `maxEvents`, `maxAgeMs`, `requestContext` and `signal`. Returns `{ events, cursor, hasMore?, nextPollMs?, truncated? }`. Each event needs `data` and a stable `eventId` (clients dedupe by it, so return the same id whenever the same occurrence is polled); when `cursor` is `null`, resolve the starting position once, and return the id of the last occurrence, or that starting position when the result is empty; a missing `timestamp` defaults to now. If `poll` or `match` throws, the client gets a generic `-32603` error and the details are logged on the server.',
   },
   {
     name: 'delivery',

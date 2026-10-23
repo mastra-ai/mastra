@@ -40,6 +40,7 @@ export function SessionListItem({
     <SessionNavRow
       name={row.name}
       url={row.openPath}
+      externalLinks={row.externalLinks}
       from={row.origin === 'factory' ? location : undefined}
       source={row.source}
       active={row.active}
@@ -48,15 +49,7 @@ export function SessionListItem({
       changeRequestProvider={row.pullRequest?.provider}
       status={STATUS_MARKER_BY_ACTIVITY[row.status]}
       pinned={row.pinned}
-      preview={{
-        kind: row.kind,
-        owner: row.owner,
-        itemLabel: row.itemLabel,
-        itemTitle: row.itemTitle,
-        branch: row.session.branch,
-        baseBranch: row.session.baseBranch,
-        updatedAt: row.updatedAt,
-      }}
+      preview={{ factoryId, session: row.session, owner: row.owner, item: row.item, threadId: row.threadId }}
       onPinChange={pinned => setSessionPinned(row.session.sessionId, pinned)}
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
       onRegenerateTitle={row.canRegenerateTitle ? regenerate : undefined}

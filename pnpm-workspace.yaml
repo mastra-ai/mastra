@@ -210,8 +210,8 @@ minimumReleaseAgeExclude:
   - svgo@3.3.4
   - svgo@3.3.5
   # Renovate security update: @hono/node-server@2.0.10 || 2.0.5
-  - "@hono/node-server@2.0.10 || 2.0.5"
-  - "@hono/node-server@1.19.17"
+  - '@hono/node-server@2.0.10 || 2.0.5'
+  - '@hono/node-server@1.19.17'
   # Security bump: hono 4.13.7 (query-parser / toSSG / parseBody / XSS advisories)
   - hono@4.13.5
   - hono@4.13.7
@@ -226,7 +226,8 @@ minimumReleaseAgeExclude:
   - joi@17.13.8
   - nanoid@3.3.19
   - browserslist@4.28.9
-  - ip-address@10.6.0
+  # Renovate security update: ip-address@10.7.4
+  - ip-address@10.6.0 || 10.7.4
   - '@opentelemetry/propagator-jaeger@2.11.0'
   - '@clerk/shared@4.31.1'
   - '@clerk/backend@3.17.2'
@@ -252,8 +253,8 @@ minimumReleaseAgeExclude:
   # Renovate security update: valibot@1.4.2
   - valibot@1.4.2
   # SEC-170/171: Fastify 5.12.5 (fast-uri fix; raised 2026-10-02) and @blaxel/core@0.3.20 — adopted
-  # before the 1-day minimumReleaseAge window; pinned to exact versions.
-  - fastify@5.12.5
+  # before the 1-day minimumReleaseAge window; pinned to exact versions. || 5.12.6
+  - fastify@5.12.5 || 5.12.6
   - '@blaxel/core@0.3.20'
   - '@fastify/proxy-addr@5.1.1'
   - 'fast-uri@3.1.8'
@@ -291,6 +292,16 @@ minimumReleaseAgeExclude:
   - simple-git@4.0.1
   # Renovate security update: vite@8.2.4
   - vite@8.2.4
+  # Renovate security update: @modelcontextprotocol/client@2.3.0
+  - '@modelcontextprotocol/client@2.3.0'
+  # Renovate security update: launch-editor@2.14.2
+  - launch-editor@2.14.2
+  # Renovate security update: @vitest/mocker@4.1.12
+  - "@vitest/mocker@4.1.12"
+  # Renovate security update: @storybook/addon-mcp@10.6.2
+  - "@storybook/addon-mcp@10.6.2"
+  # Renovate security update: storybook@10.6.2
+  - storybook@10.6.2
 trustPolicyExclude:
   # Vanta 2026-10-02: 7.4.6 fixes GHSA-g84c-rxfj-3j2c; earlier 7.4.x had trusted publisher
   # but 7.4.6 lacks that evidence (pnpm trustPolicy no-downgrade).
@@ -345,7 +356,7 @@ overrides:
   axios@>=1.0.0 <1.20.0: 1.20.0
   minimatch@>=5.0.0 <5.1.8: 5.1.8
   minimatch@>=9.0.0 <9.0.7: 9.0.7
-  ws@>=8.0.0 <8.21.3: 8.21.3
+  ws@>=8.0.0 <8.21.3: 8.22.0
   webpack-dev-server@<5.2.5: 5.2.6
   qs@>=6.7.0 <6.16.0: 6.16.0
   fast-uri@<3.1.8: 3.1.8
@@ -388,7 +399,7 @@ overrides:
   hono@<4.13.13: 4.13.13
   '@hono/node-server@<1.19.15': 1.19.15
   postcss@<8.5.23: 8.5.23
-  ip-address@<10.7.1: 10.7.2
+  ip-address@<10.7.1: 10.7.4
   mermaid@>=11.0.0-alpha.1 <11.16.1: 11.16.1
   sharp@<0.35.5: 0.35.5
   # Vanta/Dependabot 2026-09-17 (overrides allowed): critical + remaining GHSA floors
@@ -396,7 +407,7 @@ overrides:
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
   # Round 2 2026-09-18: clear remaining Dependabot + raise Aikido-visible floors
   image-size@<=2.0.2: 2.0.4
-  '@vitest/mocker@>=2.1.0 <4.1.11': 4.1.11
+  '@vitest/mocker@>=2.1.0 <4.1.11': 4.1.12
   vitest@>=2.1.0 <4.1.11: 4.1.11
   jose@>=4.14.0 <6.2.12: 6.2.12
   '@noble/hashes@>=1.0.0 <1.8.0': 1.8.0

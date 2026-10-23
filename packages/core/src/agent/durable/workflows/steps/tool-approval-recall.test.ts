@@ -14,6 +14,7 @@
  *     round-trip to the expected AI SDK v6 UI parts.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Mastra } from '../../../../mastra';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { MastraDBMessage } from '../../../message-list';
 import { MessageList } from '../../../message-list';
@@ -177,11 +178,10 @@ describe('issue #17218 (durable engine): tool-call step records the approval dec
       );
       const messageListState = messageList.serialize();
       const memory = {
-        recall: vi.fn().mockResolvedValue({ messages: messageList.get.all.db() }),
+        recall: vi.fn(async () => ({ messages: structuredClone(messageList.get.all.db()) })),
         saveMessages: vi.fn().mockResolvedValue([]),
       };
       const saveQueueManager = new SaveQueueManager({ memory: memory as any });
-      const flush = vi.spyOn(saveQueueManager, 'flushMessages');
       const execute = vi.fn(async (_args, context) => {
         expect(JSON.stringify(context.messages)).toContain('Original parent request');
         await context.suspend({}, { requireToolApproval: true });
@@ -196,7 +196,7 @@ describe('issue #17218 (durable engine): tool-call step records the approval dec
         const suspend = vi.fn().mockResolvedValue('suspended');
         await (createDurableToolCallStep() as any).execute({
           inputData: { toolCallId, toolName, args: TOOL_ARGS },
-          mastra: { getLogger: () => undefined },
+          mastra: new Mastra({ logger: false }),
           suspend,
           resumeData: { approved: true },
           requestContext: new Map(),
@@ -209,8 +209,15 @@ describe('issue #17218 (durable engine): tool-call step records the approval dec
       }
 
       expect(execute).toHaveBeenCalledTimes(2);
-      expect(memory.saveMessages).not.toHaveBeenCalled();
-      expect(flush).not.toHaveBeenCalled();
+      // A worker without a registry list persists the new approval through the
+      // recalled history (#28050); only that assistant message is written, never
+      // the copied replay transcript.
+      const saved = memory.saveMessages.mock.calls.flatMap(([{ messages }]) => messages as MastraDBMessage[]);
+      expect(saved.map(m => m.role)).toEqual(['assistant', 'assistant']);
+      expect(saved.map(m => Object.keys((m.content.metadata as any)?.pendingToolApprovals ?? {}))).toEqual([
+        ['call-1'],
+        ['call-2'],
+      ]);
       for (const [, context] of execute.mock.calls) {
         expect(context.getMessages).toBeUndefined();
       }

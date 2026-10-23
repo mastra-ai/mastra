@@ -40,16 +40,70 @@ type RootSpanSummary = {
   error?: unknown;
 };
 
-export interface TraceSummaryDescriptionProps {
-  rootSpan: RootSpanSummary;
-  usage?: TraceUsageSummary;
+export interface TraceEntityMetaProps {
+  rootSpan: Pick<RootSpanSummary, 'entityId' | 'entityName' | 'entityType'>;
   /** When provided (with `LinkComponent`), the entity name links to the entity's page. */
   entityHref?: string;
   LinkComponent?: LinkComponent;
 }
 
-/** Compact trace metadata shown under the trace side-panel heading. */
-export function TraceSummaryDescription({ rootSpan, usage, entityHref, LinkComponent }: TraceSummaryDescriptionProps) {
+/** The trace's root entity (agent, workflow…) as a `DataPanel.Meta` pill; renders nothing without a name or id. */
+export function TraceEntityMeta({ rootSpan, entityHref, LinkComponent }: TraceEntityMetaProps) {
+  const entityName = rootSpan.entityName || rootSpan.entityId;
+  if (!entityName) return null;
+
+  const entityType = rootSpan.entityType;
+  const formattedEntityType = entityType ? formatEntityType(entityType) : 'Entity';
+  const EntityIcon = entityType?.includes('workflow') ? WorkflowIcon : AgentIcon;
+
+  return entityHref ? (
+    <DataPanel.Meta
+      as={LinkComponent ?? 'a'}
+      href={entityHref}
+      icon={<EntityIcon />}
+      tooltip={`See ${formattedEntityType.toLowerCase()}`}
+    >
+      {entityName}
+    </DataPanel.Meta>
+  ) : (
+    <DataPanel.Meta icon={<EntityIcon />} tooltip={formattedEntityType}>
+      {entityName}
+    </DataPanel.Meta>
+  );
+}
+
+export interface TraceStatusMetaProps {
+  rootSpan: Pick<RootSpanSummary, 'endedAt' | 'error'>;
+}
+
+/** The trace's status badge as a `DataPanel.Meta` item. */
+export function TraceStatusMeta({ rootSpan }: TraceStatusMetaProps) {
+  return (
+    // `px-0`: the badge is already a pill, so it sits flush with the panel's content edge.
+    <DataPanel.Meta tooltip="Trace status" className="px-0">
+      <TraceStatusValue status={computeTraceStatus(rootSpan)} />
+    </DataPanel.Meta>
+  );
+}
+
+export interface TraceSummaryDescriptionProps extends TraceEntityMetaProps {
+  rootSpan: RootSpanSummary;
+  usage?: TraceUsageSummary;
+  /** Leave the entity out when the caller renders `TraceEntityMeta` elsewhere. Defaults to `true`. */
+  showEntity?: boolean;
+  /** Leave the status out when the caller renders `TraceStatusMeta` elsewhere. Defaults to `true`. */
+  showStatus?: boolean;
+}
+
+/** Compact trace metadata shown in the trace panel header. */
+export function TraceSummaryDescription({
+  rootSpan,
+  usage,
+  entityHref,
+  LinkComponent,
+  showEntity = true,
+  showStatus = true,
+}: TraceSummaryDescriptionProps) {
   const startedAt = rootSpan.startedAt ? new Date(rootSpan.startedAt) : null;
   const endedAt = rootSpan.endedAt ? new Date(rootSpan.endedAt) : null;
   const duration = formatDuration(getSpanDurationMs(startedAt, endedAt));
@@ -57,31 +111,10 @@ export function TraceSummaryDescription({ rootSpan, usage, entityHref, LinkCompo
   const startedAtTimestamp = formatDate(startedAt, 'time');
   const exactStartedAtTimestamp = formatTimestampPrecise(startedAt);
 
-  const entityName = rootSpan.entityName || rootSpan.entityId;
-  const entityType = rootSpan.entityType;
-  const formattedEntityType = entityType ? formatEntityType(entityType) : 'Entity';
-  const EntityIcon = entityType?.includes('workflow') ? WorkflowIcon : AgentIcon;
-
   return (
     <DataPanel.Metadata>
-      {entityName &&
-        (entityHref ? (
-          <DataPanel.Meta
-            as={LinkComponent ?? 'a'}
-            href={entityHref}
-            icon={<EntityIcon />}
-            tooltip={`See ${formattedEntityType.toLowerCase()}`}
-          >
-            {entityName}
-          </DataPanel.Meta>
-        ) : (
-          <DataPanel.Meta icon={<EntityIcon />} tooltip={formattedEntityType}>
-            {entityName}
-          </DataPanel.Meta>
-        ))}
-      <DataPanel.Meta tooltip="Trace status">
-        <TraceStatusValue status={computeTraceStatus(rootSpan)} />
-      </DataPanel.Meta>
+      {showEntity && <TraceEntityMeta rootSpan={rootSpan} entityHref={entityHref} LinkComponent={LinkComponent} />}
+      {showStatus && <TraceStatusMeta rootSpan={rootSpan} />}
       {startedAtTimestamp && exactStartedAtTimestamp && (
         <DataPanel.Meta icon={<CalendarClockIcon />} tooltip={`Started at ${exactStartedAtTimestamp}`}>
           {startedAtTimestamp}

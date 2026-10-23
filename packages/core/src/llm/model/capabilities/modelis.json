@@ -33,10 +33,19 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "claude-opus-4-8": [
+    "gemini-2.5-flash": [
       {
         "type": "toggle"
       },
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "claude-fable-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -48,7 +57,10 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "claude-fable-5": [
+    "claude-opus-4-8": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -63,27 +75,15 @@
         "type": "budget_tokens"
       }
     ],
-    "gemini-2.5-flash": [
+    "qwen/qwen3.7-plus": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "max"]
       },
       {
         "type": "budget_tokens"
       }
     ],
     "qwen/qwen3.7-max": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen3.7-plus": [
       {
         "type": "toggle"
       },
