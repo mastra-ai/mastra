@@ -200,7 +200,7 @@ Returns: [`Promise<InngestAgentStreamResult>`](#inngestagentstreamresult)
 
 #### `resume(runId, resumeData, options?)`
 
-Resumes a suspended Inngest run, for example after a tool approval. Loads the workflow snapshot from storage and finds the suspended step before sending a resume event to Inngest.
+Resumes a suspended Inngest run, for example after a tool approval. Loads the workflow snapshot from storage and finds the suspended step before sending a resume event to Inngest. If the suspended iteration's snapshot has not yet recorded every suspended tool call, `resume()` waits up to 10 seconds for it, then rejects with `Cannot resume run <runId>: the nested iteration snapshot does not contain suspended tool calls <ids>.` without sending the event. The run stays suspended, so you can call `resume()` again.
 
 ```typescript
 const { output, cleanup } = await durableAgent.resume(

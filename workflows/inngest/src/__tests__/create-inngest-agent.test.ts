@@ -1781,7 +1781,14 @@ describe('InngestAgent parity surface', () => {
         // The run is still parked and resumable; only this caller is rejected.
         expect(publishSpy.mock.calls.some(([, event]: any[]) => event?.type === 'error')).toBe(false);
         expect(globalRunRegistry.get(runId)).toBeUndefined();
+
+        // Once the iteration snapshot catches up, retrying the same resume dispatches.
+        setLaggingStore(durableAgent, 0);
+        const retried = await durableAgent.resume(runId, { approved: true }, { toolCallId: 'approval-call' });
+        expect(sendSpy).toHaveBeenCalledTimes(1);
+        retried.cleanup();
       } finally {
+        globalRunRegistry.delete(runId);
         vi.useRealTimers();
         publishSpy.mockRestore();
         sendSpy.mockRestore();
