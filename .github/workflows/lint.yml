@@ -216,6 +216,11 @@ jobs:
       - name: Validate Mastra Code types
         run: pnpm --filter ./mastracode/sdk check
 
+      # Same gap as above: the shared workflow conformance suite is only ever
+      # transpiled by vitest, so its `typecheck` script has to be run explicitly.
+      - name: Validate workflow conformance suite types
+        run: pnpm --filter ./workflows/_test-utils typecheck
+
       - name: Validate generated files are committed
         run: bash .github/scripts/check-clean-worktree.bash
 
