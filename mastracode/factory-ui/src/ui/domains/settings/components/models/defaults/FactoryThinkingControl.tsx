@@ -42,7 +42,6 @@ export function FactoryThinkingControl({ factoryId }: { factoryId: string }) {
       options={ALL_THINKING_LEVEL_OPTIONS}
       value={levelQuery.data}
       label="Thinking"
-      description="Used by sessions and work-item runs on the Factory defaults, and by anyone whose personal defaults have no level. Each run caps it at what its model supports."
       onChange={(level: ThinkingLevelSetting) =>
         setLevel.mutateAsync(level).catch(error => toast.error(thinkingWriteFailureMessage(error)))
       }

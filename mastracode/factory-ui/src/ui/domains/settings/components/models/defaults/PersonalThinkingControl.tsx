@@ -50,7 +50,6 @@ export function PersonalThinkingControl({
       value={level}
       label="Thinking"
       origin={savedThinkingLevel === null ? THINKING_DEFAULT_SOURCE_LABELS.factory : undefined}
-      description="Used by your sessions on personal defaults until they pick their own level. Each session caps it at what its model supports."
       footer={
         <PersonalThinkingOriginNote
           followsFactory={savedThinkingLevel === null}
@@ -76,13 +75,8 @@ function PersonalThinkingOriginNote({ followsFactory, onUseFactoryDefault }: Per
     );
   }
   return (
-    <div className="flex items-center justify-between gap-3">
-      <Txt as="p" variant="caption" tone="muted">
-        Set for your personal defaults.
-      </Txt>
-      <Button variant="ghost" size="sm" onClick={onUseFactoryDefault}>
-        Use Factory default
-      </Button>
-    </div>
+    <Button variant="ghost" size="sm" className="self-end" onClick={onUseFactoryDefault}>
+      Use Factory default
+    </Button>
   );
 }
