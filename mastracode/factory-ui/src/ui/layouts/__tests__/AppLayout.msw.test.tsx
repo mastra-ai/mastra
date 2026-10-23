@@ -3,7 +3,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, Link, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
@@ -59,6 +59,19 @@ function stubRepository() {
 
 function sidebarIsCollapsed() {
   return screen.getByRole('separator', { name: /^Resize sidebar/ }).getAttribute('aria-valuetext') === 'collapsed';
+}
+
+function mockMobileViewport() {
+  vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+    matches: true,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
 }
 
 function PageA() {
@@ -117,6 +130,10 @@ function renderApp(initialPath = `/factories/${FACTORY_ID}/a`) {
 }
 
 describe('AppLayout', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('renders the sidebar once and swaps only the outlet between routes', async () => {
     stubFactory();
     renderApp();
@@ -179,6 +196,20 @@ describe('AppLayout', () => {
 
     await waitFor(() => expect(router.state.location.pathname).not.toBe(firstDraftPath));
     expect(router.state.location.pathname).toMatch(draftPath);
+  });
+
+  it.each(['New session', 'New user session'])('closes the mobile drawer once %s opens a draft', async label => {
+    mockMobileViewport();
+    stubFactory();
+    stubRepository();
+    const { router } = renderApp();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Open navigation menu' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Navigation' });
+    await userEvent.click(await within(drawer).findByRole('button', { name: label }));
+
+    await waitFor(() => expect(router.state.location.pathname).toMatch(`/factories/${FACTORY_ID}/user/new/`));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).not.toBeInTheDocument());
   });
 
   it('toggles the sidebar with [ but not on key repeat or while typing in a field', async () => {
