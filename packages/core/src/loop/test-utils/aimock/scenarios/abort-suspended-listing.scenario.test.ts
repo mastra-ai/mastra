@@ -63,13 +63,9 @@ describeForAllEngines('A resumed run is no longer listed as suspended once it fi
   }
 
   // Approval must be discoverable before resume and gone when finish is visible (#27898).
-  it(
-    'drops an approved run from listSuspendedRuns() by the time its finish is delivered',
-    async () => {
-      await approveAndCheckListing(getMock(), { abortFirst: false });
-    },
-    30_000,
-  );
+  it('drops an approved run from listSuspendedRuns() by the time its finish is delivered', async () => {
+    await approveAndCheckListing(getMock(), { abortFirst: false });
+  }, 30_000);
 
   it('drops an aborted-then-approved run from listSuspendedRuns() by the time its finish is delivered', async () => {
     await approveAndCheckListing(getMock(), { abortFirst: true });

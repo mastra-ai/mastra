@@ -581,6 +581,6 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         },
         { id: 'execute-scorers' },
       )
-      .commit()
+      .commit(),
   );
 }
