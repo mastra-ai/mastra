@@ -1,5 +1,31 @@
 # @mastra/factory
 
+## 0.25.0-alpha.1
+
+### Patch Changes
+
+- The Studio and Factory chat composers now show one button while an agent is running: Stop until the draft has something to send, then Send. Sending or clearing the draft brings Stop back. A Factory draft with only images keeps Stop, since images can't be sent mid-run. Studio agents that can't take messages mid-run keep showing Stop. ([#28263](https://github.com/mastra-ai/mastra/pull/28263))
+
+- Fixed chats in a Factory using the Factory's observational memory settings instead of their owner's. Memory settings now follow the Factory's model routing, the same as models and credentials: ([#28179](https://github.com/mastra-ai/mastra/pull/28179))
+
+  - A chat that runs on personal credentials uses its owner's **Personal memory** settings.
+  - A run that uses the Factory's credentials uses **Factory memory**.
+
+  Before, a chat in a hybrid Factory could fail with `No usable anthropic credential is available` even though the owner had picked an OpenAI memory model and connected OpenAI.
+
+- Added a **New session** button to the top of the Factory sidebar. It opens an empty session draft, the same as the **+** next to Sessions. Removed the search and collapse buttons from the top of the open sidebar. Open search with Cmd+K (Ctrl+K on Windows and Linux). Collapse the sidebar with its resize handle or `[`. The sidebar toggle still shows in the page header while the sidebar is collapsed. ([#28271](https://github.com/mastra-ai/mastra/pull/28271))
+
+- Removed the Factory Activity page, its Codebase view, and its sidebar and search links. The Activity unread badge, open-item dot, and attention chime for failed runs, mentions, and waiting agents are retired, along with the Needs you and followed-discussion lists and their inbox read, archive, and restore actions. ([#28257](https://github.com/mastra-ai/mastra/pull/28257))
+
+  Old Activity, Overview, Attention, Metrics, and Audit URLs now open the same Factory's board landing. Board cards retain failed-decision retries and proposal approval and dismissal. Session status indicators and completion sounds remain available.
+
+- Fixed Git identity setup before session commands run so agents can commit in primary and secondary repositories. Fixes https://github.com/mastra-ai/mastra/issues/28233. ([#28292](https://github.com/mastra-ai/mastra/pull/28292))
+
+- Updated dependencies [[`f396b43`](https://github.com/mastra-ai/mastra/commit/f396b435c72042fc6d9e82c361fa047675995812), [`7cd42a5`](https://github.com/mastra-ai/mastra/commit/7cd42a5863a19be68552c99565c345e06e4ffb1f), [`0d7d5cb`](https://github.com/mastra-ai/mastra/commit/0d7d5cbdccacc0b03697b3400579ea520e382061), [`f5ebbf3`](https://github.com/mastra-ai/mastra/commit/f5ebbf3b2dc935b8fc068996b4db478815f05bd5), [`11c83d5`](https://github.com/mastra-ai/mastra/commit/11c83d53331588e06623d5d4a35baa606bbaa424), [`703b0a1`](https://github.com/mastra-ai/mastra/commit/703b0a1cb342d3a6fce72b5b07685fbb31695674), [`1283717`](https://github.com/mastra-ai/mastra/commit/1283717ecfc652da293aafe6ff582afa07ca84a5), [`3be96ae`](https://github.com/mastra-ai/mastra/commit/3be96ae2f65a2ff3b2189fb79fd03b7eedee3dbe)]:
+  - @mastra/core@1.80.0-alpha.1
+  - @mastra/code-sdk@1.15.1-alpha.1
+  - @mastra/mcp@2.6.0-alpha.0
+
 ## 0.25.0-alpha.0
 
 ### Minor Changes
