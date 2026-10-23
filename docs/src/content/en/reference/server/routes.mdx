@@ -717,7 +717,7 @@ How a supplied `id` is treated depends on the storage adapter. Some adapters ups
 | `PATCH` | `/api/saved-views/:savedViewId` | Change a saved view's name or state |
 | `DELETE` | `/api/saved-views/:savedViewId` | Delete a saved view |
 
-A saved view's `state` stores a Studio page's setup, such as its filters, time range, sort, and columns. Everyone who can open Studio sees every view. `authorId` records who created a view and `updatedById` who last changed it.
+A saved view's `state` stores a Studio page's setup, such as its filters, time range, sort, and columns. Views are shared between users. `authorId` records who created a view and `updatedById` who last changed it.
 
 The `page` query parameter selects a Studio page. The list paginates with `perPage` (1 to 100, default 100) and the zero-based `pageIndex`. The response's `pagination.hasMore` is `true` while more views follow. Delete answers `{ "deleted": true }`.
 

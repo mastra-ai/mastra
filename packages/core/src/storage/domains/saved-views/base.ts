@@ -13,9 +13,10 @@ export type SavedViewState = { version: number } & Record<string, unknown>;
 /**
  * A named, shared setup for a Studio page (for example the traces table).
  *
- * Everyone who can open Studio sees every view, and anyone who can write can
- * edit it. `authorId` records who created it and `updatedById` who last
- * changed it.
+ * Views are shared between users: every caller who can read views sees the
+ * same ones (within their scope, when stored resources are scoped), and anyone
+ * who can write can edit them. `authorId` records who created a view and
+ * `updatedById` who last changed it.
  */
 export interface SavedView {
   id: string;
