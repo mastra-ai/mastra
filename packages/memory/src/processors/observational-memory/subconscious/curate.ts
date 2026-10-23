@@ -8,7 +8,7 @@ import { Extractor } from '../extractor';
 import type { ExtractorOnExtractedContext } from '../extractor';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
-import { createKnowledgeTools, resolveRunKnowledgeScopes } from './knowledge-tools';
+import { createKnowledgeReadTools, resolveRunKnowledgeScopes } from './knowledge-tools';
 import type { KnowledgeRunScopes } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { resolveSubconsciousAgentModel } from './model';
@@ -258,7 +258,7 @@ export async function createCuratorAgent(
     model,
     memory: curatorMemory,
     tools: {
-      ...createKnowledgeTools(memory, runScopes.scopeIds),
+      ...createKnowledgeReadTools(memory, runScopes.scopeIds),
       ...createKnowledgeWriteTools(memory, {
         scopeIds: runScopes.scopeIds,
         levels: runScopes.levels,
