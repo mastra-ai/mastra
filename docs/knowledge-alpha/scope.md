@@ -183,6 +183,7 @@ scopes: [{ tag: 'org:self', access: 'read' }, 'team:self:director', 'agent:alex'
 - **Default writes leave it out.** A write with no `scope` argument lands at every *writable* run tag. A member holding `[{org:self, read}, team:self:director, agent:alex]` writes at `[team:self:director, agent:alex]`.
 - **The model can't write there.** A `scope` argument (D10) naming a read-only tag on a write, append, remove, rescope, merge or pin tool is refused with an error naming the tag ("`org:self` is read-only for this run"). Reads may name it.
 - **Ownership needs write.** A read-only tag never acts as an ownership principal (§3, D13). Otherwise a member holding `org:self` read-only could read every `team:self:*` through org's ownership, which is the team-separation hole Kayle found. A read-only `org:self` makes visible only records that carry `org:self`; it reaches no owned scope.
+- **Stored keys don't change.** Access lives only on the run. Records, pins and scope keys store bare tags, so `canonicalizeKnowledgeScope` and `knowledgeScopeKey` never see access and no existing key moves. The 8-tag cap counts distinct tags; a tag held read-only counts once.
 - **Identity tags stay plain.** `resource:` and `thread:` are Memory's identity and can't be read-only; an object entry for them is refused by `resolveAgentScopes` with `AGENT_SCOPES_INVALID`.
 
 **Where it goes in the API.** One entry type everywhere a list of scopes is accepted:
@@ -195,12 +196,13 @@ scopes: [{ tag: 'org:self', access: 'read' }, 'team:self:director', 'agent:alex'
 **How it's carried in the trusted run context.** `mastra__scopes` stays a `string[]` of tags, so code that reads it today keeps working. Next to it, `setRunAgentScopes` writes `mastra__scopeAccess`, a frozen `Record<tag, 'read'>` listing only the read-only tags, and marks both objects in the same `runScopeValues` WeakSet (`scopes.ts:51-56`). `getRunAgentScopes` returns `{ tag, access }[]` only when both are marked; an unmarked access map is ignored and the run is treated as having no tags at all, so a caller can't forge `readwrite` by dropping the map. `AgentScopesSnapshot` stores the access map, and `restoreRunAgentScopes` (`:68`) re-marks it after a durable resume.
 
 **Combining the three sources** (agent config, `mastra__scopes` request context, per-call option; `resolveAgentScopes` `:201-215`), plus session defaults/required and per-message scopes:
+- Trusted (harness) sources: Agent config `scopes`, the marked `mastra__scopes`/`mastra__scopeAccess` pair, per-call `scopes`, session `defaultScopes`/`requiredScopes`, host-authorized per-message `scopes`, and `createTools({ scope })`. The model's tool `scope` argument is the only untrusted input.
 - Union by tag. If **any** harness source gives a tag as read, it's read. The narrowest wins; nothing widens a read entry into readwrite.
 - The model's `scope` argument only selects from the result and can never widen.
 - Resume: the snapshot is authoritative, as today. A resumed run can narrow a tag to read but not widen it; trying to widen throws `AGENT_SCOPES_CONFLICT`.
 - Per-message: a message whose entries differ from the active run's, by tag **or** by access, is a `scope-mismatch` (§3) and starts its own run.
 
-**The `org:local` default.** This doesn't replace it. The per-type default (line 132) keeps local Knowledge visible when the caller gives no `org:`, and the two-org collision it fixed is about tag types, not access. It does simplify the Director: members hold `{ tag: 'org:self', access: 'read' }` and see the org's shared knowledge without being able to write org-wide or reach the teams org owns. The director session holds `org:self` read/write and decides what's org-wide, plus its team for its own writes.
+**The `org:local` default.** This doesn't replace it. The default (line 132) applies only to a run with no caller tags, so a plain local session still sees local Knowledge; any stamped tag, read-only or not, turns it off. So Director members never get `org:local`, whether or not they hold `org:self` read-only. It does simplify the Director: members hold `{ tag: 'org:self', access: 'read' }` and see the org's shared knowledge without being able to write org-wide or reach the teams org owns. The director session holds `org:self` read/write and decides what's org-wide, plus its team for its own writes.
 
 **Pins.** Pins are records at the pin tags, so pins at a read-only tag are delivered (visible) but not writable. Default pin tags are the writable run tags except `thread`. `knowledge_pin`, `edit_pin` and `unpin` naming a read-only tag are refused, and editing or unpinning a visible pin whose tags include a read-only tag is refused too. A member sees the director's org pins but can't change them.
 
@@ -336,10 +338,11 @@ For each, a red control showing the test fails without the change.
 - A record at `[org:self]` is visible to a run holding `{ tag:'org:self', access:'read' }`, so a read-only tag hides nothing.
 - That run's default write lands at its writable tags only, without `org:self`.
 - A `scope` argument naming `org:self` on `knowledge_create`/`append`/`remove`/`rescope`/`merge_nodes`/`pin` is refused with the tag named; on `knowledge_search`/`read` it's accepted.
-- Union narrowing: `org:self` readwrite in agent config plus read-only per-call makes it read-only, in all three source orders; a model `scope` arg can't widen it; a resume can't widen it.
+- Union narrowing, one test per source pair in both directions (read-only in one, readwrite in the other): agent config × per-call, agent config × request context, per-call × request context, session `defaultScopes`/`requiredScopes` × per-call. Each ends read-only; a model `scope` arg can't widen it; a resume can't widen it.
 - A forged `mastra__scopes` without a marked access map gives no tags; a marked access map stays read after JSON round-trip and durable resume.
 - `resource:`/`thread:` as object entries are refused.
-- Director shape: a member `[{org:self,read}, team:self:director, agent:alex]` writes at team/agent, sees org records and director org pins, and can't reach `team:self:other`. The director session `[org:self, team:self:director]` sees members' team writes through ownership and writes org-wide. Pins at `org:self` can't be edited by the member.
+- A record written by a run holding `{org:self,read}` + `team:self:x` has the same stored scope key as one written by a run holding plain `team:self:x`; 8 distinct tags with some read-only pass, 9 fail.
+- Director shape: a member `[{org:self,read}, team:self:director, agent:alex]` writes at team/agent, sees org records and director org pins, and can't reach `team:self:other` (a read-only owner tag owns nothing, for reads or writes). The director session `[org:self, team:self:director]` sees members' team writes through ownership and writes org-wide. Pins at `org:self` can't be edited by the member.
 - A message with the same tags but different access during an active run gets `scope-mismatch`.
 
 **Structure and ownership**
