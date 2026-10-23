@@ -2,6 +2,7 @@ import { MastraClient } from '@mastra/client-js';
 import type { ListMemoryThreadMessagesResponse, StreamParams } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { TaskItem } from '@mastra/core/signals';
+import { ChunkFrom } from '@mastra/core/stream';
 import type { ChunkType } from '@mastra/core/stream';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -1163,9 +1164,15 @@ describe('Thread', () => {
   });
 
   describe('when thread signals allow sending during a run', () => {
-    it('replaces cancel with send while drafting and restores cancel after clearing the draft', async () => {
+    let subscription: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let sentMessages: string[];
+    let abortRequests: number;
+
+    beforeEach(async () => {
       window.MASTRA_AGENT_SIGNALS = 'true';
-      let subscription: ReadableStreamDefaultController<Uint8Array> | undefined;
+      subscription = undefined;
+      sentMessages = [];
+      abortRequests = 0;
       server.use(...baseHandlers());
       server.use(
         http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryEnabled)),
@@ -1181,38 +1188,63 @@ describe('Thread', () => {
               { headers: { 'content-type': 'text/event-stream' } },
             ),
         ),
+        http.post(`${BASE_URL}/api/agents/:agentId/send-message`, async ({ request }) => {
+          sentMessages.push(JSON.stringify(await request.json()));
+          return HttpResponse.json({ accepted: true, runId: 'run-1' });
+        }),
+        http.post(`${BASE_URL}/api/agents/:agentId/threads/abort`, () => {
+          abortRequests += 1;
+          return HttpResponse.json({ aborted: true });
+        }),
       );
 
       await act(async () => {
         renderThread([]);
       });
-
-      try {
-        await waitFor(() => expect(subscription).toBeDefined());
-        await act(async () =>
-          subscription?.enqueue(
-            new TextEncoder().encode(
-              sseChunk({ type: 'start', runId: 'run-1', from: 'AGENT', payload: {} } satisfies ChunkType),
-            ),
+      await waitFor(() => expect(subscription).toBeDefined());
+      await act(async () =>
+        subscription?.enqueue(
+          new TextEncoder().encode(
+            sseChunk({ type: 'start', runId: 'run-1', from: ChunkFrom.AGENT, payload: {} } satisfies ChunkType),
           ),
-        );
-        await screen.findByRole('button', { name: 'Cancel' });
-        expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+        ),
+      );
+      await screen.findByRole('button', { name: 'Cancel' });
+    });
 
-        const textarea = screen.getByPlaceholderText('Enter your message...');
-        fireEvent.change(textarea, { target: { value: '   ' } });
-        expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+    afterEach(async () => {
+      await act(async () => subscription?.close());
+    });
 
-        fireEvent.change(textarea, { target: { value: 'Continue with the new instructions' } });
-        expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
-        expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false);
+    it('replaces cancel with send while drafting and restores cancel after clearing the draft', () => {
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
 
-        fireEvent.change(textarea, { target: { value: '' } });
-        expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
-      } finally {
-        await act(async () => subscription?.close());
-      }
+      const textarea = screen.getByPlaceholderText('Enter your message...');
+      fireEvent.change(textarea, { target: { value: '   ' } });
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+
+      fireEvent.change(textarea, { target: { value: 'Continue with the new instructions' } });
+      expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false);
+
+      fireEvent.change(textarea, { target: { value: '' } });
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+    });
+
+    it('keeps the run going when Send is double-clicked, and Cancel still stops it', async () => {
+      fireEvent.change(screen.getByPlaceholderText('Enter your message...'), {
+        target: { value: 'Continue with the new instructions' },
+      });
+      const primaryAction = screen.getByRole('button', { name: 'Send' });
+      fireEvent.click(primaryAction, { detail: 1 });
+      await waitFor(() => expect(sentMessages.join()).toContain('Continue with the new instructions'));
+      fireEvent.click(primaryAction, { detail: 2 });
+      await act(async () => new Promise(resolve => setTimeout(resolve, 100)));
+      expect(abortRequests).toBe(0);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }), { detail: 1 });
+      await waitFor(() => expect(abortRequests).toBe(1));
     });
   });
 

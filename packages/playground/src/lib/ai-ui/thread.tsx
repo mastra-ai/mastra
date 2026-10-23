@@ -601,10 +601,20 @@ const ComposerSendButton = ({
   onCancel,
 }: ComposerSendButtonProps) => {
   const { isAddingAttachments } = useComposerAttachments();
-  // An empty draft leaves room to stop; a non-empty draft can be sent when supported.
-  if (isRunning && (isEmpty || !canSendWhileStreaming)) {
+  const draftCanSteerRun = canSendWhileStreaming && !isEmpty;
+  if (isRunning && !draftCanSteerRun) {
     return (
-      <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
+      <Button
+        variant="default"
+        size="icon-md"
+        type="button"
+        tooltip="Cancel"
+        onClick={event => {
+          // Send turns into Cancel under the pointer: a double-click on Send must not cancel.
+          if (event.detail > 1) return;
+          onCancel();
+        }}
+      >
         <CircleStopIcon />
       </Button>
     );

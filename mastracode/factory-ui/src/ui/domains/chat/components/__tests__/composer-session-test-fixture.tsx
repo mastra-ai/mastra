@@ -38,6 +38,7 @@ interface PreparingSession {
   sessionLookups: number;
   controllerCreates: number;
   steerAttempts: number;
+  abortRequests: number;
 }
 
 interface StubPreparingSessionOptions {
@@ -89,6 +90,7 @@ export function stubPreparingSession({
     delivered: [],
     operations: [],
     steerAttempts: 0,
+    abortRequests: 0,
     controllerCreates: 0,
     sessionLookups: 0,
   };
@@ -232,6 +234,10 @@ export function stubPreparingSession({
     }),
     http.post(`${API}/sessions/:resourceId/steer`, () => {
       result.steerAttempts += 1;
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${API}/sessions/:resourceId/abort`, () => {
+      result.abortRequests += 1;
       return HttpResponse.json({ ok: true });
     }),
   );

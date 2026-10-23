@@ -60,6 +60,24 @@ describe('Composer steering', () => {
       expect(await screen.findByRole('button', { name: 'Send message' })).toBeDisabled();
       expect(screen.queryByRole('button', { name: 'Abort' })).not.toBeInTheDocument();
     });
+
+    it('keeps the run going when Send is double-clicked, and Abort still stops it', async () => {
+      const session = stubPreparingSession({ autoAgentEnd: false });
+      const user = userEvent.setup();
+      const { client } = renderThread();
+      await releaseSession(session.finishWorkspace, client);
+      await session.emit({ type: 'agent_start' });
+      await screen.findByRole('button', { name: 'Abort' });
+
+      await user.type(screen.getByRole('textbox', { name: 'Message' }), MESSAGE);
+      await user.dblClick(screen.getByRole('button', { name: 'Send message' }));
+      await waitFor(() => expect(session.delivered).toEqual([MESSAGE]));
+      await waitForMutationsIdle(client);
+      expect(session.abortRequests).toBe(0);
+
+      await user.click(screen.getByRole('button', { name: 'Abort' }));
+      await waitFor(() => expect(session.abortRequests).toBe(1));
+    });
   });
 
   it('queues the message without interrupting the active run and confirms its delivery', async () => {
