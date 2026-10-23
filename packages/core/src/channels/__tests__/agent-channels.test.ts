@@ -2549,6 +2549,17 @@ describe('AgentChannels', () => {
         expect(metadata.error).toEqual(record.error);
       });
 
+      it.each([
+        ['an ordinary failure', new Error('failure')],
+        ['a refusal', new ChannelSessionRejectedError('refused')],
+      ])('ends the typing session after %s', async (_, thrown) => {
+        const f = await fixture(thrown);
+        const endTyping = vi.fn().mockRejectedValue(new Error('slack down'));
+        f.thread.adapter.endTyping = endTyping;
+        await expect(f.run()).resolves.toBeUndefined();
+        expect(endTyping).toHaveBeenCalledExactlyOnceWith(f.thread.id);
+      });
+
       it('keeps deliberate refusal silent and produces no ordinary error diagnostic', async () => {
         const f = await fixture(new ChannelSessionRejectedError('refused'));
         await f.run();

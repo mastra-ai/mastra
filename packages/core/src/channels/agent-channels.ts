@@ -1321,6 +1321,27 @@ export class AgentChannels {
       await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped, batchIds);
     } catch (err) {
       await this.handleRunError(chatThread, message, err);
+      await this.endTyping(chatThread);
+    }
+  }
+
+  /**
+   * End a typing session the run never got to close. Status the run sets is
+   * cleared when its stream ends, but a host handler can set one before
+   * dispatch (Factory's early "is thinking..."). Under Slack's Agent Sessions
+   * that status keeps the session `processing` — Stop shown, posts don't clear
+   * it — for up to an hour. Adapters without sessions don't implement
+   * `endTyping`, and Slack's is a no-op outside `agentView`.
+   */
+  private async endTyping(chatThread: Thread): Promise<void> {
+    try {
+      await chatThread.adapter.endTyping?.(chatThread.id);
+    } catch (err) {
+      this.log('debug', 'Ending typing session failed (best-effort)', {
+        platform: chatThread.adapter.name,
+        threadId: chatThread.id,
+        error: err,
+      });
     }
   }
 

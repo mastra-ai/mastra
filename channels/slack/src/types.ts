@@ -187,7 +187,10 @@ interface SlackProviderConfigBase extends SlackAdapterChannelConfigBase {
    * message and surface the active-view context.
    *
    * Defaults to `false`. Requires the `agent_session_stopped` bot event on the
-   * Slack app (new apps created by this provider subscribe to it).
+   * Slack app (new apps created by this provider subscribe to it). Apps this
+   * provider manages are declared with `agent_view`: new apps on creation,
+   * existing ones on the next startup. Slack can't move an app back to the
+   * assistant view, and users need to hard-refresh Slack after the switch.
    */
   agentView?: SlackAdapterConfig['agentView'];
 
@@ -559,6 +562,9 @@ export interface SlackAppManifest {
       url: string;
       usage_hint?: string;
     }>;
+    agent_view?: {
+      agent_description: string;
+    };
     assistant_view?: {
       assistant_description: string;
       suggested_prompts?: Array<{

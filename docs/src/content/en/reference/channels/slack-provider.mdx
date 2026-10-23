@@ -195,7 +195,7 @@ await slack.configure({
     isOptional: true,
     defaultValue: 'false',
     description:
-      "Run the agent as a Slack Agent Session instead of the legacy assistant view. Each run marks the thread `processing`, so Slack shows its native Stop button and the user's stop aborts the run. Slack also titles new DM sessions from the first message. Requires the `agent_session_stopped` bot event, which apps created by this provider subscribe to.",
+      "Run the agent as a Slack Agent Session instead of the legacy assistant view. Each run marks the thread `processing`, so Slack shows its native Stop button and the user's stop aborts the run. Slack also titles new DM sessions from the first message. Apps this provider manages switch their manifest from `assistant_view` to `agent_view`, including the `agent_session_stopped` bot event: new apps on creation, existing apps on the next startup. Slack can't switch an app back, and users need to hard-refresh Slack afterwards.",
   },
 ]}
 />

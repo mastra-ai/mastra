@@ -71,13 +71,28 @@ export interface BuildManifestOptions {
 
   /** Slash commands to register */
   slashCommands?: SlashCommand[];
+
+  /**
+   * Declare Slack's Agent messaging experience (`agent_view`) instead of the
+   * legacy `assistant_view`. Slack rejects a manifest declaring both, and an
+   * app moved to `agent_view` can't go back.
+   */
+  agentView?: boolean;
 }
 
 /**
  * Build a Slack app manifest for an agent.
  */
 export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
-  const { name, description, webhookUrl, oauthRedirectUrl, commandsUrl = webhookUrl, slashCommands = [] } = options;
+  const {
+    name,
+    description,
+    webhookUrl,
+    oauthRedirectUrl,
+    commandsUrl = webhookUrl,
+    slashCommands = [],
+    agentView = false,
+  } = options;
 
   const scopes: string[] = [...DEFAULT_BOT_SCOPES];
   const events: string[] = [...DEFAULT_BOT_EVENTS];
@@ -109,10 +124,9 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
         always_online: true,
       },
       // Required by Slack when `assistant:write` scope is present.
-      // Surfaces the app in the AI Assistant picker.
-      assistant_view: {
-        assistant_description: shortDescription,
-      },
+      ...(agentView
+        ? { agent_view: { agent_description: shortDescription } }
+        : { assistant_view: { assistant_description: shortDescription } }),
     },
     oauth_config: {
       redirect_urls: [oauthRedirectUrl],

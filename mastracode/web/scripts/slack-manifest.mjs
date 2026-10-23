@@ -60,8 +60,10 @@ const manifest = {
       display_name: values.name,
       always_online: true,
     },
-    assistant_view: {
-      assistant_description: 'AI assistant powered by Mastra',
+    // Factory runs as a Slack Agent Session (`agentView`). Slack rejects a
+    // manifest with both views, and an app can't go back to `assistant_view`.
+    agent_view: {
+      agent_description: 'AI assistant powered by Mastra',
     },
   },
   oauth_config: {

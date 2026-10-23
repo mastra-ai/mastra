@@ -111,6 +111,101 @@ describe('agentView', () => {
   });
 });
 
+describe('agentView manifest', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Restart a provider over an app created before `agentView` existed. */
+  async function restart(config: { agentView?: boolean }) {
+    const updateApp = vi.spyOn(SlackManifestClient.prototype, 'updateApp').mockResolvedValue(undefined as never);
+    const store = new InMemoryStore();
+    const channels = (await store.getStore('channels'))!;
+    const provider = new SlackProvider({
+      ...config,
+      baseUrl: 'https://example.com',
+      token: 'xoxe-config',
+      refreshToken: 'xoxe-refresh',
+    });
+    await channels.saveInstallation({
+      id: 'install-1',
+      platform: 'slack',
+      agentId: 'agent-1',
+      status: 'active',
+      webhookId: 'hook-1',
+      configHash: hashConfig({}, 'https://example.com', 'Helper', 'Helps'),
+      data: {
+        appId: 'A1',
+        clientId: 'client-id',
+        clientSecret: 'client-secret',
+        signingSecret: 'signing-secret',
+        teamId: 'T1',
+        botToken: 'xoxb-test',
+        botUserId: 'U-bot',
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    provider.__attach({
+      getStorage: () => store,
+      getAgentById: () => ({
+        name: 'Helper',
+        getDescription: () => 'Helps',
+        getChannels: () => undefined,
+        setChannels: () => {},
+      }),
+      getServer: () => undefined,
+    } as unknown as Mastra);
+    await provider.initialize();
+    return updateApp;
+  }
+
+  it('leaves existing apps alone without agentView', async () => {
+    const updateApp = await restart({});
+    expect(updateApp).not.toHaveBeenCalled();
+  });
+
+  it('moves existing apps to agent_view, with the stop event, when agentView is turned on', async () => {
+    const updateApp = await restart({ agentView: true });
+    expect(updateApp).toHaveBeenCalledTimes(1);
+    const [appId, manifest] = updateApp.mock.calls[0]!;
+    expect(appId).toBe('A1');
+    expect(manifest.features?.agent_view).toEqual({ agent_description: 'Helps' });
+    expect(manifest.features?.assistant_view).toBeUndefined();
+    expect(manifest.settings?.event_subscriptions?.bot_events).toContain('agent_session_stopped');
+  });
+
+  it('creates new apps with agent_view under agentView', async () => {
+    const createApp = vi.spyOn(SlackManifestClient.prototype, 'createApp').mockResolvedValue({
+      appId: 'A1',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      signingSecret: 'signing-secret',
+      oauthAuthorizeUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-id',
+    } as Awaited<ReturnType<SlackManifestClient['createApp']>>);
+    const store = new InMemoryStore();
+    const provider = new SlackProvider({
+      agentView: true,
+      baseUrl: 'https://example.com',
+      tokenResolver: async () => 'token',
+      encryptionKey: 'k'.repeat(32),
+    });
+    provider.__attach({
+      getStorage: () => store,
+      getAgentById: () => ({ name: 'Helper', getDescription: () => 'Helps' }),
+    } as unknown as Mastra);
+
+    await provider.connect({ id: 'agent-1', name: 'Helper', description: 'Helps' });
+
+    const manifest = createApp.mock.calls[0]![0];
+    expect(manifest.features?.agent_view).toEqual({ agent_description: 'Helps' });
+    expect(manifest.features?.assistant_view).toBeUndefined();
+    const channels = (await store.getStore('channels'))!;
+    const [record] = (await channels.listInstallations('slack')) as Array<{ configHash?: string }>;
+    expect(record?.configHash).toBe(hashConfig({ agentView: true }, 'https://example.com', 'Helper', 'Helps'));
+  });
+});
+
 describe('connect config hash', () => {
   afterEach(() => {
     vi.restoreAllMocks();

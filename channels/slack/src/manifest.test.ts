@@ -81,6 +81,14 @@ describe('buildManifest', () => {
     const manifest = buildManifest(baseOptions);
     expect(manifest.features?.assistant_view).toBeDefined();
     expect(manifest.features?.assistant_view?.assistant_description).toBeTruthy();
+    expect(manifest.features?.agent_view).toBeUndefined();
+  });
+
+  it('declares agent_view instead of assistant_view under agentView', () => {
+    const manifest = buildManifest({ ...baseOptions, description: 'Helps', agentView: true });
+    expect(manifest.features?.agent_view).toEqual({ agent_description: 'Helps' });
+    // Slack rejects a manifest that declares both views.
+    expect(manifest.features?.assistant_view).toBeUndefined();
   });
 
   describe('slash commands', () => {
