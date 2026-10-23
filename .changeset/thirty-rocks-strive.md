@@ -6,4 +6,11 @@ Added a `size` prop to `Drawer` and `DrawerContent` for wider left and right dra
 
 ```tsx
 <Drawer side="right" variant="floating" size="lg">
+  <DrawerContent>
+    <DrawerHeader>
+      <DrawerTitle>Connect</DrawerTitle>
+    </DrawerHeader>
+    <DrawerBody>…</DrawerBody>
+  </DrawerContent>
+</Drawer>
 ```
