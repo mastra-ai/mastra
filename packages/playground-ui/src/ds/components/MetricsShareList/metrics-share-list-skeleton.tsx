@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { NUM, ROW } from './metrics-share-list-classes';
+import { FIXED_LABEL, NUM, ROW } from './metrics-share-list-classes';
 import type { MetricsShareListColumn } from './metrics-share-list-types';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
@@ -22,14 +22,19 @@ export function ShareListSkeleton({
   rows,
   columns,
   valueWidth,
+  showShare,
   header,
 }: {
   rows: number;
   columns: MetricsShareListColumn[];
   valueWidth: string;
+  showShare: boolean;
   /** Column headers between the strip and the rows, when the list puts them there. */
   header?: ReactNode;
 }) {
+  const left = columns.filter(c => c.align === 'left');
+  const right = columns.filter(c => c.align !== 'left');
+  const hasLeft = left.length > 0;
   return (
     <>
       <div className="flex h-2">
@@ -40,19 +45,27 @@ export function ShareListSkeleton({
         {Array.from({ length: rows }, (_, i) => (
           <li key={i} className={ROW}>
             <Skeleton className="size-2 shrink-0 rounded-[2px]" />
-            <span className="min-w-0 flex-1">
+            <span className={cn('min-w-0', hasLeft ? FIXED_LABEL : 'flex-1')}>
               <Txt as="span" variant="body-sm" className="relative">
                 <Bar className={cn('left-0', LABEL_WIDTHS[i % LABEL_WIDTHS.length])} />
               </Txt>
             </span>
-            {columns.map(c => (
+            {left.map(c => (
+              <span key={c.label} className={cn(NUM, 'relative', c.width ?? 'w-16')}>
+                <Bar className="left-0 w-16" />
+              </span>
+            ))}
+            {hasLeft && <span aria-hidden className="flex-1" />}
+            {right.map(c => (
               <span key={c.label} className={cn(NUM, 'relative', c.width ?? 'w-16')}>
                 <Bar className="right-0 w-10" />
               </span>
             ))}
-            <span className={cn(NUM, 'relative w-12')}>
-              <Bar className="right-0 w-9" />
-            </span>
+            {showShare && (
+              <span className={cn(NUM, 'relative w-12')}>
+                <Bar className="right-0 w-9" />
+              </span>
+            )}
             <span className={cn(NUM, 'relative', valueWidth)}>
               <Bar className="right-0 w-12" />
             </span>

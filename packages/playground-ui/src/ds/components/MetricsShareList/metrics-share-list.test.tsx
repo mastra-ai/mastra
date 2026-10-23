@@ -30,6 +30,20 @@ describe('MetricsShareList', () => {
     expect(items[1]).toContain('25%');
   });
 
+  it('puts left-aligned text columns right after the label, before the number columns, in rows and headers', () => {
+    render(
+      <MetricsShareList
+        rows={[row('agent', 10, { cells: ['5%', 'my-project'] })]}
+        columns={[{ label: 'Errors' }, { label: 'Project', align: 'left' }]}
+        valueLabel="Runs"
+        showShare={false}
+        onSortChange={() => {}}
+      />,
+    );
+    expect(labels()[0]).toBe('agentmy-project5%10');
+    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Project', 'Errors', 'Runs']);
+  });
+
   it('folds rows past the limit into one Other row with the caller’s totals', () => {
     const rows = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((k, i) => row(k, 70 - i * 10));
     render(

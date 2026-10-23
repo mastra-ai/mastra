@@ -1,5 +1,5 @@
 import type { CSSProperties, ElementType, ReactNode } from 'react';
-import { NUM, ROW } from './metrics-share-list-classes';
+import { FIXED_LABEL, NUM, ROW } from './metrics-share-list-classes';
 import type { ShownRow } from './metrics-share-list-rows';
 import type { MetricsShareListColumn } from './metrics-share-list-types';
 import { Txt } from '@/ds/components/Txt';
@@ -9,8 +9,8 @@ export type ShareListRowProps = {
   row: ShownRow;
   columns: MetricsShareListColumn[];
   valueWidth: string;
-  /** The row's share, formatted. */
-  share: string;
+  /** The row's share, formatted; no Share column when unset. */
+  share?: string;
   highlighted: boolean;
   dimmed: boolean;
   onHover: () => void;
@@ -28,6 +28,7 @@ export function ShareListRow({
   onHover,
   LinkComponent,
 }: ShareListRowProps) {
+  const hasLeft = columns.some(c => c.align === 'left');
   const className = cn(
     ROW,
     'transition-[background-color,opacity] duration-150',
@@ -47,13 +48,25 @@ export function ShareListRow({
           className="size-2 shrink-0 rounded-[2px]"
           style={{ backgroundColor: row.paint.color, opacity: row.paint.alpha }}
         />
-        <RowLabel row={row} />
-        {columns.map((c, i) => (
-          <span key={c.label} className={cn(NUM, 'text-muted-foreground', c.width ?? 'w-16')}>
-            {row.cells?.[i]}
-          </span>
-        ))}
-        <span className={cn(NUM, 'w-12 text-muted-foreground')}>{share}</span>
+        <RowLabel row={row} fixed={hasLeft} />
+        {columns.map((c, i) =>
+          c.align === 'left' ? (
+            <span key={c.label} className={cn('min-w-0 shrink-0 truncate', c.width ?? 'w-16')}>
+              <Txt as="span" variant="body-sm" tone="muted">
+                {row.cells?.[i]}
+              </Txt>
+            </span>
+          ) : null,
+        )}
+        {hasLeft && <span aria-hidden className="flex-1" />}
+        {columns.map((c, i) =>
+          c.align === 'left' ? null : (
+            <span key={c.label} className={cn(NUM, 'text-muted-foreground', c.width ?? 'w-16')}>
+              {row.cells?.[i]}
+            </span>
+          ),
+        )}
+        {share !== undefined && <span className={cn(NUM, 'w-12 text-muted-foreground')}>{share}</span>}
         <span className={cn(NUM, 'text-foreground', valueWidth)}>{row.value}</span>
       </RowShell>
     </li>
@@ -82,16 +95,17 @@ function RowShell({
 }
 
 /** A block line box, like the skeleton's, so loaded and loading rows share a height. */
-function RowLabel({ row }: { row: ShownRow }) {
+function RowLabel({ row, fixed }: { row: ShownRow; fixed: boolean }) {
+  const width = fixed ? FIXED_LABEL : 'flex-1';
   if (typeof row.label !== 'string') {
     return (
-      <span className="flex min-w-0 flex-1" title={row.title}>
+      <span className={cn('flex min-w-0', width)} title={row.title}>
         {row.label}
       </span>
     );
   }
   return (
-    <span className="min-w-0 flex-1 truncate" title={row.title ?? row.label}>
+    <span className={cn('min-w-0 truncate', width)} title={row.title ?? row.label}>
       <Txt as="span" variant="body-sm" tone="ink">
         {row.label}
       </Txt>

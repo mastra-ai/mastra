@@ -40,6 +40,17 @@ export {
   type MetricsPropertyFilterFieldId,
 } from '../metrics-filters';
 export { useMetricsActivity, type ActivityBucket } from './use-metrics-activity';
-export { useMetricsLatency, type LatencyBucket, type LatencyEntity } from './use-metrics-latency';
+export {
+  useMetricsLatency,
+  type LatencyBucket,
+  type LatencyEntity,
+  type LatencyPercentile,
+} from './use-metrics-latency';
 export { useMetricsScores, type MetricsScores, type ScorerAverage, type ScoresBucket } from './use-metrics-scores';
 export { useTokenSpend, type SpendDimension, type SpendRow } from './use-token-spend';
+export {
+  useMetricsUsageTotals,
+  USAGE_METRICS,
+  type UsageTotalsMeasure,
+  type UsageTotalsOptions,
+} from './use-metrics-usage-totals';
