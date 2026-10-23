@@ -81,17 +81,12 @@ describe('createSlackAdapter', () => {
 });
 
 describe('withAgentSessionTyping', () => {
-  it('marks the session processing before the first text status of a run', async () => {
+  it('marks the session processing before a text status', async () => {
     const { adapter, calls } = makeAdapter({ agentView: true });
 
     await adapter.startTyping(THREAD, 'is thinking…', { initiatorUserId: 'U1' });
-    await adapter.startTyping(THREAD, 'is typing…');
 
-    expect(calls.map(c => c.method)).toEqual([
-      'agents.sessions.setStatus',
-      'assistant.threads.setStatus',
-      'assistant.threads.setStatus',
-    ]);
+    expect(calls.map(c => c.method)).toEqual(['agents.sessions.setStatus', 'assistant.threads.setStatus']);
     expect(calls[0]!.args).toMatchObject({
       channel_id: 'C1',
       thread_ts: '1700.42',
@@ -101,55 +96,25 @@ describe('withAgentSessionTyping', () => {
     expect(calls[1]!.args).toMatchObject({ status: 'is thinking…' });
   });
 
-  it("clearing the status ends the session, and the next run's text status re-opens it", async () => {
+  it('re-opens a session that Slack ended between runs in the same thread', async () => {
     const { adapter, calls } = makeAdapter({ agentView: true });
 
     await adapter.startTyping(THREAD, 'is thinking…');
-    await adapter.startTyping(THREAD, '');
-    await adapter.startTyping(THREAD, 'is thinking…');
+    // Ended outside the wrapper, as a finished reply stream or Stop does.
+    await (adapter as any).setSessionStatus('C1', '1700.42', 'active');
+    await adapter.startTyping(THREAD, 'is sleeping for 30 seconds');
 
     expect(sessionStatuses(calls)).toEqual(['processing', 'active', 'processing']);
+    expect(calls.at(-1)!.args).toMatchObject({ status: 'is sleeping for 30 seconds' });
   });
 
-  it('a bare startTyping opens the session itself; a later text status does not re-open it', async () => {
+  it('passes a clear and a bare startTyping straight through', async () => {
     const { adapter, calls } = makeAdapter({ agentView: true });
 
     await adapter.startTyping(THREAD);
-    await adapter.startTyping(THREAD, 'is typing…');
+    await adapter.startTyping(THREAD, '');
 
-    expect(sessionStatuses(calls)).toEqual(['processing']);
-  });
-
-  it('endTyping ends the session so the next text status re-opens it', async () => {
-    const { adapter, calls } = makeAdapter({ agentView: true });
-
-    await adapter.startTyping(THREAD, 'is thinking…');
-    await adapter.endTyping(THREAD);
-    await adapter.startTyping(THREAD, 'is thinking…');
-
-    expect(sessionStatuses(calls)).toEqual(['processing', 'active', 'processing']);
-  });
-
-  it('a finished stream ends the session so the next text status re-opens it', async () => {
-    const { adapter, calls } = makeAdapter({ agentView: true });
-
-    await adapter.startTyping(THREAD, 'is thinking…');
-    await adapter.stream(THREAD, (async function* () {})());
-    await adapter.startTyping(THREAD, 'is typing…');
-
-    expect(sessionStatuses(calls)).toEqual(['processing', 'processing']);
-  });
-
-  it('tracks threads independently', async () => {
-    const { adapter, calls } = makeAdapter({ agentView: true });
-
-    await adapter.startTyping('slack:C1:1.0', 'is thinking…');
-    await adapter.startTyping('slack:C1:2.0', 'is thinking…');
-    await adapter.startTyping('slack:C1:1.0', 'is typing…');
-
-    expect(calls.filter(c => c.method === 'agents.sessions.setStatus').map(c => c.args.thread_ts)).toEqual([
-      '1.0',
-      '2.0',
-    ]);
+    expect(calls.map(c => c.method)).toEqual(['agents.sessions.setStatus', 'agents.sessions.setStatus']);
+    expect(sessionStatuses(calls)).toEqual(['processing', 'active']);
   });
 });

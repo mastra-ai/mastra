@@ -13,7 +13,7 @@ export function createSlackAdapter(config?: SlackAdapterConfig): SlackAdapter {
 }
 
 /**
- * Keep Slack's Agent Session in step with Mastra's typing statuses.
+ * Keep Slack's Agent Session open while Mastra shows typing statuses.
  *
  * Under `agentView` the adapter routes a bare `startTyping()` to
  * `agents.sessions.setStatus('processing')` — which creates the session and
@@ -22,44 +22,18 @@ export function createSlackAdapter(config?: SlackAdapterConfig): SlackAdapter {
  * always sends text (`is thinking…`, tool descriptions), so left alone no
  * session is ever created and Stop never appears.
  *
- * Mark the session processing before the first text status of each turn. A
- * turn ends when the status is cleared (`''`), `endTyping` runs, or a native
- * stream completes — each sets the session back to `active`, so the next text
- * status re-opens it.
+ * Mark the session processing before every text status. Slack ends sessions
+ * on its own (a finished reply stream, the Stop button, a later run in the
+ * same thread), so remembering "already open" goes stale and leaves later
+ * runs without Stop. `setStatus('processing')` is idempotent, and core
+ * already skips repeated statuses.
  */
 export function withAgentSessionTyping(adapter: SlackAdapter): SlackAdapter {
-  const processing = new Set<string>();
   const startTyping = adapter.startTyping.bind(adapter);
-  const endTyping = adapter.endTyping.bind(adapter);
-  const stream = adapter.stream.bind(adapter);
 
   adapter.startTyping = async (threadId, status, options) => {
-    if (!status) {
-      // Bare → processing, '' → active: the adapter already speaks Agent
-      // Sessions here; just track which one it is.
-      if (status === '') processing.delete(threadId);
-      else processing.add(threadId);
-      return startTyping(threadId, status, options);
-    }
-    if (!processing.has(threadId)) {
-      processing.add(threadId);
-      await startTyping(threadId, undefined, options);
-    }
+    if (status) await startTyping(threadId, undefined, options);
     return startTyping(threadId, status, options);
-  };
-
-  adapter.endTyping = async (threadId, status) => {
-    processing.delete(threadId);
-    return endTyping(threadId, status);
-  };
-
-  adapter.stream = async (threadId, textStream, options) => {
-    try {
-      return await stream(threadId, textStream, options);
-    } finally {
-      // Both the native and fallback stream paths end the session `active`.
-      processing.delete(threadId);
-    }
   };
 
   return adapter;
