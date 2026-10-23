@@ -21,5 +21,42 @@ describe('TracesSpansSwitch', () => {
 
       expect(onViewChange).toHaveBeenCalledWith('spans');
     });
+
+    it('does not offer the threads view by default', () => {
+      render(<TracesSpansSwitch current="traces" onViewChange={vi.fn()} />);
+
+      expect(screen.queryByRole('tab', { name: 'Threads' })).toBeNull();
+    });
+  });
+
+  describe('when the host offers the threads view', () => {
+    it('renders the tabs in the given order', () => {
+      render(<TracesSpansSwitch current="traces" views={['traces', 'spans', 'threads']} onViewChange={vi.fn()} />);
+
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Traces', 'Spans', 'Threads']);
+    });
+
+    it('asks the host to switch to threads when the Threads tab is clicked', () => {
+      const onViewChange = vi.fn();
+      render(<TracesSpansSwitch current="traces" views={['traces', 'threads']} onViewChange={onViewChange} />);
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Threads' }));
+
+      expect(onViewChange).toHaveBeenCalledWith('threads');
+    });
+
+    it('marks the Threads tab as selected when threads are current', () => {
+      render(<TracesSpansSwitch current="threads" views={['traces', 'threads']} onViewChange={vi.fn()} />);
+
+      expect(screen.getByRole('tab', { name: 'Threads' }).getAttribute('aria-selected')).toBe('true');
+    });
+  });
+
+  describe('when the host offers only threads besides traces', () => {
+    it('does not render the Spans tab', () => {
+      render(<TracesSpansSwitch current="traces" views={['traces', 'threads']} onViewChange={vi.fn()} />);
+
+      expect(screen.queryByRole('tab', { name: 'Spans' })).toBeNull();
+    });
   });
 });
