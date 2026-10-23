@@ -33,6 +33,7 @@ import type {
 import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
 import { experimentScoreId } from './experiment/scorer.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
+import { assertAgentModelTarget } from './experiment/validate-agent-model.js';
 import { deleteExperimentTraces } from './experiment-traces.js';
 
 /**
@@ -386,6 +387,7 @@ export class Dataset {
   async startExperimentAsync<I = unknown, O = unknown, E = unknown>(
     config: StartExperimentConfig<I, O, E>,
   ): Promise<{ experimentId: string; status: 'pending'; totalItems: number }> {
+    assertAgentModelTarget(config);
     const persistExperiments = config.persistence?.experiments !== 'none';
     const experimentsStore = persistExperiments ? await this.#getExperimentsStore() : undefined;
     const datasetsStore = await this.#getDatasetsStore();

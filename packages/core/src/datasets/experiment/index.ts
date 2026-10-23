@@ -19,6 +19,7 @@ import {
 import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, TOOL_MOCK_NOT_DECLARED } from './tool-mocks';
 import type { ItemToolMock, UnmockedToolPolicy } from './tool-mocks';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
+import { assertAgentModelTarget } from './validate-agent-model';
 
 /** Error code recorded on an item whose `beforeEach` hook threw. */
 export const EXPERIMENT_ITEM_BEFORE_EACH_FAILED = 'EXPERIMENT_ITEM_BEFORE_EACH_FAILED';
@@ -308,6 +309,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   let execFn: (item: ExperimentItem, signal?: AbortSignal) => Promise<ExecutionResult>;
 
   try {
+    assertAgentModelTarget(config);
     if (config.task) {
       // Inline task path
       const taskFn = config.task;
@@ -348,6 +350,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           requestContext: mergedRequestContext,
           experimentId,
           versions,
+          agentModel: config.agentModel,
           toolMocks: targetType === 'agent' ? item.toolMocks : undefined,
           unmockedToolPolicy:
             targetType === 'agent' ? (item.unmockedToolPolicy ?? config.unmockedToolPolicy ?? 'allow') : undefined,

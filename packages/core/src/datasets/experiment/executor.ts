@@ -4,6 +4,7 @@ import type { MessageListInput } from '../../agent/message-list';
 import type { MastraScorer } from '../../evals/base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
 import type { ScoringData } from '../../llm/model/base.types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { VersionOverrides } from '../../mastra/types';
 import { EntityType, getOrCreateSpan, resolveObservabilityContext, SpanType } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
@@ -129,6 +130,8 @@ export async function executeTarget(
     requestContext?: Record<string, unknown>;
     experimentId?: string;
     versions?: VersionOverrides;
+    /** Per-call model override (agent targets only). */
+    agentModel?: MastraModelConfig;
     /** Item-level static tool mocks (agent targets only). */
     toolMocks?: ItemToolMock[];
     /** Handling for agent tool calls not declared in `toolMocks`. */
@@ -160,6 +163,7 @@ export async function executeTarget(
           assignedTraceId => {
             traceId = assignedTraceId;
           },
+          options?.agentModel,
         );
         break;
       case 'workflow':
@@ -235,11 +239,13 @@ async function executeAgent(
   toolMocks?: ItemToolMock[],
   unmockedToolPolicy?: UnmockedToolPolicy,
   onTraceIdAssigned?: (traceId: string) => void,
+  agentModel?: MastraModelConfig,
 ): Promise<ExecutionResult> {
   const reqCtx: RequestContext | undefined = requestContext
     ? new RequestContext(Object.entries(requestContext))
     : undefined;
-  const model = await agent.getModel({ requestContext: reqCtx });
+  // generateLegacy() has no per-call model, so an override always runs through generate().
+  const useLegacy = !agentModel && !isSupportedLanguageModel(await agent.getModel({ requestContext: reqCtx }));
 
   // Both generate() and generateLegacy() return different types (FullOutput vs GenerateTextResult)
   // but share the fields we extract. Cast input to MessageListInput at the boundary.
@@ -313,7 +319,7 @@ async function executeAgent(
 
   let rawResult: unknown;
   try {
-    rawResult = isSupportedLanguageModel(model)
+    rawResult = !useLegacy
       ? await agent.generate(input, {
           scorers: {},
           returnScorerData: true,
@@ -322,6 +328,7 @@ async function executeAgent(
           ...(reqCtx ? { requestContext: reqCtx } : {}),
           tracingOptions,
           ...(versions ? { versions } : {}),
+          ...(agentModel ? { model: agentModel } : {}),
           ...(mockHooks ? { hooks: mockHooks } : {}),
           ...(mockConcurrency ?? {}),
         })

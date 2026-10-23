@@ -2,6 +2,7 @@ import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
 import type { MastraScorer, ScorerStepName } from '../../evals/base';
 import type { NotScorableOutcome } from '../../evals/not-scorable';
 import type { TrajectoryExpectation } from '../../evals/types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import type {
@@ -274,6 +275,12 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   requestContext?: Record<string, unknown>;
   /** Agent version ID to record against the experiment */
   agentVersion?: string;
+  /**
+   * Model override for agent targets, passed per call to `agent.generate()`. The agent
+   * version, instructions, tools and sub-agent models stay exactly as they would without it.
+   * Not persisted on the experiment record.
+   */
+  agentModel?: MastraModelConfig;
   /** Version overrides for sub-agent delegation during experiment execution */
   versions?: VersionOverrides;
   /**
