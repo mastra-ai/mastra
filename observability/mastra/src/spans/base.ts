@@ -33,6 +33,42 @@ type AnyBaseSpan = AnySpan & {
   readonly isExcluded?: boolean;
 };
 
+/** Parent and root entity fields shared by exported spans and correlation context */
+type SpanEntityLineage = Pick<
+  ExportedSpan<SpanType>,
+  | 'parentEntityType'
+  | 'parentEntityId'
+  | 'parentEntityName'
+  | 'parentEntityVersionId'
+  | 'rootEntityType'
+  | 'rootEntityId'
+  | 'rootEntityName'
+  | 'rootEntityVersionId'
+>;
+
+const LINEAGE_KEYS = [
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'parentEntityVersionId',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+  'rootEntityVersionId',
+] as const satisfies readonly (keyof SpanEntityLineage)[];
+
+/** Copy only the lineage fields that have values, so spans don't carry undefined keys */
+function definedLineage(source: SpanEntityLineage): SpanEntityLineage {
+  const lineage: SpanEntityLineage = {};
+  for (const key of LINEAGE_KEYS) {
+    const value = source[key];
+    if (value !== undefined && value !== null) {
+      (lineage as Record<string, unknown>)[key] = value;
+    }
+  }
+  return lineage;
+}
+
 /**
  * Determines if a span type should be considered internal based on flags.
  * Returns false if flags are undefined.
@@ -190,6 +226,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public isExcluded: boolean;
   /** Cached canonical correlation context for this live span */
   protected correlationContext?: CorrelationContext;
+  /**
+   * Parent and root entity restored by `rebuildSpan()`. A rebuilt span has no
+   * live `parent`, so its original ancestors are only known from the cached export.
+   */
+  protected restoredLineage?: SpanEntityLineage;
   /** Child spans that have started but not yet ended */
   #openChildren?: Set<BaseSpan<any>>;
   /** The span whose open-child set currently tracks this span: the parent, or a live ancestor after promotion */
@@ -485,7 +526,32 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     return undefined;
   }
 
-  /** Build and cache the canonical correlation context for this live span. */
+  /**
+   * Restore the parent and root entity a span had before it was exported and
+   * rebuilt (durable execution), so it and its new children keep their lineage.
+   */
+  public restoreEntityLineage(cached: SpanEntityLineage): void {
+    const lineage = definedLineage(cached);
+    if (Object.keys(lineage).length > 0) {
+      this.restoredLineage = lineage;
+      this.correlationContext = undefined;
+    }
+  }
+
+  /**
+   * Build and cache the canonical correlation context for this live span.
+   *
+   * Parent entity: the nearest ancestor that is not internal or excluded, the
+   * same rule used for entity inheritance. Root entity: the top of the
+   * in-process parent chain, which is not necessarily the distributed trace's
+   * root when the trace continues from another service. The root walk does not
+   * skip internal spans, so the root can name an entity whose span is not
+   * exported. Logs, metrics, scores and feedback share these values.
+   *
+   * When the top of the live chain was rebuilt, its original ancestors only
+   * survive in the restored lineage, so it supplies the root and, when no live
+   * ancestor qualifies, the parent.
+   */
   public getCorrelationContext(): CorrelationContext {
     if (this.correlationContext) {
       return this.correlationContext;
@@ -504,6 +570,33 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     while (rootSpan.parent) {
       rootSpan = rootSpan.parent;
     }
+    const restored = rootSpan instanceof BaseSpan ? rootSpan.restoredLineage : undefined;
+    const parentLineage: SpanEntityLineage = parentSpan
+      ? {
+          parentEntityType: parentSpan.entityType,
+          parentEntityId: parentSpan.entityId,
+          parentEntityName: parentSpan.entityName,
+          parentEntityVersionId: getSpanMetadataString(parentSpan, 'entityVersionId'),
+        }
+      : {
+          parentEntityType: restored?.parentEntityType,
+          parentEntityId: restored?.parentEntityId,
+          parentEntityName: restored?.parentEntityName,
+          parentEntityVersionId: restored?.parentEntityVersionId,
+        };
+    const rootLineage: SpanEntityLineage = restored
+      ? {
+          rootEntityType: restored.rootEntityType,
+          rootEntityId: restored.rootEntityId,
+          rootEntityName: restored.rootEntityName,
+          rootEntityVersionId: restored.rootEntityVersionId,
+        }
+      : {
+          rootEntityType: rootSpan.entityType,
+          rootEntityId: rootSpan.entityId,
+          rootEntityName: rootSpan.entityName,
+          rootEntityVersionId: getSpanMetadataString(rootSpan, 'entityVersionId'),
+        };
 
     const rootTags = rootSpan.tags?.length ? [...rootSpan.tags] : undefined;
 
@@ -519,14 +612,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       entityId: this.entityId,
       entityName: this.entityName,
       entityVersionId: getMetadataString('entityVersionId'),
-      parentEntityType: parentSpan?.entityType,
-      parentEntityId: parentSpan?.entityId,
-      parentEntityName: parentSpan?.entityName,
-      parentEntityVersionId: getSpanMetadataString(parentSpan, 'entityVersionId'),
-      rootEntityType: rootSpan.entityType,
-      rootEntityId: rootSpan.entityId,
-      rootEntityName: rootSpan.entityName,
-      rootEntityVersionId: getSpanMetadataString(rootSpan, 'entityVersionId'),
+      ...parentLineage,
+      ...rootLineage,
       userId: getMetadataString('userId'),
       organizationId: getMetadataString('organizationId'),
       resourceId: getMetadataString('resourceId'),
@@ -572,14 +659,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       ...(this.isInternal ? { isInternal: true } : {}),
-      parentEntityType: correlation.parentEntityType,
-      parentEntityId: correlation.parentEntityId,
-      parentEntityName: correlation.parentEntityName,
-      parentEntityVersionId: correlation.parentEntityVersionId,
-      rootEntityType: correlation.rootEntityType,
-      rootEntityId: correlation.rootEntityId,
-      rootEntityName: correlation.rootEntityName,
-      rootEntityVersionId: correlation.rootEntityVersionId,
+      ...definedLineage(correlation),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),

@@ -1624,12 +1624,19 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
 export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
   /** Set when the span is internal, so `rebuildSpan()` can restore its internal status */
   isInternal?: boolean;
-  /** Entity of the nearest exported ancestor span (undefined for root spans) */
+  /**
+   * Entity of the nearest ancestor span that is not internal or excluded. Omitted when there is none.
+   * Independent of `includeInternalSpans`, so it can skip the span `parentSpanId` points to.
+   */
   parentEntityType?: EntityType;
   parentEntityId?: string;
   parentEntityName?: string;
   parentEntityVersionId?: string;
-  /** Entity of the trace's root span (the span's own entity when it is the root) */
+  /**
+   * Entity of the top span in this process's parent chain (the span's own entity when it is that span).
+   * For a trace continued from another service, this is the local root, not the distributed trace's root.
+   * Internal spans are not skipped.
+   */
   rootEntityType?: EntityType;
   rootEntityId?: string;
   rootEntityName?: string;

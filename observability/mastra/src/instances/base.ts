@@ -365,6 +365,11 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceState: cached.nestedUnderParent ? { requestContextKeys: [], nestedUnderParent: true } : undefined,
     });
 
+    // The rebuilt span has no live parent, so restore the lineage computed before export
+    if (span instanceof BaseSpan) {
+      span.restoreEntityLineage(cached);
+    }
+
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
     this.wireSpanLifecycle(span);
 
