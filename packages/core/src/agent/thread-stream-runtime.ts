@@ -88,6 +88,11 @@ const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
  * drops everything after the resource id, including the thread id and the rest
  * of the message. Ids themselves may contain NUL, so it is escaped as well.
  */
+/** Keys {@link AgentThreadRuntimeState.claimedQueuedMessages} by thread and signal id. */
+function claimedQueuedMessageKey(key: string, signalId: string): string {
+  return JSON.stringify([key, signalId]);
+}
+
 function describeThreadKey(key: string): string {
   const separator = key.indexOf(AGENT_THREAD_KEY_SEPARATOR);
   // An id containing NUL makes the split ambiguous: show the whole key, escaped.
@@ -593,7 +598,10 @@ type AgentThreadRuntimeState = {
    * preserves when it retries a message whose acknowledgement never landed.
    */
   acceptedIdleMessagesByIdentity: ReturnType<typeof createRecentRequests<AcceptedIdleMessage>>;
-  /** Claimed-owner messages queued for a run in flight, keyed by signal id. */
+  /**
+   * Claimed-owner messages queued for a run in flight, keyed by {@link claimedQueuedMessageKey}: the thread and the
+   * signal id, since callers may choose signal ids and two threads can queue the same one.
+   */
   claimedQueuedMessages: ReturnType<typeof createRecentRequests<ClaimedQueuedMessage>>;
   claimedThreadOwners: Map<string, ClaimedThreadOwner<any>>;
   advertisedThreadPeers: Map<string, AdvertisedThreadPeer>;
@@ -2367,7 +2375,7 @@ export class AgentThreadStreamRuntime {
         queue.push(signal);
         state.preRunSignalsByThread.set(key, queue);
         const queued: ClaimedQueuedMessage = { identity: messageIdentity };
-        state.claimedQueuedMessages.set(signal.id, queued);
+        state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
         this.#recordLocallyQueuedSignal(state, key, signal.id);
         this.#notifyPendingSignals(state, key);
         const admission = await pendingAdmission.outcome.catch(() => undefined);
@@ -2384,7 +2392,7 @@ export class AgentThreadStreamRuntime {
           return { runId: admission.runId };
         }
         // That run never started here, so it will not take the input; route it again.
-        state.claimedQueuedMessages.delete(signal.id);
+        state.claimedQueuedMessages.delete(claimedQueuedMessageKey(key, signal.id));
         this.#discardQueuedPreRunSignal(state, key, signal.id);
         if (!isOwnerActive()) {
           releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
@@ -2405,7 +2413,7 @@ export class AgentThreadStreamRuntime {
         // Tracked before it is queued: queuing can cut the run's request short at once, and
         // whatever cancels the input from there must find it.
         const queued: ClaimedQueuedMessage = { identity: messageIdentity, runId: activeRecord.runId };
-        state.claimedQueuedMessages.set(signal.id, queued);
+        state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
         this.#queueForActiveRun(state, pubsub, key, activeRecord, signal);
         settleMessageIdentity?.(
           queued.cancelled
@@ -6499,7 +6507,7 @@ export class AgentThreadStreamRuntime {
     }
     // A claimed-owner message joined a run in flight: a retry must learn it was cancelled.
     for (const id of cancelled) {
-      const queued = state.claimedQueuedMessages.get(id);
+      const queued = state.claimedQueuedMessages.get(claimedQueuedMessageKey(key, id));
       if (!queued) continue;
       queued.cancelled = true;
       if (queued.identity && queued.runId) this.#markAcceptedMessageCancelled(state, queued.identity, queued.runId);
