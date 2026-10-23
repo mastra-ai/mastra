@@ -58,6 +58,20 @@ console.log(`${summary2.succeededCount}/${summary2.totalItems} succeeded`)
 console.log(`Status: ${summary2.status}`)
 ```
 
+### Compare models without changing the agent
+
+Use `agentModel` to run the same agent against a different model. The registered agent keeps its own model.
+
+```typescript
+const summary = await dataset.startExperiment({
+  targetType: 'agent',
+  targetId: 'my-agent',
+  agentModel: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+  metadata: { model: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' },
+  scorers: ['accuracy'],
+})
+```
+
 ## Parameters
 
 <PropertiesTable
@@ -73,6 +87,13 @@ console.log(`Status: ${summary2.status}`)
     type: 'string',
     isOptional: true,
     description: 'ID of the registered target. Use with `targetType`.',
+  },
+  {
+    name: 'agentModel',
+    type: 'MastraModelConfig',
+    isOptional: true,
+    description:
+      "Model to run the agent target with, instead of the agent's own model. Accepts the same values as the `model` option on `Agent`. Applies only when `targetType` is `'agent'`. The model is passed with each call the experiment makes, so the registered agent and other experiments are unaffected. The agent version is picked the same way as without `agentModel`, and sub-agents keep their own models. The model isn't saved on the experiment record; add it to `metadata` if you want to keep it.",
   },
   {
     name: 'scorers',
