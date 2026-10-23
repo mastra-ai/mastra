@@ -13,8 +13,9 @@ export type SavedViewState = { version: number } & Record<string, unknown>;
 /**
  * A named, shared setup for a Studio page (for example the traces table).
  *
- * Everyone who can open Studio sees every view. `authorId` only records who
- * created it.
+ * Everyone who can open Studio sees every view, and anyone who can write can
+ * edit it. `authorId` records who created it and `updatedById` who last
+ * changed it.
  */
 export interface SavedView {
   id: string;
@@ -23,18 +24,26 @@ export interface SavedView {
   name: string;
   /** Who created the view. `null` when the server runs without auth. */
   authorId: string | null;
+  /** Who last changed the view, starting as `authorId`. `null` when the server runs without auth. */
+  updatedById: string | null;
+  /**
+   * Tenant the view belongs to when the server scopes stored resources
+   * (`server.storedResources.scope`). `null` otherwise.
+   */
+  resourceId: string | null;
   /** What the view restores on its page. */
   state: SavedViewState;
   createdAt: Date;
   updatedAt: Date;
 }
 
-/** Input for creating a saved view. A missing `id` is generated. */
+/** Input for creating a saved view. A missing `id` is generated, and `updatedById` starts as `authorId`. */
 export interface CreateSavedViewInput {
   id?: string;
   page: string;
   name: string;
   authorId?: string | null;
+  resourceId?: string | null;
   state: SavedViewState;
 }
 
@@ -42,6 +51,8 @@ export interface CreateSavedViewInput {
 export interface UpdateSavedViewInput {
   name?: string;
   state?: SavedViewState;
+  /** Who is making this change. */
+  updatedById?: string | null;
 }
 
 export type SavedViewOrderByField = 'createdAt' | 'updatedAt' | 'name';
@@ -49,6 +60,8 @@ export type SavedViewOrderByField = 'createdAt' | 'updatedAt' | 'name';
 export interface ListSavedViewsInput {
   /** Only return views for this page. Omit to list views for every page. */
   page?: string;
+  /** Only return views for this tenant. Omit to list views for every tenant. */
+  resourceId?: string;
   /** Defaults to the first 100 views. */
   pagination?: StoragePagination;
   /** Defaults to `createdAt ASC`, so new views come last. Ties are broken by `id ASC`. */

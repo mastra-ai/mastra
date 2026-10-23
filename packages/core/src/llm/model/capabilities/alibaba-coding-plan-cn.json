@@ -14,17 +14,17 @@
   ],
   "structuredOutput": ["qwen3-coder-next"],
   "reasoning": {
-    "qwen3.5-plus": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen3.6-plus": [
       {
         "type": "toggle"
       }
     ],
-    "kimi-k2.5": [
+    "qwen3.7-plus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.5-plus": [
       {
         "type": "toggle"
       }
@@ -39,7 +39,7 @@
         "type": "toggle"
       }
     ],
-    "qwen3.7-plus": [
+    "kimi-k2.5": [
       {
         "type": "toggle"
       }

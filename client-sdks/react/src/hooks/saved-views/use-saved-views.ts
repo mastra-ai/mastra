@@ -15,8 +15,9 @@ export function isSavedViewsUnavailableError(error: unknown): boolean {
 }
 
 /**
- * Lists the saved views for one Studio page, oldest first. Never retries;
- * check `isSavedViewsUnavailableError(error)` to hide the feature.
+ * Lists every saved view for one Studio page, oldest first, following
+ * `pagination.hasMore` across pages of 100. Never retries; check
+ * `isSavedViewsUnavailableError(error)` to hide the feature.
  */
 export const useSavedViews = <TData = SavedViewResponse[]>({
   page,
@@ -30,8 +31,14 @@ export const useSavedViews = <TData = SavedViewResponse[]>({
   return useQuery<SavedViewResponse[], Error, TData>({
     queryKey: ['saved-views', page],
     queryFn: async () => {
-      const result = await client.listSavedViews({ page });
-      return result.views;
+      const views: SavedViewResponse[] = [];
+      for (let pageIndex = 0; ; pageIndex++) {
+        const result = await client.listSavedViews({ page, pageIndex });
+        // A server that ignores `pageIndex` answers the first page again, so stop instead of looping.
+        if (result.pagination.page !== pageIndex) return views;
+        views.push(...result.views);
+        if (!result.pagination.hasMore || result.views.length === 0) return views;
+      }
     },
     retry: false,
     ...queryOptions,
@@ -75,11 +82,11 @@ export const useUpdateSavedView = ({
 /** Deletes a saved view by id and refreshes every `useSavedViews` list. */
 export const useDeleteSavedView = ({
   queryOptions,
-}: { queryOptions?: MastraMutationOptions<{ message: string }, string> } = {}) => {
+}: { queryOptions?: MastraMutationOptions<{ deleted: true }, string> } = {}) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
-  return useMutation<{ message: string }, Error, string>({
+  return useMutation<{ deleted: true }, Error, string>({
     mutationFn: savedViewId => client.deleteSavedView(savedViewId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['saved-views'] });

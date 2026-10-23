@@ -25,13 +25,14 @@ const view: SavedViewResponse = {
   page: 'traces',
   name: 'Errors',
   authorId: null,
-  state: { version: 1, timeRange: { preset: 'last-24h' }, sort: { field: 'startedAt', direction: 'desc' } },
+  updatedById: null,
+  state: { version: 1, filters: [], settings: { datePreset: 'last-24h', sortDirection: 'desc' } },
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
 const listResponse = (views: SavedViewResponse[]) => ({
   views,
-  pagination: { total: views.length, page: 0, perPage: false, hasMore: false },
+  pagination: { total: views.length, page: 0, perPage: 100, hasMore: false },
 });
 
 // Retries stay on so the tests prove the hook itself never retries 404/501.
@@ -62,6 +63,48 @@ describe('useSavedViews', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toEqual([view]);
       expect(onList).toHaveBeenCalledWith('traces');
+    });
+  });
+
+  describe('when the views span more than one page', () => {
+    it('fetches every page', async () => {
+      const second = { ...view, id: 'view-2', name: 'Slow' };
+      const onList = vi.fn<(pageIndex: string | null) => void>();
+      server.use(
+        http.get(SAVED_VIEWS_URL, ({ request }) => {
+          const pageIndex = new URL(request.url).searchParams.get('pageIndex');
+          onList(pageIndex);
+          const page = Number(pageIndex);
+          return HttpResponse.json({
+            views: page === 0 ? [view] : [second],
+            pagination: { total: 2, page, perPage: 1, hasMore: page === 0 },
+          });
+        }),
+      );
+
+      const { result } = renderHook(() => useSavedViews({ page: 'traces' }), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toEqual([view, second]);
+      expect(onList.mock.calls).toEqual([['0'], ['1']]);
+    });
+  });
+
+  describe('when the server ignores pageIndex', () => {
+    it('stops after the first page instead of looping', async () => {
+      const onList = vi.fn();
+      server.use(
+        http.get(SAVED_VIEWS_URL, () => {
+          onList();
+          return HttpResponse.json({ views: [view], pagination: { total: 101, page: 0, perPage: 100, hasMore: true } });
+        }),
+      );
+
+      const { result } = renderHook(() => useSavedViews({ page: 'traces' }), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toEqual([view]);
+      expect(onList).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -159,7 +202,7 @@ describe('useDeleteSavedView', () => {
         http.delete(`${SAVED_VIEWS_URL}/:savedViewId`, ({ params }) => {
           onDelete(params.savedViewId as string);
           views = [];
-          return HttpResponse.json({ message: 'Saved view deleted' });
+          return HttpResponse.json({ deleted: true });
         }),
       );
       const wrapper = makeWrapper();

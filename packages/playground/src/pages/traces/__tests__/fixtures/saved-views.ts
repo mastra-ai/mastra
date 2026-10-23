@@ -4,7 +4,7 @@ import type { TraceViewSettings } from '@mastra/playground-ui/domains/traces/tra
 
 export const emptySavedViews: ListSavedViewsResponse = {
   views: [],
-  pagination: { total: 0, page: 0, perPage: false, hasMore: false },
+  pagination: { total: 0, page: 0, perPage: 100, hasMore: false },
 };
 
 const errorsFilters: FilterBarItem[] = [{ id: 'status', fieldId: 'status', operatorId: 'is', value: 'error' }];
@@ -26,6 +26,7 @@ export const errorsView: SavedViewResponse = {
   page: 'traces',
   name: 'Errors',
   authorId: null,
+  updatedById: null,
   state: { version: 1, filters: errorsFilters, settings: errorsSettings },
   createdAt: '2026-10-01T10:00:00.000Z',
   updatedAt: '2026-10-01T10:00:00.000Z',
@@ -56,6 +57,7 @@ export const productionOrStagingView: SavedViewResponse = {
   page: 'traces',
   name: 'Prod or staging',
   authorId: 'user-1',
+  updatedById: 'user-1',
   state: { version: 1, filters: productionOrStagingFilters, settings: productionOrStagingSettings },
   createdAt: '2026-10-02T10:00:00.000Z',
   updatedAt: '2026-10-02T10:00:00.000Z',
@@ -63,5 +65,5 @@ export const productionOrStagingView: SavedViewResponse = {
 
 export const savedViewsList = (...views: SavedViewResponse[]): ListSavedViewsResponse => ({
   views,
-  pagination: { total: views.length, page: 0, perPage: false, hasMore: false },
+  pagination: { total: views.length, page: 0, perPage: 100, hasMore: false },
 });

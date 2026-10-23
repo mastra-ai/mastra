@@ -29,6 +29,7 @@ export class InMemorySavedViewsStorage extends SavedViewsStorage {
   async list(args: ListSavedViewsInput = {}): Promise<ListSavedViewsOutput> {
     let views = Array.from(this.db.savedViews.values());
     if (args.page !== undefined) views = views.filter(view => view.page === args.page);
+    if (args.resourceId !== undefined) views = views.filter(view => view.resourceId === args.resourceId);
 
     const orderBy = resolveListOrderBy(args.orderBy, SAVED_VIEW_ORDER_BY_FIELDS, DEFAULT_SAVED_VIEW_ORDER_BY);
     views.sort(compareByField(orderBy.field, orderBy.direction));
@@ -66,6 +67,8 @@ export class InMemorySavedViewsStorage extends SavedViewsStorage {
       page: input.page,
       name: input.name,
       authorId: input.authorId ?? null,
+      updatedById: input.authorId ?? null,
+      resourceId: input.resourceId ?? null,
       state: structuredClone(input.state),
       createdAt: now,
       updatedAt: now,
@@ -82,6 +85,7 @@ export class InMemorySavedViewsStorage extends SavedViewsStorage {
       ...existing,
       ...(patch.name !== undefined && { name: patch.name }),
       ...(patch.state !== undefined && { state: structuredClone(patch.state) }),
+      ...(patch.updatedById !== undefined && { updatedById: patch.updatedById }),
       updatedAt: new Date(),
     };
     this.db.savedViews.set(id, updated);

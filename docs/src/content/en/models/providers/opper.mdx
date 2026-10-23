@@ -7,7 +7,7 @@ description: "Browse Opper model IDs, capabilities, context windows, and pricing
 
 # <img src="https://models.dev/logos/opper.svg" alt="Opper logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Opper
 
-Access 57 Opper models through Mastra's model router. Authentication is handled automatically using the `OPPER_API_KEY` environment variable.
+Access 55 Opper models through Mastra's model router. Authentication is handled automatically using the `OPPER_API_KEY` environment variable.
 
 Learn more in the [Opper documentation](https://opper.ai/models).
 
@@ -202,18 +202,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.57624
   },
   {
-    "model": "opper/devstral-2512",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 256000,
-    "maxOutput": 8192,
-    "inputCost": 0.4,
-    "outputCost": 2
-  },
-  {
     "model": "opper/gemini-3-flash-preview",
     "imageInput": true,
     "audioInput": true,
@@ -260,18 +248,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.3,
     "outputCost": 2.5
-  },
-  {
-    "model": "opper/gemini-3.7-flash",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 0.75,
-    "outputCost": 3.75
   },
   {
     "model": "opper/gemini-3.8-flash",
@@ -620,18 +596,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 1.25,
     "outputCost": 4.25
-  },
-  {
-    "model": "opper/qwen3-coder-next",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.5811,
-    "outputCost": 2.3244
   },
   {
     "model": "opper/qwen3.6-35b-a3b",

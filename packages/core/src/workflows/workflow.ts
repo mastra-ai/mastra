@@ -49,7 +49,8 @@ import {
   endOutputStreamSpanOutsideStep,
   findOwnModelStepSpan,
 } from '../processors/runner';
-import { createProcessorSendSignal } from '../processors/send-signal';
+import type { ProcessorLateSignalSink } from '../processors/send-signal';
+import { createProcessorSendSignal, PROCESSOR_LATE_SIGNAL_SINK } from '../processors/send-signal';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -827,7 +828,12 @@ export function createStepFromProcessor<TProcessorId extends string>(
       requestContext,
       tracingContext,
       outputWriter,
-    }: Parameters<ProcessorStepExecutor<ProcessorStepInput | ProcessorStepOutput>>[0]) => {
+      mastra,
+      runId: workflowRunId,
+    }: Parameters<ProcessorStepExecutor<ProcessorStepInput | ProcessorStepOutput>>[0] & {
+      mastra?: Mastra;
+      runId?: string;
+    }) => {
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
@@ -836,6 +842,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
         llmRequestProcessorIds?: ReadonlySet<string>;
         abortSignal?: AbortSignal;
         agent?: Agent;
+        lateSignalSink?: ProcessorLateSignalSink;
       };
       const {
         phase,
@@ -879,6 +886,8 @@ export function createStepFromProcessor<TProcessorId extends string>(
         abortSignal,
         // Agent reference so processors can access the running agent (e.g. on signal/schedule wake)
         agent,
+        // Receives sendSignal calls made after the creating durable step returned
+        lateSignalSink,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -1158,6 +1167,9 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 messageList: processorMessageList,
                 writer: processorWriter,
                 rotateResponseMessageId: rotateCurrentResponseMessageId,
+                lateSink:
+                  (workflowRunId ? mastra?.__getRunScope(workflowRunId)?.get(PROCESSOR_LATE_SIGNAL_SINK) : undefined) ??
+                  lateSignalSink,
               }),
             }
           : {}),
@@ -1166,6 +1178,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // Pass-through data that should flow to the next processor in a chain
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
+        lateSignalSink,
         phase,
         runId: agentRunId,
         // Auto-create MessageList from messages if not provided
@@ -2517,7 +2530,7 @@ export class Workflow<
       >;
     }
 
-    const newMappingConfig: Record<string, any> = Object.entries(mappingConfig).reduce(
+    const newMappingConfig: Record<string, any> = Object.entries(mappingConfig).reduce<Record<string, any>>(
       (a, [key, mapping]) => {
         const m: any = mapping;
         if (m.value !== undefined) {
@@ -2561,7 +2574,7 @@ export class Workflow<
         }
         return a;
       },
-      {} as Record<string, any>,
+      {},
     );
 
     type MappedOutputSchema = any;

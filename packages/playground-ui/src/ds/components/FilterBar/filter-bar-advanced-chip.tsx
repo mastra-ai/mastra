@@ -1,5 +1,5 @@
 import { BracesIcon, CircleAlertIcon, XIcon } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { chipClass, editableSegmentClass, segmentClass } from './filter-bar-chip';
 import { FILTER_BAR_SCOPE_ATTR, useFilterBarContext } from './filter-bar-context';
@@ -28,6 +28,7 @@ export type FilterBarAdvancedChipProps = {
  */
 export function FilterBarAdvancedChip({ group, unsupported, className }: FilterBarAdvancedChipProps) {
   const ctx = useFilterBarContext();
+  const [initial] = useState(() => !ctx.mounted);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const leaving = ctx.leaving.has(group.id);
@@ -83,6 +84,7 @@ export function FilterBarAdvancedChip({ group, unsupported, className }: FilterB
         aria-hidden={leaving || undefined}
         title={unsupported}
         data-slot="filter-bar-advanced"
+        data-initial={initial || undefined}
         data-leaving={leaving || undefined}
         className={cn(
           'filter-bar-advanced',

@@ -39,7 +39,18 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "deepseek-v4-flash-0731": [
+    "mimo-v2.6-pro-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },
@@ -48,18 +59,23 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
     "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "nemotron-3.5-content-safety": [
+    "glm-5.x-menthol": [
       {
         "type": "toggle"
       }
     ],
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+    "laguna-s-2.1": [
       {
         "type": "toggle"
       }
@@ -79,7 +95,12 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "mimo-v2.6-flash-rl": [
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nemotron-3.5-content-safety": [
       {
         "type": "toggle"
       }
@@ -96,12 +117,7 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "glm-5.x-menthol": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4.1-flash": [
+    "deepseek-v4-flash-0731": [
       {
         "type": "toggle"
       },
@@ -110,23 +126,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "laguna-s-2.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "mimo-v2.6-pro-rl": [
+    "mimo-v2.6-flash-rl": [
       {
         "type": "toggle"
       }

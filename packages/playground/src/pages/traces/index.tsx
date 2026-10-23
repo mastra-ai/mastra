@@ -40,6 +40,7 @@ import { useTraceColumnPreferencesStorageKey } from '@mastra/react/hooks/traces'
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { STUDIO_TRACES_FEATURES } from './features';
 import { useTraceFilterPersistence } from './hooks/use-trace-filter-persistence';
 import { useTracesRouteState } from './hooks/use-traces-route-state';
 import { useTracesScopeParams } from './hooks/use-traces-scope-params';
@@ -271,6 +272,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           views.applied ? patch({ sortDirection: direction }) : route.setSortDirection(direction)
         }
         scope={scope}
+        features={STUDIO_TRACES_FEATURES}
         {...(!isScoped && { columns, onColumnsChange })}
       >
         <TracesPageContent isScoped={isScoped} />

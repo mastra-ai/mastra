@@ -6,22 +6,21 @@ import { writeScorer } from './file-utils';
 import type { ScorerTemplate } from './types';
 
 export async function selectScorer(): Promise<ScorerTemplate[] | null> {
-  const groupedScorers = AVAILABLE_SCORERS.reduce(
-    (acc, curr) => {
-      if (!acc[curr.type]) {
-        acc[curr.type] = [];
-      }
-      let obj = acc[curr.type];
-      if (!obj) return acc;
-      obj.push({
-        value: curr.id,
-        label: `${curr.name}`,
-        hint: `${curr.description}`,
-      });
-      return acc;
-    },
-    {} as Record<string, Array<{ value: string; label: string; hint: string }>>,
-  );
+  const groupedScorers = AVAILABLE_SCORERS.reduce<
+    Record<string, Array<{ value: string; label: string; hint: string }>>
+  >((acc, curr) => {
+    if (!acc[curr.type]) {
+      acc[curr.type] = [];
+    }
+    let obj = acc[curr.type];
+    if (!obj) return acc;
+    obj.push({
+      value: curr.id,
+      label: `${curr.name}`,
+      hint: `${curr.description}`,
+    });
+    return acc;
+  }, {});
 
   const selectedIds = await p.groupMultiselect({
     message: 'Choose a scorer to add:',

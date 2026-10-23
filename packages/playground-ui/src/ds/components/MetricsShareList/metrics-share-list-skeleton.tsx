@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { NUM, ROW } from './metrics-share-list-classes';
 import type { MetricsShareListColumn } from './metrics-share-list-types';
 import { Skeleton } from '@/ds/components/Skeleton';
@@ -21,16 +22,20 @@ export function ShareListSkeleton({
   rows,
   columns,
   valueWidth,
+  header,
 }: {
   rows: number;
   columns: MetricsShareListColumn[];
   valueWidth: string;
+  /** Column headers between the strip and the rows, when the list puts them there. */
+  header?: ReactNode;
 }) {
   return (
     <>
       <div className="flex h-2">
         <Skeleton className="size-full rounded-full" />
       </div>
+      {header}
       <ul className="grid min-w-0 grid-cols-1 gap-0.5" aria-busy>
         {Array.from({ length: rows }, (_, i) => (
           <li key={i} className={ROW}>

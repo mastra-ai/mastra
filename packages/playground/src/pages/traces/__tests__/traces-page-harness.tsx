@@ -1,7 +1,7 @@
 import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { http, HttpResponse } from 'msw';
 import type { ComponentProps, ReactNode } from 'react';
-import { useLocation } from 'react-router';
+import { Outlet, Route, Routes, useLocation } from 'react-router';
 import TracesPage from '..';
 import { emptySavedViews } from './fixtures/saved-views';
 import { emptyTraceQueryFields, traceQueryCapabilities, traceQueryPage } from './fixtures/trace-query';
@@ -18,6 +18,7 @@ import {
   traceUsageBreakdown,
 } from './fixtures/traces';
 import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
+import { ObservabilityLayout } from '@/domains/observability/observability-layout';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -57,7 +58,8 @@ export const setTracePageHandlers = (
 
 /**
  * Renders the traces page on a data router (it blocks navigation), with `children` beside it, and
- * the router's search params in `data-testid="location"` to assert what the URL holds.
+ * the router's search params and pathname in `data-testid="location"` and `data-testid="pathname"`
+ * to assert what the URL holds. Unscoped, the page sits in the shared observability layout as on /traces.
  */
 export const renderTracesPage = (
   initialEntry = '/traces',
@@ -66,11 +68,31 @@ export const renderTracesPage = (
 ) => {
   const LocationProbe = () => {
     const location = useLocation();
-    return <div data-testid="location">{location.search}</div>;
+    return (
+      <>
+        <div data-testid="location">{location.search}</div>
+        <div data-testid="pathname">{location.pathname}</div>
+      </>
+    );
   };
   return renderWithProviders(
     <TestLinkProvider>
-      <TracesPage {...props} />
+      {props.scopedEntityId ? (
+        // Scoped traces live inside an agent/workflow tab, which owns its own header.
+        <TracesPage {...props} />
+      ) : (
+        <Routes>
+          <Route
+            element={
+              <ObservabilityLayout>
+                <Outlet />
+              </ObservabilityLayout>
+            }
+          >
+            <Route path="/traces" element={<TracesPage {...props} />} />
+          </Route>
+        </Routes>
+      )}
       <LocationProbe />
       {children}
     </TestLinkProvider>,

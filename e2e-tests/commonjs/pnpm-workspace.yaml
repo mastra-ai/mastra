@@ -2,6 +2,8 @@ packages:
   - '.'
 
 overrides:
+  # Vanta 2026-10-21: GHSA-587h-7wmj-h5pm (CVE-2026-112942/3/4) via vitest 4 (vite ^6||^7||^8)
+  'vite@>=8.0.0 <8.3.3': 8.3.4
   proxy-addr: 2.0.8
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
   qs@>=6.7.0 <6.16.0: 6.16.0
@@ -10,8 +12,8 @@ overrides:
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
   brace-expansion@>=2.0.0 <2.1.7: 2.1.7
   brace-expansion@>=4.0.0 <5.0.12: 5.0.12
-  hono@<4.13.8: 4.13.8
-  ip-address@<10.7.1: 10.7.2
+  hono@<4.13.8: 4.13.11
+  ip-address@<10.7.1: 10.7.4
   js-yaml@>=3.0.0 <3.15.2: 3.15.2
   js-yaml@>=4.0.0 <4.3.2: 4.3.2
   adm-zip@<=0.6.0: 0.6.1

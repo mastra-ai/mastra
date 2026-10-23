@@ -13,7 +13,7 @@ export const NoScorersInfo = () => (
 
         icon={<ExternalLinkIcon />}
       >
-        Scorers Documentation
+        Scorers documentation
       </Button>
     }
     variant="fill"

@@ -7,9 +7,11 @@ packages:
 
 # Saved Views API
 
-A saved view stores how a Studio page looks so you can come back to it, such as its filters, time range, sort, and columns. Studio uses saved views on the **Traces** page. Views live in the `savedViews` domain of your [Mastra storage](/reference/storage/overview), and everyone who can open Studio sees every view.
+The Saved Views API stores named setups for Studio pages, such as the filters and table settings of the **Traces** page, where Studio shows them as view tabs. Views live in the `savedViews` domain of your [Mastra storage](/reference/storage/overview). They're shared: everyone who can open Studio sees every view, and anyone with write access can change one. Each view records who created it and who last changed it.
 
-Saved views need a storage adapter with the `savedViews` domain: `@mastra/pg`, `@mastra/libsql`, `@mastra/mongodb`, `@mastra/mysql`, `@mastra/spanner`, or the in-memory store. Other stores answer `501`, and servers that predate saved views answer `404`.
+Saved views need a storage adapter with the `savedViews` domain: `@mastra/pg`, `@mastra/libsql`, `@mastra/mongodb`, `@mastra/mysql`, `@mastra/mssql`, `@mastra/spanner`, or the in-memory store. Other stores answer `501`, and servers that predate saved views answer `404`.
+
+With [stored resource scoping](/docs/auth/fga#stored-resource-scoping) on, each view belongs to the scope of the caller that created it. Lists only include views in the caller's scope, and views in other scopes answer `404`.
 
 ## Usage
 
@@ -23,23 +25,31 @@ const view = await mastraClient.createSavedView({
   name: 'Errors today',
   state: {
     version: 1,
-    timeRange: { preset: 'last-24h' },
-    filter: { logic: 'and', nodes: [{ fieldId: 'status', operatorId: 'is', value: 'error' }] },
-    sort: { field: 'startedAt', direction: 'desc' },
+    filters: [{ id: 'status', fieldId: 'status', operatorId: 'is', value: 'error' }],
+    settings: {
+      datePreset: 'last-24h',
+      groups: [],
+      sortDirection: 'desc',
+      columns: { visibleColumns: [], customColumns: [], metadataKeys: [], order: [] },
+    },
   },
 })
 ```
 
-The server checks only that `state` is a JSON object with an integer `version`, at most 64 KB. The page that reads the view owns the rest of the shape, so it can add fields without a server release.
+The server checks only that `state` is a JSON object with an integer `version`, at most 64 KB. The page that reads the view owns the rest of the shape, so it can add fields without a server release. The example uses the shape the Studio **Traces** page reads: `filters` holds the filter chips, and `settings` holds the time range, filter groups, sort, and columns.
 
 ## Methods
 
 ### `listSavedViews(params?)`
 
-Lists saved views, oldest first. Pass `page` to list the views for one Studio page.
+Lists saved views, oldest first, up to 100 per call. Pass `page` to list the views for one Studio page. When `pagination.hasMore` is `true`, more views follow: pass the next `pageIndex` to get them.
 
 ```typescript
-const { views } = await mastraClient.listSavedViews({ page: 'traces' })
+const { views, pagination } = await mastraClient.listSavedViews({ page: 'traces' })
+
+if (pagination.hasMore) {
+  const next = await mastraClient.listSavedViews({ page: 'traces', pageIndex: pagination.page + 1 })
+}
 ```
 
 <PropertiesTable
@@ -50,10 +60,24 @@ const { views } = await mastraClient.listSavedViews({ page: 'traces' })
     description: "Only return the views for this Studio page, for example `'traces'`.",
     isOptional: true,
   },
+  {
+    name: 'perPage',
+    type: 'number',
+    description: 'How many views to return, from 1 to 100.',
+    isOptional: true,
+    defaultValue: '100',
+  },
+  {
+    name: 'pageIndex',
+    type: 'number',
+    description: 'Zero-based page of results to return.',
+    isOptional: true,
+    defaultValue: '0',
+  },
 ]}
 />
 
-Returns: `{ views: SavedViewResponse[]; pagination: { total: number; page: number; perPage: number | false; hasMore: boolean } }`. The list isn't paginated, so it always holds every matching view.
+Returns: `{ views: SavedViewResponse[]; pagination: { total: number; page: number; perPage: number; hasMore: boolean } }`. `pagination.page` is the `pageIndex` of these results, and `total` counts every matching view.
 
 ### `getSavedView(savedViewId)`
 
@@ -65,7 +89,7 @@ const view = await mastraClient.getSavedView('view-id')
 
 ### `createSavedView(params)`
 
-Creates a saved view and returns it. The server generates its `id` and records the caller's user ID as `authorId`, or `null` when the server runs without auth.
+Creates a saved view and returns it. The server generates its `id` and records the caller's user ID as both `authorId` and `updatedById`, or `null` when the server runs without auth.
 
 <PropertiesTable
   content={[
@@ -90,7 +114,7 @@ Creates a saved view and returns it. The server generates its `id` and records t
 
 ### `updateSavedView(savedViewId, params)`
 
-Changes a view's `name` or `state` and returns the updated view. A new `state` replaces the old one as a whole. Omitted fields keep their value, and `updatedAt` moves forward. Throws a `MastraClientError` with status `404` when no view has this ID.
+Changes a view's `name` or `state` and returns the updated view. A new `state` replaces the old one as a whole. Omitted fields keep their value, `updatedAt` moves forward, and `updatedById` becomes the caller's user ID. Throws a `MastraClientError` with status `404` when no view has this ID.
 
 ```typescript
 await mastraClient.updateSavedView('view-id', { name: 'Errors this week' })
@@ -98,7 +122,7 @@ await mastraClient.updateSavedView('view-id', { name: 'Errors this week' })
 
 ### `deleteSavedView(savedViewId)`
 
-Deletes a view and returns `{ message: string }`. Throws a `MastraClientError` with status `404` when no view has this ID.
+Deletes a view and returns `{ deleted: true }`. Throws a `MastraClientError` with status `404` when no view has this ID.
 
 ```typescript
 await mastraClient.deleteSavedView('view-id')
@@ -111,10 +135,11 @@ await mastraClient.deleteSavedView('view-id')
   id: string;
   page: string;
   name: string;
-  authorId: string | null;  // Who created the view; null without auth
+  authorId: string | null;     // Who created the view; null without auth
+  updatedById: string | null;  // Who last changed the view; null without auth
   state: { version: number; [key: string]: unknown };
-  createdAt: string;        // ISO timestamp
-  updatedAt: string;        // ISO timestamp
+  createdAt: string;           // ISO timestamp
+  updatedAt: string;           // ISO timestamp
 }
 ```
 
@@ -122,7 +147,7 @@ await mastraClient.deleteSavedView('view-id')
 
 `@mastra/react/hooks/saved-views` wraps these methods for React Query:
 
-- `useSavedViews({ page })`: Lists one page's views. It never retries a `404` or `501`.
+- `useSavedViews({ page })`: Lists every view for one Studio page, fetching each page of results while `pagination.hasMore` is `true`. It never retries a `404` or `501`.
 - `useCreateSavedView()`, `useUpdateSavedView()`, and `useDeleteSavedView()`: Mutations that refresh every saved-views list when they succeed. `useUpdateSavedView` takes `{ savedViewId, ...changes }`.
 - `isSavedViewsUnavailableError(error)`: Returns `true` for a `404` or `501`, so you can hide saved views instead of showing an error.
 

@@ -1,4 +1,9 @@
-import type { CreateSavedViewParams, SavedViewResponse, UpdateSavedViewParams } from '@mastra/client-js';
+import type {
+  CreateSavedViewParams,
+  QueryTracesInput,
+  SavedViewResponse,
+  UpdateSavedViewParams,
+} from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -104,10 +109,12 @@ describe('Traces page saved views', () => {
     it("shows a view's filters and sort, with only its id in the URL", async () => {
       setTracePageHandlers();
       serveSavedViews(errorsView);
-      const onQuery = vi.fn<(body: unknown) => void>();
+      const onQuery = vi.fn<(body: QueryTracesInput) => void>();
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
-          onQuery(await request.json());
+          const body = await readBody<QueryTracesInput>(request);
+          // Live-tail delta polls can't sort, so only the list's page queries carry the view's sort.
+          if (body.mode !== 'delta') onQuery(body);
           return HttpResponse.json({ spans: [], pagination: { total: 0, page: 0, perPage: 25, hasMore: false } });
         }),
       );
@@ -414,7 +421,7 @@ describe('Traces page saved views', () => {
       server.use(
         http.delete(`${SAVED_VIEWS_URL}/view-errors`, () => {
           deleted();
-          return HttpResponse.json({ message: 'Saved view deleted' });
+          return HttpResponse.json({ deleted: true });
         }),
       );
       window.localStorage.setItem(SAVED_FILTERS_STORAGE_KEY, 'status=success');

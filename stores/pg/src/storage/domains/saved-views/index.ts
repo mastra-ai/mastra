@@ -30,6 +30,8 @@ function rowToSavedView(row: Record<string, unknown>): SavedView {
     page: String(row.page),
     name: String(row.name),
     authorId: row.authorId == null ? null : String(row.authorId),
+    updatedById: row.updatedById == null ? null : String(row.updatedById),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
     state: parseJsonResilient(row.state) as SavedViewState,
     createdAt: new Date((row.createdAtZ ?? row.createdAt) as string | number | Date),
     updatedAt: new Date((row.updatedAtZ ?? row.updatedAt) as string | number | Date),
@@ -119,11 +121,16 @@ export class SavedViewsPG extends SavedViewsStorage {
     const tableName = this.#tableName();
 
     const params: unknown[] = [];
-    let where = '';
+    const conditions: string[] = [];
     if (args.page !== undefined) {
       params.push(args.page);
-      where = `WHERE "page" = $1`;
+      conditions.push(`"page" = $${params.length}`);
     }
+    if (args.resourceId !== undefined) {
+      params.push(args.resourceId);
+      conditions.push(`"resourceId" = $${params.length}`);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const countResult = await this.#db.readClient.one(`SELECT COUNT(*) as count FROM ${tableName} ${where}`, params);
     const total = parseInt(countResult.count, 10);
@@ -175,6 +182,8 @@ export class SavedViewsPG extends SavedViewsStorage {
         page: input.page,
         name: input.name,
         authorId: input.authorId ?? null,
+        updatedById: input.authorId ?? null,
+        resourceId: input.resourceId ?? null,
         state: input.state,
         createdAt: now,
         updatedAt: now,
@@ -192,6 +201,7 @@ export class SavedViewsPG extends SavedViewsStorage {
     const data: Record<string, unknown> = { updatedAt: now, updatedAtZ: now };
     if (patch.name !== undefined) data.name = patch.name;
     if (patch.state !== undefined) data.state = patch.state;
+    if (patch.updatedById !== undefined) data.updatedById = patch.updatedById;
 
     await this.#db.update({ tableName: TABLE_SAVED_VIEWS, keys: { id }, data });
     return this.#get(this.#db.client, id);

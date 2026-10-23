@@ -590,7 +590,10 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     }
     const shared = new SharedLeases();
     let stall = false;
-    /** The event loop stalls past the lease TTL while an owner check is in flight, then the check errors. */
+    /**
+     * The event loop stalls past the lease TTL while an owner check is in flight, then the check errors, and so
+     * does taking the lapsed lease back: nothing can prove the run still holds the thread.
+     */
     class StallingPubSub extends ReplicaPubSub {
       override async getLeaseOwner(key: string) {
         if (!stall || !key.startsWith(`${RESOURCE}\u0000`)) return super.getLeaseOwner(key);
@@ -599,6 +602,10 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
           // stall
         }
         throw new Error('lease backend unreachable');
+      }
+      override async acquireLease(key: string, owner: string, ttlMs: number) {
+        if (stall && key.startsWith(`${RESOURCE}\u0000`)) throw new Error('lease backend unreachable');
+        return super.acquireLease(key, owner, ttlMs);
       }
     }
     let ticks = 0;
@@ -936,4 +943,934 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     },
     20_000,
   );
+
+  it('keeps a run going when its renewals stall past the lease TTL and no other run took the thread', async () => {
+    const thread = 'stalled-renewal-thread';
+    for (let i = 0; i < 8; i++) {
+      llm.on(
+        { userMessage: 'stalled renewals', sequenceIndex: i },
+        { toolCalls: [{ id: `call_stalled_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    llm.on({ userMessage: 'stalled renewals', sequenceIndex: 8 }, { content: 'stalled renewals done' });
+
+    const shared = new SharedLeases();
+    /** Renewals that hang until released, as on a machine too loaded to finish one in time. */
+    class StallingRenewalsPubSub extends ReplicaPubSub {
+      stalled: Promise<void> | undefined;
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (this.stalled && key.startsWith(`${RESOURCE}\u0000`)) await this.stalled;
+        return super.renewLease(key, owner, ttlMs);
+      }
+    }
+    const pubsub = new StallingRenewalsPubSub(shared);
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return 'ticked';
+      },
+    });
+    const { output, drain } = await startStream(
+      replica(shared, new MockMemory(), { tick }, pubsub),
+      'stalled renewals',
+      { maxSteps: 12, memory: { thread, resource: RESOURCE } },
+    );
+    const done = drain();
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+    let resume!: () => void;
+    pubsub.stalled = new Promise<void>(resolve => (resume = resolve));
+    // No renewal confirms for well past the TTL (300ms), so the lease expires and the run's deadline passes.
+    await new Promise(resolve => setTimeout(resolve, 700));
+    pubsub.stalled = undefined;
+    resume();
+    await done;
+
+    expect(ticks).toBe(8);
+    expect(await output.text).toBe('stalled renewals done');
+    expect(await output.finishReason).not.toBe('aborted');
+  }, 20_000);
+
+  it('keeps a run going while its own retake holds the lease under its temporary token', async () => {
+    const thread = `own-retake-fence-thread-${engine}`;
+    const key = [RESOURCE, thread].join('\u0000');
+    const runId = `own-retake-run-${engine}`;
+    const prompt = `own retake fence ${engine}`;
+    for (let i = 0; i < 10; i++) {
+      llm.on(
+        { userMessage: prompt, sequenceIndex: i },
+        { toolCalls: [{ id: `call_own_retake_${engine}_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    llm.on({ userMessage: prompt, sequenceIndex: 10 }, { content: 'own retake fence done' });
+
+    const shared = new SharedLeases();
+    let releaseHandover: (() => void) | undefined;
+    let handoverStarted: (() => void) | undefined;
+    const handover = new Promise<void>(resolve => (handoverStarted = resolve));
+    /**
+     * Renewals hang past the TTL, as on a process too loaded to finish one in time, so the lease lapses and the run
+     * takes it back. The retake then holds the lease under its own temporary token for a moment before handing it to
+     * the run id, as a slow backend does, and a queued tool call checks the fence inside that window.
+     */
+    class StalledHandoverPubSub extends ReplicaPubSub {
+      stalled: Promise<void> | undefined;
+      ownerReads = 0;
+      override async getLeaseOwner(k: string) {
+        if (k === key) this.ownerReads++;
+        return super.getLeaseOwner(k);
+      }
+      override async renewLease(k: string, owner: string, ttlMs: number) {
+        if (this.stalled && k === key) await this.stalled;
+        return super.renewLease(k, owner, ttlMs);
+      }
+      override async transferLease(k: string, from: string, to: string) {
+        if (k === key && from.includes('\u0000retake\u0000')) {
+          handoverStarted?.();
+          await new Promise<void>(resolve => (releaseHandover = resolve));
+        }
+        return super.transferLease(k, from, to);
+      }
+    }
+    const pubsub = new StalledHandoverPubSub(shared);
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return 'ticked';
+      },
+    });
+    const { output, drain } = await startStream(replica(shared, new MockMemory(), { tick }, pubsub), prompt, {
+      runId,
+      maxSteps: 12,
+      memory: { thread, resource: RESOURCE },
+    });
+    const done = drain();
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 15_000 });
+
+    let resume!: () => void;
+    pubsub.stalled = new Promise<void>(resolve => (resume = resolve));
+    await handover;
+    expect(shared.owner(key)?.startsWith(`${runId}\u0000retake\u0000`)).toBe(true);
+
+    // The fence must wait for that handover instead of stopping the run. Once it has read the token as owner it
+    // either fails at once or keeps waiting for the retake, so one turn is enough to tell the two apart.
+    const readsBefore = pubsub.ownerReads;
+    let fenceState = 'pending';
+    const fence = verifyRunLease(runId).then(
+      () => {
+        fenceState = 'resolved';
+      },
+      () => {
+        fenceState = 'rejected';
+      },
+    );
+    await vi.waitFor(() => expect(pubsub.ownerReads).toBeGreaterThan(readsBefore), { timeout: 2_000 });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(fenceState).toBe('pending');
+
+    // Released inside the same interval, the retake hands the lease over and the run keeps the thread.
+    releaseHandover?.();
+    pubsub.stalled = undefined;
+    resume();
+    await fence;
+    expect(fenceState).toBe('resolved');
+    await done;
+
+    expect(await output.text).toBe('own retake fence done');
+    expect(await output.finishReason).not.toBe('aborted');
+  }, 30_000);
+
+  it('gives up a retake whose handoff outlives one renewal interval and frees its token', async () => {
+    const thread = `slow-handoff-bound-thread-${engine}`;
+    const key = [RESOURCE, thread].join('\u0000');
+    const runId = `slow-handoff-run-${engine}`;
+    const prompt = `slow handoff bound ${engine}`;
+    for (let i = 0; i < 40; i++) {
+      llm.on(
+        { userMessage: prompt, sequenceIndex: i },
+        { toolCalls: [{ id: `call_slow_handoff_${engine}_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+
+    const shared = new SharedLeases();
+    const released: string[] = [];
+    let handoverStarted: (() => void) | undefined;
+    const handover = new Promise<void>(resolve => (handoverStarted = resolve));
+    /**
+     * The handoff never answers. The whole retake is bounded by one renewal interval, handoff included, so it must
+     * give up and free the temporary token instead of holding the thread under a lease nothing renews.
+     */
+    class SilentHandoffPubSub extends ReplicaPubSub {
+      stalled: Promise<void> | undefined;
+      override async renewLease(k: string, owner: string, ttlMs: number) {
+        if (this.stalled && k === key) await this.stalled;
+        return super.renewLease(k, owner, ttlMs);
+      }
+      override async transferLease(k: string, from: string, to: string) {
+        if (k === key && from.includes('\u0000retake\u0000')) {
+          handoverStarted?.();
+          await new Promise(() => {});
+        }
+        return super.transferLease(k, from, to);
+      }
+      override async releaseLease(k: string, owner: string) {
+        if (k === key) released.push(owner);
+        return super.releaseLease(k, owner);
+      }
+    }
+    const pubsub = new SilentHandoffPubSub(shared);
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return 'ticked';
+      },
+    });
+    const { output, drain } = await startStream(replica(shared, new MockMemory(), { tick }, pubsub), prompt, {
+      runId,
+      maxSteps: 100,
+      memory: { thread, resource: RESOURCE },
+    });
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 15_000 });
+
+    let resume!: () => void;
+    pubsub.stalled = new Promise<void>(resolve => (resume = resolve));
+    await handover;
+    const handoverAt = Date.now();
+    resume();
+
+    // Past the one interval the retake may spend, it gives up and releases the token lease it took.
+    await vi.waitFor(() => expect(released.some(owner => owner.startsWith(`${runId}\u0000retake\u0000`))).toBe(true), {
+      timeout: 1_500,
+    });
+    expect(Date.now() - handoverAt).toBeLessThan(1_500);
+    await vi.waitFor(() => expect(output.finishReason).resolves.toBe('aborted'), { timeout: 2_000 });
+    await done;
+  }, 30_000);
+
+  it('leaves a late handoff alone when a successor holds the same run id', async () => {
+    const thread = `late-handoff-successor-thread-${engine}`;
+    const key = [RESOURCE, thread].join('\u0000');
+    const runId = `late-handoff-run-${engine}`;
+    const prompt = `reused id late handoff ${engine}`;
+    // One tool call holds the run open while the lease lapses, so nothing here depends on how many steps fit.
+    llm.on(
+      { userMessage: prompt },
+      { toolCalls: [{ id: `call_late_handoff_${engine}`, name: 'tick', arguments: {} }] },
+    );
+
+    const shared = new SharedLeases();
+    const released: string[] = [];
+    let releaseTool!: () => void;
+    const toolGate = new Promise<void>(resolve => (releaseTool = resolve));
+    let handoverStarted: (() => void) | undefined;
+    const handover = new Promise<void>(resolve => (handoverStarted = resolve));
+    let releaseHandoff: (() => void) | undefined;
+    /** The handoff answers only after the retake gave up, and then installs the run id on a lease nobody renews. */
+    class LateHandoffPubSub extends ReplicaPubSub {
+      cut = false;
+      transfers: Array<{ from: string; to: string }> = [];
+      override async renewLease(k: string, owner: string, ttlMs: number) {
+        if (this.cut && k === key) await new Promise(() => {});
+        return super.renewLease(k, owner, ttlMs);
+      }
+      override async transferLease(k: string, from: string, to: string) {
+        if (k === key) this.transfers.push({ from, to });
+        if (k === key && from.includes('\u0000retake\u0000')) {
+          handoverStarted?.();
+          await new Promise<void>(resolve => (releaseHandoff = resolve));
+        }
+        return super.transferLease(k, from, to);
+      }
+      override async releaseLease(k: string, owner: string) {
+        released.push(owner);
+        if (k !== key) return super.releaseLease(k, owner);
+        // A backend whose release of the temporary token loses the race with the handoff still grants it.
+        if (owner.includes('\u0000retake\u0000')) return;
+        return super.releaseLease(k, owner);
+      }
+    }
+    const pubsub = new LateHandoffPubSub(shared);
+    let ticking = false;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Wait while the lease is retaken',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticking = true;
+        await toolGate;
+        return 'ticked';
+      },
+    });
+    const agent = replica(shared, new MockMemory(), { tick }, pubsub);
+    const { output, drain } = await startStream(agent, prompt, {
+      runId,
+      maxSteps: 3,
+      memory: { thread, resource: RESOURCE },
+    });
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticking).toBe(true), { timeout: 15_000 });
+    const queuedMarker = `queued input during abandoned handoff ${engine}`;
+    llm.on({ userMessage: queuedMarker }, { content: 'queued input ran here' });
+    const queued = agent.sendSignal(
+      { type: 'user-message', contents: queuedMarker },
+      { resourceId: RESOURCE, threadId: thread },
+    );
+    expect(await queued.accepted).toMatchObject({ action: 'deliver', runId });
+
+    pubsub.cut = true;
+    shared.drop(key);
+    await handover;
+    // Past the one interval a retake may spend, so this attempt has already given up on its handoff, while the
+    // temporary token it took is still live.
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    releaseHandoff?.();
+    // The abandoned handoff lands after the give-up and installs the run id on a lease nothing renews here.
+    await vi.waitFor(() => expect(shared.owner(key)).toBe(runId), { timeout: 2_000 });
+    const remote = new ReplicaPubSub(shared);
+    expect(await remote.acquireLease(key, runId, 60_000)).toMatchObject({ acquired: true });
+    const releasedBefore = released.length;
+    releaseTool();
+    await done;
+    expect(await output.finishReason).toBe('aborted');
+
+    // Ending under that run id must leave the lease to expire: whatever runs next under the same id owns it.
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(released.slice(releasedBefore)).not.toContain(runId);
+    expect(
+      pubsub.transfers.filter(transfer => transfer.from === runId),
+      'marked record must not transfer a same-id successor lease to a local drain',
+    ).toEqual([]);
+    expect(shared.owner(key)).toBe(runId);
+
+    // The marker belongs to this record, so a later execution that reuses the id on the same thread still frees
+    // the lease it acquires. Checking a different thread would pass without ever consulting the marker.
+    released.length = 0;
+    const laterPrompt = `reused id later run ${engine}`;
+    llm.on({ userMessage: laterPrompt }, { content: 'later finished' });
+    const later = await startStream(agent, laterPrompt, {
+      runId,
+      maxSteps: 2,
+      memory: { thread, resource: RESOURCE },
+    });
+    const releasesBeforeLater = released.length;
+    await later.drain();
+    await vi.waitFor(() => expect(released.slice(releasesBeforeLater)).toContain(runId), { timeout: 5_000 });
+  }, 40_000);
+
+  it.each([false, true])(
+    'never acknowledges delivery to a temporary retake lease token (stuck=%s)',
+    async stuck => {
+      const thread = `retake-token-signal-thread-${stuck}`;
+      const key = [RESOURCE, thread].join('\u0000');
+      const marker = `primary-retake-input-${engine}-${stuck}`;
+      const concurrentMarker = `concurrent-retake-input-${engine}-${stuck}`;
+      const runId = `retaking-run-${engine}-${stuck}`;
+      const prompt = `retake signal owner ${stuck}`;
+      llm.on(
+        { userMessage: prompt, sequenceIndex: 0 },
+        { toolCalls: [{ id: `call_retake_signal_${engine}_${stuck}`, name: 'tick', arguments: {} }] },
+      );
+      llm.on({ userMessage: prompt, sequenceIndex: 1 }, { content: 'owner finished' });
+      llm.on({ userMessage: marker }, { content: 'primary signal received' });
+      llm.on({ userMessage: concurrentMarker }, { content: 'concurrent signal received' });
+      const shared = new SharedLeases();
+      const events = new EventEmitter();
+      let releaseTransfer!: () => void;
+      const transferGate = new Promise<void>(resolve => (releaseTransfer = resolve));
+      let releaseTool!: () => void;
+      const toolGate = new Promise<void>(resolve => (releaseTool = resolve));
+      class RetakingPubSub extends ReplicaPubSub {
+        cut = false;
+        tokenHeld = false;
+        override async renewLease(key: string, owner: string, ttlMs: number) {
+          if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+          return super.renewLease(key, owner, ttlMs);
+        }
+        override async transferLease(key: string, from: string, to: string) {
+          if (from.includes('\u0000retake\u0000')) {
+            this.tokenHeld = true;
+            await transferGate;
+          }
+          return super.transferLease(key, from, to);
+        }
+      }
+      const ownerPubSub = new RetakingPubSub(shared, events);
+      let ticking = false;
+      const tick = createTool({
+        id: 'tick',
+        description: 'Wait while the lease is retaken',
+        inputSchema: z.object({}),
+        execute: async () => {
+          ticking = true;
+          await toolGate;
+          return 'ticked';
+        },
+      });
+      const { output, drain } = await startStream(replica(shared, new MockMemory(), { tick }, ownerPubSub), prompt, {
+        runId,
+        maxSteps: 3,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      let accepted: { action: string; runId?: string } | undefined;
+      let concurrentAccepted: { action: string; runId?: string } | undefined;
+      let signalIds: string[] = [];
+      let forwardedEvents: Array<{ type?: string; runId?: string; signal?: { id: string } }> = [];
+      let handover: ReturnType<typeof setTimeout> | undefined;
+      const senderPubSub = new ReplicaPubSub(shared, events);
+      const published = vi.spyOn(senderPubSub, 'publish');
+      const startedAt = performance.now();
+      try {
+        await vi.waitFor(() => expect(ticking).toBe(true));
+        ownerPubSub.cut = true;
+        shared.drop(key);
+        await vi.waitFor(() => expect(ownerPubSub.tokenHeld).toBe(true));
+        expect(shared.owner(key)).toContain('\u0000retake\u0000');
+        const sender = replica(shared, new MockMemory(), {}, senderPubSub);
+        const sent = sender.sendSignal(
+          { type: 'user-message', contents: marker },
+          { resourceId: RESOURCE, threadId: thread, ifIdle: { behavior: 'wake' } },
+        );
+        await new Promise(resolve => setTimeout(resolve, 10));
+        const concurrent = sender.sendSignal(
+          { type: 'user-message', contents: concurrentMarker },
+          { resourceId: RESOURCE, threadId: thread, ifIdle: { behavior: 'wake' } },
+        );
+        signalIds = [sent.signal.id, concurrent.signal.id];
+        if (!stuck) handover = setTimeout(releaseTransfer, 20);
+        [accepted, concurrentAccepted] = await Promise.all([sent.accepted, concurrent.accepted]);
+      } finally {
+        clearTimeout(handover);
+        ownerPubSub.cut = false;
+        releaseTransfer();
+        releaseTool();
+        await done;
+        forwardedEvents = published.mock.calls
+          .map(([, event]) => event.data as { type?: string; runId?: string; signal?: { id: string } })
+          .filter(event => event.type === 'signal-enqueued' && signalIds.includes(event.signal?.id ?? ''));
+        published.mockRestore();
+      }
+      expect(accepted).toMatchObject({ action: stuck ? 'blocked' : 'deliver', runId });
+      expect(concurrentAccepted).toMatchObject({ action: stuck ? 'blocked' : 'deliver', runId });
+      expect(performance.now() - startedAt).toBeLessThan(2_000);
+      // A handoff that never answers leaves the run unable to prove it holds the thread within one interval, so
+      // the run stops instead of going on beside a thread nobody can show it owns. Its signals are still never
+      // acknowledged to the temporary token.
+      expect(await output.finishReason).toBe(stuck ? 'aborted' : 'stop');
+      for (const signalId of signalIds) {
+        const matching = forwardedEvents.filter(event => event.signal?.id === signalId);
+        expect(matching).toHaveLength(stuck ? 0 : 1);
+        if (!stuck) expect(matching[0]?.runId).toBe(runId);
+      }
+      const requests = llm.getRequests().map(request => JSON.stringify(request.body));
+      expect(requests.some(request => request.includes(marker))).toBe(!stuck);
+      expect(requests.some(request => request.includes(concurrentMarker))).toBe(!stuck);
+    },
+    20_000,
+  );
+
+  it.each([
+    ['follow-up', false],
+    ['idle', false],
+    ['follow-up', true],
+    ['idle', true],
+  ] as const)(
+    'never forwards the %s drain to a retake token (stuck=%s)',
+    async (queue, stuck) => {
+      const thread = `retake-drain-${queue}-${stuck}`;
+      const key = [RESOURCE, thread].join('\u0000');
+      const runId = `draining-run-${engine}-${queue}-${stuck}`;
+      const successor = `successor-${engine}-${queue}-${stuck}`;
+      const token = `${successor}\u0000retake\u0000attempt`;
+      const prompt = `retake drain ${queue} ${stuck}`;
+      llm.on(
+        { userMessage: prompt, sequenceIndex: 0 },
+        { toolCalls: [{ id: `call_drain_${engine}_${queue}_${stuck}`, name: 'tick', arguments: {} }] },
+      );
+      llm.on({ userMessage: prompt, sequenceIndex: 1 }, { content: 'draining owner finished' });
+      const shared = new SharedLeases();
+      let releaseAcquire!: () => void;
+      const acquireGate = new Promise<void>(resolve => (releaseAcquire = resolve));
+      class DrainPubSub extends ReplicaPubSub {
+        draining = false;
+        override async transferLease(leaseKey: string, from: string, to: string) {
+          if (leaseKey === key && from === runId && to !== runId) {
+            this.draining = true;
+            shared.leases.set(key, { owner: token, expiresAt: Date.now() + 60_000 });
+            return false;
+          }
+          return super.transferLease(leaseKey, from, to);
+        }
+        override async acquireLease(leaseKey: string, owner: string, ttlMs: number) {
+          if (leaseKey === key && this.draining) {
+            await acquireGate;
+            if (!stuck) shared.leases.set(key, { owner: successor, expiresAt: Date.now() + 60_000 });
+          }
+          return super.acquireLease(leaseKey, owner, ttlMs);
+        }
+      }
+      const pubsub = new DrainPubSub(shared);
+      const published = vi.spyOn(pubsub, 'publish');
+      let releaseTool!: () => void;
+      const toolGate = new Promise<void>(resolve => (releaseTool = resolve));
+      let ticking = false;
+      const tick = createTool({
+        id: 'tick',
+        description: 'Hold the run until its follow-up is queued',
+        inputSchema: z.object({}),
+        execute: async () => {
+          ticking = true;
+          await toolGate;
+          return 'ticked';
+        },
+      });
+      const agent = replica(shared, new MockMemory(), { tick }, pubsub);
+      const target = { resourceId: RESOURCE, threadId: thread };
+      let sent: ReturnType<Agent['sendSignal']> | undefined;
+      const { output, drain } = await startStream(agent, prompt, {
+        runId,
+        maxSteps: 2,
+        memory: { thread, resource: RESOURCE },
+        onFinish: async () => {
+          if (queue === 'follow-up') {
+            // Input arriving after the final model step must use the follow-up drain.
+            sent = agent.sendSignal({ type: 'user-message', contents: 'queued during retake' }, target);
+            await sent!.accepted;
+          }
+        },
+      });
+      const done = drain();
+      let concurrent: ReturnType<Agent['sendSignal']> | undefined;
+      let concurrentAccepted: { action: string; runId?: string } | undefined;
+      try {
+        await vi.waitFor(() => expect(ticking).toBe(true));
+        if (queue === 'idle') {
+          sent = agent.queueMessage('queued during retake', target);
+          await sent!.accepted;
+        }
+        releaseTool();
+        await vi.waitFor(() => expect(pubsub.draining).toBe(true));
+        concurrent = agent.sendSignal(
+          { type: 'user-message', contents: 'concurrent during drain reservation' },
+          target,
+        );
+        releaseAcquire();
+        concurrentAccepted = await concurrent.accepted;
+        await done;
+        expect(sent).toBeDefined();
+        const signalIds = [sent!.signal.id, concurrent.signal.id];
+        const forwarded = () =>
+          published.mock.calls
+            .map(([, event]) => event.data as { type?: string; runId?: string; signal?: { id: string } })
+            .filter(
+              event =>
+                event?.type === 'signal-enqueued' &&
+                signalIds.includes(event.signal?.id ?? '') &&
+                event.runId !== runId,
+            );
+        expect(concurrentAccepted).toMatchObject({ action: stuck ? 'blocked' : 'deliver', runId: successor });
+        if (stuck) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          expect(forwarded()).toEqual([]);
+          expect(agent.cancelQueuedMessages({ ...target, signalIds: [sent!.signal.id] })).toEqual({
+            cancelledSignalIds: [sent!.signal.id],
+          });
+        } else {
+          await vi.waitFor(() => expect(forwarded()).toHaveLength(2));
+          for (const signalId of signalIds) {
+            expect(forwarded().filter(event => event.signal?.id === signalId)).toEqual([
+              expect.objectContaining({ runId: successor }),
+            ]);
+          }
+        }
+        expect(await output.finishReason).toBe('stop');
+      } finally {
+        releaseTool();
+        releaseAcquire();
+        await done;
+        published.mockRestore();
+      }
+    },
+    20_000,
+  );
+
+  it('stops a run whose lapsed lease is not taken back within a renewal interval', async () => {
+    const thread = 'slow-retake-thread';
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'slow retake', sequenceIndex: i },
+        { toolCalls: [{ id: `call_slow_retake_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    /** Once cut, renewals never answer and taking the lease back answers only after most of a TTL (300ms). */
+    class SlowBackendPubSub extends ReplicaPubSub {
+      cut = false;
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+        return super.renewLease(key, owner, ttlMs);
+      }
+      override async acquireLease(key: string, owner: string, ttlMs: number) {
+        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(resolve => setTimeout(resolve, 250));
+        return super.acquireLease(key, owner, ttlMs);
+      }
+    }
+    const pubsub = new SlowBackendPubSub(shared);
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return 'ticked';
+      },
+    });
+    const { output, drain } = await startStream(replica(shared, new MockMemory(), { tick }, pubsub), 'slow retake', {
+      maxSteps: 100,
+      memory: { thread, resource: RESOURCE },
+    });
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+    // A backend this slow can't show the run still holds the thread before another process could take it.
+    const cutAt = Date.now();
+    pubsub.cut = true;
+    await done;
+
+    expect(await output.finishReason).toBe('aborted');
+    // Within a renewal interval of the cut (100ms here), not after a later, unrelated abort.
+    expect(Date.now() - cutAt).toBeLessThan(2_000);
+  }, 20_000);
+
+  it('frees the thread when a retake it gave up on is granted after the run stopped', async () => {
+    const thread = 'late-retake-grant-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'late retake grant', sequenceIndex: i },
+        { toolCalls: [{ id: `call_late_grant_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    /** Once cut, renewals never answer and a retake is granted only after the run gave up on it. */
+    class LateGrantPubSub extends ReplicaPubSub {
+      cut = false;
+      grantedLate = false;
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+        return super.renewLease(key, owner, ttlMs);
+      }
+      override async acquireLease(key: string, owner: string, ttlMs: number) {
+        if (!this.cut || !key.startsWith(`${RESOURCE}\u0000`)) return super.acquireLease(key, owner, ttlMs);
+        await new Promise(resolve => setTimeout(resolve, 250));
+        const lease = await super.acquireLease(key, owner, ttlMs);
+        this.grantedLate = lease.acquired;
+        return lease;
+      }
+    }
+    const pubsub = new LateGrantPubSub(shared);
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return 'ticked';
+      },
+    });
+    const { output, drain } = await startStream(
+      replica(shared, new MockMemory(), { tick }, pubsub),
+      'late retake grant',
+      { maxSteps: 100, memory: { thread, resource: RESOURCE } },
+    );
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+    pubsub.cut = true;
+    await done;
+    expect(await output.finishReason).toBe('aborted');
+
+    // The backend granted the abandoned retake to a run that no longer exists. Nothing renews that lease,
+    // so the thread must be freed at once rather than stay held for a TTL.
+    await vi.waitFor(() => expect(pubsub.grantedLate).toBe(true), { timeout: 5_000 });
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(shared.owner(key)).toBeUndefined();
+  }, 20_000);
+
+  it("never frees a successor's lease when a retake it gave up on settles after the successor took the run", async () => {
+    const thread = 'late-retake-successor-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'late retake after takeover', sequenceIndex: i },
+        { toolCalls: [{ id: `call_late_takeover_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    /** Once cut, renewals never answer and a retake reaches the backend only after the run gave up on it. */
+    class LateRetakePubSub extends ReplicaPubSub {
+      cut = false;
+      /** Thread-lease acquires that reached the backend after the cut, and those still on their way. */
+      settled = 0;
+      pending = 0;
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+        return super.renewLease(key, owner, ttlMs);
+      }
+      override async acquireLease(key: string, owner: string, ttlMs: number) {
+        if (!this.cut || !key.startsWith(`${RESOURCE}\u0000`)) return super.acquireLease(key, owner, ttlMs);
+        this.pending++;
+        await new Promise(resolve => setTimeout(resolve, 250));
+        try {
+          return await super.acquireLease(key, owner, ttlMs);
+        } finally {
+          this.pending--;
+          this.settled++;
+        }
+      }
+    }
+    const pubsub = new LateRetakePubSub(shared);
+    const runId = `late-retake-successor-${engine}`;
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return 'ticked';
+      },
+    });
+    const { output, drain } = await startStream(
+      replica(shared, new MockMemory(), { tick }, pubsub),
+      'late retake after takeover',
+      { runId, maxSteps: 100, memory: { thread, resource: RESOURCE } },
+    );
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+    pubsub.cut = true;
+    await done;
+    expect(await output.finishReason).toBe('aborted');
+
+    // Another process recovers the same run (a durable recover does this) and takes the thread under the
+    // run's id while this process's abandoned retake is still on its way to the backend.
+    const successor = await new ReplicaPubSub(shared).acquireLease(key, runId, 60_000);
+    expect(successor.acquired).toBe(true);
+
+    // Wait until every acquire the abandoned retake sent has settled, and for what it does after.
+    await vi.waitFor(
+      () => {
+        expect(pubsub.settled).toBeGreaterThan(0);
+        expect(pubsub.pending).toBe(0);
+      },
+      { timeout: 5_000 },
+    );
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(shared.owner(key)).toBe(runId);
+  }, 20_000);
+
+  it('keeps a run going when a late renewal finds its lease expired and no other run took the thread', async () => {
+    const thread = 'late-renewal-expired-thread';
+    for (let i = 0; i < 8; i++) {
+      llm.on(
+        { userMessage: 'late renewal expired', sequenceIndex: i },
+        { toolCalls: [{ id: `call_late_expired_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    llm.on({ userMessage: 'late renewal expired', sequenceIndex: 8 }, { content: 'late renewal expired done' });
+
+    const shared = new SharedLeases();
+    /** Every renewal waits until the lease has run out, as a renewal queued behind a stalled process does. */
+    class LateRenewalsPubSub extends ReplicaPubSub {
+      late = false;
+      falseRenewals = 0;
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (this.late && key.startsWith(`${RESOURCE}\u0000`)) {
+          const expiresAt = shared.leases.get(key)?.expiresAt ?? 0;
+          await new Promise(resolve => setTimeout(resolve, Math.max(0, expiresAt - Date.now()) + 20));
+        }
+        const renewed = await super.renewLease(key, owner, ttlMs);
+        if (!renewed) this.falseRenewals++;
+        return renewed;
+      }
+    }
+    const pubsub = new LateRenewalsPubSub(shared);
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return 'ticked';
+      },
+    });
+    const { output, drain } = await startStream(
+      replica(shared, new MockMemory(), { tick }, pubsub),
+      'late renewal expired',
+      { maxSteps: 12, memory: { thread, resource: RESOURCE } },
+    );
+    const done = drain();
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+    pubsub.late = true;
+    await vi.waitFor(() => expect(pubsub.falseRenewals).toBeGreaterThan(0), { timeout: 5_000 });
+    pubsub.late = false;
+    await done;
+
+    expect(ticks).toBe(8);
+    expect(await output.text).toBe('late renewal expired done');
+    expect(await output.finishReason).not.toBe('aborted');
+  }, 20_000);
+
+  it('says the run stopped because another run holds its thread lease', async () => {
+    const thread = 'lease-lost-reason-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'reason run', sequenceIndex: i },
+        { toolCalls: [{ id: `call_reason_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return 'ticked';
+      },
+    });
+    const agent = replica(shared, new MockMemory(), { tick });
+    const subscription = await agent.subscribeToThread({ resourceId: RESOURCE, threadId: thread });
+    const aborts: unknown[] = [];
+    const watching = (async () => {
+      for await (const chunk of subscription.stream as AsyncIterable<any>) {
+        if (chunk?.type === 'abort') {
+          aborts.push(chunk.payload);
+          break;
+        }
+      }
+    })();
+
+    const { output, drain } = await startStream(agent, 'reason run', {
+      maxSteps: 100,
+      memory: { thread, resource: RESOURCE },
+    });
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+    // Another process's run takes the thread.
+    shared.leases.set(key, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
+    await done;
+    await watching;
+    subscription.unsubscribe();
+
+    expect(await output.finishReason).toBe('aborted');
+    expect(aborts).toEqual([expect.objectContaining({ reason: 'thread-lease-lost' })]);
+  }, 20_000);
+
+  it('stops a run whose retake is refused because another run took the thread during the lapse', async () => {
+    const thread = 'refused-retake-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'refused retake', sequenceIndex: i },
+        { toolCalls: [{ id: `call_refused_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const modelCalls = () =>
+      llm.getRequests().filter(request => JSON.stringify(request.body?.messages ?? []).includes('refused retake'))
+        .length;
+    const shared = new SharedLeases();
+    /**
+     * Once cut, the lease backend stops answering renewals and owner checks, as one behind a partition does,
+     * and another process's run takes the thread. Only an acquire still gets through, so the run's
+     * deadline sends it to retake the lease, and the retake must be refused.
+     */
+    class LapseThenTakenPubSub extends ReplicaPubSub {
+      cut = false;
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+        return super.renewLease(key, owner, ttlMs);
+      }
+      override async getLeaseOwner(key: string) {
+        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+        return super.getLeaseOwner(key);
+      }
+    }
+    const pubsub = new LapseThenTakenPubSub(shared);
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return 'ticked';
+      },
+    });
+    const agent = replica(shared, new MockMemory(), { tick }, pubsub);
+    const subscription = await agent.subscribeToThread({ resourceId: RESOURCE, threadId: thread });
+    const aborts: unknown[] = [];
+    let callsAtAbort = -1;
+    let ticksAtAbort = -1;
+    const watching = (async () => {
+      for await (const chunk of subscription.stream as AsyncIterable<any>) {
+        if (chunk?.type === 'abort') {
+          callsAtAbort = modelCalls();
+          ticksAtAbort = ticks;
+          aborts.push(chunk.payload);
+          break;
+        }
+      }
+    })();
+
+    const { output, drain } = await startStream(agent, 'refused retake', {
+      maxSteps: 100,
+      memory: { thread, resource: RESOURCE },
+    });
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+    pubsub.cut = true;
+    shared.leases.set(key, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
+    const ticksAtTakeover = ticks;
+    await done;
+    await watching;
+    subscription.unsubscribe();
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(await output.finishReason).toBe('aborted');
+    expect(aborts).toEqual([expect.objectContaining({ reason: 'thread-lease-lost' })]);
+    // No tool call starts once the thread was taken (one may already be running), and nothing runs after the abort.
+    expect(ticks - ticksAtTakeover).toBeLessThanOrEqual(1);
+    expect(ticks).toBe(ticksAtAbort);
+    expect(modelCalls()).toBe(callsAtAbort);
+    expect(shared.owner(key)).toBe('successor-run');
+  }, 20_000);
 });

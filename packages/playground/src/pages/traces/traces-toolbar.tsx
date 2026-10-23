@@ -53,7 +53,6 @@ export function TracesToolbar() {
         </ActionRow.Start>
         <ActionRow.End>
           <TracesExplorer.ColumnsMenu />
-          <TracesExplorer.AutoRefresh />
         </ActionRow.End>
       </ActionRow>
       <LeaveUnsavedViewDialog />

@@ -19,12 +19,12 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
 import { MessageBubble } from './MessageBubble';
-import { ProviderLoginAction } from './ProviderLoginAction';
+import { ProviderReconnectAction } from './ProviderReconnectAction';
 import { draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
-import { isTimeGap } from './TranscriptSignals';
+import { isTurnDivider } from './TranscriptSignals';
 
 import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from '../services/transcript';
 
@@ -124,7 +124,7 @@ export function TranscriptEntries({
   // rail and history, but claims no room and no trip — the reader stays with the stream.
   const steers = (entry: TimelineEntry | undefined): boolean => entry?.kind === 'message' && Boolean(entry.steer);
 
-  const turnGroups = groupTurns(entries, { key: entry => entry.id, opensTurn, introduces: isTimeGap });
+  const turnGroups = groupTurns(entries, { key: entry => entry.id, opensTurn, introduces: isTurnDivider });
   const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
 
   return (
@@ -275,7 +275,7 @@ function NoticeCard({ entry }: { entry: NoticeEntry }) {
     <Notice
       className="my-2"
       variant={entry.level === 'error' ? 'destructive' : 'info'}
-      action={entry.action === 'provider-login' ? <ProviderLoginAction /> : undefined}
+      action={entry.action === 'provider-login' ? <ProviderReconnectAction /> : undefined}
     >
       <MarkdownRenderer className="text-current">{entry.text}</MarkdownRenderer>
     </Notice>
