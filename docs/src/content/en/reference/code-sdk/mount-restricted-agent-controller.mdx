@@ -61,12 +61,14 @@ The allowlist applies to every mode. A mode can narrow its own access with `avai
 
 The factory prevents Mastra Code itself from discovering ambient host capabilities. The model, workspace, storage, memory, tools, processors, routes, and callbacks you inject are trusted host code and remain responsible for their own filesystem, process, credential, and network access. In particular, `allowedTools` controls which tools the model can see and call. It doesn't sandbox the implementation of an allowed tool.
 
+The `Mastra` server itself isn't restricted. Its standard routes, such as `GET /agents/providers`, report which model providers have API keys in the server's environment variables. Keep tenant credentials out of the process environment, or protect those routes with [server authentication](/docs/auth/overview).
+
 ## Disabled capabilities
 
 The restricted factory doesn't register these capabilities:
 
 - Authentication storage or provider login
-- Built-in model gateways, so `listAvailableModels()` returns an empty catalog and doesn't reveal which provider credentials the server holds
+- Built-in model gateways on the controller, so `listAvailableModels()` returns an empty catalog
 - Browser automation
 - GitHub polling or cross-agent signals
 - Goal judging
