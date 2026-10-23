@@ -1110,6 +1110,10 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
     // own cleanups.
     try {
       await settleBackgroundTasks(host);
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
       await host.shutdown();
     } catch (error) {
       errors.push(error);
