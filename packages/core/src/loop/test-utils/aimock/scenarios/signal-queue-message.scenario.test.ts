@@ -23,9 +23,16 @@ import { stepCountIs } from '@internal/ai-sdk-v5';
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory/mock';
-import { isUserMessagePendingChunk, isUserMessageCancelledChunk } from '../../../../stream/types';
+import type { UserMessageCancelledChunk, UserMessagePendingChunk } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines, createSharedAgent } from '../aimock-scenario';
+
+const hasType = (part: unknown, type: string) =>
+  !!part && typeof part === 'object' && 'type' in part && part.type === type;
+const isUserMessagePendingChunk = (part: unknown): part is UserMessagePendingChunk =>
+  hasType(part, 'data-user-message-pending');
+const isUserMessageCancelledChunk = (part: unknown): part is UserMessageCancelledChunk =>
+  hasType(part, 'data-user-message-cancelled');
 
 const QUEUED = 'Queued follow-up';
 
