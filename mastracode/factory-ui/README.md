@@ -46,6 +46,8 @@ Factory stores actor names and profile images in audit event metadata when event
 
 Opening a Factory lands on its first board. The retired Activity, Overview, Attention, Metrics, and Audit URLs also open that Factory's board landing. Activity and Audit log are no longer offered in the sidebar or global search.
 
+Activity's unread badge, open-item dot, and attention chime are retired, including alerts for failed runs, mentions, and waiting agents. The Needs you and followed-discussion lists and their inbox read, archive, and restore actions are also removed. Board cards still offer failed-decision retries and proposal approval and dismissal.
+
 Successful run completions continue to use the live Ready indicator and completion sound on sidebar session rows.
 
 ## Session titles
