@@ -918,8 +918,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       fixedMemory: typedAgent.__hasFixedMemory(),
     },
     messageId,
-    agentSpanData: agentSpan?.snapshot(),
-    modelSpanData: modelSpan?.snapshot(),
+    agentSpanData: agentSpan?.snapshot?.() ?? agentSpan?.exportSpan(),
+    modelSpanData: modelSpan?.snapshot?.() ?? modelSpan?.exportSpan(),
     requestContextEntries: requestContextEntriesSnapshot,
     inputTripwire: tripwireData,
   });

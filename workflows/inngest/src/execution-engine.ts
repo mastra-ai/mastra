@@ -367,7 +367,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       });
 
       // Return serializable form
-      return span?.snapshot();
+      return span?.snapshot?.() ?? span?.exportSpan();
     });
 
     // Return a rebuilt span that can have .end()/.error() called later
@@ -454,7 +454,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       });
 
       // Return serializable form
-      return span?.snapshot();
+      return span?.snapshot?.() ?? span?.exportSpan();
     });
 
     // Return a rebuilt span that can have .end()/.error() called later
