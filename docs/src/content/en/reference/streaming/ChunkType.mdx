@@ -2044,7 +2044,7 @@ type UserMessagePendingChunk = {
 
 A transient removal event emitted when accepted user input is cancelled before delivery. Subscribers can remove the pending projection whose `data.id` matches the cancelled signal.
 
-The chunk isn't saved to conversation history. It is emitted only after the input is removed, not when cancellation is merely requested.
+The chunk is emitted only after the input has been removed, confirming removal rather than a cancellation request. It remains transient and isn't saved to conversation history.
 
 ```typescript
 type UserMessageCancelledChunk = {
@@ -2064,7 +2064,7 @@ type UserMessageCancelledChunk = {
 
 The stored history of a thread, emitted at the start of a thread subscription.
 
-`thread-history` arrives only when you call [`agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions) with `withInitialHistory: true`. It is the first chunk, followed by retained parts newer than the history and then live parts. Without agent memory, or when the thread has no stored messages yet, the chunk is still emitted first with an empty `messages` array and `hasMore: false`.
+`thread-history` arrives only when you call [`agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions) with `withInitialHistory: true`. It's the first chunk, followed by retained parts newer than the history and then live parts. Without agent memory, or when the thread has no stored messages yet, the chunk is still emitted first with an empty `messages` array and `hasMore: false`.
 
 <PropertiesTable
   content={[

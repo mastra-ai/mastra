@@ -34,25 +34,15 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "qwen3.8-flash": [
+    "MiniMax-M3": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 262144
       }
     ],
     "kimi-k3": [
@@ -64,15 +54,25 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "MiniMax-M3": [
+    "qwen3.8-flash": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 262144
+      }
+    ],
+    "hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ]
   }
