@@ -204,4 +204,19 @@ describe('restricted Mastra Code embedding', () => {
       'explicit storage',
     );
   });
+
+  it('keeps only host-granted allow rules in session state', async () => {
+    const { createRestrictedMastraCodeAgentController } = await import('./restricted.js');
+    await createRestrictedMastraCodeAgentController(
+      createConfig({ initialState: { permissionRules: { categories: { read: 'allow' }, tools: { view: 'allow' } } } }),
+    );
+
+    const stateSchema = (controllerConfigs[0] as Record<string, any>).stateSchema;
+    const rules = (categories: Record<string, string>, tools: Record<string, string>) =>
+      stateSchema.safeParse({ permissionRules: { categories, tools } }).success;
+    expect(rules({ read: 'allow' }, { view: 'allow' })).toBe(true);
+    expect(rules({ read: 'ask', execute: 'deny' }, { view: 'deny', remote_read: 'ask' })).toBe(true);
+    expect(rules({ execute: 'allow' }, {})).toBe(false);
+    expect(rules({}, { remote_read: 'allow' })).toBe(false);
+  });
 });

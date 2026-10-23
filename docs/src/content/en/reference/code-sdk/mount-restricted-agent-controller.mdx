@@ -61,6 +61,8 @@ The allowlist applies to every mode. A mode can narrow its own access with `avai
 
 The factory prevents Mastra Code itself from discovering ambient host capabilities. The model, workspace, storage, memory, tools, processors, routes, and callbacks you inject are trusted host code and remain responsible for their own filesystem, process, credential, and network access. In particular, `allowedTools` controls which tools the model can see and call. It doesn't sandbox the implementation of an allowed tool.
 
+Session state can't turn on automatic tool approval. `yolo` stays `false`, and `permissionRules` keeps an `allow` policy only when `initialState.permissionRules` already sets that tool or category to `allow`. Clients can still set `ask` or `deny` and answer approval prompts, including approving every call in a category from a prompt.
+
 The `Mastra` server itself isn't restricted. Its standard routes, such as `GET /agents/providers`, report which model providers have API keys in the server's environment variables. Keep tenant credentials out of the process environment, or protect those routes with [server authentication](/docs/auth/overview).
 
 ## Disabled capabilities
@@ -136,7 +138,7 @@ The factory also skips gateway synchronization, local thread locks, model usage 
     name: 'initialState',
     type: 'Partial<MastraCodeState>',
     description:
-      'Host-supplied initial state. Values in project take precedence over matching state fields. The factory always sets `yolo` to false, skips global instructions, clears plugin paths, and disables observational memory model selection.',
+      'Host-supplied initial state. Values in project take precedence over matching state fields. The factory always sets `yolo` to false, skips global instructions, clears plugin paths, and disables observational memory model selection. Session state can only use the `allow` permission rules set here.',
     isOptional: true,
   },
   {

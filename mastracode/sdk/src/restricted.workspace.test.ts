@@ -112,6 +112,19 @@ describe('restricted workspace tool enforcement', () => {
     await expect(session.state.set({ yolo: true } as never)).rejects.toThrow('Invalid state update');
     expect(session.state.get().yolo).toBe(false);
 
+    // Persisted allow rules would auto-approve tools just like yolo; clients may only tighten approval.
+    await expect(session.permissions.setForCategory({ category: 'execute', policy: 'allow' })).rejects.toThrow(
+      'Invalid state update',
+    );
+    await expect(session.permissions.setForTool({ toolName: 'view', policy: 'allow' })).rejects.toThrow(
+      'Invalid state update',
+    );
+    expect(session.resolveToolApproval('view')).toBe('ask');
+    expect(session.permissions.getRules()).toEqual({ categories: {}, tools: {} });
+    await session.permissions.setForTool({ toolName: 'view', policy: 'deny' });
+    expect(session.resolveToolApproval('view')).toBe('deny');
+    await session.permissions.setForTool({ toolName: 'view', policy: 'ask' });
+
     await session.sendMessage({ content: 'Delete protected.txt' });
 
     const streamOptions = stream.mock.calls[0]![1];

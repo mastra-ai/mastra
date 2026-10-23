@@ -24,6 +24,34 @@ import type { MastraCodeState } from './schema.js';
 // memory models on the injected memory instead.
 const disabledModelId = '__restricted_model_disabled__';
 const disabledModel = z.literal(disabledModelId).default(disabledModelId);
+
+type PermissionRules = NonNullable<MastraCodeState['permissionRules']>;
+
+/**
+ * Persisted "allow" rules skip tool approval just like yolo. Session state may
+ * only keep the "allow" rules the host set in `initialState`; clients can still
+ * tighten approval or answer individual approval prompts.
+ */
+function restrictedPermissionRules(hostRules?: Partial<PermissionRules>) {
+  const policies = z.record(z.string(), z.enum(['allow', 'ask', 'deny'])).default({});
+  return z
+    .object({ categories: policies, tools: policies })
+    .superRefine((rules, ctx) => {
+      for (const scope of ['categories', 'tools'] as const) {
+        for (const [name, policy] of Object.entries(rules[scope])) {
+          if (policy === 'allow' && hostRules?.[scope]?.[name] !== 'allow') {
+            ctx.addIssue({
+              code: 'custom',
+              path: [scope, name],
+              message: `Restricted Mastra Code can't auto-approve "${name}" unless the host allows it`,
+            });
+          }
+        }
+      }
+    })
+    .default({ categories: {}, tools: {} });
+}
+
 const restrictedStateSchema = z.looseObject({
   currentModelId: z.string().optional(),
   modeId: z.string().optional(),
@@ -53,12 +81,7 @@ const restrictedStateSchema = z.looseObject({
   omScope: z.enum(['thread', 'resource']).optional(),
   thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
   yolo: z.literal(false).default(false),
-  permissionRules: z
-    .object({
-      categories: z.record(z.string(), z.enum(['allow', 'ask', 'deny'])).default({}),
-      tools: z.record(z.string(), z.enum(['allow', 'ask', 'deny'])).default({}),
-    })
-    .default({ categories: {}, tools: {} }),
+  permissionRules: restrictedPermissionRules(),
   smartEditing: z.boolean().default(true),
   notifications: z.enum(['bell', 'system', 'both', 'off']).default('off'),
   tasks: z
@@ -255,7 +278,9 @@ export async function createRestrictedMastraCodeAgentController(config: Restrict
     storage: config.storage,
     memory,
     pubsub: config.pubsub,
-    stateSchema: restrictedStateSchema as PublicSchema<MastraCodeState>,
+    stateSchema: restrictedStateSchema.extend({
+      permissionRules: restrictedPermissionRules(config.initialState?.permissionRules),
+    }) as PublicSchema<MastraCodeState>,
     agent: codeAgent,
     subagents: [],
     gateways: [],
