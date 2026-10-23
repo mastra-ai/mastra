@@ -82,6 +82,7 @@ const tools = company.createTools({ write: true }); // explicit wiring
 - Draining the outbox happens before every search (in bounded batches) and, without blocking, after each tool write.
 - **Indexing lag:** records written by anything other than a tool, such as an import or a direct API call, are indexed only when some process next runs a search. A first search after a bulk import is slower.
 - Without a vector store, search is keyword-only.
+- **The store enqueues outbox rows on every write regardless of a vector store** (e.g. `inmemory.ts:370, 479-486, 505, 557-558`; LibSQL/PG the same). The alpha keeps that: rows stay pending, one per write, and if a vector store and embedder are added later the first search back-fills the index from them. The cost is outbox growth on keyword-only instances; pruning it is left for later.
 
 **What Memory still adds** when both are set: message history and OM. Memory no longer has a `knowledge` option (D4).
 
@@ -119,6 +120,7 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 
 - An agent with Knowledge and no Memory gets read tools only, by default. Its search is keyword-only without a vector store, and semantic with one.
 - Write tools stamp `agent:<id>` as the source, and refuse without a thread or org.
+- `createMastraCode({ knowledge: { key, instance, organizationId, resourceId } })` with no Memory, the old Subconscious flag unset and no vector store: both keys reach the tool context (`resourceId` as `knowledgeResourceId`), and a write lands at `org:<override>` / `resource:<override>`.
 - The pins processor gives a stable block from one run to the next. One user's pin shows in their other threads and never in another user's. The pin limits are enforced in tokens.
 - Limit checks run at the new token bounds in the shared store contract (InMemory, LibSQL, PG).
 - OM still strips old Subconscious signals from observer input, and `deleteThread` still removes owned remind threads.
