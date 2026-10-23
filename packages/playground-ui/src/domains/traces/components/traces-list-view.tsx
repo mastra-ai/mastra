@@ -2,6 +2,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { ListFilterIcon } from 'lucide-react';
 import { useRef } from 'react';
 import {
+  ALL_TRACES_LIST_ID,
   DEFAULT_TRACE_COLUMN_PREFERENCES,
   TRACE_CUSTOM_COLUMN_LABELS,
   buildTraceListColumnKeys,
@@ -140,7 +141,7 @@ export function TracesListView({
   createdSort,
   onSortChange,
   onFilterByField,
-  listId = 'all-traces',
+  listId = ALL_TRACES_LIST_ID,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const columns = buildTraceListColumns(columnPreferences);

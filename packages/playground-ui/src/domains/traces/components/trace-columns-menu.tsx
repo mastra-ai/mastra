@@ -1,7 +1,12 @@
 import { Columns3Icon, PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import { TRACE_CUSTOM_COLUMN_FIELDS, TRACE_CUSTOM_COLUMN_LABELS, TRACE_USAGE_COLUMNS } from '../trace-list-columns';
+import {
+  TRACE_CUSTOM_COLUMN_FIELDS,
+  TRACE_CUSTOM_COLUMN_LABELS,
+  TRACE_OPTIONAL_COLUMN_LABELS,
+  TRACE_USAGE_COLUMNS,
+} from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceCustomColumn, TraceOptionalColumn } from '../trace-list-columns';
 import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
@@ -31,19 +36,6 @@ const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = [
   'endTime',
   'environment',
 ];
-
-const COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
-  type: 'Primitive type',
-  input: 'Input',
-  output: 'Output',
-  duration: 'Duration',
-  endTime: 'End',
-  environment: 'Environment',
-  inputTokens: 'Input tokens',
-  outputTokens: 'Output tokens',
-  totalTokens: 'Total tokens',
-  estimatedCost: 'Estimated cost',
-};
 
 type TraceColumnsMenuProps = {
   preferences: TraceColumnPreferences;
@@ -124,7 +116,7 @@ export function TraceColumnsMenu({
               checked={preferences.visibleColumns.includes(column)}
               onCheckedChange={() => onToggleColumn(column)}
             >
-              {COLUMN_LABELS[column]}
+              {TRACE_OPTIONAL_COLUMN_LABELS[column]}
             </DropdownMenu.CheckboxItem>
           ))}
 
@@ -137,7 +129,7 @@ export function TraceColumnsMenu({
               disabled={Boolean(usageDisabledReason)}
               onCheckedChange={() => onToggleColumn(column)}
             >
-              {COLUMN_LABELS[column]}
+              {TRACE_OPTIONAL_COLUMN_LABELS[column]}
             </DropdownMenu.CheckboxItem>
           ))}
           {usageDisabledReason && (

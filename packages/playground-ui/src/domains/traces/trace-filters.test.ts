@@ -119,9 +119,9 @@ describe('createTraceFilterBarFields', () => {
     expect(byId('traceId')?.hidden).toBeUndefined();
   });
 
-  it('omits fields the query API cannot filter on', () => {
-    expect(byId('runId')).toBeUndefined();
-    expect(byId('serviceName')).toBeUndefined();
+  it('does not offer fields the query API cannot filter on, but keeps their labels for chips', () => {
+    expect(byId('runId')).toMatchObject({ label: 'Run ID', hidden: true });
+    expect(byId('sessionId')?.hidden).toBe(true);
   });
 
   describe('when the server supports root duration predicates', () => {
@@ -142,8 +142,8 @@ describe('createTraceFilterBarFields', () => {
   });
 
   describe('when the server does not support root duration predicates', () => {
-    it('does not offer a Duration (ms) field', () => {
-      expect(byId('durationMs')).toBeUndefined();
+    it('does not offer a Duration (ms) field, but keeps its label for chips', () => {
+      expect(byId('durationMs')).toMatchObject({ label: 'Duration (ms)', hidden: true });
     });
   });
 
@@ -155,7 +155,7 @@ describe('createTraceFilterBarFields', () => {
         withQueryTrace: false,
         withRootDuration: true,
       });
-      expect(legacy.find(f => f.id === 'durationMs')).toBeUndefined();
+      expect(legacy.find(f => f.id === 'durationMs')?.hidden).toBe(true);
     });
   });
 
@@ -223,7 +223,7 @@ describe('createTraceFilterBarFields', () => {
         canonicalTraceFields: [tagsDescriptor],
         withQueryTrace: false,
       });
-      expect(legacy.find(f => f.id === 'tags')).toBeUndefined();
+      expect(legacy.find(f => f.id === 'tags')?.hidden).toBe(true);
     });
   });
 
@@ -240,10 +240,10 @@ describe('createTraceFilterBarFields', () => {
       metadataFields: [{ path: 'metadata.region', suggestions: [] }],
       withQueryTrace: false,
     });
-    const ids = legacyFields.map(f => f.id);
+    const offered = legacyFields.filter(f => !f.hidden);
 
     it('offers only fields the legacy list endpoint can filter on', () => {
-      expect(ids.sort()).toEqual(
+      expect(offered.map(f => f.id).sort()).toEqual(
         [
           'entityId',
           'entityName',
@@ -252,7 +252,6 @@ describe('createTraceFilterBarFields', () => {
           'organizationId',
           'requestId',
           'resourceId',
-          'rootEntityType',
           'runId',
           'sessionId',
           'status',
@@ -264,7 +263,12 @@ describe('createTraceFilterBarFields', () => {
     });
 
     it('offers only the is operator', () => {
-      expect(legacyFields.every(f => f.operators.length === 1 && f.operators[0] === 'is')).toBe(true);
+      expect(offered.every(f => f.operators.length === 1 && f.operators[0] === 'is')).toBe(true);
+    });
+
+    it('keeps labels for the fields it cannot run, without offering them', () => {
+      expect(legacyFields.find(f => f.id === 'metadata.region')).toMatchObject({ label: 'region', hidden: true });
+      expect(legacyFields.find(f => f.id === 'spans.model')?.hidden).toBe(true);
     });
 
     it('keeps hidden field ids hidden', () => {
@@ -361,13 +365,11 @@ describe('createTraceFilterBarFields', () => {
     expect(find('spans.name')?.strict).toBe(true);
   });
 
-  it('lists picker fields, then free-text, then span, score and feedback fields, alphabetically', () => {
-    expect(fields.map(f => f.id)).toEqual([
+  it('offers picker fields, then free-text, then span, score and feedback fields, alphabetically', () => {
+    expect(fields.filter(f => !f.hidden).map(f => f.id)).toEqual([
       'environment',
       'entityName',
-      'rootEntityType',
       'status',
-      'entityId',
       'resourceId',
       'threadId',
       'traceId',

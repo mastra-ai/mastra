@@ -143,6 +143,30 @@ await mastraClient.deleteSavedView('view-id')
 }
 ```
 
+## React hooks
+
+`@mastra/react/hooks/saved-views` wraps these methods for React Query:
+
+- `useSavedViews({ page })`: Lists every view for one Studio page, fetching each page of results while `pagination.hasMore` is `true`. It never retries a `404` or `501`.
+- `useCreateSavedView()`, `useUpdateSavedView()`, and `useDeleteSavedView()`: Mutations that refresh every saved-views list when they succeed. `useUpdateSavedView` takes `{ savedViewId, ...changes }`.
+- `isSavedViewsUnavailableError(error)`: Returns `true` for a `404` or `501`, so you can hide saved views instead of showing an error.
+
+```tsx
+import { isSavedViewsUnavailableError, useSavedViews } from '@mastra/react/hooks/saved-views'
+
+function TraceViewNames() {
+  const { data: views = [], error } = useSavedViews({ page: 'traces' })
+  if (isSavedViewsUnavailableError(error)) return null
+  return (
+    <ul>
+      {views.map(view => (
+        <li key={view.id}>{view.name}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
 ## Related
 
 - [Server routes](/reference/server/routes#saved-views)

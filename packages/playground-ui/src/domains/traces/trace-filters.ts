@@ -572,24 +572,32 @@ export function createTraceFilterBarFields({
   const tagsFields = tagsField ? [tagsField] : [];
 
   const hidden = new Set(hiddenFieldIds);
+  const durationField: FilterBarField = { ...number('durationMs'), operators: TRACE_ROOT_DURATION_OPERATORS };
+  // Never offered, but labelled: chips for filters this server can't run (from a view or a URL
+  // made where it could) still read as the field rather than its id.
+  const hide = (field: FilterBarField): FilterBarField => ({ ...field, hidden: true });
   if (!withQueryTrace) {
-    return [...pickFields.sort(byLabel), ...textFields.sort(byLabel)].map(field => ({
-      ...field,
-      operators: TRACE_LEGACY_OPERATORS,
-      ...(hidden.has(field.id) ? { hidden: true } : {}),
-    }));
+    return [
+      ...[...pickFields.sort(byLabel), ...textFields.sort(byLabel)].map(field => ({
+        ...field,
+        operators: TRACE_LEGACY_OPERATORS,
+        ...(hidden.has(field.id) ? { hidden: true } : {}),
+      })),
+      ...[...tagsFields, durationField, ...relatedFields, ...metadataBarFields].map(hide),
+    ];
   }
   return [
     ...[...pickFields, ...tagsFields].sort(byLabel),
-    ...[
-      ...textFields,
-      ...(withRootDuration ? [{ ...number('durationMs'), operators: TRACE_ROOT_DURATION_OPERATORS }] : []),
-    ].sort(byLabel),
+    ...[...textFields, durationField].sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),
-  ]
-    .filter(field => !TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(field.id))
-    .map(field => (hidden.has(field.id) ? { ...field, hidden: true } : field));
+  ].map(field =>
+    hidden.has(field.id) ||
+    TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(field.id) ||
+    (field.id === 'durationMs' && !withRootDuration)
+      ? hide(field)
+      : field,
+  );
 }
 
 /** One FilterBar item per token, keyed by field id so chip order == URL order.
@@ -852,7 +860,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every(entry => typeof entry === 'string');
 
-function parseTraceFilterGroup(input: unknown): TraceFilterGroup | undefined {
+export function parseTraceFilterGroup(input: unknown): TraceFilterGroup | undefined {
   if (!isRecord(input) || typeof input.id !== 'string') return undefined;
   if (input.logic !== 'and' && input.logic !== 'or') return undefined;
   if (!Array.isArray(input.nodes)) return undefined;
@@ -871,6 +879,32 @@ function parseTraceFilterNode(input: unknown): TraceFilterNode | undefined {
   }
   return token;
 }
+
+/** The legacy list endpoint's single-value filters, by filter field. Each one takes `is` only. */
+const TRACE_LEGACY_FILTER_KEYS = {
+  entityId: 'entityId',
+  entityName: 'entityName',
+  traceId: 'traceId',
+  runId: 'runId',
+  threadId: 'threadId',
+  sessionId: 'sessionId',
+  requestId: 'requestId',
+  resourceId: 'resourceId',
+  userId: 'userId',
+  organizationId: 'organizationId',
+  serviceName: 'serviceName',
+  environment: 'environment',
+  experimentId: 'experimentId',
+} as const satisfies Record<string, keyof NonNullable<ListTracesArgs['filters']>>;
+const TRACE_LEGACY_FILTER_KEY_BY_FIELD = new Map(Object.entries(TRACE_LEGACY_FILTER_KEYS));
+
+/** Every field the legacy list endpoint filters on (see `buildTraceListFilters`). */
+export const TRACE_LEGACY_FILTER_FIELD_IDS: ReadonlySet<string> = new Set([
+  'rootEntityType',
+  'status',
+  'tags',
+  ...TRACE_LEGACY_FILTER_KEY_BY_FIELD.keys(),
+]);
 
 export function buildTraceListFilters({
   rootEntityType,
@@ -921,49 +955,8 @@ export function buildTraceListFilters({
     if (!token.value.trim()) continue;
     if (token.value === 'Any') continue;
 
-    switch (token.fieldId) {
-      case 'entityId':
-        filters.entityId = token.value;
-        break;
-      case 'entityName':
-        filters.entityName = token.value;
-        break;
-      case 'traceId':
-        filters.traceId = token.value;
-        break;
-      case 'runId':
-        filters.runId = token.value;
-        break;
-      case 'threadId':
-        filters.threadId = token.value;
-        break;
-      case 'sessionId':
-        filters.sessionId = token.value;
-        break;
-      case 'requestId':
-        filters.requestId = token.value;
-        break;
-      case 'resourceId':
-        filters.resourceId = token.value;
-        break;
-      case 'userId':
-        filters.userId = token.value;
-        break;
-      case 'organizationId':
-        filters.organizationId = token.value;
-        break;
-      case 'serviceName':
-        filters.serviceName = token.value;
-        break;
-      case 'environment':
-        filters.environment = token.value;
-        break;
-      case 'experimentId':
-        filters.experimentId = token.value;
-        break;
-      default:
-        break;
-    }
+    const key = TRACE_LEGACY_FILTER_KEY_BY_FIELD.get(token.fieldId);
+    if (key) filters[key] = token.value;
   }
 
   return filters;
