@@ -12,7 +12,6 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Memory } from '../..';
 import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
-import { BackgroundOperation, waitWithAbort } from './background-operation';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { runOMCommit } from './commit-queue';
 import { omDebug, omError } from './debug';
@@ -70,6 +69,7 @@ import type {
   ResolvedReflectionConfig,
   ThresholdRange,
 } from './types';
+import { waitWithAbort } from './wait-with-abort';
 
 async function getThreadExtractedValues(
   storage: MemoryStorage,
@@ -722,7 +722,6 @@ export class ReflectorRunner {
     sendSignal?: ProcessorContext['sendSignal'],
     trigger?: ObserveTrigger,
     currentModel?: ObservationModelContext,
-    abortSignal?: AbortSignal,
   ): void {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -730,7 +729,6 @@ export class ReflectorRunner {
       return;
     }
 
-    const operation = new BackgroundOperation(lockKey, abortSignal);
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, observationTokens);
 
     registerOp(record.id, 'bufferingReflection');
@@ -760,11 +758,10 @@ export class ReflectorRunner {
           sendSignal,
           trigger,
           currentModel,
-          operation.signal,
         );
       } catch (error) {
         reflectionError = error instanceof Error ? error : new Error(String(error));
-        if (writer && !operation.signal.aborted) {
+        if (writer) {
           try {
             const failedMarker = createBufferingFailedMarker({
               cycleId: `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
@@ -778,12 +775,7 @@ export class ReflectorRunner {
             });
             // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
             void writer.custom({ ...failedMarker, transient: true }).catch(() => {});
-            await this.persistMarkerToStorage(
-              failedMarker,
-              record.threadId ?? '',
-              record.resourceId ?? undefined,
-              operation.signal,
-            );
+            await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
           } catch (markerError) {
             omError(
               '[OM] Failed to persist buffering-failed marker after async buffered reflection failure',
@@ -806,7 +798,6 @@ export class ReflectorRunner {
           omError('[OM] onReflectionEnd hook failed after async buffered reflection', hookError);
         }
 
-        operation.dispose();
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
         unregisterOp(record.id, 'bufferingReflection');
         await this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
@@ -834,7 +825,6 @@ export class ReflectorRunner {
     sendSignal?: ProcessorContext['sendSignal'],
     trigger?: ObserveTrigger,
     currentModel?: ObservationModelContext,
-    abortSignal?: AbortSignal,
   ): Promise<
     | {
         usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -902,7 +892,6 @@ export class ReflectorRunner {
         startMarker,
         currentRecord.threadId ?? '',
         currentRecord.resourceId ?? undefined,
-        abortSignal,
       );
     }
 
@@ -912,7 +901,7 @@ export class ReflectorRunner {
       undefined,
       undefined,
       compressionTarget,
-      abortSignal,
+      undefined,
       true,
       compressionStartLevel,
       requestContext,
@@ -930,8 +919,6 @@ export class ReflectorRunner {
       hookContext,
     );
 
-    abortSignal?.throwIfAborted();
-
     const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: reflector returned ${reflectionTokenCount} tokens (${reflectResult.observations?.length} chars), saving to recordId=${currentRecord.id}`,
@@ -944,7 +931,6 @@ export class ReflectorRunner {
       async () => {
         const head = await this.storage.getObservationalMemory(currentRecord.threadId, currentRecord.resourceId);
         if (head?.id !== currentRecord.id) return false;
-        abortSignal?.throwIfAborted();
         await this.storage.updateBufferedReflection({
           id: currentRecord.id,
           reflection: reflectResult.observations,
@@ -954,7 +940,6 @@ export class ReflectorRunner {
         });
         return true;
       },
-      { abortSignal },
     );
     if (!saved) {
       omDebug(
@@ -966,14 +951,12 @@ export class ReflectorRunner {
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: bufferedReflection saved with lineCount=${reflectedObservationLineCount}`,
     );
-    abortSignal?.throwIfAborted();
     // Only a stored buffered reflection's extracted values belong to the thread.
     await persistThreadExtractedValues(
       this.storage,
       this.reflectionConfig.extractors,
       currentRecord.threadId ?? undefined,
       reflectResult.extractedValues,
-      abortSignal,
     );
 
     if (writer) {
@@ -991,12 +974,7 @@ export class ReflectorRunner {
       });
       // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
       void writer.custom({ ...endMarker, transient: true }).catch(() => {});
-      await this.persistMarkerToStorage(
-        endMarker,
-        currentRecord.threadId ?? '',
-        currentRecord.resourceId ?? undefined,
-        abortSignal,
-      );
+      await this.persistMarkerToStorage(endMarker, currentRecord.threadId ?? '', currentRecord.resourceId ?? undefined);
     }
 
     return { usage: reflectResult.usage, providerMetadata: reflectResult.providerMetadata };
@@ -1293,7 +1271,6 @@ export class ReflectorRunner {
           sendSignal,
           trigger,
           currentModel,
-          abortSignal,
         );
       }
     }
@@ -1402,7 +1379,6 @@ export class ReflectorRunner {
           sendSignal,
           trigger,
           currentModel,
-          abortSignal,
         );
         return;
       }

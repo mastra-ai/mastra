@@ -75,7 +75,6 @@ function createMockOM(opts: { asyncEnabled: boolean; bufferOnIdle?: boolean; uno
   return {
     buffering: {
       isAsyncObservationEnabled: vi.fn(() => opts.asyncEnabled),
-      getLockKey: vi.fn((threadId: string, resourceId?: string) => `${threadId}:${resourceId ?? ''}`),
     },
     getObservationConfig: vi.fn(() => ({ bufferOnIdle: opts.bufferOnIdle ?? true })),
     getOrCreateRecord: vi.fn(async () => record),

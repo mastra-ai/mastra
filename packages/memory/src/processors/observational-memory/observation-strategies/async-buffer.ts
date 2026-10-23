@@ -64,7 +64,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     const omMeta = thread ? getThreadOMMetadata(thread.metadata) : undefined;
     this.priorExtractedValues = getPriorExtractedValues(omMeta, this.observationConfig.extractors);
 
-    const result = await this.deps.observer.call(observerContext, messages, this.opts.abortSignal, {
+    const result = await this.deps.observer.call(observerContext, messages, undefined, {
       skipContinuationHints: true,
       wasTruncated,
       requestContext: this.opts.requestContext,
@@ -180,7 +180,6 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
           const head = await getLineageHead(this.storage, record);
           if (!head) return null;
           targetId = head.id;
-          this.opts.abortSignal?.throwIfAborted();
           const input = {
             id: targetId,
             chunk: {
@@ -279,7 +278,6 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
               ...(metadataUpdate.extracted ?? {}),
             },
           });
-          this.opts.abortSignal?.throwIfAborted();
           await this.storage.patchThread({
             id: threadId,
             ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),

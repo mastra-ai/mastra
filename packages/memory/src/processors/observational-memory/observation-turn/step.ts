@@ -241,7 +241,6 @@ export class ObservationStep {
         void om.trackBackgroundWork(
           om
             .buffer({
-              abortSignal: this.turn.abortSignal,
               threadId,
               resourceId,
               messages: safeCandidates,

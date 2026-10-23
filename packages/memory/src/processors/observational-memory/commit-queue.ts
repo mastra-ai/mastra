@@ -1,6 +1,6 @@
 import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 
-import { waitWithAbort } from './background-operation';
+import { waitWithAbort } from './wait-with-abort';
 
 /**
  * Process-wide queue for observational memory storage commits, keyed per thread or resource

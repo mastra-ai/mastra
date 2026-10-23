@@ -1,10 +1,10 @@
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
-import { waitWithAbort } from './background-operation';
 import { getOMLockKey, runOMCommit } from './commit-queue';
 import { omDebug } from './debug';
 import { isOpActiveInProcess } from './operation-registry';
 import type { ResolvedObservationConfig, ResolvedReflectionConfig } from './types';
+import { waitWithAbort } from './wait-with-abort';
 
 /**
  * Manages the static buffering state machine for async observation and reflection.

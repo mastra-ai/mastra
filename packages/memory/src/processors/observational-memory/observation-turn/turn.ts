@@ -5,7 +5,6 @@ import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/proce
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
-import { BackgroundOperation } from '../background-operation';
 import { omDebug } from '../debug';
 import { getObservableMessages } from '../message-utils';
 import type { ObservationalMemory } from '../observational-memory';
@@ -98,7 +97,6 @@ export class ObservationTurn {
   readonly hooks: ObservationTurnHooks;
 
   readonly abortSignal?: AbortSignal;
-  private releaseRun: () => void = () => {};
 
   constructor(opts: {
     abortSignal?: AbortSignal;
@@ -199,10 +197,6 @@ export class ObservationTurn {
       };
     }
 
-    this.releaseRun = BackgroundOperation.retainRun(
-      this.om.buffering.getLockKey(this.threadId, this.resourceId),
-      this.abortSignal,
-    );
     return this._context;
   }
 
@@ -242,7 +236,6 @@ export class ObservationTurn {
   async end(messageList: MessageList = this.messageList): Promise<TurnResult> {
     if (this._ended) throw new Error('Turn already ended');
     this._ended = true;
-    this.releaseRun();
 
     // Save any unsaved messages from the last step
     const unsavedInput = messageList.get.input.db();
@@ -268,7 +261,6 @@ export class ObservationTurn {
         void this.om.trackBackgroundWork(
           this.om
             .buffer({
-              abortSignal: this.abortSignal,
               threadId: this.threadId,
               resourceId: this.resourceId,
               messages: idleMessages,
