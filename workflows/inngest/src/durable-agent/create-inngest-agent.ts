@@ -1210,7 +1210,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       );
 
       // 1b. Register non-serializable state on the global run registry so
-      // workflow steps running in the same process can recover it.
+      // workflow steps running in the same process can recover it. The finish step processes
+      // into this MessageList, which the stream below reads for its final messages (as core does).
+      registryEntry.messageList = preparation.messageList;
       globalRunRegistry.set(runId, registryEntry);
 
       // 2. The AGENT_RUN and MODEL_GENERATION spans were already opened by the
@@ -1252,6 +1254,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         threadId,
         resourceId,
         structuredOutput: registryEntry.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
+        messageList: registryEntry.messageList,
+        outputProcessors: registryEntry.outputProcessors,
+        processorStates: registryEntry.processorStates,
+        requestContext: registryEntry.requestContext,
         onChunk: callbackOptions.onChunk,
         onStepFinish: callbackOptions.onStepFinish,
         onFinish: async result => {
@@ -1533,6 +1539,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         threadId: resumeOptions?.threadId,
         resourceId: resumeOptions?.resourceId,
         structuredOutput: existingEntry.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
+        messageList: existingEntry.messageList,
+        outputProcessors: existingEntry.outputProcessors,
+        processorStates: existingEntry.processorStates,
+        requestContext: existingEntry.requestContext,
         onChunk: chunk => {
           resumedChunkSeen = true;
           return callbackOptions.onChunk?.(chunk);
