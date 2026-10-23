@@ -2802,12 +2802,15 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists saved views, oldest first. Pass `page` (for example `'traces'`) to
-   * only return the views for one Studio page.
+   * Lists saved views, oldest first, up to 100 per call. Pass `page` (for
+   * example `'traces'`) to only return the views for one Studio page, and
+   * `pageIndex` to fetch the next page while `pagination.hasMore` is true.
    */
   public listSavedViews(params: ListSavedViewsParams = {}): Promise<ListSavedViewsResponse> {
     const searchParams = new URLSearchParams();
-    if (params.page) searchParams.set('page', params.page);
+    if (params.page !== undefined) searchParams.set('page', params.page);
+    if (params.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params.pageIndex !== undefined) searchParams.set('pageIndex', String(params.pageIndex));
     const qs = searchParams.toString();
     return this.request(`/saved-views${qs ? `?${qs}` : ''}`);
   }
@@ -2840,7 +2843,7 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Deletes a saved view.
+   * Deletes a saved view and returns `{ deleted: true }`.
    */
   public deleteSavedView(
     savedViewId: PathParams<'DELETE /saved-views/:savedViewId'>['savedViewId'],

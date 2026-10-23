@@ -7,6 +7,7 @@ import { AgentsMSSQL } from './domains/agents';
 import { BackgroundTasksMSSQL } from './domains/background-tasks';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
+import { SavedViewsMSSQL } from './domains/saved-views';
 import { ScoresMSSQL } from './domains/scores';
 import { WorkflowDefinitionsMSSQL } from './domains/workflow-definitions';
 import { WorkflowsMSSQL } from './domains/workflows';
@@ -17,6 +18,7 @@ export {
   BackgroundTasksMSSQL,
   MemoryMSSQL,
   ObservabilityMSSQL,
+  SavedViewsMSSQL,
   ScoresMSSQL,
   WorkflowDefinitionsMSSQL,
   WorkflowsMSSQL,
@@ -214,6 +216,7 @@ export class MSSQLStore extends MastraCompositeStore {
 
       const agents = new AgentsMSSQL(domainConfig);
       const workflowDefinitions = new WorkflowDefinitionsMSSQL(domainConfig);
+      const savedViews = new SavedViewsMSSQL(domainConfig);
 
       this.stores = {
         scores,
@@ -223,6 +226,7 @@ export class MSSQLStore extends MastraCompositeStore {
         backgroundTasks,
         agents,
         workflowDefinitions,
+        savedViews,
       };
     } catch (e) {
       throw new MastraError(

@@ -904,7 +904,8 @@ describe('MastraClient', () => {
       page: 'traces',
       name: 'Errors',
       authorId: null,
-      state: { version: 1, timeRange: { preset: 'last-24h' } },
+      updatedById: null,
+      state: { version: 1, filters: [], settings: { datePreset: 'last-24h' } },
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
@@ -922,7 +923,7 @@ describe('MastraClient', () => {
     });
 
     it('lists views for a page', async () => {
-      const response = { views: [view], pagination: { total: 1, page: 0, perPage: false, hasMore: false } };
+      const response = { views: [view], pagination: { total: 1, page: 0, perPage: 100, hasMore: false } };
       respondWith(response);
 
       const result = await client.listSavedViews({ page: 'traces' });
@@ -932,11 +933,27 @@ describe('MastraClient', () => {
     });
 
     it('lists every view when no page is given', async () => {
-      respondWith({ views: [], pagination: { total: 0, page: 0, perPage: false, hasMore: false } });
+      respondWith({ views: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } });
 
       await client.listSavedViews();
 
       expect(lastCall()[0]).toBe('http://localhost:4111/api/saved-views');
+    });
+
+    it('sends an empty page so the server rejects it', async () => {
+      respondWith({ views: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } });
+
+      await client.listSavedViews({ page: '' });
+
+      expect(lastCall()[0]).toBe('http://localhost:4111/api/saved-views?page=');
+    });
+
+    it('sends perPage and pageIndex', async () => {
+      respondWith({ views: [], pagination: { total: 0, page: 2, perPage: 25, hasMore: false } });
+
+      await client.listSavedViews({ page: 'traces', perPage: 25, pageIndex: 2 });
+
+      expect(lastCall()[0]).toBe('http://localhost:4111/api/saved-views?page=traces&perPage=25&pageIndex=2');
     });
 
     it('gets a view by id', async () => {
@@ -973,14 +990,14 @@ describe('MastraClient', () => {
     });
 
     it('deletes a view', async () => {
-      respondWith({ message: 'Saved view deleted' });
+      respondWith({ deleted: true });
 
       const result = await client.deleteSavedView('view-1');
 
       const [url, init] = lastCall();
       expect(url).toBe('http://localhost:4111/api/saved-views/view-1');
       expect(init.method).toBe('DELETE');
-      expect(result).toEqual({ message: 'Saved view deleted' });
+      expect(result).toEqual({ deleted: true });
     });
   });
 

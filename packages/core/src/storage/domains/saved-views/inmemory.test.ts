@@ -42,7 +42,29 @@ describe('InMemorySavedViewsStorage', () => {
 
   it('stores a null author when none is given', async () => {
     const created = await storage.create(viewInput({ authorId: undefined }));
-    expect(created.authorId).toBeNull();
+    expect(created).toMatchObject({ authorId: null, updatedById: null, resourceId: null });
+  });
+
+  it('records who last changed a view', async () => {
+    const created = await storage.create(viewInput({ id: 'view-1' }));
+    expect(created.updatedById).toBe('user-1');
+
+    const edited = await storage.update('view-1', { name: 'Renamed', updatedById: 'user-2' });
+    expect(edited).toMatchObject({ authorId: 'user-1', updatedById: 'user-2' });
+
+    const renamedAgain = await storage.update('view-1', { name: 'Renamed again' });
+    expect(renamedAgain?.updatedById).toBe('user-2');
+  });
+
+  it('filters by resourceId', async () => {
+    await storage.create(viewInput({ id: 'a', resourceId: 'team-a' }));
+    await storage.create(viewInput({ id: 'b', resourceId: 'team-b' }));
+    await storage.create(viewInput({ id: 'unscoped' }));
+
+    const teamA = await storage.list({ page: 'traces', resourceId: 'team-a' });
+    expect(teamA.views.map(view => view.id)).toEqual(['a']);
+    expect(teamA.pagination.total).toBe(1);
+    expect((await storage.list()).views).toHaveLength(3);
   });
 
   it('returns copies so callers cannot mutate stored JSON', async () => {

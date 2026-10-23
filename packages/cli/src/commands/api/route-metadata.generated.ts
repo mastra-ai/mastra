@@ -6440,7 +6440,9 @@ export const API_ROUTE_METADATA = {
     "path": "/saved-views",
     "pathParams": [],
     "queryParams": [
-      "page"
+      "page",
+      "pageIndex",
+      "perPage"
     ],
     "bodyParams": [],
     "hasQuery": true,

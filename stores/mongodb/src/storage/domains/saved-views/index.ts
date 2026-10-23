@@ -26,6 +26,8 @@ function docToSavedView(doc: Record<string, any>): SavedView {
     page: doc.page,
     name: doc.name,
     authorId: doc.authorId ?? null,
+    updatedById: doc.updatedById ?? null,
+    resourceId: doc.resourceId ?? null,
     state: doc.state,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt),
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt : new Date(doc.updatedAt),
@@ -102,6 +104,7 @@ export class MongoDBSavedViewsStorage extends SavedViewsStorage {
     const collection = await this.getCollection(TABLE_SAVED_VIEWS);
     const filter: Record<string, unknown> = {};
     if (args.page !== undefined) filter.page = args.page;
+    if (args.resourceId !== undefined) filter.resourceId = args.resourceId;
 
     const total = await collection.countDocuments(filter);
     const hasMore = perPageInput === false ? false : total > offset + perPage;
@@ -139,6 +142,8 @@ export class MongoDBSavedViewsStorage extends SavedViewsStorage {
       page: input.page,
       name: input.name,
       authorId: input.authorId ?? null,
+      updatedById: input.authorId ?? null,
+      resourceId: input.resourceId ?? null,
       state: input.state,
       createdAt: now,
       updatedAt: now,
@@ -163,6 +168,7 @@ export class MongoDBSavedViewsStorage extends SavedViewsStorage {
     const update: Record<string, unknown> = { updatedAt: new Date() };
     if (patch.name !== undefined) update.name = patch.name;
     if (patch.state !== undefined) update.state = patch.state;
+    if (patch.updatedById !== undefined) update.updatedById = patch.updatedById;
 
     const updated = await collection.findOneAndUpdate({ id }, { $set: update }, { returnDocument: 'after' });
     return updated ? docToSavedView(updated) : null;

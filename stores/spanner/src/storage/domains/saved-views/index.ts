@@ -34,6 +34,8 @@ function rowToSavedView(row: Record<string, any>): SavedView {
     page: String(parsed.page),
     name: String(parsed.name),
     authorId: parsed.authorId == null ? null : String(parsed.authorId),
+    updatedById: parsed.updatedById == null ? null : String(parsed.updatedById),
+    resourceId: parsed.resourceId == null ? null : String(parsed.resourceId),
     state: parsed.state,
     createdAt: parsed.createdAt instanceof Date ? parsed.createdAt : new Date(parsed.createdAt),
     updatedAt: parsed.updatedAt instanceof Date ? parsed.updatedAt : new Date(parsed.updatedAt),
@@ -95,11 +97,16 @@ export class SavedViewsSpanner extends SavedViewsStorage {
 
     const tableName = quoteIdent(TABLE_SAVED_VIEWS, 'table name');
     const params: Record<string, any> = {};
-    let whereSql = '';
+    const conditions: string[] = [];
     if (args.page !== undefined) {
       params.page = args.page;
-      whereSql = `WHERE ${quoteIdent('page', 'column name')} = @page`;
+      conditions.push(`${quoteIdent('page', 'column name')} = @page`);
     }
+    if (args.resourceId !== undefined) {
+      params.resourceId = args.resourceId;
+      conditions.push(`${quoteIdent('resourceId', 'column name')} = @resourceId`);
+    }
+    const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const [countRows] = await this.database.run({
       sql: `SELECT COUNT(*) AS count FROM ${tableName} ${whereSql}`,
@@ -149,6 +156,8 @@ export class SavedViewsSpanner extends SavedViewsStorage {
         page: input.page,
         name: input.name,
         authorId: input.authorId ?? null,
+        updatedById: input.authorId ?? null,
+        resourceId: input.resourceId ?? null,
         state: input.state,
         createdAt: now,
         updatedAt: now,
@@ -165,6 +174,7 @@ export class SavedViewsSpanner extends SavedViewsStorage {
     const data: Record<string, any> = { updatedAt: new Date() };
     if (patch.name !== undefined) data.name = patch.name;
     if (patch.state !== undefined) data.state = patch.state;
+    if (patch.updatedById !== undefined) data.updatedById = patch.updatedById;
 
     await this.db.update({ tableName: TABLE_SAVED_VIEWS, keys: { id }, data });
     return this.get(id);

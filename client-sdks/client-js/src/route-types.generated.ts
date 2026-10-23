@@ -4794,6 +4794,8 @@ type Shared_Type_104 = {
   name: string;
   /** Who created the view. `null` when the server runs without auth. */
   authorId: string | null;
+  /** Who last changed the view, starting as `authorId`. `null` when the server runs without auth. */
+  updatedById: string | null;
   state: {
     version: number;
     [x: string]: unknown;
@@ -22896,6 +22898,10 @@ export interface PostSchedulesScheduleIdRun_RouteContract {
 export type GetSavedViews_QueryParams = {
   /** Only return views for this Studio page, for example `traces` */
   page?: string | undefined;
+  /** Views per page of results, 1 to 100 */
+  perPage?: number | undefined;
+  /** Zero-based page of results */
+  pageIndex?: number | undefined;
 };
 
 export type GetSavedViews_Response = {
@@ -22903,7 +22909,7 @@ export type GetSavedViews_Response = {
   pagination: {
     total: number;
     page: number;
-    perPage: number | false;
+    perPage: number;
     hasMore: boolean;
   };
 };
@@ -23028,7 +23034,9 @@ export interface PatchSavedViewsSavedViewId_RouteContract {
 // ============================================================================
 export type DeleteSavedViewsSavedViewId_PathParams = GetSavedViewsSavedViewId_PathParams;
 
-export type DeleteSavedViewsSavedViewId_Response = PostAgentsAgentIdModel_Response;
+export type DeleteSavedViewsSavedViewId_Response = {
+  deleted: true;
+};
 
 export type DeleteSavedViewsSavedViewId_Request = Simplify<
   (DeleteSavedViewsSavedViewId_PathParams extends never ? {} : { params: DeleteSavedViewsSavedViewId_PathParams }) &

@@ -66,6 +66,8 @@ export function createSavedViewsTests({ storage }: SavedViewsTestOptions) {
       expect(created.page).toBe('traces');
       expect(created.name).toBe('Errors');
       expect(created.authorId).toBe('user-1');
+      expect(created.updatedById).toBe('user-1');
+      expect(created.resourceId).toBeNull();
       expect(created.createdAt).toBeInstanceOf(Date);
       expect(created.updatedAt).toBeInstanceOf(Date);
 
@@ -83,7 +85,8 @@ export function createSavedViewsTests({ storage }: SavedViewsTestOptions) {
     it('stores a null author when none is given', async () => {
       const created = await store.create(viewInput({ authorId: undefined }));
       expect(created.authorId).toBeNull();
-      expect((await store.get(created.id))?.authorId).toBeNull();
+      expect(created.updatedById).toBeNull();
+      expect(await store.get(created.id)).toMatchObject({ authorId: null, updatedById: null });
 
       const explicitNull = await store.create(viewInput({ authorId: null }));
       expect((await store.get(explicitNull.id))?.authorId).toBeNull();
@@ -145,6 +148,27 @@ export function createSavedViewsTests({ storage }: SavedViewsTestOptions) {
       expect(pagination).toEqual({ total: 0, page: 0, perPage: 100, hasMore: false });
     });
 
+    it('filters by resourceId', async () => {
+      await store.create(viewInput({ id: 'a-traces', resourceId: 'team-a' }));
+      await store.create(viewInput({ id: 'a-metrics', resourceId: 'team-a', page: 'metrics' }));
+      await store.create(viewInput({ id: 'b-traces', resourceId: 'team-b' }));
+      await store.create(viewInput({ id: 'unscoped' }));
+
+      expect((await store.get('a-traces'))?.resourceId).toBe('team-a');
+      expect((await store.get('unscoped'))?.resourceId).toBeNull();
+
+      const teamA = await store.list({ resourceId: 'team-a' });
+      expect(teamA.views.map(view => view.id).sort()).toEqual(['a-metrics', 'a-traces']);
+      expect(teamA.pagination.total).toBe(2);
+
+      const teamATraces = await store.list({ page: 'traces', resourceId: 'team-a' });
+      expect(teamATraces.views.map(view => view.id)).toEqual(['a-traces']);
+      expect(teamATraces.pagination.total).toBe(1);
+
+      expect((await store.list({ resourceId: 'team-c' })).views).toEqual([]);
+      expect((await store.list()).pagination.total).toBe(4);
+    });
+
     it('rejects an unknown orderBy field', async () => {
       await expect(store.list({ orderBy: { field: 'state' as never } })).rejects.toThrow(/Invalid orderBy field/);
     });
@@ -157,6 +181,7 @@ export function createSavedViewsTests({ storage }: SavedViewsTestOptions) {
       expect(renamed?.name).toBe('Renamed');
       expect(renamed?.page).toBe('traces');
       expect(renamed?.authorId).toBe('user-1');
+      expect(renamed?.updatedById).toBe('user-1');
       expect(renamed?.state).toEqual(created.state);
       expect(renamed?.createdAt.getTime()).toBe(created.createdAt.getTime());
       expect(renamed!.updatedAt.getTime()).toBeGreaterThan(created.updatedAt.getTime());
@@ -167,6 +192,17 @@ export function createSavedViewsTests({ storage }: SavedViewsTestOptions) {
       expect(restated?.state).toEqual(nextState);
 
       expect(await store.get('view-1')).toEqual(restated);
+    });
+
+    it('records who last changed a view', async () => {
+      await store.create(viewInput({ id: 'view-1', resourceId: 'team-a' }));
+
+      const edited = await store.update('view-1', { name: 'Renamed', updatedById: 'user-2' });
+      expect(edited).toMatchObject({ authorId: 'user-1', updatedById: 'user-2', resourceId: 'team-a' });
+
+      const anonymous = await store.update('view-1', { name: 'Renamed again', updatedById: null });
+      expect(anonymous).toMatchObject({ authorId: 'user-1', updatedById: null });
+      expect(await store.get('view-1')).toEqual(anonymous);
     });
 
     it('returns null when updating a missing view', async () => {

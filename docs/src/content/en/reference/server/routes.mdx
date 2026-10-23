@@ -711,15 +711,17 @@ How a supplied `id` is treated depends on the storage adapter. Some adapters ups
 
 | Method | Path | Description |
 | - | - | - |
-| `GET` | `/api/saved-views` | List saved views, oldest first. Pass `?page=traces` to list one Studio page's views |
+| `GET` | `/api/saved-views` | List saved views, oldest first, up to 100 per page. Pass `?page=traces` to list one Studio page's views |
 | `POST` | `/api/saved-views` | Create a saved view |
 | `GET` | `/api/saved-views/:savedViewId` | Get a saved view |
 | `PATCH` | `/api/saved-views/:savedViewId` | Change a saved view's name or state |
 | `DELETE` | `/api/saved-views/:savedViewId` | Delete a saved view |
 
-A saved view's `state` stores how a Studio page looks, such as its filters, time range, sort, and columns. Everyone who can open Studio sees every view, and `authorId` only records who created it. The `page` query parameter selects a Studio page and doesn't paginate the list.
+A saved view's `state` stores a Studio page's setup, such as its filters, time range, sort, and columns. Everyone who can open Studio sees every view. `authorId` records who created a view and `updatedById` who last changed it.
 
-Every route answers `501` when the storage has no `savedViews` domain, and get, update, and delete answer `404` for an unknown ID. On authenticated servers, the read routes require the `saved-views:read` permission, create and update require `saved-views:write`, and delete requires `saved-views:delete`.
+The `page` query parameter selects a Studio page. The list paginates with `perPage` (1 to 100, default 100) and the zero-based `pageIndex`. The response's `pagination.hasMore` is `true` while more views follow. Delete answers `{ "deleted": true }`.
+
+Every route answers `501` when the storage has no `savedViews` domain, and get, update, and delete answer `404` for an unknown ID. With [stored resource scoping](/docs/auth/fga#stored-resource-scoping) on, lists only include views in the caller's scope, and views in other scopes answer `404`. On authenticated servers, the read routes require the `saved-views:read` permission, create and update require `saved-views:write`, and delete requires `saved-views:delete`.
 
 ### Create saved view request body
 

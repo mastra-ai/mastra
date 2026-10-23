@@ -396,6 +396,8 @@ export const SAVED_VIEWS_SCHEMA: Record<string, StorageColumn> = {
   page: { type: 'text', nullable: false }, // e.g. 'traces'
   name: { type: 'text', nullable: false },
   authorId: { type: 'text', nullable: true },
+  updatedById: { type: 'text', nullable: true }, // last editor
+  resourceId: { type: 'text', nullable: true }, // tenant, when `server.storedResources.scope` is on
   state: { type: 'jsonb', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
