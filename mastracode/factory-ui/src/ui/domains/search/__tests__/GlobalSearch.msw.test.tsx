@@ -436,6 +436,18 @@ describe('Global search', () => {
     expect(screen.getByRole('combobox', { name: 'Search MastraCode' })).toHaveFocus();
   });
 
+  it.each(['activity', 'overview', 'attention', 'metrics', 'audit'])(
+    'opens the same Factory board from the retired %s URL',
+    async page => {
+      stubSearchApi();
+      const { router } = renderSearchRoute(`/factories/${OTHER_FACTORY_ID}/${page}?events=all`);
+
+      await screen.findByLabelText('Board stages');
+      expect(router.state.location.pathname).toBe(`/factories/${OTHER_FACTORY_ID}/work`);
+      expect(router.state.location.search).toBe('');
+    },
+  );
+
   it('opens with Ctrl+K from the Work route', async () => {
     stubSearchApi();
     const user = userEvent.setup();
@@ -466,9 +478,7 @@ describe('Global search', () => {
     for (const label of [
       'Work',
       'Review',
-      'Activity',
       'Rules',
-      'Audit log',
       'Preferences',
       'Manage Factory',
       'Connections',
@@ -480,6 +490,8 @@ describe('Global search', () => {
     ]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
     }
+    expect(within(dialog).queryByText('Activity')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('Audit log')).not.toBeInTheDocument();
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
   });
 
