@@ -648,7 +648,7 @@ describe('Traces side panel header actions', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Score trace' }));
       fireEvent.click(await screen.findByRole('combobox', { name: 'Select scorer' }));
       fireEvent.click(await screen.findByRole('option', { name: 'Quality scorer' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Start Scoring' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
       await waitFor(() =>
         expect(onScore).toHaveBeenCalledWith({
           scorerName: 'quality',

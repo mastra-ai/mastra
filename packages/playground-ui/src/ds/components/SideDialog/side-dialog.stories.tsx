@@ -58,7 +58,7 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
 
   return (
     <div className="p-8">
-      <Button onClick={() => setIsOpen(true)}>Open Side Dialog</Button>
+      <Button onClick={() => setIsOpen(true)}>Open side dialog</Button>
       <SideDialog
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
@@ -178,8 +178,8 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
   return (
     <div className="p-8">
       <div className="flex gap-2">
-        <Button onClick={() => openDepth(2)}>Open Nested Level 2</Button>
-        {depth === 3 && <Button onClick={() => openDepth(3)}>Open Nested Level 3</Button>}
+        <Button onClick={() => openDepth(2)}>Open nested level 2</Button>
+        {depth === 3 && <Button onClick={() => openDepth(3)}>Open nested level 3</Button>}
       </div>
 
       <SideDialog
@@ -195,7 +195,7 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
           </TextAndIcon>
           <div className="ml-auto">
             <Button size="sm" onClick={() => setIsLevel2Open(true)}>
-              Open Trace
+              Open trace
             </Button>
           </div>
         </SideDialog.Top>
@@ -253,7 +253,7 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
               {depth === 3 && (
                 <div className="ml-auto">
                   <Button size="sm" onClick={() => setIsLevel3Open(true)}>
-                    Open Span
+                    Open span
                   </Button>
                 </div>
               )}
@@ -360,7 +360,7 @@ const SideDialogWithCodeDemo = () => {
 
   return (
     <div className="p-8">
-      <Button onClick={() => setIsOpen(true)}>Open with Code Section</Button>
+      <Button onClick={() => setIsOpen(true)}>Open with code section</Button>
       <SideDialog
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
@@ -414,7 +414,7 @@ const ConfirmationDialogDemo = () => {
 
   return (
     <div className="p-8">
-      <Button onClick={() => setIsOpen(true)}>Open Confirmation</Button>
+      <Button onClick={() => setIsOpen(true)}>Open confirmation</Button>
       <SideDialog
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}

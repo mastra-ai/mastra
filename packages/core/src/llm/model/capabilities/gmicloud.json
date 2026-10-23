@@ -35,37 +35,11 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "zai-org/GLM-5.2-FP8": [
+    "anthropic/claude-sonnet-4.6": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "Qwen/Qwen3.8-Flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.8-Max": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "openai/gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "MiniMaxAI/MiniMax-M3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "anthropic/claude-opus-4.7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
       }
     ],
     "anthropic/claude-opus-4.8": [
@@ -81,11 +55,37 @@
         "max": 127999
       }
     ],
-    "anthropic/claude-sonnet-4.6": [
+    "anthropic/claude-opus-4.7": [
       {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "zai-org/GLM-5.2-FP8": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.8-Max": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.8-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ]
   }

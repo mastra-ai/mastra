@@ -39,6 +39,11 @@
         "type": "toggle"
       }
     ],
+    "evroc/roc": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "zai-org/GLM-5.2": [
       {
         "type": "toggle"
@@ -62,26 +67,21 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "evroc/roc": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "moonshotai/Kimi-K2.6": [
       {
         "type": "budget_tokens"
-      }
-    ],
-    "mistralai/Mistral-Medium-3.5-128B": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "mistralai/Mistral-Medium-3.5-128B": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ]
   }
