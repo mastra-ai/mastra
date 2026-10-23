@@ -1,10 +1,17 @@
+import { createOpenAI } from '@ai-sdk/openai-v5';
 import { expect, it } from 'vitest';
 import { Memory } from '../../../../../../memory/src';
+import { Agent } from '../../../../agent';
+import { assembleAgentFromFsEntry } from '../../../../agent/fs-routing';
+import { Mastra } from '../../../../mastra';
+import type { StorageDomains } from '../../../../storage/base';
 import { TaskSignalProvider } from '../../../../signals';
 import { InMemoryThreadStateStorage } from '../../../../storage/domains/thread-state/inmemory';
+import { InMemoryStore } from '../../../../storage/mock';
 import { TASK_STATE_TYPE, taskWriteTool } from '../../../../tools/builtin/task-tools';
 import type { TaskItemSnapshot } from '../../../../tools/builtin/task-tools';
-import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { SCENARIO_MODEL_ID } from '../types';
 
 // Hold the first database write while another thread makes progress. Without
 // serialization, the second tool reads the old list and its update is lost.
@@ -23,6 +30,17 @@ class PausedTaskStore extends InMemoryThreadStateStorage {
   }
 }
 
+class ObservedStorage extends InMemoryStore {
+  readonly secondResolved = Promise.withResolvers<void>();
+  observeSecondTool = false;
+
+  override async getStore<K extends keyof StorageDomains>(name: K): Promise<StorageDomains[K] | undefined> {
+    const store = await super.getStore(name);
+    if (name === 'threadState' && this.observeSecondTool) this.secondResolved.resolve();
+    return store;
+  }
+}
+
 describeForAllEngines('concurrent task tools', engine => {
   const getMock = useLoopScenarioAimock();
 
@@ -33,14 +51,33 @@ describeForAllEngines('concurrent task tools', engine => {
       toolCallConcurrency: { limit: 3, strategy: 'called' as const },
     };
     const memory = new Memory({ options: { generateTitle: false } });
-    const shared = await createSharedAgent(llm, {
-      engine,
+    const storage = new ObservedStorage();
+    const store = new PausedTaskStore();
+    const provider = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
+    const config = {
+      id: 'concurrent-tasks',
+      name: 'concurrent-tasks',
+      instructions: 'Track tasks.',
+      model: provider(SCENARIO_MODEL_ID),
       memory,
       signals: [new TaskSignalProvider()],
       defaultOptions,
-    });
-    const store = new PausedTaskStore();
-    shared.mastra.getStorage().stores.threadState = store;
+      hooks: {
+        beforeToolCall: async ({ input }: { input: unknown }) => {
+          if (typeof input === 'object' && input !== null && 'id' in input && input.id === 'b') {
+            // Let A reach its write before B resolves the same store.
+            await store.entered.promise;
+            storage.observeSecondTool = true;
+          }
+        },
+      },
+    };
+    const agent =
+      engine === 'fs'
+        ? assembleAgentFromFsEntry({ name: config.name, config, instructionsMd: config.instructions })
+        : new Agent(config);
+    storage.stores.threadState = store;
+    const shared = { agent, mastra: new Mastra({ agents: { [config.name]: agent }, storage, logger: false }) };
     const initial: TaskItemSnapshot[] = [
       { id: 'a', content: 'Task A', activeForm: 'Doing A', status: 'in_progress' },
       { id: 'b', content: 'Task B', activeForm: 'Doing B', status: 'pending' },
@@ -75,7 +112,7 @@ describeForAllEngines('concurrent task tools', engine => {
     });
     try {
       await Promise.race([
-        store.entered.promise,
+        Promise.all([store.entered.promise, storage.secondResolved.promise]),
         running.then(() => {
           throw new Error('Agent finished without writing tasks');
         }),
