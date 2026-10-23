@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { OMConfigInfo, ProviderInfo } from '../../../../../api/types';
+import type { FactoryModelScope } from '../../../workspaces/services/github';
 import { MemorySettings } from '../MemorySettings';
 
 const OM_URL = `${TEST_BASE_URL}/web/config/om`;
@@ -38,7 +39,12 @@ function stubProviders(providers: ProviderInfo[]) {
   );
 }
 
-function renderMemory() {
+function renderMemory(modelScope: FactoryModelScope = 'hybrid') {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+      HttpResponse.json({ project: { id: 'fp-1', name: 'Shipyard', modelScope } }),
+    ),
+  );
   return renderWithProviders(
     <MemoryRouter>
       <MemorySettings factoryId="fp-1" sessionId="session-1" />
@@ -75,6 +81,34 @@ describe('MemorySettings', () => {
 
     await waitFor(() => expect(factoryWrite).toEqual({ factoryId: 'fp-1', observationThreshold: 60_000 }));
     expect(within(personal).getByDisplayValue('10,000')).toBeInTheDocument();
+  });
+
+  it("labels each memory with the threads the Factory's model routing sends to it", async () => {
+    stubProviders([{ provider: 'openai', source: 'stored' }]);
+    server.use(
+      http.get(OM_URL, () => HttpResponse.json({ config: omConfig(30_000) })),
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authenticated: true, user: { id: 'user-1', organizationId: 'org-1' } }),
+      ),
+    );
+    renderMemory('hybrid');
+
+    const personal = screen.getByRole('region', { name: 'Personal memory' });
+    const factory = screen.getByRole('region', { name: 'Factory memory' });
+    expect(await within(personal).findByText('Chats')).toBeInTheDocument();
+    expect(within(factory).getByText('Work-item runs')).toBeInTheDocument();
+  });
+
+  it('labels Factory memory as used by every thread while sign-in is off, whatever the routing', async () => {
+    stubProviders([{ provider: 'openai', source: 'stored' }]);
+    server.use(http.get(OM_URL, () => HttpResponse.json({ config: omConfig(30_000) })));
+    renderMemory('hybrid');
+
+    const personal = screen.getByRole('region', { name: 'Personal memory' });
+    const factory = screen.getByRole('region', { name: 'Factory memory' });
+    expect(await within(personal).findByText('Not used in this scope')).toBeInTheDocument();
+    expect(within(factory).getByText('Chats')).toBeInTheDocument();
+    expect(within(factory).getByText('Work-item runs')).toBeInTheDocument();
   });
 
   it('points to Models settings while no provider is connected', async () => {
