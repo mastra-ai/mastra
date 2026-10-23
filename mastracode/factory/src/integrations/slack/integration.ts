@@ -249,7 +249,10 @@ export class SlackIntegration implements FactoryIntegration {
     const threadId = (requestContext?.get('controller') as { threadId?: string } | undefined)?.threadId;
     if (!url || !requestContext || !threadId || !(await isSlackThread(requestContext, this.#deps))) return;
     if (this.#markers) await rememberOpenedPullRequest(this.#markers, requestContext, url);
-    await announcePullRequest(this.#channels?.(), threadId, 'opened', url);
+    // Not awaited: the tool call must not wait on Slack.
+    void announcePullRequest(this.#channels?.(), threadId, 'opened', url).catch(error =>
+      console.warn('[slack] pull request opened announcement failed', error),
+    );
   }
 
   /** Shows a card's stage as a reaction on the Slack thread it was filed from. */

@@ -287,6 +287,7 @@ describe('SlackIntegration.postToolObserver', () => {
 
     await integration.postToolObserver({ toolContext: prTool, requestContext });
 
+    await vi.waitFor(() => expect(post).toHaveBeenCalled());
     expect(post).toHaveBeenCalledWith({ markdown: 'Pull request opened: https://github.com/mastra-ai/mastra/pull/123' });
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org-1', sessionId: 'session-1' }));
     // Opening a pull request does not close the thread out; its merge does.
