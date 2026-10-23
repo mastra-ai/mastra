@@ -30,6 +30,12 @@ export const traceAggregateCapabilities: GetObservabilityCapabilitiesResponse = 
   capabilities: { ...baseCapabilities.capabilities, traceAggregate: true, traceQueryRootSpanFields: true },
 };
 
+/** A server that answers both `aggregateTraces()` and `aggregateSpans()`: the unified Metrics page. */
+export const aggregateCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceAggregateCapabilities,
+  capabilities: { ...traceAggregateCapabilities.capabilities, spanAggregate: true },
+};
+
 /** A server from before trace aggregation: no `traceAggregate` capability at all. */
 export const olderServerCapabilities: GetObservabilityCapabilitiesResponse = baseCapabilities;
 

@@ -68,6 +68,8 @@ export type DrilldownScope = {
   status?: 'running' | 'success' | 'error';
   /** Overrides date preset with explicit window bounds. */
   window?: TimeRange;
+  /** Set by cards on pages that span several projects; the page decides how to open that project. */
+  projectId?: string;
 };
 
 /** A card's navigation callback. The call site decides where a scope leads. */

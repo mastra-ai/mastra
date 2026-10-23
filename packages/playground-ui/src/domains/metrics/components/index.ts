@@ -4,7 +4,7 @@ export { OpenErrorsInLogsButton, OpenInTracesButton } from './card-action-button
 export { ChartArea, type ChartAreaProps } from './chart-area';
 export { ChartCard, type ChartCardProps } from './chart-card';
 export { ChartCardError } from './chart-card-error';
-export { TraceAggregateLimiterProvider } from '../hooks/trace-aggregate-limiter-provider';
+export { AggregateLimiterProvider } from '../hooks/aggregate-limiter-provider';
 export { KpiCard, type KpiCardProps } from './kpi-card';
 export { MetricsGrid, type MetricsGridProps, type MetricsGridItemProps } from './metrics-grid/metrics-grid';
 export { MetricsKpis } from './metrics-kpis';

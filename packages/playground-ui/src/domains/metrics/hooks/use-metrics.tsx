@@ -1,10 +1,12 @@
 /* eslint-disable react-refresh/only-export-components */
+import { useMetricsQueryFilters } from '@mastra/react/hooks/metrics';
+import type { MetricsQueryFilters } from '@mastra/react/hooks/metrics';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
 import { buildMetricsDimensionalFilter } from '../metrics-filters';
 import type { MetricsDimensionalFilter } from '../metrics-filters';
-import { TraceAggregateLimiterProvider } from './trace-aggregate-limiter-provider';
+import { AggregateLimiterProvider } from './aggregate-limiter-provider';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 import { formatShortDate } from '@/utils/date-format';
 
@@ -28,6 +30,17 @@ export function isValidPreset(value: string | null | undefined): value is DatePr
 
 export type DateRange = { from?: Date; to?: Date };
 
+/**
+ * What the page knows about projects. Pages that span several projects (an organization) pass
+ * `projectLabel`; cards then add a Project dimension. Studio has no projects and passes nothing.
+ */
+export type MetricsScope = {
+  /** Display name for a project id. Setting it turns on the Project dimension. */
+  projectLabel?: (projectId: string) => string;
+  /** A project's colour, so it keeps the same colour on every card. Defaults to colouring by rank. */
+  projectColor?: (projectId: string) => string | undefined;
+};
+
 /** Internal — all state is derived from the URL-backed props the owner passes.
  *  There is intentionally no local mirror; keeping a mirror caused URL ↔ state
  *  feedback loops that re-rendered the entire metrics tree on every keystroke.
@@ -44,6 +57,9 @@ type MetricsContextValue = {
   dimensionalFilter: MetricsDimensionalFilter;
   /** Stable JSON representation of `dimensionalFilter`, safe for query keys. */
   dimensionalFilterKey: string;
+  /** The page's window and filters, frozen once per window change so every card sends the same keys. */
+  queryFilters: MetricsQueryFilters | undefined;
+  scope: MetricsScope;
 };
 
 export const MetricsContext = createContext<MetricsContextValue>({
@@ -57,6 +73,8 @@ export const MetricsContext = createContext<MetricsContextValue>({
   setFilterTokens: () => {},
   dimensionalFilter: {},
   dimensionalFilterKey: '{}',
+  queryFilters: undefined,
+  scope: {},
 });
 
 export function useMetrics() {
@@ -105,6 +123,7 @@ export function MetricsProvider({
   onFilterTokensChange,
   customRange,
   onCustomRangeChange,
+  scope,
 }: {
   children: ReactNode;
   preset: DatePreset;
@@ -113,6 +132,8 @@ export function MetricsProvider({
   onFilterTokensChange: (tokens: PropertyFilterToken[]) => void;
   customRange?: DateRange;
   onCustomRangeChange?: (range: DateRange | undefined) => void;
+  /** Keep it referentially stable; a new object re-renders every card. */
+  scope?: MetricsScope;
 }) {
   // Stable key for memo dependencies — the parent may re-create the tokens
   // array on every render (e.g. from `useMemo(... , [searchParams])`), but the
@@ -127,6 +148,15 @@ export function MetricsProvider({
   const dimensionalFilter = useMemo(() => buildMetricsDimensionalFilter(stableFilterTokens), [stableFilterTokens]);
 
   const dimensionalFilterKey = useMemo(() => JSON.stringify(dimensionalFilter), [dimensionalFilter]);
+
+  // One anchor for the whole page: cards computing their own "now" would send near-duplicate keys.
+  const queryFilters = useMetricsQueryFilters({
+    datePreset: preset,
+    customRange,
+    dimensionalFilter,
+    dimensionalFilterKey,
+  });
+  const resolvedScope = useMemo(() => scope ?? {}, [scope]);
 
   const dateRangeLabel = getDateRangeLabel(preset, customRange);
   const comparisonLabel = getComparisonLabel(preset, customRange);
@@ -143,6 +173,8 @@ export function MetricsProvider({
       setFilterTokens: onFilterTokensChange,
       dimensionalFilter,
       dimensionalFilterKey,
+      queryFilters,
+      scope: resolvedScope,
     }),
     [
       preset,
@@ -155,12 +187,14 @@ export function MetricsProvider({
       onFilterTokensChange,
       dimensionalFilter,
       dimensionalFilterKey,
+      queryFilters,
+      resolvedScope,
     ],
   );
 
   return (
     <MetricsContext.Provider value={value}>
-      <TraceAggregateLimiterProvider>{children}</TraceAggregateLimiterProvider>
+      <AggregateLimiterProvider>{children}</AggregateLimiterProvider>
     </MetricsContext.Provider>
   );
 }
