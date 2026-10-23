@@ -1190,10 +1190,12 @@ export const toolCallEmptyInput: CompatRule = {
   applyToPrompt({ prompt }) {
     const isEmpty = (part: { type: string; input?: unknown }) =>
       part.type === 'tool-call' && (part.input === undefined || part.input === null);
-    if (!prompt.some(m => m.role === 'assistant' && m.content.some(isEmpty))) return undefined;
+    if (!prompt.some(m => m.role === 'assistant' && Array.isArray(m.content) && m.content.some(isEmpty))) {
+      return undefined;
+    }
 
     return prompt.map(message =>
-      message.role === 'assistant'
+      message.role === 'assistant' && Array.isArray(message.content)
         ? { ...message, content: message.content.map(part => (isEmpty(part) ? { ...part, input: {} } : part)) }
         : message,
     ) as LanguageModelV2Prompt;

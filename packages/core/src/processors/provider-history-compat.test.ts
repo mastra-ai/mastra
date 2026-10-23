@@ -559,6 +559,13 @@ describe('toolCallEmptyInput', () => {
     }
   });
 
+  it('skips an assistant message whose content is not an array', () => {
+    const prompt = [{ role: 'assistant', content: 'plain text' }, ...promptWith(undefined)] as any;
+    const result = toolCallEmptyInput.applyToPrompt!({ prompt, model: {} } as any) as any[];
+    expect(result[0]).toEqual({ role: 'assistant', content: 'plain text' });
+    expect(toolCallEmptyInput.applyToPrompt!({ prompt: [prompt[0]], model: {} } as any)).toBeUndefined();
+  });
+
   it('does not mutate the original prompt', () => {
     const prompt = promptWith(undefined);
     toolCallEmptyInput.applyToPrompt!({ prompt, model: {} });
