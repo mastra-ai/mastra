@@ -543,6 +543,8 @@ async function route(options: {
   orders: string[];
   pages: number;
   cold: boolean;
+  /** X56o: start descending listings at a cursor this many days before the window's end. */
+  depths?: number[];
 }) {
   const selection = loadSelection();
   if (!selection) throw new Error('No project selection');
@@ -552,100 +554,141 @@ async function route(options: {
   try {
     for (const window of options.windows)
       for (const shapeId of options.shapes)
-        for (const orderId of options.orders) {
-          const shape = SHAPES[shapeId]!;
-          const timeRange = windowRange(window);
-          const request = {
-            timeRange,
-            ...(shape.where ? { where: shape.where } : {}),
-            orderBy: [ORDERS[orderId]],
-            page: { limit: shape.limit },
-          };
-          const scope = scopeOf(project, 'org');
-          const label = ['org', window, shapeId, orderId].join(' ');
-          const oracle: string[][] = [];
-          let plan = mods.plan.planPlatformSpanQuery(request, scope);
-          for (let page = 1; page <= options.pages; page++) {
-            const { rows, failed } = await selectPage(raw, mods, plan, 'base', ORACLE);
-            if (failed) break;
-            oracle.push(rows.slice(0, plan.limit).map(routeKey));
-            if (rows.length <= plan.limit) break;
-            plan = nextPlan(plan, rows[plan.limit - 1]!);
-          }
-          let after: string | undefined;
-          for (let page = 1; page <= options.pages; page++) {
-            const statements: Statement[] = [];
-            const tagged = {
-              query: (args: Parameters<ClickHouseClient['query']>[0]) => {
-                assertReadOnlyStatement(args.query);
-                const id = randomUUID();
-                statements.push({ id, wallMs: 0, attempt: statements.length, ok: true });
-                return raw.query({
-                  ...args,
-                  query_id: id,
-                  clickhouse_settings: {
-                    ...args.clickhouse_settings,
-                    use_query_cache: 0,
-                    log_comment: 'aqa-bench:mobs-span-query-x56:route',
-                    ...(options.cold ? { enable_filesystem_cache: 0 } : {}),
-                  },
-                });
-              },
-            } as unknown as ClickHouseClient;
-            const start = performance.now();
-            let result: { spans: Row[]; page: { next: string | null } } | undefined;
-            let error: unknown;
-            try {
-              result = await mods.spanQuery.querySpans(
-                tagged,
-                mods.plan.planPlatformSpanQuery(
-                  { ...request, page: { ...request.page, ...(after ? { after } : {}) } },
-                  scope,
-                ),
-              );
-            } catch (caught) {
-              error = caught;
-            }
-            const wallMs = Math.round(performance.now() - start);
-            await attachStats(raw, statements);
-            for (const statement of statements) statement.ok = !Number(statement.stat?.exc ?? 0);
-            const expected = oracle[page - 1];
-            const equal =
-              result && expected ? JSON.stringify(result.spans.map(routeKey)) === JSON.stringify(expected) : null;
-            const record = {
-              at: new Date().toISOString(),
-              label: options.label,
-              hash: project.hash,
-              scope: 'org',
-              window,
-              shape: shapeId,
-              order: orderId,
-              variant: 'route',
-              phase: options.cold ? 'cold' : 'warm',
-              run: options.cold ? 0 : 1,
-              page,
-              ok: !!result,
-              rows: result?.spans.length ?? 0,
-              statements,
-              equal,
-              oracle: 'relaxed',
-              wallMs,
-              ...(error ? { error: String((error as Error).name ?? error) } : {}),
+        for (const orderId of options.orders)
+          for (const depth of options.depths ?? [undefined]) {
+            const shape = SHAPES[shapeId]!;
+            const timeRange = windowRange(window);
+            const request = {
+              timeRange,
+              ...(shape.where ? { where: shape.where } : {}),
+              orderBy: [ORDERS[orderId]],
+              page: { limit: shape.limit },
             };
-            appendFileSync(OUT, `${JSON.stringify(record)}\n`);
-            const peak = Math.max(0, ...statements.map(s => s.stat?.memMiB ?? 0));
-            const read = statements.reduce((sum, s) => sum + Number(s.stat?.readMiB ?? 0), 0);
-            console.log(
-              label,
-              `route${options.cold ? ' cold' : ''} p${page}`,
-              result ? 'ok' : `FAIL ${record.error}`,
-              `${statements.length} stmt, ${wallMs} ms wall, peak ${peak} MiB, read ${Math.round(read)} MiB, rows ${record.rows}`,
-              equal === null ? 'noref' : equal ? 'equal' : 'DIFF',
-            );
-            after = result?.page.next ?? undefined;
-            if (!after) break;
+            const scope = scopeOf(project, 'org');
+            const label = ['org', window, shapeId, orderId, ...(depth ? [`@${depth}d`] : [])].join(' ');
+            const oracle: string[][] = [];
+            let plan = mods.plan.planPlatformSpanQuery(request, scope);
+            // A cursor before every span at that instant: identity fields sort first.
+            if (depth) {
+              const at = new Date(Date.parse(timeRange.to) - depth * 86_400_000).toISOString();
+              plan = nextPlan(plan, {
+                projectId: '',
+                resourceId: '',
+                traceId: '',
+                spanId: '',
+                [plan.orderBy.field]: at,
+              } as Row);
+            }
+            const first = plan;
+            if (depth) {
+              // Today's whole-window collapse at production limits, for comparison.
+              const today = await selectPage(raw, mods, first, 'base', PROD);
+              await attachStats(raw, today.statements);
+              const st = today.statements[0]!;
+              appendFileSync(
+                OUT,
+                `${JSON.stringify({ at: new Date().toISOString(), label: options.label, hash: project.hash, scope: 'org', window, shape: shapeId, order: orderId, depth, variant: 'today', phase: options.cold ? 'cold' : 'warm', page: 1, ok: !today.failed, rows: today.rows.length, statements: today.statements })}\n`,
+              );
+              console.log(
+                label,
+                'today p1',
+                today.failed ? `FAIL ${st.errorCode}` : 'ok',
+                `${st.wallMs} ms, peak ${st.stat?.memMiB} MiB, read ${st.stat?.readMiB} MiB`,
+              );
+            }
+            for (let page = 1; page <= options.pages; page++) {
+              const { rows, failed } = await selectPage(raw, mods, plan, 'base', ORACLE);
+              if (failed) break;
+              oracle.push(rows.slice(0, plan.limit).map(routeKey));
+              if (rows.length <= plan.limit) break;
+              plan = nextPlan(plan, rows[plan.limit - 1]!);
+            }
+            let after: string | undefined;
+            for (let page = 1; page <= options.pages; page++) {
+              const statements: Statement[] = [];
+              const tagged = {
+                query: (args: Parameters<ClickHouseClient['query']>[0]) => {
+                  assertReadOnlyStatement(args.query);
+                  const id = randomUUID();
+                  const kind = /AS edge/.test(args.query)
+                    ? 'probe'
+                    : /candidates AS/.test(args.query)
+                      ? 'select'
+                      : 'payload';
+                  statements.push({ id, wallMs: 0, attempt: statements.length, ok: true, kind } as Statement);
+                  return raw.query({
+                    ...args,
+                    query_id: id,
+                    clickhouse_settings: {
+                      ...args.clickhouse_settings,
+                      use_query_cache: 0,
+                      log_comment: 'aqa-bench:mobs-span-query-x56:route',
+                      ...(options.cold ? { enable_filesystem_cache: 0 } : {}),
+                    },
+                  });
+                },
+              } as unknown as ClickHouseClient;
+              const start = performance.now();
+              let result: { spans: Row[]; page: { next: string | null } } | undefined;
+              let error: unknown;
+              try {
+                result = await mods.spanQuery.querySpans(
+                  tagged,
+                  page === 1 && depth
+                    ? first
+                    : mods.plan.planPlatformSpanQuery(
+                        { ...request, page: { ...request.page, ...(after ? { after } : {}) } },
+                        scope,
+                      ),
+                );
+              } catch (caught) {
+                error = caught;
+              }
+              const wallMs = Math.round(performance.now() - start);
+              await attachStats(raw, statements);
+              for (const statement of statements) statement.ok = !Number(statement.stat?.exc ?? 0);
+              const expected = oracle[page - 1];
+              const equal =
+                result && expected ? JSON.stringify(result.spans.map(routeKey)) === JSON.stringify(expected) : null;
+              const record = {
+                at: new Date().toISOString(),
+                label: options.label,
+                hash: project.hash,
+                scope: 'org',
+                window,
+                shape: shapeId,
+                order: orderId,
+                ...(depth ? { depth } : {}),
+                variant: 'route',
+                phase: options.cold ? 'cold' : 'warm',
+                run: options.cold ? 0 : 1,
+                page,
+                ok: !!result,
+                rows: result?.spans.length ?? 0,
+                statements,
+                equal,
+                oracle: 'relaxed',
+                wallMs,
+                ...(error ? { error: String((error as Error).name ?? error) } : {}),
+              };
+              appendFileSync(OUT, `${JSON.stringify(record)}\n`);
+              const peak = Math.max(0, ...statements.map(s => s.stat?.memMiB ?? 0));
+              const read = statements.reduce((sum, s) => sum + Number(s.stat?.readMiB ?? 0), 0);
+              const sel = statements.filter(s => (s as { kind?: string }).kind !== 'payload');
+              const selMs = sel.reduce((sum, s) => sum + Number(s.stat?.durationMs ?? 0), 0);
+              const selPeak = Math.max(0, ...sel.map(s => Number(s.stat?.memMiB ?? 0)));
+              console.log(
+                label,
+                `route${options.cold ? ' cold' : ''} p${page}`,
+                result ? 'ok' : `FAIL ${record.error}`,
+                `${statements.length} stmt, ${wallMs} ms wall, peak ${peak} MiB, read ${Math.round(read)} MiB, rows ${record.rows}`,
+                `| selection ${sel.length} stmt ${selMs} ms ${selPeak} MiB`,
+                equal === null ? 'noref' : equal ? 'equal' : 'DIFF',
+              );
+              after = result?.page.next ?? undefined;
+              if (!after) break;
+            }
           }
-        }
   } finally {
     await raw.close();
   }
@@ -697,6 +740,11 @@ async function hydrate(options: {
   pages: number;
   variants: string[];
   probe?: boolean;
+  /** X56p: filesystem cache on, after one warm-up run of each statement. */
+  warm?: boolean;
+  /** X56p: time each page's first selection statement instead (with `depths`, deep descending pages). */
+  select?: boolean;
+  depths?: number[];
 }) {
   const selection = loadSelection();
   if (!selection) throw new Error('No project selection');
@@ -706,113 +754,146 @@ async function hydrate(options: {
   try {
     for (const window of options.windows)
       for (const shapeId of options.shapes)
-        for (const orderId of options.orders) {
-          const shape = SHAPES[shapeId]!;
-          const request = {
-            timeRange: windowRange(window),
-            ...(shape.where ? { where: shape.where } : {}),
-            orderBy: [ORDERS[orderId]],
-            page: { limit: shape.limit },
-          };
-          const scope = scopeOf(project, 'org');
-          let after: string | undefined;
-          for (let page = 1; page <= options.pages; page++) {
-            const captured: Array<{ query: string; query_params: Record<string, unknown> }> = [];
-            const capturing = {
-              query: (args: Parameters<ClickHouseClient['query']>[0]) => {
-                assertReadOnlyStatement(args.query);
-                captured.push({ query: args.query, query_params: args.query_params as Record<string, unknown> });
-                return raw.query({
-                  ...args,
-                  query_id: randomUUID(),
-                  clickhouse_settings: {
-                    ...args.clickhouse_settings,
-                    use_query_cache: 0,
-                    log_comment: 'aqa-bench:mobs-span-query-x56:capture',
-                  },
-                });
-              },
-            } as unknown as ClickHouseClient;
-            let next: string | null = null;
-            try {
-              const result = await mods.spanQuery.querySpans(
-                capturing,
-                mods.plan.planPlatformSpanQuery(
-                  { ...request, page: { ...request.page, ...(after ? { after } : {}) } },
-                  scope,
-                ),
+        for (const orderId of options.orders)
+          for (const depth of options.depths ?? [undefined]) {
+            const shape = SHAPES[shapeId]!;
+            const request = {
+              timeRange: windowRange(window),
+              ...(shape.where ? { where: shape.where } : {}),
+              orderBy: [ORDERS[orderId]],
+              page: { limit: shape.limit },
+            };
+            const scope = scopeOf(project, 'org');
+            let after: string | undefined;
+            for (let page = 1; page <= options.pages; page++) {
+              const captured: Array<{ query: string; query_params: Record<string, unknown> }> = [];
+              const capturing = {
+                query: (args: Parameters<ClickHouseClient['query']>[0]) => {
+                  assertReadOnlyStatement(args.query);
+                  captured.push({ query: args.query, query_params: args.query_params as Record<string, unknown> });
+                  return raw.query({
+                    ...args,
+                    query_id: randomUUID(),
+                    clickhouse_settings: {
+                      ...args.clickhouse_settings,
+                      use_query_cache: 0,
+                      log_comment: 'aqa-bench:mobs-span-query-x56:capture',
+                    },
+                  });
+                },
+              } as unknown as ClickHouseClient;
+              let next: string | null = null;
+              let pagePlan = mods.plan.planPlatformSpanQuery(
+                { ...request, page: { ...request.page, ...(after ? { after } : {}) } },
+                scope,
               );
-              next = result.page.next;
-            } catch {
-              // The payload statements were still captured; time them below.
-            }
-            const payloads = options.probe
-              ? captured
-                  .filter(c => c.query.includes('AS edge'))
-                  .slice(0, 1)
-                  .map(c => ({ ...c, kind: 'probe' }))
-              : captured
-                  .filter(c => c.query.includes('any(tuple('))
-                  .map(c => ({ ...c, kind: c.query.includes('AS input') ? 'legacy' : 'payload' }))
-                  .filter(
-                    (c, index, all) =>
-                      c.kind === 'payload' || all.slice(0, index).filter(d => d.kind === 'legacy').length < 2,
-                  );
-            for (const payload of payloads) {
-              const statements: Array<Statement & { variant: string }> = [];
-              const order = options.variants.map((_, i) => options.variants[(i + rotation) % options.variants.length]!);
-              rotation++;
-              for (const variant of order) {
-                const id = randomUUID();
-                const start = performance.now();
-                try {
-                  const out = await exec(
-                    raw,
-                    mods,
-                    payload,
-                    { ...PROD, ...HYDRATE_VARIANTS[variant], enable_filesystem_cache: 0 },
-                    false,
-                    id,
-                  );
-                  statements.push({
-                    id,
-                    variant,
-                    wallMs: Math.round(performance.now() - start),
-                    attempt: 0,
-                    ok: true,
-                    rows: out.length,
-                  });
-                } catch (error) {
-                  statements.push({
-                    id,
-                    variant,
-                    wallMs: Math.round(performance.now() - start),
-                    attempt: 0,
-                    ok: false,
-                    errorCode: errorCode(error),
-                  });
-                }
+              if (depth && page === 1) {
+                const at = new Date(Date.parse(request.timeRange.to) - depth * 86_400_000).toISOString();
+                pagePlan = nextPlan(pagePlan, {
+                  projectId: '',
+                  resourceId: '',
+                  traceId: '',
+                  spanId: '',
+                  [pagePlan.orderBy.field]: at,
+                } as Row);
               }
-              await attachStats(raw, statements);
-              appendFileSync(
-                OUT,
-                `${JSON.stringify({ at: new Date().toISOString(), label: options.label, hash: project.hash, scope: 'org', window, shape: shapeId, order: orderId, variant: 'hydrate', kind: payload.kind, page, statements })}\n`,
-              );
-              console.log(
-                ['org', window, shapeId, orderId, `p${page}`, payload.kind].join(' '),
-                statements
-                  .sort((a, b) => options.variants.indexOf(a.variant) - options.variants.indexOf(b.variant))
-                  .map(
-                    s =>
-                      `${s.variant} ${s.ok ? 'ok' : `FAIL ${s.errorCode}`} ${s.stat?.durationMs ?? s.wallMs} ms, ${s.stat?.memMiB} MiB, read ${s.stat?.readMiB} MiB`,
-                  )
-                  .join(' | '),
-              );
+              try {
+                const result = await mods.spanQuery.querySpans(capturing, pagePlan);
+                next = result.page.next;
+              } catch {
+                // The payload statements were still captured; time them below.
+              }
+              const payloads = options.select
+                ? captured
+                    .filter(c => c.query.includes('candidates AS'))
+                    .slice(0, 1)
+                    .map(c => ({ ...c, kind: 'select' }))
+                : options.probe
+                  ? captured
+                      .filter(c => c.query.includes('AS edge'))
+                      .slice(0, 1)
+                      .map(c => ({ ...c, kind: 'probe' }))
+                  : captured
+                      .filter(c => c.query.includes('any(tuple('))
+                      .map(c => ({ ...c, kind: c.query.includes('AS input') ? 'legacy' : 'payload' }))
+                      .filter(
+                        (c, index, all) =>
+                          c.kind === 'payload' || all.slice(0, index).filter(d => d.kind === 'legacy').length < 2,
+                      );
+              for (const payload of payloads) {
+                const statements: Array<Statement & { variant: string }> = [];
+                const order = options.variants.map(
+                  (_, i) => options.variants[(i + rotation) % options.variants.length]!,
+                );
+                rotation++;
+                if (options.warm)
+                  await exec(raw, mods, payload, { ...PROD, ...HYDRATE_VARIANTS.streams32 }, false, randomUUID()).catch(
+                    () => undefined,
+                  );
+                for (const variant of order) {
+                  const id = randomUUID();
+                  const start = performance.now();
+                  try {
+                    const out = await exec(
+                      raw,
+                      mods,
+                      payload,
+                      {
+                        ...PROD,
+                        ...HYDRATE_VARIANTS[variant],
+                        ...(options.warm ? {} : { enable_filesystem_cache: 0 }),
+                      },
+                      false,
+                      id,
+                    );
+                    statements.push({
+                      id,
+                      variant,
+                      wallMs: Math.round(performance.now() - start),
+                      attempt: 0,
+                      ok: true,
+                      rows: out.length,
+                    });
+                  } catch (error) {
+                    statements.push({
+                      id,
+                      variant,
+                      wallMs: Math.round(performance.now() - start),
+                      attempt: 0,
+                      ok: false,
+                      errorCode: errorCode(error),
+                    });
+                  }
+                }
+                await attachStats(raw, statements);
+                appendFileSync(
+                  OUT,
+                  `${JSON.stringify({ at: new Date().toISOString(), label: options.label, hash: project.hash, scope: 'org', window, shape: shapeId, order: orderId, variant: 'hydrate', kind: payload.kind, ...(depth ? { depth } : {}), phase: options.warm ? 'warm' : 'cold', page, statements })}\n`,
+                );
+                console.log(
+                  [
+                    'org',
+                    window,
+                    shapeId,
+                    orderId,
+                    ...(depth ? [`@${depth}d`] : []),
+                    `p${page}`,
+                    payload.kind,
+                    options.warm ? 'warm' : 'cold',
+                  ].join(' '),
+                  statements
+                    .sort((a, b) => options.variants.indexOf(a.variant) - options.variants.indexOf(b.variant))
+                    .map(
+                      s =>
+                        `${s.variant} ${s.ok ? 'ok' : `FAIL ${s.errorCode}`} ${s.stat?.durationMs ?? s.wallMs} ms, ${s.stat?.memMiB} MiB, read ${s.stat?.readMiB} MiB`,
+                    )
+                    .join(' | '),
+                );
+              }
+              after = next ?? undefined;
+              if (!after) break;
             }
-            after = next ?? undefined;
-            if (!after) break;
           }
-        }
   } finally {
     await raw.close();
   }
@@ -836,6 +917,9 @@ async function main() {
       oracle: { type: 'string' },
       settings: { type: 'string', default: '{}' },
       cold: { type: 'boolean', default: false },
+      depths: { type: 'string' },
+      warm: { type: 'boolean', default: false },
+      select: { type: 'boolean', default: false },
       probe: { type: 'boolean', default: false },
     },
   });
@@ -846,6 +930,9 @@ async function main() {
   if (command === 'hydrate' && values.label)
     return hydrate({
       probe: values.probe!,
+      warm: values.warm!,
+      select: values.select!,
+      ...(values.depths ? { depths: values.depths.split(',').map(Number) } : {}),
       platform: values.platform,
       base: values.base,
       label: values.label,
@@ -865,6 +952,7 @@ async function main() {
       orders: values.orders!.split(','),
       pages: Number(values.pages),
       cold: values.cold!,
+      ...(values.depths ? { depths: values.depths.split(',').map(Number) } : {}),
     });
   if (command !== 'run' || !values.label)
     throw new Error('usage: probe | run --label <id> | route --label <id> | report');
