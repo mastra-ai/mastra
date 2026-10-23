@@ -30,6 +30,28 @@ describe('swapThreadReaction', () => {
     warn.mockRestore();
   });
 
+  it('applies overlapping swaps on one thread in the order they were started', async () => {
+    const calls: string[] = [];
+    let releaseFirstRemove!: () => void;
+    const adapter = {
+      removeReaction: vi.fn(async (_t: string, _ts: string, emoji: string) => {
+        if (emoji === 'eyes') await new Promise<void>(resolve => (releaseFirstRemove = resolve));
+        calls.push(`-${emoji}`);
+      }),
+      addReaction: vi.fn(async (_t: string, _ts: string, emoji: string) => {
+        calls.push(`+${emoji}`);
+      }),
+    };
+
+    const first = swapThreadReaction(adapter, THREAD, { remove: 'eyes', add: 'memo' });
+    const second = swapThreadReaction(adapter, THREAD, { remove: 'memo', add: 'hammer' });
+    await vi.waitFor(() => expect(adapter.removeReaction).toHaveBeenCalledTimes(1));
+    releaseFirstRemove();
+    await Promise.all([first, second]);
+
+    expect(calls).toEqual(['-eyes', '+memo', '-memo', '+hammer']);
+  });
+
   it('ignores thread ids that are not Slack threads', async () => {
     const adapter = fakeAdapter();
 

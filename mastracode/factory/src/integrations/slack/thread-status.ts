@@ -22,19 +22,30 @@ export const STAGE_REACTIONS: Record<string, string> = {
  * are `slack:<channel>:<thread ts>`, and the thread ts is that message's ts.
  * Best-effort: a failure is logged and never reaches the caller, and a failed
  * removal (the reaction was never there) still lets the new one through.
+ * Swaps on the same thread run one after another, so stage changes that fire
+ * close together land in order.
  */
-export async function swapThreadReaction(
+export function swapThreadReaction(
   adapter: Pick<Adapter, 'addReaction' | 'removeReaction'>,
   threadId: string,
   { remove, add }: { remove?: string; add?: string },
 ): Promise<void> {
   const [platform, channel, rootTs] = threadId.split(':');
-  if (platform !== 'slack' || !channel || !rootTs || remove === add) return;
+  if (platform !== 'slack' || !channel || !rootTs || remove === add) return Promise.resolve();
   const attempt = (call: Promise<void>, emoji: string) =>
     call.catch(error => console.warn('[slack] thread status reaction failed', { threadId, emoji, error }));
-  if (remove) await attempt(adapter.removeReaction(threadId, rootTs, remove), remove);
-  if (add) await attempt(adapter.addReaction(threadId, rootTs, add), add);
+  const run = (pending.get(threadId) ?? Promise.resolve()).then(async () => {
+    if (remove) await attempt(adapter.removeReaction(threadId, rootTs, remove), remove);
+    if (add) await attempt(adapter.addReaction(threadId, rootTs, add), add);
+  });
+  pending.set(threadId, run);
+  void run.then(() => {
+    if (pending.get(threadId) === run) pending.delete(threadId);
+  });
+  return run;
 }
+
+const pending = new Map<string, Promise<void>>();
 
 /**
  * Post a pull request's link into the Slack thread a session is linked to.
