@@ -44,7 +44,7 @@ const processor = new MessageHistory({
             name: 'lastMessages',
             type: 'number | false',
             description:
-              'Maximum number of historical messages to retrieve. Set to false or omit to retrieve all messages',
+              "Maximum number of historical messages to retrieve. Set to false to retrieve all messages. If omitted, the storage adapter's default page size applies (40 messages for built-in adapters)",
             isOptional: true,
           },
         ],
