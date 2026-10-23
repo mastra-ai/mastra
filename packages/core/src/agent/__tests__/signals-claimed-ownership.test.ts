@@ -399,6 +399,506 @@ describe('Agent signals: claimed thread ownership', () => {
     claim.unsubscribe();
   });
 
+  it('delivers remote claimed-owner input into the busy owner run at its next model request', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    // The owner agent runs on the process-wide runtime, as it does in a real process,
+    // so its claim and its active run share one state.
+    const ownerRuntime = agentThreadStreamRuntime;
+    const senderRuntime = new AgentThreadStreamRuntime();
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    const prompts: string[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(JSON.stringify(prompt));
+        const call = prompts.length;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: `text-${call}` });
+              controller.enqueue({ type: 'text-delta', id: `text-${call}`, delta: `answer ${call}. ` });
+              controller.enqueue({ type: 'text-end', id: `text-${call}` });
+              if (call === 1) await firstFinished;
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const ownerAgent = new Agent({
+      id: 'busy-claimed-owner',
+      name: 'Busy Claimed Owner',
+      instructions: 'Test',
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'busy-claimed-sender',
+      name: 'Busy Claimed Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'busy-claimed-user', threadId: 'busy-claimed-thread' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const firstRun = readNextRunWithParts(iterator);
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+    const sendRemote = (contents: string) =>
+      senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+
+    try {
+      await expect(sendRemote('start the run').accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => prompts.length === 1);
+      const activeRunId = subscription.activeRunId();
+      expect(activeRunId).toBeTruthy();
+
+      // The sender cannot see the owner's run, so it asks for an idle wake; the owner
+      // must still hand each input to the run already in flight, in order.
+      const first = sendRemote('first input while busy');
+      const second = sendRemote('second input while busy');
+      await expect(first.accepted).resolves.toEqual({ action: 'deliver', runId: activeRunId });
+      await expect(second.accepted).resolves.toEqual({ action: 'deliver', runId: activeRunId });
+
+      releaseFirst();
+      await expect(firstRun).resolves.toMatchObject({ value: { runId: activeRunId, text: 'answer 1. answer 2. ' } });
+      await pubsub.flush();
+
+      expect(prompts).toHaveLength(2);
+      const firstAt = prompts[1]!.indexOf('first input while busy');
+      const secondAt = prompts[1]!.indexOf('second input while busy');
+      expect(firstAt).toBeGreaterThan(-1);
+      expect(secondAt).toBeGreaterThan(firstAt);
+      expect(prompts[1]!.split('first input while busy')).toHaveLength(2);
+      expect(prompts[1]!.split('second input while busy')).toHaveLength(2);
+    } finally {
+      releaseFirst();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('hands remote claimed-owner input to an owner run that has reserved the thread but not started', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = agentThreadStreamRuntime;
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const prompts: string[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(JSON.stringify(prompt));
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: `answer ${prompts.length}. ` },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        };
+      },
+    });
+    const ownerAgent = new Agent({
+      id: 'reserved-claimed-owner',
+      name: 'Reserved Claimed Owner',
+      instructions: 'Test',
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'reserved-claimed-sender',
+      name: 'Reserved Claimed Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'reserved-claimed-user', threadId: 'reserved-claimed-thread' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const firstRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+    let releaseLease!: () => void;
+    pubsub.acquireLeaseWait = new Promise<void>(resolve => {
+      releaseLease = resolve;
+    });
+    let leaseRequested = false;
+    pubsub.onAcquireLease = () => {
+      leaseRequested = true;
+    };
+    const sendRemote = (contents: string) =>
+      senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+
+    try {
+      const first = sendRemote('first input');
+      await waitForCondition(() => leaseRequested);
+      const second = sendRemote('second input');
+      await waitForCondition(() =>
+        pubsub.publishedData.some(
+          data => data?.type === 'idle-signal-enqueued' && data.signal?.contents === 'second input',
+        ),
+      );
+      await pubsub.flush();
+      releaseLease();
+
+      const firstAccepted = await first.accepted;
+      expect(firstAccepted).toMatchObject({ action: 'deliver' });
+      await expect(second.accepted).resolves.toEqual({ action: 'deliver', runId: firstAccepted.runId });
+      await expect(firstRun).resolves.toMatchObject({ value: { runId: firstAccepted.runId, text: 'answer 1. ' } });
+      await pubsub.flush();
+
+      expect(prompts).toHaveLength(1);
+      expect(prompts[0]!.indexOf('second input')).toBeGreaterThan(prompts[0]!.indexOf('first input'));
+      expect(prompts[0]!.split('second input')).toHaveLength(2);
+    } finally {
+      releaseLease();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('ends remote claimed-owner input cancelled while it waits on a reserved owner run', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const prompts: string[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(JSON.stringify(prompt));
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'answer. ' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        };
+      },
+    });
+    const ownerAgent = new Agent({ id: 'reserved-cancel-owner', name: 'Owner', instructions: 'Test', model, pubsub });
+    const senderAgent = new Agent({
+      id: 'reserved-cancel-sender',
+      name: 'Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'reserved-cancel-user', threadId: 'reserved-cancel-thread' };
+    const subscription = await agentThreadStreamRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const firstRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const claim = await agentThreadStreamRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+    let releaseLease!: () => void;
+    pubsub.acquireLeaseWait = new Promise<void>(resolve => {
+      releaseLease = resolve;
+    });
+    let leaseRequested = false;
+    pubsub.onAcquireLease = () => {
+      leaseRequested = true;
+    };
+    const attributes = { messageId: 'reserved-cancel-message', sourcePeerId: 'reserved-cancel-peer' };
+    const sendRemote = (contents: string, signalAttributes?: typeof attributes) =>
+      senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents, ...(signalAttributes ? { attributes: signalAttributes } : {}) },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+
+    try {
+      const first = sendRemote('first input');
+      await waitForCondition(() => leaseRequested);
+      const cancelledInput = sendRemote('cancelled input', attributes);
+      await waitForCondition(() =>
+        pubsub.publishedData.some(
+          data => data?.type === 'idle-signal-enqueued' && data.signal?.contents === 'cancelled input',
+        ),
+      );
+      await pubsub.flush();
+      expect(
+        agentThreadStreamRuntime.cancelQueuedMessages(
+          ownerAgent,
+          { ...target, signalIds: [cancelledInput.signal.id] },
+          pubsub,
+        ).cancelledSignalIds,
+      ).toEqual([cancelledInput.signal.id]);
+      releaseLease();
+
+      await expect(first.accepted).resolves.toMatchObject({ action: 'deliver' });
+      // As for queued input on an idle owner, the first attempt was accepted; a retry learns it was cancelled.
+      await expect(cancelledInput.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await expect(sendRemote('cancelled input', attributes).accepted).rejects.toThrow('cancelled before it ran');
+      await expect(firstRun).resolves.toMatchObject({ value: { text: 'answer. ' } });
+      await pubsub.flush();
+      expect(prompts).toHaveLength(1);
+      expect(prompts[0]).toContain('first input');
+      expect(prompts[0]).not.toContain('cancelled input');
+    } finally {
+      releaseLease();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it.each([
+    ['queueSignal', 'this'],
+    ['queueMessage', 'this'],
+    ['queueSignal', 'an older'],
+    ['queueMessage', 'an older'],
+  ] as const)(
+    'keeps remote %s input from %s version waiting until the busy claimed owner run finishes',
+    async (method, version) => {
+      const pubsub = new ControlledLeasePubSub();
+      if (version === 'an older') {
+        // A sender from before claimed-owner input could join a run in flight sends no intent with its request.
+        const publish = pubsub.publish.bind(pubsub);
+        pubsub.publish = (topic, event) => {
+          if (event.data?.type !== 'idle-signal-enqueued') return publish(topic, event);
+          const { waitForIdle: _wait, joinActiveRun: _join, ...older } = event.data;
+          return publish(topic, { ...event, data: older });
+        };
+      }
+      const senderRuntime = new AgentThreadStreamRuntime();
+      let releaseFirst!: () => void;
+      const firstFinished = new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      });
+      const prompts: string[] = [];
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(JSON.stringify(prompt));
+          const call = prompts.length;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({ type: 'text-start', id: `text-${call}` });
+                controller.enqueue({ type: 'text-delta', id: `text-${call}`, delta: `answer ${call}. ` });
+                controller.enqueue({ type: 'text-end', id: `text-${call}` });
+                if (call === 1) await firstFinished;
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      });
+      const ownerAgent = new Agent({
+        id: `queue-owner-${method}`,
+        name: 'Queue Owner',
+        instructions: 'Test',
+        model,
+        pubsub,
+      });
+      const senderAgent = new Agent({
+        id: `queue-sender-${method}`,
+        name: 'Queue Sender',
+        instructions: 'Test',
+        model: createTextStreamModel('sender response'),
+        pubsub,
+      });
+      const target = { resourceId: `queue-claimed-user-${method}`, threadId: `queue-claimed-thread-${method}` };
+      const subscription = await agentThreadStreamRuntime.subscribeToThread(ownerAgent, target, pubsub);
+      const iterator = subscription.stream[Symbol.asyncIterator]();
+      const firstRun = readNextRunWithParts(iterator);
+      const claim = await agentThreadStreamRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+      const claimedTarget = { ...target, ifIdle: { behavior: 'wake' as const, requireClaimedOwner: true } };
+
+      try {
+        await senderRuntime.sendSignal(
+          senderAgent,
+          { type: 'user-message', contents: 'start the run' },
+          claimedTarget,
+          pubsub,
+        ).accepted;
+        await waitForCondition(() => prompts.length === 1);
+        const activeRunId = subscription.activeRunId();
+
+        // The sender cannot see the owner's run, so its queue falls back to an idle wake.
+        // The owner must still treat it as queued: it waits for the run to finish.
+        const queued =
+          method === 'queueSignal'
+            ? senderRuntime.queueSignal(
+                senderAgent,
+                { type: 'user-message', contents: 'queued input' },
+                claimedTarget,
+                pubsub,
+              )
+            : senderRuntime.queueMessage(senderAgent, 'queued input', claimedTarget, pubsub);
+        const accepted = await queued.accepted;
+        expect(accepted.action).toBe('deliver');
+        expect(accepted.runId).not.toBe(activeRunId);
+
+        releaseFirst();
+        await expect(firstRun).resolves.toMatchObject({ value: { runId: activeRunId, text: 'answer 1. ' } });
+        const queuedRun = await readNextRunWithParts(iterator);
+        expect(queuedRun.value.runId).not.toBe(activeRunId);
+        expect(prompts).toHaveLength(2);
+        expect(prompts[0]).not.toContain('queued input');
+        expect(prompts[1]!.split('queued input')).toHaveLength(2);
+      } finally {
+        releaseFirst();
+        claim.unsubscribe();
+        subscription.unsubscribe();
+      }
+    },
+  );
+
+  it("keeps remote claimed-owner input out of another agent's reserved run", async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'other-agent-reserved-user', threadId: 'other-agent-reserved-thread' };
+    const ownerPrompts: string[] = [];
+    const otherPrompts: string[] = [];
+    const answer = [
+      { type: 'stream-start' as const, warnings: [] },
+      { type: 'text-start' as const, id: 'answer' },
+      { type: 'text-delta' as const, id: 'answer', delta: 'complete' },
+      { type: 'text-end' as const, id: 'answer' },
+      {
+        type: 'finish' as const,
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      },
+    ];
+    const ownerAgent = new Agent({
+      id: 'reserved-owner-agent',
+      name: 'Reserved Owner',
+      instructions: 'Owner',
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          ownerPrompts.push(JSON.stringify(prompt));
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream(answer),
+          };
+        },
+      }),
+      pubsub,
+    });
+    const otherAgent = new Agent({
+      id: 'reserved-other-agent',
+      name: 'Reserved Other',
+      instructions: 'Other',
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt, abortSignal }) => {
+          otherPrompts.push(JSON.stringify(prompt));
+          if (otherPrompts.length > 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream(answer),
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({ type: 'text-start', id: 'held' });
+                controller.enqueue({ type: 'text-delta', id: 'held', delta: 'held' });
+                abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
+              },
+            }),
+          };
+        },
+      }),
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'reserved-other-sender',
+      name: 'Reserved Other Sender',
+      instructions: 'Sender',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const claim = await ownerAgent.claimThreadOwnership(target);
+    expect(claim.claimed).toBe(true);
+    const abort = new AbortController();
+    let releaseTransfer!: () => void;
+    const transferGate = new Promise<void>(resolve => {
+      releaseTransfer = resolve;
+    });
+    let consumption: Promise<void> | undefined;
+    try {
+      const output = await otherAgent.stream('initial other run', {
+        memory: { thread: target.threadId, resource: target.resourceId },
+        abortSignal: abort.signal,
+      });
+      consumption = (async () => {
+        for await (const _part of output.fullStream) {
+          // drain
+        }
+      })();
+      await vi.waitFor(() => expect(otherPrompts).toHaveLength(1));
+      await otherAgent.sendSignal({ type: 'user-message', contents: 'other agent follow-up' }, target).accepted;
+
+      // Abort hands the thread to the other agent's follow-up run; hold it while it is
+      // reserved but not started.
+      let transferring = false;
+      pubsub.transferLeaseWait = transferGate;
+      pubsub.onTransferLease = () => {
+        transferring = true;
+      };
+      abort.abort();
+      await vi.waitFor(() => expect(transferring).toBe(true));
+
+      const incoming = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'input for the owner' },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await vi.waitFor(() =>
+        expect(
+          pubsub.publishedData.some(
+            data => data?.type === 'idle-signal-enqueued' && data.signal?.contents === 'input for the owner',
+          ),
+        ).toBe(true),
+      );
+      await pubsub.flush();
+      releaseTransfer();
+
+      await expect(incoming.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await vi.waitFor(() => expect(ownerPrompts).toHaveLength(1));
+      expect(ownerPrompts[0]).toContain('input for the owner');
+      expect(otherPrompts.join('')).not.toContain('input for the owner');
+    } finally {
+      releaseTransfer();
+      abort.abort();
+      await consumption?.catch(() => {});
+      claim.unsubscribe();
+    }
+  });
+
   it('rejects remote claimed-owner delivery when stream admission fails', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
@@ -618,7 +1118,8 @@ describe('Agent signals: claimed thread ownership', () => {
 
   it('reports the terminal cancellation to a retry of a cancelled queued message', async () => {
     const pubsub = new ControlledLeasePubSub();
-    const ownerRuntime = new AgentThreadStreamRuntime();
+    // The owner agent runs on the process-wide runtime, so the queued message joins its run.
+    const ownerRuntime = agentThreadStreamRuntime;
     const senderRuntime = new AgentThreadStreamRuntime();
     const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
       'held owner response',
@@ -1228,7 +1729,7 @@ describe('Agent signals: claimed thread ownership', () => {
     }
   });
 
-  it('cancels claimant-held idle input after claim release without any thread observers', async () => {
+  it('rejects claimed input waiting on a reserved run when the claim is released', async () => {
     const scope = { resourceId: 'claim-control-user', threadId: 'claim-control-thread' };
     const key = `${scope.resourceId}\u0000${scope.threadId}`;
     const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
@@ -1259,20 +1760,24 @@ describe('Agent signals: claimed thread ownership', () => {
         },
         pubsub,
       );
-      await queued.accepted;
+      void queued.accepted.catch(() => {});
+      // The input waits for the reserved run's first request, so it is not
+      // acknowledged until that run is admitted here.
+      await waitForCondition(() =>
+        pubsub.publishedData.some(
+          data => data?.type === 'idle-signal-enqueued' && data.signal?.contents === 'claimant queued input',
+        ),
+      );
+      await pubsub.flush();
       expect(model.doStreamCalls).toHaveLength(0);
       claim.unsubscribe();
-      await pubsub.publish(topic, {
-        type: 'signals-cancelled',
-        data: { type: 'signals-cancelled', signalIds: [queued.signal.id] },
-      });
-      await pubsub.flush();
-      await nextTick();
+      release();
+      await expect(first.accepted).rejects.toThrow('Claimed thread owner was released');
+      // A released owner sends no reply, so the sender is refused when its acceptance window ends.
+      await expect(queued.accepted).rejects.toThrow('Claimed thread owner did not accept signal');
       expect(agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
         cancelledSignalIds: [],
       });
-      release();
-      await expect(first.accepted).rejects.toThrow('Claimed thread owner was released');
       await vi.waitFor(() => expect(pubsub.subscriberCount(topic)).toBe(0));
       expect(pubsub.owners.get(key)).toBeUndefined();
       expect(model.doStreamCalls).toHaveLength(0);
