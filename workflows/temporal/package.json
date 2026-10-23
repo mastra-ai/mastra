@@ -71,7 +71,6 @@
     "@internal/types-builder": "workspace:*",
     "@internal/workflow-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@temporalio/testing": "1.22.0",
     "@types/node": "22.20.5",
     "tsdown": "0.23.1",
     "typescript": "catalog:",

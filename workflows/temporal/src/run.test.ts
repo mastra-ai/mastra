@@ -1,38 +1,54 @@
 import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createStep, createWorkflow as createLocalWorkflow } from '@mastra/core/workflows';
 import type { Client } from '@temporalio/client';
-import { TestWorkflowEnvironment } from '@temporalio/testing';
-import { Worker } from '@temporalio/worker';
+import { proxyActivities } from '@temporalio/workflow';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { buildTemporalWorkflowModule } from './transforms/workflows';
 import { createWorkflow } from './workflow';
 import { init } from './index';
 
+// The Temporal SDK cannot load under the repository's protobufjs override, so the
+// worker sandbox is replaced by calling the generated workflow module directly.
+vi.mock('@temporalio/workflow', () => ({
+  executeChild: vi.fn(),
+  proxyActivities: vi.fn(),
+  sleep: vi.fn(),
+  log: { info: vi.fn() },
+}));
+
+// Temporal's default payload converter sends workflow arguments and results as JSON.
+function overTheWire<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
+
 describe('TemporalRun', () => {
   it('returns the same output as a local run', async () => {
     const packageRoot = fileURLToPath(new URL('..', import.meta.url));
     const directory = await realpath(await mkdtemp(path.join(packageRoot, '.start-result-')));
-    let env: TestWorkflowEnvironment | undefined;
 
     try {
-      env = await TestWorkflowEnvironment.createLocal({
-        server: {
-          executable: process.env.TEMPORAL_CLI_PATH
-            ? { type: 'existing-path', path: process.env.TEMPORAL_CLI_PATH }
-            : undefined,
-        },
-      });
       const sourcePath = path.join(directory, 'source.mjs');
       await writeFile(
         sourcePath,
         `import { createWorkflow } from '@mastra/core/workflows';
          export const echoWorkflow = createWorkflow({ id: 'echo-workflow' }).then('echo').commit();`,
       );
-      const { outputPath: workflowsPath } = await buildTemporalWorkflowModule(sourcePath, directory, 'workflow.mjs');
-      const taskQueue = `start-result-${crypto.randomUUID()}`;
+      const { outputPath } = await buildTemporalWorkflowModule(sourcePath, directory, 'workflow.mjs');
+      const workflows: Record<string, (args: unknown) => Promise<unknown>> = await import(
+        pathToFileURL(outputPath).href
+      );
+      vi.mocked(proxyActivities).mockReturnValue({
+        echo: async ({ inputData }: { inputData: { output: unknown } }) => inputData.output,
+      });
+      const start = vi.fn(async (workflowType: string, options: { args: [unknown] }) => {
+        const execution = workflows[workflowType]!(overTheWire(options.args[0]));
+        return { result: async () => overTheWire(await execution) };
+      });
+      const client = { workflow: { start } } as unknown as Client;
+
       const schema = z.unknown();
       const stateSchema = z.object({ date: z.date(), optional: z.unknown().optional() });
       const inputSchema = stateSchema.extend({ output: schema });
@@ -44,37 +60,27 @@ describe('TemporalRun', () => {
       });
       const config = { id: 'echo-workflow', inputSchema, outputSchema: schema, stateSchema };
       const local = createLocalWorkflow(config).then(echo).commit();
-      const temporal = init({ client: env.client, taskQueue }).createWorkflow(config).then(echo).commit();
-      const worker = await Worker.create({
-        connection: env.nativeConnection,
-        taskQueue,
-        workflowsPath,
-        activities: { echo: async ({ inputData }: { inputData: { output: unknown } }) => inputData.output },
-      });
+      const temporal = init({ client, taskQueue: 'start-result' }).createWorkflow(config).then(echo).commit();
 
-      await worker.runUntil(async () => {
-        // #27934: decode only the transport envelope, preserving falsy outputs and user result fields.
-        for (const output of [{ value: 6 }, null, { result: { value: 6 } }, 0, false, '']) {
-          const initialState = { date: new Date('2026-10-20T00:00:00Z'), optional: undefined };
-          const inputData = { ...initialState, output };
-          const expected = await (await local.createRun()).start({ inputData, initialState });
-          const actual = await (await temporal.createRun()).start({ inputData, initialState });
-          expect(expected.status).toBe('success');
-          expect(actual.status).toBe('success');
-          if (expected.status === 'success' && actual.status === 'success') {
-            expect(expected.result).toEqual(output);
-            expect(actual.result).toEqual(output);
-            expect(actual.input).toStrictEqual(expected.input);
-            expect(actual.state).toStrictEqual(initialState);
-          }
+      // #27934: decode only the transport envelope, preserving falsy outputs and user result fields.
+      for (const output of [{ value: 6 }, null, { result: { value: 6 } }, 0, false, '']) {
+        const initialState = { date: new Date('2026-10-20T00:00:00Z'), optional: undefined };
+        const inputData = { ...initialState, output };
+        const expected = await (await local.createRun()).start({ inputData, initialState });
+        const actual = await (await temporal.createRun()).start({ inputData, initialState });
+        expect(expected.status).toBe('success');
+        expect(actual.status).toBe('success');
+        if (expected.status === 'success' && actual.status === 'success') {
+          expect(expected.result).toEqual(output);
+          expect(actual.result).toEqual(output);
+          expect(actual.input).toStrictEqual(expected.input);
+          expect(actual.state).toStrictEqual(initialState);
         }
-      });
-    } finally {
-      try {
-        await env?.teardown();
-      } finally {
-        await rm(directory, { recursive: true, force: true });
       }
+      expect(start).toHaveBeenCalledTimes(6);
+      expect(start).toHaveBeenCalledWith('echoWorkflow', expect.objectContaining({ taskQueue: 'start-result' }));
+    } finally {
+      await rm(directory, { recursive: true, force: true });
     }
   });
 
