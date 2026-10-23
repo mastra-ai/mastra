@@ -601,8 +601,8 @@ const ComposerSendButton = ({
   onCancel,
 }: ComposerSendButtonProps) => {
   const { isAddingAttachments } = useComposerAttachments();
-  // While streaming and not allowed to send mid-stream, the only action is cancel.
-  if (isRunning && !canSendWhileStreaming) {
+  // An empty draft leaves room to stop; a non-empty draft can be sent when supported.
+  if (isRunning && (isEmpty || !canSendWhileStreaming)) {
     return (
       <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
         <CircleStopIcon />
@@ -611,22 +611,15 @@ const ComposerSendButton = ({
   }
 
   return (
-    <>
-      <Button
-        type="submit"
-        variant="default"
-        size="icon-md"
-        tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        disabled={!canExecute || isEmpty || isAddingAttachments}
-      >
-        <ArrowUp />
-      </Button>
-      {isRunning && (
-        <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
-          <CircleStopIcon />
-        </Button>
-      )}
-    </>
+    <Button
+      type="submit"
+      variant="default"
+      size="icon-md"
+      tooltip={canExecute ? 'Send' : 'No permission to execute'}
+      disabled={!canExecute || isEmpty || isAddingAttachments}
+    >
+      <ArrowUp />
+    </Button>
   );
 };
 

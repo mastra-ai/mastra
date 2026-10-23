@@ -24,6 +24,44 @@ import {
 const MESSAGE = 'Use the platform token, then continue';
 
 describe('Composer steering', () => {
+  describe('when a run is active', () => {
+    it('replaces abort with send while drafting and restores abort after sending', async () => {
+      const session = stubPreparingSession({ autoAgentEnd: false });
+      const user = userEvent.setup();
+      const { client } = renderThread();
+      await releaseSession(session.finishWorkspace, client);
+
+      expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+      expect(screen.queryByRole('button', { name: 'Abort' })).not.toBeInTheDocument();
+
+      await session.emit({ type: 'agent_start' });
+      await screen.findByRole('button', { name: 'Abort' });
+      expect(screen.queryByRole('button', { name: 'Send message' })).not.toBeInTheDocument();
+
+      const composer = screen.getByRole('textbox', { name: 'Message' });
+      await user.type(composer, '   ');
+      expect(screen.getByRole('button', { name: 'Abort' })).toBeEnabled();
+      expect(screen.queryByRole('button', { name: 'Send message' })).not.toBeInTheDocument();
+
+      await user.type(composer, MESSAGE);
+      expect(screen.queryByRole('button', { name: 'Abort' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Send message' }));
+
+      await waitFor(() => expect(session.delivered).toEqual([MESSAGE]));
+      expect(screen.getByRole('button', { name: 'Abort' })).toBeEnabled();
+      expect(screen.queryByRole('button', { name: 'Send message' })).not.toBeInTheDocument();
+
+      await user.type(composer, MESSAGE);
+      await user.clear(composer);
+      expect(screen.getByRole('button', { name: 'Abort' })).toBeEnabled();
+      expect(screen.queryByRole('button', { name: 'Send message' })).not.toBeInTheDocument();
+
+      await session.emit({ type: 'agent_end' });
+      expect(await screen.findByRole('button', { name: 'Send message' })).toBeDisabled();
+      expect(screen.queryByRole('button', { name: 'Abort' })).not.toBeInTheDocument();
+    });
+  });
+
   it('queues the message without interrupting the active run and confirms its delivery', async () => {
     const session = stubPreparingSession({ autoAgentEnd: false });
     const user = userEvent.setup();

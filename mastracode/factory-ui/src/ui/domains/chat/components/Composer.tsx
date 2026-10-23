@@ -84,6 +84,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   });
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
   const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
+  const isEmpty = !draft.trim() && images.length === 0;
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -275,7 +276,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               >
                 <ImagePlus size={14} />
               </Button>
-              {liveRun && (
+              {liveRun && isEmpty ? (
                 <Button
                   type="button"
                   size="icon-sm"
@@ -284,18 +285,17 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 >
                   <Square size={14} />
                 </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  size="icon-sm"
+                  disabled={sendDisabled || isEmpty || (planFeedback.pending && !draft.trim())}
+                  aria-label="Send message"
+                  title={sendTitle}
+                >
+                  <ArrowUp size={16} />
+                </Button>
               )}
-              <Button
-                type="submit"
-                size="icon-sm"
-                disabled={
-                  sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())
-                }
-                aria-label="Send message"
-                title={sendTitle}
-              >
-                <ArrowUp size={16} />
-              </Button>
             </ButtonsGroup>
           </ComposerActions>
         </ComposerBox>
