@@ -67,6 +67,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { ChunkFrom } from '@mastra/core/stream';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
+import type { CoreTool } from '@mastra/core/tools';
 import { deepMerge } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
@@ -411,6 +412,12 @@ export interface InngestAgentResumeOptions<OUTPUT = undefined> {
    * iterations.
    */
   abortSignal?: AbortSignal;
+  /**
+   * Per-call tool lifecycle hooks for the resumed segment. Applied when the
+   * run's tools are still held in this process; function hooks are not
+   * serialized, so a resume in a fresh process cannot restore them.
+   */
+  hooks?: AgentExecutionOptions<OUTPUT>['hooks'];
   /**
    * When set, keep the resumed segment open after the workflow's initial
    * resume turn finishes and continue streaming follow-up turns until the
@@ -1307,6 +1314,42 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       }
       existingEntry.abortController = abortController;
       existingEntry.abortSignal = abortController.signal;
+
+      // A warm resume reuses the tools built for the first request, which close
+      // over that request's tool hooks. Rebuild them with this call's hooks and
+      // swap in only entries still holding a request-built tool, so tools a
+      // processor added or replaced are kept (matches core DurableAgent.resume).
+      if (existingRegistryEntry && resumeOptions?.hooks) {
+        try {
+          const requestTools = await agent.getToolsForExecution({
+            threadId: resumeOptions.threadId,
+            resourceId: resumeOptions.resourceId,
+            runId,
+            requestContext: callbackOptions.requestContext,
+            hooks: resumeOptions.hooks,
+            methodType: resumeOptions.closeOnSuspend ? 'generate' : 'stream',
+            backgroundTaskEnabled: Boolean(existingRegistryEntry.backgroundTaskManager),
+            model: existingRegistryEntry.model,
+          });
+          const previous = existingRegistryEntry.requestTools;
+          const refresh = (current: Record<string, CoreTool>) => {
+            const next = { ...current };
+            for (const [name, tool] of Object.entries(requestTools)) {
+              // A name missing from current but present in previous was withheld by a processor.
+              const configured =
+                name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
+              if (configured) next[name] = tool;
+            }
+            return next;
+          };
+          existingRegistryEntry.tools = refresh(existingRegistryEntry.tools ?? {});
+          if (existingRegistryEntry.baseTools)
+            existingRegistryEntry.baseTools = refresh(existingRegistryEntry.baseTools);
+          existingRegistryEntry.requestTools = requestTools;
+        } catch (error) {
+          mastra?.getLogger?.()?.warn?.(`[InngestAgent] resume(${runId}) tool resolution failed: ${error}`);
+        }
+      }
 
       // Track cleanup state for the resumed segment so terminal events
       // (finish/error/abort/cleanup) always tear down the registry entry.

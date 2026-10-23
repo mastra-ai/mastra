@@ -272,7 +272,43 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
     expect(JSON.stringify(requests[1]!.body.messages)).toContain('call-only');
   });
 
-  if (engine === 'durable' || engine === 'evented') {
+  it('uses call-time hooks passed to generate()', async () => {
+    const llm = getMock();
+    const defaultBefore = vi.fn();
+    const callBefore = vi.fn(() => ({ proceed: false as const, output: { value: 'blocked-by-generate' } }));
+    const execute = vi.fn(async () => ({ value: 'executed' }));
+    const tool = createTool({
+      id: 'guarded_tool',
+      description: 'A guarded tool.',
+      inputSchema: z.object({ key: z.string() }),
+      execute,
+    });
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'call_generate', name: 'guarded_tool', arguments: { key: 'delta' } }] },
+    );
+    llm.on({ endpoint: 'chat', toolCallId: 'call_generate', hasToolResult: true }, { content: 'Generate blocked.' });
+    const { agent } = await createSharedAgent(llm, {
+      engine,
+      tools: { guarded_tool: tool },
+      defaultOptions: { hooks: { beforeToolCall: defaultBefore } },
+    });
+
+    const result = await agent.generate('Call the guarded tool.', {
+      hooks: { beforeToolCall: callBefore },
+      stopWhen: stepCountIs(5),
+    });
+
+    expect(result.text).toContain('Generate blocked');
+    expect(callBefore).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: 'guarded_tool', input: { key: 'delta' } }),
+    );
+    expect(defaultBefore).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    expect(JSON.stringify(llm.getRequests()[1]?.body.messages)).toContain('blocked-by-generate');
+  });
+
+  if (engine === 'durable' || engine === 'evented' || engine === 'inngest') {
     it('uses hooks supplied only on warm resume for a suspended tool', async () => {
       const llm = getMock();
       const defaultBefore = vi.fn();
