@@ -646,37 +646,18 @@ describe('runEvals', () => {
         .then(mockStep)
         .commit();
 
-      // Create mock scores storage
-      const saveScoreSpy = vi.fn().mockResolvedValue({ score: {} });
-      const mockScoresStore = {
-        saveScore: saveScoreSpy,
-      };
-
-      // Mock workflows store with methods needed for scorer workflow runs
-      const mockWorkflowsStore = {
-        getWorkflowRunById: vi.fn().mockResolvedValue(null),
-        deleteWorkflowRunById: vi.fn().mockResolvedValue(undefined),
-        persistWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
-        listWorkflowRuns: vi.fn().mockResolvedValue({ runs: [] }),
-      };
-
-      const mockStorage = {
-        init: vi.fn().mockResolvedValue(undefined),
-        getStore: vi.fn().mockImplementation(async (domain: string) => {
-          if (domain === 'workflows') return mockWorkflowsStore;
-          if (domain === 'scores') return mockScoresStore;
-          return null;
-        }),
-        __setLogger: vi.fn(),
-      };
-
+      // Workflow runs claim run ownership through the workflows store, so a
+      // partial mock cannot satisfy them. Use a real in-memory store.
       const mastra = new Mastra({
         workflows: {
           testWorkflow: workflow,
         },
         logger: false,
-        storage: mockStorage as any,
+        storage: new InMemoryStore(),
       });
+
+      const scoresStore = (await mastra.getStorage()!.getStore('scores'))!;
+      const saveScoreSpy = vi.spyOn(scoresStore, 'saveScore');
 
       const scorer = createScorer({
         id: 'workflowScorer',

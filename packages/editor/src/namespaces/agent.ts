@@ -345,6 +345,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return super.create(finalInput);
   }
 
+  /**
+   * Returns the registered agent when it is defined by the project, either in code (`'code'`) or in an
+   * `agents/<name>/` folder (`'fs'`). Stored records for these agents are overrides layered on top.
+   */
   private getCodeDefinedAgent(id: string): Agent | undefined {
     let agent: Agent | undefined;
     try {
@@ -352,7 +356,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     } catch {
       return undefined;
     }
-    return agent?.source === 'code' ? agent : undefined;
+    return agent?.source === 'code' || agent?.source === 'fs' ? agent : undefined;
   }
 
   private async ensureStoredWorkspaceRefs(

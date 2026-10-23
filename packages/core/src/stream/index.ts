@@ -15,6 +15,8 @@ export type {
   ThreadHistoryChunk,
   ThreadHistoryPayload,
   DataChunkType,
+  UserMessagePendingChunk,
+  UserMessageCancelledChunk,
   NetworkChunkType,
   WorkflowStreamEvent,
   FileChunk,

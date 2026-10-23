@@ -131,6 +131,45 @@ describeForAllEngines(
       expect(finishReason).toMatch(/abort|cancelled|error|tripwire/i);
     });
 
+    it('reports the run as aborted when a tool rejects because the run was aborted', async () => {
+      const abortController = new AbortController();
+
+      const waitTool = createTool({
+        id: 'wait_for_abort',
+        description: 'Waits until the run is aborted',
+        inputSchema: z.object({}),
+        execute: async (_, context) => {
+          const signal = (context as any)?.abortSignal as AbortSignal;
+          setTimeout(() => abortController.abort(), 20);
+          await new Promise((_resolve, reject) =>
+            signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }),
+          );
+          return { done: true };
+        },
+      });
+
+      const { output, requests, chunks } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Wait for the abort',
+        tools: { wait_for_abort: waitTool },
+        stopWhen: stepCountIs(5),
+        abortSignal: abortController.signal,
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_wait', name: 'wait_for_abort', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Should not reach here' });
+        },
+      });
+
+      expect(requests).toHaveLength(1);
+      expect(await output.finishReason).toBe('aborted');
+      expect(chunks?.filter(chunk => chunk.type === 'abort')).toHaveLength(1);
+    });
+
     it('loop does not make additional requests after abort during tool execution', async () => {
       const abortController = new AbortController();
       let toolCallCount = 0;

@@ -1,3 +1,4 @@
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -42,7 +43,8 @@ const models: AvailableModelOption[] = [
 ];
 
 const baseSession: ChatSessionContextApi = {
-  resourceId: 'session-1',
+  sessionId: 'session-1',
+  resourceId: 'user-1',
   sessionEnabled: true,
   resourceReady: true,
   sandboxReady: true,
@@ -81,7 +83,11 @@ function renderPicker({
   /** Mount on a Factory route whose project has this model scope. */
   modelScope?: 'factory' | 'user' | 'hybrid';
   factoryDefaultModelId?: string;
-  sessionPolicy?: { modelScope: 'factory' | 'user'; defaultModelId: string | null };
+  sessionPolicy?: {
+    modelScope: 'factory' | 'user';
+    defaultModelId: string | null;
+    personalThinkingLevel?: ThinkingLevelSetting | null;
+  };
   /** The Factory's scope has no credentials, so its catalog is empty. */
   emptyCatalog?: boolean;
   /** The session catalog request fails. */
@@ -90,7 +96,9 @@ function renderPicker({
   const modelSwitches: unknown[] = [];
   const stateUpdates: unknown[] = [];
   server.use(
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: defaultModelId })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: defaultModelId, thinkingLevel: null }),
+    ),
     http.get(`${TEST_BASE_URL}/web/config/models`, async ({ request }) => {
       await catalogLoaded;
       if (!modelScope) return HttpResponse.json({ models });
@@ -99,7 +107,8 @@ function renderPicker({
         if (catalogFails) {
           return HttpResponse.json({ error: 'session_model_policy_unavailable' }, { status: 503 });
         }
-        expect(params.get('resourceId')).toBe('session-1');
+        expect(params.get('sessionId')).toBe('session-1');
+        expect(params.get('resourceId')).toBe('user-1');
         expect(params.get('threadId')).toBe('session-1');
         const effectiveScope = sessionPolicy?.modelScope ?? (modelScope === 'hybrid' ? kind : modelScope);
         return HttpResponse.json({
@@ -109,6 +118,7 @@ function renderPicker({
             : effectiveScope === 'factory'
               ? (factoryDefaultModelId ?? null)
               : defaultModelId,
+          personalThinkingLevel: sessionPolicy?.personalThinkingLevel ?? null,
           models: emptyCatalog
             ? []
             : models.filter(model => model.provider === (effectiveScope === 'factory' ? 'openai' : 'anthropic')),
@@ -181,7 +191,13 @@ function renderPicker({
       <ChatConnectionContext.Provider
         value={{
           status: 'ready',
-          state: { controllerId: AGENT_CONTROLLER_ID, resourceId: 'session-1', modeId: 'build', modelId },
+          state: {
+            controllerId: AGENT_CONTROLLER_ID,
+            sessionId: 'session-1',
+            resourceId: 'user-1',
+            modeId: 'build',
+            modelId,
+          },
         }}
       >
         <ChatModelsProvider>
@@ -248,6 +264,22 @@ describe('ModelPicker', () => {
     expect(await screen.findByRole('note')).toHaveTextContent(
       "Showing models this Factory's organization credentials can run.",
     );
+  });
+
+  it("starts a chat on personal defaults at its owner's personal thinking level", async () => {
+    const user = userEvent.setup();
+    renderPicker({
+      modelScope: 'user',
+      modelId: 'anthropic/claude-sonnet-4-6',
+      sessionPolicy: {
+        modelScope: 'user',
+        defaultModelId: 'anthropic/claude-sonnet-4-6',
+        personalThinkingLevel: 'high',
+      },
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Thinking: High · Personal default' }));
+    expect(screen.getByText('Follows the Personal default.')).toBeInTheDocument();
   });
 
   it('uses personal credentials to show a hybrid user session model as configured', async () => {

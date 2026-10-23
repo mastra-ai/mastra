@@ -5,22 +5,28 @@ import * as path from 'node:path';
 import { Mastra } from '@mastra/core';
 import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
-import { LogLevel, type BaseLogMessage, type IMastraLogger } from '@mastra/core/logger';
+import { LogLevel } from '@mastra/core/logger';
+import type { BaseLogMessage, IMastraLogger } from '@mastra/core/logger';
 import { MockMemory } from '@mastra/core/memory';
 import { SpanType } from '@mastra/core/observability';
 import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
-import { InMemoryStore, type MemoryStorage } from '@mastra/core/storage';
+import { InMemoryStore } from '@mastra/core/storage';
+import type { MemoryStorage } from '@mastra/core/storage';
 import { UnknownToolProviderError } from '@mastra/core/tool-provider';
-import { createTool, type Tool } from '@mastra/core/tools';
+import { createTool } from '@mastra/core/tools';
+import type { Tool } from '@mastra/core/tools';
 import { getZodDef, getZodTypeName } from '@mastra/core/utils';
 import { MastraVector } from '@mastra/core/vector';
 import { CompositeVoice } from '@mastra/core/voice';
-import { Workflow, createWorkflow, createStep } from '@mastra/core/workflows';
+import type { Workflow } from '@mastra/core/workflows';
+import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
-import { MCPServer } from '@mastra/mcp';
+import { defineEvent, MCPServer } from '@mastra/mcp';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { WorkflowRegistry, type ServerRoute } from '@mastra/server/server-adapter';
-import { expect, vi, type Mock } from 'vitest';
+import { WorkflowRegistry } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
+import { expect, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import * as zod from 'zod';
 import type { ZodTypeAny } from 'zod';
 import {
@@ -381,7 +387,14 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   const testTool = createTestTool({ id: 'test-tool' });
 
   // Create test agent with memory and mocks
-  const agent = createTestAgent({ name: 'test-agent', memory });
+  const agent = createTestAgent({
+    name: 'test-agent',
+    memory,
+    model: [
+      { id: 'id1', model: 'openai/gpt-4o', maxRetries: 3 },
+      { id: 'id2', model: 'openai/gpt-4o-mini', maxRetries: 3 },
+    ],
+  });
   mockAgentMethods(agent);
 
   // Mock Agent.prototype.generate for routes that create new Agent instances
@@ -498,6 +511,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         name: 'Test App',
         html: '<html><body>Test</body></html>',
       },
+    },
+    events: {
+      'ticket.created': defineEvent({
+        description: 'A ticket was created',
+        payloadSchema: z.object({ id: z.string() }),
+      }),
     },
   });
 
@@ -663,7 +682,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         'trace-query-discovery',
         'trace-aggregate',
         'thread-query',
+        'thread-query-rows',
         'span-query',
+        'span-aggregate',
       ]);
       vi.spyOn(observability, 'queryTraces').mockResolvedValue({ traces: [], page: { next: null } });
       vi.spyOn(observability, 'aggregateTraces').mockResolvedValue({ rows: [], truncated: false });
@@ -674,6 +695,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       vi.spyOn(observability, 'getTraceQueryValues').mockResolvedValue({ values: [], valuesTruncated: false });
       vi.spyOn(observability, 'queryThreads').mockResolvedValue({ threads: [], page: { next: null } });
       vi.spyOn(observability, 'querySpans').mockResolvedValue({ spans: [], page: { next: null } });
+      vi.spyOn(observability, 'aggregateSpans').mockResolvedValue({ rows: [], truncated: false });
       await observability.createSpan({
         span: {
           spanId: 'test-span',

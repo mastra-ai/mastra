@@ -6,6 +6,7 @@ import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryMessaging } from './messaging-tools.js';
+import { requirePerson } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
 
 export interface FactoryApprovalToolDependencies {
@@ -25,7 +26,7 @@ interface ApprovalGateSession {
   }): { accepted: true } | { accepted: false; reason: string };
 }
 
-/** Answers a tool call another session holds for approval. Interactive user turns only. */
+/** Answers a tool call another session holds for approval. Only a signed-in person's turn may answer. */
 export function createFactoryApprovalTools(
   scope: FactoryToolScope,
   deps: FactoryApprovalToolDependencies,
@@ -46,6 +47,7 @@ export function createFactoryApprovalTools(
       })
       .strict(),
     execute: async ({ sessionId, toolCallId, decision, reason }) => {
+      requirePerson(scope, 'answer an approval');
       const row = await deps.sessions.getBySessionId(sessionId);
       if (!row || row.orgId !== scope.orgId || row.factoryProjectId !== scope.factoryProjectId) {
         throw new Error(`Session ${sessionId} was not found in this Factory.`);
@@ -78,7 +80,7 @@ export function createFactoryApprovalTools(
 
       const messaging = await deps.messaging();
       if (!messaging) throw new Error('Answering approvals is not available on this server.');
-      const live = (await messaging.controller.getSessionByResource(sessionId)) as ApprovalGateSession | null;
+      const live = (await messaging.controller.getSession(sessionId)) as ApprovalGateSession | null;
       if (!live?.approval.isArmed({ toolCallId })) {
         throw new Error(
           'Nothing is waiting on that tool call any more: the run that asked has ended or it was already answered. ' +

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/spanner",
-  "version": "1.10.0-alpha.1",
+  "version": "1.10.0",
   "description": "Google Cloud Spanner provider for Mastra - db storage capabilities (GoogleSQL dialect)",
   "type": "module",
   "main": "dist/index.js",
@@ -28,23 +28,22 @@
     "pretest:watch": "docker compose up -d",
     "test:watch": "vitest watch",
     "posttest:watch": "docker compose down -v",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@google-cloud/spanner": "^8.10.0"
+    "@google-cloud/spanner": "^8.13.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

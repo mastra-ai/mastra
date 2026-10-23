@@ -411,6 +411,17 @@ export interface TUIState {
   waitForAgentControllerEvents?: () => Promise<void>;
 }
 
+/**
+ * Forget the in-flight tool calls, stopping their live updates first: a
+ * running shell row keeps redrawing the whole TUI on a timer until stopped,
+ * even after it has left the chat.
+ */
+export function clearPendingTools(state: TUIState): void {
+  for (const tool of state.pendingTools.values()) tool.stopLiveUpdates?.();
+  state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
+}
+
 // =============================================================================
 // Factory
 // =============================================================================

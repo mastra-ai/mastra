@@ -1,4 +1,5 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createSessionApprovalNotifier, createSessionRunEndReporter } from './reports.js';
@@ -114,6 +115,46 @@ describe('observeSessionRunReports', () => {
     ]);
   });
 
+  it('reports a usage-limit rejection from the provider body instead of Bad Request', () => {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    observeSessionRunReports(session, report);
+    const error = new Error('Bad Request');
+    Object.assign(error, {
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: { message: 'You have exceeded your current quota, please check your plan.' },
+      }),
+    });
+
+    session.emit({ type: 'error', error } as AgentControllerEvent);
+    session.emit(end('error'));
+
+    expect(report).toHaveBeenCalledWith(
+      {
+        status: 'failed',
+        reason: 'the run ended in error: You have exceeded your current quota, please check your plan.',
+      },
+      expect.any(Date),
+    );
+  });
+
+  it('leaves a plain Bad Request unchanged when the provider body has no usage-limit reason', () => {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    observeSessionRunReports(session, report);
+    const error = new Error('Bad Request');
+    Object.assign(error, { statusCode: 400, responseBody: JSON.stringify({ error: { message: 'Invalid model id' } }) });
+
+    session.emit({ type: 'error', error } as AgentControllerEvent);
+    session.emit(end('error'));
+
+    expect(report).toHaveBeenCalledWith(
+      { status: 'failed', reason: 'the run ended in error: Bad Request' },
+      expect.any(Date),
+    );
+  });
+
   it('keeps listening when a report fails', async () => {
     const session = fakeSession();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -158,6 +199,110 @@ describe('createSessionRunEndReporter', () => {
     await reporter({ sessionId: 'mine', threadId: 'thread', outcome: { status: 'done' }, since: new Date() });
 
     expect(reporting).not.toHaveBeenCalled();
+  });
+
+  it("reports a finished run kept on its own resource to its item's followers", async () => {
+    const since = new Date('2026-10-01T00:00:00.000Z');
+    // A run on untrusted content records its own session id as the binding's resource.
+    const findRunBindingBySession = vi.fn(async ({ resourceId }: { resourceId: string }) =>
+      resourceId === 'run'
+        ? {
+            orgId: 'org-1',
+            factoryProjectId: 'project-1',
+            workItemId: 'item-1',
+            role: 'reviewer',
+            threadId: 'run',
+            revokedAt: new Date('2026-10-01T00:05:00.000Z'),
+          }
+        : null,
+    );
+    const listWorkItemSubscribers = vi.fn(async () => []);
+    const reporter = createSessionRunEndReporter({
+      sessions: {
+        getBySessionId: async () =>
+          ({
+            sessionId: 'run',
+            orgId: 'org-1',
+            factoryProjectId: 'project-1',
+            userId: 'user-1',
+            originSessionId: null,
+            originThreadId: null,
+            title: null,
+          }) as never,
+      },
+      workItems: {
+        findActiveRunBindingForSession: async () => null,
+        findRunBindingBySession,
+        listWorkItemSubscribers,
+        getForProject: vi.fn(),
+      } as never,
+      reporting: async () => ({ deliver: vi.fn(), notifications: new InMemoryNotificationsStorage() }),
+    });
+
+    await reporter({ sessionId: 'run', threadId: 'run', outcome: { status: 'done' }, since });
+
+    expect(findRunBindingBySession).toHaveBeenCalledWith(expect.objectContaining({ resourceId: 'run' }));
+    expect(listWorkItemSubscribers).toHaveBeenCalledWith(expect.objectContaining({ workItemId: 'item-1' }));
+  });
+
+  function sideReporter(originMutedAt: Date | null) {
+    const deliver = vi.fn(async () => ({ delivered: 'woken' as const, notificationId: 'n-1' }));
+    const reporter = createSessionRunEndReporter({
+      sessions: {
+        getBySessionId: async () =>
+          ({
+            sessionId: 'side',
+            orgId: 'org-1',
+            factoryProjectId: 'project-1',
+            userId: 'user-1',
+            originSessionId: 'origin',
+            originThreadId: 'origin-thread',
+            originMutedAt,
+            title: 'Look into it',
+          }) as never,
+      },
+      workItems: {
+        findActiveRunBindingForSession: async () => null,
+        findRunBindingBySession: async () => null,
+        listWorkItemSubscribers: vi.fn(),
+        getForProject: vi.fn(),
+      } as never,
+      reporting: async () => ({ deliver, notifications: new InMemoryNotificationsStorage() }),
+    });
+    return { reporter, deliver };
+  }
+
+  it("reports a side session's failed run to its origin", async () => {
+    const { reporter, deliver } = sideReporter(null);
+    await reporter({
+      sessionId: 'side',
+      threadId: 'side-thread',
+      outcome: { status: 'failed', reason: 'usage limit' },
+      since: new Date(),
+    });
+    expect(deliver).toHaveBeenCalledWith({ sessionId: 'origin', threadId: 'origin-thread' }, expect.anything());
+  });
+
+  it('sends no finished or failed run-end report once the origin has muted the side session', async () => {
+    const { reporter, deliver } = sideReporter(new Date());
+    for (const outcome of [{ status: 'failed', reason: 'usage limit' }, { status: 'done' }] as const) {
+      await reporter({ sessionId: 'side', threadId: 'side-thread', outcome, since: new Date() });
+    }
+    expect(deliver).not.toHaveBeenCalled();
+  });
+
+  it('still tells a muted side session origin that the session is blocked waiting on a tool', async () => {
+    const { reporter, deliver } = sideReporter(new Date());
+    await reporter({
+      sessionId: 'side',
+      threadId: 'side-thread',
+      outcome: { status: 'blocked', toolName: 'ask_user' },
+      since: new Date(),
+    });
+    expect(deliver).toHaveBeenCalledWith(
+      { sessionId: 'origin', threadId: 'origin-thread' },
+      expect.objectContaining({ kind: 'blocked' }),
+    );
   });
 });
 
@@ -296,6 +441,20 @@ describe('createSessionApprovalNotifier', () => {
     expect(deliver).toHaveBeenCalledWith(
       { sessionId: 'origin', threadId: 'origin-thread' },
       expect.objectContaining({ summary: expect.stringContaining('The side session "Look into it" is waiting') }),
+    );
+  });
+
+  it("still tells a muted side session's origin about a held approval, since the session cannot go on without it", async () => {
+    const { notify, deliver } = notifier(false, {
+      originSessionId: 'origin',
+      originThreadId: 'origin-thread',
+      originMutedAt: new Date(),
+      title: 'Look into it',
+    });
+    await notify(request);
+    expect(deliver).toHaveBeenCalledWith(
+      { sessionId: 'origin', threadId: 'origin-thread' },
+      expect.objectContaining({ kind: 'approval' }),
     );
   });
 

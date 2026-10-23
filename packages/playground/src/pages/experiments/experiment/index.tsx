@@ -27,7 +27,8 @@ import {
   ExperimentCrumbStatusIcon,
 } from '@/domains/experiments/experiment-crumb';
 import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-experiment-results-selection';
-import { navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { navCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 
 // Stable fallback so the selection hook's memoised filters don't churn while results load.
 const EMPTY_RESULTS: never[] = [];
@@ -130,7 +131,7 @@ function ExperimentPage() {
         descriptionSlot={`No experiment with id "${experimentId}".`}
         actionSlot={
           <Button render={<Link to="/experiments" />} icon={<ArrowLeft />}>
-            Back to Experiments
+            Back to experiments
           </Button>
         }
       />

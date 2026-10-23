@@ -25,19 +25,22 @@
     "@inner/hello-world": "workspace:*",
     "@inner/subpath-only": "workspace:*",
     "@inner/transitive-a": "workspace:*",
+    "@inner/transitive-only-dependent": "workspace:*",
+    "@inner/transitive-only-leaf": "workspace:*",
     "@inner/versionless": "workspace:*",
     "@inner/versionless-dependent": "workspace:*",
     "@inner/raw-ts": "workspace:*",
     "date-fns": "4.4.0",
     "lodash": "^4.18.1",
     "@hono/node-ws": "^1.3.0",
-    "hono": "^4.13.7",
+    "hono": "^4.13.11",
     "ws": "^8.21.3",
     "nodemailer": "^10.1.1",
     "unicorn-magic": "0.4.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "mastra": "monorepo-test"
+    "mastra": "monorepo-test",
+    "typescript": "7.0.2"
   }
 }

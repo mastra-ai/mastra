@@ -121,21 +121,27 @@ function mergeBackgroundTasks(
 /**
  * Returns `live` with every tool part that would not move its stored counterpart forward turned
  * into a bare call. The merger then uses it only to anchor surrounding parts: a stored outcome
- * stays canonical, and a stale or edited echo can't overwrite it. Live state may only fill in a
- * call the stored copy still has pending.
+ * stays canonical, and a stale or edited echo can't overwrite it. Live state may fill in a
+ * pending call or advance a background result from running to completed or failed.
  */
 function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
-  const storedStates = new Map<string, MastraToolInvocation['state']>();
+  const storedParts = new Map<string, MastraToolInvocationPart>();
   for (const part of stored.content.parts) {
-    if (part.type === 'tool-invocation') storedStates.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
+    if (part.type === 'tool-invocation') storedParts.set(part.toolInvocation.toolCallId, part);
   }
-  if (storedStates.size === 0) return live;
+  if (storedParts.size === 0) return live;
 
   let changed = false;
   const parts = live.content.parts.map(part => {
     if (part.type !== 'tool-invocation') return part;
-    const storedState = storedStates.get(part.toolInvocation.toolCallId);
-    if (!storedState || advancesToolInvocationState(storedState, part.toolInvocation.state)) return part;
+    const storedPart = storedParts.get(part.toolInvocation.toolCallId);
+    if (!storedPart || advancesToolInvocationState(storedPart.toolInvocation.state, part.toolInvocation.state))
+      return part;
+    const storedTask = storedPart.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
+    const liveTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
+    if (storedTask?.status === 'running' && (liveTask?.status === 'completed' || liveTask?.status === 'failed')) {
+      return part;
+    }
     changed = true;
     const { toolCallId, toolName, args } = part.toolInvocation;
     return { type: 'tool-invocation' as const, toolInvocation: { state: 'call' as const, toolCallId, toolName, args } };
@@ -1601,10 +1607,30 @@ export class MessageList {
   }
 
   public drainUnsavedMessages(): MastraDBMessage[] {
+    return this.drainUnsavedMessagesForSave().messages;
+  }
+
+  /**
+   * Same as {@link drainUnsavedMessages}, plus `restore`, which marks the drained
+   * messages unsaved again so a later save writes them after this one failed.
+   */
+  public drainUnsavedMessagesForSave(): { messages: MastraDBMessage[]; restore: () => void } {
+    const userMessages = [...this.newUserMessages];
+    const responseMessages = [...this.newResponseMessages];
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
     this.newUserMessages.clear();
     this.newResponseMessages.clear();
-    return messages.map(message => this.transformMessageForTranscript(message));
+    return {
+      messages: messages.map(message => this.transformMessageForTranscript(message)),
+      restore: () => {
+        for (const message of userMessages) {
+          if (this.messages.includes(message)) this.newUserMessages.add(message);
+        }
+        for (const message of responseMessages) {
+          if (this.messages.includes(message)) this.newResponseMessages.add(message);
+        }
+      },
+    };
   }
 
   /**

@@ -11,7 +11,7 @@ export interface DefaultModelApplicableSession {
 }
 
 export interface DefaultModelHydrationSession extends DefaultModelApplicableSession {
-  readonly identity: { getResourceId(): string };
+  readonly identity: { getId(): string; getResourceId(): string };
   model: DefaultModelApplicableSession['model'] & { get(): string; setDefault(args: { modelId: string }): void };
   state: {
     get(): Record<string, unknown> | undefined;
@@ -43,6 +43,7 @@ export async function hydrateSessionDefaultModel(
   session: DefaultModelHydrationSession,
   { sourceControl, projects, workItems, modelDefaults }: DefaultModelHydrationDependencies,
 ): Promise<void> {
+  const sessionId = session.identity.getId();
   const resourceId = session.identity.getResourceId();
   const initialState = session.state.get() ?? {};
   if (initialState.factoryProjectId || typeof session.thread.firstUserMessage !== 'function') return;
@@ -53,7 +54,7 @@ export async function hydrateSessionDefaultModel(
     session.state.set({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
   let identityResolved = false;
   try {
-    const sourceSession = await sourceControl.getBySessionId(resourceId);
+    const sourceSession = await sourceControl.getBySessionId(sessionId);
     if (!sourceSession) {
       await clearFactoryIdentity();
       return;
@@ -69,7 +70,7 @@ export async function hydrateSessionDefaultModel(
           orgId: sourceSession.orgId,
           threadId,
           resourceId,
-          sessionId: resourceId,
+          sessionId,
           rejectAmbiguous: true,
         })
       : null;

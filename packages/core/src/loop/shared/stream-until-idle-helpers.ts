@@ -29,6 +29,9 @@ import { deepMerge } from '../../utils';
 /** Upper bound on the startup task-adoption lookup; past it the wrapper tracks events only. */
 const ADOPT_LOOKUP_TIMEOUT_MS = 5_000;
 
+/** Inner-run chunks after which the run is parked, waiting to be resumed. */
+const PARKING_CHUNKS = new Set(['tool-call-approval', 'tool-call-suspended']);
+
 export const TERMINAL_BG_CHUNKS = new Set([
   'background-task-completed',
   'background-task-failed',
@@ -384,7 +387,7 @@ export async function runIdleLoop<
   }
 
   const { threadId, resourceId, scopeKey } = scope;
-  const maxIdleMs = _maxIdleMs ?? 5 * 60_000;
+  const maxIdleMs = _maxIdleMs ?? deps.bgManager.config.untilIdleMaxIdleMs ?? 5 * 60_000;
 
   // Continuation calls reuse the memory thread but drop segment-scoped options.
   // Omitting runId lets durable agents start a fresh stream segment instead of
@@ -419,10 +422,16 @@ export async function runIdleLoop<
   let activeInnerRunId: string | undefined;
   let continuationAbort: AbortController | undefined;
   let aborting = false;
+  // Set once the active inner run parks on a tool approval or a tool
+  // suspend(). A parked run is waiting for resumeStreamUntilIdle(), so a reader
+  // that stops reading (break / request disconnect) must only detach;
+  // aborting here would discard the run the caller is about to resume.
+  let parked = false;
+  let innerReader: ReadableStreamDefaultReader<any> | undefined;
   const outerAbort = new AbortController();
 
   // --- Close / idle timer ---
-  const forceClose = () => {
+  const forceClose = (opts?: { keepInnerRuns?: boolean }) => {
     if (closed) return;
     closed = true;
     if (idleTimer) {
@@ -436,7 +445,13 @@ export async function runIdleLoop<
     } catch {
       // already closed
     }
-    hooks?.onForceClose?.();
+    if (opts?.keepInnerRuns) {
+      // Cancelling the inner reader only unsubscribes this wrapper; the
+      // parked run and its registry entry stay in place for the resume.
+      void innerReader?.cancel().catch(() => {});
+    } else {
+      hooks?.onForceClose?.();
+    }
   };
 
   const abortWrapper = () => {
@@ -449,6 +464,8 @@ export async function runIdleLoop<
     if (activeInnerRunId) agent.abortRunStream?.(activeInnerRunId);
     forceClose();
   };
+
+  const detachOrAbort = () => (parked ? forceClose({ keepInnerRuns: true }) : abortWrapper());
 
   const tryClose = () => {
     if (closed) return;
@@ -475,18 +492,22 @@ export async function runIdleLoop<
     clearIdleTimer();
     if (isProcessing) return;
     if (runningTaskIds.size === 0) return;
-    idleTimer = setTimeout(forceClose, maxIdleMs);
+    idleTimer = setTimeout(() => forceClose(), maxIdleMs);
   };
 
   // --- Stream plumbing ---
   const pipeInner = async (inner: ReadableStream<any>) => {
     const reader = inner.getReader();
+    innerReader = reader;
     try {
       while (true) {
         if (outerAbort.signal.aborted) break;
         const { done, value } = await reader.read();
         if (done) break;
         clearIdleTimer();
+        if (value && typeof value === 'object' && PARKING_CHUNKS.has((value as any).type)) {
+          parked = true;
+        }
         try {
           outerController.enqueue(value);
         } catch {
@@ -500,6 +521,7 @@ export async function runIdleLoop<
         }
       }
     } finally {
+      if (innerReader === reader) innerReader = undefined;
       reader.releaseLock();
     }
   };
@@ -523,6 +545,7 @@ export async function runIdleLoop<
       const segmentAbort = new AbortController();
       continuationAbort = segmentAbort;
       activeInnerRunId = undefined;
+      parked = false;
       const existingAbortSignal = continuationOpts.abortSignal as AbortSignal | undefined;
       continuationOpts.abortSignal = existingAbortSignal
         ? AbortSignal.any([existingAbortSignal, segmentAbort.signal])
@@ -561,14 +584,14 @@ export async function runIdleLoop<
   acquireStreamSlot(deps.activeStreams, scopeKey, abortWrapper);
   acquireRunStreamSlot(deps.activeStreams, wrapperRunId, abortWrapper);
 
-  streamOptions?.abortSignal?.addEventListener('abort', abortWrapper, { once: true });
+  streamOptions?.abortSignal?.addEventListener('abort', detachOrAbort, { once: true });
 
   const combinedStream = new ReadableStream<any>({
     start(controller) {
       outerController = controller;
     },
     cancel() {
-      abortWrapper();
+      detachOrAbort();
     },
   });
 
@@ -723,5 +746,5 @@ export async function runIdleLoop<
     }
   })();
 
-  return buildResult(first, { combinedStream, forceClose, threadId, resourceId });
+  return buildResult(first, { combinedStream, forceClose: () => forceClose(), threadId, resourceId });
 }

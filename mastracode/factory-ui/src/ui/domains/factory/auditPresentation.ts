@@ -19,6 +19,7 @@ const AUDIT_CATEGORY_STYLES: Record<AuditNamespace, AuditCategoryStyle> = {
   git: { tone: 'orange', label: 'Git', dotClass: 'bg-chart-orange' },
   agent: { tone: 'blue', label: 'Agent', dotClass: 'bg-chart-amber' },
   intake: { tone: 'cyan', label: 'Intake', dotClass: 'bg-placeholder' },
+  session: { tone: 'pink', label: 'Sessions', dotClass: 'bg-placeholder' },
 };
 
 /** The server's namespaces, in its order, dressed for the page. */

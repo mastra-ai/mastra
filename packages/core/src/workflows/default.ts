@@ -1260,14 +1260,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
       return stepResults[step.id]?.output;
     } else if (step.type === 'parallel' || step.type === 'conditional') {
-      return step.steps.reduce(
-        (acc, entry) => {
-          const id = entry.type === 'step' ? entry.step.id : entry.id;
-          acc[id] = stepResults[id]?.output;
-          return acc;
-        },
-        {} as Record<string, any>,
-      );
+      return step.steps.reduce<Record<string, any>>((acc, entry) => {
+        const id = entry.type === 'step' ? entry.step.id : entry.id;
+        acc[id] = stepResults[id]?.output;
+        return acc;
+      }, {});
     } else if (step.type === 'loop') {
       return stepResults[getSingleStepEntryId(step.step)]?.output;
     } else if (step.type === 'foreach') {

@@ -692,6 +692,42 @@ describe('AgentChannels', () => {
         expect(dispatchApproval).toHaveBeenCalledTimes(1);
       });
 
+      it('passes byUser on approve (#27093)', async () => {
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'approved' ? { kind: 'post', message: `Onaylandı: ${event.byUser}` } : undefined,
+        );
+        const { adapter, click, dispatchApproval } = await setup(toolDisplay);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(toolDisplay).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'approved', byUser: 'Clicker' }),
+          expect.anything(),
+        );
+        expect(adapter.editMessage).toHaveBeenCalledWith('channel-1:thread-1', 'card-1', 'Onaylandı: Clicker');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('passes byUser as undefined when approved in a DM (#27093)', async () => {
+        const toolDisplay = vi.fn(() => undefined);
+        const { click } = await setup(toolDisplay, true);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(toolDisplay).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'approved', byUser: undefined }),
+          expect.anything(),
+        );
+      });
+
+      it('shows the approving user on the default approved card (#27093)', async () => {
+        const { adapter, click } = await setup(() => undefined);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(JSON.stringify(adapter.editMessage.mock.calls[0]![2])).toContain('Approved by Clicker');
+      });
+
       it('edits the card with the renderer output on deny and passes byUser', async () => {
         const toolDisplay = vi.fn((event: any) =>
           event.kind === 'denied' ? { kind: 'post', message: `Reddedildi: ${event.byUser}` } : undefined,
@@ -963,6 +999,7 @@ describe('AgentChannels', () => {
         {
           contents: 'hello from discord',
           attributes: {
+            platform: 'discord',
             messageId: 'message-1',
             authorName: 'Tyler Barnes',
             authorId: 'user-1',
@@ -3336,6 +3373,7 @@ describe('thread history', () => {
       expect(s.attributes.source).toBe('thread-history');
     }
     expect(signals[0].attributes).toEqual({
+      platform: 'slack',
       messageId: 'h0',
       authorName: 'Alice',
       authorId: 'U1',
@@ -3343,7 +3381,7 @@ describe('thread history', () => {
       source: 'thread-history',
     });
     expect(signals[0].createdAt).toEqual(new Date(BASE_TIME));
-    expect(signals[1].attributes).toEqual({ source: 'thread-history', kind: 'gap', omitted: '5' });
+    expect(signals[1].attributes).toEqual({ platform: 'slack', source: 'thread-history', kind: 'gap', omitted: '5' });
     expect(signals[1].createdAt).toEqual(new Date(BASE_TIME + 1));
     // Platform badge without an author, so clients can tag the marker as channel context.
     expect(signals[1].providerOptions).toEqual({ mastra: { channels: { slack: {} } } });

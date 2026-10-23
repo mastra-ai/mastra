@@ -1,5 +1,13 @@
 # @internal/core
 
+## 0.1.3
+
+### Patch Changes
+
+- Added a shared markdown frontmatter parser and serializer that supports YAML and JSON frontmatter. ([#27198](https://github.com/mastra-ai/mastra/pull/27198))
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 0.1.3-alpha.1
 
 ### Patch Changes

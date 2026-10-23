@@ -65,8 +65,7 @@ export function NewExperimentDialog({
   const requestContextInput = useRequestContextInput(datasetChoice.datasetId);
   const experimentName = useExperimentName({ initialName, targetLabel: targetChoice.target?.label });
   const [description, setDescription] = useState(initialDescription ?? '');
-  // A rerun that pins a version or carries a description opens with those fields showing.
-  const [advancedOpen, setAdvancedOpen] = useState(initialDatasetVersion !== undefined || Boolean(initialDescription));
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const { triggerExperiment } = useDatasetMutations();
 
   const { target } = targetChoice;
@@ -119,7 +118,7 @@ export function NewExperimentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} onOpenChangeComplete={onOpenChangeComplete} pending={isRunning}>
-      <DialogContent ref={contentRef} size="md" onKeyDown={handleKeyDown}>
+      <DialogContent ref={contentRef} size="lg" onKeyDown={handleKeyDown}>
         <DialogHeader>
           <DialogTitle>New experiment</DialogTitle>
           <DialogDescription>Run every item in a dataset through an agent, workflow or scorer.</DialogDescription>
@@ -127,8 +126,8 @@ export function NewExperimentDialog({
 
         <DialogBody>
           {/* A plain block, so the closed Advanced panel adds no gap below the toggle. */}
-          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-            <div className="space-y-5">
+          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="py-3">
+            <div className="space-y-6">
               <TargetField
                 options={targetChoice.options}
                 isLoading={targetChoice.isLoading}
@@ -151,11 +150,11 @@ export function NewExperimentDialog({
               />
             </div>
 
-            <div className="mt-4">
+            <div className="mt-6">
               <AdvancedToggle />
             </div>
 
-            <CollapsibleContent className="space-y-4 pt-3">
+            <CollapsibleContent className="space-y-6 pt-4">
               {datasetId && (
                 <DatasetVersionField
                   datasetId={datasetId}

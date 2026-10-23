@@ -29,6 +29,7 @@ import { RequestContext } from '../../../request-context';
 import { InMemoryStore, RUN_FENCE_CONFLICT_ERROR_ID, resolveRunFence } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { SaveQueueManager } from '../../save-queue';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
@@ -37,6 +38,7 @@ import {
   DurableExecutionFenceError,
   EXECUTION_ABANDONED_ERROR_ID,
   EXECUTION_CONFLICT_ERROR_ID,
+  EXECUTION_LEASE_RENEW_INTERVAL_MS,
   EXECUTION_LEASE_TTL_MS,
   ExecutionFence,
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
@@ -380,6 +382,56 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
       return JSON.stringify(messages.filter(message => message.role === 'assistant').map(message => message.content));
     }
+
+    it.each(['default', 'evented'] as const)(
+      '%s: losing ownership at the initial input barrier neither writes the request nor calls the model (COR-1472)',
+      async engine => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const model = gatedModel('This execution must never reach the model.');
+        const agent = new Agent({
+          id: 'barrier-fence-agent',
+          name: 'Barrier Fence Agent',
+          instructions: 'Answer the request.',
+          model: model.model as LanguageModelV2,
+          memory,
+        });
+        const durableAgent =
+          engine === 'evented' ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent, pubsub });
+        new Mastra({ agents: { agent: durableAgent }, storage, pubsub, logger: false });
+        const runId = `initial-barrier-${backend}-${engine}`;
+        let fence: ExecutionFence | undefined;
+        const flushMessages = SaveQueueManager.prototype.flushMessages;
+        // Move ownership immediately before the real queued guard runs; keep the queue and storage real.
+        vi.spyOn(SaveQueueManager.prototype, 'flushMessages').mockImplementationOnce(async function (...args) {
+          fence = ExecutionFence.getLocalActive(runId)!;
+          await foreignOwnership(backend, storage, pubsub).takeOver(fence, 'barrier-recoverer');
+          return flushMessages.apply(this, args);
+        });
+
+        const result = await durableAgent.stream('Do not lose or execute this superseded request.', {
+          runId,
+          memory: { thread: THREAD, resource: RESOURCE },
+        });
+        const stream = collect(result.fullStream);
+        try {
+          await vi.waitFor(() => expect(fence).toBeDefined());
+          await fence!.whenSettled;
+          expect(fence!.isLost()).toBe(true);
+          expect(model.calls()).toBe(0);
+          const store = (await storage.getStore('memory'))!;
+          expect((await store.listMessages({ threadId: THREAD, perPage: false })).messages).toEqual([]);
+          expect(await foreignOwnership(backend, storage, pubsub).isHeldBy(agent.id, runId, 'barrier-recoverer')).toBe(
+            true,
+          );
+        } finally {
+          model.release();
+          await stream.stop();
+          result.cleanup();
+          await foreignOwnership(backend, storage, pubsub).free(agent.id, runId, 'barrier-recoverer');
+        }
+      },
+    );
 
     it('a superseded execution does not overwrite the recovered answer, delete snapshots, or publish a terminal event', async () => {
       const storage = createStorage(backend);
@@ -810,6 +862,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const remove = vi.spyOn(durableAgent, 'deleteRunSnapshots');
       vi.useFakeTimers();
       try {
+        const recoveryStartedAt = Date.now();
         const recovery = mastra.recoverAllDurableAgents();
         await vi.waitFor(() => expect(next.calls()).toBe(1));
         const fence = ExecutionFence.getLocalActive(runId)!;
@@ -819,11 +872,14 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         await vi.advanceTimersByTimeAsync(30_000);
         expect(await recovery).toEqual({ agents: 1, recovered: 0, succeeded: 0, failed: 0, skipped: 1 });
-        expect(await recover.mock.results[0]!.value).toEqual({
-          recovered: [{ runId, status: 'skipped', reason: 'recovery-timeout' }],
+        const batch = await recover.mock.results[0]!.value;
+        expect(batch).toEqual({
+          recovered: [{ runId, status: 'skipped', reason: 'recovery-timeout', retryAt: expect.any(Number) }],
           succeeded: 0,
           failed: 0,
         });
+        expect(batch.recovered[0]!.retryAt).toBeGreaterThanOrEqual(recoveryStartedAt + 60_000);
+        expect(batch.recovered[0]!.retryAt).toBeLessThanOrEqual(Date.now() + 30_000);
         expect(ExecutionFence.getLocalActive(runId)).toBe(fence);
         expect(await foreign.owner(fence.agentId, runId)).toBe(fence.executionId);
         expect(signal.aborted).toBe(false);
@@ -1568,6 +1624,131 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
       await stream.stop();
       result.cleanup();
+    });
+
+    describe.each(['durable', 'evented'] as const)('%s in-flight tool ownership loss (COR-1473)', kind => {
+      it.each([false, true])(
+        'aborts the actual tool signal without canceling the successor (remote worker: %s)',
+        async remote => {
+          const storage = createStorage(backend);
+          const memory = new MockMemory({ storage });
+          const modelGate = gate();
+          const toolEntered = gate();
+          const toolAborted = gate();
+          const releaseTool = gate();
+          const { model, prompts } = recordingModel([modelGate.opened], 'lookup');
+          let toolSignal: AbortSignal | undefined;
+          const lookup = createTool({
+            id: 'lookup',
+            description: 'Wait for a lookup, honoring cancellation.',
+            inputSchema: z.object({}),
+            outputSchema: z.object({ result: z.string() }),
+            execute: async (_input, context) => {
+              toolSignal = context?.abortSignal;
+              const onAbort = () => {
+                toolAborted.open();
+                releaseTool.open();
+              };
+              toolSignal?.addEventListener('abort', onAbort, { once: true });
+              toolEntered.open();
+              try {
+                await releaseTool.opened;
+                // An abort-aware tool may return after cleanup instead of throwing.
+                // Its stale result must still never be persisted or fed to a model.
+                return { result: 'stale lookup result' };
+              } finally {
+                toolSignal?.removeEventListener('abort', onAbort);
+              }
+            },
+          });
+          const agent = new Agent({
+            id: 'fence-agent',
+            name: 'Fence Agent',
+            instructions: 'Call lookup.',
+            model: model as LanguageModelV2,
+            memory,
+            tools: { lookup },
+          });
+          const durableAgent =
+            kind === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent });
+          new Mastra({
+            agents: { 'fence-agent': durableAgent as any },
+            logger: false,
+            storage,
+            pubsub,
+            recovery: { durableAgents: 'auto' },
+          });
+          const canceled: string[] = [];
+          const publish = pubsub.publish.bind(pubsub);
+          vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+            if (event.type === 'workflow.cancel') canceled.push(event.runId);
+            return publish(topic, event, options);
+          });
+          const started = await durableAgent.stream('Look it up.', {
+            memory: { thread: THREAD, resource: RESOURCE },
+          });
+          const original = collect(started.fullStream);
+          const pollCallbacks: Array<() => void> = [];
+          try {
+            await vi.waitFor(() => expect(prompts).toHaveLength(1));
+            const fence = ExecutionFence.getLocalActive(started.runId)!;
+            expect(fence).toBeDefined();
+            if (remote) {
+              // Forget the driver before the tool's wrapper starts, not after it
+              // subscribed to a local fence. This exercises remote worker reads.
+              __resetExecutionFencesForTests();
+              const setInterval = globalThis.setInterval;
+              vi.spyOn(globalThis, 'setInterval').mockImplementation((callback, delay, ...args) => {
+                if (delay === EXECUTION_LEASE_RENEW_INTERVAL_MS) pollCallbacks.push(() => callback(...args));
+                return setInterval(callback, delay, ...args);
+              });
+            }
+            modelGate.open();
+            await toolEntered.opened;
+            expect(toolSignal).toBeInstanceOf(AbortSignal);
+            expect(toolSignal!.aborted).toBe(false);
+            const foreign = foreignOwnership(backend, storage, durableAgent.pubsub);
+            await foreign.takeOver(fence, 'foreign-recoverer');
+            if (remote) {
+              expect(ExecutionFence.getLocalActive(started.runId)).toBeUndefined();
+              expect(pollCallbacks.length).toBeGreaterThan(0);
+              // Run the real interval callback without waiting ten seconds or
+              // faking runtime timers; the ownership reads and tool stay real.
+              for (const poll of pollCallbacks) poll();
+            } else {
+              await expect(fence.verify()).rejects.toBeInstanceOf(DurableExecutionFenceError);
+            }
+            await vi.waitFor(() => expect(toolSignal!.aborted).toBe(true));
+            await toolAborted.opened;
+            expect(toolSignal!.reason).toBeInstanceOf(DurableExecutionFenceError);
+            await fence.whenSettled;
+            expect(prompts).toHaveLength(1);
+            expect(await assistantText(memory)).not.toContain('stale lookup result');
+            const { runs } = await storage.stores.workflows!.listWorkflowRuns({});
+            expect(JSON.stringify(runs.map(run => run.snapshot))).not.toContain('stale lookup result');
+            expect(canceled).toEqual([]);
+            expect(await foreign.owner(fence.agentId, fence.runId)).toBe('foreign-recoverer');
+            expect(original.chunks.some(chunk => chunk.type === 'tool-result')).toBe(false);
+
+            const recovered = await durableAgent.recover(started.runId, { force: true });
+            try {
+              const recoveryFence = ExecutionFence.getLocalActive(started.runId)!;
+              const chunks = await drain(recovered.fullStream);
+              expect(chunks.some(chunk => chunk.type === 'error')).toBe(false);
+              expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+              await recoveryFence.whenSettled;
+              expect(await assistantText(memory)).toContain('answer 2');
+            } finally {
+              recovered.cleanup();
+            }
+          } finally {
+            modelGate.open();
+            releaseTool.open();
+            await original.stop();
+            started.cleanup();
+          }
+        },
+      );
     });
 
     it('EventedAgent: the finish published by an execution that lost its run does not end the execution that recovered it', async () => {

@@ -33,10 +33,11 @@ import {
   omitPriorCompletionFields,
   validateStepResumeData,
 } from '../../utils';
-import { resolveCurrentState, withoutAuthToken } from '../helpers';
+import { isNonRedeliverable, resolveCurrentState, withoutAuthToken } from '../helpers';
 import { StepExecutor } from '../step-executor';
-import { processWorkflowForEach, processWorkflowLoop } from './loop';
+import { isQueuedForeachIteration, processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
+import { resolveCompletedRestartEntry } from './restart';
 import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
 import { getNestedWorkflow, getStepId, isExecutableStep, toStepExecutionParentWorkflow } from './utils';
 
@@ -170,6 +171,14 @@ export class WorkflowEventProcessor extends EventProcessor {
   // the same logical event short-circuits as terminal and does NOT re-run
   // errorWorkflow or reset the per-event budget.
   private static readonly TERMINAL_SENTINEL = Number.POSITIVE_INFINITY;
+  // Events that exhausted their budget but whose workflow.fail publish threw.
+  // A redelivery skips the handler and retries the publish; the event only
+  // turns TERMINAL once the publish lands or MAX_FAIL_PUBLISH_ATTEMPTS is hit.
+  // Without this, a live caller awaiting workflows-finish never hears back.
+  private pendingFailures: Map<string, { error: Error; publishAttempts: number }> = new Map();
+  // Bounded so the total (3 handler + 2 republish deliveries) stays within the
+  // tightest transport redelivery cap (RedisStreamsPubSub: 5 deliveries).
+  private static readonly MAX_FAIL_PUBLISH_ATTEMPTS = 3;
   // Upper bound on entries kept in deliveryAttempts so a long-lived processor
   // can't grow the map without limit. When the map exceeds this size we evict
   // the oldest entries in insertion order (Map preserves insertion order). The
@@ -728,7 +737,62 @@ export class WorkflowEventProcessor extends EventProcessor {
     resourceId: eventResourceId,
   }: ProcessorArgs & { initialState?: Record<string, any> }) {
     // Use initialState from event data if provided, otherwise use state from ProcessorArgs
-    const initialState = (arguments[0] as any).initialState ?? state ?? {};
+    let initialState = (arguments[0] as any).initialState ?? state ?? {};
+    const completed = restart && resolveCompletedRestartEntry(workflow.stepGraph, restart, initialState);
+    let successorActiveStepsPath: Record<string, number[]> | undefined;
+    if (completed) {
+      stepResults = completed.stepResults;
+      initialState = completed.state;
+      const successor = workflow.stepGraph[completed.executionPath[0]!];
+      const captured = workflow.stepGraph[restart!.activePaths[0] ?? 0]!;
+      if (
+        successor &&
+        (isSingleStepEntry(successor) ||
+          successor.type === 'loop' ||
+          successor.type === 'sleep' ||
+          successor.type === 'sleepUntil' ||
+          successor.type === 'parallel' ||
+          successor.type === 'conditional') &&
+        getStepIds(successor).some(id => getStepIds(captured).includes(id))
+      ) {
+        // Reusing an ID would overwrite the only completed-boundary record.
+        // Atomically checkpoint the successor's inputs and cursor instead.
+        const ids = getStepIds(successor);
+        const isContainer = successor.type === 'parallel' || successor.type === 'conditional';
+        // Conditions may read the completed result via getStepResult. Decide the
+        // route before replacing those records, and retain it across recovery.
+        const conditionalRoute =
+          successor.type === 'conditional'
+            ? {
+                index: completed.executionPath[0]!,
+                branches: await this.stepExecutor.evaluateConditions({
+                  workflowId,
+                  runId,
+                  step: successor,
+                  stepResults: stepResults ?? {},
+                  state: initialState,
+                  requestContext: new RequestContext(Object.entries(requestContext ?? {})),
+                  actor,
+                  input: completed.output,
+                }),
+              }
+            : undefined;
+        successorActiveStepsPath = {};
+        stepResults = { ...stepResults };
+        for (const [branchIndex, id] of ids.entries()) {
+          stepResults[id] = {
+            status: 'running',
+            payload: completed.output,
+            startedAt: Date.now(),
+            ...(conditionalRoute ? { metadata: { __restartConditional: conditionalRoute } } : {}),
+          };
+          if (isContainer) successorActiveStepsPath[id] = [...completed.executionPath, branchIndex];
+        }
+        const collisionIndex = ids.findIndex(id => getStepIds(captured).includes(id));
+        executionPath = isContainer ? [...completed.executionPath, collisionIndex] : completed.executionPath;
+        restart = { ...restart!, activePaths: executionPath, activeStepsPath: successorActiveStepsPath };
+      }
+    }
     const resolvedFormat = format ?? this.runFormats.get(runId);
     this.runFormats.set(runId, resolvedFormat);
     // The run is starting (or restarting via timeTravel/restart under the
@@ -803,13 +867,34 @@ export class WorkflowEventProcessor extends EventProcessor {
             status: 'running',
             payload: existing?.payload ?? parentWorkflow.input?.output ?? {},
             ...(existing ?? {}), // preserve anything else (suspendPayload, etc.)
-            metadata: { ...(existing?.metadata ?? {}), nestedRunId: runId },
+            // A child start does not own queued siblings from this potentially stale snapshot.
+            ...(parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!]?.type === 'foreach' &&
+            Array.isArray(existing?.output)
+              ? { output: existing.output.map((value: unknown) => (isQueuedForeachIteration(value) ? null : value)) }
+              : {}),
+            metadata: {
+              ...(existing?.metadata ?? {}),
+              nestedRunId: runId,
+              ...(parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!]?.type === 'foreach'
+                ? { foreachNestedRunIds: { [parentWorkflow.executionPath[1]!]: runId } }
+                : {}),
+            },
           },
           requestContext: withoutAuthToken(requestContext),
         });
       }
     }
 
+    // Keep the captured cursor until the successor records its own input. A crash
+    // between this snapshot and dispatch must revisit the same completed boundary.
+    if (completed) {
+      executionPath = completed.executionPath;
+      prevResult = { status: 'success', output: completed.output } as StepResult<any, any, any, any>;
+      restart = undefined;
+      resumeSteps = [];
+      resumeData = undefined;
+      timeTravel = undefined;
+    }
     const startExecutionPath = executionPath ?? [0];
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.step.run',
@@ -832,7 +917,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext,
         actor,
         resumeData,
-        activeStepsPath: restart?.activeStepsPath ?? {},
+        activeStepsPath: successorActiveStepsPath ?? restart?.activeStepsPath ?? {},
         perStep,
         state: initialState,
         outputOptions,
@@ -1226,6 +1311,20 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
+    // Report the failure on the run's watch topic like the default engine does, so
+    // stream consumers (and RunOutput's workflow-finish status) see the failed step.
+    const failedStepId = workflow ? getStepId(workflow, executionPath ?? []) : null;
+    if (failedStepId && prevResult?.status === 'failed' && workflow?.options?.emitStepEvents !== false) {
+      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-result',
+          payload: { id: failedStepId, ...prevResult },
+        },
+      });
+    }
+
     await this.mastra.pubsub.publish('workflows-finish', {
       type: 'workflow.fail',
       runId,
@@ -1467,7 +1566,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           step,
         },
       );
-    } else if (step?.type === 'foreach' && executionPath.length === 1) {
+    } else if (step?.type === 'foreach' && (executionPath.length === 1 || (restart && !restart.isForeachRestarted))) {
       return processWorkflowForEach(
         {
           workflow,
@@ -1941,7 +2040,12 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (restart && !!restart.activeStepsPath?.[leafId]) {
-        const nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? globalThis.crypto.randomUUID();
+        const nestedRunId =
+          (step.type === 'foreach'
+            ? stepResults[leafId]?.metadata?.foreachNestedRunIds?.[executionPath[1]!]
+            : undefined) ??
+          stepResults[leafId]?.metadata?.nestedRunId ??
+          globalThis.crypto.randomUUID();
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: leafId,
@@ -2312,6 +2416,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             outputOptions,
           },
         });
+        return;
       } else {
         return this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.run',
@@ -2752,6 +2857,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       const originalPayload = existingStepResult?.payload;
 
       let newResult = prevResult;
+      // An earlier iteration of this foreach already failed and failed the run.
+      let priorFailure: any;
       if (currentIdx !== undefined) {
         // Check for bail - short circuit foreach execution
         // @ts-expect-error - bailed status not in type
@@ -2793,8 +2900,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
 
         // For foreach, store the full suspended result so its resume state is preserved.
-        // Completed iterations keep the public output array shape.
-        // A failed iteration has no output; keep its slot empty so later siblings can't treat the foreach as complete.
+        // Completed iterations keep the public output array shape. A failed iteration has no
+        // output; its slot stays null so iterations finishing after the run failed stop at the
+        // pending check below instead of advancing the loop.
         const iterationResult =
           prevResult.status === 'suspended'
             ? prevResult
@@ -2804,6 +2912,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         const existingSuspendPayload = existingStepResult?.suspendPayload as any;
         const iterationSuspendPayload = prevResult.suspendPayload as any;
         const foreachOutput = [...(existingSuspendPayload?.__workflow_meta?.foreachOutput ?? [])];
+        priorFailure = foreachOutput.find((r: any, i: number) => i !== currentIdx && r?.status === 'failed');
         // Drop `payload`: it holds the whole foreach input array, which is already stored once on the step.
         const { payload: _payload, ...iterationRecord } = prevResult as any;
         foreachOutput[currentIdx] =
@@ -2821,19 +2930,40 @@ export class WorkflowEventProcessor extends EventProcessor {
           // Merge foreach step-level properties (suspendPayload, resumePayload, suspendedAt, resumedAt)
           // New iteration's resume properties take precedence for resumePayload/resumedAt (most recent resume)
           // Existing step's suspend properties are preserved (first suspend)
+          const stillSettling =
+            (prevResult.status === 'success' || prevResult.status === 'suspended') &&
+            existingStepResult?.status !== 'failed'
+              ? existingStepResult?.status === 'suspended'
+                ? ('suspended' as const)
+                : ('running' as const)
+              : undefined;
           newResult = {
             ...existingStepResult, // Preserve step-level properties
             ...prevResult, // Get iteration timing info
             // An iteration that finishes after a sibling failed must not mark the foreach successful.
             ...(existingStepResult?.status === 'failed' ? { status: 'failed' as const } : {}),
+            // One iteration settling doesn't settle the foreach: the coordinator below writes
+            // 'success' or 'suspended' once every iteration has settled. Until then the step stays
+            // 'running' with no suspendedAt/endedAt (as in the default engine); an already-suspended
+            // aggregate (e.g. while one of several suspended iterations is resumed) stays suspended.
+            ...(stillSettling ? { status: stillSettling, endedAt: undefined } : {}),
+            startedAt: existingStepResult?.startedAt ?? prevResult.startedAt,
             output: currentResult,
             payload: originalPayload,
             suspendPayload,
-            suspendedAt: existingStepResult?.suspendedAt ?? (prevResult as any).suspendedAt,
+            suspendedAt:
+              stillSettling === 'running'
+                ? undefined
+                : (existingStepResult?.suspendedAt ?? (prevResult as any).suspendedAt),
             // Update resume metadata to most recent resume (new iteration takes precedence)
             resumePayload: (prevResult as any).resumePayload ?? existingStepResult?.resumePayload,
             resumedAt: (prevResult as any).resumedAt ?? existingStepResult?.resumedAt,
           } as any;
+          // A sibling finishing after another iteration failed must not flip the foreach back to
+          // success or replace the first failure's error.
+          if (priorFailure) {
+            newResult = { ...newResult, status: 'failed', error: priorFailure.error } as any;
+          }
         } else {
           newResult = { ...prevResult, output: [iterationResult], payload: originalPayload, suspendPayload } as any;
         }
@@ -2848,7 +2978,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowName: workflow.id,
         runId,
         stepId: getEntryId(step.step),
-        result: newResult,
+        result: {
+          ...newResult,
+          // Only the coordinator owns queued markers; null leaves persisted siblings unchanged.
+          ...('output' in newResult && Array.isArray(newResult.output)
+            ? { output: newResult.output.map(value => (isQueuedForeachIteration(value) ? null : value)) }
+            : {}),
+        },
         requestContext: withoutAuthToken(requestContext),
         state: currentState,
       });
@@ -2881,7 +3017,8 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         // Emit per-iteration progress event
         const completedCount = iterationResults.filter(
-          (r: any) => r !== null && !(typeof r === 'object' && r.status === 'suspended'),
+          (r: any) =>
+            r !== null && !isQueuedForeachIteration(r) && !(typeof r === 'object' && r.status === 'suspended'),
         ).length;
         const iterationStatus =
           prevResult.status === 'suspended'
@@ -2908,7 +3045,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           });
         }
 
-        if (prevResult.status === 'failed') {
+        // A failed iteration fails the whole foreach, like a failed regular step. Only the first
+        // failure fails the run; a later failing sibling stops here like any other late sibling.
+        if (prevResult.status === 'failed' && !priorFailure) {
           await this.mastra.pubsub.publish('workflows', {
             type: 'workflow.fail',
             runId,
@@ -2940,7 +3079,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         // Check if there are more iterations to start before deciding to suspend
         // This handles partial concurrency: don't suspend until all iterations have been started
-        if (iterationsStarted < targetLen) {
+        if (iterationsStarted < targetLen || iterationResults.some(isQueuedForeachIteration)) {
           // More iterations need to be started - call processWorkflowForEach to continue
           await processWorkflowForEach(
             {
@@ -3006,6 +3145,8 @@ export class WorkflowEventProcessor extends EventProcessor {
             payload: foreachResult!.payload,
             suspendedAt: Date.now(),
             startedAt: foreachResult!.startedAt ?? Date.now(),
+            // A suspended step hasn't ended; drop any endedAt merged in from a finished iteration.
+            endedAt: undefined,
             suspendPayload: {
               ...firstSuspendedIterationPayload,
               __workflow_meta: {
@@ -3599,14 +3740,41 @@ export class WorkflowEventProcessor extends EventProcessor {
       return { ok: false, retry: false };
     }
 
+    const pendingFailure = this.pendingFailures.get(eventKey);
+    if (pendingFailure) {
+      return this.#publishPendingFailure(event, eventKey, pendingFailure);
+    }
+    // Deliveries already spent on this event. The transport's deliveryAttempt
+    // counts deliveries made to other processors too (e.g. a Redis nack picked
+    // up by another consumer), so it is a floor for the local count.
+    const priorAttempts = Math.max(this.deliveryAttempts.get(eventKey) ?? 0, (event.deliveryAttempt ?? 1) - 1);
+    // Budget already spent but there is no pending entry (evicted from the
+    // bounded map, or the earlier deliveries went to another processor):
+    // retry the publish instead of rerunning the handler. Each publish retry
+    // spends one delivery past the budget, so the publish count is derived
+    // from the delivery count and survives eviction.
+    if (priorAttempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS) {
+      return this.#publishPendingFailure(event, eventKey, {
+        error: new Error(`Event ${event.type} exhausted its delivery attempts`),
+        publishAttempts: priorAttempts - WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS + 1,
+      });
+    }
+
     try {
       await this.#dispatch(event);
       this.deliveryAttempts.delete(eventKey);
       return { ok: true };
     } catch (err) {
-      const attempts = (this.deliveryAttempts.get(eventKey) ?? 0) + 1;
-      this.#setDeliveryAttempts(eventKey, attempts);
-      const exhausted = attempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS;
+      const attempts = priorAttempts + 1;
+      // Deterministic failures (e.g. a throwing user callback) would fail the
+      // same way on every redelivery, so fail them on the first attempt.
+      const exhausted = attempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS || isNonRedeliverable(err);
+      // Record an exhausted event at the full budget so a redelivery never
+      // reruns its handler, even if its pending-failure entry is evicted.
+      this.#setDeliveryAttempts(
+        eventKey,
+        exhausted ? Math.max(attempts, WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS) : attempts,
+      );
 
       this.mastra.getLogger()?.error('WorkflowEventProcessor.handle: error processing event', {
         type: event.type,
@@ -3623,37 +3791,65 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       // Transport-level retries are exhausted. Surface as a terminal workflow
       // failure so any caller awaiting workflows-finish (e.g. agent.generate())
-      // sees an error instead of hanging forever. Replace the counter with a
-      // TERMINAL sentinel so any later redelivery of the same logical event
-      // short-circuits at the top of handle() instead of rerunning
-      // errorWorkflow or resetting the budget.
-      this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
-      try {
-        const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'>;
-        // Never republish workflow.fail for an event that IS workflow.fail.
-        // Each publish gets a fresh event id (fresh retry bucket), so with a
-        // persistently-broken dependency (e.g. missing workflows table) the
-        // fail event would exhaust its own budget and publish another
-        // workflow.fail forever.
-        if (
-          event.type !== 'workflow.fail' &&
-          failWorkflowData &&
-          failWorkflowData.workflowId &&
-          failWorkflowData.runId
-        ) {
-          await this.errorWorkflow(failWorkflowData, getErrorFromUnknown(err));
-        }
-      } catch (failErr) {
-        this.mastra
-          .getLogger()
-          ?.error('WorkflowEventProcessor.handle: failed to publish workflow.fail after retry exhaustion', {
-            type: event.type,
-            runId: event.runId,
-            error: failErr,
-          });
+      // sees an error instead of hanging forever.
+      const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'> | undefined;
+      // Never republish workflow.fail for an event that IS workflow.fail.
+      // Each publish gets a fresh event id (fresh retry bucket), so with a
+      // persistently-broken dependency (e.g. missing workflows table) the
+      // fail event would exhaust its own budget and publish another
+      // workflow.fail forever.
+      if (event.type === 'workflow.fail' || !failWorkflowData?.workflowId || !failWorkflowData.runId) {
+        this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
+        return { ok: false, retry: false };
       }
-      return { ok: false, retry: false };
+      return this.#publishPendingFailure(event, eventKey, { error: getErrorFromUnknown(err), publishAttempts: 0 });
     }
+  }
+
+  /**
+   * Publish workflow.fail for an event that exhausted its delivery budget. If
+   * the publish throws, ask the transport to redeliver so the next delivery
+   * retries the publish (skipping the handler). Once the publish lands, or
+   * after MAX_FAIL_PUBLISH_ATTEMPTS, the event becomes TERMINAL so later
+   * redeliveries short-circuit at the top of handle().
+   */
+  async #publishPendingFailure(
+    event: Event,
+    eventKey: string,
+    pending: { error: Error; publishAttempts: number },
+  ): Promise<{ ok: false; retry: boolean }> {
+    const publishAttempts = pending.publishAttempts + 1;
+    try {
+      await this.errorWorkflow(event.data as Omit<ProcessorArgs, 'workflow'>, pending.error);
+    } catch (failErr) {
+      const giveUp = publishAttempts >= WorkflowEventProcessor.MAX_FAIL_PUBLISH_ATTEMPTS;
+      this.mastra
+        .getLogger()
+        ?.error('WorkflowEventProcessor.handle: failed to publish workflow.fail after retry exhaustion', {
+          type: event.type,
+          runId: event.runId,
+          publishAttempts,
+          maxPublishAttempts: WorkflowEventProcessor.MAX_FAIL_PUBLISH_ATTEMPTS,
+          terminal: giveUp,
+          error: failErr,
+        });
+      if (!giveUp) {
+        // Keep the delivery count in step with the publish count so a later
+        // delivery without a pending entry resumes at the right publish attempt.
+        this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS + publishAttempts - 1);
+        this.pendingFailures.delete(eventKey);
+        this.pendingFailures.set(eventKey, { error: pending.error, publishAttempts });
+        while (this.pendingFailures.size > WorkflowEventProcessor.DELIVERY_ATTEMPTS_MAX_ENTRIES) {
+          const oldestKey = this.pendingFailures.keys().next().value;
+          if (oldestKey === undefined) break;
+          this.pendingFailures.delete(oldestKey);
+        }
+        return { ok: false, retry: true };
+      }
+    }
+    this.pendingFailures.delete(eventKey);
+    this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
+    return { ok: false, retry: false };
   }
 
   /**

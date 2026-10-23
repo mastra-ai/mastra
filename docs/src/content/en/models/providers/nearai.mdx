@@ -7,7 +7,7 @@ description: "Browse NEAR AI Cloud model IDs, capabilities, context windows, and
 
 # <img src="https://models.dev/logos/nearai.svg" alt="NEAR AI Cloud logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />NEAR AI Cloud
 
-Access 56 NEAR AI Cloud models through Mastra's model router. Authentication is handled automatically using the `NEARAI_API_KEY` environment variable.
+Access 57 NEAR AI Cloud models through Mastra's model router. Authentication is handled automatically using the `NEARAI_API_KEY` environment variable.
 
 Learn more in the [NEAR AI Cloud documentation](https://docs.near.ai/).
 
@@ -203,15 +203,15 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "nearai/black-forest-labs/FLUX.2-klein-4B",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 128000,
-    "inputCost": 1,
-    "outputCost": 1
+    "contextWindow": null,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "nearai/deepseek/deepseek-v3.2",
@@ -226,7 +226,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.1
   },
   {
-    "model": "nearai/deepseek/deepseek-v4.1-flash",
+    "model": "nearai/deepseek/deepseek-v4.1-flash-1017",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -665,7 +665,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 65536,
+    "maxOutput": 131072,
     "inputCost": 2.8,
     "outputCost": 7.5
   },
@@ -704,6 +704,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 500000,
     "inputCost": 2,
     "outputCost": 6
+  },
+  {
+    "model": "nearai/z-ai/glm-5.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 1.8,
+    "outputCost": 5.75
   },
   {
     "model": "nearai/z-ai/glm-5.3-flash",

@@ -22,7 +22,7 @@ import { Knowledge } from '@mastra/core/knowledge';
 import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
-import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
+import { defaultNotificationDeliveryDecision, readNotificationRoutingRequirement } from '@mastra/core/notifications';
 import {
   AgentsMDInjector,
   createBackgroundWorkSignalProcessor,
@@ -40,7 +40,7 @@ import type { SignalProvider } from '@mastra/core/signals';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
-import { DuckDBStore } from '@mastra/duckdb';
+import type { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
@@ -50,7 +50,6 @@ import {
   MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability';
-import { PostgresStore } from '@mastra/pg';
 
 import { createSessionThreadAdvertisement } from './agent-connections/session-advertisement.js';
 import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
@@ -64,7 +63,13 @@ import {
 } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
-import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
+import {
+  canUseProvider,
+  createMastraCodeGateway,
+  getDynamicModel,
+  getGoalJudgeModel,
+  resolveModel,
+} from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { createPlanMode } from './agents/modes/plan.js';
@@ -134,6 +139,7 @@ import { isThinkingLevelSetting } from './thinking.js';
 import type { ThinkingLevelSetting } from './thinking.js';
 import { DiscardingScoresStorage } from './utils/discarding-scores-storage.js';
 import { syncGateways } from './utils/gateway-sync.js';
+import { openLocalObservabilityStore } from './utils/local-observability.js';
 import { registerSessionAndWaitForMaintenance, UNKNOWN_OWNER, unregisterSession } from './utils/maintenance-lock.js';
 import { createResourceNotificationDispatcher, shouldHoldNotificationDelivery } from './utils/notification-dispatch.js';
 import {
@@ -149,6 +155,8 @@ import type { StorageResult } from './utils/storage-factory.js';
 import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
 import type { StorageMaintenance } from './utils/storage-maintenance.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
+import { FOREIGN_THREAD, findWakeSession, sessionLeaseScopes } from './utils/wake-session.js';
+import type { WakeSession } from './utils/wake-session.js';
 import { registerWorkflowBuilderPrimitives } from './workflows/register-primitives.js';
 
 const CODE_AGENT_ID = 'code-agent';
@@ -443,6 +451,16 @@ export interface MastraCodeConfig {
     resourceId: string;
     threadId: string;
   }) => void | Promise<void>;
+  /**
+   * Bring the session that owns `resourceId` online when a notification is
+   * delivered and no session in this process owns it (a deferred delivery
+   * after the session closed, a restart, another replica). Without it such a
+   * notification stays pending until a process whose session runs the thread
+   * delivers it. Create the session as its owner, or throw when the owner
+   * can't be resolved. When set, a delivery that still finds no owning session
+   * fails with that error instead of running.
+   */
+  resumeWakeSession?: (args: { resourceId: string; threadId: string }) => Promise<void>;
 }
 
 export function createAuthStorage() {
@@ -524,7 +542,8 @@ function resolveInjectedStorageBackend(
 ): 'libsql' | 'pg' {
   if (configuredBackend) return configuredBackend;
   if (storage instanceof LibSQLStore || hasAncestorClassNamed(storage, 'LibSQLStore')) return 'libsql';
-  if (storage instanceof PostgresStore || hasAncestorClassNamed(storage, 'PostgresStore')) return 'pg';
+  // By name only: an `instanceof` check would load `@mastra/pg` for every libsql session.
+  if (hasAncestorClassNamed(storage, 'PostgresStore')) return 'pg';
   throw new Error('storageBackend is required when injecting a custom storage instance.');
 }
 
@@ -556,6 +575,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Every session this controller has live, whose resources this process
   // dispatches notifications for.
   const liveSessions = new Set<Session<MastraCodeState>>();
+  const sessionRouter = {
+    getSession: (sessionId: string) => controller.getSession(sessionId),
+    listLiveSessions: () => liveSessions,
+  };
   // Same trick for the controller, which plugins reach through a lazy accessor.
   // Plugins load well before the controller is constructed, and a closure over
   // the `controller` binding itself would throw on early access rather than
@@ -715,12 +738,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   let observabilityWarning: string | undefined;
   if (globalSettings.observability.localTracing) {
     try {
-      const observabilityDuckDB = new DuckDBStore({
-        id: 'mastra-code-observability',
-        path: getObservabilityDatabasePath(),
-      });
-      // Force an early connection attempt so the lock error surfaces now, not mid-session.
-      await observabilityDuckDB.db.getConnection();
+      const { store: observabilityDuckDB } = await openLocalObservabilityStore(getObservabilityDatabasePath());
       observabilityDomain = observabilityDuckDB.observability;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -918,10 +936,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ownsNotificationDispatch && !ownSignalsPubSub && process.platform !== 'win32'
       ? createSignalsPubSub(project.resourceId)
       : undefined;
+  const notificationDispatchLeases = ownsNotificationDispatch
+    ? (ownSignalsPubSub ?? dispatchLeasePubSub)?.getLeaseProvider()
+    : undefined;
   const notificationDispatcher = createResourceNotificationDispatcher({
     getMastra: () => controller.getMastra(),
-    getResourceIds: () => [...liveSessions].map(session => session.identity.getResourceId()),
-    leases: ownsNotificationDispatch ? (ownSignalsPubSub ?? dispatchLeasePubSub)?.getLeaseProvider() : undefined,
+    getSessionScopes: async () =>
+      (
+        await Promise.all(
+          [...liveSessions].map(async session => {
+            const resourceId = session.identity.getResourceId();
+            return (await sessionLeaseScopes(session)).map(scope => ({ resourceId, scope }));
+          }),
+        )
+      ).flat(),
+    leases: notificationDispatchLeases,
     owner: `${ownerId}:${process.pid}:${randomUUID()}`,
     onError: error => console.warn('Notification dispatch failed:', error),
   });
@@ -931,6 +960,26 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // well after controller is constructed (line ~692). Explicit type annotations
   // on githubSignals, codeAgent, modes, and controller break the circular
   // inference chain this forward reference would otherwise create.
+
+  // Finds the session that runs a wake for `target`. When nobody here owns the
+  // resource, a host that resumes sessions (`resumeWakeSession`) brings the
+  // owner's session online from its stored row, so the wake runs as that owner
+  // rather than as a bare wake with no identity. If it still can't, the wake
+  // is refused before any run starts.
+  const resolveWakeOwner = async (
+    target: { resourceId: string; threadId: string },
+    leases?: Parameters<typeof findWakeSession>[3],
+  ) => {
+    const owner = await findWakeSession(controller, liveSessions, target, leases);
+    if (owner || !config?.resumeWakeSession) return owner;
+    await config.resumeWakeSession(target);
+    const resumed = await findWakeSession(controller, liveSessions, target, leases);
+    if (!resumed) {
+      throw new Error(`No session owns resource ${target.resourceId} to run its wake on thread ${target.threadId}.`);
+    }
+    return resumed;
+  };
+
   // Builds the stream options of every wake (a run with no inbound request).
   // Shared by GithubSignals (immediate sends) and the code agent's
   // notification delivery policy (notifications and cross-agent signals,
@@ -938,16 +987,26 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // workflow) — all need the target session's request context, or a woken idle
   // thread has no model to run with ("No model selected"). New wake paths must
   // build their options here so `prepareWakeRequestContext` runs for them.
-  const getWakeStreamOptions = async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
-    // Run the woken notification as the session that owns the target
-    // resource so it uses that session's model/mode/state/workspace. Never
-    // borrow another session: every Mastra Code process shares one database,
-    // so the target thread may belong to another project, and running it with
-    // this session's workspace would act on the wrong project.
-    const session = await controller.getSessionByResource(resourceId);
-    // No session here owns the resource. Return undefined so the dispatcher
+  const getWakeStreamOptions = async ({
+    resourceId,
+    threadId,
+    owner,
+  }: {
+    resourceId: string;
+    threadId: string;
+    /** The thread's wake session, when the caller already found it. */
+    owner?: WakeSession<MastraCodeState>;
+  }) => {
+    // Run the woken notification as the session that owns the target thread
+    // so it uses that session's model/mode/state/workspace. Never borrow
+    // another session: every Mastra Code process shares one database, so the
+    // target thread may belong to another project, and running it with this
+    // session's workspace would act on the wrong project.
+    const wake = owner ?? (await findWakeSession(controller, liveSessions, { resourceId, threadId }));
+    // No session here owns the thread. Return undefined so the dispatcher
     // sends a bare wake instead of throwing mid-delivery.
-    if (!session) return undefined;
+    if (!wake || wake === FOREIGN_THREAD) return undefined;
+    const { session } = wake;
     // A long-running system must be able to drive work unattended, so migrate
     // and restore the thread's persisted model before falling back to a real
     // mode or live-session default rather than failing the run.
@@ -1014,6 +1073,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       isThreadActive: () => session.thread.getId() === threadId,
       threadId,
       resourceId,
+      sessionId: session.identity.getId(),
       session: {
         id: session.identity.getId(),
         ownerId: session.identity.getOwnerId(),
@@ -1067,7 +1127,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       }),
     deliver: async (schedule, assembled) => {
       const target = { resourceId: schedule.resourceId, threadId: schedule.threadId };
-      const streamOptions = await getWakeStreamOptions(target);
+      const owner = await resolveWakeOwner(target);
+      const streamOptions =
+        owner && owner !== FOREIGN_THREAD ? await getWakeStreamOptions({ ...target, owner }) : undefined;
       // A busy thread gets the prompt as the running agent's next input
       // (`deliver`); `persist` would only write it to history without a run.
       const accepted = await codeAgent.sendSignal(
@@ -1080,7 +1142,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         {
           ...target,
           ifActive: { behavior: 'deliver' },
-          ifIdle: { behavior: 'wake', ...(streamOptions ? { streamOptions } : {}) },
+          ifIdle: {
+            behavior: 'wake',
+            ...(streamOptions ? { streamOptions } : {}),
+            // Another process owns this thread: hand the wake to it, or refuse
+            // it, rather than run it here with no owner identity.
+            ...(owner === FOREIGN_THREAD ? { requireClaimedOwner: true } : {}),
+          },
         },
       ).accepted;
       if (accepted.action === 'blocked' || accepted.action === 'discard') {
@@ -1283,17 +1351,42 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           // don't fall through to the active session and wake it under an
           // empty resource binding.
           if (!input.record.resourceId) return decision;
+          const target = { resourceId: input.record.resourceId, threadId: input.record.threadId };
+          const owner =
+            decision.action === 'deliver' || decision.action === 'summarize'
+              ? await resolveWakeOwner(target, notificationDispatchLeases)
+              : await findWakeSession(controller, liveSessions, target, notificationDispatchLeases);
+          // No session here runs the thread: a session here serves the
+          // resource but not the thread's project, or none serves the resource.
+          // Another process sharing the database runs it, with its own
+          // workspace and model. Never wake it from here, where the run would
+          // start with no session: leave it pending for that process's own
+          // dispatch pass. `hold` covers that at delivery time but is ignored
+          // when a notification is first sent, so an action that wakes the
+          // thread at first send becomes a delivery due now. A sender that
+          // asked for the thread's claimed owner is already routed to that
+          // process, so its first send goes ahead.
+          if (owner === FOREIGN_THREAD || owner === undefined) {
+            const wakesAtFirstSend = decision.action === 'deliver' || decision.action === 'queue';
+            const routedToOwner = readNotificationRoutingRequirement(input.record.metadata)?.requireClaimedOwner;
+            if (!wakesAtFirstSend || routedToOwner) return { ...decision, hold: true };
+            return { action: 'defer', deliverAt: input.now, reason: decision.reason, hold: true };
+          }
           const streamOptions = await getWakeStreamOptions({
             resourceId: input.record.resourceId,
             threadId: input.record.threadId,
+            owner,
           });
           const withOptions = streamOptions ? { ...decision, streamOptions } : decision;
+          // With a pubsub of its own the embedder runs no dispatch timer here,
+          // so this process delivers its own resources from the shared schedule.
           if (!ownsNotificationDispatch) return withOptions;
           // `hold` only applies at delivery time; it is ignored when a
           // notification is first sent.
           const hold = shouldHoldNotificationDelivery({
             resourceId: input.record.resourceId,
-            ownedHere: streamOptions !== undefined,
+            scope: owner.scope,
+            ownedHere: true,
             dispatcher: notificationDispatcher,
           });
           return hold ? { ...withOptions, hold: true } : withOptions;
@@ -1633,7 +1726,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           backgroundTasks: {
             enabled: true,
             recoverStaleTasksOnStart: false,
-            ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
+            ...createBackgroundCompletionCallbacks(() => sessionRouter, backgroundCompletionEvents),
           },
         }
       : {}),
@@ -1646,7 +1739,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       defaultObserverModelId: DEFAULT_OM_MODEL_ID,
       reflectorModel: 'auto',
       defaultReflectorModelId: DEFAULT_OM_MODEL_ID,
-      resolveAutoModelId: ({ currentModelId }) => resolveAutoOMModelId(currentModelId),
+      resolveAutoModelId: ({ currentModelId }) => resolveAutoOMModelId(currentModelId, canUseProvider),
     },
     agent: codeAgent,
     subagents,

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/acp",
-  "version": "0.4.3-alpha.0",
+  "version": "0.4.3",
   "description": "ACP package for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -27,8 +27,8 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test": "vitest run --passWithNoTests",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "keywords": [],
   "author": "",
@@ -38,11 +38,10 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",

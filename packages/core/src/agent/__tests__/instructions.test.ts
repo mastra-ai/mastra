@@ -11,6 +11,8 @@ import { Agent } from '../agent';
 import { MessageList } from '../message-list/index';
 
 function instructionTests(version: 'v1' | 'v2') {
+  // Cases that only resolve agent config (no model call) are identical across versions; run them once.
+  const modelIndependent = version === 'v2';
   let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
 
   beforeEach(() => {
@@ -182,206 +184,226 @@ function instructionTests(version: 'v1' | 'v2') {
   });
 
   describe(`${version} - Agent instructions with SystemMessage types`, () => {
-    it('should support string instructions (backward compatibility)', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: 'You are a helpful assistant.',
-        model: dummyModel,
+    if (modelIndependent) {
+      it('should support string instructions (backward compatibility)', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'You are a helpful assistant.',
+          model: dummyModel,
+        });
+
+        const instructions = await agent.getInstructions();
+        expect(instructions).toBe('You are a helpful assistant.');
       });
+    }
 
-      const instructions = await agent.getInstructions();
-      expect(instructions).toBe('You are a helpful assistant.');
-    });
-
-    it('should support CoreSystemMessage instructions', async () => {
-      const systemMessage: CoreSystemMessage = {
-        role: 'system',
-        content: 'You are an expert programmer.',
-      };
-
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: systemMessage,
-        model: dummyModel,
-      });
-
-      const instructions = await agent.getInstructions();
-      expect(instructions).toEqual(systemMessage);
-    });
-
-    it('should support SystemModelMessage instructions', async () => {
-      const systemMessage: SystemModelMessage = {
-        role: 'system',
-        content: 'You are a data analyst.',
-      };
-
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: systemMessage,
-        model: dummyModel,
-      });
-
-      const instructions = await agent.getInstructions();
-      expect(instructions).toEqual(systemMessage);
-    });
-
-    it('should support array of string instructions', async () => {
-      const instructionsArray = ['You are a helpful assistant.', 'Always be polite.', 'Provide detailed answers.'];
-
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: instructionsArray,
-        model: dummyModel,
-      });
-
-      const instructions = await agent.getInstructions();
-      expect(instructions).toEqual(instructionsArray);
-    });
-
-    it('should support array of CoreSystemMessage instructions', async () => {
-      const instructionsArray: CoreSystemMessage[] = [
-        { role: 'system', content: 'You are a helpful assistant.' },
-        { role: 'system', content: 'Always be polite.' },
-      ];
-
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: instructionsArray,
-        model: dummyModel,
-      });
-
-      const instructions = await agent.getInstructions();
-      expect(instructions).toEqual(instructionsArray);
-    });
-
-    it('should support array of CoreSystemMessage with provider metadata', async () => {
-      const instructionsArray: CoreSystemMessage[] = [
-        { role: 'system', content: 'You are a helpful assistant.' },
-        {
+    if (modelIndependent) {
+      it('should support CoreSystemMessage instructions', async () => {
+        const systemMessage: CoreSystemMessage = {
           role: 'system',
-          content: 'Always be polite.',
-          experimental_providerMetadata: { anthropic: { cache_control: { type: 'ephemeral' } } },
-        },
-        {
+          content: 'You are an expert programmer.',
+        };
+
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: systemMessage,
+          model: dummyModel,
+        });
+
+        const instructions = await agent.getInstructions();
+        expect(instructions).toEqual(systemMessage);
+      });
+    }
+
+    if (modelIndependent) {
+      it('should support SystemModelMessage instructions', async () => {
+        const systemMessage: SystemModelMessage = {
           role: 'system',
-          content: 'Use technical language.',
-          providerOptions: { openai: { reasoning_effort: 'medium' } },
-        },
-      ];
+          content: 'You are a data analyst.',
+        };
 
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: instructionsArray,
-        model: dummyModel,
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: systemMessage,
+          model: dummyModel,
+        });
+
+        const instructions = await agent.getInstructions();
+        expect(instructions).toEqual(systemMessage);
       });
+    }
 
-      const instructions = await agent.getInstructions();
-      expect(instructions).toEqual(instructionsArray);
-    });
+    if (modelIndependent) {
+      it('should support array of string instructions', async () => {
+        const instructionsArray = ['You are a helpful assistant.', 'Always be polite.', 'Provide detailed answers.'];
 
-    it('should support dynamic instructions returning string', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: ({ requestContext }) => {
-          const role = requestContext?.get('role') || 'assistant';
-          return `You are a helpful ${role}.`;
-        },
-        model: dummyModel,
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: instructionsArray,
+          model: dummyModel,
+        });
+
+        const instructions = await agent.getInstructions();
+        expect(instructions).toEqual(instructionsArray);
       });
+    }
 
-      const requestContext = new RequestContext();
-      requestContext.set('role', 'teacher');
+    if (modelIndependent) {
+      it('should support array of CoreSystemMessage instructions', async () => {
+        const instructionsArray: CoreSystemMessage[] = [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'system', content: 'Always be polite.' },
+        ];
 
-      const instructions = await agent.getInstructions({ requestContext });
-      expect(instructions).toBe('You are a helpful teacher.');
-    });
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: instructionsArray,
+          model: dummyModel,
+        });
 
-    it('should support dynamic instructions returning CoreSystemMessage', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: ({ requestContext }) => {
-          const role = requestContext?.get('role') || 'assistant';
-          return {
+        const instructions = await agent.getInstructions();
+        expect(instructions).toEqual(instructionsArray);
+      });
+    }
+
+    if (modelIndependent) {
+      it('should support array of CoreSystemMessage with provider metadata', async () => {
+        const instructionsArray: CoreSystemMessage[] = [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          {
             role: 'system',
-            content: `You are a helpful ${role}.`,
-          };
-        },
-        model: dummyModel,
-      });
-
-      const requestContext = new RequestContext();
-      requestContext.set('role', 'doctor');
-
-      const instructions = await agent.getInstructions({ requestContext });
-      expect(instructions).toEqual({
-        role: 'system',
-        content: 'You are a helpful doctor.',
-      });
-    });
-
-    it('should support dynamic instructions returning array', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: ({ requestContext }) => {
-          const expertise = (requestContext?.get('expertise') as string[]) || [];
-          const expertiseMessages: CoreSystemMessage[] = expertise.map((exp: string) => ({
+            content: 'Always be polite.',
+            experimental_providerMetadata: { anthropic: { cache_control: { type: 'ephemeral' } } },
+          },
+          {
             role: 'system',
-            content: `You have expertise in ${exp}.`,
-          }));
-          const messages: CoreSystemMessage[] = [
-            { role: 'system', content: 'You are a helpful assistant.' },
-            ...expertiseMessages,
-          ];
-          return messages;
-        },
-        model: dummyModel,
+            content: 'Use technical language.',
+            providerOptions: { openai: { reasoning_effort: 'medium' } },
+          },
+        ];
+
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: instructionsArray,
+          model: dummyModel,
+        });
+
+        const instructions = await agent.getInstructions();
+        expect(instructions).toEqual(instructionsArray);
       });
+    }
 
-      const requestContext = new RequestContext();
-      requestContext.set('expertise', ['Python', 'JavaScript']);
+    if (modelIndependent) {
+      it('should support dynamic instructions returning string', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: ({ requestContext }) => {
+            const role = requestContext?.get('role') || 'assistant';
+            return `You are a helpful ${role}.`;
+          },
+          model: dummyModel,
+        });
 
-      const instructions = await agent.getInstructions({ requestContext });
-      expect(instructions).toEqual([
-        { role: 'system', content: 'You are a helpful assistant.' },
-        { role: 'system', content: 'You have expertise in Python.' },
-        { role: 'system', content: 'You have expertise in JavaScript.' },
-      ]);
-    });
+        const requestContext = new RequestContext();
+        requestContext.set('role', 'teacher');
 
-    it('should support async dynamic instructions', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: async ({ requestContext }) => {
-          // Simulate async operation
-          await delay(10);
-          const role = requestContext?.get('role') || 'assistant';
-          return {
-            role: 'system',
-            content: `You are an async ${role}.`,
-          };
-        },
-        model: dummyModel,
+        const instructions = await agent.getInstructions({ requestContext });
+        expect(instructions).toBe('You are a helpful teacher.');
       });
+    }
 
-      const requestContext = new RequestContext();
-      requestContext.set('role', 'consultant');
+    if (modelIndependent) {
+      it('should support dynamic instructions returning CoreSystemMessage', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: ({ requestContext }) => {
+            const role = requestContext?.get('role') || 'assistant';
+            return {
+              role: 'system',
+              content: `You are a helpful ${role}.`,
+            };
+          },
+          model: dummyModel,
+        });
 
-      const instructions = await agent.getInstructions({ requestContext });
-      expect(instructions).toEqual({
-        role: 'system',
-        content: 'You are an async consultant.',
+        const requestContext = new RequestContext();
+        requestContext.set('role', 'doctor');
+
+        const instructions = await agent.getInstructions({ requestContext });
+        expect(instructions).toEqual({
+          role: 'system',
+          content: 'You are a helpful doctor.',
+        });
       });
-    });
+    }
+
+    if (modelIndependent) {
+      it('should support dynamic instructions returning array', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: ({ requestContext }) => {
+            const expertise = (requestContext?.get('expertise') as string[]) || [];
+            const expertiseMessages: CoreSystemMessage[] = expertise.map((exp: string) => ({
+              role: 'system',
+              content: `You have expertise in ${exp}.`,
+            }));
+            const messages: CoreSystemMessage[] = [
+              { role: 'system', content: 'You are a helpful assistant.' },
+              ...expertiseMessages,
+            ];
+            return messages;
+          },
+          model: dummyModel,
+        });
+
+        const requestContext = new RequestContext();
+        requestContext.set('expertise', ['Python', 'JavaScript']);
+
+        const instructions = await agent.getInstructions({ requestContext });
+        expect(instructions).toEqual([
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'system', content: 'You have expertise in Python.' },
+          { role: 'system', content: 'You have expertise in JavaScript.' },
+        ]);
+      });
+    }
+
+    if (modelIndependent) {
+      it('should support async dynamic instructions', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: async ({ requestContext }) => {
+            // Simulate async operation
+            await delay(10);
+            const role = requestContext?.get('role') || 'assistant';
+            return {
+              role: 'system',
+              content: `You are an async ${role}.`,
+            };
+          },
+          model: dummyModel,
+        });
+
+        const requestContext = new RequestContext();
+        requestContext.set('role', 'consultant');
+
+        const instructions = await agent.getInstructions({ requestContext });
+        expect(instructions).toEqual({
+          role: 'system',
+          content: 'You are an async consultant.',
+        });
+      });
+    }
 
     it('should combine instructions with system option in generate', async () => {
       // This test verifies that both agent instructions and user-provided system messages
@@ -453,29 +475,33 @@ function instructionTests(version: 'v1' | 'v2') {
       }
     });
 
-    it('should handle empty instructions gracefully', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: '',
-        model: dummyModel,
+    if (modelIndependent) {
+      it('should handle empty instructions gracefully', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: '',
+          model: dummyModel,
+        });
+
+        const instructions = await agent.getInstructions();
+        expect(instructions).toBe('');
       });
+    }
 
-      const instructions = await agent.getInstructions();
-      expect(instructions).toBe('');
-    });
+    if (modelIndependent) {
+      it('should handle empty array instructions', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: [],
+          model: dummyModel,
+        });
 
-    it('should handle empty array instructions', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: [],
-        model: dummyModel,
+        const instructions = await agent.getInstructions();
+        expect(instructions).toEqual([]);
       });
-
-      const instructions = await agent.getInstructions();
-      expect(instructions).toEqual([]);
-    });
+    }
 
     it('should allow override instructions in generate options', async () => {
       const agent = new Agent({
@@ -505,73 +531,79 @@ function instructionTests(version: 'v1' | 'v2') {
       }
     });
 
-    it('should convert CoreSystemMessage instructions for voice', async () => {
-      const mockVoice = {
-        addInstructions: vi.fn(),
-        addTools: vi.fn(),
-      };
+    if (modelIndependent) {
+      it('should convert CoreSystemMessage instructions for voice', async () => {
+        const mockVoice = {
+          addInstructions: vi.fn(),
+          addTools: vi.fn(),
+        };
 
-      const agent = new Agent({
-        id: 'voice-agent',
-        name: 'Voice Agent',
-        instructions: {
-          role: 'system',
-          content: 'You are a helpful voice assistant.',
-        },
-        model: dummyModel,
-        voice: mockVoice as any,
+        const agent = new Agent({
+          id: 'voice-agent',
+          name: 'Voice Agent',
+          instructions: {
+            role: 'system',
+            content: 'You are a helpful voice assistant.',
+          },
+          model: dummyModel,
+          voice: mockVoice as any,
+        });
+
+        await agent.getVoice();
+
+        // Verify voice received the instruction text
+        expect(mockVoice.addInstructions).toHaveBeenCalledWith('You are a helpful voice assistant.');
       });
+    }
 
-      await agent.getVoice();
-
-      // Verify voice received the instruction text
-      expect(mockVoice.addInstructions).toHaveBeenCalledWith('You are a helpful voice assistant.');
-    });
-
-    it('should support SystemModelMessage with providerOptions', async () => {
-      const systemMessage: SystemModelMessage = {
-        role: 'system',
-        content: 'You are an expert programmer.',
-        providerOptions: {
-          openai: { reasoning_effort: 'high' },
-        },
-      };
-
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: systemMessage,
-        model: dummyModel,
-      });
-
-      const instructions = await agent.getInstructions();
-      expect(instructions).toEqual(systemMessage);
-    });
-
-    it('should support array of SystemModelMessage', async () => {
-      const instructionsArray: SystemModelMessage[] = [
-        {
+    if (modelIndependent) {
+      it('should support SystemModelMessage with providerOptions', async () => {
+        const systemMessage: SystemModelMessage = {
           role: 'system',
-          content: 'You are an expert.',
-          providerOptions: { openai: { temperature: 0.7 } },
-        },
-        {
-          role: 'system',
-          content: 'Be concise.',
-          providerOptions: { openai: { max_tokens: 100 } },
-        },
-      ];
+          content: 'You are an expert programmer.',
+          providerOptions: {
+            openai: { reasoning_effort: 'high' },
+          },
+        };
 
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: instructionsArray,
-        model: dummyModel,
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: systemMessage,
+          model: dummyModel,
+        });
+
+        const instructions = await agent.getInstructions();
+        expect(instructions).toEqual(systemMessage);
       });
+    }
 
-      const instructions = await agent.getInstructions();
-      expect(instructions).toEqual(instructionsArray);
-    });
+    if (modelIndependent) {
+      it('should support array of SystemModelMessage', async () => {
+        const instructionsArray: SystemModelMessage[] = [
+          {
+            role: 'system',
+            content: 'You are an expert.',
+            providerOptions: { openai: { temperature: 0.7 } },
+          },
+          {
+            role: 'system',
+            content: 'Be concise.',
+            providerOptions: { openai: { max_tokens: 100 } },
+          },
+        ];
+
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: instructionsArray,
+          model: dummyModel,
+        });
+
+        const instructions = await agent.getInstructions();
+        expect(instructions).toEqual(instructionsArray);
+      });
+    }
 
     it('should combine instructions with system option in stream', async () => {
       if (version === 'v2') {
@@ -621,33 +653,35 @@ function instructionTests(version: 'v1' | 'v2') {
       }
     });
 
-    it('should support dynamic instructions returning SystemModelMessage', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: ({ requestContext }) => {
-          const mode = requestContext?.get('mode') || 'default';
-          return {
-            role: 'system' as const,
-            content: `You are in ${mode} mode.`,
-            providerOptions: {
-              openai: { temperature: mode === 'creative' ? 0.9 : 0.3 },
-            },
-          } as SystemModelMessage;
-        },
-        model: dummyModel,
-      });
+    if (modelIndependent) {
+      it('should support dynamic instructions returning SystemModelMessage', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: ({ requestContext }) => {
+            const mode = requestContext?.get('mode') || 'default';
+            return {
+              role: 'system' as const,
+              content: `You are in ${mode} mode.`,
+              providerOptions: {
+                openai: { temperature: mode === 'creative' ? 0.9 : 0.3 },
+              },
+            } as SystemModelMessage;
+          },
+          model: dummyModel,
+        });
 
-      const requestContext = new RequestContext();
-      requestContext.set('mode', 'creative');
+        const requestContext = new RequestContext();
+        requestContext.set('mode', 'creative');
 
-      const instructions = await agent.getInstructions({ requestContext });
-      expect(instructions).toEqual({
-        role: 'system',
-        content: 'You are in creative mode.',
-        providerOptions: { openai: { temperature: 0.9 } },
+        const instructions = await agent.getInstructions({ requestContext });
+        expect(instructions).toEqual({
+          role: 'system',
+          content: 'You are in creative mode.',
+          providerOptions: { openai: { temperature: 0.9 } },
+        });
       });
-    });
+    }
 
     it('should preserve provider options when building message list', async () => {
       // This test verifies that provider options (like Anthropic caching) are preserved

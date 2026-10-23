@@ -13,76 +13,60 @@ vi.mock('../../evals/hooks', () => ({
 function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
   const dummyModel = getDummyResponseModel(version);
 
-  describe('scorer output data', () => {
-    it(`${version} - should return scoring data from generate when returnScorerData is true`, async () => {
-      const agent = new Agent({
-        id: 'scorer-test',
-        name: 'Scorer Agent',
-        instructions: 'You are an agent that can score things',
-        model: dummyModel,
-      });
+  // Non-legacy generate()/stream() coverage lives in loop/test-utils/aimock/scenarios/scorers-live.scenario.test.ts.
+  if (version === 'v1') {
+    describe('scorer output data', () => {
+      it(`v1 - should return scoring data from generate when returnScorerData is true`, async () => {
+        const agent = new Agent({
+          id: 'scorer-test',
+          name: 'Scorer Agent',
+          instructions: 'You are an agent that can score things',
+          model: dummyModel,
+        });
 
-      let result;
-      if (version === 'v1') {
-        result = await agent.generateLegacy('Make it green', {
+        const result = await agent.generateLegacy('Make it green', {
           returnScorerData: true,
         });
-      } else {
-        result = await agent.generate('Make it green', {
-          returnScorerData: true,
+
+        expect(result.scoringData).toBeDefined();
+        expect(result.scoringData.input).toMatchObject({
+          inputMessages: expect.any(Array),
+          rememberedMessages: expect.any(Array),
+          systemMessages: expect.any(Array),
+          taggedSystemMessages: expect.any(Object),
         });
-      }
-
-      expect(result.scoringData).toBeDefined();
-      expect(result.scoringData.input).toMatchObject({
-        inputMessages: expect.any(Array),
-        rememberedMessages: expect.any(Array),
-        systemMessages: expect.any(Array),
-        taggedSystemMessages: expect.any(Object),
-      });
-      expect(result.scoringData.output).toBeInstanceOf(Array);
-    });
-
-    it(`${version} - should not return scoring data from generate when returnScorerData is false`, async () => {
-      const agent = new Agent({
-        id: 'scorer-test',
-        name: 'Scorer Agent',
-        instructions: 'You are an agent that can score things',
-        model: dummyModel,
+        expect(result.scoringData.output).toBeInstanceOf(Array);
       });
 
-      let result;
-      if (version === 'v1') {
-        result = await agent.generateLegacy('Make it green', {
+      it(`v1 - should not return scoring data from generate when returnScorerData is false`, async () => {
+        const agent = new Agent({
+          id: 'scorer-test',
+          name: 'Scorer Agent',
+          instructions: 'You are an agent that can score things',
+          model: dummyModel,
+        });
+
+        const result = await agent.generateLegacy('Make it green', {
           returnScorerData: false,
         });
-      } else {
-        result = await agent.generate('Make it green', {
-          returnScorerData: false,
-        });
-      }
 
-      expect(result.scoringData).toBeUndefined();
-    });
-
-    it(`${version} - should not return scoring data from generate when returnScorerData is not specified`, async () => {
-      const agent = new Agent({
-        id: 'scorer-test',
-        name: 'Scorer Agent',
-        instructions: 'You are an agent that can score things',
-        model: dummyModel,
+        expect(result.scoringData).toBeUndefined();
       });
 
-      let result;
-      if (version === 'v1') {
-        result = await agent.generateLegacy('Make it green');
-      } else {
-        result = await agent.generate('Make it green');
-      }
+      it(`v1 - should not return scoring data from generate when returnScorerData is not specified`, async () => {
+        const agent = new Agent({
+          id: 'scorer-test',
+          name: 'Scorer Agent',
+          instructions: 'You are an agent that can score things',
+          model: dummyModel,
+        });
 
-      expect(result.scoringData).toBeUndefined();
+        const result = await agent.generateLegacy('Make it green');
+
+        expect(result.scoringData).toBeUndefined();
+      });
     });
-  });
+  }
 
   describe('scorer override functionality', () => {
     let agent: Agent;
@@ -123,110 +107,83 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
       });
     });
 
-    it(`${version} - should call scorerTest when no override is provided`, async () => {
-      if (version === 'v1') {
+    if (version === 'v1') {
+      it(`v1 - should call scorerTest when no override is provided`, async () => {
         await agent.generateLegacy('Hello world');
-      } else {
-        await agent.generate('Hello world');
-      }
 
-      expect(runScorer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorer-test',
-          scorerObject: expect.objectContaining({
-            scorer: scorerTest,
+        expect(runScorer).toHaveBeenCalledWith(
+          expect.objectContaining({
+            scorerId: 'scorer-test',
+            scorerObject: expect.objectContaining({
+              scorer: scorerTest,
+            }),
           }),
-        }),
-      );
-    });
+        );
+      });
 
-    it(`${version} - should use override scorers when provided in generate options`, async () => {
-      if (version === 'v1') {
+      it(`v1 - should use override scorers when provided in generate options`, async () => {
         await agent.generateLegacy('Hello world', {
           scorers: {
             scorer1: { scorer: mastra.getScorer('scorer1') },
           },
         });
-      } else {
-        await agent.generate('Hello world', {
+
+        expect(runScorer).toHaveBeenCalledWith(
+          expect.objectContaining({
+            scorerId: 'scorer-1',
+            scorerObject: expect.objectContaining({
+              scorer: expect.any(Object),
+            }),
+          }),
+        );
+
+        expect(runScorer).not.toHaveBeenCalledWith(
+          expect.objectContaining({
+            scorerId: 'scorer-test',
+            scorerObject: expect.objectContaining({
+              scorer: scorerTest,
+            }),
+          }),
+        );
+
+        expect(runScorer).toHaveBeenCalledTimes(1);
+      });
+
+      it(`v1 - should call scorers when provided in stream options`, async () => {
+        const result = await agent.streamLegacy('Hello world', {
           scorers: {
             scorer1: { scorer: mastra.getScorer('scorer1') },
           },
         });
-      }
+        await result.consumeStream();
 
-      expect(runScorer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorer-1',
-          scorerObject: expect.objectContaining({
-            scorer: expect.any(Object),
+        expect(runScorer).toHaveBeenCalledWith(
+          expect.objectContaining({
+            scorerId: 'scorer-1',
+            scorerObject: expect.objectContaining({
+              scorer: expect.any(Object),
+            }),
           }),
-        }),
-      );
+        );
+      });
 
-      expect(runScorer).not.toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorer-test',
-          scorerObject: expect.objectContaining({
-            scorer: scorerTest,
-          }),
-        }),
-      );
-
-      expect(runScorer).toHaveBeenCalledTimes(1);
-    });
-
-    it(`${version} - should call scorers when provided in stream options`, async () => {
-      let result: any;
-      if (version === 'v1') {
-        result = await agent.streamLegacy('Hello world', {
-          scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
-          },
-        });
-      } else {
-        result = await agent.stream('Hello world', {
-          scorers: {
-            scorer1: { scorer: mastra.getScorer('scorer1') },
-          },
-        });
-      }
-      await result.consumeStream();
-
-      expect(runScorer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorer-1',
-          scorerObject: expect.objectContaining({
-            scorer: expect.any(Object),
-          }),
-        }),
-      );
-    });
-
-    it(`${version} - can use scorer name for scorer config for generate`, async () => {
-      if (version === 'v1') {
+      it(`v1 - can use scorer name for scorer config for generate`, async () => {
         await agent.generateLegacy('Hello world', {
           scorers: {
             scorer1: { scorer: scorer1.name },
           },
         });
-      } else {
-        await agent.generate('Hello world', {
-          scorers: {
-            scorer1: { scorer: scorer1.name },
-          },
-        });
-      }
 
-      expect(runScorer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scorerId: 'scorer-1',
-          scorerObject: expect.objectContaining({
-            scorer: scorer1,
+        expect(runScorer).toHaveBeenCalledWith(
+          expect.objectContaining({
+            scorerId: 'scorer-1',
+            scorerObject: expect.objectContaining({
+              scorer: scorer1,
+            }),
           }),
-        }),
-      );
-    });
+        );
+      });
+    }
 
     it(`${version} - should call runScorer with correct parameters`, async () => {
       if (version === 'v1') {

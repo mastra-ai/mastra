@@ -41,11 +41,17 @@ import { defineLazyWriter } from '../../../../workflows/utils';
 import { createStep } from '../../../../workflows/workflow';
 import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
+import type { MastraDBMessage } from '../../../message-list/state/types';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
 import { DurableStepIds } from '../../constants';
-import { assertExecutionNotSuperseded, assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
+import {
+  assertExecutionNotSuperseded,
+  assertExecutionOwned,
+  getExecutionOwnershipGuard,
+  isExecutionFenceError,
+} from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
@@ -88,6 +94,8 @@ const durableToolCallInputSchema = z.object({
   stepSpanData: z.any().optional(),
   // First-chunk clock of the step that produced this call, for ending spans on suspend
   completionStartTime: z.coerce.date().optional(),
+  // Model usage of the step that produced this call, reported on its suspension chunk
+  stepUsage: z.any().optional(),
 });
 
 /**
@@ -347,6 +355,8 @@ export function createDurableToolCallStep() {
         getStepResult,
       } = params;
 
+      const ownership = getExecutionOwnershipGuard(params);
+
       // Access pubsub via symbol
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
@@ -371,6 +381,7 @@ export function createDurableToolCallStep() {
       // to persist into the authoritative messageList (#19375 parity port).
       const processorDataParts: Array<{ type: string; data?: unknown; messageId?: string }> = [];
       const collectProcessorDataPart = (part: { type: string; data?: unknown; messageId?: string }) => {
+        ownership?.throwIfLost();
         processorDataParts.push(part);
       };
 
@@ -675,16 +686,28 @@ export function createDurableToolCallStep() {
         else await clearAndPublish();
       };
       let resumeMessageList = messageList;
-      // A durable engine can replay the completed LLM step on a cold resume,
-      // so its runtime rehydration never runs before this suspended tool step.
-      // The suspension metadata was flushed to memory before suspending.
-      if (!resumeMessageList && workflowResumeData !== undefined && memory && state?.threadId) {
+      // Observational memory loads history in the LLM step, which a cold resume skips.
+      // Recover the persisted invocation before clearing or replacing its metadata.
+      const hasInvocation = (msg: MastraDBMessage) =>
+        msg.role === 'assistant' &&
+        (msg.content?.parts ?? []).some(
+          part => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
+        );
+      if (
+        workflowResumeData !== undefined &&
+        memory &&
+        state?.threadId &&
+        !messageList?.get.all.db().some(hasInvocation)
+      ) {
         const { messages } = await memory.recall({
           threadId: state.threadId,
           resourceId: state.resourceId,
           perPage: false,
         });
-        if (messages.length) {
+        if (messageList) {
+          const invocation = [...messages].reverse().find(hasInvocation);
+          if (invocation) messageList.add(invocation, 'memory');
+        } else if (messages.length) {
           resumeMessageList = createRunMessageList({
             mastra,
             threadId: state.threadId,
@@ -716,7 +739,8 @@ export function createDurableToolCallStep() {
       const assertNotSuperseded = () =>
         assertExecutionNotSuperseded({ runId, agentId: initData.agentId, requestContext, mastra: mastra as Mastra });
 
-      const doFlush = async (messagesToFlush = messageList) => {
+      // Remote workers have no registry message list; persist updates through the recovered resume list.
+      const doFlush = async (messagesToFlush = messageList ?? resumeMessageList) => {
         if (
           saveQueueManager &&
           messagesToFlush &&
@@ -792,7 +816,8 @@ export function createDurableToolCallStep() {
         approvalToolName?: string;
         approvalArgs?: unknown;
       }) => {
-        if (!messageList) return;
+        const metadataMessageList = messageList ?? resumeMessageList;
+        if (!metadataMessageList) return;
         const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         const entry = {
           toolCallId,
@@ -816,7 +841,7 @@ export function createDurableToolCallStep() {
             (part: any) => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
           );
 
-        const responseMessages = messageList.get.response.db();
+        const responseMessages = metadataMessageList.get.response.db();
         const lastAssistantMessage = [...responseMessages].reverse().find(carriesToolCall);
         if (lastAssistantMessage?.content) {
           let metadata: Record<string, any>;
@@ -841,7 +866,7 @@ export function createDurableToolCallStep() {
         // the entry into the assistant message that carries this tool call via
         // updateMessageMetadataByToolCallId, which also re-marks the message
         // unsaved so the following flush persists this write too.
-        const allMessages = messageList.get.all.db();
+        const allMessages = metadataMessageList.get.all.db();
         const target = [...allMessages].reverse().find(carriesToolCall);
         if (!target?.content) {
           logger?.warn?.(
@@ -854,7 +879,7 @@ export function createDurableToolCallStep() {
             ? (target.content.metadata as Record<string, any>)
             : {};
         const existingEntries = (existingMeta[metadataKey] ?? {}) as Record<string, any>;
-        messageList.updateMessageMetadataByToolCallId(toolCallId, {
+        metadataMessageList.updateMessageMetadataByToolCallId(toolCallId, {
           [metadataKey]: { ...existingEntries, [toolCallId]: entry },
         });
       };
@@ -1024,7 +1049,14 @@ export function createDurableToolCallStep() {
               type: 'tool-call-approval' as const,
               runId,
               from: ChunkFrom.AGENT,
-              payload: { toolCallId, toolName, args, resumeSchema: approvalResumeSchema, updatedAt: Date.now() },
+              payload: {
+                toolCallId,
+                toolName,
+                args,
+                resumeSchema: approvalResumeSchema,
+                updatedAt: Date.now(),
+                usage: typedInput.stepUsage,
+              },
             },
             {
               policy: toolPayloadTransform,
@@ -1218,7 +1250,23 @@ export function createDurableToolCallStep() {
       }
 
       if (isResumingFromSuspension) {
-        const cleanupTarget = isResumableTool ? resolvedSuspensionIdentity : { toolCallId, toolName };
+        // Auto-resume re-calls a plain tool under a new toolCallId and names the original via
+        // `suspendedToolCallId`; resolve it so the original entry is cleared (mirrors tool-call-step.ts).
+        const plainResumeIdentity =
+          !isResumableTool && hasModelResumeData
+            ? resolveFrameworkSuspendedToolIdentity({
+                toolCallId,
+                toolName,
+                resumeSource: 'model',
+                modelSuppliedSuspendedToolCallId: args?.suspendedToolCallId,
+                modelSuppliedSuspendedToolRunId: args?.suspendedToolRunId,
+                suspendData,
+                messages: messageList?.get.all.db() ?? [],
+              })
+            : undefined;
+        const cleanupTarget = isResumableTool
+          ? resolvedSuspensionIdentity
+          : (plainResumeIdentity ?? { toolCallId, toolName });
         if (cleanupTarget) {
           await removeToolMetadata(cleanupTarget, resolvedSuspensionIdentity?.type ?? 'suspension');
         }
@@ -1262,7 +1310,7 @@ export function createDurableToolCallStep() {
 
       // Forward abort signal from the run registry so tools can observe
       // cancellation (mirrors the non-durable tool-call-step).
-      const toolAbortSignal = registryEntry?.abortSignal;
+      const toolAbortSignal = ownership?.composeSignal(registryEntry?.abortSignal) ?? registryEntry?.abortSignal;
 
       // Provide outputWriter so context.writer.write() / context.writer.custom()
       // emit chunks through pubsub (matching the regular agent's tool streaming).
@@ -1355,6 +1403,7 @@ export function createDurableToolCallStep() {
                     args: approvalArgs,
                     resumeSchema: approvalResumeSchema,
                     updatedAt: Date.now(),
+                    usage: typedInput.stepUsage,
                   },
                 },
                 {
@@ -1424,6 +1473,7 @@ export function createDurableToolCallStep() {
                     suspendPayload,
                     args,
                     resumeSchema: suspendOptions?.resumeSchema,
+                    usage: typedInput.stepUsage,
                   },
                 },
                 {
@@ -1607,7 +1657,11 @@ export function createDurableToolCallStep() {
                     toolCallId: chunk.payload.toolCallId,
                     toolName: chunk.payload.toolName,
                     args: cleanedArgs,
-                    result: chunk.payload.result,
+                    // Match the awaited step result below: a void result is reported as null.
+                    result:
+                      info.disposition === 'awaited' && chunk.payload.result === undefined
+                        ? null
+                        : chunk.payload.result,
                     providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'completed'),
                     providerExecuted,
                   },
@@ -1786,7 +1840,8 @@ export function createDurableToolCallStep() {
           return {
             ...typedInput,
             args: cleanedArgs,
-            result: completedTask.result,
+            // Normalize a void result to null like executeToolCall does, so the loop continues.
+            result: completedTask.result === undefined ? null : completedTask.result,
             providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
             ...(bgOutcome.status === 'started' ? (approvalGrant ?? {}) : {}),
             ...(processorDataParts.length ? { processorDataParts } : {}),
@@ -1835,6 +1890,7 @@ export function createDurableToolCallStep() {
       let mappingFailure: { error: unknown } | undefined;
 
       try {
+        ownership?.throwIfLost();
         const outcome = await executeToolCall({
           tool: tool as any,
           args: cleanedArgs,
@@ -1842,11 +1898,13 @@ export function createDurableToolCallStep() {
           toolCallId,
           toolName,
           abortSignal: toolAbortSignal,
+          assertNotBailedOut: () => ownership?.throwIfLost(),
           // Run-activity tracking brackets live execution (durable-only bookkeeping).
           acquireExecution: () => markRunActive(runId),
           logger: logger as any,
         });
 
+        ownership?.throwIfLost();
         if (outcome.status === 'aborted') {
           // Mid-flight cancellation: leave the call incomplete (no result/error,
           // no chunk emission) so the mapping step doesn't fake-complete it on
@@ -1958,6 +2016,7 @@ export function createDurableToolCallStep() {
                 : undefined,
               abortSignal: toolAbortSignal,
             });
+            ownership?.throwIfLost();
             // Sync any processor mutation back so the emitted chunk and the
             // serialized step output both carry the post-processor value.
             const postProcessorResult = readToolResultFromMessageList(messageList, toolCallId);
@@ -1965,6 +2024,7 @@ export function createDurableToolCallStep() {
               result = postProcessorResult;
             }
           } catch (processorError) {
+            ownership?.throwIfLost();
             if (processorError instanceof TripWire) {
               // Blocked: emit a tripwire chunk instead of the tool-result and
               // leave the call incomplete (no result). llm-mapping skips
@@ -2021,9 +2081,10 @@ export function createDurableToolCallStep() {
                 type: 'tool-result' as const,
                 runId,
                 from: ChunkFrom.AGENT,
-                payload: { toolCallId, toolName, args, result, providerExecuted },
+                payload: { toolCallId, toolName, args, result, providerMetadata, providerExecuted },
               },
               {
+                transformInput: { args, providerMetadata: typedInput.providerMetadata },
                 policy: toolPayloadTransform,
                 toolTransform: (tool as { transform?: any })?.transform,
                 tools: toolsForTransform,
@@ -2048,6 +2109,7 @@ export function createDurableToolCallStep() {
               collectProcessorDataPart,
             );
           } catch (emitError) {
+            ownership?.throwIfLost();
             if (emitError instanceof DurableOutputProcessorError) {
               throw emitError;
             }
@@ -2066,6 +2128,7 @@ export function createDurableToolCallStep() {
           ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
         };
       } catch (error) {
+        ownership?.throwIfLost();
         if (mappingFailure?.error === error) {
           return {
             ...typedInput,
@@ -2117,6 +2180,7 @@ export function createDurableToolCallStep() {
               collectProcessorDataPart,
             );
           } catch (emitError) {
+            ownership?.throwIfLost();
             if (emitError instanceof DurableOutputProcessorError) {
               throw emitError;
             }
