@@ -27,7 +27,7 @@ export function mapAgentResponseToDataSource(agent: GetAgentResponse): AgentData
     try {
       requestContextSchema =
         typeof agent.requestContextSchema === 'string'
-          ? superjsonParse(agent.requestContextSchema)
+          ? superjsonParse<AgentDataSource['requestContextSchema']>(agent.requestContextSchema)
           : agent.requestContextSchema;
     } catch {
       // Invalid JSON — skip
