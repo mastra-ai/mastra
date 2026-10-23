@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 describe('importing without native libsql bindings (#28201)', () => {
@@ -32,7 +33,7 @@ describe('importing without native libsql bindings (#28201)', () => {
             await store.init();
             const memory = await store.getStore('memory');
             const thread = {
-              id: 'thread', resourceId: 'resource', title: 'Native-free import',
+              id: 'thread', resourceId: 'resource', title: 'Native-free import', metadata: { source: 'injected' },
               createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01')
             };
             await memory.saveThread({ thread });
@@ -42,6 +43,7 @@ describe('importing without native libsql bindings (#28201)', () => {
             assert.throws(() => new api.LibSQLStore({ id: 'url', url: ':memory:' }), /Native libsql binding unavailable/);
             assert.throws(() => new api.MemoryLibSQL({ url: ':memory:' }), /Native libsql binding unavailable/);
             assert.throws(() => new api.LibSQLVector({ id: 'vector', url: ':memory:' }), /Native libsql binding unavailable/);
+            assert.throws(() => new api.LibSQLFactoryStorage({ url: ':memory:' }), /Native libsql binding unavailable/);
             await store.close();
             console.log('Persisted and read a thread with native module loading blocked');
           } finally {
@@ -50,7 +52,7 @@ describe('importing without native libsql bindings (#28201)', () => {
           }
         `,
       ],
-      { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000 },
+      { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', timeout: 30_000 },
     );
     expect(output).toContain('Persisted and read a thread with native module loading blocked');
   });
