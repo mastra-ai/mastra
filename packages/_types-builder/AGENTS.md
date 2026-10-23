@@ -2,19 +2,7 @@
 
 Builds published `.d.ts` output for packages that bundle `@internal/*` (and other) type dependencies. `generateTypes()` compiles declarations, inlines bundled package types into `dist/_types/`, and validates that declaration imports only reference runtime dependencies or bundled packages.
 
-## Package build config
-
-Write a package's `tsdown.config.ts` with `defineLibConfig` from `@internal/types-builder/tsdown`. It sets the repo defaults (ESM and CJS, sourcemaps, tree-shaking, `nodeProtocol: 'strip'`, `fixedExtension: false`, `clean`) and runs `generateTypes()` after the build unless `dts` is enabled. List type-only bundled packages in `bundledTypes`; override any other tsdown option directly.
-
-```ts
-import { defineLibConfig } from '@internal/types-builder/tsdown';
-
-export default defineLibConfig({
-  entry: ['src/index.ts'],
-  deps: { alwaysBundle: ['@internal/core'] },
-  bundledTypes: ['@internal/core'],
-});
-```
+Package `tsdown.config.ts` files use `defineLibConfig` from `./tsdown`: repo defaults plus `generateTypes()`, with bundled types in `bundledTypes`.
 
 ## Boundary rule: bundled types must be structural
 
