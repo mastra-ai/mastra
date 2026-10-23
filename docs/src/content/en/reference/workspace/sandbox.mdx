@@ -324,7 +324,7 @@ const pkg = sandbox.filesystem
   : (await sandbox.executeCommand?.('cat', ['/workspace/app/package.json']))?.stdout
 ```
 
-`E2BSandbox` and `PlatformSandbox` implement `filesystem`. A `Workspace` doesn't use it automatically; pass it as the workspace `filesystem` or call it directly.
+`E2BSandbox` and `PlatformSandbox` implement `filesystem`. To use it in a `Workspace`, pass it explicitly as the workspace `filesystem`, or call it directly.
 
 ## Computer capability
 

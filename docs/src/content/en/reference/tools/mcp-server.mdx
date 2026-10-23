@@ -1680,7 +1680,7 @@ const ticketCreated = defineEvent({
 })
 ```
 
-`authorize` runs on every `events/poll`, every `events/stream` open, and every webhook `events/subscribe`, including refreshes. An open stream isn't checked again until it reconnects, and a webhook subscription until its next refresh. A caller who loses access keeps receiving occurrences until then. FGA isn't applied to events; use `authorize` to restrict them.
+`authorize` runs on every `events/poll`, every `events/stream` open, and every webhook `events/subscribe`, including refreshes. An open stream isn't checked again until it reconnects, and a webhook subscription until its next refresh. A caller who loses access keeps receiving occurrences until then. Use `authorize` to restrict events because FGA doesn't apply to them.
 
 ### `defineEvent()` options
 
@@ -1950,7 +1950,7 @@ Records an occurrence, delivers it to matching push streams and webhook subscrip
 - Emitted events stay in the process that emitted them. Push streams, webhook subscriptions, and buffered polls only see events emitted by the same `MCPServer` instance, so a serverless or multi-instance deployment needs a `poll` source backed by shared storage.
 - The buffer is in memory. A restarted server treats earlier cursors as a gap and reports `truncated: true`.
 - Webhook delivery state (pending retries, suspension, verification results) is in memory and rebuilt when clients refresh.
-- Changes to the list of event types aren't announced yet. The server doesn't advertise `listChanged` or send `notifications/events/list_changed`, because the MCP TypeScript SDK 2.2.0 doesn't carry the `eventsListChanged` filter on `subscriptions/listen`. Clients should re-run `events/list` to see changed event types.
+- Event-list change announcements require the `eventsListChanged` filter on `subscriptions/listen`, which the MCP TypeScript SDK 2.2.0 doesn't carry. Until that support is available, the server neither advertises `listChanged` nor sends `notifications/events/list_changed`. Clients should re-run `events/list` to see changed event types.
 
 ## Related information
 

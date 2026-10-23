@@ -826,7 +826,7 @@ response.processDataStream({
 
 ### Shape client tool output for the model
 
-Client tools support `toModelOutput` to control what the model receives, including multimodal content such as images. Because client tools execute locally, the mapping also runs on the client after `execute` completes. The transformed output is sent back to the server alongside the raw result, so the raw result stays available for storage and application logic.
+Client tools support `toModelOutput` to control what the model receives, including multimodal content such as images. Because client tools execute locally, the mapping also runs on the client after `execute` completes. The client sends both the transformed output and the raw result back to the server, keeping the raw result available for storage and application logic.
 
 ```typescript
 const screenshotTool = createTool({
