@@ -252,6 +252,12 @@ export class CachingPubSub extends PubSub {
     // replays.
     const logLength = offset > 0 ? await this.cache.get(this.getCounterKey(topic)).catch(() => undefined) : undefined;
     let reached = typeof logLength === 'number' ? Math.min(offset, logLength) : offset;
+    // The id the log stored for its frame 0 when this subscriber attached. The
+    // counter alone cannot tell a retained copy of that frame from the first
+    // frame of a new segment once the new counter catches up with `reached`;
+    // a new segment writes a new entry 0 with a different id.
+    const readFirstId = async () => ((await this.cache.listFromTo(cacheKey, 0, 0).catch(() => [])) as Event[])[0]?.id;
+    let firstId = typeof logLength === 'number' ? await readFirstId() : undefined;
     let closed = false;
     let warnedUnnumbered = false;
     // Set only while a backfill (or the initial history read) is in flight.
@@ -322,9 +328,16 @@ export class CachingPubSub extends PubSub {
           // A cache read failure must not turn a duplicate into a nack loop;
           // fall through to the drop path in that case.
           const allocated = await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
+          const currentFirstId = firstId !== undefined ? await readFirstId() : undefined;
           if (closed) return ack?.();
 
-          if (typeof allocated === 'number' && allocated < Math.min(next, reached)) {
+          const restarted =
+            typeof allocated === 'number' &&
+            (firstId !== undefined
+              ? currentFirstId !== undefined && currentFirstId !== firstId
+              : allocated < Math.min(next, reached));
+          if (restarted) {
+            firstId = currentFirstId;
             this.logWarn(
               `[CachingPubSub] Log for ${topic} restarted at 0 while the subscriber cursor was at ${next}; ` +
                 `the retained log expired or was cleared. Resyncing from the start of the new segment.`,

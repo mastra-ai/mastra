@@ -1283,12 +1283,12 @@ describe('CachingPubSub', () => {
     }
 
     /** Append a frame to the shared log and return it, index included. */
-    const append = async (target: InMemoryServerCache, n: number): Promise<Event> => {
+    const append = async (target: InMemoryServerCache, n: number, id = `frame-${n}`): Promise<Event> => {
       const frame = {
         type: 'chunk',
         runId: 'run-1',
         data: { n },
-        id: `frame-${n}`,
+        id,
         createdAt: new Date(),
       } as Event;
       frame.index = await target.listPushIndexed(
@@ -1576,6 +1576,32 @@ describe('CachingPubSub', () => {
       await flush();
       expect(received).toEqual([5, 6]);
       expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('resyncs when a short log past the offset expires and a new segment restarts at 0', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      inner.retained.set(topic, [await append(shared, 0)]);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event.index!);
+      });
+      await flush();
+      expect(received).toEqual([]);
+
+      // The log expires and the resumed run numbers a new segment from 0. Its
+      // counter matches the old log's length, so only frame 0's identity shows the restart.
+      await shared.delete(`pubsub:${topic}`);
+      await shared.delete(`pubsub:${topic}:counter`);
+      for (const n of [0, 1]) await inner.publish(topic, await append(shared, n, `segment-2-${n}`));
+      await flush();
+
+      expect(received).toEqual([0, 1]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toContain('restarted at 0');
     });
 
     it('resumes from an offset inside a short log without resyncing from the start', async () => {
