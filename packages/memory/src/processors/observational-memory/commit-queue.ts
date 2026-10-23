@@ -1,7 +1,5 @@
 import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 
-import { waitWithAbort } from './wait-with-abort';
-
 /**
  * Process-wide queue for observational memory storage commits, keyed per thread or resource
  * (the `BufferingCoordinator.getLockKey` scheme).
@@ -82,6 +80,9 @@ function runNext(key: string, queue: KeyQueue): void {
  * Runs `op` once every earlier op on `key` has settled (reflection-priority ops first among those
  * still waiting) and resolves or rejects with its result. A rejection reaches only this caller.
  *
+ * Aborting `abortSignal` while the op is still queued rejects the caller and skips the op. Once the
+ * op has started, the caller waits for its result, so work after a landed commit still runs.
+ *
  * Enqueueing on a key from inside an op that holds the same key, directly or through nested ops
  * on other keys, would deadlock, so it rejects.
  */
@@ -97,6 +98,7 @@ export function runOMCommit<T>(
   }
 
   if (abortSignal?.aborted) return Promise.reject(abortSignal.reason);
+  let started = false;
   const work = new Promise<T>((resolve, reject) => {
     let queue = queues.get(key);
     if (!queue) {
@@ -132,6 +134,7 @@ export function runOMCommit<T>(
         .run(held, () =>
           Promise.resolve().then(() => {
             abortSignal?.throwIfAborted();
+            started = true;
             return op();
           }),
         )
@@ -150,7 +153,14 @@ export function runOMCommit<T>(
     (priority === 'reflection' ? owner.reflection : owner.normal).push(start);
     if (owner.running === null) runNext(key, owner);
   });
-  return waitWithAbort(work, abortSignal);
+  if (!abortSignal) return work;
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      if (!started) reject(abortSignal.reason);
+    };
+    abortSignal.addEventListener('abort', onAbort, { once: true });
+    work.then(resolve, reject).finally(() => abortSignal.removeEventListener('abort', onAbort));
+  });
 }
 
 /** Whether the current async context runs inside an op holding `key`. Test-only. */
