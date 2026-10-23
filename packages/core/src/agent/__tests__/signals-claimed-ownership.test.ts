@@ -5,6 +5,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { EventCallback } from '../../events/types';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
+import type { AgentExecutionOptions } from '../agent.types';
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
   createTextStreamModel,
@@ -764,6 +765,90 @@ describe('Agent signals: claimed thread ownership', () => {
         expect(prompts[1]!.split('queued input')).toHaveLength(2);
       } finally {
         releaseFirst();
+        claim.unsubscribe();
+        subscription.unsubscribe();
+      }
+    },
+  );
+
+  it.each([
+    ['a running run', 'slow'],
+    ['a running run', 'rejecting'],
+    ['a reserved run', 'slow'],
+    ['a reserved run', 'rejecting'],
+  ] as const)(
+    'joins remote claimed-owner input to %s without waiting on a %s stream-options factory',
+    async (joinKind, factoryKind) => {
+      const pubsub = new ControlledLeasePubSub();
+      const ownerRuntime = agentThreadStreamRuntime;
+      const senderRuntime = new AgentThreadStreamRuntime();
+      const held = createBlockingFirstTextStreamModel('held answer', 'later answer');
+      const ownerAgent = new Agent({
+        id: 'factory-owner',
+        name: 'Factory Owner',
+        instructions: 'Test',
+        model: held.model,
+        pubsub,
+      });
+      const senderAgent = new Agent({
+        id: 'factory-sender',
+        name: 'Factory Sender',
+        instructions: 'Test',
+        model: createTextStreamModel('sender response'),
+        pubsub,
+      });
+      const target = { resourceId: 'factory-user', threadId: `factory-thread-${joinKind}-${factoryKind}` };
+      // The first wake gets its options; every later call is slow or fails, and a join must not need them.
+      let factoryCalls = 0;
+      const streamOptions = () => {
+        factoryCalls++;
+        if (factoryCalls === 1) return {};
+        return factoryKind === 'slow'
+          ? new Promise<AgentExecutionOptions<any>>(() => {})
+          : Promise.reject(new Error('stream options unavailable'));
+      };
+      const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+      const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, { ...target, streamOptions }, pubsub);
+      let releaseLease = () => {};
+      let leaseRequested = false;
+      if (joinKind === 'a reserved run') {
+        pubsub.acquireLeaseWait = new Promise<void>(resolve => (releaseLease = resolve));
+        pubsub.onAcquireLease = () => (leaseRequested = true);
+      }
+      const sendRemote = (contents: string) =>
+        senderRuntime.sendSignal(
+          senderAgent,
+          { type: 'user-message', contents },
+          { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+          pubsub,
+        );
+
+      try {
+        const first = sendRemote('first input');
+        if (joinKind === 'a reserved run') {
+          await waitForCondition(() => leaseRequested);
+        } else {
+          await expect(first.accepted).resolves.toMatchObject({ action: 'deliver' });
+          await waitForCondition(() => held.getStreamCount() === 1);
+        }
+        const second = sendRemote('second input');
+        if (joinKind === 'a reserved run') {
+          await waitForCondition(
+            () => factoryCalls >= 2 || pubsub.publishedData.some(data => data?.signal?.contents === 'second input'),
+          );
+          await pubsub.flush();
+          releaseLease();
+        }
+        const firstAccepted = await first.accepted;
+        await expect(
+          withTimeout(second.accepted, 'the join waited on the stream-options factory', 2_000),
+        ).resolves.toEqual({
+          action: 'deliver',
+          runId: firstAccepted.runId,
+        });
+      } finally {
+        releaseLease();
+        held.releaseFirst();
         claim.unsubscribe();
         subscription.unsubscribe();
       }
