@@ -727,10 +727,15 @@ describe('the side session run-end backstop', () => {
       attributes: { backstop: 'true', 'from-session': result.sessionId, 'from-user': 'user-1' },
     });
 
-    // A later run nobody started from here (a typed message, a wake) reports too.
+    // A later run (a typed message, a wake) that ends with nothing new doesn't say "finished" again.
     session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reports).toHaveLength(1);
+
+    // But a failure after it still goes out.
+    session.emit({ type: 'agent_end', reason: 'error' } as AgentControllerEvent);
     await vi.waitFor(() => expect(reports).toHaveLength(2));
-    expect(reports[1]!.target).toEqual({ resourceId: scope.sessionId, threadId: scope.threadId });
+    expect(reports[1]!.input).toMatchObject({ kind: 'failed' });
   });
 
   it('stays quiet when the agent already sent its own final report', async () => {
