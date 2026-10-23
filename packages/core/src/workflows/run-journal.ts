@@ -43,12 +43,6 @@ export function isStepResultStub(value: unknown): boolean {
  * differs from the one last written. State is edited in place, so changes are marked
  * through `markStateChanged()` where they are merged into the run.
  *
- * Writes in flight at the same time (parallel branches, `foreach` with concurrency) can
- * commit in any order. A step two of them carry with different values may end up stored
- * with either, so it isn't recorded as written and the next write sends it again. A
- * checkpoint replaces every entry, so around one, every step the two writes don't carry
- * with the same value is sent again, and so is the state.
- *
  * @internal
  */
 export class RunJournal {
@@ -60,7 +54,6 @@ export class RunJournal {
   #written: Map<string, unknown>;
   #stateDirty = false;
   #needsCheckpoint: boolean;
-  #inFlight = new Set<InFlightWrite>();
 
   /**
    * @param seed The step results already in storage (a resume's loaded snapshot context).
@@ -121,26 +114,6 @@ export class RunJournal {
     const steps: StepResults = {};
     for (const stepId of stepIds) steps[stepId] = results[stepId] as StepResult<any, any, any, any>;
 
-    const self: InFlightWrite = {
-      steps: new Map(Object.entries(steps)),
-      checkpoint,
-      unsure: new Set(),
-      overlapsCheckpoint: false,
-    };
-    for (const other of this.#inFlight) {
-      const overlapsCheckpoint = checkpoint || other.checkpoint;
-      if (overlapsCheckpoint) self.overlapsCheckpoint = other.overlapsCheckpoint = true;
-      for (const stepId of new Set([...self.steps.keys(), ...other.steps.keys()])) {
-        if (self.steps.get(stepId) === other.steps.get(stepId)) continue;
-        // A checkpoint replaces every entry, so it can also wipe a step it doesn't carry.
-        if (overlapsCheckpoint || (self.steps.has(stepId) && other.steps.has(stepId))) {
-          self.unsure.add(stepId);
-          other.unsure.add(stepId);
-        }
-      }
-    }
-    this.#inFlight.add(self);
-
     this.#needsCheckpoint = false;
     this.#stateDirty = false;
     try {
@@ -161,14 +134,10 @@ export class RunJournal {
       if (checkpoint) this.#needsCheckpoint = true;
       if (stateDirty) this.#stateDirty = true;
       throw error;
-    } finally {
-      this.#inFlight.delete(self);
     }
-    // A checkpoint's state may have replaced the other write's, or the other way round.
-    if (self.overlapsCheckpoint) this.#stateDirty = true;
-    for (const [stepId, value] of self.steps) this.#written.set(stepId, value);
-    // Unrecorded steps are resent by the next write, and are never evicted.
-    for (const stepId of self.unsure) this.#written.delete(stepId);
+    for (const stepId of stepIds) {
+      this.#written.set(stepId, steps[stepId]);
+    }
   }
 
   /**
@@ -242,15 +211,6 @@ export class RunJournal {
     }
     return getStepResult(stepResults, step);
   }
-}
-
-interface InFlightWrite {
-  /** stepId -> the object this write carries */
-  steps: Map<string, unknown>;
-  checkpoint: boolean;
-  /** Steps another in-flight write carries with a different value. */
-  unsure: Set<string>;
-  overlapsCheckpoint: boolean;
 }
 
 /**
