@@ -88,7 +88,7 @@ describe('restricted Mastra Code embedding', () => {
     await createRestrictedMastraCodeAgentController(
       createConfig({
         workspace,
-        initialState: { yolo: true, skipGlobalInstructions: false },
+        initialState: { yolo: true, skipGlobalInstructions: false, observerModelSelection: 'openai/gpt-5' },
         allowedTools: ['remote_read', 'view'],
         modes: [{ id: 'build' }, { id: 'review', availableTools: ['view', 'execute_command'] }],
       }),
@@ -98,6 +98,7 @@ describe('restricted Mastra Code embedding', () => {
     expect(controllerConfig.workspace).toBe(workspace);
     expect(controllerConfig.subagents).toEqual([]);
     expect(controllerConfig.gateways).toEqual([]);
+    expect(controllerConfig.includeDefaultGateways).toBe(false);
     expect(controllerConfig.intervalHandlers).toEqual([]);
     expect(controllerConfig.modes).toEqual([
       { id: 'build', availableTools: ['remote_read', 'view'] },
@@ -106,6 +107,7 @@ describe('restricted Mastra Code embedding', () => {
     expect(controllerConfig.initialState).toMatchObject({
       yolo: false,
       skipGlobalInstructions: true,
+      observerModelSelection: '__restricted_model_disabled__',
       projectPath: '/remote/workspace',
       projectName: 'remote-project',
       gitBranch: 'main',
@@ -119,6 +121,9 @@ describe('restricted Mastra Code embedding', () => {
     expect(() => stateSchema.parse({ pluginSkillPaths: ['/ambient/skill'] })).toThrow();
     expect(() => stateSchema.parse({ pluginCommandPaths: ['/ambient/command'] })).toThrow();
     expect(() => stateSchema.parse({ pluginInstructions: ['ambient instructions'] })).toThrow();
+    for (const key of ['observerModelId', 'reflectorModelId', 'observerModelSelection', 'reflectorModelSelection']) {
+      expect(() => stateSchema.parse({ [key]: 'openai/gpt-5' })).toThrow();
+    }
   });
 
   it('registers the controller under the requested key on a supplied Mastra instance', async () => {
@@ -181,6 +186,11 @@ describe('restricted Mastra Code embedding', () => {
     await expect(createRestrictedMastraCodeAgentController(createConfig({ modes: [] }))).rejects.toThrow(
       'at least one mode',
     );
+    await expect(
+      createRestrictedMastraCodeAgentController(
+        createConfig({ modes: [{ id: 'build', agent: { id: 'ambient-agent' } }] }),
+      ),
+    ).rejects.toThrow('must not define its own agent');
     await expect(createRestrictedMastraCodeAgentController(createConfig({ allowedTools: [''] }))).rejects.toThrow(
       'tool names must not be empty',
     );

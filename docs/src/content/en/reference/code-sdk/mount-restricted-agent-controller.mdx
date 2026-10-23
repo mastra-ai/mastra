@@ -66,11 +66,13 @@ The factory prevents Mastra Code itself from discovering ambient host capabiliti
 The restricted factory doesn't register these capabilities:
 
 - Authentication storage or provider login
+- Built-in model gateways, so `listAvailableModels()` returns an empty catalog and doesn't reveal which provider credentials the server holds
 - Browser automation
 - GitHub polling or cross-agent signals
 - Goal judging
 - Project or global hook, plugin, and Model Context Protocol (MCP) discovery
 - Local or global instruction files
+- Observational memory model selection. The observer and reflector model fields in session state are locked to a disabled value, so configure those models on the injected `memory`
 - Subagents
 - Workflow creation, loading, or execution
 
@@ -98,8 +100,9 @@ The factory also skips gateway synchronization, local thread locks, model usage 
   },
   {
     name: 'modes',
-    type: 'AgentControllerMode[]',
-    description: 'Explicit controller modes. At least one mode is required.',
+    type: 'RestrictedMode[]',
+    description:
+      'Explicit controller modes. At least one mode is required. A mode can\'t define its own `agent`, because it would replace the host model, instructions, and tools.',
   },
   {
     name: 'allowedTools',
@@ -130,7 +133,8 @@ The factory also skips gateway synchronization, local thread locks, model usage 
   {
     name: 'initialState',
     type: 'Partial<MastraCodeState>',
-    description: 'Host-supplied initial state. Values in project take precedence over matching state fields.',
+    description:
+      'Host-supplied initial state. Values in project take precedence over matching state fields. The factory always sets `yolo` to false, skips global instructions, clears plugin paths, and disables observational memory model selection.',
     isOptional: true,
   },
   {

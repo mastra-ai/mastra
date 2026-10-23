@@ -18,9 +18,12 @@ import type { MastraCodeState } from './schema.js';
 
 // Keep the restricted entry point independent from the regular Mastra Code
 // schema, whose defaults intentionally consult the local process environment.
-// The disabled model sentinel fails closed if a host injects an observational
-// memory processor without also supplying its model configuration.
+// The observational memory model keys are locked to a disabled sentinel: a
+// client-selected id would resolve through the model router's default
+// gateways and their ambient credentials. Hosts configure observational
+// memory models on the injected memory instead.
 const disabledModelId = '__restricted_model_disabled__';
+const disabledModel = z.literal(disabledModelId).default(disabledModelId);
 const restrictedStateSchema = z.looseObject({
   currentModelId: z.string().optional(),
   modeId: z.string().optional(),
@@ -39,12 +42,10 @@ const restrictedStateSchema = z.looseObject({
   homeDir: z.string().optional(),
   gitBranch: z.string().optional(),
   lastCommand: z.string().optional(),
-  observerModelId: z.string().default(disabledModelId),
-  reflectorModelId: z.string().default(disabledModelId),
-  // Observational memory reads the selection before the model id, so both
-  // keys default to the disabled sentinel.
-  observerModelSelection: z.string().default(disabledModelId),
-  reflectorModelSelection: z.string().default(disabledModelId),
+  observerModelId: disabledModel,
+  reflectorModelId: disabledModel,
+  observerModelSelection: disabledModel,
+  reflectorModelSelection: disabledModel,
   observationThreshold: z.number().default(30_000),
   reflectionThreshold: z.number().default(40_000),
   cavemanObservations: z.boolean().default(false),
@@ -98,6 +99,13 @@ export type RestrictedToolProvider =
       requestContext: RequestContext;
     }) => Record<string, ToolsInput[string] | undefined> | Promise<Record<string, ToolsInput[string] | undefined>>);
 
+/**
+ * A controller mode for the restricted entry point. Per-mode agents are not
+ * accepted because they would replace the host-supplied model, instructions,
+ * and tools.
+ */
+export type RestrictedMode = AgentControllerMode & { agent?: never };
+
 export interface RestrictedProjectMetadata {
   /** Stable resource id used to scope controller threads. */
   resourceId: string;
@@ -124,7 +132,7 @@ export interface RestrictedMastraCodeConfig {
   /** Complete system instructions. No repository or global instruction files are loaded. */
   instructions: AgentConfig['instructions'];
   /** Explicit controller modes. Each mode is permanently bounded by `allowedTools`. */
-  modes: AgentControllerMode[];
+  modes: RestrictedMode[];
   /** Explicit global tool allowlist. An empty array creates a tool-free agent. */
   allowedTools: string[];
   /** Host-supplied non-workspace tools. Built-in Mastra Code tools are not added. */
@@ -161,6 +169,11 @@ function validateRestrictedConfig(config: RestrictedMastraCodeConfig): Set<strin
   if (!config.project.name.trim()) throw new Error('Restricted Mastra Code requires project.name');
   if (!config.project.rootPath.trim()) throw new Error('Restricted Mastra Code requires project.rootPath');
   if (config.modes.length === 0) throw new Error('Restricted Mastra Code requires at least one mode');
+  for (const mode of config.modes) {
+    if (mode.agent !== undefined) {
+      throw new Error(`Restricted Mastra Code mode "${mode.id}" must not define its own agent`);
+    }
+  }
   if (config.memory === undefined) throw new Error('Restricted Mastra Code requires an explicit memory policy');
 
   const allowedTools = new Set<string>();
@@ -172,7 +185,7 @@ function validateRestrictedConfig(config: RestrictedMastraCodeConfig): Set<strin
 }
 
 /** Bounds every controller mode by the host's global tool allowlist. */
-function restrictModes(modes: AgentControllerMode[], allowedTools: Set<string>): AgentControllerMode[] {
+function restrictModes(modes: RestrictedMode[], allowedTools: Set<string>): AgentControllerMode[] {
   return modes.map(mode => ({
     ...mode,
     availableTools: (mode.availableTools ?? [...allowedTools]).filter(name => allowedTools.has(name)),
@@ -246,11 +259,16 @@ export async function createRestrictedMastraCodeAgentController(config: Restrict
     agent: codeAgent,
     subagents: [],
     gateways: [],
+    includeDefaultGateways: false,
     workspace: config.workspace,
     initialState: {
       ...config.initialState,
       yolo: false,
       skipGlobalInstructions: true,
+      observerModelId: disabledModelId,
+      reflectorModelId: disabledModelId,
+      observerModelSelection: disabledModelId,
+      reflectorModelSelection: disabledModelId,
       projectPath: config.project.rootPath,
       projectName: config.project.name,
       gitBranch: config.project.gitBranch,

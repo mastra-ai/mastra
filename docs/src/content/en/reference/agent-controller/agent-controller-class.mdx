@@ -284,6 +284,14 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
     isOptional: true,
   },
   {
+    name: 'includeDefaultGateways',
+    type: 'boolean',
+    description:
+      'Whether the model catalog and auth checks also use the built-in gateways, which read provider credentials from the process environment. Set to `false` to use only `gateways`.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
     name: 'omConfig',
     type: 'AgentControllerOMConfig',
     description: 'Default observational memory model selections, automatic model resolver, and thresholds.',

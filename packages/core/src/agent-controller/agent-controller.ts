@@ -280,9 +280,13 @@ export class AgentController<TState = {}> {
       this.#channels.__setController(this);
     }
     // Gateway manager merges configured gateways with the router defaults
-    // (custom takes precedence). Shared by listAvailableModels,
-    // getCurrentModelAuthStatus, and the OM model resolver.
-    this.#gatewayManager = new GatewayManager([...(config.gateways ?? []), ...defaultGateways]);
+    // (custom takes precedence) unless the host opts out of the defaults.
+    // Shared by listAvailableModels, getCurrentModelAuthStatus, and the OM
+    // model resolver.
+    this.#gatewayManager = new GatewayManager([
+      ...(config.gateways ?? []),
+      ...(config.includeDefaultGateways === false ? [] : defaultGateways),
+    ]);
 
     const defaultMode = config.defaultModeId
       ? config.modes.find(mode => mode.id === config.defaultModeId)

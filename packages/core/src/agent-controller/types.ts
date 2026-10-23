@@ -362,6 +362,14 @@ export interface AgentControllerConfig<TState = {}> {
   gateways?: MastraModelGatewayInterface[];
 
   /**
+   * Whether the model catalog and auth checks also consult the router's
+   * default gateways, which read provider credentials from the process
+   * environment. Set to `false` when only `gateways` may be used.
+   * @default true
+   */
+  includeDefaultGateways?: boolean;
+
+  /**
    * Observational Memory configuration defaults.
    * The AgentController auto-manages OM state (model IDs, thresholds) internally
    * and provides accessors that Memory's dynamic model functions can close over.

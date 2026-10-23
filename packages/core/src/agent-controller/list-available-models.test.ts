@@ -8,6 +8,7 @@ import type {
   GatewayAuthRequest,
   GatewayAuthResult,
 } from '../llm/model/gateways';
+import { defaultGateways } from '../llm/model/gateways/defaults';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -82,6 +83,7 @@ describe('AgentController.listAvailableModels', () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('builds the catalog from gateway providers and caches/refreshes fetchProviders', async () => {
@@ -197,5 +199,27 @@ describe('AgentController.listAvailableModels', () => {
 
     const status = await controller.getCurrentModelAuthStatus(session);
     expect(status.hasAuth).toBe(false);
+  });
+
+  it('consults only configured gateways when default gateways are excluded', async () => {
+    const defaultFetches = defaultGateways.map(defaultGateway => vi.spyOn(defaultGateway, 'fetchProviders'));
+    const gateway = createFakeGateway({ models: ['sonic-fast'] });
+
+    await createController(gateway).listAvailableModels();
+    expect(defaultFetches.some(fetchProviders => fetchProviders.mock.calls.length > 0)).toBe(true);
+    for (const fetchProviders of defaultFetches) fetchProviders.mockClear();
+
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'restricted-controller',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true }],
+      gateways: [gateway],
+      includeDefaultGateways: false,
+    });
+
+    const models = await controller.listAvailableModels();
+    expect(models.map(model => model.id)).toEqual(['test-gateway/acme/sonic-fast']);
+    for (const fetchProviders of defaultFetches) expect(fetchProviders).not.toHaveBeenCalled();
   });
 });

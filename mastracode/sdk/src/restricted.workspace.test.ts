@@ -119,5 +119,8 @@ describe('restricted workspace tool enforcement', () => {
     expect(streamOptions?.activeTools).not.toContain('delete_file');
     expect(deleteFile).not.toHaveBeenCalled();
     await expect(filesystem.readFile('protected.txt', { encoding: 'utf-8' })).resolves.toBe('keep me');
+
+    // The model catalog must not reveal which providers the server process has credentials for.
+    await expect(controller.listAvailableModels()).resolves.toEqual([]);
   });
 });
