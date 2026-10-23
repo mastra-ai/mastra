@@ -260,9 +260,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
       // Create abort controller for request cancellation
       const controller = new AbortController();
-      ctx.req.on('close', () => {
+      // Listen on the response, not the request: once a body parser has consumed the request,
+      // `ctx.req` is already closed, so its 'close' event never reports a client disconnect.
+      ctx.res.on('close', () => {
         // Only abort if the response wasn't successfully completed
-        if (!ctx.res.writableEnded) {
+        if (!ctx.res.writableFinished) {
           controller.abort();
         }
       });
