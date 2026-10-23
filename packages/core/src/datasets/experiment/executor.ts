@@ -225,6 +225,17 @@ function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T>
   });
 }
 
+/** A `provider/modelId` label for trace metadata. Reads only identifying fields, never credentials. */
+function modelLabel(model: MastraModelConfig): string {
+  if (typeof model === 'string') return model;
+  const m = model as { id?: unknown; providerId?: unknown; provider?: unknown; modelId?: unknown };
+  if (typeof m.id === 'string') return m.id;
+  const provider = m.providerId ?? m.provider;
+  return typeof provider === 'string' && typeof m.modelId === 'string'
+    ? `${provider}/${m.modelId}`
+    : String(m.modelId ?? 'unknown');
+}
+
 /**
  * Execute a dataset item against an agent.
  * Uses generate() for both v1 and v2 models.
@@ -314,7 +325,14 @@ async function executeAgent(
   onTraceIdAssigned?.(assignedTraceId);
   const tracingOptions = {
     traceId: assignedTraceId,
-    ...(experimentId ? { metadata: { experimentId } } : {}),
+    ...(experimentId || agentModel
+      ? {
+          metadata: {
+            ...(experimentId ? { experimentId } : {}),
+            ...(agentModel ? { agentModel: modelLabel(agentModel) } : {}),
+          },
+        }
+      : {}),
   };
 
   let rawResult: unknown;

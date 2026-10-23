@@ -17,4 +17,4 @@ await dataset.startExperiment({
 });
 ```
 
-`agentModel` works only with agent targets and is rejected before an experiment record is created otherwise. It is not saved on the experiment record, so put it in `metadata` if you want to keep track of it.
+`agentModel` works only with agent targets and is rejected before an experiment record is created otherwise. It is not saved on the experiment record, so put it in `metadata` if you want to keep track of it. Each run's trace metadata includes `agentModel` (for example `anthropic/claude-haiku-5-5`), so you can tell override runs apart in traces.

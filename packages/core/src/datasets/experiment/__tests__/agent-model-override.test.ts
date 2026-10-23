@@ -182,6 +182,35 @@ describe('experiment agentModel override', () => {
     expect(callCount(helperModel)).toBe(1);
   });
 
+  describe('tags each trace with the override so it can be told apart from the agent default', () => {
+    it.each([
+      { scenario: 'a model instance', agentModel: () => textModel('x'), expected: 'mock-provider/mock-model-id' },
+      {
+        scenario: 'a labeled model',
+        agentModel: () => ({ model: textModel('x'), id: 'anthropic/claude-haiku-5-5' }),
+        expected: 'anthropic/claude-haiku-5-5',
+      },
+      { scenario: 'no override', agentModel: () => undefined, expected: undefined },
+    ])('$scenario', async ({ agentModel, expected }) => {
+      const { mastra, dataset } = await setup();
+      const generate = vi.spyOn(mastra.getAgentById('eval-agent'), 'generate');
+
+      const summary = await dataset.startExperiment({
+        targetType: 'agent',
+        targetId: 'eval-agent',
+        agentModel: agentModel(),
+      });
+
+      expect(generate).toHaveBeenCalledTimes(2);
+      for (const [, options] of generate.mock.calls) {
+        expect(options?.tracingOptions?.metadata).toEqual({
+          experimentId: summary.experimentId,
+          ...(expected ? { agentModel: expected } : {}),
+        });
+      }
+    });
+  });
+
   describe('only the model changes compared to the same run without an override', () => {
     it.each<{
       scenario: string;

@@ -93,7 +93,7 @@ const summary = await dataset.startExperiment({
     type: 'MastraModelConfig',
     isOptional: true,
     description:
-      "Model to run the agent target with, instead of the agent's own model. Accepts the same values as the `model` option on `Agent`. Applies only when `targetType` is `'agent'`. The model is passed with each call the experiment makes, so the registered agent and other experiments are unaffected. The agent version is picked the same way as without `agentModel`, and sub-agents keep their own models. The model isn't saved on the experiment record; add it to `metadata` if you want to keep it.",
+      "Model to run the agent target with, instead of the agent's own model. Accepts the same values as the `model` option on `Agent`. Applies only when `targetType` is `'agent'`. The model is passed with each call the experiment makes, so the registered agent and other experiments are unaffected. The agent version is picked the same way as without `agentModel`, and sub-agents keep their own models. The model isn't saved on the experiment record; add it to `metadata` if you want to keep it. Each run's trace metadata includes it as `agentModel`.",
   },
   {
     name: 'scorers',
