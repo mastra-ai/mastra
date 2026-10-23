@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { PostgresStore } from '../..';
 import { Mastra } from '../../../../../../packages/core/src/mastra';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../../../../packages/core/src/request-context';
 import { createStep, createWorkflow } from '../../../../../../packages/core/src/workflows/evented';
 import { RedeliveryDriver } from '../../../../../../packages/core/src/workflows/evented/test-utils/redelivery-driver';
 import { connectionString, TEST_CONFIG } from '../../test-utils';
@@ -16,6 +17,92 @@ describe('Postgres evented occurrence replay', () => {
     await storage.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
     await storage.close();
   });
+
+  it.each([false, true])(
+    'does not fail a finished run on redelivery with snapshot persistence %s',
+    async persist => {
+      const driver = new RedeliveryDriver();
+      const schema = z.object({ n: z.number() });
+      let calls = 0;
+      const workflow = createWorkflow({
+        id: `finished-replay-${randomUUID()}`,
+        inputSchema: schema,
+        outputSchema: schema,
+        options: { shouldPersistSnapshot: () => persist },
+      })
+        .then(
+          createStep({
+            id: 'finish',
+            inputSchema: schema,
+            outputSchema: schema,
+            execute: async ({ inputData }) => {
+              calls++;
+              return inputData;
+            },
+          }),
+        )
+        .commit();
+      const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        expect(await run.start({ inputData: { n: 1 } })).toMatchObject({ status: 'success', result: { n: 1 } });
+        const store = (await storage.getStore('workflows'))!;
+        await expect
+          .poll(async () => Boolean(await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId })))
+          .toBe(persist);
+        const original = driver.stepRuns({ spec: '0', runId: run.runId })[0]!;
+        const key = `workflow-step-run:${run.runId}:${original.id}`;
+        for (const deliveryAttempt of [2, 3, 4]) {
+          const owner = await driver.pubsub.getLeaseOwner(key);
+          if (owner) await driver.pubsub.releaseLease(key, owner);
+          await driver.redeliverEvent(original, { deliveryAttempt });
+        }
+        expect(driver.events.filter(event => event.type === 'workflow.fail' && event.runId === run.runId)).toEqual([]);
+        expect(calls).toBe(1);
+      } finally {
+        await mastra.stopWorkers();
+        driver.dispose();
+      }
+    },
+    8_000,
+  );
+
+  it('fails promptly when a live run loses its snapshot inside a step', async () => {
+    const driver = new RedeliveryDriver();
+    const schema = z.object({ n: z.number() });
+    const store = (await storage.getStore('workflows'))!;
+    const workflow = createWorkflow({
+      id: `missing-live-${randomUUID()}`,
+      inputSchema: schema,
+      outputSchema: schema,
+    })
+      .then(
+        createStep({
+          id: 'delete-snapshot',
+          inputSchema: schema,
+          outputSchema: schema,
+          execute: async ({ inputData, runId }) => {
+            await store.deleteWorkflowRunById({ workflowName: workflow.id, runId });
+            return inputData;
+          },
+        }),
+      )
+      .commit();
+    const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: { n: 1 } });
+      expect(result.status).toBe('failed');
+      expect(driver.events.filter(event => event.type === 'workflow.fail' && event.runId === run.runId)).toHaveLength(
+        1,
+      );
+    } finally {
+      await mastra.stopWorkers();
+      driver.dispose();
+    }
+  }, 8_000);
 
   it.each(['step', 'workflow', 'nested-completion', 'snapshots-disabled'] as const)(
     'continues a saved %s loop result after the worker dies before publishing the next iteration',
@@ -30,6 +117,7 @@ describe('Postgres evented occurrence replay', () => {
         inputSchema: schema,
         outputSchema: schema,
         execute: async ({ inputData, requestContext, setState }) => {
+          expect(requestContext.get(MASTRA_AUTH_TOKEN_KEY)).toBe('live-loop-recovery-token');
           contexts.push(requestContext.get('iteration'));
           requestContext.set('iteration', inputData.n + 1);
           calls.push(inputData.n + 1);
@@ -74,11 +162,14 @@ describe('Postgres evented occurrence replay', () => {
       await mastra.startWorkers();
       try {
         const run = await workflow.createRun();
-        const result = run.start({ inputData: { n: 0 }, initialState: { n: 0 } });
+        const requestContext = new RequestContext();
+        requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'live-loop-recovery-token');
+        const result = run.start({ inputData: { n: 0 }, initialState: { n: 0 }, requestContext });
         await saved;
         const store = await storage.getStore('workflows');
         const snapshot = await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
         expect(snapshot?.context[body.id]).toMatchObject({ status: 'success', output: { n: 1 } });
+        expect(snapshot?.requestContext).not.toHaveProperty(MASTRA_AUTH_TOKEN_KEY);
         expect(snapshot?.context.__state).toEqual({ n: 1 });
         expect(calls).toEqual([1]);
         const original =
@@ -288,6 +379,7 @@ describe('Postgres evented occurrence replay', () => {
         execute: async ({ inputData, requestContext, state }) => {
           calls.push('second');
           expect(requestContext.get('committed')).toBe(true);
+          expect(requestContext.get(MASTRA_AUTH_TOKEN_KEY)).toBe('live-recovery-token');
           expect(state).toEqual({ n: 1 });
           await secondGate;
           return { n: inputData.n + 1 };
@@ -331,7 +423,9 @@ describe('Postgres evented occurrence replay', () => {
       await mastra.startWorkers();
       try {
         const run = await workflow.createRun();
-        const result = run.start({ inputData: { n: 0 }, initialState: { n: 0 } });
+        const requestContext = new RequestContext();
+        requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'live-recovery-token');
+        const result = run.start({ inputData: { n: 0 }, initialState: { n: 0 }, requestContext });
         await saved;
         const original =
           delivery === 'run'
@@ -352,7 +446,7 @@ describe('Postgres evented occurrence replay', () => {
                   ...original.data,
                   prevResult: { ...original.data.prevResult, output: { n: 999 } },
                   state: { n: 999 },
-                  requestContext: { committed: false },
+                  requestContext: { committed: false, [MASTRA_AUTH_TOKEN_KEY]: 'live-recovery-token' },
                 },
               }
             : original,

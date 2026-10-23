@@ -34,7 +34,7 @@ import {
   omitPriorCompletionFields,
   validateStepResumeData,
 } from '../../utils';
-import { isNonRedeliverable, resolveCurrentState, withoutAuthToken } from '../helpers';
+import { isNonRedeliverable, resolveCurrentState, restoreLiveRequestContext, withoutAuthToken } from '../helpers';
 import { StepExecutor } from '../step-executor';
 import { evaluateLoopCondition, isQueuedForeachIteration, processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
@@ -1751,7 +1751,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           ...args,
           stepResults: error.storedSnapshot?.context ?? args.stepResults,
           state: error.storedSnapshot?.context.__state ?? args.state,
-          requestContext: error.storedRequestContext ?? args.requestContext,
+          requestContext: restoreLiveRequestContext(error.storedRequestContext, args.requestContext),
         };
       }
     }
@@ -1950,7 +1950,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             (error.storedResult?.status === 'success' || error.storedResult?.status === 'failed')
           ) {
             completedResult = error.storedResult;
-            requestContext = error.storedRequestContext ?? requestContext;
+            requestContext = restoreLiveRequestContext(error.storedRequestContext, requestContext);
             currentState = error.storedSnapshot?.context.__state ?? currentState;
             Object.assign(stepResults, error.storedSnapshot?.context);
           } else {
@@ -3566,7 +3566,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         newStepResults = error.storedSnapshot?.context;
         storedResult = error.storedResult!;
         prevResult = storedResult;
-        requestContext = error.storedRequestContext ?? requestContext;
+        requestContext = restoreLiveRequestContext(error.storedRequestContext, requestContext);
         currentState = error.storedSnapshot?.context.__state ?? currentState;
       }
 
@@ -4013,14 +4013,32 @@ export class WorkflowEventProcessor extends EventProcessor {
     // retry the publish instead of rerunning the handler. Each publish retry
     // spends one delivery past the budget, so the publish count is derived
     // from the delivery count and survives eviction.
-    if (priorAttempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS) {
-      return this.#publishPendingFailure(event, eventKey, {
-        error: new Error(`Event ${event.type} exhausted its delivery attempts`),
-        publishAttempts: priorAttempts - WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS + 1,
-      });
-    }
-
     try {
+      if (priorAttempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS) {
+        if ((event.type === 'workflow.step.run' || event.type === 'workflow.step.end') && baseWorkflowData.workflowId) {
+          const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+          if (workflowsStore?.supportsWorkflowStepGuards()) {
+            const snapshot = await workflowsStore.loadWorkflowSnapshot({
+              workflowName: baseWorkflowData.workflowId,
+              runId: event.runId,
+            });
+            if (!snapshot || snapshot.status === 'success' || snapshot.status === 'failed') {
+              // A deleted live row is indistinguishable from terminal snapshot cleanup.
+              this.deliveryAttempts.delete(eventKey);
+              this.mastra.getLogger()?.warn('Ignoring late workflow delivery after terminal cleanup', {
+                type: event.type,
+                runId: event.runId,
+              });
+              return { ok: true };
+            }
+          }
+        }
+        return this.#publishPendingFailure(event, eventKey, {
+          error: new Error(`Event ${event.type} exhausted its delivery attempts`),
+          publishAttempts: priorAttempts - WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS + 1,
+        });
+      }
+
       await this.#dispatch(event);
       this.deliveryAttempts.delete(eventKey);
       return { ok: true };
@@ -4029,10 +4047,22 @@ export class WorkflowEventProcessor extends EventProcessor {
         this.deliveryAttempts.delete(eventKey);
         return { ok: true };
       }
+      const missingSnapshot = isWorkflowStepConflictError(err) && err.reason === 'missing';
+      if (missingSnapshot && (event.deliveryAttempt ?? 1) > 1) {
+        // Nothing survives deletion to distinguish terminal cleanup from a lost live row.
+        // Redelivery acknowledges either case; a first delivery must still fail the caller.
+        this.deliveryAttempts.delete(eventKey);
+        this.mastra.getLogger()?.warn('Ignoring redelivered workflow step without a snapshot', {
+          type: event.type,
+          runId: event.runId,
+        });
+        return { ok: true };
+      }
       const attempts = priorAttempts + 1;
       // Deterministic failures (e.g. a throwing user callback) would fail the
       // same way on every redelivery, so fail them on the first attempt.
-      const exhausted = attempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS || isNonRedeliverable(err);
+      const exhausted =
+        missingSnapshot || attempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS || isNonRedeliverable(err);
       // Record an exhausted event at the full budget so a redelivery never
       // reruns its handler, even if its pending-failure entry is evicted.
       this.#setDeliveryAttempts(
