@@ -1139,3 +1139,53 @@ export const RUN_FENCING_TABLE_SCHEMAS = {
   [TABLE_WORKFLOW_RUN_OWNERS]: WORKFLOW_RUN_OWNERS_SCHEMA,
   [TABLE_MEMORY_RUN_FENCES]: MEMORY_RUN_FENCES_SCHEMA,
 };
+
+export const TABLE_WORKFLOW_RUNS = 'mastra_workflow_runs';
+export const TABLE_WORKFLOW_RUN_ENTRIES = 'mastra_workflow_run_entries';
+
+/**
+ * Storage v2 run headers: the run's `WorkflowRunHeader` (its `WorkflowRunState` without
+ * `context` and `value`). `status` and `threadId` are copied out of the snapshot so they
+ * can be filtered and indexed. `lastSeq` is the highest `seq` the run's entries have used;
+ * it only increases, across checkpoints too.
+ * @experimental
+ */
+export const WORKFLOW_RUNS_SCHEMA: Record<string, StorageColumn> = {
+  workflow_name: { type: 'text', nullable: false },
+  run_id: { type: 'text', nullable: false },
+  resourceId: { type: 'text', nullable: true },
+  threadId: { type: 'text', nullable: true },
+  status: { type: 'text', nullable: false },
+  header: { type: 'jsonb', nullable: false },
+  lastSeq: { type: 'integer', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+/**
+ * Storage v2 run entries: one step result (`kind: 'step'`) or the run's state
+ * (`kind: 'state'`, `step_id` null) per row, ordered by `seq` within a run.
+ * @experimental
+ */
+export const WORKFLOW_RUN_ENTRIES_SCHEMA: Record<string, StorageColumn> = {
+  workflow_name: { type: 'text', nullable: false },
+  run_id: { type: 'text', nullable: false },
+  seq: { type: 'integer', nullable: false },
+  kind: { type: 'text', nullable: false },
+  step_id: { type: 'text', nullable: true },
+  payload: { type: 'jsonb', nullable: true },
+};
+
+/**
+ * Table configs for the storage v2 run tables (`storageVersion: 2`).
+ * Exported separately because only adapters that support run journals create them,
+ * so they are not part of TABLE_NAMES.
+ * @experimental
+ */
+export const WORKFLOW_RUN_JOURNAL_TABLE_CONFIGS = {
+  [TABLE_WORKFLOW_RUNS]: { columns: WORKFLOW_RUNS_SCHEMA, compositePrimaryKey: ['workflow_name', 'run_id'] },
+  [TABLE_WORKFLOW_RUN_ENTRIES]: {
+    columns: WORKFLOW_RUN_ENTRIES_SCHEMA,
+    compositePrimaryKey: ['workflow_name', 'run_id', 'seq'],
+  },
+} satisfies Record<string, StorageTableConfig>;

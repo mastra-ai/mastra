@@ -21,11 +21,14 @@ export function runPrune({
   domain,
   targets,
   options,
+  deleteBatch,
 }: {
   db: PgDB;
   domain: string;
   targets: PruneTarget[];
   options?: PruneOptions;
+  /** Deletes one batch for targets that need more than a plain row delete; return `undefined` to use the default. */
+  deleteBatch?: (target: PruneTarget, cutoff: Date | number, limit: number) => Promise<number> | undefined;
 }): Promise<PruneResult[]> {
   return executeRetentionPrune({
     domain,
@@ -33,6 +36,7 @@ export function runPrune({
     options,
     cutoffFor: (target, now) => cutoffFor(target.policy, target.anchorType ?? 'timestamp', now),
     deleteBatch: (target, cutoff, limit) =>
+      deleteBatch?.(target, cutoff, limit) ??
       db.pruneBatch({ tableName: target.table, column: target.column, cutoff, limit }),
   });
 }

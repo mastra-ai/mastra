@@ -2,6 +2,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { summarizeStepResult } from '../storage/domains/workflows/journal';
 import type { StepResultSummary } from '../storage/domains/workflows/journal';
+import { getSnapshotMemoryInfo } from '../storage/domains/workflows/snapshot-memory-info';
 import { getStepResult, getStepResultAsync } from './step';
 import { stepRefId } from './step-refs';
 import type { StepResult, WorkflowRunState } from './types';
@@ -173,7 +174,10 @@ export class RunJournal {
     this.#inFlight++;
     if (boundary) this.#boundaryInFlight = true;
     try {
-      const run = { workflowName: this.workflowName, runId: this.runId, resourceId, header, steps };
+      // Stubs only replace successful results other than `input`, and the thread comes from a
+      // suspended result or `input`, so the snapshot still holds the whole run's thread.
+      const threadId = getSnapshotMemoryInfo(snapshot)?.threadId;
+      const run = { workflowName: this.workflowName, runId: this.runId, resourceId, threadId, header, steps };
       if (checkpoint) {
         await store.writeWorkflowRunCheckpoint({ ...run, state: value });
       } else {

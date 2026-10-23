@@ -165,12 +165,16 @@ export abstract class WorkflowsStorage extends StorageDomain {
   /**
    * Replace all of a storage v2 run's entries with one per step, in the given order, then
    * the state. Writes the header, creating the run if it isn't stored.
+   *
+   * `threadId` is the whole run's thread (`getSnapshotMemoryInfo`), passed on every write.
+   * Stores that keep it next to the header filter `listWorkflowRuns` by it without reading entries.
    * @experimental
    */
   async writeWorkflowRunCheckpoint(_args: {
     workflowName: string;
     runId: string;
     resourceId?: string;
+    threadId?: string;
     header: WorkflowRunHeader;
     steps: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
@@ -182,12 +186,15 @@ export abstract class WorkflowsStorage extends StorageDomain {
   /**
    * Append one entry per given step to a storage v2 run, then the state when given. Writes
    * the header, creating the run if it isn't stored.
+   *
+   * `threadId` is the whole run's thread, as for `writeWorkflowRunCheckpoint`, not only the given steps'.
    * @experimental
    */
   async appendWorkflowRunEntries(_args: {
     workflowName: string;
     runId: string;
     resourceId?: string;
+    threadId?: string;
     header: WorkflowRunHeader;
     steps: Record<string, StepResult<any, any, any, any>>;
     state?: Record<string, any>;
