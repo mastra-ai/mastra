@@ -11,13 +11,24 @@
     "theme.css",
     "components.css",
     "sources.css",
-    "theme"
+    "theme",
+    "oxlint"
   ],
   "exports": {
     "./style.css": "./dist/style.css",
     "./theme.css": "./theme.css",
     "./components.css": "./components.css",
     "./sources.css": "./sources.css",
+    "./oxlint": {
+      "import": {
+        "types": "./oxlint/index.d.ts",
+        "default": "./oxlint/index.js"
+      },
+      "require": {
+        "types": "./oxlint/index.d.ts",
+        "default": "./oxlint/index.js"
+      }
+    },
     "./tokens": {
       "import": {
         "types": "./dist/tokens.d.ts",
