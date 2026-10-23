@@ -2011,6 +2011,48 @@ Emitted when the stream is forcibly terminated due to content being blocked by a
 
 ## Thread subscription chunks
 
+### data-user-message-pending
+
+A transient user-message projection emitted when a thread accepts a steer or queued follow-up, before the agent consumes it. Subscribers can show the input immediately, then reconcile it with the delivered `data-user-message` chunk by `data.id`.
+
+The chunk isn't saved to conversation history. `data.metadata.status` is `pending` for a steer that joins the active run and `queued` for a follow-up that runs afterward.
+
+```typescript
+type UserMessagePendingChunk = {
+  type: 'data-user-message-pending'
+  runId: string
+  traceId?: string
+  from: ChunkFrom
+  metadata?: Record<string, any>
+  transient: true
+  data: AgentSignalDataPart['data'] & {
+    metadata: Record<string, unknown> & {
+      status: 'pending' | 'queued'
+    }
+  }
+}
+```
+
+### data-user-message-cancelled
+
+A transient removal event emitted when accepted user input is cancelled before delivery. Subscribers can remove the pending projection whose `data.id` matches the cancelled signal.
+
+The chunk isn't saved to conversation history. It is emitted only after the input is removed, not when cancellation is merely requested.
+
+```typescript
+type UserMessageCancelledChunk = {
+  type: 'data-user-message-cancelled'
+  runId: string
+  traceId?: string
+  from: ChunkFrom
+  metadata?: Record<string, any>
+  transient: true
+  data: {
+    id: string
+  }
+}
+```
+
 ### thread-history
 
 The stored history of a thread, emitted at the start of a thread subscription.

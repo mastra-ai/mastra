@@ -106,7 +106,7 @@ export function LogDataPanel({
                           # {log.traceId}
                         </Txt>
                       </Button>
-                      <CopyButton content={log.traceId} tooltip="Copy Trace ID to clipboard" />
+                      <CopyButton content={log.traceId} tooltip="Copy trace ID to clipboard" />
                     </ButtonsGroup>
                   )}
                   {log.spanId && (
@@ -122,7 +122,7 @@ export function LogDataPanel({
                           # {log.spanId}
                         </Txt>
                       </Button>
-                      <CopyButton content={log.spanId} tooltip="Copy Span ID to clipboard" />
+                      <CopyButton content={log.spanId} tooltip="Copy span ID to clipboard" />
                     </ButtonsGroup>
                   )}
                 </div>

@@ -59,7 +59,7 @@ export const NoLogsInfo = ({ datePreset, dateFrom, dateTo }: NoLogsInfoProps = {
           }
           icon={<ExternalLinkIcon />}
         >
-          Logging Documentation
+          Logging documentation
         </Button>
       }
       variant="fill"

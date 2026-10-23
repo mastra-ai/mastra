@@ -18,6 +18,22 @@ export function withoutAuthToken<T extends Record<string, any> | undefined>(requ
   return rest as T;
 }
 
+const NON_REDELIVERABLE = Symbol.for('mastra.evented.nonRedeliverable');
+
+/**
+ * Marks an error as deterministic (for example a throwing user callback), so the
+ * evented processor fails the workflow on the first delivery instead of having
+ * the transport redeliver the event and rerun the callback.
+ */
+export function markNonRedeliverable<T extends Error>(error: T): T {
+  Object.defineProperty(error, NON_REDELIVERABLE, { value: true });
+  return error;
+}
+
+export function isNonRedeliverable(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as any)[NON_REDELIVERABLE] === true;
+}
+
 /**
  * Interface for tripwire chunks in the stream.
  * These chunks are emitted when a processor triggers a tripwire.

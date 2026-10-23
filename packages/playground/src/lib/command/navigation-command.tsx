@@ -140,7 +140,7 @@ const CommandResults = ({
           closeCommand();
         }}
         icon={<PanelLeftIcon />}
-        title="Toggle Sidebar"
+        title="Toggle sidebar"
         subtitle="Studio layout"
       />
     </CommandGroup>

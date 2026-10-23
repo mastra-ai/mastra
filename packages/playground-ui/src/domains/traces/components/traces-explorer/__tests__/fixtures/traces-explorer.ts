@@ -34,9 +34,15 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
     threadQuery: true,
+    threadQueryRows: true,
     spanQuery: true,
     feedback: true,
   },
+};
+
+export const noThreadRowsCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, threadQueryRows: false },
 };
 
 export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = {

@@ -25,7 +25,7 @@ export function ScoresTools({ onEntityChange, onReset, selectedEntity, entityOpt
         }}
         disabled={isLoading}
       >
-        <SelectTrigger aria-label="Filter by Entity" size="md" className="whitespace-nowrap">
+        <SelectTrigger aria-label="Filter by entity" size="md" className="whitespace-nowrap">
           <SelectValue placeholder="Select..." />
         </SelectTrigger>
         <SelectContent>

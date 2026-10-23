@@ -775,11 +775,6 @@ const sidebars = {
           id: 'mastra-platform/connect/channels',
           label: 'Channels',
         },
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/end-user-connections',
-          label: 'End-user connections',
-        },
       ],
     },
     {
