@@ -19,7 +19,8 @@ class EventuallyConsistentVector extends LibSQLVector {
   }
 
   override async query(params: Parameters<LibSQLVector['query']>[0]) {
-    if (!params.includeVector) return super.query(params);
+    // Only migration reads lag; ordinary reads inspect the committed database state.
+    if (!params.includeVector || typeof params.filter?.resource_id !== 'object') return super.query(params);
     if (params.topK && params.topK > 20) throw new Error('Vectorize permits at most 20 results with values');
     const page = this.pages.get(params.indexName);
     if (page && page.readsLeft > 0) {
@@ -77,15 +78,30 @@ async function transfer(memory: Memory) {
   const result = memory.updateThreadResourceId({ threadId: 'moving', resourceId: 'new' });
   let settled = false;
   // Attach both handlers immediately so an expected rejection never goes unhandled.
-  void result.then(() => (settled = true), () => (settled = true));
-  await vi.waitFor(() => expect(settled).toBe(true), { timeout: 300_000, interval: 1000 });
+  void result.then(
+    () => (settled = true),
+    () => (settled = true),
+  );
+  await vi.waitFor(
+    async () => {
+      await vi.runOnlyPendingTimersAsync();
+      expect(settled).toBe(true);
+    },
+    { timeout: 10_000, interval: 1 },
+  );
   return result;
 }
 
 async function readObservations(vector: LibSQLVector, resourceId: string) {
   const [indexName] = await vector.listIndexes();
   if (!indexName) throw new Error('Missing seeded observation index');
-  return vector.query({ indexName, queryVector: [1, 0], topK: 100, filter: { resource_id: resourceId } });
+  return vector.query({
+    indexName,
+    queryVector: [1, 0],
+    topK: 100,
+    includeVector: true,
+    filter: { resource_id: resourceId },
+  });
 }
 
 describe('observation transfer on eventually consistent vector stores (#27834)', () => {
