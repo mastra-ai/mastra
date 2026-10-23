@@ -417,8 +417,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // prepare() already counted the current unobserved window and resource context.
         const finalTotalPending = ctx.status.pendingTokens;
         try {
-          await runOMCommit(this.engine.buffering.getLockKey(threadId, resourceId), () =>
-            this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+          await runOMCommit(
+            this.engine.buffering.getLockKey(threadId, resourceId),
+            () => this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+            { abortSignal },
           );
           this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
         } catch {

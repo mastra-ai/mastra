@@ -1292,3 +1292,63 @@ it('does not persist extracted values from a buffered reflection cancelled befor
   const thread = await storage.getThreadById({ threadId });
   expect(JSON.stringify(thread?.metadata ?? {})).not.toContain('Late priority');
 });
+
+it('does not wait for or apply a queued pending-token write after the run aborts (#27792)', async () => {
+  const actor = createLatchedModel('Actor');
+  const observer = createLatchedModel('Unused', false);
+  const store = new InMemoryStore();
+  const memory = new Memory({
+    storage: store,
+    options: {
+      generateTitle: false,
+      observationalMemory: {
+        enabled: true,
+        observation: { model: observer.model, messageTokens: 100_000, bufferTokens: false },
+        reflection: { model: observer.model, observationTokens: 100_000 },
+      },
+    },
+  });
+  const engine = (await memory.omEngine)!;
+  const threadId = 'pending-token-abort';
+  const resourceId = 'pending-token-resource';
+  await engine.getOrCreateRecord(threadId, resourceId);
+  const key = engine.buffering.getLockKey(threadId, resourceId);
+  const release = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  const blocker = runOMCommit(key, async () => {
+    entered.resolve();
+    await release.promise;
+  });
+  await entered.promise;
+  const controller = new AbortController();
+  const agent = new Agent({ id: threadId, name: threadId, model: actor.model, instructions: 'Help.', memory });
+  let settled = false;
+  const run = agent
+    .stream('Remember this request. '.repeat(20), {
+      abortSignal: controller.signal,
+      memory: { thread: threadId, resource: resourceId },
+    })
+    .then(result => result.consumeStream())
+    .catch(() => undefined)
+    .finally(() => {
+      settled = true;
+    });
+  try {
+    for (let i = 0; i < 200 && waitingOMCommits(key).normal === 0; i++) {
+      await new Promise<void>(resolve => setTimeout(resolve, 5));
+    }
+    expect(waitingOMCommits(key).normal).toBeGreaterThan(0);
+    controller.abort();
+    for (let i = 0; i < 200 && !settled; i++) await new Promise<void>(resolve => setTimeout(resolve, 5));
+    expect(settled).toBe(true);
+    expect(actor.calls).toBe(0);
+  } finally {
+    controller.abort();
+    release.resolve();
+    actor.release();
+    await blocker;
+    await run;
+    await engine.settled();
+  }
+  expect((await engine.getRecord(threadId, resourceId))?.pendingMessageTokens ?? 0).toBe(0);
+});
