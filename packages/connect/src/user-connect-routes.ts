@@ -4,12 +4,14 @@ import type { ApiRoute } from '@mastra/core/server';
 import {
   createProjectConnectSession,
   disconnectConnection,
+  getConnectUrl,
+  getProjectIntegrationSettings,
   listIntegrations,
   listProjectConnections,
   resolveClient,
   validateResourceId,
 } from './client.js';
-import type { ConnectClientOptions, ProjectConnection, ResolvedClient } from './client.js';
+import type { ConnectClientOptions, IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import { MastraConnectError } from './errors.js';
 import { renderConnectPage } from './user-connect-page.js';
 
@@ -26,11 +28,15 @@ export interface UserConnectIdentityContext {
 
 export interface UserConnectRoutesOptions {
   /**
-   * Required explicit allowlist of platform integration ids exposed to end
-   * users (e.g. `['linear', 'slack']`). The end-user surface never defaults
-   * open: providers outside this set 404 on every mounted route.
+   * Code-level allowlist of platform integration ids exposed to end users
+   * (e.g. `['linear', 'slack']`). Providers outside the set 404 on every
+   * mounted route. This overrides the project's provider configuration in
+   * Mastra Platform. Omit it to use that project configuration (`null` means
+   * the full catalog; an empty platform list disables all providers). An
+   * explicit empty code array is rejected: pass a real allowlist or configure
+   * the project in Mastra Platform.
    */
-  providers: string[];
+  providers?: string[];
   /**
    * Derives the caller's end-user resource key per request. Defaults to the
    * server-derived `MASTRA_RESOURCE_ID_KEY`, which `server.auth.mapUserToResourceId`
@@ -59,6 +65,7 @@ export interface UserConnectRoutesOptions {
 const RESERVED_PROVIDER_IDS = new Set(['providers', 'connections', 'sessions']);
 
 const NO_STORE = 'no-store, private';
+const PROJECT_PROVIDER_POLICY_TTL_MS = 30_000;
 
 // Loose structural view of the Hono context core hands to custom API routes.
 // Kept `any`-shaped (like core's ApiRouteHandler) so this package does not
@@ -66,9 +73,16 @@ const NO_STORE = 'no-store, private';
 type RouteContext = any;
 
 interface RouteError {
-  status: 400 | 401 | 403 | 404 | 500 | 502;
+  status: 400 | 401 | 403 | 404 | 409 | 429 | 500 | 502;
   code: string;
   message: string;
+}
+
+interface ProviderPolicy {
+  /** Ordered provider ids, or undefined when the full platform catalog is allowed. */
+  providers: string[] | undefined;
+  /** Membership view of providers; undefined when the full platform catalog is allowed. */
+  allowlist: Set<string> | undefined;
 }
 
 function errorResponse(c: RouteContext, error: RouteError): Response {
@@ -78,8 +92,10 @@ function errorResponse(c: RouteContext, error: RouteError): Response {
 
 /**
  * Maps a platform-call failure to a safe end-user response. Platform detail
- * strings never reach the end user — this is an unauthenticated-adjacent
- * surface, and the details describe the developer's platform account.
+ * strings do not reach the end user — this is an unauthenticated-adjacent
+ * surface, and the details describe the developer's platform account. The one
+ * exception is 409 conflicts, whose details describe the caller's own
+ * connection state and are authored by the platform for display.
  */
 function toRouteError(error: unknown): RouteError {
   if (error instanceof MastraConnectError) {
@@ -92,6 +108,20 @@ function toRouteError(error: unknown): RouteError {
       error.code === 'invalid_options'
     ) {
       return { status: 500, code: 'misconfigured', message: 'Connect routes are not configured correctly.' };
+    }
+    if (error.status === 409) {
+      // Conflicts describe the end user's own connection state (per-resource
+      // connection caps, already-pending sessions, coming-soon providers) and
+      // the platform authors their detail strings for display, so forwarding
+      // them gives the user the action to take instead of a dead-end 502.
+      return {
+        status: 409,
+        code: 'conflict',
+        message: error.detail ?? 'The request conflicts with the current state of this connection.',
+      };
+    }
+    if (error.status === 429) {
+      return { status: 429, code: 'rate_limited', message: 'Too many requests. Try again shortly.' };
     }
     return { status: 502, code: 'platform_error', message: 'Platform request failed.' };
   }
@@ -185,13 +215,13 @@ function connectionScope(connection: ProjectConnection): 'global' | 'user' {
  * ```
  */
 export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[] {
-  if (!Array.isArray(options.providers) || options.providers.length === 0) {
+  if (options.providers !== undefined && (!Array.isArray(options.providers) || options.providers.length === 0)) {
     throw new MastraConnectError(
       'invalid_options',
-      'userConnectRoutes requires a non-empty providers allowlist: the end-user surface never defaults open.',
+      'Invalid providers: pass a non-empty allowlist, or omit the option to use the project provider configuration.',
     );
   }
-  const providers = options.providers.map(provider => {
+  const providers = options.providers?.map(provider => {
     const id = typeof provider === 'string' ? provider.trim().toLowerCase() : '';
     if (!id) {
       throw new MastraConnectError('invalid_options', 'Invalid provider id in userConnectRoutes providers allowlist.');
@@ -201,7 +231,8 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
     }
     return id;
   });
-  const allowlist = new Set(providers);
+  /** Explicit code configuration wins without reading project settings from the platform. */
+  const codeAllowlist = providers === undefined ? undefined : new Set(providers);
 
   const basePath = options.basePath ?? '/connect';
   if (!basePath.startsWith('/') || basePath.endsWith('/') || basePath.includes(':') || basePath.includes('*')) {
@@ -215,6 +246,33 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
   if (!projectId) {
     throw new MastraConnectError('missing_project_id', 'Missing project id: set MASTRA_PROJECT_ID or pass projectId.');
   }
+
+  let cachedProjectPolicy: { policy: ProviderPolicy; fetchedAt: number } | undefined;
+  let projectPolicyInflight: Promise<ProviderPolicy> | undefined;
+
+  /** Lazily loads project policy, sharing one short-lived snapshot across end-user requests and status polling. */
+  const resolveProviderPolicy = (client: ResolvedClient): Promise<ProviderPolicy> => {
+    if (providers !== undefined) return Promise.resolve({ providers, allowlist: codeAllowlist });
+    if (cachedProjectPolicy && Date.now() - cachedProjectPolicy.fetchedAt < PROJECT_PROVIDER_POLICY_TTL_MS) {
+      return Promise.resolve(cachedProjectPolicy.policy);
+    }
+    if (!projectPolicyInflight) {
+      projectPolicyInflight = getProjectIntegrationSettings(client, projectId)
+        .then(settings => {
+          const configured = settings.endUserProviders?.map(provider => provider.toLowerCase());
+          const policy: ProviderPolicy = {
+            providers: configured,
+            allowlist: configured === undefined ? undefined : new Set(configured),
+          };
+          cachedProjectPolicy = { policy, fetchedAt: Date.now() };
+          return policy;
+        })
+        .finally(() => {
+          projectPolicyInflight = undefined;
+        });
+    }
+    return projectPolicyInflight;
+  };
 
   if (options.client?.resourceId !== undefined) {
     throw new MastraConnectError(
@@ -281,17 +339,24 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       }
     };
 
-  /** Lists the caller's visible connections (global + own), filtered to the allowlist. */
-  const listVisibleConnections = async (client: ResolvedClient): Promise<ProjectConnection[]> => {
-    const connections = await listProjectConnections(client, projectId);
-    return connections.filter(connection => allowlist.has(connection.integrationId.toLowerCase()));
-  };
+  /**
+   * Lists the caller's visible connections (global + own, scoped by the
+   * platform via the resource header). Deliberately NOT filtered to the
+   * provider policy: the allowlist gates what end users can newly connect,
+   * not what already exists — agents keep resolving tools from existing
+   * connections, and narrowing the allowlist must not hide (or orphan) a
+   * user's own rows, which they still need to see and disconnect.
+   */
+  const listVisibleConnections = async (client: ResolvedClient): Promise<ProjectConnection[]> =>
+    listProjectConnections(client, projectId);
 
-  const providerParam = (c: RouteContext): string | null => {
+  const providerParam = (c: RouteContext, policy: ProviderPolicy): string | null => {
     const provider = String(c.req.param('provider') ?? '')
       .trim()
       .toLowerCase();
-    return allowlist.has(provider) ? provider : null;
+    if (!provider || RESERVED_PROVIDER_IDS.has(provider) || provider.includes('/')) return null;
+    if (policy.allowlist !== undefined && !policy.allowlist.has(provider)) return null;
+    return provider;
   };
 
   const notFound = (c: RouteContext, code: string, message: string): Response =>
@@ -305,20 +370,21 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       method: 'GET',
       requiresAuth: true,
       handler: gated(async (c, client) => {
-        const catalog = await listIntegrations(client);
+        const [catalog, policy] = await Promise.all([listIntegrations(client), resolveProviderPolicy(client)]);
+        const toListed = (entry: IntegrationCatalogEntry) => ({
+          id: entry.id,
+          displayName: entry.displayName ?? null,
+          logoUrl: entry.logoUrl ?? null,
+          authType: entry.authType ?? null,
+          authFields: entry.authFields ?? null,
+        });
+        if (policy.providers === undefined) {
+          return c.json({ providers: catalog.map(toListed) });
+        }
         const byId = new Map(catalog.map(entry => [entry.id.toLowerCase(), entry]));
-        const visible = providers.flatMap(id => {
+        const visible = policy.providers.flatMap(id => {
           const entry = byId.get(id);
-          if (!entry) return [];
-          return [
-            {
-              id: entry.id,
-              displayName: entry.displayName ?? null,
-              logoUrl: entry.logoUrl ?? null,
-              authType: entry.authType ?? null,
-              authFields: entry.authFields ?? null,
-            },
-          ];
+          return entry ? [toListed(entry)] : [];
         });
         return c.json({ providers: visible });
       }),
@@ -328,15 +394,28 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       method: 'GET',
       requiresAuth: true,
       handler: gated(async (c, client) => {
-        const connections = await listVisibleConnections(client);
+        // Display metadata comes from the FULL catalog, not the policy-
+        // filtered provider list: rows for de-allowlisted providers stay
+        // visible, so clients must still be able to render them. Best-effort —
+        // a catalog outage must not take down the listing.
+        const [connections, catalog] = await Promise.all([
+          listVisibleConnections(client),
+          listIntegrations(client).catch(() => [] as IntegrationCatalogEntry[]),
+        ]);
+        const catalogById = new Map(catalog.map(entry => [entry.id.toLowerCase(), entry]));
         return c.json({
-          connections: connections.map(connection => ({
-            id: connection.id,
-            integrationId: connection.integrationId,
-            status: connection.status,
-            accountLabel: connection.accountLabel ?? null,
-            scope: connectionScope(connection),
-          })),
+          connections: connections.map(connection => {
+            const entry = catalogById.get(connection.integrationId.toLowerCase());
+            return {
+              id: connection.id,
+              integrationId: connection.integrationId,
+              displayName: entry?.displayName ?? null,
+              logoUrl: entry?.logoUrl ?? null,
+              status: connection.status,
+              accountLabel: connection.accountLabel ?? null,
+              scope: connectionScope(connection),
+            };
+          }),
         });
       }),
     },
@@ -373,19 +452,66 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       }),
     },
     {
+      path: `${basePath}/connections/:id/launch`,
+      method: 'GET',
+      requiresAuth: true,
+      handler: gated(async (c, client) => {
+        // Launch gate: the only way a browser enters the OAuth flow. The
+        // vendor connect link is a bearer capability, so it is never returned
+        // by the session route; instead the popup navigates here, this route
+        // re-fetches the link from the platform under the caller's own
+        // resource assertion, and redirects. A caller who is not the
+        // session's owner gets a 404 from the platform before any OAuth page
+        // ever loads — which is what makes a leaked or fixated launch URL
+        // useless.
+        const id = String(c.req.param('id') ?? '');
+        if (!id) return notFound(c, 'connection_not_found', 'Connection not found.');
+        const { connectUrl, expiresAt } = await getConnectUrl(client, id);
+        c.header('Cache-Control', 'no-store');
+        // JSON redemption for headless auth: the hosted-page URL is just the
+        // session token in query-param clothing, so handing the token to the
+        // proven owner's fetch releases the exact same capability as the 302
+        // below — through the same identity and ownership checks. A null
+        // token (unrecognized URL shape) tells the client to fall back to
+        // the hosted popup; the vendor URL itself is never in the body.
+        if ((c.req.header('accept') ?? '').includes('application/json')) {
+          let sessionToken: string | null = null;
+          try {
+            sessionToken = new URL(connectUrl).searchParams.get('session_token');
+          } catch {
+            sessionToken = null;
+          }
+          return c.json({ sessionToken, expiresAt });
+        }
+        return c.redirect(connectUrl, 302);
+      }),
+    },
+    {
       path: `${basePath}/:provider/sessions`,
       method: 'POST',
       requiresAuth: true,
       handler: gated(async (c, client) => {
-        const provider = providerParam(c);
+        const policy = await resolveProviderPolicy(client);
+        const provider = providerParam(c, policy);
         if (!provider) return notFound(c, 'provider_not_found', 'Provider not available.');
+        if (policy.allowlist === undefined) {
+          // The full-catalog policy only proves the param is well formed;
+          // confirm the provider exists so unknown ids 404 instead of
+          // surfacing a platform error.
+          const known = (await listIntegrations(client)).some(entry => entry.id.toLowerCase() === provider);
+          if (!known) return notFound(c, 'provider_not_found', 'Provider not available.');
+        }
         const session = await createProjectConnectSession(client, projectId, provider);
         return c.json(
           {
             connectionId: session.connectionId,
             integrationId: session.integrationId,
-            connectUrl: session.connectUrl,
-            sessionToken: session.sessionToken,
+            // The browser never receives a launch capability — neither the
+            // vendor connect link nor the session token (which can open the
+            // vendor Connect UI by itself). It opens the launch gate instead,
+            // which verifies the caller's identity against the pending row
+            // immediately before OAuth entry.
+            launchUrl: `${basePath}/connections/${encodeURIComponent(session.connectionId)}/launch`,
             expiresAt: session.expiresAt,
           },
           201,
@@ -397,7 +523,8 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       method: 'GET',
       requiresAuth: true,
       handler: gated(async (c, client) => {
-        const provider = providerParam(c);
+        const policy = await resolveProviderPolicy(client);
+        const provider = providerParam(c, policy);
         if (!provider) return notFound(c, 'provider_not_found', 'Provider not available.');
         const returnTo = validateReturnTo(c.req.query('returnTo') ?? undefined, allowedOrigins);
         if (!returnTo.ok) {

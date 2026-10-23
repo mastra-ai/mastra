@@ -3,6 +3,7 @@ import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import { createSignal } from '@mastra/core/signals';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
 
@@ -12,12 +13,16 @@ import type { SessionRetirementCoordinator } from '../sandbox/session-retirement
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { seedSessionOrg } from '../session/org-seed.js';
 import {
+  isRunBound,
+  isWorkerSession,
   sessionMemoryResourceId,
   listFactorySessionThreads,
   sessionThreadsToMove,
   userSessionResourceFor,
 } from '../session/session-threads.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
+import { SESSION_OWNER_SIGNAL_TAG } from '../session-owner-signal.js';
+import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -28,7 +33,7 @@ import type {
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteAuth } from './route.js';
-import { canReadSessionResource, canViewSourceControlSession } from './session-access.js';
+import { canReadSessionResource, canSwitchSessionModel, canViewSourceControlSession } from './session-access.js';
 
 type RouteContext = Context;
 
@@ -58,6 +63,7 @@ export interface SourceControlSessionRoutesOptions {
   projects: Pick<FactoryProjectsStorage, 'get'>;
   users?: SessionOwnerUserProvider;
   controller?: MountedMastraCode['controller'];
+  audit?: AuditRecorder;
   memorySettings: Pick<MemorySettingsStorage, 'get'>;
   sessionRetirement?: SessionRetirementCoordinator;
   /** Whether the host sandbox can recreate a session's sandbox (false for local). */
@@ -98,8 +104,56 @@ function canRecreateSandbox(options: SourceControlSessionRoutesOptions): boolean
   return Boolean(options.sessionRetirement) && options.sandboxRecreateSupported === true;
 }
 
-function withCapabilities<T extends object>(session: T, recreateSandbox: boolean) {
-  return { ...session, capabilities: { recreateSandbox } };
+type SessionCapabilities = { recreateSandbox: boolean; takeOwnership: boolean; switchModel: boolean };
+
+function withCapabilities<T extends object>(session: T, capabilities: SessionCapabilities) {
+  return { ...session, capabilities };
+}
+
+type OwnershipRefusal = { status: 409 | 503; error: string };
+
+async function ownershipRefusal(
+  session: SourceControlSession,
+  options: SourceControlSessionRoutesOptions,
+): Promise<OwnershipRefusal | null> {
+  // Shared threads live on the Factory's memory resource, which an owner change keeps; without one they sit on the owner's.
+  if (!session.factoryProjectId) {
+    return { status: 409, error: "This session isn't linked to a Factory, so it can't change owner." };
+  }
+  if (!options.workItems) {
+    return {
+      status: 503,
+      error: "Session ownership can't change yet: Factory storage is still starting up. Try again in a moment.",
+    };
+  }
+  // Slack finds a thread's session by its sender, a Factory run's session follows its work item,
+  // and a side session acts for the session that started it.
+  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) || (await isWorkerSession(session, options.workItems))) {
+    return { status: 409, error: 'Only user sessions can change owner' };
+  }
+  return null;
+}
+
+/** Marks the takeover in every thread of the session: the transcript draws it as a divider and the model reads it as context. */
+async function markOwnerChange(
+  options: SourceControlSessionRoutesOptions,
+  session: SourceControlSession,
+  newOwner: { id: string; name?: string },
+) {
+  const { controller } = options;
+  const memory = await controller?.getMastra()?.getStorage()?.getStore('memory');
+  if (!controller || !memory) return;
+  const threads = await listFactorySessionThreads(controller, session, options.workItems);
+  if (threads.length === 0) return;
+  const contents = `${newOwner.name ?? 'A teammate'} took ownership`;
+  await memory.saveMessages({
+    messages: threads.map(thread =>
+      createSignal({ type: 'reactive', tagName: SESSION_OWNER_SIGNAL_TAG, contents, author: newOwner }).toDBMessage({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+      }),
+    ),
+  });
 }
 
 /** Abort the session's active run and wait (bounded) for it to stop. Returns whether a run was aborted. */
@@ -118,11 +172,11 @@ async function abortActiveRun(
       await new Promise(resolve => setTimeout(resolve, ABORT_SETTLE_POLL_MS));
     }
     if (live.stream.isActive()) {
-      console.warn('[Factory Sessions] Aborted run did not settle before sandbox recreate', { sessionId });
+      console.warn('[Factory Sessions] Aborted run did not settle in time', { sessionId });
     }
     return true;
   } catch (error) {
-    console.warn('[Factory Sessions] Failed to abort the active run before sandbox recreate', { sessionId, error });
+    console.warn('[Factory Sessions] Failed to abort the active run', { sessionId, error });
     return false;
   }
 }
@@ -203,6 +257,18 @@ async function resolveSession(
   return matches[0] ?? null;
 }
 
+async function resolveReadableSession(
+  options: SourceControlSessionRoutesOptions,
+  sessionId: string,
+  viewer: { orgId: string; userId: string },
+) {
+  const match = await resolveSession(options.sourceControls, sessionId);
+  if (!match || !canViewSourceControlSession(match.session, viewer)) return null;
+  const resourceId = await sessionMemoryResourceId(options.controller, match.session, options.workItems);
+  if (!canReadSessionResource(match.session, resourceId, viewer)) return null;
+  return { ...match, resourceId };
+}
+
 /**
  * Start the live conversation for a user session on its own thread (thread id === session id), under the resource
  * its visibility gives it. Agent-controller
@@ -252,6 +318,11 @@ function createSessionNaming() {
     return started;
   };
 }
+
+const OWNER_CONFLICT_MESSAGES = {
+  stale_owner: 'Someone else owns this session now',
+  branch_owned: 'You already have a session on this branch',
+} as const;
 
 function titleModel(modelId: string) {
   return ({ requestContext }: { requestContext: RequestContext }) =>
@@ -411,7 +482,13 @@ function projectSessionRoutes(
               return c.json({ error: 'Session ID conflict' }, 409);
             }
             await startUserSessionConversation(options.controller, existing);
-            return c.json({ session: withCapabilities(existing, canRecreateSandbox(options)) });
+            return c.json({
+              session: withCapabilities(existing, {
+                recreateSandbox: canRecreateSandbox(options),
+                takeOwnership: false,
+                switchModel: true,
+              }),
+            });
           }
         }
 
@@ -445,7 +522,13 @@ function projectSessionRoutes(
         }
         await startUserSessionConversation(options.controller, session);
         // The creator owns the session, so no admin check is needed.
-        return c.json({ session: withCapabilities(session, canRecreateSandbox(options)) });
+        return c.json({
+          session: withCapabilities(session, {
+            recreateSandbox: canRecreateSandbox(options),
+            takeOwnership: false,
+            switchModel: true,
+          }),
+        });
       },
     }),
   ];
@@ -486,22 +569,25 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
-        const match = await resolveSession(options.sourceControls, c.req.param('sessionId'));
-        const session = match?.session;
-        if (!session || !canViewSourceControlSession(session, resolved.tenant)) {
-          return c.json({ error: 'Session not found' }, 404);
-        }
-        // The client opens the session by its id and creates it under this resource.
-        const resourceId = await sessionMemoryResourceId(options.controller, session, options.workItems);
-        if (!canReadSessionResource(session, resourceId, resolved.tenant)) {
-          return c.json({ error: 'Session not found' }, 404);
-        }
+        const readable = await resolveReadableSession(options, c.req.param('sessionId'), resolved.tenant);
+        if (!readable) return c.json({ error: 'Session not found' }, 404);
+        const { session, resourceId } = readable;
         const owners = await resolveOwnerProfiles([session.userId]);
         const recreateSandbox =
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
+        const takeOwnership =
+          session.userId !== resolved.tenant.userId && (await ownershipRefusal(session, options)) === null;
         return c.json({
-          session: { ...withCapabilities(withOwnerProfile(session, owners), recreateSandbox), resourceId },
+          session: {
+            ...withCapabilities(withOwnerProfile(session, owners), {
+              recreateSandbox,
+              takeOwnership,
+              switchModel: canSwitchSessionModel(session, resolved.tenant),
+            }),
+            // The client opens the session by its id and creates it under this resource.
+            resourceId,
+          },
         });
       },
     }),
@@ -597,6 +683,82 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         }
       },
     }),
+    registerApiRoute('/web/user-sessions/:sessionId/owner', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const { orgId, userId } = resolved.tenant;
+        const sessionId = c.req.param('sessionId');
+        const readable = await resolveReadableSession(options, sessionId, resolved.tenant);
+        if (!readable) return c.json({ error: 'Session not found' }, 404);
+        const { sourceControl, session } = readable;
+        let body: unknown;
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (!isJsonObject(body) || typeof body.expectedOwnerId !== 'string' || !body.expectedOwnerId.trim()) {
+          return c.json({ error: 'Invalid expectedOwnerId' }, 400);
+        }
+        const expectedOwnerId = body.expectedOwnerId;
+        if (session.userId === userId) return c.json({ session });
+        const refusal = await ownershipRefusal(session, options);
+        if (refusal) return c.json({ error: refusal.error }, refusal.status);
+        const transferred = await sourceControl.sessions.transferOwner({
+          sessionId,
+          expectedUserId: expectedOwnerId,
+          toUserId: userId,
+        });
+        if (transferred.status === 'conflict') {
+          const current = transferred.session;
+          if (!current || !canViewSourceControlSession(current, resolved.tenant)) {
+            return c.json({ error: 'Session not found' }, 404);
+          }
+          if (current.userId === userId) return c.json({ session: current });
+          return c.json(
+            {
+              error: OWNER_CONFLICT_MESSAGES[transferred.reason],
+              reason: transferred.reason,
+              currentOwnerId: current.userId,
+            },
+            409,
+          );
+        }
+        const controller = options.controller;
+        // Model calls now bill the taker, so stop the turn; only after the CAS, so a lost race never kills it.
+        await abortActiveRun(controller, sessionId, options.abortSettleTimeoutMs ?? ABORT_SETTLE_TIMEOUT_MS);
+        // The live host acts as the old owner; the next message starts one as the new.
+        if (controller && (await controller.getSession(sessionId))) {
+          await controller.deleteSession({ sessionId }).catch(error => {
+            console.error('[Factory Sessions] Failed to recycle transferred live session', { sessionId, error });
+          });
+        }
+        const newOwner = (await resolveOwnerProfiles([userId])).get(userId) ?? { id: userId };
+        await markOwnerChange(options, transferred.session, newOwner).catch(error => {
+          console.error('[Factory Sessions] Failed to mark the ownership change in the transcript', {
+            sessionId,
+            error,
+          });
+        });
+        await options.audit
+          ?.record({
+            orgId,
+            actorId: userId,
+            action: 'factory.session.owner_transferred',
+            targets: [{ type: 'session', id: session.id, name: session.title ?? session.branch }],
+            metadata: { fromOwnerId: expectedOwnerId, toOwnerId: userId },
+            factoryProjectId: session.factoryProjectId ?? undefined,
+            projectRepositoryId: session.projectRepositoryId ?? undefined,
+          })
+          .catch(error => {
+            console.error('[Factory Sessions] Failed to record ownership transfer audit event', { sessionId, error });
+          });
+        return c.json({ session: transferred.session });
+      },
+    }),
     registerApiRoute('/web/user-sessions/:sessionId', {
       method: 'DELETE',
       requiresAuth: false,
@@ -684,15 +846,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         // Only sessions a person started in the UI can change. Factory runs and
         // Slack threads keep the visibility they were created with: runs and
         // channel threads stay with the team, Slack DMs stay private.
-        if (
-          row.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) ||
-          (row.factoryProjectId !== null &&
-            (await options.workItems.hasRunBindingForSession({
-              orgId: row.orgId,
-              factoryProjectId: row.factoryProjectId,
-              sessionId,
-            })))
-        ) {
+        if (row.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) || (await isRunBound(row, options.workItems))) {
           return c.json({ error: 'Only user sessions can change visibility' }, 409);
         }
         // Sharing puts the session on its Factory's memory; without a Factory there is nowhere to share it to.
@@ -713,13 +867,21 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         // row says private, and the row says shared before threads reach the Factory.
         // A failed move then leaves the session less visible, never more, and a retry
         // moves what is left.
-        const moveThreads = async () => {
-          for (const threadId of threadIds) await options.moveThread!({ threadId, resourceId });
+        const moveThreads = async (to: string) => {
+          for (const threadId of threadIds) await options.moveThread!({ threadId, resourceId: to });
         };
-        if (visibility === 'private') await moveThreads();
-        const updated = await match.sourceControl.sessions.setVisibility({ sessionId, visibility });
-        if (!updated) return c.json({ error: 'Session not found' }, 404);
-        if (visibility === 'org') await moveThreads();
+        if (visibility === 'private') await moveThreads(resourceId);
+        const updated = await match.sourceControl.sessions.setVisibility({
+          sessionId,
+          visibility,
+          expectedUserId: row.userId,
+        });
+        if (!updated) {
+          // A teammate took the shared session after the read: its threads go back to the Factory.
+          if (visibility === 'private') await moveThreads(userSessionResourceFor(row, 'org'));
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        if (visibility === 'org') await moveThreads(resourceId);
         // A live session keeps the resource it started on. Drop it so the next
         // request resumes on its moved thread, or point it at the new resource
         // when it has no thread to resume from yet.

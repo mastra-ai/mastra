@@ -10,7 +10,9 @@ export interface AddItemError {
 }
 
 export interface AddItemDraft {
+  /** JSON is sent parsed; anything else is sent as plain text. */
   input: string;
+  /** Like the input; blank sends nothing. */
   groundTruth: string;
   /** Raw JSON: an ordered array of mocks, sent as written so every mock the runtime supports can be declared. */
   toolMocks: string;
@@ -32,6 +34,12 @@ const parseJson = (raw: string): JsonResult => {
   } catch {
     return { ok: false };
   }
+};
+
+/** Text that parses as JSON is sent as that value; any other text is sent as a string. */
+const parseJsonOrText = (raw: string): unknown => {
+  const parsed = parseJson(raw);
+  return parsed.ok ? parsed.value : raw;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -84,15 +92,10 @@ function toExpectedStep(row: TrajectoryStepRow, index: number): { step: Expected
 
 /** The request body for the dialog, or the first error with the field that owns it. Options that are off are left out. */
 export function buildAddItemPayload(draft: AddItemDraft): { params: AddItemParams } | { error: AddItemError } {
-  const input = parseJson(draft.input);
-  if (!input.ok) return { error: { field: 'input', message: 'Input must be valid JSON' } };
-  const params: AddItemParams = { input: input.value };
+  if (!draft.input.trim()) return { error: { field: 'input', message: 'Input is required' } };
+  const params: AddItemParams = { input: parseJsonOrText(draft.input) };
 
-  if (draft.groundTruth.trim()) {
-    const groundTruth = parseJson(draft.groundTruth);
-    if (!groundTruth.ok) return { error: { field: 'groundTruth', message: 'Ground truth must be valid JSON' } };
-    params.groundTruth = groundTruth.value;
-  }
+  if (draft.groundTruth.trim()) params.groundTruth = parseJsonOrText(draft.groundTruth);
 
   const toolMocks = parseToolMocks(draft.toolMocks);
   if ('message' in toolMocks) return { error: { field: 'toolMocks', message: toolMocks.message } };

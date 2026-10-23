@@ -105,7 +105,7 @@ Each value in the `providers` record form is `true`, `false`, or a `ChannelsProv
 
 The resolved `ChannelsResolver` satisfies `@mastra/core`'s channels-resolver contract:
 
-- **Callable**: returns the current `Record<string, ChannelProvider>` of providers with an active connection. Mastra invokes it at runtime; the TTL cache makes repeat calls cheap. Only the first resolution waits on the platform. After the TTL expires, resolution returns the stale snapshot immediately and refreshes in the background, skipping the refresh during a short cooldown after a failed fetch, so a new connection can appear one resolution later than the TTL suggests.
+- **Callable**: returns the current `Record<string, ChannelProvider>` of providers with an active connection. Mastra invokes it at runtime, using the TTL cache to keep repeat calls cheap. Only the first resolution waits on the platform. After the TTL expires, resolution returns the stale snapshot immediately and refreshes in the background, skipping the refresh during a short cooldown after a failed fetch, so a new connection can appear one resolution later than the TTL suggests.
 - `getRoutes()`: the union of API routes for every enabled channel, available synchronously so Mastra can mount them at construction. Routes exist before (and after) their provider has an active connection.
 - `refresh()`: fetches connections from the platform now and updates the cache. Rejects if the platform fetch fails.
 - `disconnect()`: clears the cached snapshot so the next resolution fetches fresh. It doesn't tear down providers, sessions, or credentials.

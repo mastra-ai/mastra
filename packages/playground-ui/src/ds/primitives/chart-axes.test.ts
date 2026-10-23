@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chartYTickCount, labelWidth, pickTimeTicks } from './chart-axes';
+import { chartYTickCount, labelWidth, niceYTicks, pickTimeTicks } from './chart-axes';
 
 const HOUR = 3_600_000;
 const start = new Date(2026, 9, 5, 14).getTime();
@@ -148,5 +148,45 @@ describe('chartYTickCount', () => {
     expect(chartYTickCount(120)).toBe(3);
     expect(chartYTickCount(260)).toBe(5);
     expect(chartYTickCount(1000)).toBe(5);
+  });
+});
+
+describe('niceYTicks', () => {
+  it('rounds up just above the data instead of doubling the step', () => {
+    // Recharts gave a $4.40 peak 0, 2, 4, 6, 8.
+    expect(niceYTicks(4.4, 5)).toEqual([0, 2.5, 5]);
+    expect(niceYTicks(12, 5)).toEqual([0, 5, 10, 15]);
+    expect(niceYTicks(100, 5)).toEqual([0, 25, 50, 75, 100]);
+  });
+
+  it('takes the finer step when two reach the same top', () => {
+    expect(niceYTicks(4, 5)).toEqual([0, 1, 2, 3, 4]);
+    expect(niceYTicks(1, 5)).toEqual([0, 0.25, 0.5, 0.75, 1]);
+  });
+
+  it('fits the tick count the height allows', () => {
+    expect(niceYTicks(4.4, 3)).toEqual([0, 2.5, 5]);
+    expect(niceYTicks(7, 3)).toEqual([0, 5, 10]);
+  });
+
+  it('keeps counts on whole ticks', () => {
+    // 0, 2.5, 5, 7.5 would print as 0, 3, 5, 8.
+    expect(niceYTicks(7.2, 5, true)).toEqual([0, 2, 4, 6, 8]);
+    expect(niceYTicks(40, 5, true)).toEqual([0, 10, 20, 30, 40]);
+    expect(niceYTicks(140, 5, true)).toEqual([0, 50, 100, 150]);
+  });
+
+  it('never puts the top tick under the data', () => {
+    expect(niceYTicks(4.0000000001, 5)).toEqual([0, 2.5, 5]);
+  });
+
+  it('keeps small values free of float noise', () => {
+    expect(niceYTicks(0.3, 5)).toEqual([0, 0.1, 0.2, 0.3]);
+  });
+
+  it('leaves the axis to Recharts when there is nothing to scale', () => {
+    expect(niceYTicks(0, 5)).toBeUndefined();
+    expect(niceYTicks(-3, 5)).toBeUndefined();
+    expect(niceYTicks(Number.NaN, 5)).toBeUndefined();
   });
 });

@@ -10,11 +10,16 @@ describe('isPlatformAuthSupportedHost', () => {
     'localhost',
     '127.0.0.1',
     '[::1]',
+    'main.factory.mastra.localhost',
+    'Feature-X.factory.mastra.localhost',
   ])('accepts %s', hostname => {
     expect(isPlatformAuthSupportedHost(hostname)).toBe(true);
   });
 
-  it.each(['factory.acme.com', 'mastra.cloud.evil.com', 'evilmastra.cloud'])('rejects %s', hostname => {
-    expect(isPlatformAuthSupportedHost(hostname)).toBe(false);
-  });
+  it.each(['factory.acme.com', 'mastra.cloud.evil.com', 'evilmastra.cloud', 'localhost.evil.com', 'evillocalhost'])(
+    'rejects %s',
+    hostname => {
+      expect(isPlatformAuthSupportedHost(hostname)).toBe(false);
+    },
+  );
 });

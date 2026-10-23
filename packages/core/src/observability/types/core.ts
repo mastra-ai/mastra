@@ -23,6 +23,7 @@ import type {
   ExportedSpan,
   Span,
   SpanIds,
+  SpanSnapshot,
   SpanOutputProcessor,
   SpanType,
   StartSpanOptions,
@@ -235,7 +236,7 @@ export interface ObservabilityInstance {
    * @param cached - The exported span data to rebuild from
    * @returns A span that can have end()/update()/error() called on it
    */
-  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType>;
+  rebuildSpan<TType extends SpanType>(cached: SpanSnapshot<TType>): Span<TType>;
 
   /**
    * Force flush any buffered/queued spans from all exporters and the bridge

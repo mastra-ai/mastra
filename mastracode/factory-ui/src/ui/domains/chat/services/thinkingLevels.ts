@@ -35,36 +35,50 @@ export function thinkingLevelOptionsForModel(
   return thinkingLevelOptions(getAvailableThinkingLevelsForModel(modelId, reasoningOptions));
 }
 
-export type ThinkingLevelOrigin = 'session' | 'factory';
+export type ThinkingDefaultOrigin = 'personal' | 'factory';
+export type ThinkingLevelOrigin = 'session' | ThinkingDefaultOrigin;
 
-export const FACTORY_THINKING_SOURCE_LABEL = 'Factory default';
+export const THINKING_DEFAULT_SOURCE_LABELS: Record<ThinkingDefaultOrigin, string> = {
+  personal: 'Personal default',
+  factory: 'Factory default',
+};
+
+export interface ThinkingDefault {
+  level: ThinkingLevelSetting;
+  origin: ThinkingDefaultOrigin;
+}
 
 export interface EffectiveThinkingLevel {
   level: ThinkingLevelSetting;
   origin: ThinkingLevelOrigin;
 }
 
-function chosenThinkingLevel(
-  override: ThinkingLevelSetting | undefined,
-  factoryDefault: ThinkingLevelSetting | undefined,
-): EffectiveThinkingLevel | undefined {
-  if (override) return { level: override, origin: 'session' };
-  if (!factoryDefault) return undefined;
-  return { level: factoryDefault, origin: 'factory' };
+/** Undefined while loading; null when it follows the Factory. */
+export type PersonalThinkingDefault = ThinkingLevelSetting | null | undefined;
+
+export function routedThinkingDefault(
+  personal: PersonalThinkingDefault,
+  factory: ThinkingLevelSetting | undefined,
+): ThinkingDefault | undefined {
+  if (personal) return { level: personal, origin: 'personal' };
+  if (personal === undefined || !factory) return undefined;
+  return { level: factory, origin: 'factory' };
 }
 
 export function resolveEffectiveThinkingLevel({
   modelId,
   reasoningOptions,
   override,
-  factoryDefault,
+  thinkingDefault,
 }: {
   modelId: string | undefined;
   reasoningOptions: readonly ModelReasoningOption[] | undefined;
   override: ThinkingLevelSetting | undefined;
-  factoryDefault: ThinkingLevelSetting | undefined;
+  thinkingDefault: ThinkingDefault | undefined;
 }): EffectiveThinkingLevel | undefined {
-  const chosen = chosenThinkingLevel(override, factoryDefault);
+  const chosen: EffectiveThinkingLevel | undefined = override
+    ? { level: override, origin: 'session' }
+    : thinkingDefault;
   if (!chosen || !modelId) return chosen;
   return { ...chosen, level: runThinkingLevel(modelId, chosen.level, reasoningOptions) };
 }

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ai-sdk",
-  "version": "1.11.2-alpha.0",
+  "version": "1.11.2",
   "description": "Adds custom API routes to be compatible with the AI SDK UI parts",
   "type": "module",
   "main": "dist/index.js",
@@ -53,7 +53,7 @@
     "@types/json-schema": "^7.0.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

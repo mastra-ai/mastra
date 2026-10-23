@@ -448,6 +448,8 @@ export interface ToolCallAttributes extends AIBaseAttributes {
   toolDescription?: string;
   toolCallId?: string;
   success?: boolean;
+  /** True when a dataset experiment tool mock intercepted the call (served, mismatched, exhausted or denied) and the tool never ran */
+  mocked?: boolean;
 }
 
 /**
@@ -1486,6 +1488,9 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** Returns a lightweight span ready for export */
   exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined;
 
+  /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
+  snapshot(): SpanSnapshot<TType> | undefined;
+
   /** Returns the traceId on span, unless NoOpSpan, then undefined */
   get externalTraceId(): string | undefined;
 
@@ -1625,6 +1630,16 @@ export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
 }
 
 /**
+ * A span saved between durable steps, for `rebuildSpan()`. Extends the exported
+ * form with runtime state that exporters do not need, so spans created under
+ * the rebuilt span keep honouring the trace's `requestContextKeys`,
+ * `hideInput` and `hideOutput`.
+ */
+export interface SpanSnapshot<TType extends SpanType> extends ExportedSpan<TType> {
+  traceState?: TraceState;
+}
+
+/**
  * Options for ending a model generation span
  */
 export interface EndGenerationOptions extends EndSpanOptions<SpanType.MODEL_GENERATION> {
@@ -1701,7 +1716,7 @@ export interface IModelSpanTracker {
    * Export the current step span for later rebuilding (durable execution).
    * Returns undefined if no step span is active.
    */
-  exportCurrentStep(): ExportedSpan<SpanType.MODEL_STEP> | undefined;
+  exportCurrentStep(): SpanSnapshot<SpanType.MODEL_STEP> | undefined;
 
   /**
    * Get the pending step finish payload (captured when defer mode is enabled).

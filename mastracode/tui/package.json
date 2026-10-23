@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.48.0-alpha.12",
+  "version": "0.48.1-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -127,7 +127,7 @@
     "strip-ansi": "^7.2.0",
     "tokenx": "^1.3.0",
     "vscode-jsonrpc": "^8.2.1",
-    "vscode-languageserver-protocol": "^3.17.5",
+    "vscode-languageserver-protocol": "^3.18.4",
     "yaml": "^2.7.1",
     "zod": "catalog:"
   },
@@ -135,11 +135,11 @@
     "@copilotkit/aimock": "^1.29.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "@xterm/headless": "6.0.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:ts6",
     "vitest": "catalog:"

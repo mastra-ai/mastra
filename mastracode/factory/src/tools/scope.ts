@@ -8,6 +8,7 @@ import {
   getFactoryAuthUserId,
 } from '../auth.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
+import { isWorkerSession } from '../session/session-threads.js';
 import { auditActorProfile } from '../storage/domains/audit/base.js';
 import type { AuditActorProfileInput } from '../storage/domains/audit/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -86,19 +87,11 @@ export async function resolveFactoryToolScope({
   // A caller from another org never acts here, worker or not.
   if (caller && row.orgId !== caller.orgId) return null;
 
-  // A side session works for the session that started it. Otherwise any
-  // binding, active or revoked, on any thread: a session that ever ran a role stays a worker.
   const origin =
     row.originSessionId && row.originThreadId
       ? { sessionId: row.originSessionId, threadId: row.originThreadId }
       : undefined;
-  const worker =
-    origin !== undefined ||
-    (await workItems.hasRunBindingForSession({
-      orgId: row.orgId,
-      factoryProjectId: row.factoryProjectId,
-      sessionId: row.sessionId,
-    }));
+  const worker = await isWorkerSession(row, workItems);
 
   // A worker acts as its session row: dispatcher-driven runs carry no signed-in user.
   // A user session acts as the signed-in caller, who must be able to see it.

@@ -398,7 +398,11 @@ Text uses roles, not sizes. A role such as `body-sm` or `caption` sets size, lin
 
 Shared components own their typography. Use their existing size and semantic variant APIs, and let compound slots style direct children through inheritance. Use `Txt` for text that the call site owns. Do not add a generic text-role prop or wrap arbitrary children just to migrate a CSS class. A specialized surface can use the existing `className` escape hatch with a DS role when the component's defaults do not fit.
 
+Floating menu rows, values, and search fields use `menu`: 13px text at weight 450 with a 20px line height and −0.01em tracking. DropdownMenu, ContextMenu, Select, and Combobox share this role; their triggers keep the button label role. Labels use the muted foreground tone, with lighter icons. Hover, keyboard highlight, and open submenus increase the contrast of both labels and icons together.
+
 `hero` and `lead` share the responsive typography of welcome pages. `eyebrow` supplies the size, weight, tracking, and uppercase treatment of section labels. Use `font="display"` when the display family is needed independently of the role.
+
+`display-lg` is the 28px role for plan prices and credit balances. `display` remains 22px. Use `<Txt variant="display-lg">$250</Txt>` without size or weight overrides.
 
 `Txt` defaults to the `body` role. With `as="strong"` or `as="b"`, omitting `variant` keeps the text bold; an explicit variant uses that role's weight.
 
@@ -494,6 +498,54 @@ import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 
 <CodeBlock lang="ts" code={snippet} />
 ```
+
+### Billing usage meters
+
+`Meter` keeps its red overage treatment by default. Set `variant="over-allowance"` for a warning segment and pass the amount charged in dollars through `paidFromCredits`:
+
+```tsx
+import { Meter } from '@mastra/playground-ui/components/Meter';
+
+<Meter
+  variant="over-allowance"
+  value={112}
+  max={100}
+  paidFromCredits={4.37}
+  label="vCPU"
+  aria-label="vCPU"
+  aria-valuetext="112 of 100 vCPU-hours, 12 over"
+/>;
+```
+
+The optional `label` slot accepts text or React content above the bar. Long labels truncate with an ellipsis to keep the label and caption on one line. The paid-from-credits caption sits on the right of that row, or above the bar on its own when no label is supplied. Keep supplying an accessible name through `aria-label` or `aria-labelledby`.
+
+The caption reads “$4.37 paid from credits” only when usage exceeds the allowance and the charged amount is positive. It is linked to the meter’s accessible description, alongside any caller description and `Meter.Source` key. The meter does not calculate charges from usage. `Meter.Source` children still reveal the source breakdown on hover or keyboard focus.
+
+See DataDisplay/Meter in Storybook for the billing states. Feedback/Dialog’s Resize while open story covers a full-size dialog and a form dialog crossing the 640px drawer breakpoint in either direction. Keep form drafts in caller-owned state when they must survive the popup remount.
+
+### Lint rules
+
+The package ships its design-system lint rules as an [oxlint](https://oxc.rs/docs/guide/usage/linter) JS plugin that apps on the design system can enable. Load the plugin and spread the recommended rules into your `oxlint.config.ts`:
+
+```ts
+import { recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
+import { defineConfig } from 'oxlint';
+
+export default defineConfig({
+  jsPlugins: ['@mastra/playground-ui/oxlint'],
+  rules: { ...playgroundUiRules },
+});
+```
+
+| Rule                              | Flags                                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `playground-ui/icon-button-size`  | A `<Button>` holding only an icon without an `icon-*` size                                       |
+| `playground-ui/text-role`         | Tailwind text sizes (`text-sm`, `text-[13px]`) instead of a text role                            |
+| `playground-ui/txt-tone`          | A `text-foreground` / `text-muted-foreground` / `text-placeholder` class on `<Txt>`              |
+| `playground-ui/font-mono`         | `font-mono` on `<Txt>`; `{ anywhere: true, allowIn: ['Input'] }` checks every class string       |
+| `playground-ui/no-barrel-imports` | Imports, re-exports and `vi.mock()` of the package root or a `components`/`hooks`/`utils` barrel |
+
+Turn rules off per glob in `overrides`, for example for tests and stories.
 
 ## Documentation
 

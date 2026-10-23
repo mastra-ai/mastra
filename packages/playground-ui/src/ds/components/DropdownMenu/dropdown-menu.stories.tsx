@@ -84,7 +84,7 @@ export const Variants: Story = {
 export const CustomRender: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger render={<Button size="md">Open Menu</Button>} />
+      <DropdownMenu.Trigger render={<Button size="md">Open menu</Button>} />
       {menuItems}
     </DropdownMenu>
   ),
@@ -190,7 +190,7 @@ export const WithLabelsAndGroups: Story = {
           </DropdownMenu.Item>
           <DropdownMenu.Item>
             <Plus />
-            <span>New Team</span>
+            <span>New team</span>
             <DropdownMenu.Shortcut>Ctrl+T</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
         </DropdownMenu.Group>
@@ -218,10 +218,10 @@ export const WithCheckboxItems: Story = {
           <DropdownMenu.Label>Appearance</DropdownMenu.Label>
           <DropdownMenu.Separator />
           <DropdownMenu.CheckboxItem checked={showStatusBar} onCheckedChange={setShowStatusBar}>
-            Status Bar
+            Status bar
           </DropdownMenu.CheckboxItem>
           <DropdownMenu.CheckboxItem checked={showActivityBar} onCheckedChange={setShowActivityBar}>
-            Activity Bar
+            Activity bar
           </DropdownMenu.CheckboxItem>
           <DropdownMenu.CheckboxItem checked={showPanel} onCheckedChange={setShowPanel}>
             Panel

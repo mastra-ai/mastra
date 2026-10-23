@@ -1,7 +1,7 @@
 import { rememberedBoardPath } from '../../factory/services/boardViews';
 import type { FactoryProject } from './github';
 
-const PRESERVED_FACTORY_ROUTE = /^(?:\/(?:work|review|activity|rules|new)|\/settings(?:\/[^/]+){0,2})\/?$/;
+const PRESERVED_FACTORY_ROUTE = /^(?:\/(?:work|review|rules|new)|\/settings(?:\/[^/]+){0,2})\/?$/;
 const BUILT_IN_BOARD_ROUTE = /^\/(work|review)\/?$/;
 
 /** Landing path for a server-backed factory project. */
