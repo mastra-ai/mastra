@@ -366,6 +366,14 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
           state.deferredStepFinishChunk = undefined;
           if (deferredChunk && pubsub) {
+            // Carry the step's response messages so `onStepFinish(event).response.messages` and
+            // `output.steps[i].response.messages` match the regular loop (#26780), as core does.
+            try {
+              const list = new MessageList({}).deserialize(state.messageListState);
+              deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
+            } catch (error) {
+              mastra?.getLogger?.()?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
+            }
             await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
               await emitChunkEvent(pubsub, state.runId, deferredChunk);
             });
