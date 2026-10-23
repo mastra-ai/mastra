@@ -2762,7 +2762,15 @@ export class DurableAgent<
     const aborted = this.#abortThreadStreamLocally(options);
     // The lookup is async, so this synchronous call can't report its outcome.
     // Server routes use `__abortThreadStreamAcrossProcesses` for that.
-    if (!aborted && !options.localOnly) void this.#abortThreadLeaseOwner(options);
+    if (!aborted && !options.localOnly) {
+      void this.#abortThreadLeaseOwner(options).catch(error => {
+        this.#mastra?.getLogger?.()?.warn?.('Failed to abort durable agent thread run on another process', {
+          agentId: this.id,
+          threadId: options.threadId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
     return aborted;
   }
 
@@ -2802,12 +2810,14 @@ export class DurableAgent<
     if (!runId) return false;
     // Never stop a successor run the caller didn't mean (#24422).
     if (options.expectedRunId !== undefined && options.expectedRunId !== runId) return false;
+    // The run executes elsewhere, so success means the request was published: a
+    // failed lease lookup or publish throws rather than reading as an idle thread.
     if (options.clearPendingSignals) {
       // Queued input lives on the owner, which must clear it before the run ends and
       // drains it; the thread-topic request does both there, in that order.
-      agentThreadStreamRuntime.requestThreadRunAbort(this.getPubSub(), options, runId);
+      await agentThreadStreamRuntime.requestThreadRunAbort(this.getPubSub(), options, runId);
     } else {
-      this.#abortDurableRun(runId);
+      await publishAbortRequest(this.pubsub, runId);
     }
     return true;
   }

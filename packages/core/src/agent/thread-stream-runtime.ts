@@ -907,7 +907,7 @@ export class AgentThreadStreamRuntime {
   /**
    * The run holding the thread's lease, wherever it executes. Lets a process
    * that never saw a thread's run find it. `undefined` without a lease backend
-   * or when the backend can't answer.
+   * or when no run holds the lease; rejects when the backend can't answer.
    */
   async getThreadLeaseOwnerRunId(
     pubsub: PubSub | undefined,
@@ -915,9 +915,7 @@ export class AgentThreadStreamRuntime {
   ): Promise<string | undefined> {
     const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
     if (isFallback) return undefined;
-    const owner = await provider
-      .getLeaseOwner(this.#threadKey(options.resourceId, options.threadId))
-      .catch(() => undefined);
+    const owner = await provider.getLeaseOwner(this.#threadKey(options.resourceId, options.threadId));
     // A run retaking its lease holds it under a token prefixed with its run id.
     return owner?.split(RETAKE_LEASE_MARKER)[0] || undefined;
   }
@@ -931,8 +929,8 @@ export class AgentThreadStreamRuntime {
     pubsub: PubSub | undefined,
     options: AgentThreadIdentityOptions & { clearPendingSignals?: boolean },
     runId: string,
-  ): void {
-    this.#publish(this.#getPubSub(pubsub), this.#threadKey(options.resourceId, options.threadId), {
+  ): Promise<void> {
+    return this.#publishAndWait(this.#getPubSub(pubsub), this.#threadKey(options.resourceId, options.threadId), {
       type: 'run-abort-requested',
       runId,
       ...(options.clearPendingSignals ? { clearPendingSignals: true } : {}),

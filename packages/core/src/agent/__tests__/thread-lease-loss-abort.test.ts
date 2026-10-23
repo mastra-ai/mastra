@@ -377,8 +377,9 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
       },
     });
     const ownerReplica = replica(shared, memory, { tick }, new ReplicaPubSub(shared, events));
-    const coldReplica = replica(shared, memory, {}, new ReplicaPubSub(shared, events));
-    return { ownerReplica, coldReplica, counter };
+    const coldPubsub = new ReplicaPubSub(shared, events);
+    const coldReplica = replica(shared, memory, {}, coldPubsub);
+    return { ownerReplica, coldReplica, coldPubsub, counter };
   }
 
   it.skipIf(!isDurableEngineVariant(engine)).each([
@@ -438,6 +439,34 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         .getRequests()
         .filter(request => JSON.stringify(request.body?.messages ?? []).includes('queued before cold abort'));
       expect(queuedRequests).toHaveLength(0);
+    },
+    20_000,
+  );
+
+  it.skipIf(!isDurableEngineVariant(engine))(
+    "fails a cold replica's thread abort when its lease backend can't name the run",
+    async () => {
+      const thread = 'cold-abort-unreachable';
+      const { ownerReplica, coldReplica, coldPubsub, counter } = coldReplicaSetup(thread, 'cold abort unreachable');
+      const { output: run, drain } = await startStream(ownerReplica, 'cold abort unreachable', {
+        maxSteps: 200,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      await vi.waitFor(() => expect(counter.ticks).toBeGreaterThanOrEqual(3), { timeout: 5_000 });
+
+      // An unreachable backend says nothing about the thread, so it must not read as an idle one.
+      coldPubsub.partition = 'reject';
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({ resourceId: RESOURCE, threadId: thread }),
+      ).rejects.toThrow('lease backend unreachable');
+
+      coldPubsub.partition = undefined;
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({ resourceId: RESOURCE, threadId: thread }),
+      ).resolves.toBe(true);
+      await done;
+      expect(await run.finishReason).toBe('aborted');
     },
     20_000,
   );
