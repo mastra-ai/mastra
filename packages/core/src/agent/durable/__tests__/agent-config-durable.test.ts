@@ -368,9 +368,7 @@ describe('AgentConfig.durable', () => {
     }
   });
 
-  it('does not lazy-wrap standalone durable agents after Mastra registration', async () => {
-    const { DurableAgent } = await import('../durable-agent');
-
+  it('routes the original registered instance through the registered durable wrapper', async () => {
     const raw = new Agent({
       id: 'reg-a',
       name: 'RegA',
@@ -378,19 +376,17 @@ describe('AgentConfig.durable', () => {
       model: makeMockModel(),
       durable: true,
     });
-
-    // Registering the raw agent on a Mastra causes Mastra to build its own
-    // DurableAgent wrapper. Subsequent direct calls on the raw agent must
-    // no longer lazy-wrap (the raw agent's `stream` should hit the plain
-    // path).
-    new Mastra({ agents: { regA: raw as any } });
-
-    const spy = vi.spyOn(DurableAgent.prototype as any, 'stream');
+    const mastra = new Mastra({ agents: { regA: raw } });
+    const registered = mastra.getAgent('regA');
+    const spy = vi.spyOn(registered, 'stream');
     try {
-      await raw.stream('hi').catch(() => {});
-      expect(spy).not.toHaveBeenCalled();
+      // Registration must preserve durability on the application's original reference (#28189).
+      const output = await raw.stream('hi');
+      expect(await output.getFullOutput()).toMatchObject({ text: 'hi' });
+      expect(spy).toHaveBeenCalledTimes(1);
     } finally {
       spy.mockRestore();
+      await mastra.shutdown({ drainTimeout: 1000 });
     }
   });
 
