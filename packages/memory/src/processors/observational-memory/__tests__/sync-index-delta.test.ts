@@ -278,4 +278,24 @@ describe('synchronous observation indexing delta (#27930)', () => {
     expect(vector.writes.map(row => row.group_id)).toContain(groups[0]?.id);
     expect(vector.writes).toHaveLength(3);
   });
+
+  it('indexes a committed group on the next cycle when the thread update after the commit fails', async () => {
+    const { memory, observe, vector, headGroups } = await setup();
+    await observe(memory, 1);
+    const { store } = await headGroups();
+    const patchThread = store.patchThread.bind(store);
+    let failPatch = true;
+    store.patchThread = async (...args) => {
+      if (failPatch) {
+        failPatch = false;
+        throw new Error('thread update failed');
+      }
+      return patchThread(...args);
+    };
+    await expect(observe(memory, 2)).rejects.toThrow('thread update failed');
+    await observe(memory, 3);
+    const { groups } = await headGroups();
+    expect(groups).toHaveLength(3);
+    expect(vector.writes.map(row => row.group_id).sort()).toEqual(groups.map(group => group.id).sort());
+  });
 });

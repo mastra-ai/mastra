@@ -551,28 +551,26 @@ export abstract class ObservationStrategy {
     record: ObservationIndexRecord,
   ): Promise<void> {
     const groups = parseObservationGroups(observations).map(group => ({ group, threadId, observedAt }));
-    await this.indexGroups(groups, resourceId, record);
+    this.queueObservationGroups(groups, resourceId, record);
+    await this.indexQueuedObservationGroups(record);
   }
 
   /**
-   * Index the observation groups a commit to `record` added, retrying each write. Earlier groups
-   * of the same lineage whose write failed are retried too, under the generation they were
-   * committed to; those of a cleared lineage are dropped. A write that still fails is logged and
-   * kept for a later cycle.
+   * Queue the observation groups a commit to `record` added for indexing. Call this right after
+   * the commit, so a later failure in the cycle cannot lose them; the next index pass writes them.
    */
-  protected async indexGroups(
+  protected queueObservationGroups(
     groups: Array<{ group: ObservationGroup; threadId: string; observedAt?: Date }>,
     resourceId: string | undefined,
     record: ObservationIndexRecord,
-  ): Promise<void> {
+  ): void {
     if (!resourceId || !this.deps.onIndexObservations) {
       return;
     }
-
-    // Queue this commit's groups first, so a failed lookup below cannot lose them.
-    const pending = this.deps.unindexedObservations;
+    // Only the identity fields, so the queue does not hold the record's observation text.
+    const { id, threadId: recordThreadId, resourceId: recordResourceId, generationCount } = record;
     for (const { group, threadId, observedAt } of groups) {
-      pending.set(group.id, {
+      this.deps.unindexedObservations.set(group.id, {
         write: {
           text: group.content,
           groupId: group.id,
@@ -580,13 +578,28 @@ export abstract class ObservationStrategy {
           threadId,
           resourceId,
           observedAt,
-          recordId: record.id,
+          recordId: id,
         },
-        record,
+        record: { id, threadId: recordThreadId, resourceId: recordResourceId, generationCount },
       });
     }
+  }
+
+  /**
+   * Write the queued observation groups of `record`'s lineage, retrying each write. Groups of an
+   * earlier generation keep naming the generation they were committed to; those of a cleared
+   * lineage are dropped. A write that still fails is logged and stays queued for a later cycle.
+   */
+  protected async indexQueuedObservationGroups(record: ObservationIndexRecord): Promise<void> {
+    const pending = this.deps.unindexedObservations;
+    if (!this.deps.onIndexObservations || pending.size === 0) {
+      return;
+    }
+
     const entries: UnindexedObservation[] = [];
     for (const entry of [...pending.values()]) {
+      // Another cycle is already writing it; its outcome decides whether it stays queued.
+      if (entry.writing) continue;
       if (entry.record.threadId !== record.threadId || entry.record.resourceId !== record.resourceId) continue;
       if (entry.record.id === record.id) {
         entries.push(entry);
@@ -601,6 +614,7 @@ export abstract class ObservationStrategy {
       return;
     }
 
+    for (const entry of entries) entry.writing = true;
     const results = await Promise.allSettled(
       entries.map(({ write }) =>
         withRetry(() => this.deps.onIndexObservations!(write), {
@@ -612,6 +626,7 @@ export abstract class ObservationStrategy {
     let failure: unknown;
     results.forEach((result, index) => {
       const entry = entries[index]!;
+      entry.writing = false;
       pending.delete(entry.write.groupId);
       if (result.status === 'fulfilled') return;
       failure ??= result.reason;
@@ -619,8 +634,9 @@ export abstract class ObservationStrategy {
     });
     // Bound the in-process backlog; the oldest failed writes are dropped first.
     let dropped = 0;
-    for (const groupId of pending.keys()) {
+    for (const [groupId, entry] of pending) {
       if (pending.size <= MAX_UNINDEXED_OBSERVATIONS) break;
+      if (entry.writing) continue;
       pending.delete(groupId);
       dropped++;
     }

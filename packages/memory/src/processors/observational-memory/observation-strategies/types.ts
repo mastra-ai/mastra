@@ -30,6 +30,8 @@ export type ObservationIndexRecord = Pick<
 export interface UnindexedObservation {
   write: ObservationIndexWrite;
   record: ObservationIndexRecord;
+  /** Set while a cycle is writing it, so concurrent cycles do not write it twice. */
+  writing?: boolean;
 }
 
 /** Parameters for running an observation via a strategy. */
