@@ -46,18 +46,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "abacus/claude-3-7-sonnet-20250219",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
-  },
-  {
     "model": "abacus/claude-fable-5",
     "imageInput": true,
     "audioInput": false,
@@ -80,30 +68,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 64000,
     "inputCost": 1,
     "outputCost": 5
-  },
-  {
-    "model": "abacus/claude-opus-4-1-20250805",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 32000,
-    "inputCost": 15,
-    "outputCost": 75
-  },
-  {
-    "model": "abacus/claude-opus-4-20250514",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 32000,
-    "inputCost": 15,
-    "outputCost": 75
   },
   {
     "model": "abacus/claude-opus-4-5-20251101",
@@ -166,18 +130,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 25
   },
   {
-    "model": "abacus/claude-sonnet-4-20250514",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
-  },
-  {
     "model": "abacus/claude-sonnet-4-5-20250929",
     "imageInput": true,
     "audioInput": false,
@@ -210,80 +162,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
-  },
-  {
-    "model": "abacus/deepseek-ai/DeepSeek-R1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 3,
-    "outputCost": 7
-  },
-  {
-    "model": "abacus/deepseek-ai/DeepSeek-V3.1-Terminus",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.27,
-    "outputCost": 1
-  },
-  {
-    "model": "abacus/deepseek-ai/DeepSeek-V3.2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.27,
-    "outputCost": 0.4
-  },
-  {
-    "model": "abacus/deepseek-ai/DeepSeek-V4-Flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 32768,
-    "inputCost": 0.14,
-    "outputCost": 0.28
-  },
-  {
-    "model": "abacus/deepseek-ai/DeepSeek-V4-Pro",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 32768,
-    "inputCost": 1.74,
-    "outputCost": 3.48
-  },
-  {
-    "model": "abacus/deepseek/deepseek-v3.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.55,
-    "outputCost": 1.66
+    "inputCost": 2,
+    "outputCost": 10
   },
   {
     "model": "abacus/gemini-2.5-flash",
@@ -303,7 +183,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 32768,
     "inputCost": 0.3,
@@ -346,58 +226,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 12
   },
   {
-    "model": "abacus/gemini-3-pro-image-preview",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 65536,
-    "maxOutput": 32768,
-    "inputCost": 2,
-    "outputCost": 12
-  },
-  {
-    "model": "abacus/gemini-3.1-flash-image",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 32768,
-    "inputCost": 0.5,
-    "outputCost": 3
-  },
-  {
-    "model": "abacus/gemini-3.1-flash-image-preview",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 32768,
-    "inputCost": 0.5,
-    "outputCost": 3
-  },
-  {
     "model": "abacus/gemini-3.1-flash-lite",
     "imageInput": true,
     "audioInput": true,
     "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 65536,
-    "inputCost": 0.25,
-    "outputCost": 1.5
-  },
-  {
-    "model": "abacus/gemini-3.1-flash-lite-preview",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
@@ -450,8 +282,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
-    "inputCost": 1.5,
-    "outputCost": 7.5
+    "inputCost": 0.75,
+    "outputCost": 3.75
   },
   {
     "model": "abacus/gemini-3.7-flash",
@@ -526,18 +358,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
-    "model": "abacus/gpt-4o-2024-11-20",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 2.5,
-    "outputCost": 10
-  },
-  {
     "model": "abacus/gpt-4o-mini",
     "imageInput": true,
     "audioInput": false,
@@ -551,18 +371,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "abacus/gpt-5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
-  },
-  {
-    "model": "abacus/gpt-5-codex",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -610,42 +418,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
-    "model": "abacus/gpt-5.1-chat-latest",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
-  },
-  {
-    "model": "abacus/gpt-5.1-codex",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
-  },
-  {
-    "model": "abacus/gpt-5.1-codex-max",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
-  },
-  {
     "model": "abacus/gpt-5.2",
     "imageInput": true,
     "audioInput": false,
@@ -658,55 +430,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 14
   },
   {
-    "model": "abacus/gpt-5.2-chat-latest",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.75,
-    "outputCost": 14
-  },
-  {
-    "model": "abacus/gpt-5.2-codex",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.75,
-    "outputCost": 14
-  },
-  {
-    "model": "abacus/gpt-5.3-chat-latest",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.75,
-    "outputCost": 14
-  },
-  {
     "model": "abacus/gpt-5.3-codex",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.75,
-    "outputCost": 14
-  },
-  {
-    "model": "abacus/gpt-5.3-codex-xhigh",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -774,8 +498,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
-    "inputCost": 1,
-    "outputCost": 6
+    "inputCost": 0.2,
+    "outputCost": 1.2
   },
   {
     "model": "abacus/gpt-5.6-sol",
@@ -786,8 +510,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
-    "inputCost": 5,
-    "outputCost": 30
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "abacus/gpt-5.6-terra",
@@ -798,44 +522,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
-    "inputCost": 2.5,
-    "outputCost": 15
-  },
-  {
-    "model": "abacus/grok-4-0709",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 16384,
-    "inputCost": 3,
-    "outputCost": 15
-  },
-  {
-    "model": "abacus/grok-4-1-fast-non-reasoning",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 2000000,
-    "maxOutput": 16384,
-    "inputCost": 0.2,
-    "outputCost": 0.5
-  },
-  {
-    "model": "abacus/grok-4-fast-non-reasoning",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 2000000,
-    "maxOutput": 16384,
-    "inputCost": 0.2,
-    "outputCost": 0.5
+    "inputCost": 2,
+    "outputCost": 12
   },
   {
     "model": "abacus/grok-4.3",
@@ -872,102 +560,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 2,
     "outputCost": 6
-  },
-  {
-    "model": "abacus/grok-code-fast-1",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 256000,
-    "maxOutput": 16384,
-    "inputCost": 0.2,
-    "outputCost": 1.5
-  },
-  {
-    "model": "abacus/kimi-k2-turbo-preview",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 256000,
-    "maxOutput": 8192,
-    "inputCost": 0.15,
-    "outputCost": 8
-  },
-  {
-    "model": "abacus/kimi-k2.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 32768,
-    "inputCost": 0.6,
-    "outputCost": 3
-  },
-  {
-    "model": "abacus/llama-3.3-70b-versatile",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 32768,
-    "inputCost": 0.59,
-    "outputCost": 0.79
-  },
-  {
-    "model": "abacus/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1048576,
-    "maxOutput": 8192,
-    "inputCost": 0.14,
-    "outputCost": 0.59
-  },
-  {
-    "model": "abacus/meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": 3.5,
-    "outputCost": 3.5
-  },
-  {
-    "model": "abacus/meta-llama/Meta-Llama-3.1-8B-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": 0.02,
-    "outputCost": 0.05
-  },
-  {
-    "model": "abacus/meta-llama/Meta-Llama-3.3-70B-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.59,
-    "outputCost": 0.79
   },
   {
     "model": "abacus/mimo-v2-pro",
@@ -1099,7 +691,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 200000,
     "maxOutput": 100000,
     "inputCost": 20,
-    "outputCost": 40
+    "outputCost": 80
   },
   {
     "model": "abacus/o4-mini",
@@ -1122,44 +714,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": 0.08,
-    "outputCost": 0.44
-  },
-  {
-    "model": "abacus/qwen-2.5-coder-32b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.79,
-    "outputCost": 0.79
-  },
-  {
-    "model": "abacus/Qwen/Qwen2.5-72B-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.11,
-    "outputCost": 0.38
-  },
-  {
-    "model": "abacus/Qwen/Qwen3-235B-A22B-Instruct-2507",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 8192,
-    "inputCost": 0.13,
-    "outputCost": 0.6
+    "inputCost": 0.037,
+    "outputCost": 0.17
   },
   {
     "model": "abacus/Qwen/Qwen3-32B",
@@ -1170,8 +726,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 8192,
-    "inputCost": 0.09,
-    "outputCost": 0.29
+    "inputCost": 0.08,
+    "outputCost": 0.28
   },
   {
     "model": "abacus/Qwen/Qwen3-Coder-480B-A35B-Instruct",
@@ -1182,8 +738,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 16384,
-    "inputCost": 0.29,
-    "outputCost": 1.2
+    "inputCost": 0.38,
+    "outputCost": 1.55
   },
   {
     "model": "abacus/Qwen/Qwen3.6-27B",
@@ -1196,30 +752,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.32,
     "outputCost": 3.2
-  },
-  {
-    "model": "abacus/Qwen/QwQ-32B",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 32768,
-    "maxOutput": 32768,
-    "inputCost": 0.4,
-    "outputCost": 0.4
-  },
-  {
-    "model": "abacus/qwen3-max",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 16384,
-    "inputCost": 1.2,
-    "outputCost": 6
   },
   {
     "model": "abacus/qwen3.7-max",
@@ -1254,8 +786,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
+    "inputCost": 2,
+    "outputCost": 10
   },
   {
     "model": "abacus/thinkingmachines/Inkling",
@@ -1270,18 +802,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 9.36
   },
   {
-    "model": "abacus/zai-org/GLM-4.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 96000,
-    "inputCost": 0.6,
-    "outputCost": 2.2
-  },
-  {
     "model": "abacus/zai-org/GLM-4.6",
     "imageInput": false,
     "audioInput": false,
@@ -1290,7 +810,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 202752,
     "maxOutput": 131072,
-    "inputCost": 0.6,
+    "inputCost": 0.55,
     "outputCost": 2.2
   },
   {
@@ -1326,7 +846,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 204800,
     "maxOutput": 131072,
-    "inputCost": 1.4,
+    "inputCost": 1.38,
     "outputCost": 4.4
   },
   {

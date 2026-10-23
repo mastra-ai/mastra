@@ -128,6 +128,8 @@ const mastra = new Mastra({
 
 With `scope: true`, Mastra reads `MASTRA_RESOURCE_ID_KEY` from the request context. `mapUserToResourceId()` sets this value after authentication. Stored resource handlers persist the scope in record metadata and filter list, read, update, publish, and delete operations by that scope.
 
+[Saved views](/reference/client-js/saved-views) follow the same scope. They keep it in their own `resourceId` column instead of metadata, so `metadataKey` doesn't apply to them.
+
 Use an object when the scope needs custom request logic:
 
 ```typescript oxfmt:false

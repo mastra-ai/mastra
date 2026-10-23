@@ -329,7 +329,11 @@ export class MySQLStore extends MastraCompositeStore {
       operations,
       database,
     });
-    const savedViews = new SavedViewsMySQL({ operations });
+    const savedViews = new SavedViewsMySQL({
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
 
     this.stores = {
       memory,

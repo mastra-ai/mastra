@@ -1,5 +1,11 @@
 # @mastra/voice-modelslab
 
+## 0.2.2
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 0.2.2-alpha.0
 
 ### Patch Changes

@@ -325,7 +325,7 @@ export function createSpanQueryTests(
       await getStorage().batchCreateSpans({
         records: [span('context', { ...scope, ...context, ...lineage }), span('other')],
       });
-      const expected = options.eventSourced ? context : { ...context, ...lineage };
+      const expected = { ...context, ...lineage };
       for (const [field, value] of Object.entries(expected)) {
         const result = await query({ where: { op: 'eq', left: { path: field }, right: { literal: value } } });
         expect(result.spans.map(row => row.spanId)).toEqual(['context']);
@@ -350,19 +350,17 @@ export function createSpanQueryTests(
       ]);
     });
 
-    it('maps span source to executionSource or applies documented null semantics', async () => {
+    it('maps span source to executionSource', async () => {
       await getStorage().batchCreateSpans({
         records: [span('agent', { source: 'agent' }), span('workflow', { source: 'workflow' }), span('absent')],
       });
       const result = await query({
         where: { op: 'eq', left: { path: 'executionSource' }, right: { literal: 'agent' } },
       });
-      expect(result.spans.map(row => row.spanId)).toEqual(options.eventSourced ? [] : ['agent']);
-      if (!options.eventSourced) expect(result.spans[0]).toMatchObject({ executionSource: 'agent' });
+      expect(result.spans.map(row => row.spanId)).toEqual(['agent']);
+      expect(result.spans[0]).toMatchObject({ executionSource: 'agent' });
       const absent = await query({ where: { op: 'notExists', path: 'executionSource' } });
-      expect(absent.spans.map(row => row.spanId).sort()).toEqual(
-        options.eventSourced ? ['absent', 'agent', 'workflow'] : ['absent'],
-      );
+      expect(absent.spans.map(row => row.spanId)).toEqual(['absent']);
       for (const row of absent.spans) expect(row.executionSource).toBeNull();
     });
 

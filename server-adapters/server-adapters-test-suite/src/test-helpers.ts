@@ -21,7 +21,7 @@ import { CompositeVoice } from '@mastra/core/voice';
 import type { Workflow } from '@mastra/core/workflows';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
-import { MCPServer } from '@mastra/mcp';
+import { defineEvent, MCPServer } from '@mastra/mcp';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { WorkflowRegistry } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
@@ -512,6 +512,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         html: '<html><body>Test</body></html>',
       },
     },
+    events: {
+      'ticket.created': defineEvent({
+        description: 'A ticket was created',
+        payloadSchema: z.object({ id: z.string() }),
+      }),
+    },
   });
 
   const mcpServer2 = new MCPServer({
@@ -678,6 +684,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         'thread-query',
         'thread-query-rows',
         'span-query',
+        'span-aggregate',
       ]);
       vi.spyOn(observability, 'queryTraces').mockResolvedValue({ traces: [], page: { next: null } });
       vi.spyOn(observability, 'aggregateTraces').mockResolvedValue({ rows: [], truncated: false });
@@ -688,6 +695,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       vi.spyOn(observability, 'getTraceQueryValues').mockResolvedValue({ values: [], valuesTruncated: false });
       vi.spyOn(observability, 'queryThreads').mockResolvedValue({ threads: [], page: { next: null } });
       vi.spyOn(observability, 'querySpans').mockResolvedValue({ spans: [], page: { next: null } });
+      vi.spyOn(observability, 'aggregateSpans').mockResolvedValue({ rows: [], truncated: false });
       await observability.createSpan({
         span: {
           spanId: 'test-span',

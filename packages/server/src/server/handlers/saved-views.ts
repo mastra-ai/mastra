@@ -1,16 +1,19 @@
 import type { Mastra } from '@mastra/core';
-import type { SavedViewsStorage } from '@mastra/core/storage';
+import type { SavedView, SavedViewsStorage } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
-import { messageResponseSchema } from '../schemas/common';
 import {
   createSavedViewBodySchema,
+  deleteSavedViewResponseSchema,
   listSavedViewsQuerySchema,
   listSavedViewsResponseSchema,
+  MAX_SAVED_VIEWS_PER_PAGE,
   savedViewIdPathParams,
   savedViewResponseSchema,
   updateSavedViewBodySchema,
 } from '../schemas/saved-views';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { getStoredResourceScope } from '../utils';
+import type { StoredResourceScope } from '../utils';
 import { getCallerAuthorId } from './authorship';
 import { handleError } from './error';
 
@@ -27,6 +30,24 @@ async function getSavedViewsStore(mastra: Mastra): Promise<SavedViewsStorage> {
   return store;
 }
 
+/** A view in another tenant answers 404, the same as a missing one. */
+async function getScopedView(
+  store: SavedViewsStorage,
+  savedViewId: string,
+  scope: StoredResourceScope | undefined,
+): Promise<SavedView> {
+  const view = await store.get(savedViewId);
+  if (!view || (scope && view.resourceId !== scope.value)) {
+    throw new HTTPException(404, { message: 'Saved view not found' });
+  }
+  return view;
+}
+
+/** The tenant is server-side bookkeeping, so responses leave it out. */
+function toResponse({ resourceId: _resourceId, ...view }: SavedView) {
+  return view;
+}
+
 export const LIST_SAVED_VIEWS_ROUTE = createRoute({
   method: 'GET',
   path: '/saved-views',
@@ -35,13 +56,20 @@ export const LIST_SAVED_VIEWS_ROUTE = createRoute({
   responseSchema: listSavedViewsResponseSchema,
   summary: 'List saved views',
   description:
-    'Returns every saved view, oldest first, optionally limited to one Studio page. Everyone who can open Studio sees every view.',
+    "Returns saved views, oldest first, optionally limited to one Studio page, up to 100 per page. Use `pageIndex` while `pagination.hasMore` is true. With `storedResources.scope` on, only lists views in the caller's scope.",
   tags: ['Saved Views'],
   requiresAuth: true,
-  handler: async ({ mastra, page }) => {
+  handler: async ({ mastra, requestContext, page, perPage, pageIndex }) => {
     try {
       const store = await getSavedViewsStore(mastra);
-      return await store.list({ page, pagination: { page: 0, perPage: false } });
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      const pagination = { page: pageIndex ?? 0, perPage: perPage ?? MAX_SAVED_VIEWS_PER_PAGE };
+      const result = await store.list({ page, resourceId: scope?.value, pagination });
+      return {
+        views: result.views.map(toResponse),
+        // A number, never `false`: the route doesn't list every view at once.
+        pagination: { ...result.pagination, perPage: pagination.perPage },
+      };
     } catch (error) {
       return handleError(error, 'Error listing saved views');
     }
@@ -58,12 +86,11 @@ export const GET_SAVED_VIEW_ROUTE = createRoute({
   description: 'Returns a single saved view. 404 when the view does not exist.',
   tags: ['Saved Views'],
   requiresAuth: true,
-  handler: async ({ mastra, savedViewId }) => {
+  handler: async ({ mastra, requestContext, savedViewId }) => {
     try {
       const store = await getSavedViewsStore(mastra);
-      const view = await store.get(savedViewId);
-      if (!view) throw new HTTPException(404, { message: 'Saved view not found' });
-      return view;
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      return toResponse(await getScopedView(store, savedViewId, scope));
     } catch (error) {
       return handleError(error, 'Error getting saved view');
     }
@@ -84,7 +111,15 @@ export const CREATE_SAVED_VIEW_ROUTE = createRoute({
   handler: async ({ mastra, requestContext, page, name, state }) => {
     try {
       const store = await getSavedViewsStore(mastra);
-      return await store.create({ page, name, state, authorId: getCallerAuthorId(requestContext) });
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      const view = await store.create({
+        page,
+        name,
+        state,
+        authorId: getCallerAuthorId(requestContext),
+        resourceId: scope?.value ?? null,
+      });
+      return toResponse(view);
     } catch (error) {
       return handleError(error, 'Error creating saved view');
     }
@@ -99,15 +134,18 @@ export const UPDATE_SAVED_VIEW_ROUTE = createRoute({
   bodySchema: updateSavedViewBodySchema,
   responseSchema: savedViewResponseSchema,
   summary: 'Update a saved view',
-  description: 'Changes the name or state of a saved view. Omitted fields keep their value.',
+  description:
+    'Changes the name or state of a saved view and records the caller as its last editor. Omitted fields keep their value.',
   tags: ['Saved Views'],
   requiresAuth: true,
-  handler: async ({ mastra, savedViewId, name, state }) => {
+  handler: async ({ mastra, requestContext, savedViewId, name, state }) => {
     try {
       const store = await getSavedViewsStore(mastra);
-      const view = await store.update(savedViewId, { name, state });
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      await getScopedView(store, savedViewId, scope);
+      const view = await store.update(savedViewId, { name, state, updatedById: getCallerAuthorId(requestContext) });
       if (!view) throw new HTTPException(404, { message: 'Saved view not found' });
-      return view;
+      return toResponse(view);
     } catch (error) {
       return handleError(error, 'Error updating saved view');
     }
@@ -119,17 +157,18 @@ export const DELETE_SAVED_VIEW_ROUTE = createRoute({
   path: '/saved-views/:savedViewId',
   responseType: 'json' as const,
   pathParamSchema: savedViewIdPathParams,
-  responseSchema: messageResponseSchema,
+  responseSchema: deleteSavedViewResponseSchema,
   summary: 'Delete a saved view',
   description: 'Permanently deletes the saved view. 404 when the view does not exist.',
   tags: ['Saved Views'],
   requiresAuth: true,
-  handler: async ({ mastra, savedViewId }) => {
+  handler: async ({ mastra, requestContext, savedViewId }) => {
     try {
       const store = await getSavedViewsStore(mastra);
-      if (!(await store.get(savedViewId))) throw new HTTPException(404, { message: 'Saved view not found' });
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      await getScopedView(store, savedViewId, scope);
       await store.delete(savedViewId);
-      return { message: 'Saved view deleted' };
+      return { deleted: true as const };
     } catch (error) {
       return handleError(error, 'Error deleting saved view');
     }

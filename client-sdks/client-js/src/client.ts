@@ -53,6 +53,8 @@ import type {
   TraceQueryResponse,
   AggregateTracesArgs,
   AggregateTracesResponse,
+  AggregateSpansArgs,
+  AggregateSpansResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
@@ -1246,6 +1248,15 @@ export class MastraClient extends BaseResource {
    */
   aggregateTraces(params: AggregateTracesArgs): Promise<AggregateTracesResponse> {
     return this.observability.aggregateTraces(params);
+  }
+
+  /**
+   * Groups and measures individual completed spans selected by a time range and optional span-query predicate.
+   * Token and cost measures count usage recorded on each span itself. Check `capabilities.spanAggregate` from
+   * `getObservabilityCapabilities()` first; servers without it return 404 or 501.
+   */
+  aggregateSpans(params: AggregateSpansArgs): Promise<AggregateSpansResponse> {
+    return this.observability.aggregateSpans(params);
   }
 
   /** Returns canonical and observed fields available to the advanced trace-query grammar. */
@@ -2791,12 +2802,15 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists saved views, oldest first. Pass `page` (for example `'traces'`) to
-   * only return the views for one Studio page.
+   * Lists saved views, oldest first, up to 100 per call. Pass `page` (for
+   * example `'traces'`) to only return the views for one Studio page, and
+   * `pageIndex` to fetch the next page while `pagination.hasMore` is true.
    */
   public listSavedViews(params: ListSavedViewsParams = {}): Promise<ListSavedViewsResponse> {
     const searchParams = new URLSearchParams();
-    if (params.page) searchParams.set('page', params.page);
+    if (params.page !== undefined) searchParams.set('page', params.page);
+    if (params.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params.pageIndex !== undefined) searchParams.set('pageIndex', String(params.pageIndex));
     const qs = searchParams.toString();
     return this.request(`/saved-views${qs ? `?${qs}` : ''}`);
   }
@@ -2829,7 +2843,7 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Deletes a saved view.
+   * Deletes a saved view and returns `{ deleted: true }`.
    */
   public deleteSavedView(
     savedViewId: PathParams<'DELETE /saved-views/:savedViewId'>['savedViewId'],

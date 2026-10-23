@@ -19,7 +19,7 @@ import type { S3FilesystemOptions } from './filesystem';
 export const s3FilesystemProvider: FilesystemProvider<S3FilesystemOptions> = {
   id: 's3',
   name: 'Amazon S3',
-  description: 'S3 or S3-compatible storage (AWS, R2, MinIO, DO Spaces)',
+  description: 'S3 or S3-compatible storage (AWS, R2, Neon, MinIO, DO Spaces)',
   configSchema: {
     type: 'object',
     required: ['bucket', 'region'],
@@ -53,7 +53,7 @@ export const s3FilesystemProvider: FilesystemProvider<S3FilesystemOptions> = {
 export const s3BlobStoreProvider: BlobStoreProvider<S3BlobStoreOptions> = {
   id: 's3',
   name: 'Amazon S3 Blob Store',
-  description: 'Content-addressable blob storage using S3 or S3-compatible storage (AWS, R2, MinIO, DO Spaces)',
+  description: 'Content-addressable blob storage using S3 or S3-compatible storage (AWS, R2, Neon, MinIO, DO Spaces)',
   configSchema: {
     type: 'object',
     required: ['bucket', 'region', 'accessKeyId', 'secretAccessKey'],

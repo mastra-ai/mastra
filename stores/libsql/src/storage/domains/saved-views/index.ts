@@ -37,6 +37,8 @@ function rowToSavedView(row: Record<string, any>): SavedView {
     page: String(row.page),
     name: String(row.name),
     authorId: row.authorId == null ? null : String(row.authorId),
+    updatedById: row.updatedById == null ? null : String(row.updatedById),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
     state: parseJson(row.state, row.id),
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt),
@@ -73,11 +75,16 @@ export class SavedViewsLibSQL extends SavedViewsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     const params: InValue[] = [];
-    let where = '';
+    const conditions: string[] = [];
     if (args.page !== undefined) {
       params.push(args.page);
-      where = 'WHERE "page" = ?';
+      conditions.push('"page" = ?');
     }
+    if (args.resourceId !== undefined) {
+      params.push(args.resourceId);
+      conditions.push('"resourceId" = ?');
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const countResult = await this.#client.execute({
       sql: `SELECT COUNT(*) as count FROM "${TABLE_SAVED_VIEWS}" ${where}`,
@@ -126,6 +133,8 @@ export class SavedViewsLibSQL extends SavedViewsStorage {
         page: input.page,
         name: input.name,
         authorId: input.authorId ?? null,
+        updatedById: input.authorId ?? null,
+        resourceId: input.resourceId ?? null,
         state: input.state,
         createdAt: now,
         updatedAt: now,
@@ -142,6 +151,7 @@ export class SavedViewsLibSQL extends SavedViewsStorage {
     const data: Record<string, unknown> = { updatedAt: new Date() };
     if (patch.name !== undefined) data.name = patch.name;
     if (patch.state !== undefined) data.state = patch.state;
+    if (patch.updatedById !== undefined) data.updatedById = patch.updatedById;
 
     await this.#db.update({ tableName: TABLE_SAVED_VIEWS, keys: { id }, data });
     return this.get(id);

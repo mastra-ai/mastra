@@ -1,0 +1,106 @@
+---
+title: 'State signals | Signals'
+description: 'Keep durable, named state on a Mastra thread and send snapshots or deltas that the model sees as context.'
+packages:
+  - '@mastra/core'
+---
+
+# State signals
+
+A state signal keeps the model informed about something that changes over time, such as the user's browser page or a background task's progress. It has a stable name on a thread, such as `browser`, so updates describe the same piece of context across turns. Those updates provide context rather than chat messages.
+
+Your application code, background job, or integration supplies the updates. This code is called the **producer**. It sends either a full description of the current state, called a **snapshot**, or a description of what changed, called a **delta**. Mastra stores the update and includes its text in the model's context. Your producer is responsible for comparing and combining values.
+
+## How state signals work
+
+The named slot identified by a state `id` is also called a **state lane**. Start it with a snapshot. After that, send deltas while the model still has the snapshot it needs to understand them. Send a fresh snapshot if the old one has left the model's context, or if you're unsure a delta is sufficient.
+
+Mastra tracks the current `cacheKey` and mode for each state ID. If both match an incoming update, [`sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options) skips it and returns `{ skipped: true, reason: 'unchanged' }`. Change the cache key when the state changes.
+
+State signals are durable, so they survive later turns and, with shared storage, process restarts. Because every accepted update becomes context, batch or summarize frequent changes before sending.
+
+For user input, use [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options). If context only matters for one model request, send a [transient reactive signal](/docs/signals/sending-signals#send-context-from-a-system) instead. External events that need a durable inbox record and delivery policy belong in [notifications](/docs/signals/notifications).
+
+## Send a state signal
+
+Before calling `sendStateSignal()`, configure [Memory](/docs/memory/overview) on the agent and ensure the target thread exists. Unlike a user message, this call can't create a missing thread.
+
+When the producer detects a change, send these fields:
+
+- `id`: the name of the state, such as `browser`.
+- `mode`: `snapshot` for the full state or `delta` for changes.
+- `cacheKey`: a version identifier used to skip duplicate updates.
+- `contents`: the text the model reads.
+- `value`: optional structured data for your application and processors. It isn't automatically shown to the model.
+
+The [Agent reference](/reference/agents/agent#sendstatesignalstate-options) lists all fields and return values.
+
+```typescript title="src/mastra/browser-watcher.ts"
+await agent.sendStateSignal(
+  {
+    id: 'browser',
+    mode: 'snapshot',
+    cacheKey: 'browser:https://example.com:3-tabs',
+    contents: 'Browser is open. Active tab URL: https://example.com. 3 open tabs.',
+    value: {
+      activeUrl: 'https://example.com',
+      tabCount: 3,
+      open: true,
+    },
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+  },
+)
+```
+
+## Compute state in a processor
+
+Use [`computeStateSignal()`](/reference/processors/processor-interface#computestatesignal) when a processor owns a state lane. Mastra calls it once per model input step after [`processInputStep()`](/reference/processors/processor-interface#processinputstep) and before the model request is finalized. The processor reads `activeStateSignals`, the last snapshot, and `deltasSinceSnapshot`, and returns `undefined` when nothing changed. The [Processors guide](/docs/agents/processors) covers its place in the execution order.
+
+```typescript title="src/mastra/processors/browser-state.ts"
+import type { ComputeStateSignalArgs, Processor } from '@mastra/core/processors'
+
+export const browserStateProcessor: Processor = {
+  id: 'browser-state',
+  stateId: 'browser',
+  computeStateSignal(args: ComputeStateSignalArgs) {
+    const browser = readCurrentBrowserState()
+    const previous = readMostRecentBrowserState(args.activeStateSignals)
+    const changed = previous ? diffBrowserState(previous, browser) : browser
+    const shouldRefreshSnapshot = Boolean(args.lastSnapshot && !args.contextWindow.hasSnapshot)
+
+    if (previous && Object.keys(changed).length === 0 && !shouldRefreshSnapshot) {
+      return
+    }
+
+    const isDelta = Boolean(previous && !shouldRefreshSnapshot)
+
+    return {
+      mode: isDelta ? 'delta' : 'snapshot',
+      cacheKey: stableBrowserStateCacheKey(browser),
+      contents: isDelta ? describeBrowserDelta(changed) : describeBrowserSnapshot(browser),
+      value: browser,
+      ...(isDelta ? { delta: changed } : {}),
+    }
+  },
+}
+```
+
+The browser-reading, comparison, cache-key, and description helpers in this example are application code you supply. Mastra provides `lastSnapshot` and `deltasSinceSnapshot`, loading them from message history if needed. Your processor uses them to decide what changed and what text to send.
+
+## Built-in uses
+
+Mastra uses state signals for long-lived context, and the same patterns apply to your application:
+
+- The [browser](/docs/browser) context processor keeps the active page and tabs under `browser`.
+- [Goals](/docs/harness/goals) keep the current objective under the `goal` id.
+- [Task tracking](/docs/agents/tools#task-tracking) stores task state through [`TaskStateProcessor`](/reference/signals/task-signal-provider).
+- [Working memory](/docs/memory/working-memory#opt-in-to-state-signals-experimental) can move out of the system prompt and into a `working-memory` state signal with `useStateSignals: true`.
+
+## Persistence and truncation
+
+State signals can't be transient. Mastra rebuilds tracking metadata from persisted history, so a delivery-only signal would break deduplication. With shared storage, persisted state and its tracking survive a restart; without it, a new process starts without the lane.
+
+`contextWindow.hasSnapshot` tells the processor whether the active window already contains a snapshot for the lane. If it's `false`, return a fresh `snapshot` so the model sees current state after older state messages are trimmed.

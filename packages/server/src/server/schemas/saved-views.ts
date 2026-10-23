@@ -1,10 +1,12 @@
 import { z } from 'zod/v4';
-import { paginationInfoSchema } from './common';
+import { paginationNumber } from './common';
 
 /** Maximum size of a saved view's `state` JSON. */
 export const MAX_SAVED_VIEW_STATE_BYTES = 64 * 1024;
 export const MAX_SAVED_VIEW_NAME_CHARS = 80;
 const MAX_SAVED_VIEW_PAGE_CHARS = 64;
+/** Default and largest page of views, matching Platform's saved-views list. */
+export const MAX_SAVED_VIEWS_PER_PAGE = 100;
 
 const textEncoder = new TextEncoder();
 
@@ -27,8 +29,16 @@ export const savedViewIdPathParams = z.object({
   savedViewId: z.string().describe('Unique identifier for the saved view'),
 });
 
+// `page` is the Studio page, so the zero-based page of results is `pageIndex`.
 export const listSavedViewsQuerySchema = z.object({
   page: savedViewPageSchema.optional().describe('Only return views for this Studio page, for example `traces`'),
+  perPage: paginationNumber()
+    .min(1)
+    .max(MAX_SAVED_VIEWS_PER_PAGE)
+    .optional()
+    .default(MAX_SAVED_VIEWS_PER_PAGE)
+    .describe(`Views per page of results, 1 to ${MAX_SAVED_VIEWS_PER_PAGE}`),
+  pageIndex: paginationNumber().optional().default(0).describe('Zero-based page of results'),
 });
 
 export const createSavedViewBodySchema = z.object({
@@ -49,6 +59,10 @@ export const savedViewResponseSchema = z.object({
   page: z.string(),
   name: z.string(),
   authorId: z.string().nullable().describe('Who created the view. `null` when the server runs without auth.'),
+  updatedById: z
+    .string()
+    .nullable()
+    .describe('Who last changed the view, starting as `authorId`. `null` when the server runs without auth.'),
   state: z.object({ version: z.number() }).catchall(z.unknown()),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -56,5 +70,15 @@ export const savedViewResponseSchema = z.object({
 
 export const listSavedViewsResponseSchema = z.object({
   views: z.array(savedViewResponseSchema),
-  pagination: paginationInfoSchema,
+  pagination: z.object({
+    total: z.number(),
+    /** Zero-based page of results, the `pageIndex` query param. */
+    page: z.number(),
+    perPage: z.number(),
+    hasMore: z.boolean(),
+  }),
+});
+
+export const deleteSavedViewResponseSchema = z.object({
+  deleted: z.literal(true),
 });

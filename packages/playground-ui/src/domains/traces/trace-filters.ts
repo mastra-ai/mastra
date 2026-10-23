@@ -297,12 +297,12 @@ export const TRACE_FILTER_BAR_OPERATORS: (FilterBarOperator & { id: TraceFilterO
   { id: 'notMatches', label: 'does not match', freeText: true },
 ];
 
-const TRACE_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];
+export const TRACE_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];
 /** Human-written text fields also support case-insensitive word matching. */
-const TRACE_TEXT_OPERATORS: TraceFilterOperatorId[] = [...TRACE_STRING_OPERATORS, 'matches', 'notMatches'];
+export const TRACE_TEXT_OPERATORS: TraceFilterOperatorId[] = [...TRACE_STRING_OPERATORS, 'matches', 'notMatches'];
 /** Fields every trace carries (`traceId`, `entityName`): presence operators would never be false. */
-const TRACE_REQUIRED_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn'];
-const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
+export const TRACE_REQUIRED_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn'];
+export const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
   'is',
   'isNot',
   'gt',
@@ -314,7 +314,7 @@ const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
 ];
 /** Root duration: only ranges make sense on a millisecond value. */
 const TRACE_ROOT_DURATION_OPERATORS: TraceFilterOperatorId[] = ['gt', 'gte', 'lt', 'lte'];
-const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
+export const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
 const TRACE_TAGS_OPERATORS: TraceFilterOperatorId[] = ['in', 'notIn', 'exists', 'notExists'];
 const TRACE_TAGS_OPERATOR_TO_QUERY_OP: Partial<Record<TraceFilterOperatorId, string>> = {
   in: 'includes',
@@ -330,11 +330,11 @@ export type TraceQueryCanonicalFieldDescriptor = {
   valueSuggestions: boolean;
 };
 /** Synthetic fields live in a single dedicated URL param, so they cannot carry an operator. */
-const TRACE_SYNTHETIC_OPERATORS: TraceFilterOperatorId[] = ['is', 'in'];
+export const TRACE_SYNTHETIC_OPERATORS: TraceFilterOperatorId[] = ['is', 'in'];
 // The legacy list endpoint only matches by equality.
 const TRACE_LEGACY_OPERATORS: TraceFilterOperatorId[] = ['is'];
 
-const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
+export const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   rootEntityType: 'Primitive type',
   entityName: 'Primitive name',
   entityId: 'Primitive ID',

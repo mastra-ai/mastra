@@ -52,11 +52,11 @@ export const evaluatedAgent = new Agent({
   id: 'evaluated-agent',
   scorers: {
     relevancy: {
-      scorer: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+      scorer: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
       sampling: { type: 'ratio', rate: 0.5 },
     },
     safety: {
-      scorer: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+      scorer: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
       sampling: { type: 'ratio', rate: 1 },
     },
   },
@@ -126,7 +126,7 @@ export const myAgent = new Agent({
   // ...
   scorers: {
     relevancy: {
-      scorer: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+      scorer: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
       filter: {
         op: 'eq',
         left: { path: 'requestContext.plan' },
@@ -165,7 +165,7 @@ export const mastra = new Mastra({
   scorers: {
     calledTool: checks.calledTool('get_weather'),
     includes: checks.includes('Brooklyn'),
-    relevancy: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+    relevancy: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
   },
 })
 ```

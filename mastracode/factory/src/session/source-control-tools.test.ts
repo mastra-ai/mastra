@@ -1,10 +1,10 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
@@ -990,43 +990,77 @@ describe('createSourceControlTools', () => {
   });
 });
 
-describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%s)', provider => {
+// Each test spawns dozens of Git processes, which can exceed the default 5s
+// timeout while the rest of the suite saturates the CPU.
+describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%s)', { timeout: 10_000 }, provider => {
   const roots: string[] = [];
+  const templates = new Map<string, { root: string; base: string }>();
   const branch = 'factory/issue-1';
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  // Spawning bare `git` makes libuv try every PATH entry, which costs tens of
+  // milliseconds per call with a long PATH and pushes these tests past their timeout.
+  const gitBinary = path.join(execFileSync('git', ['--exec-path'], { encoding: 'utf8' }).trim(), 'git');
+  const gitIn =
+    (checkout: string) =>
+    (...args: string[]) =>
+      execFileSync(gitBinary, ['-C', checkout, ...args], {
+        encoding: 'utf8',
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
+  const commitIn = (checkout: string) => (text: string) => {
+    const git = gitIn(checkout);
+    writeFileSync(path.join(checkout, 'tracked.txt'), text);
+    git('add', 'tracked.txt');
+    git('commit', '-m', text);
+    return git('rev-parse', 'HEAD');
+  };
 
   afterEach(() => {
     for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
   });
 
-  async function checkoutFixture(repository: string) {
-    const setup = await fixture(provider);
-    const root = mkdtempSync(path.join(os.tmpdir(), 'factory-push-'));
-    roots.push(root);
+  afterAll(() => {
+    for (const { root } of templates.values()) rmSync(root, { recursive: true, force: true });
+    templates.clear();
+  });
+
+  // Every test starts from the same seeded origin and checkout, so build it once
+  // per repository and copy it instead of spawning the same Git setup per test.
+  function seedTemplate(repository: string) {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'factory-push-template-'));
     const origin = path.join(root, 'origin.git');
     const checkout = path.join(root, repository.split('/')[1]!);
-    const cloneUrl = `https://${provider}.com/${repository}.git`;
-    const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
-    const git = (...args: string[]) =>
-      execFileSync('git', ['-C', checkout, ...args], {
-        encoding: 'utf8',
-        env,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }).trim();
-    execFileSync('git', ['init', '--bare', '--initial-branch=main', origin], { env, stdio: 'pipe' });
-    execFileSync('git', ['init', '--initial-branch=main', checkout], { env, stdio: 'pipe' });
+    const git = gitIn(checkout);
+    execFileSync(gitBinary, ['init', '--bare', '--initial-branch=main', origin], { env, stdio: 'pipe' });
+    execFileSync(gitBinary, ['init', '--initial-branch=main', checkout], { env, stdio: 'pipe' });
+    // Commits and receive-pack otherwise spawn `git maintenance run --auto`.
+    git('--git-dir', origin, 'config', 'maintenance.auto', 'false');
+    git('config', 'maintenance.auto', 'false');
     git('config', 'user.name', 'Test');
     git('config', 'user.email', 'test@example.com');
-    git('remote', 'add', 'origin', cloneUrl);
+    git('remote', 'add', 'origin', `https://${provider}.com/${repository}.git`);
     // Keep provider checkout validation real, but push to a hermetic local remote.
     git('remote', 'set-url', '--push', 'origin', origin);
-    const commit = (text: string) => {
-      writeFileSync(path.join(checkout, 'tracked.txt'), text);
-      git('add', 'tracked.txt');
-      git('commit', '-m', text);
-      return git('rev-parse', 'HEAD');
-    };
-    const base = commit('base');
+    const base = commitIn(checkout)('base');
     git('push', 'origin', 'main');
+    templates.set(repository, { root, base });
+  }
+
+  async function checkoutFixture(repository: string) {
+    const setup = await fixture(provider);
+    const template = templates.get(repository)!;
+    const root = mkdtempSync(path.join(os.tmpdir(), 'factory-push-'));
+    roots.push(root);
+    cpSync(template.root, root, { recursive: true });
+    const origin = path.join(root, 'origin.git');
+    const checkout = path.join(root, repository.split('/')[1]!);
+    const config = path.join(checkout, '.git', 'config');
+    writeFileSync(config, readFileSync(config, 'utf8').replaceAll(template.root, root));
+    const cloneUrl = `https://${provider}.com/${repository}.git`;
+    const git = gitIn(checkout);
+    const commit = commitIn(checkout);
+    const base = template.base;
     setup.getRepositoryAccess.mockResolvedValue({
       cloneUrl,
       authorization: { scheme: 'bearer', token: 'test-token', username: 'test' },
@@ -1042,7 +1076,7 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       provider: 'custom',
       workingDirectory: root,
       async executeCommand(command: string, args: string[] = [], options?: { env?: Record<string, string> }) {
-        const result = spawnSync(command, args, {
+        const result = spawnSync(command === 'git' ? gitBinary : command, args, {
           encoding: 'utf8',
           env: { ...env, ...options?.env },
           timeout: 10_000,
@@ -1061,6 +1095,8 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
   }
 
   describe.each(['acme/repo', 'acme/other'])('%s', repository => {
+    beforeAll(() => seedTemplate(repository));
+
     // A session ref left at the base used to push no agent commits. (#27667)
     it('pushes the active commit from an existing stale session branch without losing dirty work', async () => {
       const { checkout, git, commit, base, push, remote } = await checkoutFixture(repository);
