@@ -1,23 +1,17 @@
 import { cn } from '@/lib/utils';
 
-type PageClassOptions = {
-  active: boolean;
-  animateIn: boolean;
-  page: 'root' | 'view';
-  className?: string;
-};
-
-// The root page rests to the left and views to the right; an entering page starts from its
-// resting side. An exiting page leaves the flow and clips itself, so a long page fading out
-// behind a short one never adds scroll height.
-export function sidebarNavStackPageClasses({ active, animateIn, page, className }: PageClassOptions) {
+// Each page is a Base UI tab panel: it mounts with `data-starting-style`, keeps `data-ending-style`
+// until its exit transition ends, then unmounts. An exiting page leaves the flow and clips itself, so
+// a long page fading out behind a short one adds no scroll height. The root rests to the left, views
+// to the right.
+export function sidebarNavStackPageClasses(page: 'root' | 'view', className?: string) {
   return cn(
-    'col-start-1 row-start-1 min-w-0 transition-[opacity,translate] duration-normal ease-out-custom will-change-[opacity,translate] motion-reduce:transition-none',
-    active && 'relative translate-x-0 opacity-100',
-    active && animateIn && 'starting:opacity-0',
-    active && animateIn && (page === 'root' ? 'starting:-translate-x-2' : 'starting:translate-x-2'),
-    !active && 'pointer-events-none absolute inset-0 overflow-hidden opacity-0',
-    !active && (page === 'root' ? '-translate-x-2' : 'translate-x-2'),
+    'relative col-start-1 row-start-1 min-w-0 transition-[opacity,translate] duration-normal ease-out-custom will-change-[opacity,translate] motion-reduce:transition-none',
+    'data-ending-style:opacity-0 data-starting-style:opacity-0',
+    'data-ending-style:pointer-events-none data-ending-style:absolute data-ending-style:inset-0 data-ending-style:overflow-hidden',
+    page === 'root'
+      ? 'data-ending-style:-translate-x-2 data-starting-style:-translate-x-2'
+      : 'data-ending-style:translate-x-2 data-starting-style:translate-x-2',
     className,
   );
 }

@@ -1,3 +1,4 @@
+import { Tabs } from '@base-ui/react/tabs';
 import { ArrowLeftIcon } from 'lucide-react';
 import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
@@ -5,7 +6,6 @@ import { navItemClasses } from '../nav/sidebar-nav-item-classes';
 import { useSidebar } from '../root/sidebar-context';
 import { useSidebarNavStack } from './sidebar-nav-stack-context';
 import { sidebarNavStackPageClasses } from './sidebar-nav-stack-page-classes';
-import { useNavStackPagePresence } from './use-nav-stack-page-presence';
 import { cn } from '@/lib/utils';
 
 export type SidebarNavStackViewProps = ComponentPropsWithoutRef<'div'> & {
@@ -31,7 +31,6 @@ export function SidebarNavStackView({
   const active = state !== 'collapsed' && activeValue === value;
   const backRef = React.useRef<HTMLButtonElement>(null);
   const wasActiveRef = React.useRef(active);
-  const { ref, present, animateIn } = useNavStackPagePresence(active);
 
   React.useEffect(() => {
     if (active && !wasActiveRef.current) backRef.current?.focus();
@@ -57,17 +56,16 @@ export function SidebarNavStackView({
     onBack?.();
   }
 
-  if (!present) return null;
-
   return (
-    <div
+    <Tabs.Panel
       {...props}
-      ref={ref}
+      value={value}
+      role={undefined}
+      tabIndex={undefined}
       data-slot="sidebar-nav-stack-view"
       data-value={value}
       aria-hidden={!active}
-      inert={!active}
-      className={sidebarNavStackPageClasses({ active, animateIn, page: 'view', className })}
+      className={sidebarNavStackPageClasses('view', className)}
     >
       <button
         ref={backRef}
@@ -81,6 +79,6 @@ export function SidebarNavStackView({
         <span aria-hidden="true" />
       </button>
       {children}
-    </div>
+    </Tabs.Panel>
   );
 }
