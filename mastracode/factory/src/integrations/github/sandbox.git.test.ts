@@ -5,7 +5,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
-import { syncEnvironmentRepository } from './sandbox.js';
+import { checkoutSessionBranch, runSetupCommand, syncEnvironmentRepository } from './sandbox.js';
+import type { GitIdentity } from './sandbox.js';
 
 describe('environment branch selection with real Git', () => {
   let root: string;
@@ -16,10 +17,25 @@ describe('environment branch selection with real Git', () => {
   let latest: string;
   let sandbox: ExecutableSandbox;
 
+  function gitEnvironment() {
+    return {
+      ...process.env,
+      HOME: root,
+      XDG_CONFIG_HOME: root,
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_AUTHOR_NAME: undefined,
+      GIT_AUTHOR_EMAIL: undefined,
+      GIT_COMMITTER_NAME: undefined,
+      GIT_COMMITTER_EMAIL: undefined,
+      EMAIL: undefined,
+    };
+  }
+
   function git(dir: string, ...args: string[]) {
     const result = spawnSync('git', ['-C', dir, ...args], {
       encoding: 'utf8',
-      env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
+      env: gitEnvironment(),
     });
     if (result.status !== 0) throw new Error(result.stderr);
     return result.stdout.trim();
@@ -52,7 +68,7 @@ describe('environment branch selection with real Git', () => {
         const result = spawnSync(command, args, {
           encoding: 'utf8',
           cwd: root,
-          env: { ...process.env, ...options?.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
+          env: { ...gitEnvironment(), ...options?.env },
           timeout: 10_000,
         });
         if (result.error) throw result.error;
@@ -65,13 +81,74 @@ describe('environment branch selection with real Git', () => {
     if (root) await rm(root, { recursive: true, force: true });
   });
 
-  const sync = () =>
+  const sync = (identity?: GitIdentity) =>
     syncEnvironmentRepository(sandbox, checkout, {
+      identity,
       branch: 'session/task',
       defaultBranch: 'main',
       token: 'test-token',
       repoFullName: 'test/repo',
     });
+
+  describe.each([
+    { label: 'fallback', identity: undefined, name: 'Mastra Code', email: 'mastra-code@users.noreply.github.com' },
+    {
+      label: 'app bot',
+      identity: { login: 'factory-app[bot]' },
+      name: 'factory-app[bot]',
+      email: 'factory-app[bot]@users.noreply.github.com',
+    },
+    {
+      label: 'session user',
+      identity: { name: 'Ada Lovelace', email: 'ada@example.com' },
+      name: 'Ada Lovelace',
+      email: 'ada@example.com',
+    },
+  ])('$label authorship', ({ identity, name, email }) => {
+    describe.each(['primary', 'secondary'] as const)('%s session repository identity', role => {
+      it.each(['new', 'detached', 'current', 'local', 'remote', 'dirty', 'unrelated'])(
+        'allows a setup command and agent commit after %s branch startup (#28233)',
+        async start => {
+          if (start === 'detached') git(checkout, 'checkout', '--detach');
+          if (start === 'current') git(checkout, 'checkout', '-b', 'session/task');
+          if (start === 'local') git(checkout, 'branch', 'session/task');
+          if (start === 'remote') git(seed, 'push', 'origin', 'main:session/task');
+          if (start === 'dirty') await writeFile(path.join(checkout, 'tracked.txt'), 'local work\n');
+          if (start === 'unrelated') git(checkout, 'checkout', '-b', 'other-work');
+          git(checkout, 'config', 'user.useConfigOnly', 'true');
+          git(checkout, 'config', '--unset-all', 'user.name');
+          git(checkout, 'config', '--unset-all', 'user.email');
+          const missingIdentity = spawnSync('git', ['-C', checkout, 'var', 'GIT_AUTHOR_IDENT'], {
+            encoding: 'utf8',
+            env: gitEnvironment(),
+          });
+          expect(missingIdentity.status).not.toBe(0);
+
+          if (role === 'primary') {
+            await checkoutSessionBranch(sandbox, checkout, {
+              identity,
+              branch: 'session/task',
+              baseBranch: 'main',
+              token: 'test-token',
+              repoFullName: 'test/repo',
+            });
+          } else {
+            await sync(identity);
+          }
+
+          await runSetupCommand(sandbox, checkout, 'git commit --allow-empty -m "Setup commit"');
+          await writeFile(path.join(checkout, 'agent.txt'), 'Agent work\n');
+          git(checkout, 'add', '.');
+          git(checkout, 'commit', '-m', 'Agent commit');
+          expect(git(checkout, 'log', '-2', '--format=%an <%ae>|%cn <%ce>')).toBe(
+            Array(2).fill(`${name} <${email}>|${name} <${email}>`).join('\n'),
+          );
+          expect(git(checkout, 'config', '--local', 'user.name')).toBe(name);
+          expect(git(checkout, 'config', '--local', 'user.email')).toBe(email);
+        },
+      );
+    });
+  });
 
   it.each(['main', 'detached'])('creates from the remote tip when starting on %s', async start => {
     if (start === 'detached') git(checkout, 'checkout', '--detach');
