@@ -2894,16 +2894,21 @@ class SessionPermissions {
 
   /** Set the approval policy for a tool category. Resolves once persisted. */
   setForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): Promise<void> {
+    // Copy before changing: the rules are live session state, and a rejected update must leave them untouched.
     const rules = this.getRules();
-    rules.categories[category] = policy;
-    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+    return (
+      this.#setState?.({ permissionRules: { ...rules, categories: { ...rules.categories, [category]: policy } } }) ??
+      Promise.resolve()
+    );
   }
 
   /** Set the approval policy for an individual tool. Resolves once persisted. */
   setForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): Promise<void> {
     const rules = this.getRules();
-    rules.tools[toolName] = policy;
-    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+    return (
+      this.#setState?.({ permissionRules: { ...rules, tools: { ...rules.tools, [toolName]: policy } } }) ??
+      Promise.resolve()
+    );
   }
 }
 
