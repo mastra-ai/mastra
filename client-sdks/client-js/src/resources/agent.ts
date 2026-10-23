@@ -73,6 +73,7 @@ import { parsePartialJson, processDataStream } from '../utils/ai-sdk-v4';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
+import { createSseEventSplitter } from '../utils/sse-event-splitter';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
@@ -1045,10 +1046,25 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async abortThread(params: AbortAgentThreadParams): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
+  /** Stops execution of a run, including runs without a memory thread. */
+  async abortRun(
+    runId: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<RouteResponse<'POST /agents/:agentId/runs/:runId/abort'>> {
+    return this.request<RouteResponse<'POST /agents/:agentId/runs/:runId/abort'>>(
+      `/agents/${this.agentId}/runs/${encodeURIComponent(runId)}/abort`,
+      { method: 'POST', signal: options?.signal },
+    );
+  }
+
+  async abortThread(
+    params: AbortAgentThreadParams,
+    options?: { signal?: AbortSignal },
+  ): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
     const { resourceId, threadId, clearPendingSignals, expectedRunId } = params;
     return this.request<RouteResponse<'POST /agents/:agentId/threads/abort'>>(`/agents/${this.agentId}/threads/abort`, {
       method: 'POST',
+      signal: options?.signal,
       body: {
         resourceId,
         threadId,
@@ -2263,10 +2279,11 @@ export class Agent extends BaseResource {
 
   /**
    * Creates the consumer-facing stream for the streaming methods. Cancelling the
-   * returned stream (or aborting `externalSignal`) aborts the underlying request
-   * and stops any client-tool continuations.
+   * returned stream or the client-wide signal detaches the HTTP observer and
+   * stops any client-tool continuations. Per-call execution cancellation is
+   * handled separately by processStreamResponse.
    */
-  private createCancellableStream(externalSignal?: AbortSignal) {
+  private createCancellableStream() {
     const abortController = new AbortController();
     let readableController: ReadableStreamDefaultController<Uint8Array>;
     const readable = new ReadableStream<Uint8Array>({
@@ -2280,7 +2297,7 @@ export class Agent extends BaseResource {
     return {
       readable,
       controller: readableController!,
-      signal: mergeAbortSignals(abortController.signal, externalSignal, this.options.abortSignal)!,
+      signal: mergeAbortSignals(abortController.signal, this.options.abortSignal)!,
     };
   }
 
@@ -2290,6 +2307,69 @@ export class Agent extends BaseResource {
     route: string = 'stream',
     signal?: AbortSignal,
   ) {
+    // Know the execution ID before the first chunk, including for early cancellation.
+    const suppliedRunId = processedParams.runId;
+    processedParams = { ...processedParams, runId: processedParams.runId ?? uuid() };
+    const callerSignal: AbortSignal | undefined = processedParams.abortSignal;
+    callerSignal?.throwIfAborted();
+    const transportAbort = new AbortController();
+    const cancellationAbort = new AbortController();
+    const detachSignal = signal;
+    signal = mergeAbortSignals(detachSignal, transportAbort.signal);
+    let cancellationTimer: ReturnType<typeof setTimeout> | undefined;
+    const stopCancellation = () => cancellationAbort.abort();
+    const cancelExecution = () => {
+      cancellationTimer = setTimeout(
+        () => cancellationAbort.abort(new Error('Agent run cancellation was not acknowledged')),
+        10_000,
+      );
+      void (async () => {
+        try {
+          while (true) {
+            cancellationAbort.signal.throwIfAborted();
+            const result = await this.abortRun(processedParams.runId, { signal: cancellationAbort.signal });
+            if (result.aborted) return;
+            await new Promise<void>((resolve, reject) => {
+              const onAbort = () => {
+                clearTimeout(timer);
+                reject(cancellationAbort.signal.reason);
+              };
+              const timer = setTimeout(() => {
+                cancellationAbort.signal.removeEventListener('abort', onAbort);
+                resolve();
+              }, 100);
+              cancellationAbort.signal.addEventListener('abort', onAbort, { once: true });
+              if (cancellationAbort.signal.aborted) onAbort();
+            });
+          }
+        } catch (error) {
+          if (
+            !cancellationAbort.signal.aborted &&
+            !(error instanceof Error && 'status' in error && (error.status === 404 || error.status === 501))
+          ) {
+            try {
+              controller.error(error);
+            } catch {
+              /* Already detached. */
+            }
+          }
+        } finally {
+          clearTimeout(cancellationTimer);
+          transportAbort.abort(callerSignal?.reason);
+        }
+      })();
+    };
+    const cleanupCancellation = () => {
+      callerSignal?.removeEventListener('abort', cancelExecution);
+      detachSignal?.removeEventListener('abort', stopCancellation);
+      clearTimeout(cancellationTimer);
+      stopCancellation();
+    };
+    detachSignal?.addEventListener('abort', stopCancellation, { once: true });
+    if (detachSignal?.aborted) stopCancellation();
+    callerSignal?.addEventListener('abort', cancelExecution, { once: true });
+    if (callerSignal?.aborted) cancelExecution();
+
     // Extract threadId from memory config if present (matching generate() behavior)
     const { memory } = processedParams ?? {};
     const { resource, thread } = memory ?? {};
@@ -2308,18 +2388,22 @@ export class Agent extends BaseResource {
       route === 'stream' && this.routeOverrides?.stream
         ? this.routeOverrides.stream
         : `/agents/${this.agentId}/${route}`;
-    const response: Response = await this.request(requestPath, {
+    const response = await this.request<Response>(requestPath, {
       method: 'POST',
       body: requestBody,
       stream: true,
       signal,
+    }).catch(error => {
+      cleanupCancellation();
+      throw error;
     });
 
     if (!response.body) {
+      cleanupCancellation();
       throw new Error('No response body');
     }
 
-    const isAborted = () => Boolean(signal?.aborted);
+    const isAborted = () => Boolean(signal?.aborted || callerSignal?.aborted);
     const isAbortError = (error: unknown) => isAborted() || (error as Error)?.name === 'AbortError';
     const safeClose = () => {
       try {
@@ -2335,7 +2419,7 @@ export class Agent extends BaseResource {
 
     try {
       let messages: UIMessage[] = [];
-      let streamRunId: string | undefined = processedParams.runId;
+      let streamRunId: string | undefined = suppliedRunId;
       // The full model-message history the server reported on its last finish chunk. A resumed
       // run restores the conversation from its snapshot, so this is the only place a stateless
       // client can recover it for a client-tool continuation.
@@ -2350,12 +2434,10 @@ export class Agent extends BaseResource {
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
       const decoder = new TextDecoder();
-      let pendingText = '';
+      const splitEvents = createSseEventSplitter();
 
       const enqueueReadableText = (text: string, isFinal = false) => {
-        pendingText += text;
-        const lines = pendingText.split('\n\n');
-        pendingText = isFinal ? '' : (lines.pop() ?? '');
+        const lines = splitEvents(text, isFinal);
         for (const line of lines) {
           if (!line.startsWith('data: ') || !line.includes('"type":"finish"')) continue;
           try {
@@ -2721,10 +2803,12 @@ export class Agent extends BaseResource {
           safeClose();
         })
         .finally(() => {
+          cleanupCancellation();
           signal?.removeEventListener('abort', onAbort);
           releaseOpenStream();
         });
     } catch (error) {
+      cleanupCancellation();
       if (!isAbortError(error)) {
         console.error('Error processing stream response:', error);
       }
@@ -2970,7 +3054,7 @@ export class Agent extends BaseResource {
     };
 
     // Create a manually controlled readable stream
-    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
+    const { readable, controller: readableController, signal } = this.createCancellableStream();
 
     // Start processing the response in the background
     // This returns immediately with response metadata and continues streaming in background
@@ -3087,7 +3171,7 @@ export class Agent extends BaseResource {
     };
 
     // Create a manually controlled readable stream
-    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
+    const { readable, controller: readableController, signal } = this.createCancellableStream();
 
     // Start processing the response in the background
     // This returns immediately with response metadata and continues streaming in background
@@ -3180,7 +3264,7 @@ export class Agent extends BaseResource {
     };
 
     // Create a manually controlled readable stream
-    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
+    const { readable, controller: readableController, signal } = this.createCancellableStream();
 
     // A rejected request never resumes the run, so drop the hold even if the original stream is open.
     const response = await this.processStreamResponse(
@@ -3274,7 +3358,7 @@ export class Agent extends BaseResource {
     };
 
     // Create a manually controlled readable stream
-    const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
+    const { readable, controller: readableController, signal } = this.createCancellableStream();
 
     // A rejected request never resumes the run, so drop the hold even if the original stream is open.
     const response = await this.processStreamResponse(
@@ -3412,7 +3496,7 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { readable, controller: readableController, signal } = this.createCancellableStream(options.abortSignal);
+    const { readable, controller: readableController, signal } = this.createCancellableStream();
 
     const response = await this.processStreamResponse(
       processedParams,
@@ -3543,7 +3627,7 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { readable, controller: readableController, signal } = this.createCancellableStream(options.abortSignal);
+    const { readable, controller: readableController, signal } = this.createCancellableStream();
 
     const response = await this.processStreamResponse(
       processedParams,

@@ -48,12 +48,12 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "qwen3.8-27b": [
+    "gemma4-31b": [
       {
         "type": "toggle"
       }
     ],
-    "gemma4-31b": [
+    "qwen3.8-27b": [
       {
         "type": "toggle"
       }

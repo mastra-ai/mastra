@@ -78,6 +78,7 @@ class SpanRecorder {
       error: (opts?: { error?: unknown }) => recorder.ended.push({ ...data, output: { error: String(opts?.error) } }),
       update: () => {},
       exportSpan: () => ({ ...data }),
+      snapshot: () => ({ ...data }),
       getParentSpanId: () => data.parentSpanId,
       findParent: () => undefined,
       executeInContext: async (fn: () => Promise<unknown>) => fn(),

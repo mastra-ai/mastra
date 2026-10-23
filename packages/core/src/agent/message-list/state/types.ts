@@ -34,15 +34,20 @@ export type MastraStepStartPart = {
 } & MastraPartExtensions;
 
 // Persisted record of a terminal agent failure (retries, error processors and
-// fallback models all exhausted). Deliberately stores only JSON-safe identity
-// fields: stack traces, causes and custom enumerable properties stay on the
-// runtime error surfaces (stream chunk, onError, result.error) and are never
-// written to thread history.
+// fallback models all exhausted). Deliberately stores only JSON-safe fields:
+// stack traces, causes and other custom properties stay on the runtime error
+// surfaces (stream chunk, onError, result.error) and are never written to
+// thread history. Provider HTTP failures (AI SDK `APICallError`) also keep the
+// status code, a bounded copy of the response body and the provider request id,
+// because their `message` is often just the HTTP status text.
 export type MastraErrorPart = {
   type: 'error';
   error: {
     name: string;
     message: string;
+    statusCode?: number;
+    responseBody?: string;
+    requestId?: string;
   };
 } & MastraPartExtensions;
 

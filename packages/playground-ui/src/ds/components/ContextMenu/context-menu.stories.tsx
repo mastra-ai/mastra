@@ -127,10 +127,10 @@ export const WithCheckboxItems: Story = {
           <ContextMenu.Label>Appearance</ContextMenu.Label>
           <ContextMenu.Separator />
           <ContextMenu.CheckboxItem checked={showStatusBar} onCheckedChange={setShowStatusBar}>
-            Status Bar
+            Status bar
           </ContextMenu.CheckboxItem>
           <ContextMenu.CheckboxItem checked={showActivityBar} onCheckedChange={setShowActivityBar}>
-            Activity Bar
+            Activity bar
           </ContextMenu.CheckboxItem>
           <ContextMenu.CheckboxItem checked={showPanel} onCheckedChange={setShowPanel}>
             Panel

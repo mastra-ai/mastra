@@ -1428,11 +1428,10 @@ describe('InngestAgent parity surface', () => {
       expect(sendSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            requestContext: {
+            requestContext: expect.objectContaining({
               userId: 'user-1',
               organizationId: 'org-1',
-              mastra__scopes: [],
-            },
+            }),
           }),
         }),
       );

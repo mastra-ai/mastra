@@ -1,0 +1,5 @@
+{
+  "name": "yarn-npm-with-invalid-workspaces",
+  "private": true,
+  "workspaces": false
+}

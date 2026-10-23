@@ -71,25 +71,13 @@
     "xai/grok-4.3"
   ],
   "reasoning": {
-    "openai/gpt-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "openai/gpt-5-mini": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/o3-mini": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-5.1": [
+    "openai/gpt-5.2": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -101,7 +89,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-5.2": [
+    "openai/gpt-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/o3-mini": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -119,30 +113,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "anthropic/claude-opus-4-7": [
-      {
-        "type": "toggle"
-      },
+    "openai/gpt-5.1": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
     "anthropic/claude-sonnet-4-6": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
-      }
-    ],
-    "anthropic/claude-sonnet-4-5": [
       {
         "type": "toggle"
       },
@@ -171,6 +148,29 @@
       }
     ],
     "anthropic/claude-haiku-4-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
+      }
+    ],
+    "anthropic/claude-opus-4-7": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "anthropic/claude-sonnet-4-5": [
       {
         "type": "toggle"
       },

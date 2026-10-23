@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { TraceSpanPanel } from '../trace-span-panel';
 import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { queryPageFromList } from './fixtures/thread-traces';
-import { TRACE_ID, panelTraceSpans, spanDetailById } from './fixtures/trace-span-panel';
+import { TRACE_ID, panelTraceSpans, skillSignalRootDetail, spanDetailById } from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -318,6 +318,47 @@ describe('TraceSpanPanel', () => {
     fireEvent.click(screen.getByLabelText('Go to previous span'));
     expect(await screen.findByRole('heading', { name: /root01/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+  });
+
+  it('when the selected run was started by a skill signal, then its input shows the skill instead of the raw signal', async () => {
+    installHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/root01`, () =>
+        HttpResponse.json(skillSignalRootDetail),
+      ),
+    );
+    const { queryClient } = renderPanel({ initialSpanId: 'root01' });
+
+    const skill = await screen.findByLabelText('Skill: weather-check');
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    expect(skill.textContent).toContain('weather-check Paris');
+    expect(screen.getByText('Check the forecast before answering.')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('[Function]');
+  });
+
+  it('when a skill signal started the run, then its row in the span tree is badged with the skill', async () => {
+    installHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
+        HttpResponse.json({
+          ...panelTraceSpans,
+          spans: panelTraceSpans.spans.map(span => (span.spanId === 'root01' ? skillSignalRootDetail.span : span)),
+        }),
+      ),
+    );
+    const { queryClient } = renderPanel();
+
+    const badge = await waitFor(() => {
+      const element = document.querySelector('[data-slot="span-signal-badge"]');
+      expect(element).not.toBeNull();
+      return element;
+    });
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    expect(badge?.textContent).toBe('Skill weather-check');
+    expect(badge?.closest('[aria-label="View details for span Root agent run"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-slot="span-signal-badge"]')).toHaveLength(1);
   });
 
   it('when the selected span is clicked again, then onSpanSelect(undefined) clears the selection', async () => {
