@@ -785,7 +785,9 @@ describe('model switches after hosted tool results', () => {
     expect(first.text).toBe('Fetched both pages.');
     const history = first.messages;
     const before = structuredClone(history);
-    const storedCalls = history.flatMap(message => message.content.parts).filter(part => part.type === 'tool-invocation');
+    const storedCalls = history
+      .flatMap(message => message.content.parts)
+      .filter(part => part.type === 'tool-invocation');
     expect(storedCalls).toHaveLength(2);
     expect(storedCalls.every(part => part.toolInvocation.state === 'result')).toBe(true);
 
@@ -812,10 +814,7 @@ describe('model switches after hosted tool results', () => {
       instructions: 'Answer the follow-up.',
       model: secondModel,
     });
-    const secondStream = await secondAgent.stream([
-      ...history,
-      { role: 'user', content: 'Summarize the pages.' },
-    ]);
+    const secondStream = await secondAgent.stream([...history, { role: 'user', content: 'Summarize the pages.' }]);
     const second = await secondStream.getFullOutput();
     expect(second.text).toBe('Follow-up accepted.');
     expect(prompts).toHaveLength(1);
