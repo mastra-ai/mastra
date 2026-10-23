@@ -24,7 +24,7 @@ The OM hook `onReflectionCommitted` (`types.ts:1222`, `reflector-runner.ts:251-3
 
 **TUI.** Delete `components/subconscious-activity.ts` and `render-messages.ts:36-38, 525-530`. Old threads hold persisted `subconscious-activity` state signals, so the renderer skips them silently rather than printing raw signals (D8). Remove `e2e/tui/subconscious-activity-rendering.ts` and its entries in `e2e/tui/{index,types}.ts`.
 
-**Factory.** Point `routes/knowledge.ts:43` (the reserved pins node) at the constants' new home in core. Update `factory-ui/e2e/knowledge/explore.spec.ts`.
+**Factory.** `routes/knowledge.ts:43-44` keeps its own `PINNED_NODE_NAME = 'pinned'` copy; only a comment points at the Subconscious file, so nothing breaks. Update the comment and dedupe the constant against core's. Update `factory-ui/e2e/knowledge/explore.spec.ts`.
 
 **Tests, scripts and docs.**
 - Delete about 25 OM `__tests__/subconscious-*.test.ts`.
@@ -43,7 +43,7 @@ Move `knowledge-tools`, `knowledge-write-tools`, `pinned`, `pinned-state-process
 
 ```ts
 const company = new Knowledge({
-  id: 'company', storage, scopes: memoryScopeTypes,
+  id: 'company', storage,
   vector, embedder,                      // optional; without them search is keyword-only
   tools: { read: true, write: false },   // what an attached agent gets
   pins: { maxPins: 20, maxTokens: 500 }, // or true / false
@@ -52,7 +52,7 @@ new Agent({ knowledge: company /* or a registered key */ });
 const tools = company.createTools({ write: true }); // explicit wiring
 ```
 
-- `vector` and `embedder` are **new options on Knowledge**. On main they exist only on Memory.
+- `tools`, `pins`, `vector` and `embedder` are **all new options on `KnowledgeConfig`** (main has id, name, description, structure, `scopes?: KnowledgeScopeTypesConfig` and storage; `core/knowledge/config.ts`). `vector` and `embedder` exist only on Memory today.
 - Tools merge next to `workspaceTools` in `agent.ts:7369-7379`.
 - An agent with Knowledge and no Memory gets no "no memory configured" warning (`agent.ts:8760`).
 
@@ -61,7 +61,7 @@ const tools = company.createTools({ write: true }); // explicit wiring
 **Tools work without Memory.**
 - `agent.ts:8731-8745` resolves the thread and resource from call options and the reserved request-context ids, and the tool builder passes them through (`tool-builder/builder.ts:637-644, 739-740`).
 - Scopes stay main's fixed chain: `org:<requestContext.organizationId>`, then `resource:` (the `knowledgeResourceId` override if set, else the run's resourceId), then `thread:`.
-- Without an `organizationId` the tools refuse, as they do on main (D3).
+- Without an `organizationId` the tools and the pins processor both refuse or skip, as on main (D3). For Mastra Code sessions that can't resolve an org (today `hasSubconsciousTools` returns false), the agent simply gets no Knowledge tools or pins; nothing errors.
 
 **Pins can't use the state-signal lane.**
 - `ProcessorRunner` throws `computeStateSignal requires Mastra memory…` (`processors/runner.ts:496`) and then loads the thread through Memory.
@@ -86,11 +86,12 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 |---|---|
 | `MAX_KNOWLEDGE_RECORD_TEXT_LENGTH` = 1000 UTF-16 units | `MAX_KNOWLEDGE_RECORD_TOKENS` = 250 |
 | `MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH` = 400 | `MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS` = 100 |
-| pins `maxCharacters` default 2000, max 8000 | `maxTokens` default 500, max 2000 (D1) |
+| pins `maxCharacters` default 2000, max 8000 (`pinned.ts:21-22`) | `maxTokens` default 500, max 2000 (D1); `maxPins` stays 20 |
 
 - **The old constant names are removed, not kept with a new unit.** I'm not adding deprecated aliases either: the feature is experimental, and we don't keep compatibility aliases.
 - The assert function names stay. The LibSQL, PG and MySQL adapters call them on every write (libsql 718/817/962, pg 954/1052/1197, mysql 309/409/551). LibSQL and PG load them through `loadKnowledgeV2Core()`, so their code needs no change.
 - Two test updates: the shared store test contract `stores/_test-utils/src/domains/knowledge/index.ts:5-6, 643-651` (constants and the `UTF-16 code unit limit` message), and the MySQL and Mongo knowledge tests.
+- The pin budget (`pinned.ts:~103`) counts the whole pin set, so the token version estimates tokens over the whole set, not per pin.
 - The tool schemas drop `maxLength`, because a schema can't count tokens. The check at execute time is the real limit.
 
 ## 5. Effect on other work
@@ -126,7 +127,7 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 | D2 | Defaults when an agent has `knowledge` | read on, write off, pins off | everything off until set |
 | D3 | No `organizationId` in request context | refuse, as on main | default to a local org |
 | D4 | Memory's `knowledge` option | remove it; attach to the agent | keep it as a shortcut |
-| D5 | Mastra Code switch | rename to `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1`; it attaches a Knowledge with read, write and pins on | keep the old flag name |
+| D5 | Mastra Code switch | rename `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS` (`sdk/agents/memory.ts:~250`) to `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1`; it attaches a Knowledge with read, write and pins on and no longer requires a vector store (without one, search is keyword-only) | keep the old flag name |
 | D6 | Release note | Tyler's fixed wording, "Changes to an experimental, upcoming memory feature.", plus one line: "`experimental_subconscious` is removed; attach Knowledge to the agent instead." | wording only, no removal line |
 | D7 | Pins without Memory | plain input processor, one fixed block (section 3) | pins only on agents that also have Memory (state-signal lane, snapshot+delta) |
 | D8 | Leftovers in existing threads | keep three small protections: OM strip of old signals, `deleteThread` remind cleanup, TUI skips old activity signals | drop them and accept raw signals or orphaned remind threads in old threads |
