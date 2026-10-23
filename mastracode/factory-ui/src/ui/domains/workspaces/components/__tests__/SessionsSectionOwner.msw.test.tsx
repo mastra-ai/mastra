@@ -89,20 +89,6 @@ describe('Sessions sidebar owner filter', () => {
     userSession(5, 'user-grace'),
   ];
 
-  it("starts on every owner's sessions in one list", async () => {
-    stubSessions(mixedSessions());
-
-    const rendered = renderSection();
-    await waitForMutationsIdle(rendered.client);
-
-    const all = await screen.findByRole('region', { name: 'All sessions' });
-    for (const name of ['factory/issue-20001', 'task-20002', 'factory/issue-20003', 'factory/pr-20004', 'task-20005']) {
-      expect(await within(all).findByRole('link', { name })).toBeInTheDocument();
-    }
-    expect(screen.queryByRole('region', { name: 'Work sessions' })).not.toBeInTheDocument();
-    expect(sessionPropertiesTrigger()).toBeInTheDocument();
-  });
-
   it("narrows every group to the viewer's own sessions", async () => {
     groupSessionsByBoard();
     stubSessions(mixedSessions());

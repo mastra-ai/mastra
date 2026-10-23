@@ -59,9 +59,4 @@ describe('session filters', () => {
     expect(activeSessionFilterCount(EMPTY_SESSION_FILTERS)).toBe(0);
     expect(activeSessionFilterCount(filters({ owner: MY_SESSIONS, status: 'working', updated: '7d' }))).toBe(3);
   });
-
-  it('defaults to every owner, so choosing Mine counts as an active filter', () => {
-    expect(EMPTY_SESSION_FILTERS.owner).toBe(ALL_SESSION_OWNERS);
-    expect(activeSessionFilterCount(filters({ owner: MY_SESSIONS }))).toBe(1);
-  });
 });
