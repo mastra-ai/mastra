@@ -771,6 +771,131 @@ describe('Agent signals: claimed thread ownership', () => {
     },
   );
 
+  it.each(['remote', 'local'] as const)(
+    'runs %s input that joined a queued wake reservation when that wake is cancelled',
+    async kind => {
+      const pubsub = new ControlledLeasePubSub();
+      const senderRuntime = new AgentThreadStreamRuntime();
+      let releaseFirst!: () => void;
+      const firstFinished = new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      });
+      const prompts: string[] = [];
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(JSON.stringify(prompt));
+          const call = prompts.length;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({ type: 'text-start', id: `text-${call}` });
+                controller.enqueue({ type: 'text-delta', id: `text-${call}`, delta: `answer ${call}. ` });
+                controller.enqueue({ type: 'text-end', id: `text-${call}` });
+                if (call === 1) await firstFinished;
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      });
+      const ownerAgent = new Agent({
+        id: `wake-cancel-owner-${kind}`,
+        name: 'Owner',
+        instructions: 'Test',
+        model,
+        pubsub,
+      });
+      const senderAgent = new Agent({
+        id: `wake-cancel-sender-${kind}`,
+        name: 'Sender',
+        instructions: 'Test',
+        model: createTextStreamModel('sender response'),
+        pubsub,
+      });
+      const target = { resourceId: `wake-cancel-user-${kind}`, threadId: `wake-cancel-thread-${kind}` };
+      const claimedTarget = { ...target, ifIdle: { behavior: 'wake' as const, requireClaimedOwner: true } };
+      const subscription = await agentThreadStreamRuntime.subscribeToThread(ownerAgent, target, pubsub);
+      const claim = await agentThreadStreamRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+      let releaseTransfer = () => {};
+
+      try {
+        await senderRuntime.sendSignal(
+          senderAgent,
+          { type: 'user-message', contents: 'start the run' },
+          claimedTarget,
+          pubsub,
+        ).accepted;
+        await waitForCondition(() => prompts.length === 1);
+        // Queued input waits for the run to end, then reserves the thread for its own run.
+        const queued = senderRuntime.queueSignal(
+          senderAgent,
+          { type: 'user-message', contents: 'queued then cancelled', id: `wake-cancel-queued-${kind}` },
+          claimedTarget,
+          pubsub,
+        );
+        await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+        // Hold the reservation's lease handover so input can join it before it starts.
+        let transferring = false;
+        pubsub.transferLeaseWait = new Promise<void>(resolve => (releaseTransfer = resolve));
+        pubsub.onTransferLease = () => (transferring = true);
+        releaseFirst();
+        await waitForCondition(() => transferring, 2_000);
+
+        const joined =
+          kind === 'remote'
+            ? senderRuntime.sendSignal(
+                senderAgent,
+                { type: 'user-message', contents: 'joined input' },
+                claimedTarget,
+                pubsub,
+              )
+            : agentThreadStreamRuntime.sendSignal(
+                ownerAgent,
+                { type: 'user-message', contents: 'joined input' },
+                claimedTarget,
+                pubsub,
+              );
+        void joined.accepted.catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await pubsub.flush();
+
+        // The queued wake is cancelled while its reservation is still being admitted.
+        agentThreadStreamRuntime.cancelQueuedMessages(
+          ownerAgent,
+          { ...target, signalIds: [`wake-cancel-queued-${kind}`] },
+          pubsub,
+        );
+        pubsub.transferLeaseWait = undefined;
+        releaseTransfer();
+
+        // Input acknowledged as delivered must reach a model request; otherwise it must be refused.
+        const accepted = await joined.accepted.then(
+          result => result,
+          () => undefined,
+        );
+        if (accepted) {
+          await waitForCondition(() => prompts.some(prompt => prompt.includes('joined input')), 2_000);
+          expect(prompts.filter(prompt => prompt.includes('joined input'))).toHaveLength(1);
+        }
+        expect(prompts.some(prompt => prompt.includes('queued then cancelled'))).toBe(false);
+      } finally {
+        releaseFirst();
+        releaseTransfer();
+        claim.unsubscribe();
+        subscription.unsubscribe();
+      }
+    },
+  );
+
   it.each([
     ['a running run', 'slow'],
     ['a running run', 'rejecting'],
