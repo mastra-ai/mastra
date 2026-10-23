@@ -739,96 +739,108 @@ describe('stripForeignProviderExecutedTools', () => {
 // #28190: hosted results live inside assistant messages after MessageList conversion.
 describe('model switches after hosted tool results', () => {
   it.each([
-    ['openai', 'anthropic'],
-    ['anthropic', 'openai'],
-    ['openai', 'openai'],
-    ['anthropic', 'anthropic'],
-  ])('replays complete tool pairs when switching from %s to %s (#28190)', async (source, destination) => {
-    const sourceModel = new MockLanguageModelV2({
-      provider: 'vercel',
-      modelId: `${source}/source-model`,
-      doStream: async () => ({
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          ...['page-1', 'page-2'].flatMap(toolCallId => [
-            {
-              type: 'tool-call' as const,
-              toolCallId,
-              toolName: 'web_fetch',
-              input: JSON.stringify({ url: `https://example.com/${toolCallId}` }),
-              providerExecuted: true,
-              providerMetadata: { [source]: { itemId: toolCallId } },
-            },
-            {
-              type: 'tool-result' as const,
-              toolCallId,
-              toolName: 'web_fetch',
-              result: `Content of ${toolCallId}`,
-              providerExecuted: true,
-            },
-          ]),
-          { type: 'text-start', id: 'summary' },
-          { type: 'text-delta', id: 'summary', delta: 'Fetched both pages.' },
-          { type: 'text-end', id: 'summary' },
-          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
-        ]),
-      }),
-    });
-    const firstAgent = new Agent({
-      id: 'hosted-tools',
-      name: 'Hosted tools',
-      instructions: 'Fetch both pages.',
-      model: sourceModel,
-    });
-    const firstStream = await firstAgent.stream('Fetch two pages.', { maxSteps: 1 });
-    const first = await firstStream.getFullOutput();
-    expect(first.text).toBe('Fetched both pages.');
-    const history = first.messages;
-    const before = structuredClone(history);
-    const storedCalls = history
-      .flatMap(message => message.content.parts)
-      .filter(part => part.type === 'tool-invocation');
-    expect(storedCalls).toHaveLength(2);
-    expect(storedCalls.every(part => part.toolInvocation.state === 'result')).toBe(true);
-
-    const prompts: LanguageModelV2Prompt[] = [];
-    const secondModel = new MockLanguageModelV2({
-      provider: 'vercel',
-      modelId: `${destination}/destination-model`,
-      doStream: async ({ prompt }) => {
-        prompts.push(prompt);
-        return {
+    ['openai', 'anthropic', false],
+    ['anthropic', 'openai', false],
+    ['openai', 'openai', false],
+    ['anthropic', 'anthropic', false],
+    ['openai', 'anthropic', true],
+    ['anthropic', 'openai', true],
+  ] as const)(
+    'replays complete tool pairs when switching from %s to %s (mixed history: %s) (#28190)',
+    async (source, destination, mixedHistory) => {
+      const sourceModel = new MockLanguageModelV2({
+        provider: 'vercel',
+        modelId: `${source}/source-model`,
+        doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
-            { type: 'text-start', id: 'answer' },
-            { type: 'text-delta', id: 'answer', delta: 'Follow-up accepted.' },
-            { type: 'text-end', id: 'answer' },
+            ...['page-1', 'page-2'].flatMap((toolCallId, index) => [
+              {
+                type: 'tool-call' as const,
+                toolCallId,
+                toolName: 'web_fetch',
+                input: JSON.stringify({ url: `https://example.com/${toolCallId}` }),
+                providerExecuted: true,
+                providerMetadata: { [mixedHistory && index === 1 ? destination : source]: { itemId: toolCallId } },
+              },
+              {
+                type: 'tool-result' as const,
+                toolCallId,
+                toolName: 'web_fetch',
+                result: `Content of ${toolCallId}`,
+                providerExecuted: true,
+              },
+            ]),
+            { type: 'text-start', id: 'summary' },
+            { type: 'text-delta', id: 'summary', delta: 'Fetched both pages.' },
+            { type: 'text-end', id: 'summary' },
             { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
           ]),
-        };
-      },
-    });
-    const secondAgent = new Agent({
-      id: 'hosted-tools',
-      name: 'Hosted tools',
-      instructions: 'Answer the follow-up.',
-      model: secondModel,
-    });
-    const secondStream = await secondAgent.stream([...history, { role: 'user', content: 'Summarize the pages.' }]);
-    const second = await secondStream.getFullOutput();
-    expect(second.text).toBe('Follow-up accepted.');
-    expect(prompts).toHaveLength(1);
-    for (const prompt of prompts) {
-      const parts = prompt.flatMap(message => (typeof message.content === 'string' ? [] : message.content));
-      const calls = parts.filter(part => part.type === 'tool-call');
-      const results = parts.filter(part => part.type === 'tool-result');
-      // Every result crossing the provider boundary must still have its call.
-      expect(results.map(part => part.toolCallId)).toEqual(calls.map(part => part.toolCallId));
-      expect(calls).toHaveLength(source === destination ? 2 : 0);
-      expect(parts).toContainEqual(expect.objectContaining({ type: 'text', text: 'Fetched both pages.' }));
-    }
-    expect(history).toEqual(before);
-  });
+        }),
+      });
+      const firstAgent = new Agent({
+        id: 'hosted-tools',
+        name: 'Hosted tools',
+        instructions: 'Fetch both pages.',
+        model: sourceModel,
+      });
+      const firstStream = await firstAgent.stream('Fetch two pages.', { maxSteps: 1 });
+      const first = await firstStream.getFullOutput();
+      expect(first.text).toBe('Fetched both pages.');
+      const history = first.messages;
+      const before = structuredClone(history);
+      const storedCalls = history
+        .flatMap(message => message.content.parts)
+        .filter(part => part.type === 'tool-invocation');
+      expect(storedCalls).toHaveLength(2);
+      expect(storedCalls.every(part => part.toolInvocation.state === 'result')).toBe(true);
+
+      const prompts: LanguageModelV2Prompt[] = [];
+      const secondModel = new MockLanguageModelV2({
+        provider: 'vercel',
+        modelId: `${destination}/destination-model`,
+        doStream: async ({ prompt }) => {
+          prompts.push(prompt);
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 'answer' },
+              { type: 'text-delta', id: 'answer', delta: 'Follow-up accepted.' },
+              { type: 'text-end', id: 'answer' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          };
+        },
+      });
+      const secondAgent = new Agent({
+        id: 'hosted-tools',
+        name: 'Hosted tools',
+        instructions: 'Answer the follow-up.',
+        model: secondModel,
+      });
+      const secondStream = await secondAgent.stream([...history, { role: 'user', content: 'Summarize the pages.' }]);
+      const second = await secondStream.getFullOutput();
+      expect(second.text).toBe('Follow-up accepted.');
+      expect(prompts).toHaveLength(1);
+      for (const prompt of prompts) {
+        const parts = prompt.flatMap(message => (typeof message.content === 'string' ? [] : message.content));
+        const calls = parts.filter(part => part.type === 'tool-call');
+        const results = parts.filter(part => part.type === 'tool-result');
+        // Every result crossing the provider boundary must still have its call.
+        expect(results.map(part => part.toolCallId)).toEqual(calls.map(part => part.toolCallId));
+        const expectedIds = source === destination ? ['page-1', 'page-2'] : mixedHistory ? ['page-2'] : [];
+        expect(calls.map(part => part.toolCallId)).toEqual(expectedIds);
+        expect(results.map(part => part.toolCallId)).toEqual(expectedIds);
+        if (mixedHistory) {
+          expect(results).toContainEqual(
+            expect.objectContaining({ toolCallId: 'page-2', output: { type: 'text', value: 'Content of page-2' } }),
+          );
+        }
+        expect(parts).toContainEqual(expect.objectContaining({ type: 'text', text: 'Fetched both pages.' }));
+      }
+      expect(history).toEqual(before);
+    },
+  );
 });
 
 describe('anthropicStripForeignReasoningContent', () => {
