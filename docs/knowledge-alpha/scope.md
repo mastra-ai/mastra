@@ -1,4 +1,4 @@
-# Knowledge alpha scope, v13 (report 20261023T223907)
+# Knowledge alpha scope, v14 (report 20261023T223907)
 
 Everything here was checked against main `b1244bd3bc0`.
 
@@ -9,7 +9,7 @@ v12 follows Tyler's comment on Kayle's dogfood plan (v45), which supersedes v5�
 - A scope can own other scopes (org owns teams) through the structure.
 - Everything Knowledge leaves Memory for core, including the pins state-signal provider, and pins work without Memory.
 
-v13 adds the Director dogfood gap list (Kayle): a scope per message on long-lived sessions, many processes on one LibSQL file, an explicit off switch, and undeclared tag types (D12).
+v14 removes the built-in project scope (Tyler) and adds D13, how org-owns-team is held. v13 added the Director dogfood gap list (Kayle): a scope per message on long-lived sessions, many processes on one LibSQL file, an explicit off switch, and undeclared tag types (D12).
 
 Carried from earlier versions: Knowledge reads the run's tagged scopes; `organizationId` and `knowledgeResourceId` are deleted; pins stay a prompt-cacheable state signal; Knowledge ships its own usage instructions (section 3b).
 
@@ -118,7 +118,7 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
 **Session tags in Mastra Code.** The API is `createMastraCode({ knowledge: { instance, scopes? } })`; the `key` goes with Memory's `knowledge` option (D4).
 - The SDK sets the agent's `scopes` to the caller's `scopes`. Session tags are passed to the Knowledge attachment as `defaultScopes` (Factory: `requiredScopes`), and Knowledge applies them right after `getRunAgentScopes`, on the union of all three sources (an Agent-level resolver can't see the per-call option).
 - A default is added for each tag *type* the union lacks. Local TUI/studio sessions default `org:local`, so existing local Knowledge stays visible; a caller passing `org:self` gets exactly `org:self`.
-- Factory sessions require `org:<factoryOrg>` and `project:<projectId>`; a different `org:` or `project:` from any source refuses the run with an error naming the tag. The project used to sit in the resource slot through `knowledgeResourceId`; a `resource:` tag must equal the Memory resource (`resolveAgentScopes` throws otherwise), so it becomes its own tag. A Factory session whose org can't be resolved gets no Knowledge, as today.
+- **No built-in project scope** (Tyler: "the alpha should not have a builtin project scope"). Factory sessions require only `org:<factoryOrg>`; a different `org:` from any source refuses the run with an error naming the tag. The project used to sit in the resource slot through `knowledgeResourceId`, which is deleted, and the SDK adds no project tag. An app that wants project scopes declares the type in its structure and stamps the tag itself (the Director will stamp `project:<slug>` per task). A Factory session whose org can't be resolved gets no Knowledge, as today.
 - Factory Knowledge already written under `resource:<projectId>` goes out of view (D9).
 - **Off means off.** Knowledge is off when no instance is passed and `MASTRACODE_EXPERIMENTAL_KNOWLEDGE` is unset. `createMastraCode({ knowledge: false })` turns it off even when the flag is set, so a session can deliberately run without Knowledge. Off means no tools, no pins, no instructions block and no store opened.
 
@@ -247,7 +247,7 @@ For each, a red control showing the test fails without the change.
 - A run with `scopes: ['org:acme', 'team:acme:a']` writes at those tags plus resource and thread by default. A run tagged `team:acme:b` can't see it. A write with `scope: ['org:acme']` is visible to every `org:acme` run.
 - Two values of one type (`team:acme:a`, `team:acme:b`) are accepted in one run.
 - `scope` naming a tag the run neither holds nor owns is refused, for read and write.
-- Mastra Code: a local session reads Knowledge written before the change under `org:local`. For each of the three sources (Agent config, `mastra__scopes`, per-call `scopes`): a local session given `org:self` holds exactly `org:self` and gets its tools, and a Factory session given a different `org:` or `project:` is refused with an error naming the tag (six cases). A Factory session writes under `org:<org>` + `project:<id>`.
+- Mastra Code: a local session reads Knowledge written before the change under `org:local`. For each of the three sources (Agent config, `mastra__scopes`, per-call `scopes`): a local session given `org:self` holds exactly `org:self` and gets its tools, and a Factory session given a different `org:` is refused with an error naming the tag (six cases). A Factory session writes under `org:<org>` plus its run tags, and the SDK adds no `project:` tag.
 
 **Per-message scopes and off switch**
 - `session.sendMessage({ content, scopes: ['request:r1'] })` then `{ scopes: ['request:r2'] }` on one session: each run's writes carry its own request tag, and the conversation continues across both. A message with different scopes sent during an active run starts its own run after that one ends.
@@ -291,11 +291,12 @@ For each, a red control showing the test fails without the change.
 | D2 | Defaults when an agent has `knowledge` | read on, write off, pins off; instructions follow the tools that are on | everything off until set |
 | D3 | ~~No `organizationId`~~ | removed: `organizationId` is gone, an org is an `org:` tag | |
 | D4 | Memory's `knowledge` option | remove it; attach to the agent | keep it as a shortcut |
-| D5 | Mastra Code switch | rename `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS` (`sdk/agents/memory.ts:~250`) to `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1`. It attaches a default Knowledge with read, write and pins on, tagged `org:local` (or the Factory org and project), and no longer requires a vector store (without one, search is keyword-only). `createMastraCode({ knowledge: { instance, scopes } })` needs no flag | keep the old flag name |
+| D5 | Mastra Code switch | rename `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS` (`sdk/agents/memory.ts:~250`) to `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1`. It attaches a default Knowledge with read, write and pins on, tagged `org:local` (or the Factory org; no project tag), and no longer requires a vector store (without one, search is keyword-only). `createMastraCode({ knowledge: { instance, scopes } })` needs no flag | keep the old flag name |
 | D6 | Release note | Tyler's fixed wording, "Changes to an experimental, upcoming memory feature.", plus one line: "`experimental_subconscious` is removed; attach Knowledge to the agent instead." | wording only, no removal line |
 | D7 | Pins without Memory | settled by Tyler: the pins provider moves to core and pins work without Memory, through an opt-in in-run state-signal path (snapshot every call) | |
-| D9 | Rows written only with the experimental Subconscious flag on: Factory Knowledge under `resource:<projectId>`, and rows with `:uncurated` companion entries | accept that they go out of view | migrate them: `resource:<projectId>` → `project:<id>`, strip `:uncurated` entries |
+| D9 | Rows written only with the experimental Subconscious flag on: Factory Knowledge under `resource:<projectId>`, and rows with `:uncurated` companion entries | accept that they go out of view | migrate them: strip the `resource:<projectId>` and `:uncurated` entries so they sit at the org |
 | D10 | Who fills the tools' `scope` argument | the model, bounded by the run's tags and what they own; an app can fix it with `createTools({ scope })` | only the harness/agent; the model never chooses placement or enters an owned scope |
+| D13 | How "org owns team scopes" is held | computed at call time from the structure's `access` (no stored grants, works on every adapter, nothing new in storage) | pull Wave 2's stored scope nodes and grants into the alpha (storage schema 3, adapter changes on LibSQL/PG/MySQL/Mongo, larger PR). Tyler approved "org → team ownership or grants"; the option text said grants come from Wave 2, so this needs his call |
 | D12 | Tags whose type the structure doesn't declare | allowed (main's `custom` fallback); only ownership needs a declaration | strict: refuse undeclared types, so every scope type is in the structure |
 | D11 | The 8-tag throw in `canonicalizeKnowledgeScope` | keep it: a storage-safety cap, not a level rule (uncapped lookups build `IN ()` or hang) | move the cap to the Knowledge layer only, leaving explicit-scope API calls unguarded |
 | D8 | Leftovers in existing threads | keep three small protections: OM strip of old signals, `deleteThread` remind cleanup, TUI skips old activity signals | drop them and accept raw signals or orphaned remind threads in old threads |
