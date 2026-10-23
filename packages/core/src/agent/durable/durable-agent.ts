@@ -3621,6 +3621,25 @@ export class DurableAgent<
     await priorExecution?.catch(() => {
       /* errors already handled by the prior segment */
     });
+    // Validate before claiming or advancing the suspended run so invalid answers can be corrected.
+    // Use Agent's preflight to preserve target selection, approval and stored-version behavior.
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const resumeSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: DurableStepIds.AGENTIC_LOOP,
+      runId,
+    });
+    if (resumeSnapshot) {
+      await this.#wrappedAgent.__validateToolResumeData({
+        snapshot: resumeSnapshot,
+        toolCallId: resolvedOptions.toolCallId,
+        resumeData,
+        requestContext: resumeRequestContext,
+        toolsets: resolvedOptions.toolsets,
+        clientTools: resolvedOptions.clientTools,
+        runId,
+        method: 'resume',
+      });
+    }
     // A warm resume reuses the tools built for the first request, which close
     // over its request context and delegation hooks (#25960). Rebuild them for
     // this call and swap in only entries still holding a request-built tool, so

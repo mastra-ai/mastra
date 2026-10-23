@@ -8021,11 +8021,13 @@ export class Agent<
   }
 
   /**
+   * @internal
    * Rejects resume data that fails the suspended tool's `resumeSchema` while the run is
-   * still suspended. Otherwise the tool-call step hands the validation error to the model,
+   * still suspended. Shared with durable resume preflight.
+   * Otherwise the tool-call step hands the validation error to the model,
    * the run finishes and the caller can never resume it with corrected data.
    */
-  async #validateToolResumeData({
+  public async __validateToolResumeData({
     snapshot,
     toolCallId,
     resumeData,
@@ -8046,7 +8048,12 @@ export class Agent<
   }): Promise<void> {
     // A run pinned to a stored version resolves that version's tools later; the current
     // agent's schema may differ, so leave validation to the tool-call step.
-    if (this.#getSnapshotAgentVersionId(snapshot)) return;
+    const durableInput = snapshot.context?.input;
+    if (
+      this.#getSnapshotAgentVersionId(snapshot) ||
+      (durableInput?.__workflowKind === 'durable-agent' && durableInput.agentVersionId)
+    )
+      return;
 
     // Without a toolCallId the target is only certain when exactly one call is suspended.
     const suspended = this.#getSuspendedToolCalls(snapshot);
@@ -10851,7 +10858,7 @@ export class Agent<
       runId,
       method: 'resumeStream',
     });
-    await this.#validateToolResumeData({
+    await this.__validateToolResumeData({
       snapshot: resumeSnapshot,
       toolCallId: streamOptions?.toolCallId,
       resumeData,
@@ -11065,7 +11072,7 @@ export class Agent<
       runId,
       method: 'resumeGenerate',
     });
-    await this.#validateToolResumeData({
+    await this.__validateToolResumeData({
       snapshot: resumeSnapshot,
       toolCallId: options?.toolCallId,
       resumeData,
