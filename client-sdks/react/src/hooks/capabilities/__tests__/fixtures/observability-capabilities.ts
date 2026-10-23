@@ -61,6 +61,15 @@ export const legacyTraceCapabilities: GetObservabilityCapabilitiesResponse = {
   },
 };
 
+/** Store answers legacy thread queries (thread ids only) but not thread rows. */
+export const noThreadRowsCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    threadQueryRows: false,
+  },
+};
+
 /** Store runs trace queries but does not declare `trace-aggregate`. */
 export const noTraceAggregateCapabilities: GetObservabilityCapabilitiesResponse = {
   observabilityStorageType: 'ObservabilityStorageDuckDB',

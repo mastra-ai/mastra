@@ -231,7 +231,7 @@ describe('Metrics storage support', () => {
   });
 
   describe('when the dashboard has data', () => {
-    it('opens traces with the dashboard filters from "View in Traces"', async () => {
+    it('opens traces with the dashboard filters from "View in traces"', async () => {
       observeRequests();
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(supportedStorage)),
@@ -239,8 +239,8 @@ describe('Metrics storage support', () => {
 
       renderPage('/metrics?period=7d&filterEnvironment=production');
 
-      const [tokenUsageTraces] = await screen.findAllByRole('button', { name: 'View in Traces' });
-      if (!tokenUsageTraces) throw new Error('No "View in Traces" button');
+      const [tokenUsageTraces] = await screen.findAllByRole('button', { name: 'View in traces' });
+      if (!tokenUsageTraces) throw new Error('No "View in traces" button');
       fireEvent.click(tokenUsageTraces);
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toMatch(/^\/traces\?/));

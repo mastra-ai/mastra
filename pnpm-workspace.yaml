@@ -69,7 +69,6 @@ patchedDependencies:
   '@manypkg/tools@2.1.1': patches/@manypkg__tools@2.1.1.patch
   react-docgen-typescript@2.4.0: patches/react-docgen-typescript@2.4.0.patch
   read-yaml-file@1.1.0: patches/read-yaml-file@1.1.0.patch
-  vite-plugin-dts@4.5.4: patches/vite-plugin-dts@4.5.4.patch
   zod-to-ts@2.1.0: patches/zod-to-ts@2.1.0.patch
 
 packageExtensions:
@@ -95,11 +94,6 @@ packageExtensions:
       typescript-classic: npm:typescript@^6.0.3
     peerDependencies:
       typescript: '>=5'
-  # vite-plugin-dts also embeds the classic compiler API. Keep the package's
-  # TS7 peer for consumers while its patched runtime uses this alias.
-  'vite-plugin-dts@4.5.4':
-    dependencies:
-      typescript-classic: npm:typescript@^6.0.3
   # Storybook's TypeScript docgen plugin and parser both load the classic
   # compiler API while building the playground preview.
   '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0':
@@ -226,7 +220,8 @@ minimumReleaseAgeExclude:
   - joi@17.13.8
   - nanoid@3.3.19
   - browserslist@4.28.9
-  - ip-address@10.6.0
+  # Renovate security update: ip-address@10.7.4
+  - ip-address@10.6.0 || 10.7.4
   - '@opentelemetry/propagator-jaeger@2.11.0'
   - '@clerk/shared@4.31.1'
   - '@clerk/backend@3.17.2'
@@ -252,8 +247,8 @@ minimumReleaseAgeExclude:
   # Renovate security update: valibot@1.4.2
   - valibot@1.4.2
   # SEC-170/171: Fastify 5.12.5 (fast-uri fix; raised 2026-10-02) and @blaxel/core@0.3.20 — adopted
-  # before the 1-day minimumReleaseAge window; pinned to exact versions.
-  - fastify@5.12.5
+  # before the 1-day minimumReleaseAge window; pinned to exact versions. || 5.12.6
+  - fastify@5.12.5 || 5.12.6
   - '@blaxel/core@0.3.20'
   - '@fastify/proxy-addr@5.1.1'
   - 'fast-uri@3.1.8'
@@ -295,6 +290,12 @@ minimumReleaseAgeExclude:
   - '@modelcontextprotocol/client@2.3.0'
   # Renovate security update: launch-editor@2.14.2
   - launch-editor@2.14.2
+  # Renovate security update: @vitest/mocker@4.1.12
+  - "@vitest/mocker@4.1.12"
+  # Renovate security update: @storybook/addon-mcp@10.6.2
+  - "@storybook/addon-mcp@10.6.2"
+  # Renovate security update: storybook@10.6.2
+  - storybook@10.6.2
 trustPolicyExclude:
   # Vanta 2026-10-02: 7.4.6 fixes GHSA-g84c-rxfj-3j2c; earlier 7.4.x had trusted publisher
   # but 7.4.6 lacks that evidence (pnpm trustPolicy no-downgrade).
@@ -349,7 +350,7 @@ overrides:
   axios@>=1.0.0 <1.20.0: 1.20.0
   minimatch@>=5.0.0 <5.1.8: 5.1.8
   minimatch@>=9.0.0 <9.0.7: 9.0.7
-  ws@>=8.0.0 <8.21.3: 8.21.3
+  ws@>=8.0.0 <8.21.3: 8.22.0
   webpack-dev-server@<5.2.5: 5.2.6
   qs@>=6.7.0 <6.16.0: 6.16.0
   fast-uri@<3.1.8: 3.1.8
@@ -392,7 +393,7 @@ overrides:
   hono@<4.13.13: 4.13.13
   '@hono/node-server@<1.19.15': 1.19.15
   postcss@<8.5.23: 8.5.23
-  ip-address@<10.7.1: 10.7.2
+  ip-address@<10.7.1: 10.7.4
   mermaid@>=11.0.0-alpha.1 <11.16.1: 11.16.1
   sharp@<0.35.5: 0.35.5
   # Vanta/Dependabot 2026-09-17 (overrides allowed): critical + remaining GHSA floors
