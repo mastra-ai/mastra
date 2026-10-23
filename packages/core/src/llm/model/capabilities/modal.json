@@ -26,13 +26,7 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "meta-models/Muse-Spark-Open-816B-A42B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -44,7 +38,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -60,6 +54,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "meta-models/Muse-Spark-Open-816B-A42B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ]
   }

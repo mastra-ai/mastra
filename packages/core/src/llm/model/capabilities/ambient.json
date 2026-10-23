@@ -1,72 +1,54 @@
 {
-  "attachment": [
-    "moonshotai/kimi-k2.6",
-    "moonshotai/kimi-k2.7-code",
-    "qwen/qwen3.8-27b",
-    "stepfun/step-3.7-flash",
-    "xiaomi/mimo-v2.5"
-  ],
+  "attachment": ["qwen/qwen3.8-27b"],
   "temperature": [
     "ambient/large",
     "ambient/small",
-    "deepseek/deepseek-v4-flash",
-    "deepseek/deepseek-v4-flash-0731",
     "minimax/minimax-m3",
-    "moonshotai/kimi-k2.6",
-    "moonshotai/kimi-k2.7-code",
     "qwen/qwen3-30b-a3b-instruct-2507",
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.8-27b",
-    "stepfun/step-3.7-flash",
     "unsloth/qwen3.8-27b-gguf",
-    "xiaomi/mimo-v2.5",
     "z-ai/glm-5.2",
-    "zai-org/GLM-5.1-FP8",
     "zai-org/GLM-5.2-FP8"
   ],
   "structuredOutput": [
     "ambient/large",
-    "deepseek/deepseek-v4-flash",
-    "deepseek/deepseek-v4-flash-0731",
     "minimax/minimax-m3",
-    "moonshotai/kimi-k2.6",
-    "moonshotai/kimi-k2.7-code",
     "qwen/qwen3-30b-a3b-instruct-2507",
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.8-27b",
-    "stepfun/step-3.7-flash",
-    "xiaomi/mimo-v2.5",
     "z-ai/glm-5.2",
-    "zai-org/GLM-5.1-FP8",
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "xiaomi/mimo-v2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek/deepseek-v4-flash": [
+    "qwen/qwen3.8-27b": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "medium", "xhigh"]
       }
     ],
-    "deepseek/deepseek-v4-flash-0731": [
+    "qwen/qwen3.6-27b": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "minimax/minimax-m3": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "toggle"
       }
     ],
     "zai-org/GLM-5.2-FP8": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "ambient/large": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -76,37 +58,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "minimax/minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "ambient/large": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "stepfun/step-3.7-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen/qwen3.6-27b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen/qwen3.8-27b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
       }
     ]
   }

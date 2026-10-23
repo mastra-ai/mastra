@@ -261,7 +261,7 @@
     "@types/node": "22.20.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.2.0",
+    "@vitejs/plugin-react": "^6.1.2",
     "@vitest/ui": "catalog:",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -279,7 +279,6 @@
     "tailwindcss": "4.3.3",
     "typescript": "catalog:",
     "vite": "^8.0.0",
-    "vite-plugin-dts": "^4.5.4",
     "vite-plugin-lib-inject-css": "^2.2.2",
     "vitest": "catalog:"
   },
