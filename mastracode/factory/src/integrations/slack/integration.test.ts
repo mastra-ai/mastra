@@ -262,7 +262,6 @@ describe('SlackIntegration.postToolObserver', () => {
   function setup(platform: string | null) {
     const post = vi.fn(async () => ({ id: 'reply-ts' }));
     const addReaction = vi.fn(async () => {});
-    const create = vi.fn(async () => ({}));
     const channels = {
       buildChannelContextForThread: vi.fn(async () => (platform ? { channel: { platform } } : null)),
       buildRenderContextForThread: vi.fn(async () =>
@@ -272,24 +271,23 @@ describe('SlackIntegration.postToolObserver', () => {
     const integration = new SlackIntegration({ signingSecret: 'secret' });
     integration.initialize({ channels: () => channels as any });
     integration.channels({
-      storage: { generic: { subscriptions: { create } }, projects: {} },
+      storage: { projects: {} },
       runtime: { workItems: {} },
     } as any);
     const requestContext = new Map<string, unknown>([
       ['controller', { threadId: 'thread-1', sessionId: 'session-1' }],
       ['user', { id: 'user-1', organizationId: 'org-1' }],
     ]);
-    return { integration, requestContext: requestContext as any, post, addReaction, create };
+    return { integration, requestContext: requestContext as any, post, addReaction };
   }
 
-  it('posts the pull request link into the linked Slack thread and remembers the session opened one', async () => {
-    const { integration, requestContext, post, addReaction, create } = setup('slack');
+  it('posts the pull request link into the linked Slack thread', async () => {
+    const { integration, requestContext, post, addReaction } = setup('slack');
 
     await integration.postToolObserver({ toolContext: prTool, requestContext });
 
     await vi.waitFor(() => expect(post).toHaveBeenCalled());
     expect(post).toHaveBeenCalledWith({ markdown: 'Pull request opened: https://github.com/mastra-ai/mastra/pull/123' });
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org-1', sessionId: 'session-1' }));
     // Opening a pull request does not close the thread out; its merge does.
     expect(addReaction).not.toHaveBeenCalled();
   });
@@ -298,7 +296,6 @@ describe('SlackIntegration.postToolObserver', () => {
     const unlinked = setup(null);
     await unlinked.integration.postToolObserver({ toolContext: prTool, requestContext: unlinked.requestContext });
     expect(unlinked.post).not.toHaveBeenCalled();
-    expect(unlinked.create).not.toHaveBeenCalled();
 
     const linked = setup('slack');
     await linked.integration.postToolObserver({

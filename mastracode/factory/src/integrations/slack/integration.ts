@@ -37,14 +37,7 @@ import { createReplyTool, FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from '.
 import { createShareFileTool, isSlackThread } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
-import {
-  announcePullRequest,
-  FactoryThreadDoneProcessor,
-  rememberOpenedPullRequest,
-  STAGE_REACTIONS,
-  swapThreadReaction,
-} from './thread-status.js';
-import type { ThreadDoneDeps } from './thread-status.js';
+import { announcePullRequest, STAGE_REACTIONS, swapThreadReaction } from './thread-status.js';
 
 /**
  * Slack app credentials, read from env ONCE by the deploy entry. `signingSecret`
@@ -172,14 +165,7 @@ export class SlackIntegration implements FactoryIntegration {
   readonly #adapterOptions: SlackAdapterChannelConfig;
   /** Bound in `initialize()`; the controller mounts after integrations are built. */
   #channels: ShareFileToolDeps['channels'];
-  /** Bound in `channels()`, which runs once at boot. */
-  #workItems: ReturnType<NonNullable<ThreadDoneDeps['workItems']>>;
-  #markers: ReturnType<NonNullable<ThreadDoneDeps['markers']>>;
-  readonly #deps: ThreadDoneDeps = {
-    channels: () => this.#channels?.(),
-    workItems: () => this.#workItems,
-    markers: () => this.#markers,
-  };
+  readonly #deps: ShareFileToolDeps = { channels: () => this.#channels?.() };
   /**
    * With reply text hidden (the Factory default) the agent speaks through
    * `reply_in_thread`, so the prompt, reminder and live streaming for that
@@ -210,7 +196,7 @@ export class SlackIntegration implements FactoryIntegration {
       ],
       output: [
         new FactoryChannelSessionLinkProcessor(),
-        ...(textHidden ? [new FactoryReplyStreamProcessor(this.#deps), new FactoryThreadDoneProcessor(this.#deps)] : []),
+        ...(textHidden ? [new FactoryReplyStreamProcessor(this.#deps)] : []),
       ],
     };
   }
@@ -248,7 +234,6 @@ export class SlackIntegration implements FactoryIntegration {
     const url = parseCreatedPullRequest(toolContext);
     const threadId = (requestContext?.get('controller') as { threadId?: string } | undefined)?.threadId;
     if (!url || !requestContext || !threadId || !(await isSlackThread(requestContext, this.#deps))) return;
-    if (this.#markers) await rememberOpenedPullRequest(this.#markers, requestContext, url);
     // Not awaited: the tool call must not wait on Slack.
     void announcePullRequest(this.#channels?.(), threadId, 'opened', url).catch(error =>
       console.warn('[slack] pull request opened announcement failed', error),
@@ -277,8 +262,6 @@ export class SlackIntegration implements FactoryIntegration {
     const sourceControls =
       ctx.storage.sourceControls ?? (ctx.storage.sourceControlOwner ? [ctx.storage.sourceControlOwner] : []);
     this.#repoBackedSessions = sourceControls.length > 0;
-    this.#workItems = ctx.runtime?.workItems;
-    this.#markers = ctx.storage?.generic?.subscriptions;
     return createSlackChannelsConfig({
       slack: {
         clientId: this.#config.clientId,

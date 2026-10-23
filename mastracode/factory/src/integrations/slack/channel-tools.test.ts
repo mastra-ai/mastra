@@ -8,7 +8,6 @@ import { FactoryChannelSessionLinkProcessor } from './channel-session-link-proce
 import { SlackIntegration } from './integration.js';
 import { FactoryReplyReminderProcessor } from './reply-reminder-processor.js';
 import { FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool.js';
-import { FactoryThreadDoneProcessor } from './thread-status.js';
 
 type Execute = { execute: (input: Record<string, unknown>, ctx: Record<string, unknown>) => Promise<unknown> };
 
@@ -119,7 +118,6 @@ describe('Slack channel tools', () => {
     expect(slack.processors.output.map(p => p.constructor)).toEqual([
       FactoryChannelSessionLinkProcessor,
       FactoryReplyStreamProcessor,
-      FactoryThreadDoneProcessor,
     ]);
   });
 });
