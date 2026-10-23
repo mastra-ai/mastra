@@ -1,6 +1,8 @@
 import { buildDeferredStepFinishChunk } from '@internal/core/durable';
 import {
   createDurableBackgroundTaskCheckStep,
+  createDurableGoalStep,
+  createDurableIsTaskCompleteStep,
   createDurableLLMExecutionStep,
   createDurableLLMMappingStep,
   createDurableToolCallStep,
@@ -296,6 +298,10 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       },
       { id: 'update-iteration-state' },
     )
+    // Step 8: isTaskComplete scorers, then goal evaluation, as in core's durable loop.
+    // Both read their closures from the in-process run registry and no-op without them.
+    .then(createDurableIsTaskCompleteStep(maxSteps))
+    .then(createDurableGoalStep())
     .commit();
 
   // Create the main agentic loop workflow with dowhile

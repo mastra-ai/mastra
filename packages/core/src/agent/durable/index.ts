@@ -215,6 +215,8 @@ export {
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
   createDurableLLMMappingStep,
+  createDurableIsTaskCompleteStep,
+  createDurableGoalStep,
 } from './workflows/steps';
 
 // Shared workflow utilities
