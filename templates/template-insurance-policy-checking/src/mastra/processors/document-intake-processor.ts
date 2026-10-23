@@ -1,3 +1,5 @@
+import { reportNotice } from './report-notice.js';
+import type { ReportReader } from '../tools/report-tool.js';
 import type { InputProcessor } from '@mastra/core/processors';
 import { TripWire } from '@mastra/core/agent';
 import type { Memory } from '@mastra/memory';
@@ -26,6 +28,7 @@ export function createDocumentIntakeProcessor(
   operatorId: string,
   allowControlledModel: boolean,
   comparison?: ComparisonRunner,
+  report?: ReportReader,
 ): InputProcessor {
   return {
     id: 'private-document-intake',
@@ -50,6 +53,10 @@ export function createDocumentIntakeProcessor(
           .map(part => part.text)
           .join('\n');
         let receipt = '';
+        if (text.startsWith('/case ')) {
+          const caseId = z.uuid().parse(text.slice('/case '.length).trim());
+          await caseService.repository.select(context, caseId);
+        }
         if (files.length) {
           const record = await caseService.capture(context, { files }, text.trim() === '/new');
           receipt = `Captured ${record.sourceIds.length} immutable source(s). Case ${record.id}, revision ${record.revision}. `;
@@ -68,6 +75,7 @@ export function createDocumentIntakeProcessor(
           await caseService.clarify(context, clarification);
         }
         let evidence = '';
+        let reportSummary: string | undefined;
         if (text.startsWith('/compare ')) {
           if (!comparison)
             throw new IntakeError(
@@ -87,6 +95,21 @@ export function createDocumentIntakeProcessor(
           }
           evidence = JSON.stringify(await comparison.compare(context, input));
         }
+        if (text.trim() === '/report' || text.startsWith('/report ')) {
+          if (!report)
+            throw new IntakeError(
+              'REPORT_UNAVAILABLE',
+              'Draft report retrieval is not configured.',
+              'Read /status for available analysis.',
+            );
+          const record = await caseService.repository.requireCase(context);
+          const result = await report(
+            context,
+            text.trim() === '/report' ? { caseId: record.id } : JSON.parse(text.slice('/report '.length)),
+          );
+          evidence = JSON.stringify(result);
+          reportSummary = reportNotice(result, context);
+        }
         if (text.startsWith('/evidence ')) {
           const match = /^\/evidence ([a-f0-9-]{36}) ([1-9]\d*)$/.exec(text.trim());
           if (!match)
@@ -102,6 +125,13 @@ export function createDocumentIntakeProcessor(
         if (!(await memory.getThreadById({ threadId }))) await memory.createThread({ threadId, resourceId });
         if ('case' in status && status.case) {
           const record = status.case;
+          const savedReport =
+            'report' in status
+              ? (status.report as {
+                  report?: { id: string; version: number; workflowRunId: string };
+                  available?: boolean;
+                })
+              : undefined;
           await memory.updateWorkingMemory({
             threadId,
             resourceId,
@@ -111,10 +141,10 @@ export function createDocumentIntakeProcessor(
               insuredName: record.identity.insuredName,
               insuranceProduct: record.identity.insuranceProduct,
               documentIds: record.sourceIds,
-              workflowRunId: null,
-              draftReportId: null,
-              draftVersion: null,
-              reviewStatus: null,
+              workflowRunId: savedReport?.report?.workflowRunId ?? null,
+              draftReportId: savedReport?.available ? (savedReport.report?.id ?? null) : null,
+              draftVersion: savedReport?.available ? (savedReport.report?.version ?? null) : null,
+              reviewStatus: record.latestReportId ? record.state : null,
             }),
           });
         }
@@ -132,7 +162,7 @@ export function createDocumentIntakeProcessor(
           });
         }
         if (!allowControlledModel) {
-          const notice = `${summary}\nConversation model dispatch is disabled until an explicit spending budget is configured. Your saved case can be inspected with /status or /evidence.`;
+          const notice = `${reportSummary ?? summary}\nConversation model dispatch is disabled until an explicit spending budget is configured. Your saved case can be inspected with /status or /evidence.`;
           const incoming = sanitized.find(message => message.id === latest?.id);
           // A tripwire exits before installed agent history persistence. Save the sanitized
           // exchange through Memory's public API so the ordinary first run survives restart.

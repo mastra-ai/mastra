@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { OperationContext } from './contracts.js';
 import type { ProcessingAttempt } from '../storage/reconciliation.js';
 
-const text = z.string().min(1).max(2000);
+export const text = z.string().min(1).max(2000);
 const decimal = z
   .string()
   .regex(/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/)
@@ -81,7 +81,7 @@ export const termSchema = z
     uncertainty: z.array(text).max(20),
   })
   .strict();
-export const extractionSchema = z
+export const extractionObjectSchema = z
   .object({
     sourceId: z.uuid(),
     terms: z.array(termSchema).max(300),
@@ -112,14 +112,14 @@ export const extractionSchema = z
       )
       .max(100),
   })
-  .strict()
-  .superRefine((value, context) => {
-    const keys = value.terms.map(term => `${term.category}\0${term.key}\0${term.scope}`);
-    if (new Set(keys).size !== keys.length)
-      context.addIssue({ code: 'custom', message: 'Duplicate terms need distinct documented scopes.' });
-    if (new Set(value.reviewedPages).size !== value.reviewedPages.length)
-      context.addIssue({ code: 'custom', message: 'Reviewed pages must be unique.' });
-  });
+  .strict();
+export const extractionSchema = extractionObjectSchema.superRefine((value, context) => {
+  const keys = value.terms.map(term => `${term.category}\0${term.key}\0${term.scope}`);
+  if (new Set(keys).size !== keys.length)
+    context.addIssue({ code: 'custom', message: 'Duplicate terms need distinct documented scopes.' });
+  if (new Set(value.reviewedPages).size !== value.reviewedPages.length)
+    context.addIssue({ code: 'custom', message: 'Reviewed pages must be unique.' });
+});
 export const semanticSchema = z
   .object({
     assessments: z

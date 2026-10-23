@@ -8,6 +8,7 @@ export function createCaseService(
   inputProvider: InputProvider,
   configuredLimits: InputLimits,
   comparisonStatus?: (context: OperationContext) => Promise<unknown>,
+  reportStatus?: (context: OperationContext) => Promise<unknown>,
 ) {
   const limits = inputLimitsSchema.parse(configuredLimits);
   return {
@@ -61,8 +62,9 @@ export function createCaseService(
         clarifications,
         recovery: await repository.recovery(),
         ...(comparisonStatus ? { reconciliation: await comparisonStatus(context) } : {}),
+        ...(reportStatus ? { report: await reportStatus(context) } : {}),
         message:
-          'Documents are captured. Evidence-backed comparison requires explicit clarification and approved processing budgets. Reports and broker review are not available.',
+          'Documents are captured. Evidence-backed comparison requires explicit clarification and approved processing budgets. Draft reports become available after successful publication. Broker review must identify the exact version; final reports are not available.',
       };
     },
     async clarify(context: OperationContext, input: unknown) {

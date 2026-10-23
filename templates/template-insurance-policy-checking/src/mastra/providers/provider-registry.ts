@@ -22,7 +22,8 @@ export function createRegistry(registrations: Registrations, defaults: Selection
         (category === 'input'
           ? typeof (provider as ProviderCategories['input']).capture !== 'function' ||
             typeof (provider as ProviderCategories['input']).requestSchema?.parse !== 'function'
-          : typeof (provider as ProviderCategories['draftOutput']).materialize !== 'function')
+          : typeof (provider as ProviderCategories['draftOutput']).materialize !== 'function' ||
+            typeof (provider as ProviderCategories['draftOutput']).retrieve !== 'function')
       )
         throw new IntakeError(
           'PROVIDER_CONFIGURATION',

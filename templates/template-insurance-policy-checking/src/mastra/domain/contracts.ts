@@ -67,7 +67,8 @@ export type Clarification = z.infer<typeof clarifySchema>;
 export type CaseRecord = {
   id: string;
   revision: number;
-  state: 'CREATED' | 'PROCESSING' | 'FAILED';
+  state: 'CREATED' | 'PROCESSING' | 'FAILED' | 'AWAITING_REVIEW';
+  latestReportId?: string;
   latestAnalysisId?: string;
   createdAt: string;
   identity: z.infer<typeof identitySchema>;
@@ -232,38 +233,40 @@ export interface InputProvider {
   requestSchema: z.ZodType;
   capture(request: unknown, context: OperationContext, limits: InputLimits): Promise<SourceBundle>;
 }
-export const outputRequestSchema = z
-  .object({
-    operationId: z.uuid(),
-    snapshotId: z.uuid(),
-    snapshotHash: z.string().regex(/^[a-f0-9]{64}$/),
-    snapshot: z.record(z.string(), jsonValue),
-    approval: z
-      .object({ id: z.uuid(), snapshotHash: z.string().regex(/^[a-f0-9]{64}$/) })
-      .strict()
-      .optional(),
-  })
-  .strict();
 export const outputArtifactSchema = z
   .object({
     providerId: z.string().min(1),
     stage: z.enum(['draftOutput', 'reportOutput', 'correctionOutput']),
-    displayName: z.string().min(1),
-    mediaType: z.string().min(1),
+    displayName: z
+      .string()
+      .min(1)
+      .max(180)
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/),
+    mediaType: z.enum(['application/pdf', 'application/json', 'text/markdown']),
     hash: z.string().regex(/^[a-f0-9]{64}$/),
     snapshotId: z.uuid(),
+    snapshotHash: z.string().regex(/^[a-f0-9]{64}$/),
+    operationId: z.uuid(),
     approvalId: z.uuid().optional(),
     retrievalReference: z.string().min(1),
   })
-  .strict();
+  .strict()
+  .refine(
+    a => (a.stage === 'draftOutput' ? a.approvalId === undefined : a.approvalId !== undefined),
+    'Drafts cannot carry approval; approved output requires its approval binding.',
+  );
 export interface OutputProvider<C extends 'draftOutput' | 'reportOutput' | 'correctionOutput'> {
   id: string;
   category: C;
   capabilities: readonly string[];
   materialize(
-    request: z.infer<typeof outputRequestSchema>,
-    context: OperationContext,
+    request: import('./output-contracts.js').OutputRequest<C>,
+    context: OperationContext & { outputDirectory: string },
   ): Promise<z.infer<typeof outputArtifactSchema>>;
+  retrieve(
+    artifact: z.infer<typeof outputArtifactSchema>,
+    context: OperationContext & { outputDirectory: string },
+  ): Promise<Uint8Array>;
 }
 export type ProviderCategories = {
   input: InputProvider;

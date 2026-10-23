@@ -1,6 +1,6 @@
 # Insurance Policy Checking
 
-A starting point for a production insurance policy-checking application. Capture proposals, contracts and issued policies in Mastra Studio, then compare typed terms and clauses with verified source evidence. Persisted comparisons preserve uncertainty, documented amendments and the distinction between a selected reference and accepted terms. Reports and broker review are not available yet.
+A starting point for a production insurance policy-checking application. Capture proposals, contracts and issued policies in Mastra Studio, then compare typed terms and clauses with verified source evidence. Persisted comparisons preserve uncertainty, documented amendments and the distinction between a selected reference and accepted terms. Generate a downloadable PDF draft, then return to the same report and evidence after a restart. Broker approval and final reports are not available yet.
 
 ## Why we built this
 
@@ -28,7 +28,7 @@ Paid model dispatch remains disabled until explicit processing budgets are appro
 - Send `/status` to see the selected case, source IDs and missing clarification.
 - Send `/evidence SOURCE_ID 2` to read physical PDF page 2, using a saved source ID.
 - Attach documents with `/new` to start another case in the same conversation. Use [`/clarify` and the operating guide](./docs/usage.md) to declare document roles and reference choices.
-- After clarification and budget configuration, send [`/compare`](./docs/usage.md#compare-documents) to run **policyCheckingWorkflow**. Inspect saved observations with `/status`; partial scope and conflicting changes remain visible for review.
+- After clarification and budget configuration, send [`/compare`](./docs/usage.md#compare-documents) to run **policyCheckingWorkflow**. Send `/report` for the immutable PDF draft and its evidence; partial scope and conflicting changes remain visible for review.
 
 ## Customization
 

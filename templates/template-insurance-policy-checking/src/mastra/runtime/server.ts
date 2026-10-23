@@ -1,4 +1,5 @@
-import type { ServerConfig } from '@mastra/core/server';
+import { registerApiRoute, type ServerConfig } from '@mastra/core/server';
+import type { ReportRepository } from '../storage/reports.js';
 import { IntakeError, safeFailure } from '../domain/errors.js';
 import type { InputLimits } from '../config/limits.js';
 import { z } from 'zod';
@@ -52,10 +53,43 @@ function scrubErrors(value: unknown): unknown {
   return Object.fromEntries(Object.entries(record).map(([key, item]) => [key, scrubErrors(item)]));
 }
 
-export function createLocalServer(port: number, limits: InputLimits): ServerConfig {
+export function createLocalServer(
+  port: number,
+  limits: InputLimits,
+  reports?: ReportRepository,
+  operatorId = 'local-broker',
+): ServerConfig {
   const origin = `http://127.0.0.1:${port}`;
   return {
     host: '127.0.0.1',
+    apiRoutes: reports
+      ? [
+          registerApiRoute('/insurance/artifacts/:artifactId', {
+            method: 'GET',
+            handler: async context => {
+              try {
+                const result = await reports.download(
+                  { threadId: context.req.query('threadId') ?? '', operatorId },
+                  context.req.query('caseId') ?? '',
+                  context.req.param('artifactId'),
+                );
+                return new Response(new Uint8Array(result.bytes), {
+                  headers: {
+                    'Content-Type': result.artifact.mediaType,
+                    'Content-Disposition': `attachment; filename="${result.artifact.displayName}"`,
+                    'Content-Length': String(result.bytes.length),
+                    'Cache-Control': 'no-store',
+                    'X-Content-Type-Options': 'nosniff',
+                  },
+                });
+              } catch (error) {
+                const failure = safeFailure(error);
+                return Response.json(failure, { status: failure.status ?? 503 });
+              }
+            },
+          }),
+        ]
+      : [],
     port,
     bodySizeLimit: limits.maxDocumentsPerCase * (Math.ceil(limits.pdf.maxBytesPerFile / 3) * 4 + 1024) + 1024 * 1024,
     cors: { origin, allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] },
@@ -121,7 +155,10 @@ export function createLocalServer(port: number, limits: InputLimits): ServerConf
               },
               { status: context.res.status },
             );
-          } else if (contentType.includes('application/json')) {
+          } else if (
+            contentType.includes('application/json') &&
+            !context.res.headers.get('content-disposition')?.startsWith('attachment;')
+          ) {
             context.res = Response.json(scrubErrors(await context.res.json()), {
               status: context.res.status,
               headers: context.res.headers,

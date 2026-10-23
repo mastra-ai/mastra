@@ -1,3 +1,5 @@
+import { ReportRepository } from './storage/reports.js';
+import { createReportService } from './services/report-service.js';
 import { resolve } from 'node:path';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -51,19 +53,30 @@ export async function createApplication() {
     },
   });
   const registry = createRegistry(registrations, registrations.providerDefaults);
+  const reportRepository = new ReportRepository(reconciliationRepository);
+  await reportRepository.initialize();
+  const reports = createReportService(reportRepository, registry.resolve('draftOutput', undefined, 'immutable-draft'));
   const caseService = createCaseService(
     repository,
     registry.resolve('input', undefined, 'pdf-attachments'),
     limits,
     reconciliation.status,
+    reports.status,
   );
-  const comparison = createPolicyCheckingWorkflow(reconciliation, caseService, operatorId);
+  const comparison = createPolicyCheckingWorkflow(reconciliation, caseService, operatorId, reports);
   return {
     storage,
     agents: {
-      policyCheckingAgent: createPolicyCheckingAgent(caseService, memory, operatorId, testEndpoint, comparison.runner),
+      policyCheckingAgent: createPolicyCheckingAgent(
+        caseService,
+        memory,
+        operatorId,
+        testEndpoint,
+        comparison.runner,
+        comparison.report,
+      ),
     },
     workflows: { policyCheckingWorkflow: comparison.workflow },
-    server: createLocalServer(port, limits),
+    server: createLocalServer(port, limits, reportRepository, operatorId),
   };
 }

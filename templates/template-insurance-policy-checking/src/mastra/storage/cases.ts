@@ -34,6 +34,8 @@ export class CaseRepository {
       PRAGMA foreign_keys=ON;
       CREATE TABLE IF NOT EXISTS insurance_cases (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS insurance_threads (operator_id TEXT NOT NULL, thread_id TEXT NOT NULL, case_id TEXT NOT NULL REFERENCES insurance_cases(id), PRIMARY KEY(operator_id,thread_id));
+      CREATE TABLE IF NOT EXISTS insurance_case_threads (operator_id TEXT NOT NULL,thread_id TEXT NOT NULL,case_id TEXT NOT NULL REFERENCES insurance_cases(id),PRIMARY KEY(operator_id,thread_id,case_id));
+      INSERT OR IGNORE INTO insurance_case_threads SELECT operator_id,thread_id,case_id FROM insurance_threads;
       CREATE TABLE IF NOT EXISTS insurance_sources (id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES insurance_cases(id), hash TEXT NOT NULL, artifact TEXT NOT NULL UNIQUE, data TEXT NOT NULL, UNIQUE(case_id,hash));
       CREATE TABLE IF NOT EXISTS insurance_attempts (id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, state TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS insurance_schema (version INTEGER PRIMARY KEY);
@@ -63,6 +65,34 @@ export class CaseRepository {
       );
     return current;
   }
+  async select(context: OperationContext, caseId: string) {
+    return this.serial(async () => {
+      const active = await this.active(context);
+      if (active?.state === 'PROCESSING')
+        throw new IntakeError(
+          'CASE_PROCESSING',
+          'The active case is still processing.',
+          'Wait for processing to finish before selecting another case.',
+          409,
+        );
+      const result = await this.client.execute({
+        sql: 'SELECT case_id FROM insurance_case_threads WHERE operator_id=? AND thread_id=? AND case_id=?',
+        args: [context.operatorId, context.threadId, caseId],
+      });
+      if (!result.rows.length)
+        throw new IntakeError(
+          'CASE_CONTEXT',
+          'That case was not captured in this conversation.',
+          'Use a case identifier from this conversation history.',
+          403,
+        );
+      await this.client.execute({
+        sql: 'UPDATE insurance_threads SET case_id=? WHERE operator_id=? AND thread_id=?',
+        args: [caseId, context.operatorId, context.threadId],
+      });
+      return this.requireCase(context, caseId);
+    });
+  }
   async beginAttempt(context: OperationContext, providerId: string, limits: InputLimits): Promise<string> {
     const id = randomUUID();
     await this.client.execute({
@@ -88,6 +118,13 @@ export class CaseRepository {
           'CASE_PROCESSING',
           'Comparison is processing this immutable source revision.',
           'Wait for processing to finish before changing the case.',
+          409,
+        );
+      if (!newCase && active?.latestReportId)
+        throw new IntakeError(
+          'CASE_REVIEW_PENDING',
+          'This case has an immutable draft awaiting broker review.',
+          'Use /new with attachments to start a separate case.',
           409,
         );
       const existing = newCase ? null : active;
@@ -191,6 +228,10 @@ export class CaseRepository {
           sql: 'INSERT INTO insurance_threads(operator_id,thread_id,case_id) VALUES(?,?,?) ON CONFLICT(operator_id,thread_id) DO UPDATE SET case_id=excluded.case_id',
           args: [context.operatorId, context.threadId, id],
         });
+        await transaction.execute({
+          sql: 'INSERT OR IGNORE INTO insurance_case_threads(operator_id,thread_id,case_id) VALUES(?,?,?)',
+          args: [context.operatorId, context.threadId, id],
+        });
         await transaction.commit();
       } catch (error) {
         await transaction.rollback();
@@ -269,11 +310,11 @@ export class CaseRepository {
     const request = clarifySchema.parse(input);
     return this.serial(async () => {
       const record = await this.requireCase(context, request.caseId);
-      if (record.state === 'PROCESSING')
+      if (record.state === 'PROCESSING' || record.latestReportId)
         throw new IntakeError(
           'CASE_PROCESSING',
           'The case is being compared.',
-          'Wait for processing before clarifying this case.',
+          'Start a separate case to change evidence after a report snapshot has been created.',
           409,
         );
       if (record.revision !== request.expectedRevision)
@@ -305,6 +346,7 @@ export class CaseRepository {
       const updated = {
         ...record,
         state: 'CREATED' as const,
+        latestAnalysisId: undefined,
         revision: record.revision + 1,
         identity: request.identity,
         clarification: request,

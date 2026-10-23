@@ -7,11 +7,11 @@ import {
   semanticSchema,
   type CompareRequest,
 } from '../domain/reconciliation-contracts.js';
-import { contextSchema, type OperationContext } from '../domain/contracts.js';
+import { contextSchema, canonicalJson, type OperationContext } from '../domain/contracts.js';
 import { IntakeError } from '../domain/errors.js';
 import { equalValues, normalizeText, reconcile, verifyEvidence, verifyExtraction } from '../domain/reconciliation.js';
 import type { StructuredProcessingModel } from '../domain/reconciliation-contracts.js';
-import type { AnalysisInput, ReconciliationRepository } from '../storage/reconciliation.js';
+import type { Analysis, AnalysisInput, ReconciliationRepository } from '../storage/reconciliation.js';
 
 export function createReconciliationService(
   repository: ReconciliationRepository,
@@ -21,10 +21,58 @@ export function createReconciliationService(
 ) {
   const settings = processingConfigurationSchema.parse(configuration);
   const insurance = insuranceConfigurationSchema.parse(profiles);
+  const savedResult = (analysis: Analysis, runId: string) => ({
+    analysisId: analysis.id,
+    attemptId: analysis.attemptId,
+    workflowRunId: runId,
+    conclusion: analysis.conclusion,
+    comparisons: analysis.comparisons.map(({ id, label, classification, observation }) => ({
+      id,
+      label,
+      classification,
+      observation,
+    })),
+    limitations: analysis.limitations,
+  });
+  async function completed(context: OperationContext, runId?: string) {
+    const record = await repository.cases.requireCase(context);
+    const status = await repository.status(context);
+    const analysis = status.analyses.find(a => a.id === record.latestAnalysisId);
+    const attempt = status.attempts.find(
+      a => a.id === analysis?.attemptId && a.state === 'COMPLETED' && (!runId || a.runId === runId),
+    );
+    if (!analysis || !attempt) return null;
+    if (
+      canonicalJson(record.clarification) !== canonicalJson(analysis.input.clarification) ||
+      canonicalJson(record.identity) !== canonicalJson(analysis.input.identity)
+    )
+      throw new IntakeError(
+        'ANALYSIS_INPUT_CHANGED',
+        'The saved comparison belongs to earlier case clarification.',
+        'Run a newly authorized comparison of the current case; historical analysis remains readable.',
+        409,
+      );
+    await repository.verifySources(context, analysis.input.sources);
+    return {
+      result: savedResult(analysis, attempt.runId),
+      request: {
+        caseId: record.id,
+        expectedRevision: analysis.input.sourceRevision,
+        profileId: analysis.input.profile.id,
+        asOf: analysis.input.asOf,
+        retryAttemptId: null,
+      },
+    };
+  }
   return {
-    async process(context: OperationContext, request: CompareRequest, runId: string) {
+    completed,
+    async process(context: OperationContext, request: CompareRequest, runId: string, awaitPublication = false) {
       contextSchema.parse(context);
       compareRequestSchema.parse(request);
+      if (awaitPublication) {
+        const saved = await completed(context, runId);
+        if (saved) return saved.result;
+      }
       await repository.recover(context);
       const record = await repository.cases.requireCase(context, request.caseId);
       const profile = insurance.profiles.find(profile => profile.id === request.profileId);
@@ -142,20 +190,8 @@ export function createReconciliationService(
         }
         const analysis = reconcile(attempt.input, extractions, semantic, attempt.id);
         analysis.inputHash = attempt.inputHash;
-        await repository.finish(context, attempt.id, analysis);
-        return {
-          analysisId: analysis.id,
-          attemptId: attempt.id,
-          workflowRunId: runId,
-          conclusion: analysis.conclusion,
-          comparisons: analysis.comparisons.map(({ id, label, classification, observation }) => ({
-            id,
-            label,
-            classification,
-            observation,
-          })),
-          limitations: analysis.limitations,
-        };
+        await repository.finish(context, attempt.id, analysis, undefined, awaitPublication);
+        return savedResult(analysis, runId);
       } catch (error) {
         await repository.finish(context, attempt.id, null, error);
         throw error;

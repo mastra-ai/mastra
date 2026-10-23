@@ -104,7 +104,11 @@ export class ReconciliationRepository {
     await this.verifySources(context, input.sources);
     return this.transaction(async transaction => {
       const record = await this.cases.requireCase(context, request.caseId);
-      if (record.revision !== request.expectedRevision || record.state === 'PROCESSING')
+      if (
+        record.revision !== request.expectedRevision ||
+        record.state === 'PROCESSING' ||
+        Boolean(record.latestReportId)
+      )
         throw new IntakeError(
           'STALE_CASE',
           'The case revision changed or another comparison is running.',
@@ -283,7 +287,13 @@ export class ReconciliationRepository {
       });
     });
   }
-  async finish(context: OperationContext, attemptId: string, analysis: Analysis | null, failure?: unknown) {
+  async finish(
+    context: OperationContext,
+    attemptId: string,
+    analysis: Analysis | null,
+    failure?: unknown,
+    awaitPublication = false,
+  ) {
     if (analysis) await this.verifySources(context, analysis.input.sources);
     return this.transaction(async transaction => {
       const attempt = await this.attempt(context, attemptId);
@@ -307,7 +317,7 @@ export class ReconciliationRepository {
         });
       const updated = {
         ...record,
-        state: analysis ? 'CREATED' : 'FAILED',
+        state: analysis ? (awaitPublication ? 'PROCESSING' : 'CREATED') : 'FAILED',
         revision: record.revision + 1,
         ...(analysis ? { latestAnalysisId: analysis.id } : {}),
       };

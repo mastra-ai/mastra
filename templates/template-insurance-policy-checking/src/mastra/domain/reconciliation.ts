@@ -495,7 +495,7 @@ export function reconcile(
       ...(input.clarification.intent === 'document_comparison'
         ? ['The selected reference does not establish contractual acceptance. Observations describe documents only.']
         : []),
-      'Automated observations do not certify coverage or establish legal precedence. No report or broker review has been created.',
+      'Automated observations do not certify coverage or establish legal precedence.',
     ]),
   ];
   return {
