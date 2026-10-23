@@ -80,7 +80,7 @@ import type {
   MastraOnFinishCallback,
   ToolCallChunk,
 } from '@mastra/core/stream';
-import { deepMerge } from '@mastra/core/utils';
+import { deepMerge, rebindProcessorTools } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
@@ -1457,6 +1457,52 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ]),
       });
       validateModelTimeoutSettings(callbackOptions.modelSettings?.timeout);
+      // A warm resume reuses the tools built for the first request, which close
+      // over its request context (#25960). Rebuild them for this call and swap in
+      // only entries still holding a request-built tool, so tools a processor
+      // added or replaced are kept and rebound instead (#27544). Mirrors core
+      // `DurableAgent.resume`; a cold resume rebuilds tools in the worker.
+      if (existingRegistryEntry && !existingRegistryEntry.isPlaceholder && resumeOptions?.requestContext) {
+        const resumeRequestContext = callbackOptions.requestContext!;
+        const memoryInfo = (await resumableSnapshot.catch(() => undefined))?.snapshot?.context?.input?.messageListState
+          ?.memoryInfo as { threadId?: string; resourceId?: string } | undefined;
+        // The agent's default options are merged into callbackOptions.
+        const executionOptions = callbackOptions as Partial<AgentExecutionOptions<TOutput>>;
+        try {
+          const requestTools = await agent.getToolsForExecution({
+            toolsets: executionOptions.toolsets,
+            clientTools: executionOptions.clientTools,
+            threadId: memoryInfo?.threadId,
+            resourceId: memoryInfo?.resourceId,
+            runId,
+            requestContext: resumeRequestContext,
+            memoryConfig: executionOptions.memory?.options,
+            autoResumeSuspendedTools: executionOptions.autoResumeSuspendedTools,
+            methodType: callbackOptions.closeOnSuspend ? 'generate' : 'stream',
+            backgroundTaskEnabled: Boolean(existingRegistryEntry.backgroundTaskManager),
+            backgroundTaskPolicy: executionOptions.backgroundTaskPolicy,
+            model: existingRegistryEntry.model,
+          });
+          const refresh = (current: Record<string, any>, previous: Record<string, any> | undefined) => {
+            const next = { ...current };
+            for (const [name, tool] of Object.entries(requestTools)) {
+              // A name missing from current but present in previous was withheld by a processor.
+              const configured =
+                name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
+              if (configured) next[name] = tool;
+            }
+            return next;
+          };
+          const reg = existingRegistryEntry;
+          reg.tools = rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext);
+          if (reg.baseTools) {
+            reg.baseTools = rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext);
+          }
+          reg.requestTools = requestTools;
+        } catch (error) {
+          mastra?.getLogger?.()?.warn?.('Inngest durable agent resume tool resolution failed', { runId, error });
+        }
+      }
       // Read the suspended iteration only once its snapshot is persisted.
       await resumableSnapshot.catch(() => undefined);
       const initialToolCalls = await loadSuspendedToolCalls(runId);
