@@ -484,7 +484,8 @@ export class AgentChannels {
       });
 
       // Register handlers with optional overrides
-      const { onDirectMessage, onMention, onSubscribedMessage, onSlashCommand, onAction } = this.handlerOverrides;
+      const { onDirectMessage, onMention, onMessage, onSubscribedMessage, onSlashCommand, onAction } =
+        this.handlerOverrides;
 
       // Per-message dispatch scope. The request context and the handler context
       // MUST be built per message, never once at initialize() time: a custom
@@ -494,11 +495,24 @@ export class AgentChannels {
       // when the Chat SDK batched the dispatch under a `burst`/`debounce`/`queue`
       // concurrency strategy; `batchIds` covers the whole batch so a first
       // mention never re-fetches batched messages as thread history.
-      const beginMessage = (skipped: readonly Message[] = [], batchIds?: ReadonlySet<string>) => {
+      const beginMessage = (
+        skipped: readonly Message[] = [],
+        batchIds?: ReadonlySet<string>,
+        eventType?: ChannelContext['eventType'],
+      ) => {
         const requestContext = new RequestContext();
         const signalMetadata: Record<string, unknown> = {};
         const defaultHandler = (chatThread: Thread, message: Message) =>
-          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped, batchIds);
+          this.handleChatMessage(
+            chatThread,
+            message,
+            mastra,
+            requestContext,
+            signalMetadata,
+            skipped,
+            batchIds,
+            eventType,
+          );
         // Context handed to custom handlers so they can reach the resolved Mastra
         // instance without being injected with an external accessor, and
         // contribute to the request context the run will dispatch with.
@@ -516,6 +530,7 @@ export class AgentChannels {
         message: Message,
         skipped: readonly Message[] | undefined,
         handler: ChannelHandlerConfig,
+        eventType: ChannelContext['eventType'],
       ) => {
         const all = [...(skipped ?? []), message];
         const batchIds = new Set(all.map(m => m.id));
@@ -529,7 +544,11 @@ export class AgentChannels {
         let failure: { err: unknown } | undefined;
         for (const run of runs) {
           const runMessage = run[run.length - 1]!;
-          const { defaultHandler, handlerContext } = beginMessage(run.slice(0, -1), batchIds);
+          const { defaultHandler, handlerContext } = beginMessage(
+            run.slice(0, -1),
+            batchIds,
+            thread.isDM ? 'message' : eventType,
+          );
           try {
             if (typeof handler === 'function') await handler(thread, runMessage, defaultHandler, handlerContext);
             else await defaultHandler(thread, runMessage);
@@ -560,17 +579,25 @@ export class AgentChannels {
 
       if (onDirectMessage !== false) {
         chat.onDirectMessage((thread, message, _channel, context) =>
-          dispatchBatch(thread, message, context?.skipped, onDirectMessage),
+          dispatchBatch(thread, message, context?.skipped, onDirectMessage, 'message'),
         );
       }
 
       if (onMention !== false) {
-        chat.onNewMention((thread, message, context) => dispatchBatch(thread, message, context?.skipped, onMention));
+        chat.onNewMention((thread, message, context) =>
+          dispatchBatch(thread, message, context?.skipped, onMention, 'mention'),
+        );
       }
 
       if (onSubscribedMessage !== false) {
         chat.onSubscribedMessage((thread, message, context) =>
-          dispatchBatch(thread, message, context?.skipped, onSubscribedMessage),
+          dispatchBatch(thread, message, context?.skipped, onSubscribedMessage, 'subscribed'),
+        );
+      }
+
+      if (typeof onMessage === 'function') {
+        chat.onNewMessage(/[\s\S]*/, (thread, message, context) =>
+          dispatchBatch(thread, message, context?.skipped, onMessage, 'message'),
         );
       }
 
@@ -1316,9 +1343,19 @@ export class AgentChannels {
     signalMetadata: Record<string, unknown>,
     skipped: readonly Message[] = [],
     batchIds?: ReadonlySet<string>,
+    eventType?: ChannelContext['eventType'],
   ): Promise<void> {
     try {
-      await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped, batchIds);
+      await this.processChatMessage(
+        chatThread,
+        message,
+        mastra,
+        requestContext,
+        signalMetadata,
+        skipped,
+        batchIds,
+        eventType,
+      );
     } catch (err) {
       await this.handleRunError(chatThread, message, err);
     }
@@ -1385,6 +1422,7 @@ export class AgentChannels {
     signalMetadata: Record<string, unknown> = {},
     skipped: readonly Message[] = [],
     historyExcludeIds: ReadonlySet<string> = new Set([...skipped, message].map(m => m.id)),
+    eventType: ChannelContext['eventType'] = chatThread.isDM ? 'message' : 'mention',
   ): Promise<void> {
     const platform = chatThread.adapter.name;
     // Messages batched by a concurrency strategy, oldest first, then the current one.
@@ -1567,7 +1605,7 @@ export class AgentChannels {
     const { channelContext, attributes, providerOptions } = await this.buildEventContext({
       chatThread,
       platform,
-      eventType: chatThread.isDM ? 'message' : 'mention',
+      eventType,
       messageId: message.id,
       actor: message.author,
     });
