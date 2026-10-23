@@ -12,7 +12,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-flash-vision-exp": [
+    "deepseek-flash": [
       {
         "type": "toggle"
       },
@@ -30,7 +30,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-flash": [
+    "deepseek-v4-flash-vision-exp": [
       {
         "type": "toggle"
       },

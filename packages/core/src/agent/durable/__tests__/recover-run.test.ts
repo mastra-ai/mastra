@@ -1462,6 +1462,7 @@ describe('DurableAgent.recover(runId) tracing', () => {
     const recordedSpan = (id: string): any => ({
       id,
       exportSpan: () => ({ id }),
+      snapshot: () => ({ id }),
       createChildSpan: () => recordedSpan(`${id}-model`),
       end: (opts?: { output?: unknown }) => endedSpans.push({ id, output: opts?.output }),
     });

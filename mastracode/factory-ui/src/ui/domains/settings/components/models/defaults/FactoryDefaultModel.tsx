@@ -1,3 +1,4 @@
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
@@ -11,6 +12,7 @@ import {
 import { ModelCombobox } from '../../ModelCombobox';
 import { SharedCredentialNotice } from '../../SharedCredentialNotice';
 import { AppliedSessionsSummary } from './AppliedSessionsSummary';
+import { FactoryThinkingControl } from './FactoryThinkingControl';
 import { SwitchRunningSessionsDialog } from './SwitchRunningSessionsDialog';
 
 export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
@@ -37,16 +39,19 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
     <>
       <div className="flex min-w-0 flex-col gap-2">
         <div className="flex items-center gap-2">
-          <ModelCombobox
-            models={modelsQuery.data ?? []}
-            value={defaultModelId}
-            onValueChange={saveDefaultModel}
-            placeholder="Select a model"
-            aria-label="Factory default model"
-            size="sm"
-            className="min-w-0 flex-1"
-            disabled={projectQuery.isPending || setDefaultModel.isPending}
-          />
+          <ButtonsGroup size="sm" aria-label="Factory default model and thinking" className="min-w-0 flex-1">
+            <ModelCombobox
+              models={modelsQuery.data ?? []}
+              value={defaultModelId}
+              onValueChange={saveDefaultModel}
+              placeholder="Select a model"
+              aria-label="Factory default model"
+              size="sm"
+              className="min-w-0 flex-1"
+              disabled={projectQuery.isPending || setDefaultModel.isPending}
+            />
+            <FactoryThinkingControl factoryId={factoryId} />
+          </ButtonsGroup>
           {setDefaultModel.isPending && (
             <Spinner size="sm" aria-label="Saving default model" className="text-muted-foreground shrink-0" />
           )}

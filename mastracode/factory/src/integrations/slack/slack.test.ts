@@ -4,9 +4,9 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FACTORY_INTERACTIVE_KEY } from '../../auth.js';
-import { NEW_CHANNEL_SESSION_KEY } from '../../session/channel-session-link-processor.js';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
+import { NEW_CHANNEL_SESSION_KEY } from './channel-session-link-processor.js';
 
 // Captures the tenant each prime saw: the stamp can be overwritten later in
 // the gate, so asserting on the final request context alone isn't enough.

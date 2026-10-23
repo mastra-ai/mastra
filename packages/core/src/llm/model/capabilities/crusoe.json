@@ -21,7 +21,7 @@
     "zai/GLM-5.2"
   ],
   "reasoning": {
-    "moonshotai/Kimi-K2.6": [
+    "google/gemma-4-31b-it": [
       {
         "type": "toggle"
       }
@@ -32,12 +32,12 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B": [
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": [
       {
         "type": "toggle"
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": [
+    "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B": [
       {
         "type": "toggle"
       }
@@ -47,12 +47,12 @@
         "type": "toggle"
       }
     ],
-    "google/gemma-4-31b-it": [
+    "zai/GLM-5.2": [
       {
         "type": "toggle"
       }
     ],
-    "zai/GLM-5.2": [
+    "moonshotai/Kimi-K2.6": [
       {
         "type": "toggle"
       }

@@ -197,7 +197,7 @@ function ExperimentResultPanelBody({
           <span className="font-mono" title={result.itemId}>
             {getShortId(result.itemId)}
           </span>
-          <CopyButton content={result.itemId} tooltip="Copy Item Id to clipboard" variant="link" />
+          <CopyButton content={result.itemId} tooltip="Copy item ID to clipboard" variant="link" />
         </span>
       ),
       delta: null,

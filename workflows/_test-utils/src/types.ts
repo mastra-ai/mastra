@@ -142,10 +142,12 @@ export interface CreateAgentConfig<TTools extends ToolsInput = ToolsInput, TOutp
 }
 
 /**
- * Test domains that can be selectively skipped
+ * Test domains that can be selectively skipped. Keys must not shadow
+ * Object.prototype members (e.g. `constructor`, `toString`): an omitted key
+ * would resolve to the inherited value and silently skip the domain.
  */
 export type DurableAgentTestDomain =
-  | 'constructor'
+  | 'agentCreation'
   | 'prepare'
   | 'registry'
   | 'workflow'
