@@ -557,10 +557,10 @@ export class Memory extends MastraMemory {
     }
   }
 
-  /** @internal Creates isolated memory for a derived subconscious agent. */
   /** Set on the Subconscious agents' own Memory: they carry their own fixed Knowledge tools. */
   #withoutKnowledgeTools = false;
 
+  /** @internal Creates isolated memory for a derived subconscious agent. */
   createSubconsciousMemory(): Memory {
     const memory = new Memory({
       storage: this.storage,
