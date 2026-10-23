@@ -226,7 +226,8 @@ minimumReleaseAgeExclude:
   - joi@17.13.8
   - nanoid@3.3.19
   - browserslist@4.28.9
-  - ip-address@10.6.0
+  # Renovate security update: ip-address@10.7.4
+  - ip-address@10.6.0 || 10.7.4
   - '@opentelemetry/propagator-jaeger@2.11.0'
   - '@clerk/shared@4.31.1'
   - '@clerk/backend@3.17.2'
@@ -252,8 +253,8 @@ minimumReleaseAgeExclude:
   # Renovate security update: valibot@1.4.2
   - valibot@1.4.2
   # SEC-170/171: Fastify 5.12.5 (fast-uri fix; raised 2026-10-02) and @blaxel/core@0.3.20 — adopted
-  # before the 1-day minimumReleaseAge window; pinned to exact versions.
-  - fastify@5.12.5
+  # before the 1-day minimumReleaseAge window; pinned to exact versions. || 5.12.6
+  - fastify@5.12.5 || 5.12.6
   - '@blaxel/core@0.3.20'
   - '@fastify/proxy-addr@5.1.1'
   - 'fast-uri@3.1.8'
@@ -398,7 +399,7 @@ overrides:
   hono@<4.13.13: 4.13.13
   '@hono/node-server@<1.19.15': 1.19.15
   postcss@<8.5.23: 8.5.23
-  ip-address@<10.7.1: 10.7.2
+  ip-address@<10.7.1: 10.7.4
   mermaid@>=11.0.0-alpha.1 <11.16.1: 11.16.1
   sharp@<0.35.5: 0.35.5
   # Vanta/Dependabot 2026-09-17 (overrides allowed): critical + remaining GHSA floors
