@@ -1,0 +1,38 @@
+---
+title: 'Reference: Knowledge class | Knowledge'
+description: 'Constructor options and methods of the experimental Knowledge class.'
+packages:
+  - '@mastra/core'
+---
+
+# Knowledge class
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+```typescript
+import { Knowledge } from '@mastra/core/knowledge'
+```
+
+## Constructor options
+
+<PropertiesTable
+  content={[
+    { name: 'id', type: 'string', description: 'Identifier. Random if omitted.', isOptional: true },
+    { name: 'storage', type: 'MastraCompositeStore', description: 'Storage adapter.', isOptional: true },
+    { name: 'scopes', type: 'KnowledgeScopeTypesConfig', description: 'Scope types keyed by pattern, with optional description, children, and access.', isOptional: true },
+    { name: 'tools', type: '{ read?: boolean; write?: boolean }', description: 'Tools an attached agent gets. Read on, write off by default.', isOptional: true },
+    { name: 'pins', type: 'boolean | { maxPins?: number; maxTokens?: number }', description: 'Pin tools and context. Off by default.', isOptional: true },
+    { name: 'vector', type: 'MastraVector', description: 'Vector store for semantic search.', isOptional: true },
+    { name: 'embedder', type: 'MastraEmbeddingModel', description: 'Embedder for semantic search.', isOptional: true },
+    { name: 'instructions', type: 'false | string | function', description: 'Replace or remove the built-in instructions.', isOptional: true },
+  ]}
+/>
+
+## Methods
+
+- `createTools({ read, write, scope })`: returns the Knowledge tools for explicit wiring.
+- `getInstructions({ read, write, pins })`: returns the instruction block for those tools.
