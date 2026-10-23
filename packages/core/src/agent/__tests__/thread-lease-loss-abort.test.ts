@@ -351,6 +351,93 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(await oldRun.finishReason).toBe('aborted');
   }, 20_000);
 
+  // A server answering a bare abort request has never subscribed to the thread, so it
+  // knows no run on it; only the shared lease names the run (#28310). Non-durable runs
+  // can only be stopped cross-process by a replica that subscribed to the thread.
+  function coldReplicaSetup(thread: string, prompt: string) {
+    for (let i = 0; i < 200; i++) {
+      llm.on(
+        { userMessage: prompt, sequenceIndex: i },
+        { toolCalls: [{ id: `call_${thread}_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    const events = new EventEmitter();
+    events.setMaxListeners(0);
+    const memory = new MockMemory();
+    const counter = { ticks: 0 };
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        counter.ticks++;
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return 'ticked';
+      },
+    });
+    const ownerReplica = replica(shared, memory, { tick }, new ReplicaPubSub(shared, events));
+    const coldReplica = replica(shared, memory, {}, new ReplicaPubSub(shared, events));
+    return { ownerReplica, coldReplica, counter };
+  }
+
+  it.skipIf(!isDurableEngineVariant(engine)).each([
+    ['abortThreadStream', false],
+    ['__abortThreadStreamAcrossProcesses', true],
+  ] as const)(
+    'stops a run on %s from a replica that never saw the run',
+    async (method, reported) => {
+      const thread = `cold-abort-${method}`;
+      const { ownerReplica, coldReplica, counter } = coldReplicaSetup(thread, `cold abort ${method}`);
+      const { output: run, drain } = await startStream(ownerReplica, `cold abort ${method}`, {
+        maxSteps: 200,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      await vi.waitFor(() => expect(counter.ticks).toBeGreaterThanOrEqual(3), { timeout: 5_000 });
+
+      // The synchronous call can't wait for the lease lookup, so it reports only what it stopped locally.
+      expect(await coldReplica[method]({ resourceId: RESOURCE, threadId: thread })).toBe(reported);
+      const ticksAtAbort = counter.ticks;
+      await done;
+
+      expect(counter.ticks - ticksAtAbort).toBeLessThanOrEqual(1);
+      expect(await run.finishReason).toBe('aborted');
+    },
+    20_000,
+  );
+
+  it.skipIf(!isDurableEngineVariant(engine))(
+    'leaves the run alone when a cold replica aborts a run id that no longer holds the thread',
+    async () => {
+      const thread = 'cold-abort-expected-run';
+      const { ownerReplica, coldReplica, counter } = coldReplicaSetup(thread, 'cold abort expected');
+      const { output: run, drain } = await startStream(ownerReplica, 'cold abort expected', {
+        maxSteps: 200,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      await vi.waitFor(() => expect(counter.ticks).toBeGreaterThanOrEqual(3), { timeout: 5_000 });
+
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({
+          resourceId: RESOURCE,
+          threadId: thread,
+          expectedRunId: 'an-earlier-run',
+        }),
+      ).resolves.toBe(false);
+      const ticksAfterStaleAbort = counter.ticks;
+      await vi.waitFor(() => expect(counter.ticks).toBeGreaterThan(ticksAfterStaleAbort + 2), { timeout: 5_000 });
+
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({ resourceId: RESOURCE, threadId: thread }),
+      ).resolves.toBe(true);
+      await done;
+      expect(await run.finishReason).toBe('aborted');
+    },
+    20_000,
+  );
+
   it('runs no tool once a successor holds the lease, even before the next renewal', async () => {
     const thread = 'lease-takeover-thread';
     const key = [RESOURCE, thread].join('\u0000');

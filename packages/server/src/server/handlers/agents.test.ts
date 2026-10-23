@@ -4366,6 +4366,30 @@ describe('Agent Routes Authorization', () => {
       },
     );
 
+    it('reports a thread abort that reached a run executing on another server', async () => {
+      await mockMemory.createThread({ threadId: 'abort-remote-run', resourceId: 'user-a', title: 'Abort Thread' });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a', threadId: 'abort-remote-run' });
+      // The synchronous call can't wait for the lease lookup that finds a run on another server.
+      const abortThreadStream = vi.spyOn(mockAgent, 'abortThreadStream').mockReturnValue(false);
+      const acrossProcesses = vi.spyOn(mockAgent, '__abortThreadStreamAcrossProcesses').mockResolvedValue(true);
+
+      await expect(
+        ABORT_AGENT_THREAD_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          expectedRunId: 'run-elsewhere',
+        } as any),
+      ).resolves.toEqual({ aborted: true });
+
+      expect(acrossProcesses).toHaveBeenCalledWith({
+        resourceId: 'user-a',
+        threadId: 'abort-remote-run',
+        expectedRunId: 'run-elsewhere',
+      });
+      expect(abortThreadStream).not.toHaveBeenCalled();
+    });
+
     it.each(
       (['cancel', 'abort'] as const).flatMap(operation =>
         (['owned', 'unscoped', 'missing', 'no-memory'] as const).flatMap(scope =>

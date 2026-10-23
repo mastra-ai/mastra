@@ -2759,6 +2759,21 @@ export class DurableAgent<
    * intent nothing reads and lets the run stream on.
    */
   abortThreadStream(options: AgentAbortThreadOptions): boolean {
+    const aborted = this.#abortThreadStreamLocally(options);
+    // The lookup is async, so this synchronous call can't report its outcome.
+    // Server routes use `__abortThreadStreamAcrossProcesses` for that.
+    if (!aborted && !options.localOnly) void this.#abortThreadLeaseOwner(options);
+    return aborted;
+  }
+
+  /** @internal Like {@link abortThreadStream}, but reports whether a run on another process was asked to stop. */
+  async __abortThreadStreamAcrossProcesses(options: AgentAbortThreadOptions): Promise<boolean> {
+    const aborted = this.#abortThreadStreamLocally(options);
+    if (aborted || options.localOnly) return aborted;
+    return this.#abortThreadLeaseOwner(options);
+  }
+
+  #abortThreadStreamLocally(options: AgentAbortThreadOptions): boolean {
     const scopeKey = `${options.threadId ?? ''}|${options.resourceId ?? ''}`;
     const wrapperClose = getScopeStreamSlot(this.#activeStreamUntilIdle, scopeKey, options.expectedRunId);
     if (wrapperClose) {
@@ -2773,6 +2788,21 @@ export class DurableAgent<
     if (!aborted || !runId) return aborted;
 
     if (!options.localOnly) this.#abortDurableRun(runId);
+    return true;
+  }
+
+  /**
+   * A process only knows another process's run while it subscribes to the
+   * thread, so a server answering a bare abort request usually knows none.
+   * The thread lease names the run holding the thread wherever it executes;
+   * stop that run the way {@link abortRunStream} does (#28310).
+   */
+  async #abortThreadLeaseOwner(options: AgentAbortThreadOptions): Promise<boolean> {
+    const runId = await agentThreadStreamRuntime.getThreadLeaseOwnerRunId(this.getPubSub(), options);
+    if (!runId) return false;
+    // Never stop a successor run the caller didn't mean (#24422).
+    if (options.expectedRunId !== undefined && options.expectedRunId !== runId) return false;
+    this.#abortDurableRun(runId);
     return true;
   }
 

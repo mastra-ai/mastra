@@ -903,6 +903,24 @@ export class AgentThreadStreamRuntime {
     return (await provider.getLeaseOwner(this.#threadKey(resourceId, threadId))) === runId;
   }
 
+  /**
+   * The run holding the thread's lease, wherever it executes. Lets a process
+   * that never saw a thread's run find it. `undefined` without a lease backend
+   * or when the backend can't answer.
+   */
+  async getThreadLeaseOwnerRunId(
+    pubsub: PubSub | undefined,
+    options: AgentThreadIdentityOptions,
+  ): Promise<string | undefined> {
+    const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
+    if (isFallback) return undefined;
+    const owner = await provider
+      .getLeaseOwner(this.#threadKey(options.resourceId, options.threadId))
+      .catch(() => undefined);
+    // A run retaking its lease holds it under a token prefixed with its run id.
+    return owner?.split(RETAKE_LEASE_MARKER)[0] || undefined;
+  }
+
   /** How long a thread lease outlives the process that stopped renewing it. */
   get threadLeaseTtlMs(): number {
     return AGENT_THREAD_LEASE_TTL_MS;
