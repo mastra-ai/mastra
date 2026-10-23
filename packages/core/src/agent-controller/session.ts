@@ -6470,14 +6470,6 @@ export class Session<TState = unknown> {
       this.suspensions.delete(address);
       this.displayState.deletePendingSuspension(address);
       const sharedOptions = this.machinery.buildSharedRunOptions(requestContext);
-      // Interactive builtins suspend to collect user input, not for approval.
-      // The resume data is the user's answer (a bare string), which the approval
-      // re-check would reject because it cannot carry an `{ approved }` field.
-      // Exempt these tools so the answer reaches the model as-is.
-      const isInteractive = suspension.toolName === 'ask_user' || suspension.toolName === 'request_access';
-      if (isInteractive) {
-        sharedOptions.requireToolApproval = false;
-      }
       sharedOptions.onStepFinish = this.#resumeUsageRecorder(agent, suspension.runId, requestContext);
       const activeTools = this.machinery.resolveModeActiveTools(modeId);
       await agent.sendStreamResume({
