@@ -1,15 +1,15 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage';
-import {
-  Knowledge,
-  type KnowledgeConfig,
-  type KnowledgeImporterDefinition,
-  type KnowledgeImporterHandle,
-  type KnowledgeImporterResolver,
-  type KnowledgeImportersInput,
-  type StaticKnowledgeImporterOperations,
-  type StaticKnowledgeNodeHandle,
+import { Knowledge } from './index';
+import type {
+  KnowledgeConfig,
+  KnowledgeImporterDefinition,
+  KnowledgeImporterHandle,
+  KnowledgeImporterResolver,
+  KnowledgeImportersInput,
+  StaticKnowledgeImporterOperations,
+  StaticKnowledgeNodeHandle,
 } from './index';
 
 describe('Knowledge public types', () => {
