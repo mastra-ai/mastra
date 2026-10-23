@@ -431,8 +431,8 @@ export interface DurableToolCallInput {
   toolCallId: string;
   /** Name of the tool to execute */
   toolName: string;
-  /** Arguments for the tool */
-  args: Record<string, unknown>;
+  /** Arguments for the tool; absent when the model's JSON could not be parsed. */
+  args?: Record<string, unknown>;
   /** Provider-specific metadata */
   providerMetadata?: SharedV2ProviderMetadata;
   /** Whether the tool was already executed by the provider */

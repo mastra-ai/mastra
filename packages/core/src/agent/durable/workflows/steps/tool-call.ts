@@ -80,7 +80,7 @@ import { readMessageListState } from '../shared/message-list-state';
 const durableToolCallInputSchema = z.object({
   toolCallId: z.string(),
   toolName: z.string(),
-  args: z.record(z.string(), z.any()),
+  args: z.record(z.string(), z.any()).optional(),
   providerMetadata: z.record(z.string(), z.any()).optional(),
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
@@ -648,6 +648,24 @@ export function createDurableToolCallStep() {
           ...typedInput,
           error,
         };
+      }
+
+      // Preserve parse failure as a tool error, before approval hooks or argument spreading.
+      if (args === null || args === undefined) {
+        const error = serializeError(
+          new Error(
+            `Tool "${toolName}" received invalid arguments — the provided JSON could not be parsed. Please provide valid JSON arguments.`,
+          ),
+        );
+        if (pubsub) {
+          await emitChunkEvent(pubsub, runId, {
+            type: 'tool-error',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { toolCallId, toolName, args, error },
+          });
+        }
+        return { ...typedInput, error };
       }
 
       // Get memory-related state for message persistence. Fall back to the
