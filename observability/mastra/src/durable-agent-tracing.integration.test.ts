@@ -82,6 +82,46 @@ function toolThenTextModel(toolName: string, toolArgs: object, finalText: string
   });
 }
 
+/**
+ * Tool call then final text, where 900 of every 1000 input tokens come from the
+ * prompt cache. Covers both deferred step closes: the tool-call step (closed
+ * after the tools ran) and the final step (closed in the LLM step itself).
+ */
+function cachedToolThenTextModel() {
+  const usage = { inputTokens: 1000, outputTokens: 10, totalTokens: 1010, cachedInputTokens: 900 };
+  let call = 0;
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      stream: convertArrayToReadableStream(
+        call++ === 0
+          ? [
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallType: 'function',
+                toolCallId: 'call-1',
+                toolName: 'get_weather',
+                input: JSON.stringify({ city: 'Paris' }),
+                providerExecuted: false,
+              },
+              { type: 'finish', finishReason: 'tool-calls', usage },
+            ]
+          : [
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'It is 21C in Paris.' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage },
+            ],
+      ),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  });
+}
+
 /** Emits an error chunk so the run fails mid-stream (exercises the error path). */
 function errorModel() {
   return new MockLanguageModelV2({
@@ -453,4 +493,32 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     expect(testExporter.getSpansByType('tool_call' as any)).toHaveLength(1);
     expect(testExporter.getIncompleteSpans()).toHaveLength(0);
   });
+
+  // Deferred step closes used to copy the raw provider usage onto model_step, so
+  // inputDetails.cacheRead was missing and cache dashboards showed 0% for these engines.
+  it.each(['durable', 'evented'] as const)(
+    '%s agent: every model_step reports prompt-cache reads the same way as the regular agent',
+    async variant => {
+      const agent = new Agent({
+        id: 'a',
+        name: 'a',
+        instructions: 'use the tool',
+        model: cachedToolThenTextModel() as any,
+        tools: { get_weather: weatherTool },
+      });
+      const { wrapped } = buildMastra(testExporter, agent, variant);
+      await runToCompletion(wrapped, 'weather in paris?', testExporter);
+
+      const steps = byStart(testExporter.getSpansByType('model_step' as any));
+      expect(steps).toHaveLength(2);
+      for (const step of steps) {
+        expect((step as any).attributes?.usage).toEqual({
+          inputTokens: 1000,
+          outputTokens: 10,
+          inputDetails: { cacheRead: 900, text: 100 },
+          outputDetails: { text: 10 },
+        });
+      }
+    },
+  );
 });
