@@ -142,6 +142,44 @@ async authorizeUser(user: TUser, request: MastraAuthRequest): Promise<boolean> |
 
 **Returns**: `true` to allow access, `false` to deny (returns 403 Forbidden).
 
+## Optional methods
+
+### `toMastraUser()`
+
+Normalize your provider-specific user object to the stable `MastraUser` shape that dynamic configuration callbacks (such as dynamic `instructions`, `model`, or `tools`) receive as the optional `user` argument.
+
+```typescript oxfmt:false
+toMastraUser(user: TUser): MastraUser
+```
+
+| Parameter | Type | Description |
+| - | - | - |
+| `user` | `TUser` | The user object returned by `authenticateToken` |
+
+**Returns**: A `MastraUser` object: `{ id: string, name?: string, email?: string, avatarUrl?: string, role?: string }`.
+
+The default implementation picks `id` from `id`, `sub`, or `userId`, `avatarUrl` from `avatarUrl` or `picture`, and passes `name`, `email`, and `role` through when present. Override it when your user type stores these fields elsewhere:
+
+```typescript {8-14} title="src/mastra/auth/provider.ts"
+import type { MastraUser } from '@mastra/core/auth'
+
+export class MyAuthProvider extends MastraAuthProvider<MyUser> {
+  async authenticateToken(token: string) {
+    /* ... */
+  }
+
+  toMastraUser(user: MyUser): MastraUser {
+    return {
+      id: user.accountId,
+      name: user.profile.displayName,
+      role: user.permissions.primaryRole,
+    }
+  }
+}
+```
+
+If no `id` can be derived from the user object, the normalized user is omitted and callbacks receive `user: undefined`; the raw user object remains available on the request context.
+
 ## Configuration options
 
 The `MastraAuthProviderOptions` interface supports these options:

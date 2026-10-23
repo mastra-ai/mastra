@@ -32,7 +32,7 @@ describe('isReservedRequestContextKey', () => {
   });
 
   it('reserves every key in the shared reserved-key list', () => {
-    expect(RESERVED_REQUEST_CONTEXT_KEYS).toHaveLength(12);
+    expect(RESERVED_REQUEST_CONTEXT_KEYS).toHaveLength(13);
     expect(new Set(RESERVED_REQUEST_CONTEXT_KEYS).size).toBe(RESERVED_REQUEST_CONTEXT_KEYS.length);
     expect(RESERVED_REQUEST_CONTEXT_KEYS).toEqual(
       expect.arrayContaining([

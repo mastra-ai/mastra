@@ -1,12 +1,13 @@
-import type { ISessionProvider } from '@mastra/core/auth';
+import type { ISessionProvider, MastraUser } from '@mastra/core/auth';
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
-import { CompositeAuth } from '@mastra/core/server';
+import { CompositeAuth, normalizeMastraUser } from '@mastra/core/server';
 import type { ApiRoute, IMastraAuthProvider, MastraAuthConfig, MastraAuthRequest } from '@mastra/core/server';
 
 import {
   MASTRA_RESOURCE_ID_KEY,
   MASTRA_USER_KEY,
+  MASTRA_NORMALIZED_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   MASTRA_USER_ROLES_KEY,
   MASTRA_AUTH_TOKEN_KEY,
@@ -18,7 +19,12 @@ import { parse } from './path-pattern';
 
 // Re-export request-context key constants so custom middleware can read namespaced
 // auth state without importing internal paths.
-export { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY, MASTRA_USER_ROLES_KEY } from '../constants';
+export {
+  MASTRA_USER_KEY,
+  MASTRA_NORMALIZED_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_USER_ROLES_KEY,
+} from '../constants';
 
 /**
  * Check if a route is a registered custom route that requires authentication.
@@ -485,6 +491,27 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     // `MASTRA_USER_KEY` to avoid collisions with caller-supplied keys.
     requestContext.set('user', user);
 
+    // Normalize the authenticated user to the stable MastraUser shape consumed
+    // by DynamicArgument callbacks. Must run before mapUserToResourceId:
+    // CompositeAuth's resource-id mapping consumes its authenticated-provider
+    // bookkeeping while toMastraUser only peeks at it. Best-effort — a user
+    // shape the default normalization can't handle leaves the key unset
+    // (callbacks see `user: undefined`) instead of failing the request.
+    try {
+      const toMastraUser =
+        'toMastraUser' in authConfig && typeof authConfig.toMastraUser === 'function'
+          ? (authConfig.toMastraUser as (user: unknown) => MastraUser)
+          : normalizeMastraUser;
+      const normalizedUser = toMastraUser.call(authConfig, user);
+      if (normalizedUser && typeof normalizedUser.id === 'string' && normalizedUser.id.trim()) {
+        requestContext.set(MASTRA_NORMALIZED_USER_KEY, normalizedUser);
+      }
+    } catch (normalizeError) {
+      mastra.getLogger()?.debug('Failed to normalize authenticated user to MastraUser', {
+        error: normalizeError instanceof Error ? { message: normalizeError.message } : normalizeError,
+      });
+    }
+
     // Store the raw auth token so downstream code (e.g., editor MCP client
     // resolution) can forward it when connecting to auth-protected MCP servers.
     // The token may arrive via Authorization header, apiKey query param, or
@@ -549,6 +576,13 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
           requestContext.set(MASTRA_USER_ROLES_KEY, roles);
           // Backward-compat alias for callers reading the legacy key.
           requestContext.set('userRoles', roles);
+
+          // Populate the normalized user's role from RBAC when the auth
+          // provider's user carried none: primary role = first RBAC role.
+          const normalizedUser = requestContext.get(MASTRA_NORMALIZED_USER_KEY) as MastraUser | undefined;
+          if (normalizedUser && !normalizedUser.role && Array.isArray(roles) && typeof roles[0] === 'string') {
+            requestContext.set(MASTRA_NORMALIZED_USER_KEY, { ...normalizedUser, role: roles[0] });
+          }
         }
       }
     } catch (rbacError) {

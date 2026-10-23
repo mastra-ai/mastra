@@ -2,7 +2,7 @@ import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import { describe, expect, it, vi } from 'vitest';
 
-import { MASTRA_AUTH_MODE_KEY, MASTRA_USER_KEY } from '../constants';
+import { MASTRA_AUTH_MODE_KEY, MASTRA_NORMALIZED_USER_KEY, MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 
 import {
@@ -825,6 +825,154 @@ describe('auth helpers', () => {
         body: { error: 'Failed to map authenticated user to a resource ID' },
       });
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+    });
+  });
+
+  describe('coreAuthMiddleware - normalized user (MASTRA_NORMALIZED_USER_KEY)', () => {
+    function createRequestContext() {
+      const store = new Map<string, unknown>();
+      return {
+        get: (key: string) => store.get(key),
+        set: (key: string, value: unknown) => store.set(key, value),
+      };
+    }
+
+    const baseCtx = {
+      path: '/api/agents',
+      method: 'GET',
+      getHeader: () => undefined,
+      rawRequest: {},
+      token: 'valid-token',
+      buildAuthorizeContext: () => null,
+    };
+
+    const mockMastra = (server: Record<string, unknown> = {}) =>
+      ({
+        getServer: () => server,
+        getLogger: () => null,
+      }) as any;
+
+    it('sets the normalized user via default normalization for inline auth configs', async () => {
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: mockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ sub: 'user-9', name: 'Ada', picture: 'https://img.test/a.png' }),
+        },
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get(MASTRA_NORMALIZED_USER_KEY)).toEqual({
+        id: 'user-9',
+        name: 'Ada',
+        avatarUrl: 'https://img.test/a.png',
+      });
+    });
+
+    it("uses the auth config's toMastraUser when present", async () => {
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: mockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ wrapped: { uid: 'u-1' } }),
+          toMastraUser: (user: any) => ({ id: user.wrapped.uid, role: 'custom-role' }),
+        } as any,
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get(MASTRA_NORMALIZED_USER_KEY)).toEqual({ id: 'u-1', role: 'custom-role' });
+    });
+
+    it('keeps the provider-supplied role (role from user object wins)', async () => {
+      const requestContext = createRequestContext();
+
+      await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: mockMastra({
+          rbac: {
+            getPermissions: async () => [],
+            getRoles: async () => ['rbac-role'],
+          },
+        }),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-1', role: 'provider-role' }),
+          authorizeUser: async () => true,
+        },
+        requestContext,
+      });
+
+      expect((requestContext.get(MASTRA_NORMALIZED_USER_KEY) as any).role).toBe('provider-role');
+    });
+
+    it('populates role from the primary RBAC role when the provider user has none', async () => {
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: mockMastra({
+          rbac: {
+            getPermissions: async () => ['read'],
+            getRoles: async () => ['admin', 'viewer'],
+          },
+        }),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-1', name: 'Ada' }),
+          authorizeUser: async () => true,
+        },
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get(MASTRA_NORMALIZED_USER_KEY)).toEqual({ id: 'user-1', name: 'Ada', role: 'admin' });
+    });
+
+    it('leaves the key unset when the user shape cannot be normalized, without failing the request', async () => {
+      const requestContext = createRequestContext();
+      const user = { email: 'no-id@example.com' };
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: mockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => user,
+        },
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get(MASTRA_USER_KEY)).toBe(user);
+      expect(requestContext.get(MASTRA_NORMALIZED_USER_KEY)).toBeUndefined();
+    });
+
+    it('does not set the key for unauthenticated public requests', async () => {
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        token: undefined,
+        path: '/public/thing',
+        mastra: mockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          public: ['/public/*'],
+          authenticateToken: async () => null,
+        },
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get(MASTRA_NORMALIZED_USER_KEY)).toBeUndefined();
     });
   });
 
