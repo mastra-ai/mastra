@@ -17,13 +17,16 @@ export function MainCard({
   className?: string;
   edgeToEdge?: boolean;
 }) {
+  const animatesEdgeToEdge = edgeToEdge !== undefined;
+
   return (
     <div
       data-slot="main-card"
       className={cn(
         'relative min-h-0 flex-1 overflow-hidden',
-        'transition-[border-radius,padding,box-shadow] duration-(--resize-dur) ease-(--resize-ease) motion-reduce:transition-none!',
-        'in-data-[sidebar-gesture=active]:transition-none!',
+        animatesEdgeToEdge &&
+          'transition-[border-radius,padding,box-shadow] duration-(--resize-dur) ease-(--resize-ease) motion-reduce:transition-none!',
+        animatesEdgeToEdge && 'in-data-[sidebar-gesture=active]:transition-none!',
         !edgeToEdge && 'lg:rounded-studio-frame lg:p-px lg:shadow-raised',
         frameFillStyle,
         className,

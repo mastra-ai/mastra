@@ -12,6 +12,8 @@ export interface AppShellProps extends Omit<ComponentPropsWithRef<'div'>, 'child
 }
 
 export function AppShell({ children, className, edgeToEdge, mobileHeader, ref, sidebar, ...props }: AppShellProps) {
+  const animatesEdgeToEdge = edgeToEdge !== undefined;
+
   return (
     <div
       ref={ref}
@@ -30,8 +32,9 @@ export function AppShell({ children, className, edgeToEdge, mobileHeader, ref, s
           data-slot="app-shell-body"
           className={cn(
             'flex min-h-0 flex-1 flex-col',
-            'transition-[padding] duration-(--resize-dur) ease-(--resize-ease) motion-reduce:transition-none!',
-            'in-data-[sidebar-gesture=active]:transition-none!',
+            animatesEdgeToEdge &&
+              'transition-[padding] duration-(--resize-dur) ease-(--resize-ease) motion-reduce:transition-none!',
+            animatesEdgeToEdge && 'in-data-[sidebar-gesture=active]:transition-none!',
             // Below lg the sidebar is a drawer and the content runs edge to edge under the mobile header.
             // From lg it's inset on every side; with a sidebar column the sidebar's own padding provides the left gap.
             // Longhands only: consumer CSS that also emits a padding shorthand can't override the lg inset.

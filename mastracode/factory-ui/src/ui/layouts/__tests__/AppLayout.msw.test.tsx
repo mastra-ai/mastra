@@ -236,6 +236,25 @@ describe('AppLayout', () => {
     field.remove();
   });
 
+  it('gives the page the whole window while the sidebar is collapsed', async () => {
+    stubFactory();
+    renderApp(`/factories/${FACTORY_ID}/slots`);
+    const mainCard = () => document.querySelector('[data-slot="main-card"]');
+    const shellBody = () => document.querySelector('[data-slot="app-shell-body"]');
+
+    await screen.findByRole('heading', { name: 'Slots page' });
+    expect(mainCard()).toHaveClass('lg:rounded-studio-frame');
+    expect(shellBody()).toHaveClass('lg:py-2');
+
+    await userEvent.keyboard('[[');
+    await waitFor(() => expect(mainCard()).not.toHaveClass('lg:rounded-studio-frame'));
+    expect(shellBody()).not.toHaveClass('lg:py-2');
+
+    await userEvent.keyboard('[[');
+    await waitFor(() => expect(mainCard()).toHaveClass('lg:rounded-studio-frame'));
+    expect(shellBody()).toHaveClass('lg:py-2');
+  });
+
   it('keeps the shell mounted when switching between draft sessions', async () => {
     stubFactory();
     renderApp();
