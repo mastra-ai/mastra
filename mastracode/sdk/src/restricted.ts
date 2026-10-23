@@ -41,6 +41,10 @@ const restrictedStateSchema = z.looseObject({
   lastCommand: z.string().optional(),
   observerModelId: z.string().default(disabledModelId),
   reflectorModelId: z.string().default(disabledModelId),
+  // Observational memory reads the selection before the model id, so both
+  // keys default to the disabled sentinel.
+  observerModelSelection: z.string().default(disabledModelId),
+  reflectorModelSelection: z.string().default(disabledModelId),
   observationThreshold: z.number().default(30_000),
   reflectionThreshold: z.number().default(40_000),
   cavemanObservations: z.boolean().default(false),

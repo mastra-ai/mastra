@@ -161,6 +161,8 @@ describe('restricted Mastra Code embedding', () => {
     expect(controllerConfig.stateSchema.parse({})).toMatchObject({
       observerModelId: '__restricted_model_disabled__',
       reflectorModelId: '__restricted_model_disabled__',
+      observerModelSelection: '__restricted_model_disabled__',
+      reflectorModelSelection: '__restricted_model_disabled__',
       skipGlobalInstructions: true,
     });
 
