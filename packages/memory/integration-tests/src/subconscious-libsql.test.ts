@@ -12,7 +12,7 @@ import { Memory, Subconscious } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  createKnowledgeTools,
+  createKnowledgeReadTools,
   getKnowledgeStore,
   resolveKnowledgeScopeIds,
 } from '../../src/processors/observational-memory/subconscious/knowledge-tools';
@@ -81,7 +81,7 @@ describe('Subconscious LibSQL integration', () => {
     const store = await getKnowledgeStore(memory);
     const privateNode = await store.createNode({ name: 'Private node', scopeIds: [scopeIds[1]!] });
     await store.createRecord({ node: privateNode, text: 'Private text', source: 'test', scopeIds: [scopeIds[1]!] });
-    const tools = createKnowledgeTools(memory);
+    const tools = createKnowledgeReadTools(memory);
     await expect(tools.knowledge_read.execute!({ id: privateNode.id }, context('b'))).rejects.toThrow(
       'parent other than org:b',
     );

@@ -27,7 +27,7 @@ import type {
   UpdateKnowledgeNodeInput,
 } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
-import type { KnowledgeConfig } from './config';
+import type { KnowledgeConfig, KnowledgeToolsConfig } from './config';
 import { KnowledgeImporterRegistry } from './imports';
 import type { KnowledgeImporterBindingInput, KnowledgeImporterDefinition, KnowledgeImporterResolver } from './imports';
 import { KnowledgeImporterRunner } from './imports/runner';
@@ -49,6 +49,8 @@ export class Knowledge extends MastraBase {
   readonly hasOwnStorage: boolean;
 
   readonly description?: string;
+  /** Knowledge tools Memory gives every agent that uses this instance. */
+  readonly tools: Readonly<Required<KnowledgeToolsConfig>>;
 
   #storage?: MastraCompositeStore;
   #storageSource?: MastraCompositeStore;
@@ -69,6 +71,7 @@ export class Knowledge extends MastraBase {
     super({ component: 'STORAGE', name: config.name ?? config.id ?? 'Knowledge' });
     this.id = config.id ?? randomUUID();
     this.description = config.description;
+    this.tools = Object.freeze({ read: config.tools?.read ?? false, write: config.tools?.write ?? false });
     this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
     this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
     if (typeof config.importers === 'function') {
@@ -626,7 +629,7 @@ export class Knowledge extends MastraBase {
 export * from '../storage/domains/knowledge';
 export * from './imports';
 export { materializeKnowledgeScopePlan, memoryScopeTypes, planKnowledgeRunScopes } from './reconcile';
-export type { KnowledgeConfig } from './config';
+export type { KnowledgeConfig, KnowledgeToolsConfig } from './config';
 export type {
   KnowledgeScopeAccessConfig,
   KnowledgeScopeChildTemplate,
