@@ -45,40 +45,37 @@ describe('AdonisJS lifecycle', () => {
     expect(warn.mock.calls.some(([message]) => String(message).includes('middleware'))).toBe(true);
   });
 
-  it.each([true, false])(
-    'forwards multipart uploads to custom API routes (bodyParser: %s)',
-    async bodyParser => {
-      const mastra = new Mastra({
-        logger: false,
-        server: {
-          apiRoutes: [
-            registerApiRoute('/upload', {
-              method: 'POST',
-              requiresAuth: false,
-              handler: async c => {
-                const form = await c.req.formData();
-                const file = form.get('file') as File;
-                return c.json({ note: form.get('note'), name: file.name, text: await file.text() });
-              },
-            }),
-          ],
-        },
-      });
-      const router = await createAdonisRouter({ bodyParser });
-      await new MastraServer({ app: router, mastra }).init();
-      const server = await listen(router);
-      try {
-        const form = new FormData();
-        form.append('note', 'hi');
-        form.append('file', new Blob(['file-bytes']), 'a.txt');
-        const res = await fetch(`${server.url}/upload`, { method: 'POST', body: form });
-        expect(res.status).toBe(200);
-        expect(await res.json()).toEqual({ note: 'hi', name: 'a.txt', text: 'file-bytes' });
-      } finally {
-        await server.close();
-      }
-    },
-  );
+  it.each([true, false])('forwards multipart uploads to custom API routes (bodyParser: %s)', async bodyParser => {
+    const mastra = new Mastra({
+      logger: false,
+      server: {
+        apiRoutes: [
+          registerApiRoute('/upload', {
+            method: 'POST',
+            requiresAuth: false,
+            handler: async c => {
+              const form = await c.req.formData();
+              const file = form.get('file') as File;
+              return c.json({ note: form.get('note'), name: file.name, text: await file.text() });
+            },
+          }),
+        ],
+      },
+    });
+    const router = await createAdonisRouter({ bodyParser });
+    await new MastraServer({ app: router, mastra }).init();
+    const server = await listen(router);
+    try {
+      const form = new FormData();
+      form.append('note', 'hi');
+      form.append('file', new Blob(['file-bytes']), 'a.txt');
+      const res = await fetch(`${server.url}/upload`, { method: 'POST', body: form });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ note: 'hi', name: 'a.txt', text: 'file-bytes' });
+    } finally {
+      await server.close();
+    }
+  });
 
   it('exposes the AdonisJS HttpContext to Mastra code and runs routeMiddleware on Mastra routes', async () => {
     const mastra = new Mastra({
