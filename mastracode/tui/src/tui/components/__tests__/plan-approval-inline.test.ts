@@ -17,6 +17,7 @@ describe('PlanApprovalInlineComponent', () => {
         toolCallId: 'tc-1',
         title: 'Ship it',
         plan: 'Build the feature',
+        startsGoal: true,
         onApprove,
         onReject: vi.fn(),
       },
@@ -33,6 +34,23 @@ describe('PlanApprovalInlineComponent', () => {
     (component as any).handleSelection('approve');
 
     expect(onApprove).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not promise a goal when Approve cannot start one', () => {
+    const component = new PlanApprovalInlineComponent(
+      {
+        toolCallId: 'tc-1',
+        title: 'Ship it',
+        plan: 'Build the feature',
+        onApprove: vi.fn(),
+        onReject: vi.fn(),
+      },
+      {} as any,
+    );
+
+    const approve = (component as any).selectList.items.find((item: { value: string }) => item.value === 'approve');
+    expect(approve.label).toContain('switch to Build mode and implement');
+    expect(approve.label).not.toContain('goal');
   });
 
   it('renders the plan inside a plan-colored left bar, without a box', () => {

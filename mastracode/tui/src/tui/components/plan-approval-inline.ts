@@ -40,6 +40,8 @@ export interface PlanApprovalInlineOptions {
   planFilename?: string;
   /** Previous plan content for diff display on resubmission. */
   previousPlan?: string;
+  /** Whether Approve also starts the plan as a goal (local TUI only). Default: false. */
+  startsGoal?: boolean;
   onApprove: () => void;
   onReject: () => void;
 }
@@ -156,6 +158,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   private contentBox: Box;
   private selectList?: SelectList;
   private onApprove?: () => void;
+  private startsGoal = false;
   private onReject?: () => void;
   private resolved = false;
   private mode: 'streaming' | 'select' = 'select';
@@ -205,6 +208,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
 
   activate(options: PlanApprovalInlineOptions): void {
     this.onApprove = options.onApprove;
+    this.startsGoal = options.startsGoal === true;
     this.onReject = options.onReject;
     this.planTitle = options.title;
     this.planContent = options.plan;
@@ -249,7 +253,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     const items: SelectItem[] = [
       {
         value: 'approve',
-        label: `${theme.fg('text', 'Approve')}          ${theme.fg('dim', 'switch to Build mode and pursue this plan as a goal')}`,
+        label: `${theme.fg('text', 'Approve')}          ${theme.fg('dim', this.startsGoal ? 'switch to Build mode and pursue this plan as a goal' : 'switch to Build mode and implement')}`,
       },
       {
         value: 'changes',

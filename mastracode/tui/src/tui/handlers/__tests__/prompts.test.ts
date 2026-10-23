@@ -361,6 +361,9 @@ describe('handlePlanApproval goal mode', () => {
     state.local = undefined;
 
     const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    const rendered = component.render(80).join('\n');
+    expect(rendered).toContain('switch to Build mode and implement');
+    expect(rendered).not.toContain('as a goal');
     await (component as any).onApprove();
     await promise;
 

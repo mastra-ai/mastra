@@ -446,6 +446,8 @@ export async function handlePlanApproval(
       plan,
       planFilename,
       previousPlan,
+      // Goals are local-only, so Factory approvals are plain approvals.
+      startsGoal: Boolean(state.local),
       onApprove: async () => {
         releaseApprovalFocus();
         try {

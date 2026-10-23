@@ -161,6 +161,33 @@ describe('buildFullPrompt', () => {
     expect(prompt).toContain('goal judge can tell when the work is done');
   });
 
+  it('does not promise a goal on plan approval when the host disables it', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'plan',
+      activePlan: null,
+      modeId: 'plan',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      planApprovalStartsGoal: false,
+      state: {
+        permissionRules: { tools: {} },
+      },
+    });
+
+    expect(prompt).not.toContain('starts it as a goal');
+    expect(prompt).not.toContain('starts the plan as a goal');
+    expect(prompt).not.toContain('/goal <objective>');
+    expect(prompt).not.toContain('## Goal-Ready Plans');
+    expect(prompt).toContain('switches to Build mode for implementation; it does not start a goal');
+    expect(prompt).toContain('**Approve** — switches to Build mode for implementation');
+    expect(prompt).toContain('Include concrete verification criteria');
+  });
+
   it('uses Factory artifact paths consistently throughout the plan prompt', () => {
     const prompt = buildFullPrompt({
       projectPath: '/tmp/project',

@@ -1355,6 +1355,8 @@ export class MastraFactory {
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
+        // Factory plan approval is a plain approval; goals are only started by the local TUI.
+        planApprovalStartsGoal: false,
         hostInstructions: async ({ requestContext }) => {
           const context = requestContext.get('controller') as
             | AgentControllerRequestContext<MastraCodeState>

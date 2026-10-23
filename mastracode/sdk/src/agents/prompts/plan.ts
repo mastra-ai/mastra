@@ -7,6 +7,8 @@ interface PlanPromptContext {
   state?: Record<string, unknown>;
   /** False when the host disabled or denied `submit_plan`; defaults to available. */
   submitPlanAvailable?: boolean;
+  /** False when the host does not start a goal on plan approval (Factory); defaults to true. */
+  planApprovalStartsGoal?: boolean;
 }
 
 export function planModePrompt(ctx: PlanPromptContext): string {
@@ -14,6 +16,7 @@ export function planModePrompt(ctx: PlanPromptContext): string {
   const plansDir = getLocalPlansRelativeDir({ factoryProjectId });
   const examplePath = `${plansDir}/add-dark-mode.md`;
   const submitPlanAvailable = ctx.submitPlanAvailable !== false;
+  const planApprovalStartsGoal = ctx.planApprovalStartsGoal !== false;
 
   return `
 # Plan Mode — READ-ONLY (except plan files)
@@ -41,7 +44,7 @@ Before writing any plan, build a mental model of the codebase:
 4. Trace data flow: where does input come from, how is it transformed, where does it go?
 5. Identify existing patterns the codebase uses (naming, structure, error handling, testing).
 
-${submitPlanAvailable ? GOAL_READY_SECTION : ''}## Your Plan Output
+${submitPlanAvailable ? goalReadySection(planApprovalStartsGoal) : ''}## Your Plan Output
 
 Produce a clear, step-by-step plan with this structure:
 
@@ -74,21 +77,29 @@ Write each plan to its own markdown file under \`${plansDir}/\` (e.g. \`${exampl
 
 **Reuse the same file while you keep iterating on the same plan.** Only create a NEW file when you're starting a genuinely different plan — that keeps each plan available to look back at and keeps revision diffs meaningful.
 
-${submitPlanAvailable ? submitPlanSection(plansDir, examplePath) : planFileOnlySection(plansDir)}Do NOT start implementing until the plan is approved.
+${submitPlanAvailable ? submitPlanSection(plansDir, examplePath, planApprovalStartsGoal) : planFileOnlySection(plansDir)}Do NOT start implementing until the plan is approved.
 `;
 }
 
-const GOAL_READY_SECTION = `## Goal-Ready Plans
+function goalReadySection(planApprovalStartsGoal: boolean): string {
+  const intro = planApprovalStartsGoal
+    ? 'Approving a plan in the submit_plan approval UI starts it as a persistent goal. Write plans so they can be carried out as a goal:'
+    : 'Write plans so they can be carried out autonomously after approval:';
+  return `## ${planApprovalStartsGoal ? 'Goal-Ready Plans' : 'Executable Plans'}
 
-Approving a plan in the submit_plan approval UI starts it as a persistent goal. Write plans so they can be carried out as a goal:
+${intro}
 - Make the desired outcome explicit and verifiable.
 - Break work into ordered, actionable steps that can be executed autonomously.
 - Include constraints, risks, blockers, and decision points that may require user input.
-- Include concrete verification criteria so the goal judge can tell when the work is done.
+- Include concrete verification criteria so ${planApprovalStartsGoal ? 'the goal judge' : 'you'} can tell when the work is done.
 
 `;
+}
 
-function submitPlanSection(plansDir: string, examplePath: string): string {
+function submitPlanSection(plansDir: string, examplePath: string, planApprovalStartsGoal: boolean): string {
+  const approveOutcome = planApprovalStartsGoal
+    ? 'switches to Build mode and starts the plan as a goal, so the agent keeps working toward the plan until judged complete, paused, or waiting for user input'
+    : 'switches to Build mode for implementation';
   return `## IMMEDIATE ACTION: Write plan file, then call submit_plan
 
 As soon as your plan is complete:
@@ -104,7 +115,7 @@ submit_plan({
 \`\`\`
 
 The user will see the plan rendered inline and can:
-- **Approve** — switches to Build mode and starts the plan as a goal, so the agent keeps working toward the plan until judged complete, paused, or waiting for user input
+- **Approve** — ${approveOutcome}
 - **Request changes** — rejects the plan; the agent stops immediately and the user provides revision feedback in their next chat message
 
 ## Revision Workflow
