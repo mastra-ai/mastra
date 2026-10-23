@@ -1,7 +1,8 @@
 ---
 title: "Server Adapters | Server"
-description: "Run Mastra with Elysia, Express, Fastify, Hono, Koa, NestJS, Next.js, or TanStack Start server adapters and control initialization, middleware, routes, prefixes, and OpenAPI."
+description: "Run Mastra with AdonisJS, Elysia, Express, Fastify, Hono, Koa, NestJS, Next.js, or TanStack Start server adapters and control initialization, middleware, routes, prefixes, and OpenAPI."
 packages:
+  - "@mastra/adonisjs"
   - "@mastra/elysia"
   - "@mastra/express"
   - "@mastra/hono"
@@ -41,6 +42,7 @@ If you want to use [Studio](/docs/studio/overview) with your server adapter, use
 
 Mastra currently provides these official server adapters:
 
+- [@mastra/adonisjs](/reference/server/adonisjs-adapter)
 - [@mastra/elysia](/reference/server/elysia-adapter)
 - [@mastra/express](/reference/server/express-adapter)
 - [@mastra/hono](/reference/server/hono-adapter)
@@ -57,6 +59,12 @@ You can build your own adapter, read [custom adapters](/docs/server/custom-adapt
 Install the adapter for the framework of your choice.
 
 <Tabs>
+  <TabItem value="adonisjs" label="AdonisJS">
+    ```bash npm2yarn
+    npm install @mastra/adonisjs@latest
+    ```
+  </TabItem>
+
   <TabItem value="elysia" label="Elysia">
     ```bash npm2yarn
     npm install @mastra/elysia@latest elysia
@@ -111,6 +119,27 @@ Install the adapter for the framework of your choice.
 Initialize your app as usual, then create a `MastraServer` by passing in the `app` and your main `mastra` instance from `src/mastra/index.ts`. Calling `init()` automatically registers Mastra middleware and all available endpoints. Continue adding your own routes either before or after `init()`. They run alongside Mastra’s endpoints.
 
 <Tabs>
+  <TabItem value="adonisjs" label="AdonisJS">
+    ```typescript {6} title="start/routes.ts"
+    import app from '@adonisjs/core/services/app'
+    import router from '@adonisjs/core/services/router'
+    import { MastraServer } from '@mastra/adonisjs'
+    import { mastra } from '#mastra/index'
+
+    const server = new MastraServer({ app: router, mastra })
+
+    await server.init()
+
+    app.terminating(() => mastra.shutdown())
+
+    router.get('/health', () => ({ status: 'ok' }))
+    ```
+
+    Pass the AdonisJS router as `app` and call `init()` from a preload file such as `start/routes.ts`, before AdonisJS commits the router. Start the app as usual with `node ace serve`.
+
+    See the [AdonisJS Adapter](/reference/server/adonisjs-adapter) documentation for full configuration options.
+  </TabItem>
+
   <TabItem value="elysia" label="Elysia">
     ```typescript {7} title="src/elysia-server.ts"
     import { Elysia } from 'elysia'
@@ -470,7 +499,7 @@ The adapter reads these settings from `mastra.getServer()`:
 | `auth` | Authentication config, used by `registerAuthMiddleware()`. |
 | `bodySizeLimit` | Default body size limit in bytes. Can be overridden per-adapter via `bodyLimitOptions`. |
 | `onError` | Custom error handler called when an unhandled error occurs in a route handler. See [server.onError](/reference/configuration#serveronerror). |
-| `middleware` | User [middleware](/docs/server/middleware), registered by `registerUserMiddleware()`. Hono-based adapters run it; Elysia, Express, Fastify, Koa, and NestJS log a warning because Hono handlers can't run there. |
+| `middleware` | User [middleware](/docs/server/middleware), registered by `registerUserMiddleware()`. Hono-based adapters run it; AdonisJS, Elysia, Express, Fastify, Koa, and NestJS log a warning because Hono handlers can't run there. |
 
 ### Adapter constructor only
 
