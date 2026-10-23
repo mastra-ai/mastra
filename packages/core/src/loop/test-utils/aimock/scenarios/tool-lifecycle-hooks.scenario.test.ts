@@ -7,6 +7,9 @@ import { Agent } from '../../../../agent';
 import type { ToolsInput } from '../../../../agent';
 import type { DurableAgentStreamOptions } from '../../../../agent/durable/durable-agent';
 import { Mastra } from '../../../../mastra';
+import { MockMemory } from '../../../../memory/mock';
+import type { Processor } from '../../../../processors';
+import { RequestContext } from '../../../../request-context';
 import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
 import type { ToolHooks } from '../../../../tools/types';
@@ -366,6 +369,283 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
       expect(execute).toHaveBeenCalledTimes(1);
       expect(JSON.stringify(llm.getRequests()[1]?.body.messages)).toContain('blocked-on-resume');
       expect(JSON.stringify(llm.getRequests()[1]?.body.messages)).not.toContain('executed-on-resume');
+    });
+  }
+
+  if (engine === 'durable' || engine === 'evented' || engine === 'inngest') {
+    it('keeps the first call delegation callbacks when a warm resume supplies only hooks', async () => {
+      const llm = getMock();
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+      const worker = new Agent({
+        id: 'worker',
+        name: 'worker',
+        description: 'Does delegated work',
+        instructions: 'You do delegated work.',
+        model: openai(SCENARIO_MODEL_ID),
+      });
+      const execute = vi.fn(async (_input: { key: string }, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({ waiting: true });
+        return { value: 'executed-on-resume' };
+      });
+      const tool = createTool({
+        id: 'guarded_tool',
+        description: 'A tool suspended before resuming.',
+        inputSchema: z.object({ key: z.string() }),
+        suspendSchema: z.object({ waiting: z.boolean() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute,
+      });
+      const onDelegationStart = vi.fn(() => ({ proceed: true }));
+      const onDelegationComplete = vi.fn();
+      const resumeBefore = vi.fn();
+      const isSupervisor = (req: any) => (req.tools ?? []).some((t: any) => t.function?.name === 'agent-worker');
+      const lastToolCallId = (req: any) => {
+        const last = req.messages.at(-1);
+        return last?.role === 'tool' ? last.tool_call_id : undefined;
+      };
+      const shared = await createSharedAgent(llm, { engine, tools: { guarded_tool: tool }, agents: { worker } });
+      const { output, chunks } = await runLoopScenario({
+        engine,
+        llm,
+        sharedAgent: shared,
+        prompt: 'Call the guarded tool, then delegate.',
+        collectChunks: true,
+        delegation: { onDelegationStart, onDelegationComplete },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', predicate: req => isSupervisor(req) && !lastToolCallId(req) },
+            { toolCalls: [{ id: 'call_guarded', name: 'guarded_tool', arguments: { key: 'alpha' } }] },
+          );
+          llm.on(
+            { endpoint: 'chat', predicate: req => isSupervisor(req) && lastToolCallId(req) === 'call_guarded' },
+            { toolCalls: [{ id: 'call_worker', name: 'agent-worker', arguments: { prompt: 'do the task' } }] },
+          );
+          llm.on({ endpoint: 'chat', predicate: req => !isSupervisor(req) }, { content: 'sub done' });
+          llm.on(
+            { endpoint: 'chat', predicate: req => isSupervisor(req) && lastToolCallId(req) === 'call_worker' },
+            { content: 'All done.' },
+          );
+        },
+      });
+      expect(chunks?.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
+      expect(onDelegationStart).not.toHaveBeenCalled();
+
+      const resumed = await shared.agent.resumeStream(
+        { approved: true },
+        { runId: output.runId, hooks: { beforeToolCall: resumeBefore } },
+      );
+      for await (const _chunk of resumed.fullStream) {
+        /* drain */
+      }
+
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(resumeBefore).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'guarded_tool' }));
+      expect(onDelegationStart).toHaveBeenCalledTimes(1);
+      expect(onDelegationComplete).toHaveBeenCalledTimes(1);
+      expect(onDelegationComplete).toHaveBeenCalledWith(
+        expect.objectContaining({ result: expect.objectContaining({ text: 'sub done' }) }),
+      );
+    });
+  }
+
+  if (engine === 'durable' || engine === 'evented' || engine === 'inngest') {
+    const suspendingTool = (id: string, onExecute: () => void = () => {}) =>
+      createTool({
+        id,
+        description: `${id} suspends before resuming.`,
+        inputSchema: z.object({ key: z.string() }),
+        suspendSchema: z.object({ waiting: z.boolean() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute: async (_input, context) => {
+          onExecute();
+          if (!context?.agent?.resumeData) return context?.agent?.suspend({ waiting: true });
+          return { value: `${id} resumed` };
+        },
+      });
+    const drain = async (stream: { fullStream: AsyncIterable<unknown> }) => {
+      for await (const _chunk of stream.fullStream) {
+        /* drain */
+      }
+    };
+
+    it('applies resume hooks to a tool from the toolsets passed on resume', async () => {
+      const llm = getMock();
+      const resumeBefore = vi.fn();
+      const toolsets = { extra: { guarded_tool: suspendingTool('guarded_tool') } };
+      const shared = await createSharedAgent(llm, { engine });
+      const { output, chunks } = await runLoopScenario({
+        engine,
+        llm,
+        sharedAgent: shared,
+        prompt: 'Call the guarded tool.',
+        toolsets,
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_guarded', name: 'guarded_tool', arguments: { key: 'alpha' } }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
+        },
+      });
+      expect(chunks?.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
+
+      await drain(
+        await shared.agent.resumeStream(
+          { approved: true },
+          { runId: output.runId, toolsets, hooks: { beforeToolCall: resumeBefore } },
+        ),
+      );
+
+      expect(resumeBefore).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'guarded_tool' }));
+    });
+
+    it('applies resume hooks to the memory tools of the suspended thread', async () => {
+      const llm = getMock();
+      const memory = new MockMemory({ enableWorkingMemory: true, workingMemoryTemplate: '# Notes\n- **Fact**:\n' });
+      const threadId = 'hooks-resume-thread';
+      const resourceId = 'hooks-resume-resource';
+      await memory.createThread({ threadId, resourceId });
+      const resumeBefore = vi.fn();
+      const shared = await createSharedAgent(llm, {
+        engine,
+        tools: { guarded_tool: suspendingTool('guarded_tool') },
+        memory,
+      });
+      const { output, chunks } = await runLoopScenario({
+        engine,
+        llm,
+        sharedAgent: shared,
+        prompt: 'Call the guarded tool, then save a note.',
+        memory,
+        threadId,
+        resourceId,
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_guarded', name: 'guarded_tool', arguments: { key: 'alpha' } }] },
+          );
+          llm.on(
+            { endpoint: 'chat', toolCallId: 'call_guarded', hasToolResult: true },
+            {
+              toolCalls: [
+                { id: 'call_wm', name: 'updateWorkingMemory', arguments: { memory: '# Notes\n- **Fact**: x\n' } },
+              ],
+            },
+          );
+          llm.on({ endpoint: 'chat', toolCallId: 'call_wm', hasToolResult: true }, { content: 'Saved.' });
+        },
+      });
+      expect(chunks?.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
+
+      await drain(
+        await shared.agent.resumeStream(
+          { approved: true },
+          { runId: output.runId, hooks: { beforeToolCall: resumeBefore } },
+        ),
+      );
+
+      expect(resumeBefore).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'updateWorkingMemory' }));
+    });
+
+    it('runs a processor-added tool with the request context passed alongside resume hooks', async () => {
+      const llm = getMock();
+      const seen: unknown[] = [];
+      const resumeBefore = vi.fn();
+      const whoami = createTool({
+        id: 'whoami',
+        description: 'Reports the caller after resuming.',
+        inputSchema: z.object({ key: z.string() }),
+        suspendSchema: z.object({ waiting: z.boolean() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute: async (_input, context) => {
+          if (!context?.agent?.resumeData) return context?.agent?.suspend({ waiting: true });
+          seen.push(context?.requestContext?.get('who'));
+          return { value: 'whoami resumed' };
+        },
+      });
+      const addTool: Processor = {
+        id: 'add-whoami',
+        processInputStep: ({ tools }) => ({ tools: { ...(tools ?? {}), whoami } }),
+      };
+      const shared = await createSharedAgent(llm, { engine, inputProcessors: [addTool] });
+      const { output, chunks } = await runLoopScenario({
+        engine,
+        llm,
+        sharedAgent: shared,
+        prompt: 'Who am I?',
+        requestContext: new RequestContext([['who', 'first']]),
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_who', name: 'whoami', arguments: { key: 'a' } }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
+        },
+      });
+      expect(chunks?.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
+
+      await drain(
+        await shared.agent.resumeStream(
+          { approved: true },
+          {
+            runId: output.runId,
+            requestContext: new RequestContext([['who', 'second']]),
+            hooks: { beforeToolCall: resumeBefore },
+          },
+        ),
+      );
+
+      expect(seen).toEqual(['second']);
+    });
+
+    it('refreshes a tool on a later resume that an earlier resume did not rebuild', async () => {
+      const llm = getMock();
+      const firstResume = vi.fn();
+      const secondResume = vi.fn();
+      const toolB = suspendingTool('tool_b');
+      const shared = await createSharedAgent(llm, { engine, tools: { tool_a: suspendingTool('tool_a') } });
+      const { output, chunks } = await runLoopScenario({
+        engine,
+        llm,
+        sharedAgent: shared,
+        prompt: 'Call tool_a, then tool_b.',
+        toolsets: { extra: { tool_b: toolB } },
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_a', name: 'tool_a', arguments: { key: 'a' } }] },
+          );
+          llm.on(
+            { endpoint: 'chat', toolCallId: 'call_a', hasToolResult: true },
+            { toolCalls: [{ id: 'call_b', name: 'tool_b', arguments: { key: 'b' } }] },
+          );
+          llm.on({ endpoint: 'chat', toolCallId: 'call_b', hasToolResult: true }, { content: 'Done.' });
+        },
+      });
+      expect(chunks?.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
+
+      // The first resume omits the toolsets, so tool_b keeps its first-call build.
+      await drain(
+        await shared.agent.resumeStream(
+          { approved: true },
+          { runId: output.runId, hooks: { beforeToolCall: firstResume } },
+        ),
+      );
+      expect(firstResume).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'tool_a' }));
+
+      await drain(
+        await shared.agent.resumeStream(
+          { approved: true },
+          { runId: output.runId, toolsets: { extra: { tool_b: toolB } }, hooks: { beforeToolCall: secondResume } },
+        ),
+      );
+
+      expect(secondResume).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'tool_b' }));
+      expect(JSON.stringify(llm.getRequests().at(-1)?.body.messages)).toContain('tool_b resumed');
     });
   }
 

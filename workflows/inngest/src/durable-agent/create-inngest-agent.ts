@@ -68,7 +68,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { ChunkFrom } from '@mastra/core/stream';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
 import type { CoreTool } from '@mastra/core/tools';
-import { deepMerge } from '@mastra/core/utils';
+import { deepMerge, rebindProcessorTools } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
@@ -237,6 +237,12 @@ export interface InngestAgentStreamOptions<OUTPUT = undefined> {
   runId?: string;
   /** Request Context */
   requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
+  /**
+   * Per-call tool lifecycle hooks. They take priority over `defaultOptions.hooks`
+   * and constructor hooks. Function hooks are not serialized, so a run recovered
+   * in a fresh process only runs constructor and `defaultOptions.hooks`.
+   */
+  hooks?: AgentExecutionOptions<OUTPUT>['hooks'];
   /** Maximum number of steps */
   maxSteps?: number;
   /**
@@ -1318,17 +1324,28 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // A warm resume reuses the tools built for the first request, which close
       // over that request's tool hooks. Rebuild them with this call's hooks and
       // swap in only entries still holding a request-built tool, so tools a
-      // processor added or replaced are kept (matches core DurableAgent.resume).
+      // processor added or replaced are kept, and rebuild processor-added tools
+      // for this call's request context (matches core DurableAgent.resume).
       if (existingRegistryEntry && resumeOptions?.hooks) {
         try {
+          const snapshotMemoryInfo = (await resumableSnapshot.catch(() => undefined))?.snapshot?.context?.input
+            ?.messageListState?.memoryInfo as { threadId?: string; resourceId?: string } | undefined;
+          const resumeRequestContext = callbackOptions.requestContext;
+          const execOptions = callbackOptions as AgentExecutionOptions<TOutput>;
           const requestTools = await agent.getToolsForExecution({
-            threadId: resumeOptions.threadId,
-            resourceId: resumeOptions.resourceId,
+            toolsets: execOptions.toolsets,
+            clientTools: execOptions.clientTools,
+            threadId: resumeOptions.threadId ?? snapshotMemoryInfo?.threadId,
+            resourceId: resumeOptions.resourceId ?? snapshotMemoryInfo?.resourceId,
             runId,
-            requestContext: callbackOptions.requestContext,
+            requestContext: resumeRequestContext,
+            memoryConfig: execOptions.memory?.options,
+            autoResumeSuspendedTools: execOptions.autoResumeSuspendedTools,
+            delegation: execOptions.delegation ?? existingRegistryEntry.delegation,
             hooks: resumeOptions.hooks,
             methodType: resumeOptions.closeOnSuspend ? 'generate' : 'stream',
             backgroundTaskEnabled: Boolean(existingRegistryEntry.backgroundTaskManager),
+            backgroundTaskPolicy: execOptions.backgroundTaskPolicy,
             model: existingRegistryEntry.model,
           });
           const previous = existingRegistryEntry.requestTools;
@@ -1342,10 +1359,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             }
             return next;
           };
-          existingRegistryEntry.tools = refresh(existingRegistryEntry.tools ?? {});
+          existingRegistryEntry.tools = rebindProcessorTools(
+            refresh(existingRegistryEntry.tools ?? {}),
+            resumeRequestContext,
+          );
           if (existingRegistryEntry.baseTools)
-            existingRegistryEntry.baseTools = refresh(existingRegistryEntry.baseTools);
-          existingRegistryEntry.requestTools = requestTools;
+            existingRegistryEntry.baseTools = rebindProcessorTools(
+              refresh(existingRegistryEntry.baseTools),
+              resumeRequestContext,
+            );
+          // Tools this rebuild did not produce still hold their earlier build, so
+          // keep that as their baseline; otherwise a later resume can never refresh them.
+          existingRegistryEntry.requestTools = { ...previous, ...requestTools };
+          if (execOptions.delegation) existingRegistryEntry.delegation = execOptions.delegation;
         } catch (error) {
           mastra?.getLogger?.()?.warn?.(`[InngestAgent] resume(${runId}) tool resolution failed: ${error}`);
         }
