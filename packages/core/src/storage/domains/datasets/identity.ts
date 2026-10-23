@@ -134,6 +134,7 @@ export function validateDatasetItemExternalId(externalId: string | undefined): v
       text: 'Dataset item externalId must be a non-empty string.',
       domain: 'STORAGE',
       category: 'USER',
+      details: { field: 'externalId' },
     });
   }
 }

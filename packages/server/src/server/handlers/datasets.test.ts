@@ -125,9 +125,10 @@ describe('Datasets Handlers', () => {
       } as any).catch((e: unknown) => e);
       const { status, body } = formatErrorResponse(error);
 
-      // Then the wire body carries the code, and its metadata matches the declared schema
+      // Then the wire body carries the code and the experiment id its metadata declares
       expect(status).toBe(404);
       expect(body.code).toBe('EXPERIMENT_NOT_FOUND');
+      expect(body.metadata).toEqual({ experimentId: 'missing' });
       expect(SERVER_ERROR_METADATA_SCHEMAS.EXPERIMENT_NOT_FOUND.safeParse(body.metadata).success).toBe(true);
     });
 

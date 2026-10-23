@@ -347,6 +347,33 @@ describe('handleError', () => {
       expect(caught.code).toBe('WORKFLOW_NOT_FOUND');
     });
 
+    it('sends the details of a core error id as the metadata its code declares', async () => {
+      const err = new MastraError({
+        id: 'PROCESSOR_WORKFLOW_FAILED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'Processor workflow p1 failed',
+        details: { processorId: 'p1', internalNote: 'not for clients' },
+      });
+      const caught = capture(err, { ...FALLBACK, metadata: { agentId: 'a1' } });
+      await expect(caught.getResponse().json()).resolves.toEqual({
+        error: 'Processor workflow p1 failed',
+        code: 'PROCESSOR_WORKFLOW_FAILED',
+        metadata: { processorId: 'p1' },
+      });
+    });
+
+    it('omits metadata when core details do not match the code schema', () => {
+      const err = new MastraError({
+        id: 'PROCESSOR_WORKFLOW_FAILED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'failed',
+        details: { processorId: 42 },
+      });
+      expect(capture(err).metadata).toBeUndefined();
+    });
+
     it('falls back for an error id outside the catalog', () => {
       const err = Object.assign(new Error('boom'), { id: 'SOME_INTERNAL_ID' });
       expect(capture(err).code).toBe('AGENT_GET_FAILED');

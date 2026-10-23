@@ -28314,11 +28314,9 @@ export interface ServerErrorMetadataMap {
   DATASET_ITEM_IDENTITY_CONFLICT: {
     conflicts: unknown[];
   };
-  DATASET_ITEM_NOT_FOUND:
-    | {
-        itemId: string;
-      }
-    | undefined;
+  DATASET_ITEM_NOT_FOUND: {
+    itemId: string;
+  };
   DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE: undefined;
   DATASET_ITEM_PURGE_FAILED: undefined;
   DATASET_ITEM_SCHEMA_VALIDATION_FAILED: {
@@ -28407,11 +28405,9 @@ export interface ServerErrorMetadataMap {
   EXPERIMENT_ID_CONFLICT: undefined;
   EXPERIMENT_INVALID_TARGET: undefined;
   EXPERIMENT_ITEM_RUN_FAILED: undefined;
-  EXPERIMENT_NOT_FOUND:
-    | {
-        experimentId: string;
-      }
-    | undefined;
+  EXPERIMENT_NOT_FOUND: {
+    experimentId: string;
+  };
   EXPERIMENT_NO_ITEMS: undefined;
   EXPERIMENT_RESULTS_LIST_FAILED: undefined;
   EXPERIMENT_RESULT_NOT_FOUND: undefined;
@@ -28602,12 +28598,10 @@ export interface ServerErrorMetadataMap {
   PROCESSOR_PROVIDER_NOT_FOUND: {
     providerId: string;
   };
-  PROCESSOR_WORKFLOW_FAILED:
-    | {
-        processorId: string;
-        status?: ('failed' | 'suspended' | 'paused') | undefined;
-      }
-    | undefined;
+  PROCESSOR_WORKFLOW_FAILED: {
+    processorId: string;
+    status?: ('failed' | 'suspended' | 'paused') | undefined;
+  };
   PROMPT_BLOCK_REFERENCE_UNPUBLISHED: {
     promptBlockIds: string[];
   };

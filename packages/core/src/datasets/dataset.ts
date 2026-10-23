@@ -527,6 +527,7 @@ export class Dataset {
         text: `Experiment not found: ${experimentId}`,
         domain: 'STORAGE',
         category: 'USER',
+        details: { experimentId },
       });
     }
   }
@@ -643,6 +644,7 @@ export class Dataset {
         text: `Experiment not found: ${experimentId}`,
         domain: 'STORAGE',
         category: 'USER',
+        details: { experimentId },
       });
     }
     return experiment;
@@ -895,6 +897,7 @@ export class Dataset {
         text: `Item ${args.itemId} not found in dataset ${this.id} at version ${experiment.datasetVersion}`,
         domain: 'STORAGE',
         category: 'USER',
+        details: { itemId: args.itemId },
       });
     }
 
@@ -986,6 +989,7 @@ export class Dataset {
         text: `Item ${args.itemId} not found in dataset ${this.id} at version ${experiment.datasetVersion}`,
         domain: 'STORAGE',
         category: 'USER',
+        details: { itemId: args.itemId },
       });
     }
 

@@ -2,6 +2,7 @@ import type { ZodError } from 'zod';
 
 import { SERVER_ERROR_CODES, isServerErrorCode } from '../error-codes';
 import type { ServerErrorBody, ServerErrorCode } from '../error-codes';
+import { SERVER_ERROR_METADATA_SCHEMAS } from '../error-codes/metadata';
 import type { ServerErrorMetadata, ServerErrorMetadataOption } from '../error-codes/metadata';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
@@ -184,6 +185,17 @@ function getErrorDetails(error: unknown): Record<string, unknown> | undefined {
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
+/**
+ * Metadata for a `code` taken from a core error id. Core puts the ids the code declares in the
+ * error's `details`; only details matching the code's schema are sent, stripped of other keys.
+ */
+export function getForwardedMetadata(code: ServerErrorCode, error: unknown): Record<string, unknown> | undefined {
+  const schema = SERVER_ERROR_METADATA_SCHEMAS[code as keyof typeof SERVER_ERROR_METADATA_SCHEMAS];
+  if (!schema) return undefined;
+  const parsed = schema.safeParse(getErrorDetails(error));
+  return parsed.success ? (parsed.data as Record<string, unknown> | undefined) : undefined;
+}
+
 function mergeMetadata(...parts: Array<Record<string, unknown> | undefined>): Record<string, unknown> | undefined {
   const merged = Object.assign({}, ...parts.filter(Boolean));
   return Object.keys(merged).length > 0 ? merged : undefined;
@@ -302,7 +314,8 @@ export function handleError<C extends ServerErrorCode>(
     stack: apiError.stack,
     cause: apiError.cause,
     code,
-    // The fallback metadata is shaped for the fallback code, so it only goes out with that code.
-    metadata: code === fallback.code ? fallback.metadata : undefined,
+    // The fallback metadata is shaped for the fallback code, so it only goes out with that code;
+    // a code taken from a core error id carries that error's details instead.
+    metadata: code === fallback.code ? fallback.metadata : getForwardedMetadata(code, error),
   });
 }

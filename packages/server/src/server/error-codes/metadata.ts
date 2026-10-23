@@ -148,13 +148,13 @@ export const SERVER_ERROR_METADATA_SCHEMAS = {
   AGENT_VOICE_NOT_CONFIGURED: z.object({ agentId: z.string() }),
   AGENT_SPEAK_FAILED: z.object({ agentId: z.string() }).optional(),
 
-  // Core throws these ids without the fields below, and handlers forward the core id as the code,
-  // so the metadata is only present when the server raised the error itself.
-  DATASET_ITEM_NOT_FOUND: z.object({ itemId: z.string() }).optional(),
-  EXPERIMENT_NOT_FOUND: z.object({ experimentId: z.string() }).optional(),
-  PROCESSOR_WORKFLOW_FAILED: z
-    .object({ processorId: z.string(), status: z.enum(['failed', 'suspended', 'paused']).optional() })
-    .optional(),
+  // Also thrown by core, which puts these fields in the error's `details` for handlers to forward.
+  DATASET_ITEM_NOT_FOUND: z.object({ itemId: z.string() }),
+  EXPERIMENT_NOT_FOUND: z.object({ experimentId: z.string() }),
+  PROCESSOR_WORKFLOW_FAILED: z.object({
+    processorId: z.string(),
+    status: z.enum(['failed', 'suspended', 'paused']).optional(),
+  }),
 
   // Run-state conflicts and validation failures raised by core, forwarded with their `details`.
   WORKFLOW_RESUME_ALREADY_CLAIMED: forwardedDetails,

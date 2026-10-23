@@ -59,7 +59,7 @@ import {
   submitExperimentResultBodySchema,
 } from '../schemas/datasets';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { handleError } from './error';
+import { getForwardedMetadata, handleError } from './error';
 
 // Result rows don't store targetType; attach the parent experiment's so clients can narrow `output`.
 type ExperimentResultResponse = z.infer<typeof experimentResultResponseSchema>;
@@ -149,12 +149,20 @@ function isSchemaUpdateValidationError(error: unknown): error is SchemaUpdateVal
 
 /**
  * Converts a dataset MastraError into an HTTPException. Core dataset error ids that are
- * catalog codes are kept as the business code; anything else uses the operation fallback.
+ * catalog codes are kept as the business code, with the core error's details as metadata;
+ * anything else uses the operation fallback.
  */
 function toDatasetHttpException(error: MastraError, fallbackCode: ServerErrorCode): HTTPException {
+  if (isServerErrorCode(error.id)) {
+    return new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, {
+      message: error.message,
+      code: error.id,
+      metadata: getForwardedMetadata(error.id, error),
+    });
+  }
   return new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, {
     message: error.message,
-    code: isServerErrorCode(error.id) ? error.id : fallbackCode,
+    code: fallbackCode,
   });
 }
 

@@ -762,6 +762,7 @@ export class ProcessorRunner {
         domain: 'AGENT',
         id: 'PROCESSOR_WORKFLOW_FAILED',
         text: `Processor workflow ${workflow.id} failed with status: ${result.status}${detailStr}`,
+        details: { processorId: workflow.id },
       });
     }
 
