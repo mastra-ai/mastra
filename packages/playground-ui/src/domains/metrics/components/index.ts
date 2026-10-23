@@ -16,3 +16,5 @@ export { TraceVolumeCard, type TraceVolumeCardProps } from './trace-volume-card'
 export { UsageCard, type UsageCardProps } from './usage-card';
 export { ScoresCard } from './scores-card';
 export { DistinctIdsCard, type DistinctIdsCardProps } from './distinct-ids-card';
+export { BreakdownCard, type BreakdownCardProps } from './breakdown-card';
+export { Sparkline } from './sparkline';

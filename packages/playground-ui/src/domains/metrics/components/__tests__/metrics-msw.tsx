@@ -8,6 +8,7 @@ import type { NormalizedSpanAggregateRequest, NormalizedTraceAggregateRequest } 
 import { http, HttpResponse, delay } from 'msw';
 import type { ReactNode } from 'react';
 import { MetricsProvider } from '../../hooks/use-metrics';
+import type { MetricsScope } from '../../hooks/use-metrics';
 import {
   agentLatencyFixture,
   agentRunSeriesFixture,
@@ -93,6 +94,27 @@ export function serveSpanAggregate(
       if (!parsed.success) return HttpResponse.json({ error: parsed.error.message }, { status: 400 });
       const result = await respond(parsed.data);
       return result instanceof Response ? result : HttpResponse.json(result);
+    }),
+  );
+}
+
+/**
+ * Answers an aggregate route the way Platform's mobs-query does on an organization-wide page,
+ * where `projectId` is also a dimension. The OSS schema rejects that dimension, so the body is
+ * passed through as sent.
+ */
+export function serveOrgAggregate(
+  route: 'traces' | 'spans',
+  respond: (request: { groupBy: string[] }) => AggregateTracesResponse,
+) {
+  server.use(
+    http.post(route === 'traces' ? TRACE_AGGREGATE_API : SPAN_AGGREGATE_API, async ({ request }) => {
+      const body: unknown = await request.json();
+      const groupBy =
+        typeof body === 'object' && body !== null && 'groupBy' in body && Array.isArray(body.groupBy)
+          ? body.groupBy.map(String)
+          : [];
+      return HttpResponse.json(respond({ groupBy }));
     }),
   );
 }
@@ -183,9 +205,15 @@ export function pendingMetrics() {
 }
 
 /** Renders a card inside a 24h, unfiltered metrics dashboard. */
-export function renderInMetrics(ui: ReactNode) {
+export function renderInMetrics(ui: ReactNode, { scope }: { scope?: MetricsScope } = {}) {
   return renderWithProviders(
-    <MetricsProvider preset="24h" filterTokens={[]} onPresetChange={() => {}} onFilterTokensChange={() => {}}>
+    <MetricsProvider
+      preset="24h"
+      filterTokens={[]}
+      onPresetChange={() => {}}
+      onFilterTokensChange={() => {}}
+      scope={scope}
+    >
       {ui}
     </MetricsProvider>,
   );

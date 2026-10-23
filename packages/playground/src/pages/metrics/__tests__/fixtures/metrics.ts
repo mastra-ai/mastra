@@ -20,10 +20,10 @@ export const aggregateStorage: GetObservabilityCapabilitiesResponse = {
   capabilities: { metrics: true, logs: true, traceQueryDiscovery: true, traceAggregate: true, spanAggregate: true },
 };
 
-export const emptyTraceAggregate: Awaited<ReturnType<MastraClient['aggregateTraces']>> = { groups: [] };
+export const emptyTraceAggregate: Awaited<ReturnType<MastraClient['aggregateTraces']>> = { rows: [], truncated: false };
 
 export const aggregate: Awaited<ReturnType<MastraClient['getMetricAggregate']>> = { value: 0 };
-export const breakdown: Awaited<ReturnType<MastraClient['getMetricBreakdown']>> = { groups: [] };
+export const breakdown: Awaited<ReturnType<MastraClient['getMetricBreakdown']>> = { rows: [], truncated: false };
 export const timeSeries: Awaited<ReturnType<MastraClient['getMetricTimeSeries']>> = { series: [] };
 export const percentiles: Awaited<ReturnType<MastraClient['getMetricPercentiles']>> = { series: [] };
 export const emptyTags: Awaited<ReturnType<MastraClient['getTags']>> = { tags: [] };
@@ -40,3 +40,14 @@ export const environments: Awaited<ReturnType<MastraClient['getEnvironments']>> 
   environments: ['production', 'staging'],
 };
 export const tags: Awaited<ReturnType<MastraClient['getTags']>> = { tags: ['beta', 'support'] };
+
+/** Runs of one agent that only ever runs nested in other agents' traces. */
+export const nestedAgentRuns: Awaited<ReturnType<MastraClient['aggregateSpans']>> = {
+  rows: [
+    {
+      dimensions: { entityName: 'Explore Subagent' },
+      measures: { count: 120, errorCount: 2, errorRate: 2 / 120, 'duration.p95': 900 },
+    },
+  ],
+  truncated: false,
+};

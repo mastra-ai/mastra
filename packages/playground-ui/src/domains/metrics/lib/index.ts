@@ -11,3 +11,14 @@ export {
   percentChange,
 } from './chart-format';
 export { bucketLabels, isMultiDay, type BucketLabels } from './bucket-labels';
+export {
+  BREAKDOWN_GROUP_LIMIT,
+  BREAKDOWN_SPAN_TYPES,
+  buildBreakdownRows,
+  entitiesAggregateRequest,
+  environmentsAggregateRequest,
+  projectsAggregateRequest,
+  type BreakdownEntityTab,
+  type BreakdownRow,
+  type BreakdownTab,
+} from './breakdown';

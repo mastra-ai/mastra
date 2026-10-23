@@ -49,12 +49,13 @@ export function useSpanAggregateGate(): SpanAggregateGate {
 /** `aggregateSpans()` for one card, through the same limiter and caching as `useMetricsTraceAggregate()`. */
 export function useMetricsSpanAggregate(
   request: AggregateSpansArgs,
-  { priority }: { priority?: AggregatePriority } = {},
+  { priority, enabled }: { priority?: AggregatePriority; enabled?: boolean } = {},
 ): UseQueryResult<AggregateSpansResponse> {
   const client = useMastraClient();
   const queryFn = useLimitedQueryFn(() => client.aggregateSpans(request), priority);
   return useSpanAggregate({
     request,
+    enabled,
     queryOptions: { queryFn, placeholderData: keepPreviousData, staleTime: Infinity },
   });
 }
