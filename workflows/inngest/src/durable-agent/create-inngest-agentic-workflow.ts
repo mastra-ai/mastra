@@ -257,7 +257,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           toolResults,
           runId: initData.runId,
           agentId: initData.agentId,
-          messageId: initData.messageId,
+          // A processor retry rotates the response message id; carry it forward as core does.
+          messageId: llmOutput?.stepResult?.messageId ?? initData.messageId,
           state: llmOutput?.state ?? initData.state,
         };
       },
