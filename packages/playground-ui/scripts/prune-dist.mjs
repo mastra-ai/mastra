@@ -30,6 +30,6 @@ try {
 
 // Without turbo's `build` first (e.g. `pnpm dev` on a fresh clone) there is nothing to layer over, so build it fully.
 if (declarations === 0) {
-  const { status } = spawnSync('vite', ['build'], { stdio: 'inherit', shell: process.platform === 'win32' });
+  const { status } = spawnSync('pnpm', ['build'], { stdio: 'inherit', shell: process.platform === 'win32' });
   process.exit(status ?? 1);
 }

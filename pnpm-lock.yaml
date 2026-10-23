@@ -5993,6 +5993,9 @@ importers:
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
+      tsdown:
+        specifier: 0.23.1
+        version: 0.23.1(@volar/typescript@2.4.23(typescript@7.0.2))(oxc-resolver@11.21.2)(tsx@4.23.1)(typescript@7.0.2)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

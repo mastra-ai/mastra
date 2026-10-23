@@ -13,6 +13,7 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "declaration": true,
     "outDir": "dist",
     "rootDir": ".",
@@ -20,6 +21,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts", "tsdown.config.ts", "lib-entries.ts"],
   "exclude": ["node_modules", "src/**/__tests__/**", "src/**/*.test.ts", "src/**/*.test.tsx"]
 }

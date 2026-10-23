@@ -147,7 +147,7 @@
     }
   },
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && tsdown",
     "dev": "node scripts/prune-dist.mjs && vite build --watch --mode development",
     "test": "vitest",
     "test:mutate": "stryker run --mutate",
@@ -266,6 +266,7 @@
     "storybook": "^10.6.0",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "4.3.3",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vite": "^8.0.0",
     "vite-plugin-lib-inject-css": "^2.2.2",

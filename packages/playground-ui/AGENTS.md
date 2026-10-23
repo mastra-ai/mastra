@@ -2,11 +2,11 @@ Build from root: pnpm build:playground-ui
 Test from root: pnpm --filter ./packages/playground-ui test
 Typecheck: pnpm --filter ./packages/playground-ui typecheck (standalone `tsc`)
 
-`build` is `vite build` only; a plugin in vite.config.ts runs TypeScript 7 `tsc`
-(`tsconfig.build.json`) alongside the bundle to emit declarations and fails the
-build on type errors. Use the `typecheck` script for an explicit `tsc` gate (CI
-runs turbo `typecheck`). The package's own build is ~5s; a slow `build:playground-ui` is the cold turbo cache rebuilding
-upstream deps (`^build`), not this package.
+`build` is `vite build` for the JS, then `tsdown` (`tsdown.config.ts`) for the type
+declarations, using TypeScript 7 and the same entries (`lib-entries.ts`). The build
+does not type-check: use the `typecheck` script (CI runs turbo `typecheck`). The
+package's own build is ~5s; a slow `build:playground-ui` is the cold turbo cache
+rebuilding upstream deps (`^build`), not this package.
 
 PRIMARY testing strategy: Vitest + MSW + typed @mastra/client-js fixtures.
 This is the #1 way to validate changes here — ABOVE Playwright E2E.
