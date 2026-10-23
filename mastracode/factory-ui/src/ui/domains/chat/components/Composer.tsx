@@ -54,7 +54,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
   const connectionNotice = useComposerConnectionNotice(status);
-  const connectionLost = status === 'reconnecting' || status === 'error';
+  const connectionLost = connectionNotice.open && connectionNotice.notice !== 'reconnected';
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
