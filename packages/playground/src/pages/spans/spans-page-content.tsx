@@ -11,20 +11,22 @@ import {
 } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import type { TracesListViewTrace } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
+import { TracesSpansSwitch } from '@mastra/playground-ui/domains/traces/components/traces-spans-switch';
+import type { ObservabilityView } from '@mastra/playground-ui/domains/traces/components/traces-spans-switch';
 import { recoveryRefetchInterval } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
 import { resolveTraceQueryTimeRange } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { TraceDatePreset } from '@mastra/playground-ui/domains/traces/types';
-import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
+import { useObservabilityCapabilities, useThreadQueryAvailable } from '@mastra/react/hooks/capabilities';
 import { useQuerySpans } from '@mastra/react/hooks/traces';
 import type { SpanQueryArgs, SpanRow } from '@mastra/react/hooks/traces';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { STUDIO_TRACES_FEATURES } from '../traces/features';
 import { tracesCrumbs } from './crumbs';
 import { SpanDetailSidePanel } from './span-detail-side-panel';
 import type { SpanSelection } from './span-detail-side-panel';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { TracesSpansSwitch } from '@/domains/traces/components/traces-spans-switch';
 
 // Same window as /traces, so switching between the two pages keeps the time chip identical.
 const DEFAULT_DATE_PRESET: TraceDatePreset = DEFAULT_TRACES_FILTERS.datePreset;
@@ -86,6 +88,8 @@ export function SpansPageContent() {
 
   const { data: capabilities } = useObservabilityCapabilities();
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
+  const withThreadQuery = useThreadQueryAvailable().enabled && STUDIO_TRACES_FEATURES.threadQuery;
+  const views: ObservabilityView[] = withThreadQuery ? ['traces', 'spans', 'threads'] : ['traces', 'spans'];
 
   const { datePreset, dateFrom, dateTo } = dates;
   const fromMs = dateFrom?.getTime();
@@ -156,7 +160,7 @@ export function SpansPageContent() {
   return (
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={tracesCrumbs} />}
-      actionRow={<TracesSpansSwitch current="spans" />}
+      actionRow={<TracesSpansSwitch current="spans" views={views} onViewChange={view => navigate(`/${view}`)} />}
     >
       <h1 className="sr-only">Spans</h1>
       <div className="flex h-full min-h-0 flex-col gap-4">

@@ -57,7 +57,7 @@ function stubSignedIn() {
 }
 
 describe('SidebarUserMenu', () => {
-  it('opens a menu without navigating and exposes personal settings, Factory settings, theme, and logout', async () => {
+  it('opens a menu without navigating and exposes account settings, all settings, theme, and logout', async () => {
     const user = userEvent.setup();
     stubSignedIn();
     renderUserMenu();
@@ -74,16 +74,7 @@ describe('SidebarUserMenu', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map(item => item.textContent),
-    ).toEqual([
-      'My account',
-      'Preferences',
-      'Your models',
-      'Your memory',
-      'Connections',
-      'Settings',
-      'ThemeSystem',
-      'Log out',
-    ]);
+    ).toEqual(['My account', 'Preferences', 'Connections', 'Settings', 'ThemeSystem', 'Log out']);
     expect(within(menu).getByRole('menuitem', { name: 'Log out' })).toHaveAttribute(
       'href',
       `${TEST_BASE_URL}/auth/logout`,
@@ -127,16 +118,16 @@ describe('SidebarUserMenu', () => {
     expect(screen.getByRole('menuitemradio', { name: 'Dark' })).toBeChecked();
   });
 
-  it('opens a personal section directly and closes the dropdown', async () => {
+  it('opens an account section directly and closes the dropdown', async () => {
     const user = userEvent.setup();
     stubSignedIn();
     renderUserMenu();
 
     await user.click(await screen.findByRole('button', { name: 'User menu' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Your models' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Connections' }));
 
     expect(screen.getByRole('status', { name: 'Current path' })).toHaveTextContent(
-      '/factories/fp-1/settings/personal-models',
+      '/factories/fp-1/settings/connections',
     );
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
   });

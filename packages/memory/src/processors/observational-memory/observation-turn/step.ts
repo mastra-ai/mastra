@@ -737,7 +737,7 @@ function restoreDrainedMessages(messageList: MessageList, drained: MastraDBMessa
  * so a result merged in place into an existing tool-invocation part yields a new key. Bookkeeping
  * fields that change when a part is re-stamped are not part of the identity.
  */
-function getPartKeys(msg: MastraDBMessage): string[] {
+export function getPartKeys(msg: MastraDBMessage): string[] {
   const seen = new Map<string, number>();
   return (msg.content.parts ?? []).flatMap(part => {
     if (part.type.startsWith('data-om-')) return [];

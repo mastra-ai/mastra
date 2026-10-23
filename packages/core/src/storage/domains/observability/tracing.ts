@@ -521,6 +521,26 @@ function textFromContent(content: unknown): string {
     .join(' ');
 }
 
+/**
+ * Preview of an agent signal recorded as a run's input (`agent.sendSignal()`): a user signal previews
+ * as its text, any other signal as its text labelled by what it is (`Skill <name>: …`, `<tag>: …`).
+ */
+function signalText(value: object): string | null {
+  const signal = value as Record<string, unknown>;
+  if (signal.__isCreatedSignal !== true || !('contents' in signal)) return null;
+  const text = textFromContent(signal.contents).trim();
+  const type = signal.type;
+  if (type === 'user' || type === 'user-message') return text || null;
+
+  const attributes = signal.attributes as Record<string, unknown> | undefined;
+  const tagName = typeof signal.tagName === 'string' ? signal.tagName : undefined;
+  const label =
+    tagName === 'skill' && typeof attributes?.name === 'string'
+      ? `Skill ${attributes.name}`
+      : (tagName ?? (typeof type === 'string' ? type : 'signal'));
+  return text ? `${label}: ${text}` : label;
+}
+
 function lastMessageText(messages: PreviewMessage[], accept: (role: string) => boolean): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
@@ -547,6 +567,8 @@ function textField(value: object): string | null {
  * - A string previews as itself.
  * - A message list (a bare array, or a `messages` array, of objects with a string `role`)
  *   previews as the last user message's text, else the last non-system message's text.
+ * - An agent signal (a run started by `agent.sendSignal()`) previews as its contents; a non-user
+ *   signal is labelled by its tag, or `Skill <name>` for a skill.
  * - An object with a non-blank `text` or `message` string previews as that string.
  * - Anything else previews as its compact JSON.
  *
@@ -570,7 +592,7 @@ function previewOf(value: unknown, serialized: string | null | undefined, maxLen
   }
 
   if (typeof value === 'object' && !Array.isArray(value)) {
-    const text = textField(value);
+    const text = signalText(value) ?? textField(value);
     if (text != null) return truncatePreview(text, maxLength);
   }
 

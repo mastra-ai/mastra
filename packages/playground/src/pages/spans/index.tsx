@@ -3,10 +3,10 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useSpanQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
+import { TracesSpansSwitchSkeleton } from '@mastra/playground-ui/domains/traces/components/traces-spans-switch';
 import { spansCrumbs, tracesCrumbs } from './crumbs';
 import { SpansPageContent } from './spans-page-content';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { TracesSpansSwitchSkeleton } from '@/domains/traces/components/traces-spans-switch';
 
 export default function SpansPage() {
   const { enabled, isLoading } = useSpanQueryAvailable();

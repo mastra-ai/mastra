@@ -1,9 +1,10 @@
-import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
+import { describeProcessorPipeline, describeSpanOutput } from '@mastra/core/observability';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { SpanRecord } from '../types';
 import {
   SpanErrorRenderer,
   SpanInputRenderer,
+  hasSpanInputPreview,
   SpanOutputRenderer,
   SpanPayloadSection,
   SpanProcessorAttributes,
@@ -66,7 +67,7 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             title="Input"
             icon={<FileInputIcon />}
             raw={span.input}
-            hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
+            hasPreview={hasSpanInputPreview(span)}
             layout="details"
           >
             <SpanInputRenderer span={span} />
