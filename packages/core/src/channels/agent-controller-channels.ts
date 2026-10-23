@@ -407,7 +407,24 @@ export class AgentControllerChannels extends AgentChannels {
    */
   protected override async dispatchStop({ thread }: { thread: StorageThreadType }): Promise<boolean> {
     const session = this.dispatchedSessions.get(thread.id);
-    if (!session || session.thread.getId() !== thread.id || !session.run.isRunning()) return false;
+    if (!session) {
+      this.log('debug', 'Stop target: no session dispatched for thread', { threadId: thread.id });
+      return false;
+    }
+    const boundThreadId = session.thread.getId();
+    // The live stream is what `abort()` stops; a run owned by another thread
+    // owner shows up there without arming this session's local run state.
+    const running = session.stream.isActive() || session.run.isRunning();
+    if (boundThreadId !== thread.id || !running) {
+      this.log('debug', 'Stop target: session not running this thread', {
+        threadId: thread.id,
+        sessionId: session.identity.getId(),
+        boundThreadId,
+        streamActive: session.stream.isActive(),
+        runRunning: session.run.isRunning(),
+      });
+      return false;
+    }
     session.abort();
     return true;
   }
