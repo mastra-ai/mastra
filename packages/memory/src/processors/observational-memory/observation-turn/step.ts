@@ -108,6 +108,7 @@ export class ObservationStep {
           threadId,
           resourceId,
           recordId: activation.record.id,
+          abortSignal: this.turn.abortSignal,
         });
         await this.turn.refreshRecord();
       }
@@ -399,6 +400,7 @@ export class ObservationStep {
               resourceId,
               recordId: obsResult.record.id,
               activatedMessageIds: obsResult.activatedMessageIds,
+              abortSignal: this.turn.abortSignal,
             });
           }
 

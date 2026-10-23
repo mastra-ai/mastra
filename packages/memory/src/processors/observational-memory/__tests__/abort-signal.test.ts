@@ -1352,3 +1352,81 @@ it('does not wait for or apply a queued pending-token write after the run aborts
   }
   expect((await engine.getRecord(threadId, resourceId))?.pendingMessageTokens ?? 0).toBe(0);
 });
+
+it.each(['stale boundary reset', 'post-commit buffering reset'] as const)(
+  'releases a cancelled caller from a queued %s (#27792)',
+  async mode => {
+    const provider = createLatchedModel('Unused', false);
+    const store = new InMemoryStore();
+    const memory = new Memory({
+      storage: store,
+      options: {
+        generateTitle: false,
+        observationalMemory: {
+          enabled: true,
+          observation: { model: provider.model, messageTokens: 100_000, bufferTokens: 1000 },
+          reflection: { model: provider.model, observationTokens: 200_000 },
+        },
+      },
+    });
+    const engine = (await memory.omEngine)!;
+    const storage = (await store.getStore('memory'))!;
+    const threadId = `queued-reset-${mode}`;
+    const resourceId = 'queued-reset-resource';
+    const record = await engine.getOrCreateRecord(threadId, resourceId);
+    await storage.setBufferingObservationFlag(record.id, true, 50_000);
+    const message: MastraDBMessage = {
+      id: `queued-reset-${mode}-message`,
+      threadId,
+      resourceId,
+      role: 'user',
+      createdAt: new Date(),
+      content: { format: 2, parts: [{ type: 'text', text: 'Short request.' }] },
+    };
+    const key = engine.buffering.getLockKey(threadId, resourceId);
+    const release = Promise.withResolvers<void>();
+    const entered = Promise.withResolvers<void>();
+    const blocker = runOMCommit(key, async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    await entered.promise;
+    const controller = new AbortController();
+    let settled = false;
+    const operation = (
+      mode === 'stale boundary reset'
+        ? engine.activate({
+            threadId,
+            resourceId,
+            messages: [message],
+            record: (await engine.getRecord(threadId, resourceId))!,
+            abortSignal: controller.signal,
+          })
+        : engine.resetBufferingState({ threadId, resourceId, recordId: record.id, abortSignal: controller.signal })
+    ).then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(waitingOMCommits(key).normal).toBeGreaterThan(0);
+      controller.abort();
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(settled).toBe(true);
+    } finally {
+      controller.abort();
+      release.resolve();
+      await blocker;
+      await operation;
+      await engine.settled();
+    }
+    const after = await engine.getRecord(threadId, resourceId);
+    // Only the post-commit reset belongs to work that already committed, so only it still applies.
+    expect(after?.lastBufferedAtTokens).toBe(mode === 'stale boundary reset' ? 50_000 : 0);
+    expect(after?.isBufferingObservation).toBe(mode === 'stale boundary reset');
+  },
+);

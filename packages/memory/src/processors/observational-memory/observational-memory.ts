@@ -3027,16 +3027,25 @@ ${formattedMessages}
     resourceId?: string;
     recordId: string;
     activatedMessageIds?: string[];
+    abortSignal?: AbortSignal;
   }): Promise<void> {
-    const { threadId, resourceId, recordId, activatedMessageIds } = opts;
+    const { threadId, resourceId, recordId, activatedMessageIds, abortSignal } = opts;
     const lockKey = this.buffering.getLockKey(threadId, resourceId);
     const bufKey = this.buffering.getObservationBufferKey(lockKey);
 
     BufferingCoordinator.setObservationBoundary(bufKey, 0);
-    await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(recordId, false, 0)).catch(() => {});
-
-    if (activatedMessageIds && activatedMessageIds.length > 0) {
-      this.buffering.cleanupStaticMaps(threadId, resourceId, activatedMessageIds);
+    try {
+      // The activation or observation already committed, so the reset still runs if the owner
+      // cancels while it waits for the commit queue.
+      const reset = this.trackBackgroundWork(
+        runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(recordId, false, 0)).catch(() => {}),
+        lockKey,
+      );
+      await waitWithAbort(reset, abortSignal);
+    } finally {
+      if (activatedMessageIds && activatedMessageIds.length > 0) {
+        this.buffering.cleanupStaticMaps(threadId, resourceId, activatedMessageIds);
+      }
     }
   }
 
@@ -3963,9 +3972,10 @@ ${formattedMessages}
             `[OM:activate] resetting stale lastBufferedBoundary: dbBoundary=${dbBoundary}, currentContextTokens=${currentContextTokens}`,
           );
           BufferingCoordinator.setObservationBoundary(bufKey, 0);
-          await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false, 0)).catch(
-            () => {},
-          );
+          await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false, 0), {
+            abortSignal: opts.abortSignal,
+          }).catch(() => {});
+          opts.abortSignal?.throwIfAborted();
         }
       }
     }
