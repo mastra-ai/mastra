@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 describe('Tab', () => {
-  it('when a tab sits in a drawer, then pressing it does not start the drawer swipe', () => {
+  it('marks each tab as swipe-ignored, so pressing one inside a drawer does not start its swipe', () => {
     render(
       <Tabs defaultTab="first">
         <TabList>
