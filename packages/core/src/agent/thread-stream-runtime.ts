@@ -1207,13 +1207,18 @@ export class AgentThreadStreamRuntime {
     const preparedRun = state.preparedRunsById.get(runId);
     if (preparedRun) preparedRun.abortController.abort(new AgentThreadLeaseLostError(runId));
     // Durable runs own their controller outside the thread runtime.
-    else {
-      // Called from a detached renewal callback, so a throw here would be an unhandled rejection.
-      try {
-        state.threadRunsById.get(runId)?.agent.abortRunStream(runId);
-      } catch {
-        // The fence above already fails the run's remaining tool calls.
-      }
+    else this.#abortAgentRunStream(state, runId);
+  }
+
+  /**
+   * Both callers run in detached async callbacks (lease renewal, a pubsub handler), so an agent without
+   * `abortRunStream`, or one whose abort throws, must not escape as an unhandled rejection.
+   */
+  #abortAgentRunStream(state: AgentThreadRuntimeState, runId: string): void {
+    try {
+      state.threadRunsById.get(runId)?.agent.abortRunStream(runId);
+    } catch {
+      // Nothing to recover: the caller has already fenced the run or released its queue.
     }
   }
 
@@ -1445,7 +1450,7 @@ export class AgentThreadStreamRuntime {
             this.abortRun(data.runId, resolvedPubSub);
           } else {
             // Durable runs own their controller outside the thread runtime.
-            state.threadRunsById.get(data.runId)?.agent.abortRunStream(data.runId);
+            this.#abortAgentRunStream(state, data.runId);
           }
           if (clearPendingSignals) this.#notifyThreadEvents(state);
         }
