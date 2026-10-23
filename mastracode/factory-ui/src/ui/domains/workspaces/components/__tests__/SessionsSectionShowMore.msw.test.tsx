@@ -10,6 +10,7 @@ import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { stubSessionsFactory, testChatSession } from './fixtures/sessionsSection';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
+import { groupSessionsByBoard } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
 
@@ -55,6 +56,7 @@ function renderSection() {
 describe('Sessions sidebar show more', () => {
   beforeEach(() => {
     localStorage.removeItem('mastracode.pinnedSessions');
+    groupSessionsByBoard();
   });
 
   it('caps a group at 5 sessions and expands to the full list on demand', async () => {
