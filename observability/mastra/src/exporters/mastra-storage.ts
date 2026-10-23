@@ -87,7 +87,6 @@ export class MastraStorageExporter extends BaseExporter {
   #storage?: MastraCompositeStore;
   #observabilityStorage?: ObservabilityStorage;
   #resolvedStrategy?: TracingStorageStrategy;
-  #spanReadsUnsupported = false;
   #flushTimer?: NodeJS.Timeout;
   /** Storage writes (timer, size trigger, or flush()) that haven't finished yet */
   #inFlightFlushes = new Set<Promise<void>>();
@@ -361,8 +360,6 @@ export class MastraStorageExporter extends BaseExporter {
     events: (TracingEvent & RetryCount)[],
     deferredUpdates: BufferedEvent[],
     isEnd: boolean,
-    persistedSpans: Map<string, boolean>,
-    lookupErrors: Map<string, unknown>,
   ): Promise<FlushResult> {
     const deferredCountAtEntry = deferredUpdates.length;
     if (events.length === 0) return FLUSH_SUCCEEDED;
@@ -371,76 +368,26 @@ export class MastraStorageExporter extends BaseExporter {
       return { failed: true };
     }
 
+    const partials: UpdateSpanPartial[] = [];
+    for (const event of events) {
+      const span = event.exportedSpan;
+      if (this.#eventBuffer.spanExists(span)) {
+        partials.push({
+          traceId: span.traceId,
+          spanId: span.id,
+          updates: buildUpdateSpanRecord(span),
+        });
+      } else {
+        deferredUpdates.push(event);
+      }
+    }
+
+    if (partials.length === 0) return FLUSH_SUCCEEDED;
+
     try {
-      // Cache only for this flush: a missing span may be created before a retry.
-      const pendingSpans = new Map<string, TracingEvent['exportedSpan']>();
-      for (const { exportedSpan: span } of events) {
-        const key = `${span.traceId}:${span.id}`;
-        if (!this.#eventBuffer.spanExists(span) && !persistedSpans.has(key) && !lookupErrors.has(key)) {
-          pendingSpans.set(key, span);
-        }
-      }
-      const storage = this.#observabilityStorage!;
-      if (typeof storage.getSpan !== 'function') this.#spanReadsUnsupported = true;
-      const pending = pendingSpans.entries();
-      const lookup = async () => {
-        for (const [key, span] of pending) {
-          if (this.#spanReadsUnsupported) break;
-          try {
-            persistedSpans.set(key, !!(await storage.getSpan({ traceId: span.traceId, spanId: span.id })));
-          } catch (error) {
-            // Write-only providers retain the existing create-before-update behavior.
-            if (
-              error instanceof MastraError &&
-              error.domain === ErrorDomain.MASTRA_OBSERVABILITY &&
-              error.id === 'OBSERVABILITY_STORAGE_GET_SPAN_NOT_IMPLEMENTED'
-            ) {
-              this.#spanReadsUnsupported = true;
-            } else {
-              lookupErrors.set(key, error);
-            }
-          }
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(8, pendingSpans.size) }, lookup));
-
-      const partials: UpdateSpanPartial[] = [];
-      const lookupFailedEvents: (TracingEvent & RetryCount)[] = [];
-      for (const event of events) {
-        const span = event.exportedSpan;
-        const key = `${span.traceId}:${span.id}`;
-        if (lookupErrors.has(key)) {
-          lookupFailedEvents.push(event);
-          continue;
-        }
-        const spanExists = this.#eventBuffer.spanExists(span) || persistedSpans.get(key) === true;
-        if (spanExists) {
-          partials.push({
-            traceId: span.traceId,
-            spanId: span.id,
-            updates: buildUpdateSpanRecord(span),
-          });
-        } else {
-          deferredUpdates.push(event);
-        }
-      }
-
-      if (partials.length > 0) {
-        await storage.batchUpdateSpans({ records: partials });
-        if (isEnd) {
-          this.#eventBuffer.endFinishedSpans({ records: partials });
-        }
-      }
-      if (lookupFailedEvents.length > 0) {
-        const firstFailedEvent = lookupFailedEvents[0];
-        const error = firstFailedEvent
-          ? lookupErrors.get(`${firstFailedEvent.exportedSpan.traceId}:${firstFailedEvent.exportedSpan.id}`)
-          : undefined;
-        const dropped = this.#eventBuffer.reAddUpdates(lookupFailedEvents);
-        const retryAttempt = this.retryAttempt(lookupFailedEvents);
-        this.logStorageFailure('tracing', lookupFailedEvents, retryAttempt, error);
-        this.emitDrop('tracing', 'retry-exhausted', dropped.length, error);
-        return { failed: true, retryAttempt };
+      await this.#observabilityStorage!.batchUpdateSpans({ records: partials });
+      if (isEnd) {
+        this.#eventBuffer.endFinishedSpans({ records: partials });
       }
       return FLUSH_SUCCEEDED;
     } catch (error) {
@@ -486,8 +433,8 @@ export class MastraStorageExporter extends BaseExporter {
    * Flushes the current buffer to storage.
    *
    * Creates are flushed first, then their span keys are added to allCreatedSpans.
-   * Updates are checked against allCreatedSpans and, on a cache miss, storage.
-   * Those whose span has not been created are retried on the next flush.
+   * Updates are checked against allCreatedSpans — those whose span hasn't been
+   * created yet are re-inserted into the live buffer for the next flush.
    * Completed spans (SPAN_ENDED) are cleaned up from allCreatedSpans after success.
    */
   private async flushBuffer(): Promise<void> {
@@ -582,12 +529,8 @@ export class MastraStorageExporter extends BaseExporter {
     // Flush span updates and ends — check span existence, defer if not yet created
     const deferredUpdates: BufferedEvent[] = [];
 
-    const persistedSpans = new Map<string, boolean>();
-    const lookupErrors = new Map<string, unknown>();
-    flushResults.push(
-      await this.flushSpanUpdates(updateSpanEvents, deferredUpdates, false, persistedSpans, lookupErrors),
-    );
-    flushResults.push(await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true, persistedSpans, lookupErrors));
+    flushResults.push(await this.flushSpanUpdates(updateSpanEvents, deferredUpdates, false));
+    flushResults.push(await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true));
 
     let deferredDropCount = 0;
     if (deferredUpdates.length > 0) {
