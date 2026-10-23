@@ -6,6 +6,7 @@ import { getCustomProviderId, MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/o
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { getModelReasoningOptions } from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
@@ -14,7 +15,7 @@ import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { resolveFactoryModelPolicy } from '../session/credential-policy.js';
+import { resolveFactoryModelPolicy, routedPersonalDefaults } from '../session/credential-policy.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {
   CredentialRecord,
@@ -33,6 +34,7 @@ import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { THINKING_LEVELS } from './contracts.js';
 import {
   credentialLabel,
   getAuthProviderId,
@@ -1027,7 +1029,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const factoryProjectId = c.req.query('factoryId') || undefined;
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
-            let sessionPolicy: { modelScope: 'factory' | 'user'; defaultModelId: string | null } | undefined;
+            let sessionPolicy:
+              | {
+                  modelScope: 'factory' | 'user';
+                  defaultModelId: string | null;
+                  personalThinkingLevel: ThinkingLevelSetting | null;
+                }
+              | undefined;
             const resourceId = c.req.query('resourceId');
             const threadId = c.req.query('threadId');
             const sessionId = c.req.query('sessionId');
@@ -1075,13 +1083,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                   modelScope,
                 });
                 let defaultModelId = policy.factoryDefaultModelId ?? null;
+                let personalThinkingLevel: ThinkingLevelSetting | null = null;
                 if (modelScope === 'user') {
                   if (!options.modelDefaults) return c.json({ error: 'model_defaults_unavailable' }, 503);
-                  await options.modelDefaults.ensureReady();
-                  defaultModelId =
-                    (await options.modelDefaults.get({ orgId, userId: policy.tenant.userId }))?.modelId ?? null;
+                  const ownerDefaults = await routedPersonalDefaults(policy.tenant, options.modelDefaults);
+                  defaultModelId = ownerDefaults?.modelId ?? null;
+                  personalThinkingLevel = ownerDefaults?.thinkingLevel ?? null;
                 }
-                sessionPolicy = { modelScope, defaultModelId };
+                sessionPolicy = { modelScope, defaultModelId, personalThinkingLevel };
               }
             } else if (c.req.query('scope') !== undefined) {
               // Explicit settings scopes never override a live thread's owner and policy above.
@@ -1129,7 +1138,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if ('response' in context) return context.response;
           try {
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            return c.json({ modelId: record?.modelId ?? null });
+            return c.json({ modelId: record?.modelId ?? null, thinkingLevel: record?.thinkingLevel ?? null });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1239,6 +1248,39 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           try {
             await context.storage.set({ orgId: context.orgId, userId: context.userId, modelId });
             return c.json({ ok: true, modelId });
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      registerApiRoute('/web/config/default-model/thinking', {
+        method: 'PUT',
+        requiresAuth: false,
+        handler: async c => {
+          const context = await resolveModelDefaultsContext({
+            c: loose(c),
+            auth,
+            modelDefaults: options.modelDefaults,
+          });
+          if ('response' in context) return context.response;
+          let body: unknown;
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const parsed = z.object({ thinkingLevel: z.enum(THINKING_LEVELS).nullable() }).safeParse(body);
+          if (!parsed.success) return c.json({ error: 'Invalid thinkingLevel' }, 400);
+          const { thinkingLevel } = parsed.data;
+          try {
+            const record = await context.storage.setThinkingLevel({
+              orgId: context.orgId,
+              userId: context.userId,
+              thinkingLevel,
+            });
+            if (!record) return c.json({ error: 'default_model_not_set' }, 400);
+            return c.json({ ok: true, thinkingLevel });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

@@ -5,7 +5,6 @@ import {
   runThinkingLevel,
   THINK_COMMAND_DESCRIPTOR,
 } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import {
@@ -19,7 +18,6 @@ import {
   useFollowUpAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
-import { useFactoryThinkingDefaultQuery } from '../../../../hooks/use-thinking';
 import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
@@ -27,18 +25,20 @@ import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/setti
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { FACTORY_THINKING_SOURCE_LABEL, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
+import { THINKING_DEFAULT_SOURCE_LABELS, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
+import type { ThinkingDefault } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
 import { useChatModelScope } from './useChatModelScope';
 import { useChatPermissions } from './useChatPermissions';
 import { useChatSessionContext } from './useChatSessionContext';
+import { useChatThinking } from './useChatThinking';
 import { useChatRuntime } from './useChatRuntime';
 import { useChatTranscript } from './useChatTranscript';
 
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
-function describeFactoryDefault(level: string): string {
-  return `${level} (${FACTORY_THINKING_SOURCE_LABEL})`;
+function describeThinkingDefault({ level, origin }: ThinkingDefault): string {
+  return `${level} (${THINKING_DEFAULT_SOURCE_LABELS[origin]})`;
 }
 
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
@@ -67,9 +67,9 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
   const followUpMutation = useFollowUpAgentControllerMutation(hookArgs);
   const settingsQuery = useAgentControllerSettings(hookArgs);
-  const factoryThinkingQuery = useFactoryThinkingDefaultQuery(factoryId, { enabled: false });
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
+  const { thinkingDefault } = useChatThinking();
 
   const openSessionDefaults = () => {
     if (factoryId)
@@ -85,7 +85,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     {
       value: 'default',
       label: 'Default',
-      description: 'Factory default',
+      ...(thinkingDefault ? { description: THINKING_DEFAULT_SOURCE_LABELS[thinkingDefault.origin] } : {}),
       active: settingsQuery.data !== undefined && currentThinkingLevel === undefined,
     },
     ...availableThinkingLevels.map(level => ({
@@ -99,12 +99,6 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     if (settingsQuery.data) return settingsQuery.data;
     const result = await settingsQuery.refetch();
     if (!result.data) throw new Error('Session settings are unavailable');
-    return result.data;
-  };
-  const ensureFactoryThinkingDefault = async (): Promise<ThinkingLevelSetting> => {
-    if (factoryThinkingQuery.data) return factoryThinkingQuery.data;
-    const result = await factoryThinkingQuery.refetch();
-    if (!result.data) throw new Error('The Factory thinking level is unavailable');
     return result.data;
   };
 
@@ -220,16 +214,16 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
           if (action.kind === 'clear') {
             await ensureSettings();
             await updateSettingsMutation.mutateAsync({ thinkingLevel: null });
-            try {
-              const factoryDefault = await ensureFactoryThinkingDefault();
-              pushNotice(`Thinking level set to default: ${describeFactoryDefault(factoryDefault)}.`);
-            } catch {
-              pushNotice('Thinking level set to default. Current default is unavailable.');
-            }
+            pushNotice(
+              thinkingDefault
+                ? `Thinking level set to default: ${describeThinkingDefault(thinkingDefault)}.`
+                : 'Thinking level set to default. Current default is unavailable.',
+            );
             return;
           }
-          const [settings, factoryDefault] = await Promise.all([ensureSettings(), ensureFactoryThinkingDefault()]);
-          const defaultLevel = describeFactoryDefault(factoryDefault);
+          const settings = await ensureSettings();
+          if (!thinkingDefault) throw new Error('The thinking default is unavailable');
+          const defaultLevel = describeThinkingDefault(thinkingDefault);
           pushNotice(
             settings.thinkingLevel
               ? `Thinking level: ${settings.thinkingLevel} (session override). Default: ${defaultLevel}.`

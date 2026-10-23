@@ -2,8 +2,11 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { ThinkingLevelPicker, ThinkingLevelUnavailable } from '@mastra/playground-ui/components/ThinkingLevel';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
-import { useFactoryThinkingDefaultQuery, useSetFactoryThinkingDefaultMutation } from '../../../../hooks/use-thinking';
-import { ALL_THINKING_LEVEL_OPTIONS } from '../../chat/services/thinkingLevels';
+import {
+  useFactoryThinkingDefaultQuery,
+  useSetFactoryThinkingDefaultMutation,
+} from '../../../../../../hooks/use-thinking';
+import { ALL_THINKING_LEVEL_OPTIONS } from '../../../../chat/services/thinkingLevels';
 
 function thinkingWriteFailureMessage(error: unknown) {
   if (!(error instanceof Error)) return 'Failed to change thinking level';
@@ -39,7 +42,6 @@ export function FactoryThinkingControl({ factoryId }: { factoryId: string }) {
       options={ALL_THINKING_LEVEL_OPTIONS}
       value={levelQuery.data}
       label="Thinking"
-      description="Used by every session and work-item run in this Factory until it picks its own level. Each run caps it at what its model supports."
       onChange={(level: ThinkingLevelSetting) =>
         setLevel.mutateAsync(level).catch(error => toast.error(thinkingWriteFailureMessage(error)))
       }
