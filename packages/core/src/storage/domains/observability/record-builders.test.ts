@@ -46,6 +46,41 @@ describe('record-builders', () => {
       expect(buildCreateSpanRecord(span()).timeToFirstChunkMs).toBeNull();
       expect(buildUpdateSpanRecord(span())).not.toHaveProperty('timeToFirstChunkMs');
     });
+
+    it('stores the parent and root entity carried on the exported span, null when absent', () => {
+      const nested: AnyExportedSpan = {
+        ...span(),
+        isRootSpan: false,
+        parentEntityType: EntityType.WORKFLOW_RUN,
+        parentEntityId: 'wf-1',
+        parentEntityName: 'triage',
+        parentEntityVersionId: 'wf-v1',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'agent-1',
+        rootEntityName: 'support',
+        rootEntityVersionId: 'agent-v1',
+      };
+      expect(buildCreateSpanRecord(nested)).toMatchObject({
+        parentEntityType: EntityType.WORKFLOW_RUN,
+        parentEntityId: 'wf-1',
+        parentEntityName: 'triage',
+        parentEntityVersionId: 'wf-v1',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'agent-1',
+        rootEntityName: 'support',
+        rootEntityVersionId: 'agent-v1',
+      });
+      expect(buildCreateSpanRecord(span())).toMatchObject({
+        parentEntityType: null,
+        parentEntityId: null,
+        parentEntityName: null,
+        parentEntityVersionId: null,
+        rootEntityType: null,
+        rootEntityId: null,
+        rootEntityName: null,
+        rootEntityVersionId: null,
+      });
+    });
   });
 
   it('preserves exporter-supplied previews for create and update records', () => {

@@ -10,7 +10,7 @@ import { executeWithContext } from '@mastra/core/observability/context-storage';
 
 // Core Mastra imports
 import type { Processor } from '@mastra/core/processors';
-import { MockStore } from '@mastra/core/storage';
+import { MockStore, buildCreateSpanRecord } from '@mastra/core/storage';
 import type { InferSchemaOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
@@ -2157,6 +2157,63 @@ describe('Tracing Integration Tests', () => {
       const allSpans = testExporter.getAllSpans();
       const spansWithContext = allSpans.filter(s => s.requestContext);
       expect(spansWithContext.length).toBeGreaterThanOrEqual(1);
+
+      finalExpectations(testExporter);
+    });
+  });
+
+  describe('parent and root entity on exported spans', () => {
+    it('carries the owning parent and root entity from a real agent → tool span tree', async () => {
+      const testAgent = new Agent({
+        id: 'entity-agent',
+        name: 'Entity Agent',
+        instructions: 'You are a test agent',
+        model: mockModelV2,
+        tools: { calculator: calculatorTool },
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { testAgent },
+      });
+
+      await mastra.getAgent('testAgent').generate('Calculate 5 + 3');
+
+      const [agentSpan] = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      const [toolSpan] = testExporter.getSpansByType(SpanType.TOOL_CALL);
+      expect(agentSpan).toBeDefined();
+      expect(toolSpan).toBeDefined();
+
+      expect(agentSpan).toMatchObject({
+        entityType: EntityType.AGENT,
+        entityId: 'entity-agent',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'entity-agent',
+        rootEntityName: 'Entity Agent',
+      });
+      expect(agentSpan?.parentEntityType).toBeUndefined();
+
+      expect(toolSpan).toMatchObject({
+        entityType: EntityType.TOOL,
+        entityId: 'calculator',
+        parentEntityType: EntityType.AGENT,
+        parentEntityId: 'entity-agent',
+        parentEntityName: 'Entity Agent',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'entity-agent',
+        rootEntityName: 'Entity Agent',
+      });
+
+      expect(buildCreateSpanRecord(toolSpan!)).toMatchObject({
+        parentEntityType: EntityType.AGENT,
+        parentEntityId: 'entity-agent',
+        parentEntityName: 'Entity Agent',
+        parentEntityVersionId: null,
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'entity-agent',
+        rootEntityName: 'Entity Agent',
+        rootEntityVersionId: null,
+      });
 
       finalExpectations(testExporter);
     });
