@@ -50,7 +50,7 @@
     "@vitest/ui": "catalog:",
     "ai": "^7.0.143",
     "json-schema": "^0.4.0",
-    "msw": "^2.12.11",
+    "msw": "^2.15.0",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
     "tsdown": "0.23.1",
