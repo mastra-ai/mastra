@@ -149,7 +149,10 @@ describe('MCP Tasks wire (2026-07-28)', () => {
     ]);
     for (const error of errors) {
       expect(error).toBeInstanceOf(ProtocolError);
-      expect(error).toMatchObject({ code: TASKS_ERROR_CODES.InvalidParams, message: expect.stringContaining('Task not found') });
+      expect(error).toMatchObject({
+        code: TASKS_ERROR_CODES.InvalidParams,
+        message: expect.stringContaining('Task not found'),
+      });
     }
     expect(store.handle(taskId).signal.aborted).toBe(false);
   });

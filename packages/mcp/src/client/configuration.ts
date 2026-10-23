@@ -8,6 +8,7 @@ import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/client';
 import type { ProgressNotification, Prompt, Resource, ResourceTemplateType } from '@modelcontextprotocol/client';
 import equal from 'fast-deep-equal';
 import { UnauthorizedError } from '../shared/oauth-types';
+import type { MCPDetailedTask, MCPTaskInputResponses } from '../shared/tasks';
 import { InternalMastraMCPClient } from './client';
 import type { MastraMCPServerDefinition, MCPServerAuthState } from './client';
 import { getMCPDiscoveryErrorDetails, isReconnectableMCPError } from './error-utils';
@@ -76,9 +77,7 @@ function isLoopbackHostname(hostname: string): boolean {
 /**
  * Configuration options for creating an MCPClient instance.
  */
-export interface MCPClientOptions<
-  TServers extends MCPClientServers<TServers> = MCPServerMap,
-> {
+export interface MCPClientOptions<TServers extends MCPClientServers<TServers> = MCPServerMap> {
   /** Optional unique identifier to prevent memory leaks when creating multiple instances with identical configurations */
   id?: string;
   /**
@@ -141,9 +140,7 @@ export interface MCPClientOptions<
  * @see [MCP client documentation](https://mastra.ai/reference/tools/mcp-client)
  * if packaged docs are unavailable.
  */
-export class MCPClient<
-  TServers extends MCPClientServers<TServers> = MCPServerMap,
-> extends MastraBase {
+export class MCPClient<TServers extends MCPClientServers<TServers> = MCPServerMap> extends MastraBase {
   readonly typegen?: Readonly<{ outFile: string }>;
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
@@ -356,6 +353,64 @@ To fix this you have three different options:
        */
       handleWebhook: async (request: Request): Promise<Response> =>
         this.webhook ? this.webhook.receiver.handle(request) : new Response(null, { status: 404 }),
+    };
+  }
+
+  /**
+   * Reads, answers and cancels MCP tasks (SEP-2663) on configured servers. Tool calls to a server
+   * with `tasks` enabled already wait for their tasks; use this to inspect or steer one directly.
+   *
+   * @experimental SEP-2663 extension; this API may change.
+   *
+   * @example
+   * ```typescript
+   * const task = await mcp.tasks.get('reports', taskId);
+   * if (task.status === 'working') await mcp.tasks.cancel('reports', taskId);
+   * ```
+   */
+  public get tasks() {
+    this.addToInstanceCache();
+    const wrap = async <T>(id: Uppercase<string>, details: Record<string, string>, run: () => Promise<T>) => {
+      try {
+        return await run();
+      } catch (error) {
+        throw new MastraError({ id, domain: ErrorDomain.MCP, category: ErrorCategory.THIRD_PARTY, details }, error);
+      }
+    };
+    return {
+      /**
+       * Returns a task's current state, including its result once completed.
+       *
+       * @throws {MastraError} `MCP_CLIENT_GET_TASK_FAILED`; the cause is a `-32602` protocol error
+       * when the server does not know the task.
+       */
+      get: (serverName: string, taskId: string, options?: { signal?: AbortSignal }): Promise<MCPDetailedTask> =>
+        wrap('MCP_CLIENT_GET_TASK_FAILED', { serverName, taskId }, async () =>
+          (await this.getConnectedClientForServer(serverName)).tasks.get(taskId, options),
+        ),
+      /**
+       * Answers input requests of an `input_required` task, keyed as in its `inputRequests`.
+       *
+       * @throws {MastraError} `MCP_CLIENT_UPDATE_TASK_FAILED`
+       */
+      update: (
+        serverName: string,
+        taskId: string,
+        inputResponses: MCPTaskInputResponses,
+        options?: { signal?: AbortSignal },
+      ): Promise<void> =>
+        wrap('MCP_CLIENT_UPDATE_TASK_FAILED', { serverName, taskId }, async () =>
+          (await this.getConnectedClientForServer(serverName)).tasks.update(taskId, inputResponses, options),
+        ),
+      /**
+       * Asks the server to stop a task. Cancellation is cooperative: the task may still complete.
+       *
+       * @throws {MastraError} `MCP_CLIENT_CANCEL_TASK_FAILED`
+       */
+      cancel: (serverName: string, taskId: string, options?: { signal?: AbortSignal }): Promise<void> =>
+        wrap('MCP_CLIENT_CANCEL_TASK_FAILED', { serverName, taskId }, async () =>
+          (await this.getConnectedClientForServer(serverName)).tasks.cancel(taskId, options),
+        ),
     };
   }
 
