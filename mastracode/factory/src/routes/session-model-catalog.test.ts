@@ -59,6 +59,8 @@ async function setup(modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid', visib
   await seed.credentials.setCredential({ orgId: 'org-1' }, 'deepseek', { type: 'api_key', key: 'org-secret' });
   await seed.modelDefaults.set({ orgId: 'org-1', userId: 'owner', modelId: 'anthropic/claude-opus-4-6' });
   await seed.modelDefaults.set({ orgId: 'org-1', userId: 'viewer', modelId: 'openai/gpt-5.5' });
+  await seed.modelDefaults.setThinkingLevel({ orgId: 'org-1', userId: 'owner', thinkingLevel: 'high' });
+  await seed.modelDefaults.setThinkingLevel({ orgId: 'org-1', userId: 'viewer', thinkingLevel: 'low' });
   let orgId = 'org-1';
   const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
   app.use('*', async (c, next) => {
@@ -129,6 +131,7 @@ describe('session-owner model catalog', () => {
       const body = await response.json();
       expect(body.modelScope).toBe('user');
       expect(body.defaultModelId).toBe('anthropic/claude-opus-4-6');
+      expect(body.personalThinkingLevel).toBe('high');
       expect(body.models).toEqual([
         expect.objectContaining({ id: 'anthropic/claude-opus-4-6', credentialLabel: 'Anthropic API key' }),
       ]);
@@ -158,6 +161,7 @@ describe('session-owner model catalog', () => {
       const body = await response.json();
       expect(body.modelScope).toBe('factory');
       expect(body.defaultModelId).toBe('deepseek/deepseek-flash');
+      expect(body.personalThinkingLevel).toBeNull();
       expect(body.models).toEqual([
         expect.objectContaining({ id: 'deepseek/deepseek-flash', credentialLabel: 'Deepseek API key' }),
       ]);
@@ -171,6 +175,7 @@ describe('session-owner model catalog', () => {
     const body = await response.json();
     expect(body.modelScope).toBe('user');
     expect(body.defaultModelId).toBe('anthropic/claude-opus-4-6');
+    expect(body.personalThinkingLevel).toBe('high');
     expect(body.models.map((m: { id: string }) => m.id)).toEqual(['anthropic/claude-opus-4-6']);
   });
 

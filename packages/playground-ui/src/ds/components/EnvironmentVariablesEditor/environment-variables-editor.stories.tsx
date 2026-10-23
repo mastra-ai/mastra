@@ -108,7 +108,7 @@ function DemoEditor({ initialRows }: { initialRows: EnvironmentVariableEntry[] }
               onClick={save}
             >
               <RefreshCwIcon />
-              Save & Restart
+              Save & restart
             </Button>
             <Button
               type="button"
@@ -228,7 +228,7 @@ function EnvironmentVariablesDrawerStory() {
       <Drawer side="right" variant="floating" overlay="visible" open={open} onOpenChange={setOpen}>
         <DrawerTrigger asChild>
           <Button variant="primary" size="sm">
-            Add Environment Variable
+            Add environment variable
           </Button>
         </DrawerTrigger>
         <DrawerContent className="w-3xl max-w-[calc(100vw-2rem)]">
@@ -241,7 +241,7 @@ function EnvironmentVariablesDrawerStory() {
               <div className="grid gap-6">
                 <EnvironmentVariablesEditor.UploadError />
                 <EnvironmentVariablesEditor.Rows />
-                <EnvironmentVariablesEditor.AddButton>Add Another</EnvironmentVariablesEditor.AddButton>
+                <EnvironmentVariablesEditor.AddButton>Add another</EnvironmentVariablesEditor.AddButton>
                 <EnvironmentVariablesEditor.DuplicateKeysError />
               </div>
             </DrawerBody>

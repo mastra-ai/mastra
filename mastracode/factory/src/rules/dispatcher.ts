@@ -353,6 +353,7 @@ function factoryRequestContext(input: {
   requestContext.set('controller', {
     state: session.state.get(),
     getState: () => session.state.get(),
+    sessionId: binding.sessionId,
     threadId: binding.threadId,
     resourceId: binding.resourceId,
     session: {
