@@ -775,7 +775,7 @@ export class MastraFactory {
       });
     }
     const knowledgeEnabled =
-      this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+      this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE === '1';
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
