@@ -1,0 +1,58 @@
+---
+title: "Knowledge"
+description: "Give agents a durable, shared store of notes they can search, write to, and pin, without adding Memory."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+---
+
+# Knowledge
+
+Knowledge is a store of notes that agents read and write across conversations. Notes are organized into **nodes** (named places) that hold **records** (short, dated facts). Who can see a record is controlled by **scopes**, so one Knowledge instance can serve a company, its teams, and individual users.
+
+:::warning
+
+Knowledge is experimental. Its API can change between releases without a deprecation period.
+
+:::
+
+Knowledge attaches directly to an agent. It doesn't need [Memory](/docs/memory/overview), and it doesn't replace it. When both are set, Memory adds message history and Observational Memory, and Knowledge adds the notes.
+
+## Quickstart
+
+Create one `Knowledge` instance and pass it to an agent:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+import { Knowledge } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  storage: new LibSQLStore({ id: 'knowledge', url: 'file:./knowledge.db' }),
+})
+
+export const agent = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  instructions: 'You answer questions about the company.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  knowledge,
+})
+```
+
+The agent can now search Knowledge and read nodes. It can't write until you turn writing on. See [agents and tools](/docs/knowledge/agents-and-tools).
+
+## What's in the section
+
+- [Concepts](/docs/knowledge/concepts): nodes, records, scopes, tags, read-only access, and pins.
+- [Setup](/docs/knowledge/setup): storage, search, and declaring a structure.
+- [Agents and tools](/docs/knowledge/agents-and-tools): the tools an agent gets and how a run's scopes limit them.
+- [Instructions](/docs/knowledge/instructions): the built-in usage instructions and how to override them.
+- [Limits](/docs/knowledge/limits): size limits, counted in tokens.
+- [Mastra Code](/docs/knowledge/mastra-code): using Knowledge in sessions.
+
+## Not in this release
+
+Importers, retention, and stored grants aren't part of this release. Access between scopes is computed from your structure when a tool runs; nothing is stored per user.

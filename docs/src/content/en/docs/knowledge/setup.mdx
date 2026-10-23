@@ -1,0 +1,54 @@
+---
+title: "Set up Knowledge"
+description: "Create a Knowledge instance with storage, optional semantic search, and a scope structure."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+---
+
+# Set up Knowledge
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+Create a `Knowledge` instance with a storage adapter. Search works with keywords out of the box, and you can add a vector store and embedder for semantic search.
+
+## Create the instance
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  storage: new LibSQLStore({ id: 'knowledge', url: 'file:./knowledge.db' }),
+})
+```
+
+`LibSQLStore` and `PostgresStore` support the full Knowledge feature set. Storage that doesn't support Knowledge structures rejects structures that declare grants.
+
+## Add semantic search
+
+Pass a `vector` store and an `embedder`. Without them, search matches keywords only.
+
+```typescript
+export const knowledge = new Knowledge({
+  id: 'company',
+  storage,
+  vector,
+  embedder,
+})
+```
+
+Records written by a tool are indexed shortly after the write. Records added any other way, such as an import or a direct API call, are indexed the next time a search runs, so the first search after a bulk import is slower.
+
+## Declare a structure
+
+Use `scopes` to describe your scope types and which scopes own others. See [Knowledge concepts](/docs/knowledge/concepts#the-structure).
+
+## Attach to an agent
+
+Pass the instance as `knowledge` on the agent, or register it on `Mastra` and refer to it by key. See [agents and tools](/docs/knowledge/agents-and-tools).

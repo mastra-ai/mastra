@@ -408,6 +408,12 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Knowledge',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'knowledge/knowledge-class', label: 'Knowledge Class' }],
+    },
+    {
+      type: 'category',
       label: 'Memory',
       collapsed: true,
       items: [

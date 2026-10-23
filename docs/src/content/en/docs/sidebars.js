@@ -220,6 +220,46 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Knowledge',
+          link: {
+            type: 'doc',
+            id: 'knowledge/overview',
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'knowledge/concepts',
+              label: 'Concepts',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/setup',
+              label: 'Setup',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/agents-and-tools',
+              label: 'Agents and Tools',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/instructions',
+              label: 'Instructions',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/limits',
+              label: 'Limits',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/mastra-code',
+              label: 'Mastra Code',
+            },
+          ],
+        },
       ],
     },
     {

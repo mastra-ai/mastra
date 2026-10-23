@@ -1,0 +1,25 @@
+---
+title: "Knowledge limits"
+description: "Size limits for records, node descriptions, and pins, counted in tokens."
+packages:
+  - "@mastra/core"
+---
+
+# Knowledge limits
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+Limits are counted in tokens, not characters. Counts are estimates, so treat the numbers as approximate.
+
+| Item | Limit |
+|---|---|
+| Record text | 250 tokens |
+| Node description | 100 tokens |
+| Pin set (all pins together) | 500 tokens by default, up to 2000 |
+| Number of pins | 20 by default |
+
+A write over a limit fails with an error. Tool schemas don't show the limit, because a schema can't count tokens. Change the pin limits with `pins: { maxPins, maxTokens }` on `Knowledge`.

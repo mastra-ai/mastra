@@ -1,0 +1,38 @@
+---
+title: "Knowledge instructions"
+description: "The usage instructions Knowledge adds to agents, and how to change or turn them off."
+packages:
+  - "@mastra/core"
+---
+
+# Knowledge instructions
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+When Knowledge attaches tools to an agent, it also adds a short instruction block that explains how to use them. Each part appears only when its tools are on:
+
+- **Read:** search before answering, read a node before relying on it, cite the record used, say so when nothing is found, and show both records with dates when they disagree.
+- **Write:** store one durable fact per record, append to an existing node before creating one, record a change as a new dated record, and remove only records that are wrong.
+- **Pins:** how to keep the pin set small and current.
+
+The text depends only on which tools are on and on your override, never on scopes, pins, or search results, so it doesn't break prompt caching.
+
+## Override the instructions
+
+```typescript
+const knowledge = new Knowledge({
+  id: 'company',
+  storage,
+  // instructions: false, to remove the block
+  // instructions: 'Your own text', to replace it
+  instructions: ({ read, write, pins }) => `${read}\n${write}\n${pins}\nAlways answer in French.`,
+})
+```
+
+The function receives the default text for each part, and an empty string for parts that are off. Return the same string for the same inputs, or the prompt cache stops working.
+
+To add the block when you wire tools yourself, call `knowledge.getInstructions({ write: true, pins: false })`.

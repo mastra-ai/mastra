@@ -1,0 +1,65 @@
+---
+title: "Knowledge agents and tools"
+description: "Attach Knowledge to an agent, choose which tools it gets, and understand how a run's scopes limit them."
+packages:
+  - "@mastra/core"
+---
+
+# Knowledge agents and tools
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+Set `knowledge` on an agent to give it Knowledge tools. Memory isn't required.
+
+```typescript
+const agent = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  instructions: 'You answer questions about the company.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  knowledge,
+})
+```
+
+## Choose the tools
+
+Set `tools` and `pins` on `Knowledge` to control what an attached agent gets:
+
+```typescript
+const knowledge = new Knowledge({
+  id: 'company',
+  storage,
+  tools: { read: true, write: true },
+  pins: { maxPins: 20, maxTokens: 500 },
+})
+```
+
+| Option | Gives the agent | Default |
+|---|---|---|
+| `tools.read` | Search records and read nodes | on |
+| `tools.write` | Append, edit, and remove records | off |
+| `pins` | Pin tools, and the pin set in context | off |
+
+Set `pins: true` for the default budget, or pass `maxPins` and `maxTokens`.
+
+## How scopes limit the tools
+
+Every tool takes an optional `scope` argument: a list of tags. The run's own tags bound what the model can name.
+
+- **Reads** search the run's tags plus any `scope` tags. Each extra tag must be held or owned by the run.
+- **Writes** land at exactly the `scope` tags when given, otherwise at every tag the run holds. Each tag must be held or owned with write access.
+- **Pins** default to every run tag except `thread`.
+
+To fix the scope yourself, create the tools directly. The `scope` argument is then not exposed to the model:
+
+```typescript
+const tools = knowledge.createTools({ write: true, scope: ['team:acme:director'] })
+```
+
+## Memory and pins
+
+Without Memory, pins are shown to the agent on every step. With Memory, pins are saved to the thread, so later steps send only changes.

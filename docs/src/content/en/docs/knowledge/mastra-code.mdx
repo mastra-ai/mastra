@@ -1,0 +1,26 @@
+---
+title: "Knowledge in Mastra Code"
+description: "Turn on Knowledge in Mastra Code sessions and set the scopes a session runs with."
+packages:
+  - "@mastra/core"
+---
+
+# Knowledge in Mastra Code
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+Mastra Code can attach Knowledge to its agent with read, write, and pin tools on. Set `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1` to use a default instance tagged `org:local`. To supply your own, pass `knowledge` when creating the harness:
+
+```typescript
+createMastraCode({ knowledge: { instance: knowledge, scopes: ['org:acme'] } })
+```
+
+A session sends each message with the scopes it should run with. A message whose scopes differ from the running task waits for that task to finish, so tags never mix within a run.
+
+## Upgrading
+
+`experimental_subconscious` is removed. Attach Knowledge to the agent instead.

@@ -1,0 +1,65 @@
+---
+title: "Knowledge concepts"
+description: "Nodes, records, scopes, tags, read-only access, and pins in Mastra Knowledge."
+packages:
+  - "@mastra/core"
+---
+
+# Knowledge concepts
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+## Nodes and records
+
+A **node** is a named, described place in Knowledge, such as `pricing` or `onboarding`. A **record** is one short, dated fact stored under a node. Agents search records, read a node to see everything in it, and append new records.
+
+Records and node descriptions have size limits, counted in tokens. See [limits](/docs/knowledge/limits).
+
+## Scopes and tags
+
+A **scope** decides who sees a record. A scope is identified by a **tag** in the form `<type>:<value>`, for example `org:acme` or `team:acme:director`. The value can contain `:`.
+
+A run gets its tags from the agent: the `scopes` set on the agent, the `scopes` passed to a call, or the request context. Knowledge also adds `resource:<id>` and `thread:<id>` when the run has a resource or thread ID. A run reads records at every tag it holds.
+
+Tags are authority. Only the host application should set them, and a model can't add to them.
+
+## The structure
+
+The `scopes` option on `Knowledge` declares scope types with patterns that use `$param` placeholders. Declaring a type is optional: a run can use any tag, and the holder owns records at its own tag. Declare a type to add a description, child templates, or to say which scope owns it.
+
+```typescript
+import { Knowledge } from '@mastra/core/knowledge'
+
+const knowledge = new Knowledge({
+  id: 'company',
+  storage,
+  scopes: {
+    'org:$orgId': { description: 'The company' },
+    'team:$orgId:$teamId': {
+      access: [{ principal: 'org:$orgId', role: 'owner' }],
+    },
+  },
+})
+```
+
+Here a run that holds `org:acme` can read and write `team:acme:director`, but not `team:other:director`, because `$orgId` is bound from the team's own address. Ownership is checked each time a tool runs. Holding an owner tag gives a run everything that tag owns, so set it only on runs meant to have that reach.
+
+## Read-only scopes
+
+Give a run a tag as a string to allow reading and writing, or as `{ tag, access: 'read' }` to allow reading only:
+
+```typescript
+await agent.generate('What did the team decide?', {
+  scopes: [{ tag: 'org:acme', access: 'read' }, 'team:acme:director'],
+})
+```
+
+The narrowest source wins, and a model never widens its access. A read-only tag never grants ownership of other scopes.
+
+## Pins
+
+A **pin** is a short note that stays in the model's context on every step. Pins are stored in Knowledge and shown to the agent as a state signal, so they work without Memory. Pins follow the user across threads, so by default they use every run tag except `thread`. The pin set is limited to `maxPins` entries and `maxTokens` tokens in total.
