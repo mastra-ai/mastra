@@ -763,6 +763,11 @@ type AgentThreadStreamRuntimeEvent =
        * sender from before this field) keeps it waiting until the thread is idle.
        */
       joinActiveRun?: boolean;
+      /**
+       * The same signal with the sender's `ifActive` attributes, for an owner that hands it to a run in flight. The
+       * sender can't see that run, so `signal` carries its `ifIdle` attributes.
+       */
+      joinSignal?: SerializableAgentSignal;
     };
 
 type AgentThreadIdleSignalAcceptanceEvent =
@@ -1936,6 +1941,9 @@ export class AgentThreadStreamRuntime {
           () => active && state.claimedThreadOwners.get(key)?.unsubscribe === unsubscribe,
           undefined,
           data.joinActiveRun !== true,
+          data.joinActiveRun === true && data.joinSignal?.id === data.signal.id
+            ? createSignal(data.joinSignal)
+            : undefined,
         );
         if (!active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe) return;
         if (!accepted) {
@@ -2245,6 +2253,7 @@ export class AgentThreadStreamRuntime {
     isOwnerActive: () => boolean,
     incomingStreamOptions?: AgentExecutionOptions<any>,
     waitForIdle = false,
+    joinSignal?: CreatedAgentSignal,
   ): Promise<{ runId: string; error?: string; blocked?: boolean; output?: MastraModelOutput<OUTPUT> } | undefined> {
     const messageIdentity = this.#idleMessageIdentity(owner.agent.id, key, signal);
     let admissionSettled = false;
@@ -2368,7 +2377,7 @@ export class AgentThreadStreamRuntime {
           // The owner has reserved the thread for a run that has not started yet. Hand
           // it the input for its first model request, as a local send does.
           const queue = state.preRunSignalsByThread.get(key) ?? [];
-          queue.push(signal);
+          queue.push(joinSignal ?? signal);
           state.preRunSignalsByThread.set(key, queue);
           const queued: ClaimedQueuedMessage = { identity: messageIdentity };
           state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
@@ -2410,7 +2419,7 @@ export class AgentThreadStreamRuntime {
           // whatever cancels the input from there must find it.
           const queued: ClaimedQueuedMessage = { identity: messageIdentity, runId: activeRecord.runId };
           state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
-          this.#queueForActiveRun(state, pubsub, key, activeRecord, signal);
+          this.#queueForActiveRun(state, pubsub, key, activeRecord, joinSignal ?? signal);
           settleMessageIdentity?.(
             queued.cancelled
               ? { runId: activeRecord.runId, terminalReason: CANCELLED_BEFORE_RUN }
@@ -2659,6 +2668,7 @@ export class AgentThreadStreamRuntime {
     signal: CreatedAgentSignal,
     targetSourceId: string,
     waitForIdle: boolean,
+    joinSignal?: CreatedAgentSignal,
   ): Promise<string> {
     const requestId = globalThis.crypto.randomUUID();
     const replyTopic = `${this.#threadTopic(key)}.idle-acceptance.${requestId}`;
@@ -2722,6 +2732,7 @@ export class AgentThreadStreamRuntime {
             targetSourceId,
             expiresAt,
             ...(waitForIdle ? {} : { joinActiveRun: true }),
+            ...(!waitForIdle && joinSignal ? { joinSignal: this.#serializeSignal(joinSignal) } : {}),
           });
         })
         .catch(error => finish({ error: getErrorFromUnknown(error) }));
@@ -2735,6 +2746,7 @@ export class AgentThreadStreamRuntime {
     signal: CreatedAgentSignal,
     discovery: Promise<string | undefined>,
     waitForIdle = false,
+    joinSignal?: CreatedAgentSignal,
   ): Promise<SendAgentSignalAccepted<OUTPUT>> {
     const claimedOwnerSourceId = await discovery;
     if (!claimedOwnerSourceId) {
@@ -2749,6 +2761,7 @@ export class AgentThreadStreamRuntime {
       signal,
       claimedOwnerSourceId,
       waitForIdle,
+      joinSignal,
     );
     return { action: 'deliver', runId: acceptedRunId };
   }
@@ -6794,6 +6807,12 @@ export class AgentThreadStreamRuntime {
       acceptedAt: new Date(),
     });
 
+    // A claimed owner in another process may hand idle-routed input to a run this process can't see. It gets
+    // the input as it would arrive at an active run too, and uses that copy if it joins a run.
+    const joinSignal =
+      !isActiveTarget && (target.ifActive?.attributes || target.ifIdle?.attributes)
+        ? resolveDeliveryAttributes(signal, target.ifActive?.attributes)
+        : undefined;
     // Resolve conditional delivery attributes now that we know the delivery path.
     signal = resolveDeliveryAttributes(
       signal,
@@ -7043,6 +7062,7 @@ export class AgentThreadStreamRuntime {
           () => state.claimedThreadOwners.get(reservedKey)?.unsubscribe === localClaimedOwner.unsubscribe,
           target.ifIdle?.streamOptions,
           waitForIdle,
+          joinSignal,
         );
         if (!localAcceptance) {
           throw new Error(
@@ -7074,6 +7094,7 @@ export class AgentThreadStreamRuntime {
             signal,
             discovery,
             waitForIdle,
+            joinSignal,
           );
         } finally {
           if (state.claimedThreadOwnerDiscoveries.get(reservedKey) === discovery) {
