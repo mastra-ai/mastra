@@ -20,9 +20,9 @@ import type {
   ProcessorActiveStateSignal,
   ProcessInputArgs,
   ProcessInputResult,
-} from '@mastra/core/processors';
-import type { KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
-import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
+} from '../processors';
+import type { KnowledgeScope, KnowledgeStorage } from '../storage';
+import { canonicalizeKnowledgeScope } from '../storage';
 
 import { listPinnedKnowledge, PINNED_DELTA_TAG, PINNED_SNAPSHOT_TAG, SUBCONSCIOUS_PINS_STATE_ID } from './pinned';
 import { resolveKnowledgeResourceId } from './scope';

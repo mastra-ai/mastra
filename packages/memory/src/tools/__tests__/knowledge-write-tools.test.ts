@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../..';
 import { Subconscious } from '../../processors/observational-memory/subconscious';
-import { createKnowledgeWriteTools } from '../../processors/observational-memory/subconscious/knowledge-write-tools';
+import { createKnowledgeWriteTools } from '@mastra/core/knowledge';
 import type { SubconsciousConfig } from '../../processors/observational-memory/subconscious/types';
 
 const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];

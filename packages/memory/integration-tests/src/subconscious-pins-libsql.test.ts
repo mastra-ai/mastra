@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { LibSQLStore } from '@mastra/libsql';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createPinnedTools, listPinnedKnowledge } from '../../src/processors/observational-memory/subconscious/pinned';
-import { PinnedStateProcessor } from '../../src/processors/observational-memory/subconscious/pinned-state-processor';
+import { createPinnedTools, listPinnedKnowledge } from '@mastra/core/knowledge';
+import { PinnedStateProcessor } from '@mastra/core/knowledge';
 
 const threadScope = ['org:acme', 'resource:user-42', 'thread:alpha'];
 

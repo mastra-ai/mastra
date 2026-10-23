@@ -392,6 +392,12 @@ export class Knowledge extends MastraBase {
 }
 
 export * from '../storage/domains/knowledge';
+export * from './knowledge-tools';
+export * from './knowledge-write-tools';
+export * from './pinned';
+export * from './pinned-state-processor';
+export * from './semantic-index';
+export * from './scope';
 export type { KnowledgeConfig } from './config';
 export type {
   KnowledgeScopeAccessConfig,

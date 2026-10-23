@@ -9,7 +9,7 @@ import { resolveSubconsciousAgentModel } from './model';
 import { createReminderAgent } from './remind-agent';
 import { ensureOwnedRemindThread, getRemindThreadId, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
 import { createReplyToMemoryQuestionTool } from './remind-questions';
-import { resolveKnowledgeResourceId } from './scope';
+import { resolveKnowledgeResourceId } from '@mastra/core/knowledge';
 import type { ResolvedSubconsciousAgent } from './types';
 
 /** Own-thread records younger than this are treated as still-in-context and excluded from reminder candidates. */

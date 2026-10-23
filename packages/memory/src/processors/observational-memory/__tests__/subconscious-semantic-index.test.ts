@@ -2,7 +2,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
 import { Memory } from '../../..';
-import { KnowledgeSemanticIndexCoordinator } from '../subconscious/semantic-index';
+import { KnowledgeSemanticIndexCoordinator } from '@mastra/core/knowledge';
 
 const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
 

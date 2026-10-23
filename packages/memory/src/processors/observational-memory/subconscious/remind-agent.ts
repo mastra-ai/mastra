@@ -7,7 +7,7 @@ import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
 import type { Memory } from '../../..';
-import { createKnowledgeTools } from './knowledge-tools';
+import { createKnowledgeTools } from '@mastra/core/knowledge';
 import { RemindContinuationProcessor } from './remind-continuation';
 import { getRemindMessageMetadata } from './remind-protocol';
 import type { SubconsciousModel } from './types';

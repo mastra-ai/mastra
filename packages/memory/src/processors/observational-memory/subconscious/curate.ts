@@ -9,11 +9,11 @@ import { Extractor } from '../extractor';
 import type { ExtractorOnExtractedContext } from '../extractor';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
-import { createKnowledgeTools } from './knowledge-tools';
-import { createKnowledgeWriteTools } from './knowledge-write-tools';
+import { createKnowledgeTools } from '@mastra/core/knowledge';
+import { createKnowledgeWriteTools } from '@mastra/core/knowledge';
 import { resolveSubconsciousAgentModel } from './model';
-import { createPinnedTools } from './pinned';
-import { resolveKnowledgeResourceId } from './scope';
+import { createPinnedTools } from '@mastra/core/knowledge';
+import { resolveKnowledgeResourceId } from '@mastra/core/knowledge';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
 export const CURATION_AGENT = 'curate';

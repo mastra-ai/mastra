@@ -16,7 +16,7 @@ import { Memory, Subconscious } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { createPinnedTools } from '../../src/processors/observational-memory/subconscious/pinned';
+import { createPinnedTools } from '@mastra/core/knowledge';
 
 const embedder: EmbeddingModel<string> = {
   specificationVersion: 'v1',

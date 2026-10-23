@@ -3,14 +3,14 @@ import type {
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStorage,
-} from '@mastra/core/storage';
+} from '../storage';
 import {
   canonicalizeKnowledgeScope,
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
   knowledgeVisibleScopeKeys,
-} from '@mastra/core/storage';
-import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
+} from '../storage';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 
 const DEFAULT_BATCH_SIZE = 50;
 const MAX_DRAIN_BATCHES = 100;

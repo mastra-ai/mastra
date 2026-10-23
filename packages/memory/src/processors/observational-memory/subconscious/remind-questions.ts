@@ -8,7 +8,7 @@ import type { Memory } from '../../..';
 import { withOwnThreadIds } from '../internal-request-context';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousError } from './activity';
-import { resolveKnowledgeToolScope } from './knowledge-tools';
+import { resolveKnowledgeToolScope } from '@mastra/core/knowledge';
 import { resolveSubconsciousAgentModel } from './model';
 import { createReminderAgent } from './remind-agent';
 import {
