@@ -309,8 +309,8 @@ export function createSimpleConditionsWorkflows(ctx: WorkflowCreatorContext) {
       .then(step1)
       .branch([
         [
-          async ({ getStepResult }) => {
-            const step1Result = getStepResult(step1);
+          async ({ getStepResultAsync }) => {
+            const step1Result = await getStepResultAsync(step1);
             return step1Result ? step1Result.count > 3 : false;
           },
           step2,

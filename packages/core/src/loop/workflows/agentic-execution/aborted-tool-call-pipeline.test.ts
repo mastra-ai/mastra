@@ -137,7 +137,7 @@ describe('aborted tool call pipeline (tool-call-step → schema boundary → llm
       ...baseParams,
       suspend: vi.fn(),
       bail,
-      getStepResult: vi.fn(() => ({
+      getStepResultAsync: vi.fn(async () => ({
         stepResult: { isContinued: true, reason: undefined },
         metadata: {},
       })),

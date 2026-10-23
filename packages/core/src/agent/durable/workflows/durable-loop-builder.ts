@@ -240,7 +240,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
   /**
    * Engine-aware snapshot pruning. The `running`-only history strip (#20747)
    * keeps what a crash-restart reads back, including `stepResultReads`: steps
-   * that read an earlier step's result via `getStepResult` (reader → sources).
+   * that read an earlier step's result via `getStepResultAsync` (reader → sources).
    * The evented engine also reads persisted step results during normal
    * execution, but the only such reads are the declared ones below, so the
    * strip keeps exactly what it reads. Retaining *all* terminal history instead
@@ -580,11 +580,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         })
         // Step 4: Collect tool results and bundle with LLM output for mapping step
         .map(
-          async ({ inputData, getStepResult, getInitData }) => {
+          async ({ inputData, getStepResultAsync, getInitData }) => {
             const toolResults = inputData as DurableToolCallOutput[];
             // Direct read of an earlier step: declared to pruneSnapshotHook above
             // so snapshot pruning keeps it for a crash-restart.
-            const llmOutput = getStepResult(llmExecutionStep.id) as DurableLLMStepOutput;
+            const llmOutput = (await getStepResultAsync(llmExecutionStep.id)) as DurableLLMStepOutput;
             const initData = getInitData() as IterationState;
 
             return {

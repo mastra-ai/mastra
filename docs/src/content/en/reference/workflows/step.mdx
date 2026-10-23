@@ -301,9 +301,16 @@ A classifier without constructor-configured questions can't be used as a workflo
             description: 'Access to Mastra services (agents, tools, etc.)',
           },
           {
+            name: 'getStepResultAsync',
+            type: '(step: Step | string) => Promise<any>',
+            description:
+              "Function to access results from other steps. Resolves to the step's output, or `null` if the step hasn't completed successfully.",
+          },
+          {
             name: 'getStepResult',
             type: '(step: Step | string) => any',
-            description: 'Function to access results from other steps',
+            description:
+              'Deprecated. Use `await getStepResultAsync(step)` instead. `getStepResult` will be removed in a future major release.',
           },
           {
             name: 'getInitData',

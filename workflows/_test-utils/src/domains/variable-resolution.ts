@@ -67,11 +67,11 @@ export function createVariableResolutionWorkflows(ctx: WorkflowCreatorContext) {
 
     const step2 = createStep({
       id: 'step2',
-      execute: async ({ getStepResult }) => {
+      execute: async ({ getStepResultAsync }) => {
         // Test accessing previous step result
-        const step1Result = getStepResult(step1);
-        const step1ResultFromString = getStepResult('step1');
-        const failedStep = getStepResult(nonExecutedStep);
+        const step1Result = await getStepResultAsync(step1);
+        const step1ResultFromString = await getStepResultAsync('step1');
+        const failedStep = await getStepResultAsync(nonExecutedStep);
 
         // Store assertions to run after execution
         step2Assertions = () => {
@@ -102,6 +102,215 @@ export function createVariableResolutionWorkflows(ctx: WorkflowCreatorContext) {
         step2Assertions = null;
       },
     };
+  }
+
+  // ============================================================================
+  // getStepResultAsync parity — one workflow per place the engines provide it
+  // ============================================================================
+
+  // Test: getStepResultAsync in a step's execute matches getStepResult.
+  // This is the only shared-suite test that still calls the deprecated sync
+  // getStepResult, so that path stays covered until it is removed.
+  {
+    const step1 = createStep({
+      id: 'step1',
+      execute: async () => ({ value: 'step1-result' }),
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+    });
+
+    const nonExecutedStep = createStep({
+      id: 'non-executed-step',
+      execute: async () => ({}),
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    const readStep = createStep({
+      id: 'read-step',
+      execute: async ({ getStepResult, getStepResultAsync }) => ({
+        asyncByRef: await getStepResultAsync(step1),
+        asyncById: await getStepResultAsync('step1'),
+        asyncNotRun: await getStepResultAsync(nonExecutedStep),
+        asyncUnknownId: await getStepResultAsync('does-not-exist'),
+        syncByRef: getStepResult(step1),
+        syncById: getStepResult('step1'),
+        syncNotRun: getStepResult(nonExecutedStep),
+        syncUnknownId: getStepResult('does-not-exist'),
+      }),
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.any(),
+    });
+
+    const workflow = createWorkflow({
+      id: 'var-step-result-async-execute',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+    });
+
+    workflow.then(step1).then(readStep).commit();
+
+    workflows['var-step-result-async-execute'] = { workflow, mocks: {} };
+  }
+
+  // Test: getStepResultAsync in branch conditions
+  {
+    const step1 = createStep({
+      id: 'step1',
+      execute: async () => ({ route: 'yes' }),
+      inputSchema: z.object({}),
+      outputSchema: z.object({ route: z.string() }),
+    });
+
+    const yesStep = createStep({
+      id: 'yes-step',
+      execute: async () => ({ taken: 'yes' }),
+      inputSchema: z.object({ route: z.string() }),
+      outputSchema: z.object({ taken: z.string() }),
+    });
+
+    const noStep = createStep({
+      id: 'no-step',
+      execute: async () => ({ taken: 'no' }),
+      inputSchema: z.object({ route: z.string() }),
+      outputSchema: z.object({ taken: z.string() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'var-step-result-async-branch',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+    });
+
+    workflow
+      .then(step1)
+      .branch([
+        [async ({ getStepResultAsync }) => (await getStepResultAsync(step1)).route === 'yes', yesStep],
+        [
+          async ({ getStepResultAsync }) => (await getStepResultAsync<{ route: string }>('step1')).route === 'no',
+          noStep,
+        ],
+      ])
+      .commit();
+
+    workflows['var-step-result-async-branch'] = { workflow, mocks: {} };
+  }
+
+  // Test: getStepResultAsync in dowhile and dountil conditions sees the latest iteration
+  {
+    const incrementA = createStep({
+      id: 'increment-a',
+      execute: async ({ inputData }) => ({ count: inputData.count + 1 }),
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ count: z.number() }),
+    });
+
+    const incrementB = createStep({
+      id: 'increment-b',
+      execute: async ({ inputData }) => ({ count: inputData.count + 1 }),
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ count: z.number() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'var-step-result-async-loops',
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ count: z.number() }),
+    });
+
+    workflow
+      .dowhile(incrementA, async ({ getStepResultAsync }) => (await getStepResultAsync(incrementA)).count < 3)
+      .dountil(
+        incrementB,
+        async ({ getStepResultAsync }) => (await getStepResultAsync<{ count: number }>('increment-b')).count >= 6,
+      )
+      .commit();
+
+    workflows['var-step-result-async-loops'] = { workflow, mocks: {} };
+  }
+
+  // Test: getStepResultAsync in sleep and sleepUntil fns
+  {
+    const seen: { sleep?: unknown; sleepUntil?: unknown } = {};
+
+    const step1 = createStep({
+      id: 'step1',
+      execute: async () => ({ ms: 10 }),
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ms: z.number() }),
+    });
+
+    const step2 = createStep({
+      id: 'step2',
+      execute: async () => ({ done: true }),
+      inputSchema: z.object({ ms: z.number() }),
+      outputSchema: z.object({ done: z.boolean() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'var-step-result-async-sleep',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ done: z.boolean() }),
+    });
+
+    workflow
+      .then(step1)
+      .sleep(async ({ getStepResultAsync }) => {
+        const result = await getStepResultAsync(step1);
+        seen.sleep = result;
+        return result.ms;
+      })
+      .sleepUntil(async ({ getStepResultAsync }) => {
+        const result = await getStepResultAsync<{ ms: number }>('step1');
+        seen.sleepUntil = result;
+        return new Date(Date.now() + result.ms);
+      })
+      .then(step2)
+      .commit();
+
+    workflows['var-step-result-async-sleep'] = {
+      workflow,
+      mocks: {},
+      getSeen: () => seen,
+      resetSeen: () => {
+        delete seen.sleep;
+        delete seen.sleepUntil;
+      },
+    };
+  }
+
+  // Test: getStepResultAsync in a .map(fn) mapping
+  {
+    const step1 = createStep({
+      id: 'step1',
+      execute: async () => ({ value: 'from-step1' }),
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+    });
+
+    const step2 = createStep({
+      id: 'step2',
+      execute: async () => ({ other: 'from-step2' }),
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ other: z.string() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'var-step-result-async-map',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ byRef: z.string(), byId: z.string() }),
+    });
+
+    workflow
+      .then(step1)
+      .then(step2)
+      .map(async ({ getStepResultAsync }) => ({
+        byRef: (await getStepResultAsync(step1)).value,
+        byId: (await getStepResultAsync<{ other: string }>('step2')).other,
+      }))
+      .commit();
+
+    workflows['var-step-result-async-map'] = { workflow, mocks: {} };
   }
 
   // Test: should resolve trigger data from context
@@ -459,8 +668,8 @@ export function createVariableResolutionWorkflows(ctx: WorkflowCreatorContext) {
         }),
         second: {
           schema: z.string(),
-          fn: async ({ getStepResult }) => {
-            return getStepResult(step1).result;
+          fn: async ({ getStepResultAsync }) => {
+            return (await getStepResultAsync(step1)).result;
           },
         },
       })
@@ -525,8 +734,8 @@ export function createVariableResolutionWorkflows(ctx: WorkflowCreatorContext) {
         }),
         second: {
           schema: z.string(),
-          fn: async ({ getStepResult }) => {
-            return getStepResult(step1).result;
+          fn: async ({ getStepResultAsync }) => {
+            return (await getStepResultAsync(step1)).result;
           },
         },
       })
@@ -919,14 +1128,14 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
 
         const step2 = createStep({
           id: 'step2',
-          execute: async ({ getStepResult }) => {
+          execute: async ({ getStepResultAsync }) => {
             // Test accessing previous step result
-            const step1Result = getStepResult(step1);
+            const step1Result = await getStepResultAsync(step1);
             expect(step1Result).toEqual({ value: 'step1-result' });
-            const step1ResultFromString = getStepResult('step1');
+            const step1ResultFromString = await getStepResultAsync('step1');
             expect(step1ResultFromString).toEqual({ value: 'step1-result' });
 
-            const failedStep = getStepResult(nonExecutedStep);
+            const failedStep = await getStepResultAsync(nonExecutedStep);
             expect(failedStep).toBe(null);
 
             return { value: 'step2-result' };
@@ -955,6 +1164,68 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
           output: { value: 'step2-result' },
         });
       }
+    });
+
+    describe('getStepResultAsync', () => {
+      it('resolves to the same values as getStepResult in a step execute', async () => {
+        if (!useRegistry) return;
+        const { workflow } = registry!['var-step-result-async-execute']!;
+        const result = await execute(workflow, {});
+
+        expect(result.status).toBe('success');
+        expect(result.steps['read-step']).toMatchObject({
+          status: 'success',
+          output: {
+            asyncByRef: { value: 'step1-result' },
+            asyncById: { value: 'step1-result' },
+            asyncNotRun: null,
+            asyncUnknownId: null,
+            syncByRef: { value: 'step1-result' },
+            syncById: { value: 'step1-result' },
+            syncNotRun: null,
+            syncUnknownId: null,
+          },
+        });
+      });
+
+      it('is available in branch conditions', async () => {
+        if (!useRegistry) return;
+        const { workflow } = registry!['var-step-result-async-branch']!;
+        const result = await execute(workflow, {});
+
+        expect(result.status).toBe('success');
+        expect(result.steps['yes-step']).toMatchObject({ status: 'success', output: { taken: 'yes' } });
+        expect(result.steps['no-step']).toBeUndefined();
+      });
+
+      it('sees the latest iteration in dowhile and dountil conditions', async () => {
+        if (!useRegistry) return;
+        const { workflow } = registry!['var-step-result-async-loops']!;
+        const result = await execute(workflow, { count: 0 });
+
+        expect(result.status).toBe('success');
+        expect(result.steps['increment-a']).toMatchObject({ status: 'success', output: { count: 3 } });
+        expect(result.steps['increment-b']).toMatchObject({ status: 'success', output: { count: 6 } });
+      });
+
+      it('is available in sleep and sleepUntil fns', async () => {
+        if (!useRegistry) return;
+        const entry = registry!['var-step-result-async-sleep']!;
+        entry.resetSeen();
+        const result = await execute(entry.workflow, {});
+
+        expect(result.status).toBe('success');
+        expect(entry.getSeen()).toEqual({ sleep: { ms: 10 }, sleepUntil: { ms: 10 } });
+      });
+
+      it('is available in a .map(fn) mapping', async () => {
+        if (!useRegistry) return;
+        const { workflow } = registry!['var-step-result-async-map']!;
+        const result = await execute(workflow, {});
+
+        expect(result.status).toBe('success');
+        expect(result.result).toEqual({ byRef: 'from-step1', byId: 'from-step2' });
+      });
     });
 
     it('should resolve trigger data from context', async () => {

@@ -79,16 +79,18 @@ Use `inputData` to access the full output of the previous step.
   })
 ```
 
-## Using `getStepResult()`
+## Using `getStepResultAsync()`
 
-Use `getStepResult()` to access the full output of a specific step by referencing the step's instance.
+Use `getStepResultAsync()` to access the full output of a specific step by referencing the step's instance or its ID.
 
 ```typescript {3} filename="src/mastra/workflows/test-workflow.ts" oxfmt:false
   .then(step1)
-  .map(async ({ getStepResult }) => {
-    console.log(getStepResult(step1));
+  .map(async ({ getStepResultAsync }) => {
+    console.log(await getStepResultAsync(step1));
   })
 ```
+
+`getStepResultAsync()` replaces the deprecated `getStepResult()`, which returns the same value synchronously.
 
 ## Using `getInitData()`
 

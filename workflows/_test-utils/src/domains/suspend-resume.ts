@@ -2348,11 +2348,11 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
       }
       return { other: 26 };
     });
-    const finalAction = vi.fn().mockImplementation(async ({ getStepResult }) => {
+    const finalAction = vi.fn().mockImplementation(async ({ getStepResultAsync }) => {
       const startStep = { id: 'start' };
       const otherStep = { id: 'other' };
-      const startVal = getStepResult(startStep)?.newValue ?? 0;
-      const otherVal = getStepResult(otherStep)?.other ?? 0;
+      const startVal = (await getStepResultAsync(startStep))?.newValue ?? 0;
+      const otherVal = (await getStepResultAsync(otherStep))?.other ?? 0;
       return { finalValue: startVal + otherVal };
     });
     const lastAction = vi.fn().mockImplementation(async () => {
@@ -2528,11 +2528,11 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
       return { other: 26 };
     });
 
-    const finalAction = vi.fn().mockImplementation(async ({ getStepResult }) => {
+    const finalAction = vi.fn().mockImplementation(async ({ getStepResultAsync }) => {
       const startStep = { id: 'start' };
       const otherStep = { id: 'other' };
-      const startVal = getStepResult(startStep)?.newValue ?? 0;
-      const otherVal = getStepResult(otherStep)?.other ?? 0;
+      const startVal = (await getStepResultAsync(startStep))?.newValue ?? 0;
+      const otherVal = (await getStepResultAsync(otherStep))?.other ?? 0;
       return { finalValue: startVal + otherVal };
     });
 

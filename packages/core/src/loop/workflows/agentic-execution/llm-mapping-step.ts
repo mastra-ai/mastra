@@ -151,8 +151,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     id: 'llmExecutionMappingStep',
     inputSchema: z.array(toolCallOutputSchema),
     outputSchema: llmIterationOutputSchema,
-    execute: async ({ inputData, getStepResult, bail }) => {
-      const initialResult = getStepResult(llmExecutionStep);
+    execute: async ({ inputData, getStepResultAsync, bail }) => {
+      const initialResult = await getStepResultAsync(llmExecutionStep);
       // A processToolResult abort is terminal for the run: stop processing the
       // remaining tool results and end the loop instead of calling the model again.
       const bailOnToolResultTripwire = (tripwire: TripWire) => {

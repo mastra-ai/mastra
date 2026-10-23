@@ -822,8 +822,10 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
                   id: 'final-step',
                   inputSchema: z.object({ text: z.string() }),
                   outputSchema: z.object({ text: z.string() }),
-                  execute: async ({ getStepResult }) => {
-                    return { text: `${getStepResult(agentStep)?.text} ${getStepResult(agentStep2)?.text}` };
+                  execute: async ({ getStepResultAsync }) => {
+                    return {
+                      text: `${(await getStepResultAsync(agentStep))?.text} ${(await getStepResultAsync(agentStep2))?.text}`,
+                    };
                   },
                 }),
               )

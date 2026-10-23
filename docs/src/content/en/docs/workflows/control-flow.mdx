@@ -450,7 +450,7 @@ The `.map()` method provides additional helper functions for more complex mappin
 
 **Available helper functions:**
 
-- [`getStepResult()`](/reference/workflows/workflow-methods/map#using-getstepresult): Access a specific step's full output
+- [`getStepResultAsync()`](/reference/workflows/workflow-methods/map#using-getstepresultasync): Access a specific step's full output
 - [`getInitData<any>()`](/reference/workflows/workflow-methods/map#using-getinitdata): Access the workflow's initial input data
 - [`mapVariable()`](/reference/workflows/workflow-methods/map#using-mapvariable): Use declarative object syntax to extract and rename fields
 
@@ -525,7 +525,7 @@ The parallel output has this shape before `.map()`:
 }
 ```
 
-The mapped `{ riskScore, inStock }` object is passed to every branch condition and branch step, so their `inputSchema` values must match `routingSchema`. A `.map()` placed after `.branch()` works the same way. Read branch output with `inputData['manual-review']` or `getStepResult(manualReview)`.
+The mapped `{ riskScore, inStock }` object is passed to every branch condition and branch step, so their `inputSchema` values must match `routingSchema`. A `.map()` placed after `.branch()` works the same way. Read branch output with `inputData['manual-review']` or `await getStepResultAsync(manualReview)`.
 
 ## Looping steps
 
