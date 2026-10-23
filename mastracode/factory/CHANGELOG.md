@@ -1,5 +1,15 @@
 # @mastra/factory
 
+## 0.25.0-alpha.2
+
+### Patch Changes
+
+- Fixed duplicate "finished" notices from Factory sessions. After a session reported that it was done, every later run that ended with nothing new (for example, one woken by a pull request comment or an automated check result) sent its followers another "finished" notice. Followers now hear it once; a failure or a session waiting on an answer is still reported. ([#28304](https://github.com/mastra-ai/mastra/pull/28304))
+
+- Updated dependencies [[`7662736`](https://github.com/mastra-ai/mastra/commit/7662736615043b8f4d0d2e7277094936ff2c88d6)]:
+  - @mastra/core@1.80.0-alpha.2
+  - @mastra/code-sdk@1.15.1-alpha.2
+
 ## 0.25.0-alpha.1
 
 ### Patch Changes
