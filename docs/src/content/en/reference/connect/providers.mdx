@@ -9,7 +9,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-This page documents generated toolsets for 22 providers (910 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for 23 providers (937 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -30,6 +30,7 @@ MCP providers (Attio, Canva, Clay, Neon, Render, Robinhood, and Sanity) serve th
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/incident-io.svg" /> [incident.io](#incidentio) | `incident-io` | 66 |
 | <ProviderLogo slug="jira" /> [Jira](#jira) | `jira` | 38 |
 | <ProviderLogo slug="linear" /> [Linear](#linear) | `linear` | 46 |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/microsoft-excel.svg" /> [Microsoft Excel](#microsoft-excel) | `microsoft-excel` | 27 |
 | <ProviderLogo slug="microsoftteams" /> [Microsoft Teams](#microsoft-teams) | `microsoft-teams` | 25 |
 | <ProviderLogo slug="notion" mono /> [Notion](#notion) | `notion` | 44 |
 | <ProviderLogo src="https://svgl.app/library/openai.svg" mono /> [OpenAI](#openai) | `openai` | 26 |
@@ -664,6 +665,40 @@ Provider ID: `linear` · 46 tools
 | `linear_update_issue_label` | Update an existing Linear issue label. |
 | `linear_update_issue_relation` | Update fields on an existing Linear issue relation. |
 | `linear_update_project` | Update an existing Linear project. |
+
+## Microsoft Excel
+
+Provider ID: `microsoft-excel` · 27 tools
+
+| Tool | Description |
+| - | - |
+| `microsoft_excel_add_chart` | Create a chart on a worksheet from a data range. |
+| `microsoft_excel_add_defined_name` | Create a workbook-level defined name (named range or formula). |
+| `microsoft_excel_add_table` | Create a table from an existing range. |
+| `microsoft_excel_add_table_rows` | Append one or more rows to a table. |
+| `microsoft_excel_add_worksheet` | Add a new worksheet to a workbook. |
+| `microsoft_excel_calculate_workbook` | Force recalculation of all formulas in the workbook. |
+| `microsoft_excel_create_workbook` | Upload a new .xlsx workbook to a drive folder. |
+| `microsoft_excel_delete_defined_name` | Delete a workbook-level defined name. |
+| `microsoft_excel_delete_table` | Delete a table (converts it back to a normal range; does not delete the underlying cell data). |
+| `microsoft_excel_delete_workbook` | Delete a workbook file. |
+| `microsoft_excel_delete_worksheet` | Delete a worksheet from a workbook. |
+| `microsoft_excel_get_chart_image` | Render a chart as an image. |
+| `microsoft_excel_get_range` | Read cell values from a specific range on a worksheet. |
+| `microsoft_excel_get_site_drive` | Get the default document library (drive) for a SharePoint site. |
+| `microsoft_excel_get_used_range` | Read all non-empty cells on a worksheet. |
+| `microsoft_excel_get_user_drive` | Get the connected user's OneDrive, or another user's drive when userId is provided. |
+| `microsoft_excel_get_workbook` | Retrieve driveItem metadata for a workbook. |
+| `microsoft_excel_list_defined_names` | List workbook-level defined names. |
+| `microsoft_excel_list_sites` | Search and list SharePoint sites accessible to the app. |
+| `microsoft_excel_list_table_columns` | List the columns of a table |
+| `microsoft_excel_list_table_rows` | List the data rows of a table. |
+| `microsoft_excel_list_tables` | List tables in a workbook. |
+| `microsoft_excel_list_users` | List/search tenant users, to resolve a user id for personal OneDrive access. |
+| `microsoft_excel_list_workbooks` | List and search .xlsx files within a drive. |
+| `microsoft_excel_list_worksheets` | List worksheets in a workbook. |
+| `microsoft_excel_update_range` | Write cell values into a specific range on a worksheet |
+| `microsoft_excel_update_worksheet` | Rename a worksheet and/or change its tab position. |
 
 ## Microsoft Teams
 

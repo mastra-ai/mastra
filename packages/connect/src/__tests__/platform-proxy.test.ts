@@ -28,6 +28,7 @@ describe('createPlatformProxy request context binding', () => {
 
   it('keeps the full proxy surface on the bound copy', () => {
     const bound = createPlatformProxy({ connectionId: 'conn-1' }).withRequestContext(new RequestContext());
+    expect(typeof bound.proxy).toBe('function');
     expect(typeof bound.get).toBe('function');
     expect(typeof bound.post).toBe('function');
     expect(typeof bound.getConnection).toBe('function');
@@ -70,6 +71,17 @@ describe('createPlatformProxy request context binding', () => {
 
     expect(response.status).toBe(202);
     expect(response.data).toEqual({ statementHandle: 'h-1' });
+  });
+
+  it('supports the upstream generic proxy helper with GET as the default method', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(Response.json({ ok: true })));
+    const proxy = makeProxy(fetchMock);
+
+    await proxy.proxy({ endpoint: '/items' });
+    await proxy.proxy({ method: 'POST', endpoint: '/items', data: { name: 'example' } });
+
+    expect(fetchMock.mock.calls[0]![1].method).toBe('GET');
+    expect(fetchMock.mock.calls[1]![1].method).toBe('POST');
   });
 
   it('forwards template baseUrlOverride values to the platform proxy request', async () => {
@@ -232,5 +244,207 @@ describe('callProxy retry policy', () => {
     const proxy = makeProxy(fetchMock);
     await expect(proxy.patch({ endpoint: 'items/1', data: { a: 1 }, retries: 3 })).rejects.toThrow('socket hang up');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('platformProxy.paginate', () => {
+  const pages = (...bodies: unknown[]) => {
+    const fetchMock = vi.fn();
+    for (const body of bodies) fetchMock.mockResolvedValueOnce(Response.json(body));
+    return fetchMock;
+  };
+  const collect = async <T>(iterable: AsyncIterable<T[]>) => {
+    const out: T[][] = [];
+    for await (const page of iterable) out.push(page);
+    return out;
+  };
+  const urls = (fetchMock: ReturnType<typeof vi.fn>) => fetchMock.mock.calls.map(call => call[0] as string);
+
+  it('follows absolute next-links as paths on the connection base, dropping first-page params', async () => {
+    const fetchMock = pages(
+      { value: [{ id: 1 }], '@odata.nextLink': 'https://graph.microsoft.com/v1.0/items?$top=1&$skiptoken=abc' },
+      { value: [{ id: 2 }] },
+    );
+    const proxy = makeProxy(fetchMock);
+
+    const result = await collect(
+      proxy.paginate({
+        endpoint: '/v1.0/items',
+        params: { $select: 'id' },
+        paginate: {
+          type: 'link',
+          link_path_in_response_body: '@odata.nextLink',
+          response_path: 'value',
+          limit: 1,
+          limit_name_in_request: '$top',
+        },
+      }),
+    );
+
+    expect(result).toEqual([[{ id: 1 }], [{ id: 2 }]]);
+    expect(urls(fetchMock)).toEqual([
+      'https://example.test/v2/connections/conn-1/proxy/v1.0/items?%24select=id&%24top=1',
+      'https://example.test/v2/connections/conn-1/proxy/v1.0/items?$top=1&$skiptoken=abc',
+    ]);
+    expect(fetchMock.mock.calls[1]![1].headers['base-url-override']).toBeUndefined();
+  });
+
+  it('throws on next-links that leave the overridden origin or are not HTTPS', async () => {
+    for (const link of ['https://attacker.example/v1.0/items', 'http://api.example/v1.0/items', 'not a url']) {
+      const fetchMock = pages({ value: [{ id: 1 }], next: link }, { value: [{ id: 2 }] });
+      const proxy = makeProxy(fetchMock);
+
+      await expect(
+        collect(
+          proxy.paginate({
+            endpoint: '/v1.0/items',
+            baseUrlOverride: 'https://api.example',
+            paginate: { type: 'link', link_path_in_response_body: 'next', response_path: 'value' },
+          }),
+        ),
+      ).rejects.toMatchObject({ code: 'proxy_error', message: expect.stringContaining('cannot be followed') });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('pins later absolute next-links to the origin of the first one', async () => {
+    const fetchMock = pages(
+      { value: [1], next: 'https://graph.microsoft.com/v1.0/items?p=2' },
+      { value: [2], next: 'https://attacker.example/v1.0/items?p=3' },
+      { value: [3] },
+    );
+    const proxy = makeProxy(fetchMock);
+
+    await expect(
+      collect(
+        proxy.paginate({
+          endpoint: '/v1.0/items',
+          paginate: { type: 'link', link_path_in_response_body: 'next', response_path: 'value' },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'proxy_error' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not yield an empty page', async () => {
+    const fetchMock = pages({ value: [1], next: '/v1.0/items?p=2' }, { value: [], next: '/v1.0/items?p=3' });
+    const proxy = makeProxy(fetchMock);
+
+    const result = await collect(
+      proxy.paginate({
+        endpoint: '/v1.0/items',
+        paginate: { type: 'link', link_path_in_response_body: 'next', response_path: 'value' },
+      }),
+    );
+
+    expect(result).toEqual([[1]]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops when the provider repeats a next-link', async () => {
+    const body = { value: [{ id: 1 }], next: '/v1.0/items?page=2' };
+    const fetchMock = pages(body, body, body);
+    const proxy = makeProxy(fetchMock);
+
+    await collect(
+      proxy.paginate({
+        endpoint: '/v1.0/items',
+        paginate: { type: 'link', link_path_in_response_body: 'next', response_path: 'value' },
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends the response cursor back until the provider stops returning one', async () => {
+    const fetchMock = pages(
+      { data: { items: ['a'] }, meta: { next: 'c2' } },
+      { data: { items: ['b'] }, meta: { next: '' } },
+    );
+    const proxy = makeProxy(fetchMock);
+
+    const result = await collect(
+      proxy.paginate({
+        endpoint: '/items',
+        paginate: {
+          type: 'cursor',
+          cursor_path_in_response_body: 'meta.next',
+          cursor_name_in_request: 'after',
+          response_path: 'data.items',
+        },
+      }),
+    );
+
+    expect(result).toEqual([['a'], ['b']]);
+    expect(urls(fetchMock)[1]).toBe('https://example.test/v2/connections/conn-1/proxy/items?after=c2');
+  });
+
+  it('advances the offset by page size and stops on a short page', async () => {
+    const fetchMock = pages({ rows: [1, 2] }, { rows: [3] });
+    const proxy = makeProxy(fetchMock);
+
+    const result = await collect(
+      proxy.paginate({
+        endpoint: '/rows',
+        paginate: {
+          type: 'offset',
+          offset_name_in_request: 'skip',
+          limit_name_in_request: 'take',
+          limit: 2,
+          response_path: 'rows',
+        },
+      }),
+    );
+
+    expect(result).toEqual([[1, 2], [3]]);
+    expect(urls(fetchMock)).toEqual([
+      'https://example.test/v2/connections/conn-1/proxy/rows?take=2&skip=0',
+      'https://example.test/v2/connections/conn-1/proxy/rows?take=2&skip=2',
+    ]);
+  });
+
+  it('continues offset pagination without a configured page size until an empty page', async () => {
+    const fetchMock = pages({ rows: [1, 2] }, { rows: [3] }, { rows: [] });
+    const proxy = makeProxy(fetchMock);
+
+    const result = await collect(
+      proxy.paginate({
+        endpoint: '/rows',
+        paginate: {
+          type: 'offset',
+          offset_name_in_request: 'skip',
+          response_path: 'rows',
+        },
+      }),
+    );
+
+    expect(result).toEqual([[1, 2], [3]]);
+    expect(urls(fetchMock)).toEqual([
+      'https://example.test/v2/connections/conn-1/proxy/rows?skip=0',
+      'https://example.test/v2/connections/conn-1/proxy/rows?skip=2',
+      'https://example.test/v2/connections/conn-1/proxy/rows?skip=3',
+    ]);
+  });
+
+  it('throws instead of silently truncating once it hits the page cap', async () => {
+    let page = 0;
+    const fetchMock = vi.fn().mockImplementation(async () => Response.json({ value: [page], next: `/p?n=${++page}` }));
+    const proxy = makeProxy(fetchMock);
+
+    await expect(
+      collect(
+        proxy.paginate({
+          endpoint: '/p',
+          paginate: { type: 'link', link_path_in_response_body: 'next', response_path: 'value' },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'proxy_error', message: expect.stringContaining('incomplete') });
+
+    expect(fetchMock).toHaveBeenCalledTimes(100);
+  });
+
+  it('rejects a request without a paginate config', async () => {
+    const proxy = makeProxy(vi.fn());
+    await expect(collect(proxy.paginate({ endpoint: '/items' }))).rejects.toMatchObject({ code: 'invalid_options' });
   });
 });
