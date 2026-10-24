@@ -1,6 +1,13 @@
 import type { RequestContext } from '@mastra/core/di';
+import { MASTRA_AUTH_TOKEN_KEY } from '@mastra/core/request-context';
 import { Run } from '@mastra/core/workflows';
-import type { Step, WorkflowResult, WorkflowRunStartOptions } from '@mastra/core/workflows';
+import type {
+  Step,
+  StepResult,
+  WorkflowResult,
+  WorkflowRunStartOptions,
+  WorkflowRunState,
+} from '@mastra/core/workflows';
 import type { Client } from '@temporalio/client';
 import type { TemporalEngineType } from './types';
 import { toWorkflowType } from './utils';
@@ -10,6 +17,23 @@ type TemporalRunStartArgs<TState, TInput, TRequestContext> = {
   initialState?: TState;
   requestContext?: RequestContext<TRequestContext>;
 } & WorkflowRunStartOptions;
+
+// Temporal's error classes use these global markers to make instanceof checks work across duplicated SDK modules.
+function isTemporalWorkflowCancellation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  const workflowErrorMarker = Symbol.for('__temporal_isWorkflowFailedError');
+  const cancellationMarker = Symbol.for('__temporal_isCancelledFailure');
+  const cause = 'cause' in error ? error.cause : undefined;
+  return (
+    (error as Record<symbol, unknown>)[workflowErrorMarker] === true &&
+    typeof cause === 'object' &&
+    cause !== null &&
+    (cause as Record<symbol, unknown>)[cancellationMarker] === true
+  );
+}
 
 export class TemporalRun<
   TSteps extends Step<string, any, any, any, any, any, TemporalEngineType, any>[] = Step<
@@ -46,6 +70,9 @@ export class TemporalRun<
     const input = await this._validateInput(args.inputData);
     const initialState = await this._validateInitialState(args.initialState);
     await this._validateRequestContext(args.requestContext as RequestContext<unknown> | undefined);
+    const requestContext = this.serializeRequestContext(args.requestContext as RequestContext<unknown> | undefined);
+
+    await this.persistSnapshot({ status: 'running', input, state: initialState, requestContext });
 
     try {
       const handle = await this.client.workflow.start(toWorkflowType(this.workflowId), {
@@ -55,7 +82,7 @@ export class TemporalRun<
           {
             inputData: input,
             initialState,
-            requestContext: args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {},
+            requestContext,
             runId: this.runId,
             resourceId: this.resourceId,
             outputOptions: args.outputOptions,
@@ -64,20 +91,32 @@ export class TemporalRun<
           },
         ],
       });
-      const result = await handle.result();
-
-      return {
+      const result = (await handle.result()) as WorkflowResult<TState, TInput, TOutput, TSteps>;
+      await this.persistSnapshot({
         status: 'success',
-        input: input as TInput,
-        result: result as TOutput,
-        state: initialState,
-        steps: {},
-      } as WorkflowResult<TState, TInput, TOutput, TSteps>;
+        input,
+        result: (result as any).result as Record<string, any>,
+        state: result.state ?? initialState,
+        steps: result.steps as Record<string, StepResult<any, any, any, any>>,
+        requestContext,
+      });
+
+      return result;
     } catch (error) {
+      const canceled = isTemporalWorkflowCancellation(error);
+      const workflowError = error instanceof Error ? error : new Error(String(error));
+      await this.persistSnapshot({
+        status: canceled ? 'canceled' : 'failed',
+        input,
+        state: initialState,
+        error: canceled ? undefined : workflowError,
+        requestContext,
+      });
+
       return {
         status: 'failed',
         input: input as TInput,
-        error: error instanceof Error ? error : new Error(String(error)),
+        error: workflowError,
         state: initialState,
         steps: {},
       } as WorkflowResult<TState, TInput, TOutput, TSteps>;
@@ -87,6 +126,63 @@ export class TemporalRun<
   async cancel() {
     await this.client.workflow.getHandle(this.runId).cancel();
     await super.cancel();
+  }
+
+  private serializeRequestContext(requestContext?: RequestContext<unknown>) {
+    const serialized = requestContext?.toJSON() ?? {};
+    delete serialized[MASTRA_AUTH_TOKEN_KEY];
+    return serialized;
+  }
+
+  private async persistSnapshot({
+    status,
+    input,
+    state,
+    result,
+    steps = {},
+    error,
+    requestContext,
+  }: {
+    status: WorkflowRunState['status'];
+    input: unknown;
+    state: unknown;
+    result?: Record<string, any>;
+    steps?: Record<string, StepResult<any, any, any, any>>;
+    error?: Error;
+    requestContext: Record<string, any>;
+  }) {
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      resourceId: this.resourceId,
+      snapshot: {
+        runId: this.runId,
+        status,
+        value: (state ?? {}) as Record<string, string>,
+        context: {
+          input: input as Record<string, any>,
+          __state: state,
+          ...steps,
+        } as unknown as WorkflowRunState['context'],
+        activePaths: [],
+        activeStepsPath: {},
+        waitingPaths: {},
+        serializedStepGraph: this.serializedStepGraph,
+        suspendedPaths: {},
+        resumeLabels: {},
+        result,
+        error: error
+          ? {
+              name: error.name,
+              message: error.message,
+              stack: error.stack,
+            }
+          : undefined,
+        requestContext,
+        timestamp: Date.now(),
+      },
+    });
   }
 
   private unsupported(method: string): never {
@@ -135,22 +231,78 @@ export class TemporalRun<
     const input = await this._validateInput(args.inputData);
     const initialState = await this._validateInitialState(args.initialState);
     await this._validateRequestContext(args.requestContext as RequestContext<unknown> | undefined);
+    const requestContext = this.serializeRequestContext(args.requestContext as RequestContext<unknown> | undefined);
 
-    await this.client.workflow.start(toWorkflowType(this.workflowId), {
-      taskQueue: this.taskQueue,
-      workflowId: this.runId,
-      args: [
-        {
-          inputData: input,
-          initialState,
-          requestContext: args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {},
-          runId: this.runId,
-          resourceId: this.resourceId,
-          outputOptions: args.outputOptions,
-          tracingOptions: args.tracingOptions,
-          perStep: args.perStep,
-        },
-      ],
+    await this.persistSnapshot({ status: 'running', input, state: initialState, requestContext });
+
+    let handle;
+    try {
+      handle = await this.client.workflow.start(toWorkflowType(this.workflowId), {
+        taskQueue: this.taskQueue,
+        workflowId: this.runId,
+        args: [
+          {
+            inputData: input,
+            initialState,
+            requestContext,
+            runId: this.runId,
+            resourceId: this.resourceId,
+            outputOptions: args.outputOptions,
+            tracingOptions: args.tracingOptions,
+            perStep: args.perStep,
+          },
+        ],
+      });
+    } catch (error) {
+      const workflowError = error instanceof Error ? error : new Error(String(error));
+      await this.persistSnapshot({
+        status: 'failed',
+        input,
+        state: initialState,
+        error: workflowError,
+        requestContext,
+      });
+      throw error;
+    }
+
+    void (async () => {
+      let workflowResult: WorkflowResult<TState, TInput, TOutput, TSteps>;
+      try {
+        workflowResult = (await handle.result()) as WorkflowResult<TState, TInput, TOutput, TSteps>;
+      } catch (error) {
+        const canceled = isTemporalWorkflowCancellation(error);
+        const workflowError = error instanceof Error ? error : new Error(String(error));
+        await this.persistSnapshot({
+          status: canceled ? 'canceled' : 'failed',
+          input,
+          state: initialState,
+          error: canceled ? undefined : workflowError,
+          requestContext,
+        });
+        if (!canceled) {
+          this.mastra?.getLogger()?.error('Background Temporal workflow execution failed', {
+            error: workflowError,
+            runId: this.runId,
+            workflowId: this.workflowId,
+          });
+        }
+        return;
+      }
+
+      await this.persistSnapshot({
+        status: 'success',
+        input,
+        result: (workflowResult as any).result as Record<string, any>,
+        state: workflowResult.state ?? initialState,
+        steps: workflowResult.steps as Record<string, StepResult<any, any, any, any>>,
+        requestContext,
+      });
+    })().catch(error => {
+      this.mastra?.getLogger()?.error('Failed to persist background Temporal workflow result', {
+        error,
+        runId: this.runId,
+        workflowId: this.workflowId,
+      });
     });
 
     return { runId: this.runId };
