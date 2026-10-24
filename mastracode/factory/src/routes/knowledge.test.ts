@@ -29,6 +29,8 @@ interface Harness {
   knowledge: KnowledgeStorage;
   instance: Knowledge;
   projectId: string;
+  /** Another project in the same org, with its own project-scoped view. */
+  createProject: (name: string) => Promise<string>;
   orgScope: KnowledgeScope;
   projectScope: KnowledgeScope;
   threadScope: (threadId: string) => KnowledgeScope;
@@ -82,6 +84,7 @@ async function createHarness(
     knowledge,
     instance,
     projectId: project.id,
+    createProject: async name => (await seed.projects.create({ orgId, userId: 'user-1', input: { name } })).id,
     orgScope: [`org:${orgId}`],
     projectScope,
     threadScope: threadId => [...projectScope, `thread:${threadId}`],
@@ -1066,6 +1069,47 @@ describe('KnowledgeRoutes', () => {
     const session = await graph(h, '?threadId=TP');
     expect(session.status).toBe(200);
     expect(session.body.nodes.map(n => n.name).sort()).toEqual(['ProjectSessionFact', 'SessionPrivate']);
+  });
+
+  it("keeps each project's session writes in its own project and session views", async () => {
+    const resources: Record<string, string> = { T1: 'R1', T9: 'R9' };
+    const h = await createHarness({ threadResourceId: async threadId => resources[threadId] });
+    const p2 = await h.createProject('Second project');
+    const p2Scope: KnowledgeScope = [`org:${ORG}`, `project:${p2}`];
+    // Per project: a default write carries org, project, resource and thread tags; an explicit project-wide write only org and project.
+    const seedProject = async (projectScope: KnowledgeScope, suffix: string, resource: string, thread: string) => {
+      const sessionScope = [...projectScope, `resource:${resource}`, `thread:${thread}`];
+      const sessionOnly = await node(h.knowledge, `SessionOnly${suffix}`, sessionScope, 'doc');
+      await record(h.knowledge, sessionOnly, `${suffix} session fact`, sessionScope, thread);
+      const projectWide = await node(h.knowledge, `ProjectWide${suffix}`, projectScope, 'doc');
+      await record(h.knowledge, projectWide, `${suffix} project fact`, projectScope, thread);
+    };
+    await seedProject(h.projectScope, 'P1', 'R1', 'T1');
+    await seedProject(p2Scope, 'P2', 'R9', 'T9');
+
+    const names = async (projectId: string, query: string) => {
+      const response = await h.app.request(`/web/factory/projects/${projectId}/knowledge/subgraph${query}`);
+      const body = (await response.json().catch(() => ({}))) as Partial<KnowledgeGraphPayload>;
+      return {
+        status: response.status,
+        names: (body.nodes ?? [])
+          .filter(n => !n.isScope)
+          .map(n => n.name)
+          .sort(),
+      };
+    };
+    expect(await names(h.projectId, '?scopeLevel=resource')).toEqual({ status: 200, names: ['ProjectWideP1'] });
+    expect(await names(h.projectId, '?scopeLevel=thread&threadId=T1')).toEqual({
+      status: 200,
+      names: ['ProjectWideP1', 'SessionOnlyP1'],
+    });
+    expect(await names(p2, '?scopeLevel=resource')).toEqual({ status: 200, names: ['ProjectWideP2'] });
+    expect(await names(p2, '?scopeLevel=thread&threadId=T9')).toEqual({
+      status: 200,
+      names: ['ProjectWideP2', 'SessionOnlyP2'],
+    });
+    // A session of the other project cannot be opened from this one, and nothing of it shows.
+    expect(await names(h.projectId, '?scopeLevel=thread&threadId=T9')).toEqual({ status: 404, names: [] });
   });
 
   it('logs a failed session resource lookup and still serves the session by its project records', async () => {

@@ -498,6 +498,36 @@ export * from '../storage/domains/knowledge';
 export * from './knowledge-tools';
 export * from './knowledge-write-tools';
 export * from './pinned';
+export {
+  knowledgeExplorerRung,
+  knowledgeSearchHit,
+  knowledgeSearchRank,
+  readKnowledgeActivity,
+  readKnowledgeNode,
+  searchKnowledgeNodes,
+} from './explorer';
+export type {
+  KnowledgeExplorerActivityEvent,
+  KnowledgeExplorerNode,
+  KnowledgeExplorerNodeRecord,
+  KnowledgeExplorerRung,
+  KnowledgeExplorerSearchResult,
+} from './explorer';
+export {
+  KnowledgeWikilinkResolver,
+  loadKnowledgePins,
+  readKnowledgeGraph,
+  windowKnowledgeGraph,
+} from './explorer-graph';
+export type {
+  KnowledgeGraphEdgePayload,
+  KnowledgeGraphLimits,
+  KnowledgeGraphNodePayload,
+  KnowledgeGraphPins,
+  KnowledgeGraphRecordPayload,
+  KnowledgeGraphWindow,
+  KnowledgeGraphWindowPayload,
+} from './explorer-graph';
 export * from './pinned-state-processor';
 export * from './semantic-index';
 export * from './instructions';
