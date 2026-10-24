@@ -7,7 +7,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../test/render';
 import type { KnowledgeDataSource } from '../../data-source';
 import { KnowledgeDataSourceProvider } from '../../data-source-provider';
-import type { KnowledgeActivityPayload, KnowledgeScopeNode, KnowledgeSearchPayload } from '../../types';
+import type {
+  KnowledgeActivityPayload,
+  KnowledgeNodePayload,
+  KnowledgeScopeNode,
+  KnowledgeSearchPayload,
+} from '../../types';
+import { KnowledgeFlyout } from '../KnowledgeFlyout';
 import { KnowledgeScopeFlyout } from '../KnowledgeScopeFlyout';
 import { KnowledgeSearch } from '../KnowledgeSearch';
 
@@ -35,6 +41,33 @@ const activity: KnowledgeActivityPayload = {
   ],
 };
 
+const nodePayload: KnowledgeNodePayload = {
+  node: {
+    id: 'n1',
+    name: 'Refund policy',
+    kind: 'topic',
+    content: '',
+    description: 'How refunds work',
+    scope: ['org:o1', 'resource:p1'],
+    rung: 'resource',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+  },
+  records: [
+    {
+      id: 'r1',
+      node: 'n1',
+      relation: 'owned',
+      text: 'Refunds are issued within 14 days.',
+      scope: ['org:o1', 'resource:p1'],
+      rung: 'resource',
+      sourceThreadId: 't1',
+      capturedAt: '2026-01-01T00:00:00.000Z',
+      pinned: false,
+    },
+  ],
+};
+
 const searchPayload: KnowledgeSearchPayload = {
   results: [{ id: 'n1', name: 'Refund policy', kind: 'topic', type: 'node', rung: 'resource' }],
   truncated: false,
@@ -43,7 +76,8 @@ const searchPayload: KnowledgeSearchPayload = {
 // The host seam: real React Query hooks over fixtures, the way Factory and Studio wrap their routes.
 function makeSource(): KnowledgeDataSource {
   return {
-    useNode: () => useQuery({ queryKey: ['node'], queryFn: skipToken }),
+    useNode: (nodeId, scopeLevel) =>
+      useQuery({ queryKey: ['node', nodeId, scopeLevel], queryFn: async () => nodePayload }),
     useActivity: () =>
       useInfiniteQuery({
         queryKey: ['activity'],
@@ -77,6 +111,18 @@ describe('Knowledge components with a host data source', () => {
 
     expect(screen.getByText('project:p1')).toBeTruthy();
     expect(await screen.findByRole('button', { name: 'Refund policy' })).toBeTruthy();
+  });
+
+  it("renders the host's node and its record rows in the node flyout", async () => {
+    renderWithProviders(
+      <KnowledgeDataSourceProvider value={makeSource()}>
+        <KnowledgeFlyout nodeId="n1" scopeLevel="resource" onClose={() => {}} />
+      </KnowledgeDataSourceProvider>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Refund policy' })).toBeTruthy();
+    expect(screen.getByText('How refunds work')).toBeTruthy();
+    expect(await screen.findByText(/Refunds are issued within 14 days/)).toBeTruthy();
   });
 
   it('searches through the host and reports the chosen result', async () => {

@@ -10,8 +10,9 @@ import type {
 /**
  * What the Knowledge explorer reads from its host. Factory UI and Mastra Studio each
  * supply the hooks for their own server routes; the components never fetch directly.
- * Each member is called as a React hook, so a host must pass the same functions on
- * every render of its provider.
+ * Each member is called as a React hook. Hosts that close over ids (a project or
+ * session id) must supply fresh functions on every render, so the closure never
+ * holds a stale id; or take those values as hook arguments instead.
  */
 export interface KnowledgeDataSource {
   /** One node with its records, for the node flyout. */

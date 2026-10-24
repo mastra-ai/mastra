@@ -44,9 +44,9 @@ export function KnowledgeList({
         )}
         onClick={() => onNodeClick(node)}
       >
-        <span className="text-body-sm min-w-0 flex-1 truncate font-medium">{node.name}</span>
-        {node.pinned ? <Pin size={12} className="text-badge-amber-indicator shrink-0" aria-label="Pinned" /> : null}
-        <span className="text-caption text-muted-foreground shrink-0">{meta}</span>
+        <span className="min-w-0 flex-1 truncate text-body font-medium">{node.name}</span>
+        {node.pinned ? <Pin size={12} className="shrink-0 text-badge-amber-indicator" aria-label="Pinned" /> : null}
+        <span className="shrink-0 text-caption text-muted-foreground">{meta}</span>
       </button>
     );
   };
@@ -86,14 +86,14 @@ export function KnowledgeList({
                 <li key={node.id}>
                   {row(node, node.recordCount === 1 ? '1 record' : `${node.recordCount} records`)}
                   {records.length > 0 ? (
-                    <ul aria-label={`${node.name} records`} className="border-border my-1 ml-4 flex flex-col border-l">
+                    <ul aria-label={`${node.name} records`} className="my-1 ml-4 flex flex-col border-l border-border">
                       {records.map(record => (
                         <li key={record.id}>
                           <button
                             type="button"
                             aria-pressed={record.id === selectedRecordId}
                             className={cn(
-                              'min-h-11 w-full px-3 py-2 text-left text-body-sm text-muted-foreground hover:text-foreground',
+                              'min-h-11 w-full px-3 py-2 text-left text-body text-muted-foreground hover:text-foreground',
                               record.id === selectedRecordId && 'bg-fill text-foreground',
                             )}
                             onClick={() => onRecordClick(node, record.id)}
