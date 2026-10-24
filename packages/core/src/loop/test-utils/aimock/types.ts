@@ -4,6 +4,7 @@ import type { MessageListInput } from '../../../agent/message-list';
 import type { MastraServerCache } from '../../../cache';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
+import type { MemoryConfigInternal } from '../../../memory/types';
 import type { RequestContext } from '../../../request-context';
 import type { MastraModelOutput } from '../../../stream/base/output';
 import type { ChunkType } from '../../../stream/types';
@@ -382,7 +383,7 @@ export interface RunLoopScenarioOptions {
    * Controls recall behavior like `lastMessages` (number of messages to recall)
    * or `semanticRecall` (enable/disable semantic recall).
    */
-  memoryOptions?: { lastMessages?: number | false; semanticRecall?: boolean };
+  memoryOptions?: Pick<MemoryConfigInternal, 'lastMessages' | 'semanticRecall' | 'observationalMemory'>;
   /** Forwarded to `agent.stream({ memory: { onTitleGenerated } })`. */
   onTitleGenerated?: (title: string) => void | Promise<void>;
   /**
