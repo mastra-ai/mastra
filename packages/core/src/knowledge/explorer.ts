@@ -5,7 +5,12 @@ import type {
   KnowledgeScope,
   KnowledgeStorage,
 } from '../storage';
-import { canonicalizeKnowledgeScope, createKnowledgeNodeCursor, parseKnowledgeWikilinks } from '../storage';
+import {
+  canonicalizeKnowledgeScope,
+  createKnowledgeNodeCursor,
+  isKnowledgeScopeVisible,
+  parseKnowledgeWikilinks,
+} from '../storage';
 import { listPinnedKnowledge, PINNED_NODE_NAME } from './pinned';
 
 /**
@@ -129,11 +134,18 @@ export function knowledgeViewScope(tags: string[]): KnowledgeScope {
   return canonicalizeKnowledgeScope(tags);
 }
 
-/** `resource:` and `thread:` tags are the identity levels the UI colours; anything else groups with the org level. */
+/**
+ * Which view level a scope belongs to, for labels: a session (`thread:` or a session's `resource:` tag),
+ * the project (`project:`), or the org.
+ */
 export function knowledgeExplorerRung(scope: KnowledgeScope): KnowledgeExplorerRung {
-  if (scope.some(tag => tag.startsWith('thread:'))) return 'thread';
-  if (scope.some(tag => tag.startsWith('resource:'))) return 'resource';
-  return 'org';
+  let rung: KnowledgeExplorerRung = 'org';
+  for (const entry of scope) {
+    const ns = entry.slice(0, entry.indexOf(':'));
+    if (ns === 'thread' || ns === 'resource') return 'thread';
+    if (ns === 'project') rung = 'resource';
+  }
+  return rung;
 }
 
 function clip(text: string, limit: number): string {
@@ -285,43 +297,50 @@ export async function readKnowledgeGraph(
   };
 }
 
-/** One node and the records about it and mentioning it, as visible from `view`. Null when it is not visible. */
+/**
+ * One node and the records about it and mentioning it, as visible from `view`. Null when it is not visible.
+ * `getNode` is a bare id lookup, so the visibility check here is what keeps one view from reading another's node.
+ * Owned records come first, newest first within each group. `pins: false` skips the pin lookup.
+ */
 export async function readKnowledgeNode(
   store: KnowledgeStorage,
   view: KnowledgeScope,
   nodeId: string,
-  limit = 100,
+  options: { limit?: number; pins?: boolean } = {},
 ): Promise<KnowledgeExplorerNode | null> {
   const node = await store.getNode(nodeId);
-  if (!node || node.mergedInto || node.isScope) return null;
-  if (!node.scope.every(tag => view.includes(tag))) return null;
+  if (!node?.scope || !isKnowledgeScopeVisible(node.scope, view)) return null;
 
-  const [owned, mentioning, pinSet] = await Promise.all([
+  const limit = options.limit ?? 200;
+  const pinnedNodeIds = new Set(
+    options.pins === false ? [] : (await listPinnedKnowledge({ store, scope: view })).nodeIds,
+  );
+  const [owned, mentioning] = await Promise.all([
     store.listKnowledgeAbout({ node: node.id, scope: view, limit }),
     store.listKnowledgeMentioning({ node: node.id, scope: view, limit }),
-    listPinnedKnowledge({ store, scope: view }),
   ]);
-  const pinIds = new Set(pinSet.pins.map(pin => pin.id));
-  const toRecord = (record: KnowledgeRecord, relation: 'owned' | 'mentions'): KnowledgeExplorerNodeRecord => ({
-    id: record.id,
-    node: record.node,
-    relation,
-    text: record.text,
-    scope: record.scope,
-    rung: knowledgeExplorerRung(record.scope),
-    sourceThreadId: record.sourceThreadId,
-    capturedAt: record.capturedAt.toISOString(),
-    ...(record.when ? { when: record.when.toISOString() } : {}),
-    pinned: pinIds.has(record.id),
-    ...(record.metadata ? { metadata: record.metadata } : {}),
-  });
   const seen = new Set<string>();
   const records: KnowledgeExplorerNodeRecord[] = [];
-  for (const record of owned.records) {
+  const push = (record: KnowledgeRecord, relation: 'owned' | 'mentions') => {
+    if (seen.has(record.id)) return;
     seen.add(record.id);
-    records.push(toRecord(record, 'owned'));
-  }
-  for (const record of mentioning.records) if (!seen.has(record.id)) records.push(toRecord(record, 'mentions'));
+    records.push({
+      id: record.id,
+      node: record.node,
+      relation,
+      text: record.text,
+      scope: record.scope,
+      rung: knowledgeExplorerRung(record.scope),
+      sourceThreadId: record.sourceThreadId,
+      capturedAt: record.capturedAt.toISOString(),
+      ...(record.when ? { when: record.when.toISOString() } : {}),
+      pinned: pinnedNodeIds.has(record.node),
+      ...(record.metadata ? { metadata: record.metadata } : {}),
+    });
+  };
+  // Record ids are ULIDs, so id order is newest-first order.
+  for (const record of [...owned.records].sort((a, b) => b.id.localeCompare(a.id))) push(record, 'owned');
+  for (const record of [...mentioning.records].sort((a, b) => b.id.localeCompare(a.id))) push(record, 'mentions');
 
   return {
     node: {
