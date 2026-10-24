@@ -124,12 +124,8 @@ describeForAllEngines('AIMock loop scenario: full output text of a run suspended
     expect(resumedSteps.map(step => step.text).join('')).toContain('Deleted a.txt. ');
 
     const text = await resumed.text;
-    // The resumed run's text ends with the step that completed after the approval and the
-    // unfinished step that suspended; each appears exactly once.
-    expect(text.endsWith('Deleted a.txt. Deleting b.txt too. ')).toBe(true);
-    for (const part of ['Checking the file. ', 'Deleting it now. ', 'Deleted a.txt. ', 'Deleting b.txt too. ']) {
-      expect(text.split(part).length - 1).toBeLessThanOrEqual(1);
-    }
+    // Pre-approval text is restored and every segment appears exactly once.
+    expect(text).toBe('Checking the file. Deleting it now. Deleted a.txt. Deleting b.txt too. ');
     expect((await resumed.getFullOutput()).text).toBe(text);
     expect(await output.text).toBe('Checking the file. Deleting it now. ');
   });
