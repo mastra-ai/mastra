@@ -1233,6 +1233,22 @@ describe('opt-in built-in routes registered through apiRoutes', () => {
     const ping = calls.find(([, route]) => route.path === '/custom/ping');
     expect(ping?.[2].prefix).toBe('');
   });
+
+  it('documents them under the top-level server and other custom routes at the root', () => {
+    const custom = {
+      path: '/custom/ping',
+      method: 'GET',
+      handler: vi.fn(),
+      openapi: { summary: 'ping' },
+    } as any;
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [...KNOWLEDGE_ROUTES, custom] } as any });
+    const adapter = new TestMastraServer({ app: {}, mastra, prefix: '/api' });
+    const spec = (adapter as any).buildOpenAPISpec({ title: 't', version: '1', description: 'd' }, '/api');
+    expect(spec.servers).toEqual([{ url: '/api' }]);
+    expect(spec.paths['/knowledge']).toBeDefined();
+    expect(spec.paths['/knowledge'].servers).toBeUndefined();
+    expect(spec.paths['/custom/ping'].servers).toEqual([{ url: '/' }]);
+  });
 });
 
 describe('validateAuthResourceScoping', () => {
