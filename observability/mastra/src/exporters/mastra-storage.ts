@@ -345,6 +345,7 @@ export class MastraStorageExporter extends BaseExporter {
       }
 
       const dropped = this.#eventBuffer.reAddCreates(events);
+      this.#eventBuffer.forgetDroppedCreates(dropped);
       const retryAttempt = this.retryAttempt(events);
       this.logStorageFailure(signal, events, retryAttempt, error);
       this.emitDrop(signal, 'retry-exhausted', dropped.length, error);
@@ -353,7 +354,15 @@ export class MastraStorageExporter extends BaseExporter {
   }
 
   /**
-   * Flush span update/end events, deferring any whose span hasn't been created yet.
+   * Flush span update/end events.
+   *
+   * When the store supports conditional updates, only spans this exporter started
+   * and hasn't confirmed the create for are deferred. Everything else, including
+   * spans another exporter instance started (such as a durable agent ending spans
+   * it rebuilt after a crash), goes straight to storage, and updates that didn't
+   * apply are counted as drops. Without conditional updates, updates for spans this
+   * exporter hasn't created are deferred until their create is flushed.
+   *
    * When `isEnd` is true, successfully flushed spans are removed from tracking.
    */
   private async flushSpanUpdates(
@@ -368,10 +377,18 @@ export class MastraStorageExporter extends BaseExporter {
       return { failed: true };
     }
 
+    const storage = this.#observabilityStorage!;
+    // Detected at runtime so older stores and older core versions keep the previous behavior
+    const batchUpdateUnendedSpans =
+      typeof storage.batchUpdateUnendedSpans === 'function' ? storage.batchUpdateUnendedSpans.bind(storage) : undefined;
+
     const partials: UpdateSpanPartial[] = [];
     for (const event of events) {
       const span = event.exportedSpan;
-      if (this.#eventBuffer.spanExists(span)) {
+      const canSend = batchUpdateUnendedSpans
+        ? !this.#eventBuffer.isAwaitingCreate(span)
+        : this.#eventBuffer.spanExists(span);
+      if (canSend) {
         partials.push({
           traceId: span.traceId,
           spanId: span.id,
@@ -385,7 +402,12 @@ export class MastraStorageExporter extends BaseExporter {
     if (partials.length === 0) return FLUSH_SUCCEEDED;
 
     try {
-      await this.#observabilityStorage!.batchUpdateSpans({ records: partials });
+      if (batchUpdateUnendedSpans) {
+        const { updated } = await batchUpdateUnendedSpans({ records: partials });
+        this.emitNotApplied(partials, updated);
+      } else {
+        await storage.batchUpdateSpans({ records: partials });
+      }
       if (isEnd) {
         this.#eventBuffer.endFinishedSpans({ records: partials });
       }
@@ -417,6 +439,33 @@ export class MastraStorageExporter extends BaseExporter {
       this.emitDrop('tracing', 'retry-exhausted', dropped.length, error);
       return { failed: true, retryAttempt };
     }
+  }
+
+  /**
+   * Reports conditional span updates that storage didn't apply: the span wasn't
+   * stored, or it had already ended. Ended spans are immutable, so these are dropped.
+   */
+  private emitNotApplied(partials: UpdateSpanPartial[], updated: { traceId: string; spanId: string }[]): void {
+    // Count per key: one batch can hold two ends for the same span, and only the first applies.
+    const appliedCounts = new Map<string, number>();
+    for (const span of updated) {
+      const key = `${span.traceId}:${span.spanId}`;
+      appliedCounts.set(key, (appliedCounts.get(key) ?? 0) + 1);
+    }
+    let notApplied = 0;
+    for (const partial of partials) {
+      const key = `${partial.traceId}:${partial.spanId}`;
+      const remaining = appliedCounts.get(key) ?? 0;
+      if (remaining > 0) {
+        appliedCounts.set(key, remaining - 1);
+      } else {
+        notApplied++;
+      }
+    }
+    if (notApplied === 0) return;
+
+    this.logger.debug('Span updates not applied: span not stored or already ended', { count: notApplied });
+    this.emitDrop('tracing', 'span-not-updatable', notApplied);
   }
 
   /**

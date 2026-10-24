@@ -1019,6 +1019,11 @@ export const batchUpdateSpansArgsSchema = z
 /** Arguments for batch updating multiple spans */
 export type BatchUpdateSpansArgs = z.infer<typeof batchUpdateSpansArgsSchema>;
 
+/** Result of a conditional batch span update: the spans whose rows were changed. */
+export interface BatchUpdateUnendedSpansResponse {
+  updated: Array<{ traceId: string; spanId: string }>;
+}
+
 /** Maximum number of trace IDs accepted by a single batch delete request. */
 export const BATCH_DELETE_TRACES_MAX_IDS = 1000;
 
