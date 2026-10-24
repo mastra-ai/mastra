@@ -1612,39 +1612,15 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           value: String(row.value),
         });
         if (!claim) continue;
-        if (claim.targetType === 'record') {
-          const record = await this.#getRecord(tx, claim.targetId, true);
-          if (record) await this.#releaseRecordClaim(tx, record, claim, input.importRunId);
-          else await this.#deleteClaim(tx, claim, 'record', claim.targetId);
-          continue;
-        }
-        await this.#deleteClaim(tx, claim, 'node', claim.targetId);
-        const node = await this.#getNode(tx, claim.targetId);
-        if (!node) continue;
-        const current = await this.#getNodeScopeIds(tx, node.id);
-        const remaining = await this.#claims(tx, 'node', node.id);
-        const others = remaining.flatMap(other => other.scopeIds);
-        const scopeIds = reconcileKnowledgeClaimScopes({ current, previous: claim.scopeIds, next: [], others });
-        // With no claim from this importer and source left, a scope-less marker keeps its version on record.
-        const marker = (after: number) => knowledgeReleaseMarkerVersion(claim, remaining, node.version, after);
-        // A node keeps at least one membership; one only this binding held stays rather than orphaning it.
-        if (scopeIds.length === 0 || knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) {
-          const version = marker(node.version);
-          if (version !== null) await this.#writeClaim(tx, claim, 'node', node.id, [], version);
-          continue;
-        }
-        const now = new Date();
-        await tx.execute({
-          sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET version=version+1,updatedAt=? WHERE id=?`,
-          args: [now.toISOString(), node.id],
-        });
-        await this.#replaceNodeScopes(tx, node.id, scopeIds, now);
-        await this.#activity(tx, 'move', 'node', node.id, scopeIds[0], input.importRunId);
-        await this.#outbox(tx, 'node', node.id, 'delete', node.version + 1, current);
-        await this.#outbox(tx, 'node', node.id, 'upsert', node.version + 1, scopeIds);
-        await this.#advanceClaims(tx, 'node', node.id, node.version, node.version + 1);
-        const version = marker(node.version + 1);
-        if (version !== null) await this.#writeClaim(tx, claim, 'node', node.id, [], version);
+        // Retained record claims preserve placement even when another claimant removes overlapping scopes.
+        if (claim.targetType === 'record') continue;
+        const target = await this.#getNode(tx, claim.targetId);
+        await this.#deleteClaim(tx, claim, claim.targetType, claim.targetId);
+        if (!target) continue;
+        // Retirement releases active claims, not knowledge or its readable placement.
+        const remaining = await this.#claims(tx, claim.targetType, claim.targetId);
+        const version = knowledgeReleaseMarkerVersion(claim, remaining, target.version, target.version);
+        if (version !== null) await this.#writeClaim(tx, claim, claim.targetType, claim.targetId, [], version);
       }
     });
   }

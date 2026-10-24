@@ -436,9 +436,10 @@ export class Knowledge extends MastraBase {
   }
 
   /**
-   * Removes one importer binding's contribution: its claims, the scope memberships only it held and the records
-   * only it claimed. Nodes are never deleted, and a record shared with another binding stays with that binding's
-   * scopes. Use it to retire or move a binding without resetting the importer.
+   * Retires one importer binding without changing retained nodes, records or their scope memberships.
+   * Node version markers and retained record claims preserve provenance, placement and outside-edit detection.
+   * Provider-confirmed record removal is separate; retirement never deletes imported knowledge.
+   * This does not revoke invocation authority: disable the binding in the host to stop future syncs.
    */
   async releaseImportBinding(input: { importerId: string; binding: string }): Promise<void> {
     this.#assertImporter(input.importerId);
