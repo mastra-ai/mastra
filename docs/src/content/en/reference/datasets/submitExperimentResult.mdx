@@ -94,7 +94,7 @@ The item must be visible at the experiment's pinned dataset version. Submissions
     type: 'array',
     isOptional: true,
     description:
-      'Externally computed scores (`scorerId`, `score`, optional `scorerName`, `reason`, `metadata`). Persisted to the scores store under the experiment, so they appear in comparisons alongside native scorer runs. Score persistence is best-effort and never fails the submission.',
+      'Externally computed scores (`scorerId`, `score`, optional `scorerName`, `label`, `reason`, `metadata`). `label` is a categorical value next to the number, such as `failing`. Persisted to the scores store under the experiment, so they appear in comparisons alongside native scorer runs. Score persistence is best-effort and never fails the submission.',
   },
 ]}
 />

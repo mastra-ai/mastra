@@ -269,13 +269,16 @@ export function createClassifierScorer(options: any): MastraScorer<any, any, any
         },
       };
     })
-    .generateScore(({ results, mastra }) =>
-      projectClassifierScore(
+    .generateScore(({ results, mastra }) => {
+      const answer = results.analyzeStepResult.answer;
+      const score = projectClassifierScore(
         resolveClassifier(mastra).questions[options.question]!,
-        results.analyzeStepResult.answer,
+        answer,
         options.scores,
-      ),
-    )
+      );
+      // A choice answer is categorical: keep the chosen key as the score label.
+      return answer.type === 'choice' ? { score, label: answer.choice } : score;
+    })
     .generateReason(({ results, score }) =>
       classifierReason(options.question, results.analyzeStepResult.answer, score),
     );

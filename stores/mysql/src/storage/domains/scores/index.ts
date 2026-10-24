@@ -25,6 +25,7 @@ interface ScoreRow {
   runId: string;
   score: number;
   reason: string | null;
+  label: string | null;
   metadata: string | null;
   preprocessStepResult: string | null;
   extractStepResult: string | null;
@@ -102,7 +103,16 @@ export class ScoresMySQL extends ScoresStorage {
     await this.operations.alterTable({
       tableName: TABLE_SCORERS,
       schema: SCORERS_SCHEMA,
-      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
+      ifNotExists: [
+        'spanId',
+        'requestContext',
+        'organizationId',
+        'projectId',
+        'batchId',
+        'datasetId',
+        'datasetItemId',
+        'label',
+      ],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -166,6 +176,7 @@ export class ScoresMySQL extends ScoresStorage {
       runId: row.runId,
       score: row.score,
       reason: row.reason ?? undefined,
+      label: row.label ?? undefined,
       metadata: parseJSON<Record<string, unknown>>(row.metadata),
       preprocessStepResult: parseJSON<Record<string, unknown>>(row.preprocessStepResult),
       extractStepResult: parseJSON<Record<string, unknown>>(row.extractStepResult),
@@ -210,6 +221,7 @@ export class ScoresMySQL extends ScoresStorage {
       runId: score.runId,
       score: score.score,
       reason: score.reason ?? null,
+      label: score.label ?? null,
       metadata: toJson(score.metadata),
       preprocessStepResult: toJson(score.preprocessStepResult),
       extractStepResult: toJson(score.extractStepResult),

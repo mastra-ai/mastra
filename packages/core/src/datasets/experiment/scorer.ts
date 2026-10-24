@@ -258,6 +258,7 @@ export async function runScorersForItem(
             ...(stableScoreKey ? { id: `${stableScoreKey}:${scorer.id}` } : {}),
             scorerId: scorer.id,
             score: result.score,
+            label: result.label,
             reason: result.reason ?? undefined,
             input: item.input,
             output,
@@ -316,6 +317,7 @@ interface ScorerPromptMetadata {
 
 function extractScorerRunFields(scoreResult: unknown): {
   score: number | null;
+  label?: string;
   reason: string | null;
   notScorable?: NotScorableOutcome;
   promptMetadata: ScorerPromptMetadata;
@@ -336,6 +338,7 @@ function extractScorerRunFields(scoreResult: unknown): {
 
   return {
     score: typeof fields.score === 'number' ? fields.score : null,
+    ...(typeof fields.label === 'string' ? { label: fields.label } : {}),
     reason: typeof fields.reason === 'string' ? fields.reason : null,
     // `step` is always one of the scorer's own step names; see MastraScorer.
     ...(notScorable && typeof notScorable.step === 'string'
@@ -427,13 +430,14 @@ async function runScorerSafe(
       };
     }
 
-    const { score, reason, notScorable, promptMetadata } = extractScorerRunFields(scoreResult);
+    const { score, label, reason, notScorable, promptMetadata } = extractScorerRunFields(scoreResult);
 
     return {
       result: {
         scorerId: scorer.id,
         scorerName: scorer.name,
         score,
+        ...(label !== undefined ? { label } : {}),
         reason,
         error: null,
         ...(notScorable ? { notScorable } : {}),

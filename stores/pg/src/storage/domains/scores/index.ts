@@ -103,7 +103,16 @@ export class ScoresPG extends ScoresStorage {
     await this.#db.alterTable({
       tableName: TABLE_SCORERS,
       schema: TABLE_SCHEMAS[TABLE_SCORERS],
-      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
+      ifNotExists: [
+        'spanId',
+        'requestContext',
+        'organizationId',
+        'projectId',
+        'batchId',
+        'datasetId',
+        'datasetItemId',
+        'label',
+      ],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();

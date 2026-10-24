@@ -104,6 +104,13 @@ const result = await scorer.run({
       'Present when a step returned notScorable(). Carries the step name and optional reason. Remaining steps are skipped and no score is produced. See the notScorable() reference (optional).',
   },
   {
+    name: 'label',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Categorical label returned next to the score when generateScore returns `{ score, label }`, or the chosen key of a classifier choice question (optional).',
+  },
+  {
     name: 'reason',
     type: 'string',
     description: 'Explanation for the score, if generateReason step was defined (optional).',

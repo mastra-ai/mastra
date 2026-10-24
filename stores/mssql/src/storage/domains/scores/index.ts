@@ -76,6 +76,11 @@ export class ScoresMSSQL extends ScoresStorage {
       this.needsConnect = false;
     }
     await this.db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.db.alterTable({
+      tableName: TABLE_SCORERS,
+      schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      ifNotExists: ['label'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }

@@ -114,7 +114,16 @@ export class ScoresOracle extends ScoresStorage {
     await this.db.alterTable({
       tableName: TABLE_SCORERS,
       schema: ORACLE_SCORES_SCHEMA,
-      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
+      ifNotExists: [
+        'spanId',
+        'requestContext',
+        'organizationId',
+        'projectId',
+        'batchId',
+        'datasetId',
+        'datasetItemId',
+        'label',
+      ],
     });
     await this.ensureLongTextColumns();
     await this.ensureNullableJsonColumns();
@@ -177,6 +186,7 @@ export class ScoresOracle extends ScoresStorage {
           analyzeStepResult: validatedScore.analyzeStepResult,
           score: validatedScore.score,
           reason: validatedScore.reason,
+          label: validatedScore.label,
           metadata: validatedScore.metadata,
           preprocessPrompt: validatedScore.preprocessPrompt,
           extractPrompt: validatedScore.extractPrompt,
@@ -590,6 +600,7 @@ export function scoreSelectColumns(): string {
     `${SCORE_ANALYZE_STEP_RESULT} AS "analyzeStepResult"`,
     `score AS "score"`,
     `reason AS "reason"`,
+    `label AS "label"`,
     `metadata AS "metadata"`,
     `${SCORE_PREPROCESS_PROMPT} AS "preprocessPrompt"`,
     `${SCORE_EXTRACT_PROMPT} AS "extractPrompt"`,

@@ -389,6 +389,8 @@ export interface ScorerResult {
   scorerName: string;
   /** Computed score, or null when no score was produced */
   score: number | null;
+  /** Categorical label the scorer returned next to the score, when it provides one */
+  label?: string;
   /** Reason/explanation for the score, or null when no reason was produced */
   reason: string | null;
   /** Error message if scorer failed */

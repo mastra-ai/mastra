@@ -52,6 +52,7 @@ export function createSampleScore({
       text: 'Sample analyze step result',
     },
     score: 0.8,
+    label: 'adequate',
     analyzePrompt: 'Sample analyze prompt',
     generateReasonPrompt: 'Sample reason prompt',
     scorer: {

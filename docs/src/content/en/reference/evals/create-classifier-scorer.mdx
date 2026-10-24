@@ -7,7 +7,7 @@ packages:
 
 # createClassifierScorer
 
-`createClassifierScorer()` adapts one constructor-configured [`Classifier`](/reference/classifier/classifier) question to Mastra's scorer pipeline. It returns a normal `MastraScorer` with a numeric `score` and retains the selected answer, probabilities, usage, warnings, and safe response metadata in `analyzeStepResult`.
+`createClassifierScorer()` adapts one constructor-configured [`Classifier`](/reference/classifier/classifier) question to Mastra's scorer pipeline. It returns a normal `MastraScorer` with a numeric `score`, sets the score `label` to the chosen key for choice questions, and retains the selected answer, probabilities, usage, warnings, and safe response metadata in `analyzeStepResult`.
 
 Each scorer run calls `Classifier.decide()` to evaluate all questions configured on the classifier, then projects only the answer selected by `question` into a score between 0 and 1. The `question` option doesn't limit which questions are sent to the model. The adapter doesn't aggregate questions, apply boolean thresholds, infer choice ordering, or call a second judge model.
 
@@ -89,7 +89,7 @@ const routeScorer = createClassifierScorer({
 })
 ```
 
-The selected choice and its optional probability distribution remain available in `result.analyzeStepResult.answer`.
+The selected choice is also returned as the score's `label` (`result.label`, for example `'partiallyCorrect'`), so experiments can count choices next to the numeric average. The choice and its optional probability distribution remain available in `result.analyzeStepResult.answer`.
 
 ## Boolean questions
 

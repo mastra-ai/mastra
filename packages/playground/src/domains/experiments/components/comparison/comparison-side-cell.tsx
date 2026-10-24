@@ -45,6 +45,7 @@ function sideMetrics(side: ComparisonColumn, showUsage: boolean): ComparisonMetr
       scorerId: score.scorerId,
       value: score.value,
       reason: score.reason,
+      scoreLabel: score.label,
       delta: side.deltas?.[score.scorerId] ?? null,
     })),
   });

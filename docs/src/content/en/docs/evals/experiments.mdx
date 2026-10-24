@@ -59,6 +59,7 @@ An experiment's status and counts describe execution. Use the scores to assess o
 | - | - |
 | `succeededCount` and `failedCount` | How many items executed without an error or ended with an execution error |
 | Each item's `scores` | How the output performed against each scorer's criteria, with a reason when provided |
+| Each score's `label` | The category a scorer assigned next to its number, such as `failing` or `exemplary`, when the scorer provides one |
 | Average score | Aggregate performance for a scorer, which can hide individual failures |
 
 For example, an experiment with one item asks `2 + 2?` and returns `5`. An accuracy scorer assigns `0`, but the task itself returns without throwing. Its summary contains:
@@ -73,6 +74,29 @@ console.log(summary.results[0].scores[0].score) // 0
 In Studio, open the experiment and inspect per-item outputs, scores, and reasons before deciding whether a change improved your agent. Check scorer errors too: a missing score provides no evidence of quality.
 
 If every item must meet a requirement, check each item's score against it. For a binary scorer where `1` means the requirement was met, five scores of `1` and one of `0` average about `0.83`, but one item still fails the requirement.
+
+### Categorical scores
+
+A scorer can return a category next to its number by returning `{ score, label }` from `generateScore`. The label is stored with the score, returned on each item's `scores`, and Studio shows it per item and counts the labels per scorer next to the average, so one `failing` result stays visible in a run that averages `0.83`.
+
+```typescript title="src/mastra/scorers/safety-grade.ts"
+import { createScorer } from '@mastra/core/evals'
+
+const grades = { failing: 0, adequate: 0.5, exemplary: 1 } as const
+
+export const safetyGrade = createScorer({
+  id: 'safety-grade',
+  description: 'Grades conversation safety',
+  type: 'agent',
+})
+  .analyze(({ run }) => ({ grade: gradeConversation(run.output) }))
+  .generateScore(({ results }) => ({
+    score: grades[results.analyzeStepResult.grade],
+    label: results.analyzeStepResult.grade,
+  }))
+```
+
+[`createClassifierScorer()`](/reference/evals/create-classifier-scorer) sets the label automatically for choice questions. Scorers that return a plain number keep working unchanged, and comparisons still use the numeric average.
 
 For automated quality checks in CI, [`runEvals()` gates and verdicts](/docs/evals/gates-and-verdicts) provide explicit pass/fail criteria. Those options belong to `runEvals()`. Dataset experiment status and counts remain execution results.
 
