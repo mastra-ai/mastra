@@ -309,7 +309,9 @@ export class UpstashTransport extends LoggerTransport {
         };
       }
 
-      const response = await this.executeUpstashCommands([['LRANGE', this.listName, 0, -1]]);
+      // Limit snapshot reads to this transport's configured retention window.
+      const lastIndex = this.maxListLength > 0 ? this.maxListLength - 1 : -1;
+      const response = await this.executeUpstashCommands([['LRANGE', this.listName, 0, lastIndex]]);
       const filteredLogs = this.parseLogs(response?.[0]?.result).filter(log =>
         this.matchesLog(log, { fromDate, toDate, logLevel, filters }),
       );
