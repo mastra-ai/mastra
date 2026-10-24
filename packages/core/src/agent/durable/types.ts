@@ -1021,6 +1021,13 @@ export interface RunRegistryEntry {
    */
   resumeToolCallId?: string;
   /**
+   * Fingerprints of the response messages already sent on this segment's
+   * step-finish chunks, so the next chunk carries only what changed (#27475).
+   * Reset whenever a new segment starts streaming.
+   * @internal
+   */
+  emittedResponseMessageFingerprints?: string[];
+  /**
    * Set while an engine that persists the suspended snapshot before returning
    * is executing. The tool-call step queues suspension chunks/events here so
    * they are published only after the snapshot is saved; otherwise a crash in

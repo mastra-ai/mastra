@@ -1102,6 +1102,7 @@ describe('expectEngineParity', () => {
       type: 'step-finish',
       _durableStepContent: 'content',
       _durableResponseMessages: ['response'],
+      _durableResponseMessagesFrom: 0,
       processorRetryCount: 1,
       metadata: { modelMetadata: { key: 'value' }, modelProvider: 'provider', modelVersion: 'version' },
       messages: { all: ['all'], user: ['user'], nonUser: ['assistant'] },
