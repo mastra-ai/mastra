@@ -1283,12 +1283,12 @@ describe('CachingPubSub', () => {
     }
 
     /** Append a frame to the shared log and return it, index included. */
-    const append = async (target: InMemoryServerCache, n: number): Promise<Event> => {
+    const append = async (target: InMemoryServerCache, n: number, id = `frame-${n}`): Promise<Event> => {
       const frame = {
         type: 'chunk',
         runId: 'run-1',
         data: { n },
-        id: `frame-${n}`,
+        id,
         createdAt: new Date(),
       } as Event;
       frame.index = await target.listPushIndexed(
@@ -1550,6 +1550,130 @@ describe('CachingPubSub', () => {
       expect(received).toEqual([0, 1]);
       expect(warn).not.toHaveBeenCalled();
       expect(inner.acked.map(event => event.index)).toEqual([0]);
+    });
+
+    it('delivers nothing for an offset past the end of a finished log', async () => {
+      // The transport replays its whole backlog, frame 0 included, to the new subscriber.
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const frames = [await append(shared, 0), await append(shared, 1), await append(shared, 2)];
+      inner.retained.set(topic, frames);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      // Retained frame 0 is not a log restart: the log is intact, the offset is just past its end.
+      expect(received).toEqual([]);
+      expect(warn).not.toHaveBeenCalled();
+
+      // Live frames below the offset stay skipped; delivery starts once the log reaches it.
+      for (const n of [3, 4, 5, 6]) await inner.publish(topic, await append(shared, n));
+      await flush();
+      expect(received).toEqual([5, 6]);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('resyncs when a short log past the offset expires and a new segment restarts at 0', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      inner.retained.set(topic, [await append(shared, 0)]);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event.index!);
+      });
+      await flush();
+      expect(received).toEqual([]);
+
+      // The log expires and the resumed run numbers a new segment from 0. Its
+      // counter matches the old log's length, so only frame 0's identity shows the restart.
+      await shared.delete(`pubsub:${topic}`);
+      await shared.delete(`pubsub:${topic}:counter`);
+      for (const n of [0, 1]) await inner.publish(topic, await append(shared, n, `segment-2-${n}`));
+      await flush();
+
+      expect(received).toEqual([0, 1]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toContain('restarted at 0');
+    });
+
+    it('delivers the new segment from the log when a stale copy of the old frame 0 signals the restart', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const oldFrame0 = await append(shared, 0);
+      inner.retained.set(topic, [oldFrame0]);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: Event[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event);
+      });
+      await flush();
+      expect(received).toEqual([]);
+
+      // The log expires and the new segment caches its frame 0, but a delayed
+      // transport copy of the old frame 0 arrives before the new one is published.
+      await shared.delete(`pubsub:${topic}`);
+      await shared.delete(`pubsub:${topic}:counter`);
+      const newFrame0 = await append(shared, 0, 'segment-2-0');
+      await inner.publish(topic, oldFrame0);
+      await flush();
+
+      expect(received.map(event => [event.index, event.id])).toEqual([[0, 'segment-2-0']]);
+      expect(warn).toHaveBeenCalledTimes(1);
+
+      // The new frame 0's own transport copy is a duplicate; frame 1 continues the segment.
+      await inner.publish(topic, newFrame0);
+      await inner.publish(topic, await append(shared, 1, 'segment-2-1'));
+      await flush();
+      expect(received.map(event => event.index)).toEqual([0, 1]);
+    });
+
+    it('resumes from an offset inside a short log without resyncing from the start', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const frames = [await append(shared, 0), await append(shared, 1)];
+      inner.retained.set(topic, frames);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 1, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      expect(received).toEqual([1]);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('warns once when frames reaching an offset subscriber are not numbered', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: unknown[] = [];
+      await subscriber.subscribeFromOffset(topic, 2, event => {
+        received.push(event.data);
+      });
+
+      // Published straight on the transport, as a process without a shared log does.
+      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 0 } });
+      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 1 } });
+      await flush();
+
+      expect(received).toEqual([{ n: 0 }, { n: 1 }]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toContain('not numbered');
+      expect(warn.mock.calls[0]![0]).toContain('RedisServerCache');
     });
 
     it('backfills a gap the transport skipped from the log', async () => {

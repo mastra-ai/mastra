@@ -245,7 +245,21 @@ export class CachingPubSub extends PubSub {
     const cacheKey = this.getCacheKey(topic);
 
     let next = offset;
+    // How far the log is known to reach. An offset past the log's end is a
+    // position it has not reached yet, so the restart check in `reconcile`
+    // compares the counter against this rather than the cursor; otherwise the
+    // transport's retained frame 0 looks like a log restart and the whole run
+    // replays.
+    const logLength = offset > 0 ? await this.cache.get(this.getCounterKey(topic)).catch(() => undefined) : undefined;
+    let reached = typeof logLength === 'number' ? Math.min(offset, logLength) : offset;
+    // The id the log stored for its frame 0 when this subscriber attached. The
+    // counter alone cannot tell a retained copy of that frame from the first
+    // frame of a new segment once the new counter catches up with `reached`;
+    // a new segment writes a new entry 0 with a different id.
+    const readFirstId = async () => ((await this.cache.listFromTo(cacheKey, 0, 0).catch(() => [])) as Event[])[0]?.id;
+    let firstId = typeof logLength === 'number' ? await readFirstId() : undefined;
     let closed = false;
+    let warnedUnnumbered = false;
     // Set only while a backfill (or the initial history read) is in flight.
     // Frames delivered meanwhile must wait, or the cursor could advance past a
     // frame that has not been handed to the consumer yet. In the common case
@@ -256,7 +270,10 @@ export class CachingPubSub extends PubSub {
     let attaching = true;
 
     const emit = (event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>) => {
-      if (typeof event.index === 'number') next = event.index + 1;
+      if (typeof event.index === 'number') {
+        next = event.index + 1;
+        reached = Math.max(reached, next);
+      }
       return cb(event, ack, nack);
     };
 
@@ -282,7 +299,16 @@ export class CachingPubSub extends PubSub {
 
       const seq = event.index;
       if (typeof seq !== 'number') {
-        // No numbering (the frame failed to cache): live-only delivery.
+        // No numbering (the frame failed to cache, or the publisher has no
+        // shared log): live-only delivery.
+        if (offset > 0 && !warnedUnnumbered) {
+          warnedUnnumbered = true;
+          this.logWarn(
+            `[CachingPubSub] Frames on ${topic} are not numbered, so resuming from offset ${offset} cannot ` +
+              `replay or skip them by position. Configure a server cache shared by every process ` +
+              `(for example RedisServerCache) to resume streams reliably.`,
+          );
+        }
         return cb(event, ack, nack);
       }
 
@@ -302,14 +328,26 @@ export class CachingPubSub extends PubSub {
           // A cache read failure must not turn a duplicate into a nack loop;
           // fall through to the drop path in that case.
           const allocated = await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
+          const currentFirstId = firstId !== undefined ? await readFirstId() : undefined;
           if (closed) return ack?.();
 
-          if (typeof allocated === 'number' && allocated < next) {
+          const restarted =
+            typeof allocated === 'number' &&
+            (firstId !== undefined
+              ? currentFirstId !== undefined && currentFirstId !== firstId
+              : allocated < Math.min(next, reached));
+          if (restarted) {
+            firstId = currentFirstId;
             this.logWarn(
               `[CachingPubSub] Log for ${topic} restarted at 0 while the subscriber cursor was at ${next}; ` +
                 `the retained log expired or was cleared. Resyncing from the start of the new segment.`,
             );
+            // The frame in hand may be a delayed copy of the old log's frame 0,
+            // so deliver the new segment from the log rather than from it.
             next = 0;
+            await backfill(Number.POSITIVE_INFINITY);
+            if (closed) return ack?.();
+            if (next > 0) return ack?.();
             await emit(event, ack, nack);
             return;
           }
