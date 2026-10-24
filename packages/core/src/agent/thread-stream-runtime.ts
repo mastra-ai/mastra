@@ -1199,10 +1199,13 @@ export class AgentThreadStreamRuntime {
     };
     /**
      * While the run has a step running, a backend that doesn't answer is no reason to stop it: only another owner
-     * is. The retake keeps asking, one renewal interval at a time, until it gets an answer or the run is idle.
+     * is. The retake keeps asking, one renewal interval at a time, until it gets an answer or the run is idle, but
+     * no longer than the grace period after the lease ran out: a backend silent that long is treated as lost too.
      */
+    const lapsedAt = (state.leaseDeadlines.get(runId)?.confirmedSentAt ?? sentAt) + AGENT_THREAD_LEASE_TTL_MS;
     const stepRunning = () =>
       state.leaseRenewalTimers.get(runId) === timer &&
+      Date.now() < lapsedAt + AGENT_LEASE_LOST_TOOL_GRACE_MS &&
       isRunStepActive(
         state.preparedRunsById.get(runId)?.abortController.signal ?? record?.stepOwner?.(),
         AGENT_THREAD_LEASE_RENEW_INTERVAL_MS,
