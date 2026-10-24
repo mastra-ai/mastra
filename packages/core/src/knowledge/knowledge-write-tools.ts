@@ -1,3 +1,4 @@
+import type { JSONSchema7 } from 'json-schema';
 import type { KnowledgeNode, KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '../storage';
 import {
   MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
@@ -8,7 +9,6 @@ import {
 } from '../storage';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
-import type { JSONSchema7 } from 'json-schema';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
 const SCOPE_RUNGS = ['org', 'resource', 'thread'] as const;
