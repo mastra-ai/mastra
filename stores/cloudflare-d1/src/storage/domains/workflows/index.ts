@@ -33,7 +33,7 @@ import {
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 import { D1DB, resolveD1Config } from '../../db';
 import type { D1DomainConfig } from '../../db';
-import { DB_NOW_MS, executeFenced, runFenceGuard } from '../../db/run-fencing';
+import { assertRunFence, DB_NOW_MS, executeFenced, runFenceGuard } from '../../db/run-fencing';
 import type { RunFenceCheck } from '../../db/run-fencing';
 import { createSqlBuilder } from '../../sql-builder';
 import type { SqlParam } from '../../sql-builder';
@@ -91,6 +91,10 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
   constructor(config: D1DomainConfig) {
     super();
     this.#db = new D1DB(resolveD1Config(config));
+  }
+
+  supportsGuardedSnapshotWrites(): boolean {
+    return true;
   }
 
   supportsConcurrentUpdates(): boolean {
@@ -292,6 +296,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -300,7 +305,8 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     const fullTableName = this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT);
     const now = new Date().toISOString();
     const check = this.#runFenceCheck(fence, runId, 'persistWorkflowSnapshot');
@@ -351,7 +357,27 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     );
 
     try {
-      await executeFenced(this.#db, check, query.build());
+      if (expectedStatus === undefined) {
+        await executeFenced(this.#db, check, query.build());
+        return true;
+      }
+      // The guard sits on the conflict update, so the stored status is checked in the same
+      // statement that overwrites it. An explicit empty list matches no status.
+      const expectedStatuses = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+      const { sql, params } = query.build();
+      const statusGuard =
+        expectedStatuses.length === 0
+          ? ' WHERE 0'
+          : ` WHERE (CASE WHEN json_valid(${fullTableName}.snapshot) THEN json_extract(${fullTableName}.snapshot, '$.status') END) IN (${expectedStatuses.map(() => '?').join(', ')})`;
+      const rows = await this.#db.executeQuery({
+        sql: `${sql}${statusGuard} RETURNING 1 AS written`,
+        params: [...params, ...expectedStatuses],
+      });
+      const written = Array.isArray(rows) && rows.length > 0;
+      if (!written && check) {
+        await assertRunFence(this.#db, check);
+      }
+      return written;
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(

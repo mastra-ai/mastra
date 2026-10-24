@@ -6,6 +6,7 @@ import {
   RUN_FENCING_TABLE_SCHEMAS,
   WorkflowsStorage,
   createStorageErrorId,
+  hasErrorCode,
   normalizePerPage,
   matchesExpectedWorkflowStatus,
   matchesRunFence,
@@ -40,6 +41,8 @@ import type { Queryable } from '../../db/run-fencing';
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL } from '../operations';
 import { formatTableName, parseDateTime, quoteIdentifier, transformToSqlValue } from '../utils';
+
+const DUPLICATE_KEY_ERROR_CODES = new Set([1062, 'ER_DUP_ENTRY']);
 
 interface WorkflowRow {
   workflow_name: string;
@@ -175,6 +178,10 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     this.pool = pool;
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (WorkflowsMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  supportsGuardedSnapshotWrites(): boolean {
+    return true;
   }
 
   supportsConcurrentUpdates(): boolean {
@@ -526,6 +533,7 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -534,13 +542,23 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     const now = new Date();
+    const expectedStatuses =
+      expectedStatus === undefined ? undefined : Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+    // An explicit empty list matches no status, so an existing row is never overwritten.
+    const guard =
+      expectedStatuses === undefined
+        ? ''
+        : expectedStatuses.length === 0
+          ? ' AND FALSE'
+          : ` AND JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('snapshot', 'column name')}, '$.status')) IN (${expectedStatuses.map(() => '?').join(', ')})`;
     const createdAtValue = createdAt ?? now;
     const updatedAtValue = updatedAt ?? now;
     const tableName = formatTableName(TABLE_WORKFLOW_SNAPSHOT);
     try {
-      await withRunFence(
+      return await withRunFence(
         this.pool,
         RUN_OWNERS_TABLE,
         resolveRunFence(this, fence, runId),
@@ -551,12 +569,43 @@ export class WorkflowsMySQL extends WorkflowsStorage {
            SET ${quoteIdentifier('resourceId', 'column name')} = ?,
                ${quoteIdentifier('snapshot', 'column name')} = ?,
                ${quoteIdentifier('updatedAt', 'column name')} = ?
-           WHERE ${quoteIdentifier('workflow_name', 'column name')} = ? AND ${quoteIdentifier('run_id', 'column name')} = ?`,
-            [resourceId ?? null, JSON.stringify(snapshot), transformToSqlValue(updatedAtValue), workflowName, runId],
+           WHERE ${quoteIdentifier('workflow_name', 'column name')} = ? AND ${quoteIdentifier('run_id', 'column name')} = ?${guard}`,
+            [
+              resourceId ?? null,
+              JSON.stringify(snapshot),
+              transformToSqlValue(updatedAtValue),
+              workflowName,
+              runId,
+              ...(expectedStatuses ?? []),
+            ],
           );
 
+          // mysql2 connects with CLIENT_FOUND_ROWS, so affectedRows counts matched rows.
           if (updateResult.affectedRows > 0) {
-            return;
+            return true;
+          }
+
+          if (expectedStatuses !== undefined) {
+            // The guard refused an existing row or there is no row yet. A plain insert tells the two
+            // apart: it fails with a duplicate key when the row exists.
+            try {
+              await q.execute(
+                `INSERT INTO ${tableName} (${quoteIdentifier('workflow_name', 'column name')}, ${quoteIdentifier('run_id', 'column name')}, ${quoteIdentifier('resourceId', 'column name')}, ${quoteIdentifier('snapshot', 'column name')}, ${quoteIdentifier('createdAt', 'column name')}, ${quoteIdentifier('updatedAt', 'column name')})
+               VALUES (?, ?, ?, ?, ?, ?)`,
+                [
+                  workflowName,
+                  runId,
+                  resourceId ?? null,
+                  JSON.stringify(snapshot),
+                  transformToSqlValue(createdAtValue),
+                  transformToSqlValue(updatedAtValue),
+                ],
+              );
+              return true;
+            } catch (error) {
+              if (hasErrorCode(error, DUPLICATE_KEY_ERROR_CODES)) return false;
+              throw error;
+            }
           }
 
           await q.execute(
@@ -572,6 +621,7 @@ export class WorkflowsMySQL extends WorkflowsStorage {
               transformToSqlValue(updatedAtValue),
             ],
           );
+          return true;
         },
       );
     } catch (error) {

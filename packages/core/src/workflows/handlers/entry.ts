@@ -168,7 +168,7 @@ export interface PersistStepUpdateParams {
 
 // Every status but `canceled`, so only a persisted cancellation rejects the write.
 // Terminal statuses stay writable because restart and time travel re-run finished runs.
-const RUN_STATUSES = {
+const RUN_STATUSES: Record<WorkflowRunStatus, true> = {
   running: true,
   success: true,
   failed: true,
@@ -180,9 +180,10 @@ const RUN_STATUSES = {
   bailed: true,
   paused: true,
   skipped: true,
-} satisfies Record<WorkflowRunStatus, true>;
-const NOT_CANCELED_STATUSES = (Object.keys(RUN_STATUSES) as WorkflowRunStatus[]).filter(
-  status => status !== 'canceled',
+};
+const NOT_CANCELED_STATUSES = Object.keys(RUN_STATUSES).filter(
+  (status): status is Exclude<WorkflowRunStatus, 'canceled'> =>
+    Object.hasOwn(RUN_STATUSES, status) && status !== 'canceled',
 );
 
 export async function isWorkflowRunCanceled(

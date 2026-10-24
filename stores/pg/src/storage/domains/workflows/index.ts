@@ -199,6 +199,18 @@ export class WorkflowsPG extends WorkflowsStorage {
     return true;
   }
 
+  supportsGuardedSnapshotWrites(): boolean {
+    return true;
+  }
+
+  /** SQL for a snapshot's status. Legacy json/text columns can hold escapes that fail a jsonb cast (#11563). */
+  async #statusExpression(column: string): Promise<string> {
+    const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
+    return snapshotType === 'jsonb'
+      ? `${column} ->> 'status'`
+      : `regexp_replace(${column}::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status'`;
+  }
+
   private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
     let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
     if (typeof parsedSnapshot === 'string') {
@@ -664,6 +676,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -672,25 +685,31 @@ export class WorkflowsPG extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     try {
       const now = new Date();
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
       // Sanitize the snapshot JSON to remove problematic Unicode sequences
       const sanitizedSnapshot = toPgJson(snapshot);
-      await withRunFence(
+      // The status guard sits on the upsert itself, so a concurrent status change can't land
+      // between the check and the write. An empty list matches no status.
+      const guard =
+        expectedStatus === undefined ? '' : ` WHERE ${await this.#statusExpression('t.snapshot')} = ANY($9::text[])`;
+      const written = await withRunFence(
         this.#db.client,
         this.#runOwnersTable(),
         resolveRunFence(this, fence, runId),
         'persistWorkflowSnapshot',
         q =>
-          q.none(
+          q.oneOrNone<{ written: number }>(
             `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t
                  (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET "resourceId" = COALESCE($3, t."resourceId"), snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8`,
+                 SET "resourceId" = COALESCE($3, t."resourceId"), snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8${guard}
+                 RETURNING 1 AS written`,
             [
               workflowName,
               runId,
@@ -700,9 +719,13 @@ export class WorkflowsPG extends WorkflowsStorage {
               updatedAtValue,
               createdAtValue,
               updatedAtValue,
+              ...(expectedStatus === undefined
+                ? []
+                : [Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus]]),
             ],
           ),
       );
+      return written !== null;
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
@@ -724,12 +747,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunStatus | null> {
     try {
-      // Legacy json/text snapshot columns can hold escapes that fail a jsonb cast (#11563).
-      const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
-      const statusExpr =
-        snapshotType === 'jsonb'
-          ? `snapshot ->> 'status'`
-          : `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status'`;
+      const statusExpr = await this.#statusExpression('snapshot');
       const row = await this.#db.client.oneOrNone<{ status: unknown }>(
         `SELECT ${statusExpr} AS status FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE "workflow_name" = $1 AND "run_id" = $2 ORDER BY "createdAt" DESC LIMIT 1`,
         [workflowName, runId],

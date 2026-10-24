@@ -552,6 +552,40 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
       ).resolves.toBeNull();
     });
 
+    it('should guard snapshot writes on the stored status', async () => {
+      if (!workflowsStorage.supportsGuardedSnapshotWrites()) return;
+      const workflowName = 'test-workflow';
+      const { snapshot, runId } = createSampleWorkflowSnapshot('running');
+      const canceled = { ...snapshot, status: 'canceled' as const };
+      const succeeded = { ...snapshot, status: 'success' as const };
+
+      // A missing row is always written.
+      await expect(
+        workflowsStorage.persistWorkflowSnapshot({ workflowName, runId, snapshot, expectedStatus: ['running'] }),
+      ).resolves.toBe(true);
+      await expect(
+        workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          snapshot: canceled,
+          expectedStatus: 'running',
+        }),
+      ).resolves.toBe(true);
+
+      await expect(
+        workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          snapshot: succeeded,
+          expectedStatus: ['running', 'success'],
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        workflowsStorage.persistWorkflowSnapshot({ workflowName, runId, snapshot: succeeded, expectedStatus: [] }),
+      ).resolves.toBe(false);
+      await expect(workflowsStorage.loadWorkflowRunStatus({ workflowName, runId })).resolves.toBe('canceled');
+    });
+
     it('should update existing workflow snapshot', async () => {
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;

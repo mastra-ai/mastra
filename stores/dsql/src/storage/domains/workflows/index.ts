@@ -130,6 +130,10 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     return true;
   }
 
+  supportsGuardedSnapshotWrites(): boolean {
+    return true;
+  }
+
   /**
    * Returns default index definitions for the workflows domain tables.
    * Currently no default indexes are defined for workflows.
@@ -518,6 +522,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -526,19 +531,24 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     try {
       const now = new Date();
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
       const resolvedFence = resolveRunFence(this, fence, runId);
-      await withRetry(() =>
+      // The status guard sits on the upsert itself, so a concurrent status change can't land
+      // between the check and the write. An empty list matches no status.
+      const guard = expectedStatus === undefined ? '' : ` WHERE t.snapshot::jsonb ->> 'status' = ANY($7::text[])`;
+      const written = await withRetry(() =>
         withRunFence(this.#db.client, this.#runOwnersTable(), resolvedFence, 'persistWorkflowSnapshot', q =>
-          q.none(
-            `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
+          q.oneOrNone<{ written: number }>(
+            `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
+                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6${guard}
+                 RETURNING 1 AS written`,
             [
               workflowName,
               runId,
@@ -546,10 +556,14 @@ export class WorkflowsDSQL extends WorkflowsStorage {
               JSON.stringify(snapshot),
               createdAtValue.toISOString(),
               updatedAtValue.toISOString(),
+              ...(expectedStatus === undefined
+                ? []
+                : [Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus]]),
             ],
           ),
         ),
       );
+      return written !== null;
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(

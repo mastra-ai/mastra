@@ -104,6 +104,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     this.indexes = indexes?.filter(idx => (WorkflowsMSSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
+  supportsGuardedSnapshotWrites(): boolean {
+    return true;
+  }
+
   supportsConcurrentUpdates(): boolean {
     return true;
   }
@@ -539,17 +543,28 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     resourceId,
     snapshot,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
     const now = new Date().toISOString();
+    const expectedStatuses =
+      expectedStatus === undefined ? undefined : Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+    // An explicit empty list matches no status, so an existing row is never overwritten.
+    const guard =
+      expectedStatuses === undefined
+        ? ''
+        : expectedStatuses.length === 0
+          ? ' AND 1 = 0'
+          : ` AND JSON_VALUE(target.[snapshot], '$.status') IN (${expectedStatuses.map((_, i) => `@expectedStatus${i}`).join(', ')})`;
     try {
-      await withRunFence(
+      return await withRunFence(
         this.pool,
         this.#runOwnersTable,
         resolveRunFence(this, fence, runId),
@@ -562,16 +577,18 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           request.input('snapshot', JSON.stringify(snapshot));
           request.input('createdAt', sql.DateTime2, new Date(now));
           request.input('updatedAt', sql.DateTime2, new Date(now));
+          expectedStatuses?.forEach((status, i) => request.input(`expectedStatus${i}`, status));
           const mergeSql = `MERGE INTO ${table} AS target
             USING (SELECT @workflow_name AS workflow_name, @run_id AS run_id) AS src
             ON target.workflow_name = src.workflow_name AND target.run_id = src.run_id
-            WHEN MATCHED THEN UPDATE SET
+            WHEN MATCHED${guard} THEN UPDATE SET
               resourceId = @resourceId,
               snapshot = @snapshot,
               [updatedAt] = @updatedAt
             WHEN NOT MATCHED THEN INSERT (workflow_name, run_id, resourceId, snapshot, [createdAt], [updatedAt])
               VALUES (@workflow_name, @run_id, @resourceId, @snapshot, @createdAt, @updatedAt);`;
-          await request.query(mergeSql);
+          const result = await request.query(mergeSql);
+          return (result.rowsAffected[0] ?? 0) > 0;
         },
       );
     } catch (error) {
