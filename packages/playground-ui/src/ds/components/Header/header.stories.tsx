@@ -58,7 +58,7 @@ export const WithActions: Story = {
         </Button>
         <Button size="md">
           <Plus className="size-4" />
-          New Agent
+          New agent
         </Button>
       </HeaderAction>
     </Header>

@@ -34,15 +34,10 @@
         "values": ["high", "max"]
       }
     ],
-    "zai-org/glm-5.2": [
+    "openai/gpt-5.5": [
       {
         "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "zai-org/glm-5.1": [
-      {
-        "type": "toggle"
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "moonshotai/kimi-k2.5": [
@@ -56,10 +51,15 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-5.5": [
+    "zai-org/glm-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/glm-5.2": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["high", "max"]
       }
     ]
   }

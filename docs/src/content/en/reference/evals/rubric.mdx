@@ -179,7 +179,7 @@ The scorer runs in two phases:
 1. **Grade**: The judge model evaluates each criterion independently and returns a per-criterion verdict (`satisfied` / not) with reasoning.
 1. **Score**: The scorer returns `1` only when every required criterion is `satisfied` and treats every criterion as required when none are marked. All other results receive `0`.
 
-The `reason` summarizes the result and lists each criterion with its verdict, so a failing grade gives the agent targeted, useful feedback rather than a generic "try again".
+The `reason` summarizes the result and lists each criterion with its verdict, giving the agent specific feedback on a failing grade rather than a generic "try again".
 
 ## Related
 

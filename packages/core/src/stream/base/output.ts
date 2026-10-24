@@ -2410,7 +2410,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
     // Calculate text from steps, which respects tripwire (rejected steps return empty text)
     // This ensures rejected responses are excluded from the final text output
-    const textFromSteps = steps.map((step: any) => step.text || '').join('');
+    // A run that suspends mid-step (e.g. awaiting tool approval) has streamed text the step results
+    // don't hold yet. The per-step buffer is reset on every step-finish, so this text is never in `steps`.
+    const textFromSteps =
+      steps.map((step: any) => step.text || '').join('') +
+      (this.#status === 'suspended' ? this.#bufferedByStep.text : '');
 
     const fullOutput: FullOutput<OUTPUT> = {
       // After a tripwire, `text` already holds the resolved output (and a processOutputStream
@@ -2760,7 +2764,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   /** Resolves the result promises with what the run produced before it suspended. */
-  #resolveSuspendedPromises({ includeUsage = true }: { includeUsage?: boolean } = {}) {
+  #resolveSuspendedPromises() {
     const reasoningText =
       this.#bufferedReasoning.length > 0
         ? this.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
@@ -2775,12 +2779,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       sources: this.#bufferedSources,
       files: this.#bufferedFiles,
       steps: this.#bufferedSteps,
-      ...(includeUsage
-        ? {
-            usage: this.#getUsageCountWithSuspendedStep(),
-            totalUsage: this.#getTotalUsage(this.#getUsageCountWithSuspendedStep()),
-          }
-        : {}),
+      usage: this.#getUsageCountWithSuspendedStep(),
+      totalUsage: this.#getTotalUsage(this.#getUsageCountWithSuspendedStep()),
       warnings: this.#warnings,
       finishReason: 'suspended',
       content: this.messageList.get.response.aiV5.stepContent(),
@@ -2860,6 +2860,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     // removeAllListeners() here would silently kill every other subscriber
     // (see #19743).
     let detach: (() => void) | undefined;
+    // Erroring a ReadableStream discards the chunks still queued for its reader, so a failure that
+    // arrives while this subscriber is behind waits in `pendingError` until `pull` sees the queue empty.
+    let pendingError: { error: unknown } | undefined;
+    const fail = (controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>, error: unknown) => {
+      if ((controller.desiredSize ?? 0) > 0) {
+        controller.error(error);
+      } else {
+        pendingError = { error };
+      }
+    };
 
     return new ReadableStream<ChunkType<OUTPUT>>({
       start(controller) {
@@ -2871,7 +2881,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         // If stream already finished, close immediately
         if (self.#streamFinished) {
           if (self.#consumeStreamErrored) {
-            controller.error(self.#consumeStreamError);
+            fail(controller, self.#consumeStreamError);
           } else {
             controller.close();
           }
@@ -2894,7 +2904,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         };
         const errorHandler = (error: unknown) => {
           detachListeners();
-          controller.error(error);
+          fail(controller, error);
         };
 
         self.#emitter.on('chunk', chunkHandler);
@@ -2904,7 +2914,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         detach = detachListeners;
       },
 
-      pull(_controller) {
+      pull(controller) {
+        if (pendingError) {
+          controller.error(pendingError.error);
+          return;
+        }
         // Only start consumption when someone is actively reading the stream
         if (!self.#consumptionStarted) {
           self.consumeStream().catch(error => {

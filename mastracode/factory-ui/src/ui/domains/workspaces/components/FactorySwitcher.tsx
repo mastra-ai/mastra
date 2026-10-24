@@ -1,14 +1,11 @@
-import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, ChevronsUpDown, Factory as FactoryIcon, Plus } from 'lucide-react';
+import { Check, ChevronDown, Factory as FactoryIcon, Plus } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
 import { createFactoryPath, factorySwitchPath } from '../services/factoryPaths';
 
-/** Inline factory selection with a single Create Factory action. */
 export function FactorySwitcher() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const location = useLocation();
@@ -32,16 +29,15 @@ export function FactorySwitcher() {
         id="factory-switcher-trigger"
         type="button"
         aria-label="Select factory"
-        className={cn(
-          buttonVariants({ variant: 'default' }),
-          'mt-1 w-full justify-start gap-2 px-2.5 text-left [&>svg]:mx-0',
-        )}
+        variant="ghost"
+        size="sm"
+        className="-ml-[calc(var(--button-px)-2px)] min-w-0 gap-1"
       >
-        <FactoryIcon size={16} className="text-muted-foreground shrink-0" />
-        <Txt tone="ink" as="span" variant="caption" className="min-w-0 flex-1 truncate">
+        <FactoryIcon />
+        <Txt tone="ink" as="span" variant="caption" className="min-w-0 truncate">
           {activeFactory?.name ?? 'Select a factory…'}
         </Txt>
-        <ChevronsUpDown size={13} className="text-muted-foreground shrink-0" />
+        <ChevronDown size={14} className="text-muted-foreground shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => (
@@ -57,7 +53,7 @@ export function FactorySwitcher() {
         {factories.length > 0 && <DropdownMenu.Separator />}
         <DropdownMenu.Item disabled={!createFactoryFrom} onSelect={openCreateFactory}>
           <Plus />
-          <span>Create Factory</span>
+          <span>Create factory</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>

@@ -43,7 +43,7 @@ vi.mock('../bundler/workspaceDependencies', () => ({
     isWorkspacePackage: true,
   }),
 }));
-vi.mock('../bundler/find-workspaces', () => ({
+vi.mock('@internal/find-workspaces', () => ({
   findWorkspacesRoot: vi.fn().mockReturnValue({ location: '/workspace' }),
 }));
 vi.mock('empathic/package', () => ({

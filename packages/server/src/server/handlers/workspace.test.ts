@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
-import { Workspace } from '@mastra/core/workspace';
+import { Workspace, CompositeFilesystem } from '@mastra/core/workspace';
 import type { WorkspaceFilesystem, FileEntry, FileStat } from '@mastra/core/workspace';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 
@@ -428,6 +428,25 @@ describe('Workspace Handlers', () => {
       });
 
       expect(result).toEqual({ isWorkspaceConfigured: false });
+    });
+
+    it('shows a mount display name instead of its provider class name', async () => {
+      const neonMount = createMockFilesystem();
+      Object.assign(neonMount, { displayName: 'Neon Object Storage', icon: 'neon' });
+      const workspace = new Workspace({
+        id: 'neon-workspace',
+        filesystem: new CompositeFilesystem({ mounts: { '/files': neonMount } }),
+      });
+      const mastra = createMastra(workspace);
+
+      const result = await GET_WORKSPACE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'neon-workspace',
+      });
+
+      expect(result.mounts).toEqual([
+        expect.objectContaining({ path: '/files', displayName: 'Neon Object Storage', name: 'MockFilesystem' }),
+      ]);
     });
 
     it('should return workspace info with capabilities', async () => {

@@ -13,6 +13,7 @@ import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
 import {
   closeSessionProperties,
+  groupSessionsByBoard,
   openNestedSessionProperty,
   openSessionProperties,
   openSessionProperty,
@@ -81,7 +82,7 @@ const releaseItem = {
 };
 
 beforeEach(() => {
-  localStorage.removeItem('mastracode.sessionListView');
+  groupSessionsByBoard();
   stubSessionsFactory(factoryId, [projectRepositoryId]);
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/boards`, () =>
@@ -187,14 +188,13 @@ describe('Sessions sidebar groups', () => {
 
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Review sessions' })).toBeNull());
     expect(groupRegions()).toEqual(['Work sessions', 'Release Preview sessions', 'User sessions']);
-    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+    expect(sessionPropertiesTrigger(2)).toBeInTheDocument();
 
     await openSessionProperties(user);
     await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
 
-    await waitFor(() =>
-      expect(groupRegions()).toEqual(['Work sessions', 'Review sessions', 'Release Preview sessions', 'User sessions']),
-    );
+    await waitFor(() => expect(groupRegions()).toEqual(['All sessions']));
+    expect(sessionPropertiesTrigger()).toBeInTheDocument();
   });
 
   it('says so when every group that has sessions is hidden', async () => {
@@ -264,7 +264,7 @@ describe('Sessions sidebar groups', () => {
     await user.keyboard('{Alt>}{ArrowUp}{/Alt}');
     await closeSessionProperties(user);
 
-    expect(sessionPropertiesTrigger(0)).toBeInTheDocument();
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
   });
 
   it("never lists a custom board's terminal-phase session as Idle while the board catalog loads", async () => {

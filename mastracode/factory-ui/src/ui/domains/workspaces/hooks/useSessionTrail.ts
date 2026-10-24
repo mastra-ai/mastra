@@ -3,7 +3,7 @@ import { skipToken, useQuery } from '@tanstack/react-query';
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useFeedRoster } from '../../factory/components/activity/feed/useFeedRoster';
+import { useFeedRoster } from './useFeedRoster';
 import { fetchAuditEvents } from '../../factory/services/audit';
 import type { FactoryMentionMember } from '../../factory/services/members';
 import type { SessionViewerProfile } from '../services/sessionPresentation';

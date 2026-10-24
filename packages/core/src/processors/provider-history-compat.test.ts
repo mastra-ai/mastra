@@ -9,6 +9,7 @@ import {
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
   cerebrasStripReasoningContent,
+  chatCompletionsSingleSystemMessage,
   ensureUserFirstTurn,
   isMaybeAnthropic,
   isMaybeAnthropicWithoutAssistantPrefill,
@@ -18,6 +19,7 @@ import {
   isMaybeRequiringUserFirstTurn,
   ProviderHistoryCompat,
   stripForeignProviderExecutedTools,
+  toolCallEmptyInput,
 } from './provider-history-compat';
 import type { CompatRule } from './provider-history-compat';
 import { ProcessorRunner } from './runner';
@@ -451,6 +453,131 @@ describe('isMaybeRequiringUserFirstTurn', () => {
     expect(isMaybeRequiringUserFirstTurn({ provider: 'groq.chat', modelId: 'openai/gpt-oss-20b' })).toBe(false);
     expect(isMaybeRequiringUserFirstTurn({ provider: 'mistral.chat', modelId: 'mistral-small-latest' })).toBe(false);
     expect(isMaybeRequiringUserFirstTurn(undefined)).toBe(false);
+  });
+});
+
+describe('chatCompletionsSingleSystemMessage', () => {
+  const user = { role: 'user', content: [{ type: 'text', text: 'hi' }] } as const;
+  const prompt: LanguageModelV2Prompt = [
+    { role: 'system', content: 'AGENT_RULE' },
+    { role: 'system', content: '' },
+    { role: 'system', content: 'PROCESSOR_RULE', providerOptions: { openaiCompatible: { cache: true } } },
+    user,
+    { role: 'system', content: 'MID_CONVERSATION' },
+  ];
+
+  it("merges the leading system messages, keeping the last one's providerOptions", () => {
+    expect(chatCompletionsSingleSystemMessage.applyToPrompt!({ prompt, model: { provider: 'vllm.chat' } })).toEqual([
+      {
+        role: 'system',
+        content: 'AGENT_RULE\n\nPROCESSOR_RULE',
+        providerOptions: { openaiCompatible: { cache: true } },
+      },
+      user,
+      { role: 'system', content: 'MID_CONVERSATION' },
+    ]);
+  });
+
+  it('keys on the resolved API provider id over the model provider', () => {
+    // A router model reports its gateway provider (`groq`); the resolved id is `groq.chat`.
+    expect(
+      chatCompletionsSingleSystemMessage.applyToPrompt!({
+        prompt,
+        model: { provider: 'groq' },
+        apiProviderId: 'groq.chat',
+      }),
+    ).toHaveLength(3);
+    expect(
+      chatCompletionsSingleSystemMessage.applyToPrompt!({
+        prompt,
+        model: { provider: 'openai' },
+        apiProviderId: 'openai.responses',
+      }),
+    ).toBeUndefined();
+  });
+
+  it.each(['openai.responses', 'anthropic.messages', 'google.generative-ai', 'amazon-bedrock'])(
+    'leaves %s prompts unchanged',
+    provider => {
+      expect(chatCompletionsSingleSystemMessage.applyToPrompt!({ prompt, model: { provider } })).toBeUndefined();
+    },
+  );
+
+  it('leaves the prompt unchanged when an earlier system message has its own providerOptions', () => {
+    const cached: LanguageModelV2Prompt = [
+      { role: 'system', content: 'A', providerOptions: { openaiCompatible: { cache: true } } },
+      { role: 'system', content: 'B' },
+      user,
+    ];
+    expect(
+      chatCompletionsSingleSystemMessage.applyToPrompt!({ prompt: cached, model: { provider: 'vllm.chat' } }),
+    ).toBeUndefined();
+  });
+});
+
+describe('toolCallEmptyInput', () => {
+  const call = (input: unknown, toolCallId = 'c1') => ({
+    type: 'tool-call',
+    toolCallId,
+    toolName: 'team_status',
+    input,
+  });
+  const result = {
+    role: 'tool',
+    content: [
+      {
+        type: 'tool-result',
+        toolCallId: 'c1',
+        toolName: 'team_status',
+        output: { type: 'error-text', value: 'received invalid arguments' },
+      },
+    ],
+  };
+  const promptWith = (input: unknown) =>
+    [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'assistant', content: [call(input)] },
+      result,
+    ] as unknown as LanguageModelV2Prompt;
+
+  it.each([undefined, null])('sends a call with input %j as {}, keeping its paired result', input => {
+    const next = toolCallEmptyInput.applyToPrompt!({ prompt: promptWith(input), model: { provider: 'vllm.chat' } });
+    expect(next).toEqual(promptWith({}));
+  });
+
+  it('applies to every provider', () => {
+    for (const provider of ['anthropic.messages', 'openai.responses', 'google.generative-ai', 'amazon-bedrock']) {
+      expect(toolCallEmptyInput.applyToPrompt!({ prompt: promptWith(undefined), model: { provider } })).toEqual(
+        promptWith({}),
+      );
+    }
+  });
+
+  it('leaves real input, including an empty object and an empty string, unchanged', () => {
+    for (const input of [{}, { note: 'hi' }, '']) {
+      expect(toolCallEmptyInput.applyToPrompt!({ prompt: promptWith(input), model: {} })).toBeUndefined();
+    }
+  });
+
+  it('skips an assistant message whose content is not an array', () => {
+    const prompt = [{ role: 'assistant', content: 'plain text' }, ...promptWith(undefined)] as any;
+    const result = toolCallEmptyInput.applyToPrompt!({ prompt, model: {} } as any) as any[];
+    expect(result[0]).toEqual({ role: 'assistant', content: 'plain text' });
+    expect(toolCallEmptyInput.applyToPrompt!({ prompt: [prompt[0]], model: {} } as any)).toBeUndefined();
+  });
+
+  it('does not mutate the original prompt', () => {
+    const prompt = promptWith(undefined);
+    toolCallEmptyInput.applyToPrompt!({ prompt, model: {} });
+    expect((prompt[1] as any).content[0].input).toBeUndefined();
+  });
+
+  it('is part of the default ProviderHistoryCompat rule set', () => {
+    const out = new ProviderHistoryCompat().processLLMRequest({
+      prompt: promptWith(undefined),
+      model: { provider: 'anthropic.messages' },
+    } as any);
+    expect(out).toEqual({ prompt: promptWith({}) });
   });
 });
 

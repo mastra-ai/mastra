@@ -1,6 +1,7 @@
 import type { JournalEntry, LLMock } from '@copilotkit/aimock';
 import type { AgentConfig, ToolsInput } from '../../../agent';
 import type { MessageListInput } from '../../../agent/message-list';
+import type { MastraServerCache } from '../../../cache';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
 import type { RequestContext } from '../../../request-context';
@@ -51,6 +52,12 @@ export interface LoopScenarioResult {
    * `mastra.backgroundTaskManager` for background task assertions or shutdown.
    */
   mastra?: any;
+  /**
+   * The error thrown while {@link runLoopScenario} drained `fullStream`. Only
+   * returned when {@link RunLoopScenarioOptions.expectStreamError} is set;
+   * otherwise the harness rethrows it.
+   */
+  streamError?: unknown;
 }
 
 /**
@@ -389,6 +396,8 @@ export interface RunLoopScenarioOptions {
    * Use for testing the signal integration (subscribe → sendMessage → receive response).
    */
   pubsub?: PubSub;
+  /** Shared cache for durable/evented pubsub scenarios. */
+  cache?: MastraServerCache;
   /**
    * When set, {@link runLoopScenario} iterates `output.fullStream` itself
    * (instead of the default `consumeStream` drain) and returns every emitted
@@ -396,6 +405,13 @@ export interface RunLoopScenarioOptions {
    * fidelity assertions (text-delta ordering, reasoning chunks, etc.).
    */
   collectChunks?: boolean;
+  /**
+   * The scenario deliberately makes the stream throw (provider error, tripwire,
+   * abort, …). When set, a drain error is returned on
+   * {@link LoopScenarioResult.streamError}; when unset, {@link runLoopScenario}
+   * rethrows it with the original error as `cause`.
+   */
+  expectStreamError?: boolean;
   /**
    * When set, {@link runLoopScenario} returns the output WITHOUT consuming the
    * stream. The test must manually drain `output.fullStream` after publishing

@@ -88,7 +88,7 @@ export type TracesListViewProps = {
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   filtersApplied?: boolean;
   /** What the rows hold, named in the empty messages. Defaults to `traces`. */
-  resource?: 'traces' | 'spans';
+  resource?: 'traces' | 'spans' | 'threads';
   /** Currently featured/selected trace — its row gets the highlighted background. */
   featuredTraceId?: string | null;
   /**
