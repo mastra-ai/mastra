@@ -464,6 +464,11 @@ describe('serializeModelSettings timeout', () => {
 // ---------------------------------------------------------------------------
 
 describe('serializeToolMetadata', () => {
+  it('marks tools with a per-call approval function as approval-gated', () => {
+    const tool = { description: 'd', parameters: { type: 'object' }, needsApprovalFn: () => true } as any;
+    expect(serializeToolMetadata('fnTool', tool).requireApproval).toBe(true);
+  });
+
   const baseTool = {
     description: 'A test tool',
     execute: async () => 'result',

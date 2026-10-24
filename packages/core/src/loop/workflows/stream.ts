@@ -15,7 +15,14 @@ import type { ChunkType } from '../../stream/types';
 import { ChunkFrom, isDataChunk } from '../../stream/types';
 import { rebindProcessorTools } from '../../utils';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
-import { REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
+import { readScoped } from '../run-scope-access';
+import {
+  MEMORY_CONFIG_KEY,
+  REQUEST_TOOLS_KEY,
+  SAVE_QUEUE_MANAGER_KEY,
+  STEP_TOOLS_KEY,
+  THREAD_ID_KEY,
+} from '../run-scope-keys';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
@@ -520,6 +527,35 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             await deleteRunSnapshots();
           } else {
             keepRegisteredForResume = true;
+
+            // A suspension kills the tool-call foreach before llmMappingStep
+            // can commit the step's finished sibling results — commit and
+            // persist them here so they are not lost to the suspend snapshot
+            // (issue #26514). Imported lazily: this module's static import
+            // graph is on agent.ts's critical type-checking path, and the
+            // suspension exit is rare.
+            try {
+              const { commitSuspendedSiblingToolResults } = await import('./suspended-sibling-results');
+              const scopeCtx = { mastra: rest.mastra, runId, _internal };
+              const committed = await commitSuspendedSiblingToolResults({
+                executionSteps: (executionResult as { steps?: Record<string, unknown> }).steps,
+                messageList,
+                scopeCtx,
+                tools: rest.tools as ToolSet | undefined,
+                runId,
+                logger: rest.logger,
+                requestContext,
+                processorRunner: dataChunkProcessorRunner,
+              });
+              const saveQueueManager = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
+              const memoryConfig = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
+              const threadId = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+              if (committed && saveQueueManager && threadId && !memoryConfig?.readOnly) {
+                await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
+              }
+            } catch (error) {
+              rest.logger?.warn('Failed to commit sibling tool results for suspended run', { runId, error });
+            }
           }
 
           safeClose(controller);

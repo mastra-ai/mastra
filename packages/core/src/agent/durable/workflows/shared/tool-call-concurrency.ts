@@ -79,3 +79,24 @@ export function resolveDurableToolCallConcurrency({
 
   return limit > 0 ? limit : DurableAgentDefaults.TOOL_CALL_CONCURRENCY;
 }
+
+/**
+ * Whether a queued tool call may still start after a sibling suspended in the
+ * same step. Approval-gated and suspend-capable calls wait for the resume so
+ * approvals stay one at a time; everything else runs (#26514).
+ */
+export function canDurableToolCallRunAfterSuspend({
+  options,
+  toolsMetadata,
+  toolCall,
+}: {
+  options?: Pick<SerializableDurableOptions, 'requireToolApproval'>;
+  toolsMetadata?: SerializableToolMetadata[];
+  toolCall?: Pick<DurableToolCallInput, 'toolName' | 'requireApproval' | 'hasSuspendSchema'>;
+}): boolean {
+  if (!toolCall || options?.requireToolApproval || toolCall.requireApproval || toolCall.hasSuspendSchema) {
+    return false;
+  }
+  const meta = toolsMetadata?.find(tool => tool.name === toolCall.toolName || tool.id === toolCall.toolName);
+  return !meta?.requireApproval && !meta?.hasSuspendSchema;
+}
