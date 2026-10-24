@@ -674,6 +674,76 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(ticks).toBe(12);
   }, 30_000);
 
+  it('spaces out retakes while every handover fails, and goes on once one succeeds', async () => {
+    const thread = 'failing-handover-pacing-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    const prompt = 'failing handover pacing run';
+    llm.on(
+      { userMessage: prompt, sequenceIndex: 0 },
+      { toolCalls: [{ id: 'call_failing_handover', name: 'run_command', arguments: {} }] },
+    );
+    llm.on({ userMessage: prompt, sequenceIndex: 1 }, { content: 'failing handover done' });
+
+    const shared = new SharedLeases();
+    /** Once cut, the run's own renewals hang; every handover of a retake token is rejected until healed. */
+    class FailingHandoverPubSub extends ReplicaPubSub {
+      cut = false;
+      failing = true;
+      handovers = 0;
+      override async renewLease(k: string, owner: string, ttlMs: number) {
+        if (this.cut && k === key && !owner.includes('\u0000retake\u0000')) await new Promise(() => {});
+        return super.renewLease(k, owner, ttlMs);
+      }
+      override async transferLease(k: string, from: string, to: string, ttlMs: number) {
+        if (k === key && from.includes('\u0000retake\u0000')) {
+          this.handovers++;
+          if (this.failing) throw new Error('transfer rejected');
+          this.cut = false;
+        }
+        return super.transferLease(k, from, to, ttlMs);
+      }
+    }
+    const pubsub = new FailingHandoverPubSub(shared);
+    let started = false;
+    let finish = () => {};
+    const finished = new Promise<void>(resolve => (finish = resolve));
+    const runCommand = createTool({
+      id: 'run_command',
+      description: 'Run a command',
+      inputSchema: z.object({}),
+      execute: async () => {
+        started = true;
+        await finished;
+        return 'command finished';
+      },
+    });
+    const { output, drain } = await startStream(
+      replica(shared, new MockMemory(), { run_command: runCommand }, pubsub),
+      prompt,
+      {
+        maxSteps: 4,
+        memory: { thread, resource: RESOURCE },
+      },
+    );
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(started).toBe(true), { timeout: 5_000 });
+
+    pubsub.cut = true;
+    await vi.waitFor(() => expect(pubsub.handovers).toBeGreaterThan(0), { timeout: 5_000 });
+    const before = pubsub.handovers;
+    await new Promise(resolve => setTimeout(resolve, 1_000));
+    const inOneSecond = pubsub.handovers - before;
+
+    pubsub.failing = false;
+    finish();
+    await done;
+
+    // A backend that rejects every handover at once is asked again at a measured pace, not in a tight loop.
+    expect(inOneSecond).toBeLessThan(100);
+    expect(await output.finishReason).toBe('stop');
+    expect(await output.text).toBe('failing handover done');
+  }, 30_000);
+
   it('keeps a run whose lease backend stops answering during a running command, once it gets the lease back', async () => {
     const thread = 'silent-backend-running-command-thread';
     const prompt = 'silent backend command run';
