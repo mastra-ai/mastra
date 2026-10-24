@@ -4,12 +4,18 @@
  * run applies the rule; a run whose scopes this process can't see (another process owns it)
  * never matches. Scope-less signals and another agent's run behave as before.
  */
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Agent } from '../agent';
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
-import { ControlledLeasePubSub, createTextStreamModel, waitForCondition } from './signals-test-utils';
+import {
+  ControlledLeasePubSub,
+  createTextStreamModel,
+  readNextRunWithParts,
+  waitForCondition,
+} from './signals-test-utils';
 
 const agentNamed = (id: string) =>
   new Agent({ id, name: id, instructions: 'Test', model: createTextStreamModel('response') });
@@ -248,5 +254,86 @@ describe('Agent signals: per-message scopes', () => {
       runId: 'winner-run',
     });
     expect(pubsub.publishedData.some(event => event?.type === 'signal-enqueued')).toBe(false);
+  });
+
+  it("never puts a scoped message from another process into a busy claimed owner's run", async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = agentThreadStreamRuntime;
+    const senderRuntime = new AgentThreadStreamRuntime();
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => (releaseFirst = resolve));
+    const prompts: string[] = [];
+    const ownerAgent = new Agent({
+      id: 'scoped-claimed-owner',
+      name: 'Scoped Claimed Owner',
+      instructions: 'Test',
+      pubsub,
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(JSON.stringify(prompt));
+          const call = prompts.length;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({ type: 'text-start', id: `text-${call}` });
+                controller.enqueue({ type: 'text-delta', id: `text-${call}`, delta: `answer ${call}. ` });
+                controller.enqueue({ type: 'text-end', id: `text-${call}` });
+                if (call === 1) await firstFinished;
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      }),
+    });
+    const senderAgent = new Agent({
+      id: 'scoped-claimed-sender',
+      name: 'Scoped Claimed Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'scoped-claimed-user', threadId: 'scoped-claimed-thread' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const firstRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+    const sendRemote = (contents: string, scopes?: string[]) =>
+      senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents },
+        { ...target, ...(scopes ? { scopes } : {}), ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+
+    try {
+      await expect(sendRemote('start the run').accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => prompts.length === 1);
+      const activeRunId = subscription.activeRunId();
+
+      // The request to the owner carries no scopes, so a scoped message is refused at the sender.
+      await expect(sendRemote('scoped while busy', ['request:r2']).accepted).rejects.toThrow(
+        "scopes don't cross processes",
+      );
+      // A scope-less message still joins the run in flight (#28298).
+      await expect(sendRemote('plain while busy').accepted).resolves.toEqual({ action: 'deliver', runId: activeRunId });
+
+      releaseFirst();
+      await firstRun;
+      await pubsub.flush();
+      expect(prompts.join('')).toContain('plain while busy');
+      expect(prompts.join('')).not.toContain('scoped while busy');
+    } finally {
+      releaseFirst();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
   });
 });
