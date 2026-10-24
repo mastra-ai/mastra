@@ -6,6 +6,7 @@ import type {
   AppendKnowledgeInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
+  KnowledgeConcreteRole,
   KnowledgeScope,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
@@ -28,6 +29,7 @@ import type { KnowledgeInstructionsOption } from './instructions';
 import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, MAX_PINNED_MAX_TOKENS } from './pinned';
 import {
   materializeKnowledgeScopePlan,
+  ownedKnowledgeScopeRole,
   validateKnowledgeScopeTypes,
   validateKnowledgeStructurePlan,
 } from './reconcile';
@@ -240,6 +242,15 @@ export class Knowledge extends MastraBase {
     });
     const existingAddresses = new Set(existing.map(node => node.address));
     return [...configured, ...templated.filter(child => existingAddresses.has(child.address))];
+  }
+
+  /**
+   * The role a run holding `heldTags` writable has on scope `tag` through ownership declared by
+   * this instance's scope types (`access` principals with `$params` bound from `tag`). Computed
+   * from config at call time; no stored grants are read. @internal
+   */
+  __ownedScopeRole(tag: string, heldTags: readonly string[]): KnowledgeConcreteRole | undefined {
+    return ownedKnowledgeScopeRole(this.#scopeTypes!, tag, heldTags);
   }
 
   /**

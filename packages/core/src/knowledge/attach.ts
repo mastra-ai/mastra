@@ -1,4 +1,4 @@
-import type { KnowledgeScope, KnowledgeStorage } from '../storage';
+import type { KnowledgeConcreteRole, KnowledgeScope, KnowledgeStorage } from '../storage';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 import type { KnowledgeToolContext } from './knowledge-tools';
@@ -12,6 +12,7 @@ export interface KnowledgeToolHost {
   getKnowledgeStore(): Promise<KnowledgeStorage>;
   getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined>;
   getKnowledgeInstance(): {
+    __ownedScopeRole?(tag: string, heldTags: readonly string[]): KnowledgeConcreteRole | undefined;
     __getVisibleStructureScopes(
       scope: KnowledgeScope,
     ): Promise<Array<{ address: string; name: string; description?: string; heldAncestors?: string[] }>>;
@@ -66,7 +67,7 @@ export function buildKnowledgeTools(host: KnowledgeToolHost, groups: KnowledgeTo
   if (groups.read) Object.assign(tools, createKnowledgeTools(host));
   if (groups.write) {
     const options = (context: KnowledgeToolContext | undefined) => ({
-      ...resolveKnowledgeRunAccess(context),
+      ...resolveKnowledgeRunAccess(context, host.getKnowledgeInstance()),
       sourceThreadId: sourceThreadId(context),
     });
     Object.assign(
