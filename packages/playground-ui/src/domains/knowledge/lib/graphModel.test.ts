@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type {
-  KnowledgeBoundaryNode,
-  KnowledgeGraphEdge,
-  KnowledgeGraphNode,
-  KnowledgeGraphRecord,
-} from '../../services/knowledge';
+import type { KnowledgeBoundaryNode, KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphRecord } from '../types';
 import {
   BOUNDARY_NODE_SIZE,
   degreeMap,

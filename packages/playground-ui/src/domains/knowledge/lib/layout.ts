@@ -125,8 +125,8 @@ function resolveOverlaps(nodes: SimNode[]): void {
     let moved = false;
     for (let i = 0; i < order.length; i++) {
       for (let j = i + 1; j < order.length; j++) {
-        const a = order[i];
-        const b = order[j];
+        const a = order[i]!;
+        const b = order[j]!;
         // Pair breathing room = the smaller of the two paddings, so tiny
         // record markers can nestle close without knowledge nodes colliding.
         const minDistance = a.size / 2 + b.size / 2 + Math.min(a.padding, b.padding);

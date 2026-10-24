@@ -24,10 +24,10 @@ import { KnowledgeList } from '../domains/factory/components/knowledge/Knowledge
 import {
   knowledgeActivityLabel,
   KNOWLEDGE_ACTIVITY_TRUNCATED,
-} from '../domains/factory/components/knowledge/activityLabel';
+} from '@mastra/playground-ui/domains/knowledge/lib/activityLabel';
 import { KnowledgeSearch } from '../domains/factory/components/knowledge/KnowledgeSearch';
-import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
-import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
+import type { Arrivals, DiffBaseline } from '@mastra/playground-ui/domains/knowledge/lib/graphDiff';
+import { computeArrivals } from '@mastra/playground-ui/domains/knowledge/lib/graphDiff';
 import type {
   KnowledgeActivityEvent,
   KnowledgeGraphNode,
@@ -38,7 +38,7 @@ import type {
   KnowledgeSelection,
 } from '../domains/factory/services/knowledge';
 import { RequestError } from '../domains/factory/services/request';
-import { useInteractionIdle } from '../domains/factory/components/knowledge/useInteractionIdle';
+import { useInteractionIdle } from '@mastra/playground-ui/domains/knowledge/hooks/useInteractionIdle';
 import { KnowledgeScopeFlyout } from '../domains/factory/components/knowledge/KnowledgeScopeFlyout';
 
 /**

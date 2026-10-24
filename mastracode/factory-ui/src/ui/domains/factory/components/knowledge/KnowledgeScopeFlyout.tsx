@@ -3,7 +3,10 @@ import { X } from 'lucide-react';
 
 import { useKnowledgeActivity } from '../../../../../hooks/useKnowledgeGraph';
 import type { KnowledgeActivityEvent, KnowledgeScopeNode, KnowledgeSelection } from '../../services/knowledge';
-import { knowledgeActivityLabel, KNOWLEDGE_ACTIVITY_TRUNCATED } from './activityLabel';
+import {
+  knowledgeActivityLabel,
+  KNOWLEDGE_ACTIVITY_TRUNCATED,
+} from '@mastra/playground-ui/domains/knowledge/lib/activityLabel';
 
 interface KnowledgeScopeFlyoutProps {
   factoryProjectId: string;

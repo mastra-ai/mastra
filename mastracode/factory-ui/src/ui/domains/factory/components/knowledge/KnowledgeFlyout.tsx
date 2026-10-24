@@ -16,12 +16,12 @@ import { ExternalLink, Pin, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { knowledgeScopes } from './knowledgeScope';
-import { getRecordBorderClass, getRecordRingClass } from './knowledgeStyles';
+import { knowledgeScopes } from '@mastra/playground-ui/domains/knowledge/lib/knowledgeScope';
+import { getRecordBorderClass, getRecordRingClass } from '@mastra/playground-ui/domains/knowledge/lib/knowledgeStyles';
 
 import { useKnowledgeNode } from '../../../../../hooks/useKnowledgeGraph';
 import type { KnowledgeNodeRecord, KnowledgeRung } from '../../services/knowledge';
-import { parseRecordSegments } from './recordText';
+import { parseRecordSegments } from '@mastra/playground-ui/domains/knowledge/lib/recordText';
 
 const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
 

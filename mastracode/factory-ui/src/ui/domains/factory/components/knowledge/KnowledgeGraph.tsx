@@ -31,7 +31,12 @@ import { Boxes, Globe, Pin } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../../services/knowledge';
-import type { NodeFlowNode, KnowledgeFlowEdge, KnowledgeGraphFilters, RecordFlowNode } from './graphModel';
+import type {
+  NodeFlowNode,
+  KnowledgeFlowEdge,
+  KnowledgeGraphFilters,
+  RecordFlowNode,
+} from '@mastra/playground-ui/domains/knowledge/lib/graphModel';
 import {
   deriveRecordElements,
   egoGraph,
@@ -45,10 +50,10 @@ import {
   shouldShowLabel,
   toFlowGraph,
   toRecordFlow,
-} from './graphModel';
-import type { Arrivals } from './graphDiff';
-import { runLayout } from './layout';
-import { knowledgeScopes } from './knowledgeScope';
+} from '@mastra/playground-ui/domains/knowledge/lib/graphModel';
+import type { Arrivals } from '@mastra/playground-ui/domains/knowledge/lib/graphDiff';
+import { runLayout } from '@mastra/playground-ui/domains/knowledge/lib/layout';
+import { knowledgeScopes } from '@mastra/playground-ui/domains/knowledge/lib/knowledgeScope';
 import {
   getKnowledgeEdgeStyle,
   getKnowledgeNodeStyle,
@@ -56,8 +61,8 @@ import {
   getRecordRingClass,
   isKnowledgeNode,
   isRecordNode,
-} from './knowledgeStyles';
-import type { KnowledgeFlowNode } from './knowledgeStyles';
+} from '@mastra/playground-ui/domains/knowledge/lib/knowledgeStyles';
+import type { KnowledgeFlowNode } from '@mastra/playground-ui/domains/knowledge/lib/knowledgeStyles';
 import './knowledge.css';
 
 const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };

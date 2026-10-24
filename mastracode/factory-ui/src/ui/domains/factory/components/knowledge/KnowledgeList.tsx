@@ -3,7 +3,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight, Pin } from 'lucide-react';
 
 import type { KnowledgeGraphNode, KnowledgeGraphPayload } from '../../services/knowledge';
-import { parseRecordSegments } from './recordText';
+import { parseRecordSegments } from '@mastra/playground-ui/domains/knowledge/lib/recordText';
 
 /**
  * Tap-friendly reading of the same bounded lens payload the canvas renders:
