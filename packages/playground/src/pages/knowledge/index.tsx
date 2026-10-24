@@ -54,7 +54,8 @@ export default function KnowledgePage() {
       </Shell>
     );
   }
-  if (error && is403ForbiddenError(error)) {
+  // Only a 403 on the instance list means no `knowledge:read`; a refused scope tag on the graph stays inline.
+  if (instances.error && is403ForbiddenError(instances.error)) {
     return (
       <Shell>
         <PermissionDenied variant="fill" resource="knowledge" />
@@ -151,6 +152,13 @@ export default function KnowledgePage() {
             />
           ) : graph.isPending ? (
             <p className="p-4 text-body text-muted-foreground">Loading knowledge…</p>
+          ) : graph.isError && is403ForbiddenError(graph.error) ? (
+            <EmptyState
+              tone="error"
+              variant="fill"
+              titleSlot="That scope is not available to you"
+              descriptionSlot="The server refused one or more of these scope tags. Edit the tags above and press View."
+            />
           ) : graph.isError ? (
             <EmptyState
               tone="error"

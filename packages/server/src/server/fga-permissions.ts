@@ -60,4 +60,5 @@ const realPermissions = (authEE as any).MastraFGAPermissions;
 // accesses (`MastraFGAPermissions.AGENTS_READ`) flow through cleanly on every
 // supported core.
 export const MastraFGAPermissions: any =
-  realPermissions && Object.keys(realPermissions).length > 0 ? realPermissions : FALLBACK_PERMISSIONS;
+  // Merge so a core that exports the map without a newer key (older than this PR) still resolves it.
+  { ...FALLBACK_PERMISSIONS, ...(realPermissions ?? {}) };

@@ -61,6 +61,19 @@ describe('Knowledge page', () => {
     expect(await screen.findByText('Knowledge browsing is not enabled')).toBeTruthy();
   });
 
+  it('keeps the scope form when the server refuses a scope tag', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/knowledge`, () => HttpResponse.json({ instances: [{ key: 'main', id: 'kb' }] })),
+      http.get(`${TEST_BASE_URL}/api/knowledge/main/graph`, () =>
+        HttpResponse.json({ error: 'outside the caller scope' }, { status: 403 }),
+      ),
+    );
+    renderPage('/knowledge?scope=org:acme');
+    expect(await screen.findByText('That scope is not available to you')).toBeTruthy();
+    expect(screen.getByLabelText('Scope tags')).toBeTruthy();
+    expect(screen.queryByText(/Permission Denied/i)).toBeNull();
+  });
+
   it('asks for a scope before reading anything', async () => {
     let graphRequests = 0;
     server.use(
