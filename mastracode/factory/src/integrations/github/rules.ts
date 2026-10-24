@@ -10,6 +10,7 @@ import {
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
+import { requestsChangesVerdict } from '../../review-verdict.js';
 import { selectEventRule } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
@@ -129,10 +130,14 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
     // A comment on a PR arrives as `issue_comment` with `issue.pull_request` set.
     // It routes to the PR's own event so it binds to the authoring Work item via
     // provenance instead of being mistaken for a comment on an issue of the same
-    // number. Only `created` matters: edits and deletions of an existing comment
-    // are not new feedback to act on.
+    // number. Edits and deletions are not new feedback, with one exception: the
+    // review skill updates its earlier request-changes verdict in place instead
+    // of posting a new one, and that edit is the only handoff the author gets.
     if (object(issue?.pull_request)) {
-      return action === 'created' ? 'pullRequestCommentCreated' : undefined;
+      if (action === 'created') return 'pullRequestCommentCreated';
+      return action === 'edited' && editedRequestChangesVerdict(parsed.payload, parsed.payload.comment)
+        ? 'pullRequestCommentCreated'
+        : undefined;
     }
     if (action === 'created') return 'issueCommentCreated';
     if (action === 'edited') return 'issueCommentEdited';
@@ -145,7 +150,19 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
   }
   if (parsed.event === 'pull_request' && action === 'review_requested') return 'pullRequestReviewRequested';
   if (parsed.event === 'pull_request_review' && action === 'submitted') return 'pullRequestReviewSubmitted';
+  if (parsed.event === 'pull_request_review' && action === 'edited') {
+    const review = object(parsed.payload.review);
+    return string(review?.state)?.toLowerCase() === 'changes_requested' &&
+      editedRequestChangesVerdict(parsed.payload, review)
+      ? 'pullRequestReviewSubmitted'
+      : undefined;
+  }
   return undefined;
+}
+
+/** A body edit that leaves a Factory request-changes verdict on the post. */
+function editedRequestChangesVerdict(payload: Record<string, unknown>, post: unknown): boolean {
+  return object(object(payload.changes)?.body) !== undefined && requestsChangesVerdict(string(object(post)?.body));
 }
 
 /**
