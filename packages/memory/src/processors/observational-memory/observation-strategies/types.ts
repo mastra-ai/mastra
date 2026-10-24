@@ -6,7 +6,33 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Extractor } from '../extractor';
+import type { ObservationGroup } from '../observation-groups';
 import type { ObservationModelContext, ObserveHooks, ObserveTrigger } from '../types';
+
+/** One observation group's vector write, as handed to `onIndexObservations`. */
+export interface ObservationIndexWrite {
+  text: string;
+  groupId: string;
+  range: string;
+  threadId: string;
+  resourceId: string;
+  observedAt?: Date;
+  recordId?: string;
+}
+
+/** The generation an observation group was committed to. */
+export type ObservationIndexRecord = Pick<
+  ObservationalMemoryRecord,
+  'id' | 'threadId' | 'resourceId' | 'generationCount'
+>;
+
+/** A committed group's vector write that failed, kept for a later cycle to retry. */
+export interface UnindexedObservation {
+  write: ObservationIndexWrite;
+  record: ObservationIndexRecord;
+  /** Set while a cycle is writing it, so concurrent cycles do not write it twice. */
+  writing?: boolean;
+}
 
 /** Parameters for running an observation via a strategy. */
 export interface ObservationRunOpts {
@@ -78,6 +104,8 @@ export interface ProcessedObservation {
   cycleObservationTokens: number;
   observedMessageIds: string[];
   lastObservedAt: Date;
+  /** The observation group this cycle added, as composed. Only it needs a new vector write. */
+  newObservationGroup?: ObservationGroup;
   threadMetadataUpdates?: Array<{
     threadId: string;
     lastObservedAt: string;

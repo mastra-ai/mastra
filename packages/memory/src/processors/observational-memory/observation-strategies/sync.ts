@@ -195,13 +195,14 @@ export class SyncObservationStrategy extends ObservationStrategy {
     const { threadId, messages } = this.opts;
 
     const lastObservedAt = this.getMaxMessageTimestamp(messages);
-    const messageRange = this.retrieval ? buildMessageRange(messages) : undefined;
+    // Build the group this cycle adds before merging it, so the commit carries exactly that group.
+    const newObservationGroup = this.createObservationGroup(output.observations, buildMessageRange(messages));
     const newObservations = await this.wrapObservations(
       output.observations,
       existingObservations,
       threadId,
       lastObservedAt,
-      messageRange,
+      newObservationGroup,
     );
     const observationTokens = this.tokenCounter.countObservations(newObservations);
     const cycleObservationTokens = this.tokenCounter.countObservations(output.observations);
@@ -216,6 +217,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       cycleObservationTokens,
       observedMessageIds,
       lastObservedAt,
+      newObservationGroup,
       suggestedContinuation: output.suggestedContinuation,
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
@@ -254,6 +256,16 @@ export class SyncObservationStrategy extends ObservationStrategy {
       return { status: 'not-committed', reason: 'the observational memory head kept changing during the commit' };
     }
     processed = committed.processed;
+    // Queue only the group this commit added, before anything below can fail the cycle. Earlier
+    // groups were indexed by the cycle that added them, and reflected groups are not observation
+    // output. A covered cycle added nothing.
+    if (!committed.alreadyCovered && processed.newObservationGroup) {
+      this.queueObservationGroups(
+        [{ group: processed.newObservationGroup, threadId, observedAt: processed.lastObservedAt }],
+        resourceId,
+        committed.record,
+      );
+    }
 
     // A covered cycle wrote nothing; the instance that did commit owns the thread's title,
     // task, and cursor metadata, so this cycle's output must not overwrite them.
@@ -295,15 +307,8 @@ export class SyncObservationStrategy extends ObservationStrategy {
       }
     }
 
-    if (!committed.alreadyCovered) {
-      await this.indexObservationGroups(
-        processed.observations,
-        threadId,
-        resourceId,
-        processed.lastObservedAt,
-        committed.record.id,
-      );
-    }
+    // Write the queued group, including earlier ones of this lineage whose write failed.
+    await this.indexQueuedObservationGroups(committed.record);
 
     return { status: 'committed', processed, record: committed.record, alreadyCovered: committed.alreadyCovered };
   }

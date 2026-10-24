@@ -31,6 +31,7 @@ ObservationStrategy.create = ((om: ObservationalMemory, opts: ObservationRunOpts
     observedMessageIds: om.observedMessageIds,
     obscureThreadIds: om.getObscureThreadIds(),
     onIndexObservations: om.onIndexObservations,
+    unindexedObservations: om.unindexedObservations,
     emitDebugEvent: e => om.emitDebugEvent(e),
     prepareObserverContext: (observations, record) => om.prepareObserverContext(observations, record),
   };

@@ -120,15 +120,12 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       };
     }
 
-    const messageRange = this.retrieval ? buildMessageRange(messages) : undefined;
+    const group = this.createObservationGroup(output.observations, buildMessageRange(messages));
     let newObservations: string;
     if (this.scope === 'resource') {
-      newObservations = await this.wrapWithThreadTag(threadId, output.observations, messageRange);
+      newObservations = await this.wrapWithThreadTag(threadId, output.observations, group);
     } else {
-      newObservations =
-        this.retrieval && messageRange
-          ? wrapInObservationGroup(output.observations, messageRange)
-          : output.observations;
+      newObservations = group ? wrapInObservationGroup(group.content, group.range, group.id) : output.observations;
     }
 
     const observationTokens = this.tokenCounter.countObservations(newObservations);
@@ -252,7 +249,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
         threadId,
         resourceId,
         processed.lastObservedAt,
-        this.persistedRecordId,
+        committedRecord,
       );
 
       // Persist extracted values immediately; buffered observation activation is unrelated to extractor state.
