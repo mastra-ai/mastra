@@ -13,7 +13,7 @@ Knowledge is experimental and can change without notice.
 
 :::
 
-Set `knowledge` on an agent to give it Knowledge tools. Memory isn't required.
+Set `knowledge` on an agent to give it Knowledge tools. Memory isn't required. Pass the instance, or the key it's registered under on `Mastra`.
 
 ```typescript
 const agent = new Agent({
@@ -34,17 +34,17 @@ const knowledge = new Knowledge({
   id: 'company',
   storage,
   tools: { read: true, write: true },
-  pins: { maxPins: 20, maxTokens: 500 },
+  pins: { maxPins: 20 },
 })
 ```
 
 | Option | Gives the agent | Default |
 |---|---|---|
-| `tools.read` | Search records and read nodes | on |
-| `tools.write` | Append, edit, and remove records | off |
-| `pins` | Pin tools, and the pin set in context | off |
+| `tools.read` | `knowledge_search`, `knowledge_read`, `knowledge_browse` | on |
+| `tools.write` | `knowledge_create`, `knowledge_append`, `knowledge_remove`, plus node tools such as `knowledge_update_node`, `knowledge_rename_node`, `knowledge_merge_nodes`, and `knowledge_rescope` | off |
+| `pins` | `knowledge_pin`, `knowledge_edit_pin`, `knowledge_unpin`, and the pin set in context every turn | off |
 
-Set `pins: true` for the default budget, or pass `maxPins` and `maxTokens`.
+Set `pins: true` for the default limit of pins, or pass `maxPins`.
 
 ## How scopes limit the tools
 
@@ -54,10 +54,10 @@ Every tool takes an optional `scope` argument: a list of tags. The run's own tag
 - **Writes** land at exactly the `scope` tags when given, otherwise at every tag the run holds. Each tag must be held or owned with write access.
 - **Pins** default to every run tag except `thread`.
 
-To fix the scope yourself, create the tools directly. The `scope` argument is then not exposed to the model:
+To wire the tools yourself, for example into an agent's `tools`, call `createTools`. It defaults to the groups configured on the instance:
 
 ```typescript
-const tools = knowledge.createTools({ write: true, scope: ['team:acme:director'] })
+const tools = knowledge.createTools({ write: true })
 ```
 
 ## Memory and pins
