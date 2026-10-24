@@ -39,6 +39,7 @@ import type { MastraStreamReturn } from './stream-types';
 import { SYSTEM_ROUTES } from './system';
 import { TOOL_PROVIDER_ROUTES } from './tool-providers';
 import { TOOLS_ROUTES } from './tools';
+import { KNOWLEDGE_ROUTES } from './knowledge';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
 import { WORKSPACE_ROUTES } from './workspace';
@@ -175,6 +176,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...OBSERVABILITY_ROUTES,
   ...LOGS_ROUTES,
   ...VECTORS_ROUTES,
+  ...KNOWLEDGE_ROUTES,
   ...A2A_ROUTES,
   ...WORKSPACE_ROUTES,
   ...LEGACY_ROUTES,
@@ -215,6 +217,7 @@ export type ServerRoutes = readonly [
   ...typeof OBSERVABILITY_ROUTES,
   ...typeof LOGS_ROUTES,
   ...typeof VECTORS_ROUTES,
+  ...typeof KNOWLEDGE_ROUTES,
   ...typeof A2A_ROUTES,
   ...typeof AGENT_BUILDER_ROUTES,
   ...typeof WORKSPACE_ROUTES,
