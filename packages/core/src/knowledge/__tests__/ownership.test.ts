@@ -209,4 +209,110 @@ describe('Knowledge ownership computed from the structure', () => {
     );
     expect(toolErrors(result)).toEqual(['This run does not hold scope "request:r25".']);
   });
+
+  it('grants nothing through unbound $param, self, parent or mirror principals', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore({ id: 'own-ignored-principals' }),
+      tools: { write: true },
+      scopes: {
+        'team:$orgId:$teamId': {
+          access: [
+            { principal: 'org:$tenantId', role: 'owner' },
+            { principal: 'self', role: 'owner' },
+            { principal: 'parent', role: 'mirror' },
+          ],
+        },
+      },
+    });
+    const result = await run(
+      knowledge,
+      ['org:acme', 'org:xtenantId'],
+      [{ toolName: 'knowledge_create', input: { name: 'N', kind: 'doc', text: 'x', scope: ['team:acme:x'] } }],
+    );
+    expect(toolErrors(result)).toEqual(['This run does not hold scope "team:acme:x".']);
+  });
+
+  it('uses the strongest role across principals and names held and needed roles when short', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore({ id: 'own-strongest' }),
+      tools: { write: true },
+      scopes: {
+        'team:$orgId:$teamId': {
+          access: [
+            { principal: 'org:$orgId', role: 'readonly' },
+            { principal: 'admin:$orgId', role: 'append' },
+          ],
+        },
+      },
+    });
+    const created = await run(
+      knowledge,
+      ['org:acme', 'admin:acme'],
+      [{ toolName: 'knowledge_create', input: { name: 'N', kind: 'doc', text: 'x', scope: ['team:acme:x'] } }],
+    );
+    expect(toolErrors(created)).toEqual([]);
+    const removed = await run(
+      knowledge,
+      ['org:acme', 'admin:acme'],
+      [{ toolName: 'knowledge_remove', input: { recordId: toolResults(created)[0].record.id } }],
+    );
+    expect(toolErrors(removed)).toEqual(['This run reaches "team:acme:x" with role append; this needs edit.']);
+  });
+
+  it('refuses a target with one owned and one unowned tag for write and remove', async () => {
+    const knowledge = companyKnowledge('own-mixed');
+    const seeded = await run(
+      knowledge,
+      ['org:acme', 'project:p'],
+      [
+        {
+          toolName: 'knowledge_create',
+          input: { name: 'Mixed', kind: 'doc', text: 'x', scope: ['team:acme:x', 'project:p'] },
+        },
+      ],
+    );
+    const recordId = toolResults(seeded)[0].record.id;
+
+    const outsider = await run(
+      knowledge,
+      ['org:acme'],
+      [
+        {
+          toolName: 'knowledge_create',
+          input: { name: 'M2', kind: 'doc', text: 'y', scope: ['team:acme:x', 'project:p'] },
+        },
+        { toolName: 'knowledge_remove', input: { recordId } },
+      ],
+    );
+    expect(toolErrors(outsider)).toEqual([
+      'This run does not hold scope "project:p".',
+      "KnowledgeRecord is outside this run's visible scope.",
+    ]);
+  });
+
+  it("needs edit to overwrite an existing node's content, append to create one", async () => {
+    const knowledge = companyKnowledge('own-content', 'append');
+    const created = await run(
+      knowledge,
+      ['org:acme'],
+      [{ toolName: 'knowledge_write_node_content', input: { name: 'Doc', content: 'v1', scope: ['team:acme:x'] } }],
+    );
+    expect(toolErrors(created)).toEqual([]);
+    const overwrite = await run(
+      knowledge,
+      ['org:acme'],
+      [
+        {
+          toolName: 'knowledge_write_node_content',
+          input: {
+            name: 'Doc',
+            content: 'v2',
+            scope: ['team:acme:x'],
+            expectedVersion: toolResults(created)[0].version,
+          },
+        },
+      ],
+    );
+    expect(toolErrors(overwrite)).toEqual(['This run reaches "team:acme:x" with role append; this needs edit.']);
+  });
 });

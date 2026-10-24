@@ -75,6 +75,8 @@ export interface KnowledgeWriteToolsOptions {
   /** What the run reaches through ownership on scopes it doesn't hold. */
   owner?: KnowledgeOwnerLookup;
   sourceThreadId: string;
+  /** Stamped as `metadata.source` on every record written, e.g. `agent:<id>`. */
+  source?: string;
 }
 
 async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeStorage> {
@@ -307,6 +309,7 @@ export function createKnowledgeWriteTools(
           text: value.text,
           scope: recordScope,
           sourceThreadId: options.sourceThreadId,
+          ...(options.source ? { metadata: { source: options.source } } : {}),
           when,
           resolutionScope: options.scope,
           defaultScope: nodeScope,
@@ -345,6 +348,7 @@ export function createKnowledgeWriteTools(
           text: value.text,
           scope,
           sourceThreadId: options.sourceThreadId,
+          ...(options.source ? { metadata: { source: options.source } } : {}),
           when,
           resolutionScope: options.scope,
           defaultScope: scope,
@@ -572,6 +576,7 @@ export function createKnowledgeWriteTools(
           return node;
         }
         if (value.expectedVersion === undefined) throw new Error('Updating node content requires expectedVersion.');
+        requireVisible(existing.scope, options, 'Knowledge node', 'edit');
         return store.updateNode({
           id: existing.id,
           version: value.expectedVersion,

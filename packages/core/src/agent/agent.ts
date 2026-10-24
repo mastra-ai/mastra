@@ -1865,10 +1865,7 @@ export class Agent<
     return [new WorkspaceInstructionsProcessor({ workspace })];
   }
 
-  #getKnowledgeProcessors(
-    configuredProcessors: InputProcessorOrWorkflow[],
-    hasMemory: boolean,
-  ): InputProcessorOrWorkflow[] {
+  #getKnowledgeProcessors(configuredProcessors: InputProcessorOrWorkflow[]): InputProcessorOrWorkflow[] {
     const knowledge = this.getKnowledge();
     if (!knowledge) return [];
     const configuredIds = new Set(
@@ -1879,7 +1876,7 @@ export class Agent<
     if (instructions && !configuredIds.has(KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID)) {
       processors.push(new KnowledgeInstructionsProcessor(instructions));
     }
-    if (knowledge.pinsEnabled && hasMemory && !configuredIds.has(SUBCONSCIOUS_PINS_STATE_ID)) {
+    if (knowledge.pinsEnabled && !configuredIds.has(SUBCONSCIOUS_PINS_STATE_ID)) {
       processors.push(new PinnedStateProcessor({ getKnowledgeStore: () => knowledge.getStorage() }));
     }
     return processors;
@@ -2479,7 +2476,7 @@ export class Agent<
     const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, requestContext);
 
     // Knowledge usage instructions, and pins when there is a Memory thread to carry their state signal
-    const knowledgeProcessors = this.#getKnowledgeProcessors(configuredProcessors, Boolean(memory));
+    const knowledgeProcessors = this.#getKnowledgeProcessors(configuredProcessors);
 
     // Get skills processors if skills are configured (with deduplication)
     const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
