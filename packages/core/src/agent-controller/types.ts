@@ -291,7 +291,9 @@ export interface AgentControllerConfig<TState = {}> {
    * Tag types a remote caller (the HTTP `messages` route) may name in a message's
    * `scopes`, e.g. `['request']`. Scope tags are authority, so a remote message naming
    * any other tag type is refused. Empty by default: remote messages carry no scopes.
-   * In-process `session.sendMessage` callers are trusted and not checked.
+   * In-process `session.sendMessage` callers are trusted and not checked. Allowing a
+   * type lets any remote caller pick any value for it (`request:anything`), so never
+   * allow a type that marks a tenant or access boundary, such as `org` or `team`.
    */
   allowedMessageScopeTypes?: string[];
 
