@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import { GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE } from '../handlers/agents';
 import { HTTPException } from '../http-exception';
+import { KNOWLEDGE_ROUTES } from './routes';
 import { createRoute } from './routes/route-builder';
 import {
   MastraServer,
@@ -1210,6 +1211,27 @@ describe('validateCustomRoutePaths', () => {
     expect(() =>
       adapter.validateCustomRoutePathsForTest([{ path: '/api/anything', method: 'GET', handler: mockHandler }]),
     ).not.toThrow();
+  });
+});
+
+describe('opt-in built-in routes registered through apiRoutes', () => {
+  it('mount under the adapter prefix, while ordinary schema routes mount at the root', async () => {
+    const custom = {
+      path: '/custom/ping',
+      method: 'GET',
+      handler: vi.fn(),
+      responseType: 'json',
+      _mastraSchemaRoute: true,
+    } as any;
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [...KNOWLEDGE_ROUTES, custom] } as any });
+    const adapter = new TestMastraServer({ app: {}, mastra, prefix: '/api' });
+    await adapter.buildCustomRouteHandlerForTest();
+    const calls = (adapter.registerRoute as any).mock.calls as Array<[unknown, { path: string }, { prefix: string }]>;
+    const knowledge = calls.filter(([, route]) => route.path.startsWith('/knowledge'));
+    expect(knowledge.length).toBe(KNOWLEDGE_ROUTES.length);
+    expect(knowledge.every(([, , options]) => options.prefix === '/api')).toBe(true);
+    const ping = calls.find(([, route]) => route.path === '/custom/ping');
+    expect(ping?.[2].prefix).toBe('');
   });
 });
 
