@@ -1516,7 +1516,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       kinds: { 'automation-proposed': { open: 1, unread: 1 } },
     });
 
-    await seed.workItems.supersedeTerminalDecisionsForWorkItem({
+    await seed.workItems.supersedeDecisionsForWorkItem({
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
@@ -1661,7 +1661,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       createBody({ title: 'Terminal repair target' }),
     );
     const terminalItem = (await terminalResponse.json()).workItem;
-    const now = new Date('2030-01-01T00:00:00.000Z');
+    const now = new Date('2020-01-01T00:00:00.000Z');
     await seed.workItems.commitRuleEvaluation({
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,

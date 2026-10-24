@@ -3728,7 +3728,7 @@ describe('createGithubPullRequestReconciler', () => {
         labels: [],
       },
     });
-    const now = new Date('2030-01-01T00:00:00.000Z');
+    const now = new Date('2020-01-01T00:00:00.000Z');
     await context.workItems.commitRuleEvaluation({
       orgId: 'org-1',
       factoryProjectId: context.project.id,

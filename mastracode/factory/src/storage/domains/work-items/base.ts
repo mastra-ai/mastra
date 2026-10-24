@@ -100,6 +100,21 @@ export function isAgentActor(by: string | undefined): boolean {
   return by.startsWith('agent:') || by === 'factory-tool-result-rule';
 }
 
+/** When the decision was actually queued; `createdAt` is offset by its effect ordinal for ordering. */
+export function decisionQueuedAt(record: { createdAt: Date; effectOrdinal: number }): number {
+  return record.createdAt.getTime() - record.effectOrdinal;
+}
+
+/** When the card entered the stage it currently sits in, from its open history entry. */
+export function currentStageEnteredAt(item: {
+  stages: WorkItemStage[];
+  stageHistory: WorkItemStageEntry[];
+}): Date | null {
+  const open = [...item.stageHistory].reverse().find(entry => !entry.exitedAt && item.stages.includes(entry.stage));
+  const at = open ? Date.parse(open.enteredAt) : Number.NaN;
+  return Number.isFinite(at) ? new Date(at) : null;
+}
+
 export interface WorkItemSessionRef {
   sessionId: string;
   branch: string;
@@ -2580,6 +2595,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     role?: string;
     supersededAt: Date;
   }): Promise<FactoryDeferredDecisionRecord[]> {
+    // A terminal stage's own onEnter effects (e.g. the close-out skill) are
+    // committed in the same transaction that enters the stage, so they are
+    // queued at or after its entry. Only proposals queued before it are stale.
+    const item = await this.get({ orgId: input.orgId, id: input.workItemId });
+    const terminalEnteredAt = item && this.#isTerminal(item) ? currentStageEnteredAt(item) : null;
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_deferred_decisions', {
       org_id: input.orgId,
       factory_project_id: input.factoryProjectId,
@@ -2590,6 +2610,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     for (const row of rows) {
       const decision = toDeferredDecision(row);
       if (input.role !== undefined && decision.decision.role !== input.role) continue;
+      if (
+        terminalEnteredAt &&
+        decision.status === 'proposed' &&
+        decisionQueuedAt(decision) >= terminalEnteredAt.getTime()
+      )
+        continue;
       const record =
         decision.status === 'proposed'
           ? await this.#settleProposedDecision(
@@ -2671,15 +2697,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     });
     if (resolved) this.#attentionChanged(resolved);
     return resolved;
-  }
-
-  async supersedeTerminalDecisionsForWorkItem(input: {
-    orgId: string;
-    factoryProjectId: string;
-    workItemId: string;
-    supersededAt: Date;
-  }): Promise<void> {
-    await this.supersedeDecisionsForWorkItem(input);
   }
 
   async repairLegacyAttentionState(): Promise<void> {

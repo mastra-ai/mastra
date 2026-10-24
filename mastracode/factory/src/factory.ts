@@ -792,10 +792,20 @@ export class MastraFactory {
         : undefined;
     const retireTerminalSessions =
       sessionRetirement && workItemsReady
-        ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) => {
+        ? async ({
+            orgId,
+            workItemId,
+            preserveSessionIds = [],
+          }: {
+            orgId: string;
+            workItemId: string;
+            preserveSessionIds?: string[];
+          }) => {
             const item = await workItemsStorage.get({ orgId, id: workItemId });
             if (!item) return;
-            const sessionIds = [...new Set(Object.values(item.sessions).map(session => session.sessionId))];
+            const sessionIds = [...new Set(Object.values(item.sessions).map(session => session.sessionId))].filter(
+              sessionId => !preserveSessionIds.includes(sessionId),
+            );
             await Promise.all(
               sessionIds.map(async sessionId => {
                 const sourceControl = await sourceControlSessions.getSourceControlBySessionId(sessionId);
@@ -919,6 +929,7 @@ export class MastraFactory {
           factoryProjectId: string;
           workItemId: string;
           revision: number;
+          stageEnteredAt: Date | null;
           actor: FactoryRuleActor;
         }): Promise<void> =>
           terminalCleanup({
@@ -926,6 +937,7 @@ export class MastraFactory {
             factoryProjectId: args.factoryProjectId,
             workItemId: args.workItemId,
             revision: args.revision,
+            ...(args.stageEnteredAt ? { stageEnteredAt: args.stageEnteredAt } : {}),
             // Leave the seat that drove its own terminal transition running; it
             // is already returning from its transition tool call.
             ...(args.actor.type === 'agent' ? { initiatingBindingId: args.actor.bindingId } : {}),

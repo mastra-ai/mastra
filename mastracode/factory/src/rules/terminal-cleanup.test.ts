@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { currentStageEnteredAt } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createTerminalStageCleanup } from './terminal-cleanup.js';
@@ -167,6 +168,103 @@ describe('createTerminalStageCleanup', () => {
     expect(releaseSandboxes).not.toHaveBeenCalled();
   });
 
+  it('still retires pre-terminal seats after the close-out seat bumps the revision, leaving the close-out running', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const old = await prepareBinding(storage, { issue: 1, role: 'review', session: 'session-old' });
+    const moved = await new FactoryTransitionService({ storage, configVersion: 'rules-v1' }).transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: old.item.id,
+      board: 'work',
+      stage: 'done',
+      expectedRevision: old.item.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-done' },
+      cause: 'test',
+    });
+    if (moved.status !== 'accepted') throw new Error(`Expected accepted transition, got ${moved.status}`);
+    const terminal = await storage.get({ orgId: 'org-1', id: old.item.id });
+    const stageEnteredAt = currentStageEnteredAt(terminal!)!;
+
+    // The close-out skill's own seat is minted after entry and bumps the revision.
+    const closeOut = await prepareBinding(storage, { issue: 1, role: 'work', session: 'session-close-out' });
+    expect(closeOut.item.revision).toBeGreaterThan(moved.revision);
+
+    const abortSession = vi.fn(async (_binding: { id: string }) => {});
+    const releaseSandboxes = vi.fn(async () => {});
+    const cleanup = createTerminalStageCleanup({ workItems: storage, abortSession, releaseSandboxes });
+    await cleanup({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: old.item.id,
+      revision: moved.revision,
+      stageEnteredAt,
+    });
+
+    expect(abortSession.mock.calls.map(([binding]) => binding.id)).toEqual([old.binding.id]);
+    const statuses = Object.fromEntries(
+      (await storage.listRunBindings('org-1', PROJECT_ID, old.item.id)).map(b => [b.id, b.status]),
+    );
+    expect(statuses).toEqual({ [old.binding.id]: 'revoked', [closeOut.binding.id]: 'active' });
+    expect(releaseSandboxes).toHaveBeenCalledWith(
+      expect.objectContaining({ preserveSessionIds: ['session-close-out'] }),
+    );
+  });
+
+  it('does not abort a close-out seat minted on the same session while cleanup is running', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const old = await prepareBinding(storage, { issue: 1, role: 'work', session: 'session-1' });
+    const moved = await new FactoryTransitionService({ storage, configVersion: 'rules-v1' }).transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: old.item.id,
+      board: 'work',
+      stage: 'done',
+      expectedRevision: old.item.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-done' },
+      cause: 'test',
+    });
+    if (moved.status !== 'accepted') throw new Error(`Expected accepted transition, got ${moved.status}`);
+    const stageEnteredAt = currentStageEnteredAt((await storage.get({ orgId: 'org-1', id: old.item.id }))!)!;
+
+    // The dispatcher mints the close-out seat on the same session after cleanup
+    // listed the old binding but before it looks up the session's current
+    // binding. The mint revokes the old binding, so the session now belongs to
+    // the close-out run, and aborting the session would kill that run.
+    let closeOutBindingId: string | undefined;
+    const find = storage.findRunBindingBySession.bind(storage);
+    vi.spyOn(storage, 'findRunBindingBySession').mockImplementation(async address => {
+      if (!closeOutBindingId) {
+        const closeOut = await prepareBinding(storage, {
+          issue: 1,
+          role: 'work',
+          session: 'session-1',
+          kickoffKey: 'close-out',
+        });
+        closeOutBindingId = closeOut.binding.id;
+      }
+      return find(address);
+    });
+
+    const abortSession = vi.fn(async (_binding: { id: string }) => {});
+    const cleanup = createTerminalStageCleanup({ workItems: storage, abortSession });
+    await cleanup({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: old.item.id,
+      revision: moved.revision,
+      stageEnteredAt,
+    });
+
+    expect(closeOutBindingId).toBeDefined();
+    expect(abortSession).not.toHaveBeenCalled();
+    const statuses = Object.fromEntries(
+      (await storage.listRunBindings('org-1', PROJECT_ID, old.item.id)).map(b => [b.id, b.status]),
+    );
+    expect(statuses).toEqual({ [old.binding.id]: 'revoked', [closeOutBindingId!]: 'active' });
+  });
+
   it('skips reconcile for bindings that are already revoked', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBinding(storage);
@@ -281,7 +379,7 @@ describe('createTerminalStageCleanup', () => {
         get: vi.fn().mockResolvedValue({ revision: 1 }),
         listRunBindings: vi.fn().mockRejectedValue(new Error('storage down')),
         revokeRunBindingsForWorkItem: vi.fn(),
-        supersedeTerminalDecisionsForWorkItem: vi.fn().mockRejectedValue(new Error('storage down')),
+        supersedeDecisionsForWorkItem: vi.fn().mockRejectedValue(new Error('storage down')),
       },
       releaseSandboxes,
     });

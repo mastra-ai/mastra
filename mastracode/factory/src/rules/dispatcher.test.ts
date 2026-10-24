@@ -12,6 +12,8 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
+import { createTerminalStageCleanup } from './terminal-cleanup.js';
+import type { TerminalStageCleanupArgs } from './terminal-cleanup.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
 
@@ -4003,6 +4005,253 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
+  describe('close-out on a card whose bindings terminal cleanup revoked', () => {
+    function closeOutBoards() {
+      return createLifecycleTestRegistry({
+        triage: {
+          issue: {
+            onEnter: () => ({
+              type: 'invokeSkill',
+              role: 'triage',
+              skillName: 'understand-issue',
+              idempotencyKey: 'stale-triage',
+            }),
+          },
+        },
+        done: {
+          issue: {
+            onEnter: () => ({
+              type: 'invokeSkill',
+              role: 'triage',
+              skillName: 'factory-complete-issue',
+              idempotencyKey: 'close-out-triage',
+            }),
+          },
+        },
+      });
+    }
+
+    async function moveTo(
+      transitionService: FactoryTransitionService,
+      storage: WorkItemsStorage,
+      workItemId: string,
+      stage: string,
+    ) {
+      const current = await storage.get({ orgId: 'org-1', id: workItemId });
+      const result = await transitionService.transition({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId,
+        board: 'work',
+        stage,
+        expectedRevision: current!.revision,
+        actor: { type: 'human', userId: 'user-1' },
+        ingress: { type: 'human', identity: `move-${stage}` },
+        cause: `move to ${stage}`,
+      });
+      expect(result.status).toBe('accepted');
+    }
+
+    function prepareTriageBinding(storage: WorkItemsStorage, workItemId: string) {
+      return vi.fn(async () => {
+        await storage.prepareRunStart({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: PROJECT_ID,
+          workItem: {
+            id: workItemId,
+            input: {
+              externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+              title: 'Fix issue',
+              stages: ['done'],
+              sessions: {},
+              metadata: {},
+            },
+          },
+          role: 'triage',
+          session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+          resourceId: PROJECT_ID,
+          kickoffKey: 'close-out-kickoff',
+          kickoffMessage: null,
+        });
+      });
+    }
+
+    async function revokeAll(storage: WorkItemsStorage, workItemId: string) {
+      await storage.revokeRunBindingsForWorkItem({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId,
+        revokedAt: new Date(),
+      });
+      await storage.supersedeDecisionsForWorkItem({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId,
+        supersededAt: new Date(),
+      });
+    }
+
+    it('runs the terminal stage close-out in a fresh binding', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const boards = closeOutBoards();
+      const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+      const item = await createItem(storage);
+      await bindWorkRun(storage, item.id);
+      await moveTo(transitionService, storage, item.id, 'done');
+      await revokeAll(storage, item.id);
+
+      const { controller, session } = createSession();
+      const prepareBinding = prepareTriageBinding(storage, item.id);
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        boards,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        prepareBinding,
+      });
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+      const [closeOut] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(closeOut?.decision).toMatchObject({ skillName: 'factory-complete-issue' });
+      expect(prepareBinding).toHaveBeenCalledWith(expect.objectContaining({ role: 'triage' }));
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect(closeOut?.status).toBe('succeeded');
+    });
+
+    it('still supersedes work queued before the card reached a terminal stage', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const boards = closeOutBoards();
+      const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+      const item = await createItem(storage);
+      await moveTo(transitionService, storage, item.id, 'triage');
+      await new Promise(resolve => setTimeout(resolve, 5));
+      await moveTo(transitionService, storage, item.id, 'done');
+      await revokeAll(storage, item.id);
+
+      const { controller, session } = createSession();
+      const prepareBinding = prepareTriageBinding(storage, item.id);
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        boards,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        prepareBinding,
+      });
+      // The stale triage decision is older and dispatches first.
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+      const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      const stale = decisions.find(d => d.idempotencyKey === 'stale-triage');
+      expect(stale?.status).toBe('superseded');
+      const calls = session.sendSignal.mock.calls.map(([signal]) => JSON.stringify(signal));
+      expect(calls.some(call => call.includes('understand-issue'))).toBe(false);
+    });
+
+    it('keeps an unapproved close-out through terminal cleanup while superseding older proposals', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const boards = closeOutBoards();
+      const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+      const item = await createItem(storage);
+      await moveTo(transitionService, storage, item.id, 'triage');
+      await new Promise(resolve => setTimeout(resolve, 5));
+      const { controller } = createSession();
+      const gate = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        boards,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => false,
+      });
+      await gate.runOnce(new Date('2030-01-01T00:01:00Z'));
+      await moveTo(transitionService, storage, item.id, 'done');
+      await gate.runOnce(new Date('2030-01-01T00:02:00Z'));
+      const before = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(before.map(d => d.status)).toEqual(['proposed', 'proposed']);
+
+      await revokeAll(storage, item.id);
+
+      const after = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(after.find(d => d.idempotencyKey === 'stale-triage')?.status).toBe('superseded');
+      expect(after.find(d => d.idempotencyKey === 'close-out-triage')?.status).toBe('proposed');
+    });
+
+    it('retires older seats but leaves the close-out seat when cleanup runs after it is minted', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const boards = closeOutBoards();
+      let cleanupArgs: TerminalStageCleanupArgs | undefined;
+      const transitionService = new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        boards,
+        // Capture the cleanup request; it runs below, after the dispatcher wins the race.
+        onTerminalStage: ({ orgId, factoryProjectId, workItemId, revision, stageEnteredAt }) => {
+          cleanupArgs = {
+            orgId,
+            factoryProjectId,
+            workItemId,
+            revision,
+            ...(stageEnteredAt ? { stageEnteredAt } : {}),
+          };
+        },
+      });
+      const item = await createItem(storage);
+      const review = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Fix issue',
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'review',
+        session: { sessionId: 'session-review', branch: 'factory/issue-1-review', threadId: 'thread-review' },
+        resourceId: 'resource-review',
+        kickoffKey: 'review-kickoff',
+        kickoffMessage: null,
+      });
+      await new Promise(resolve => setTimeout(resolve, 5));
+      await moveTo(transitionService, storage, item.id, 'done');
+      if (!cleanupArgs) throw new Error('Expected the terminal transition to request cleanup');
+
+      const { controller } = createSession();
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        boards,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        prepareBinding: prepareTriageBinding(storage, item.id),
+      });
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))!.revision).toBeGreaterThan(cleanupArgs.revision!);
+
+      const abortSession = vi.fn(async () => {});
+      const releaseSandboxes = vi.fn(async () => {});
+      await createTerminalStageCleanup({ workItems: storage, abortSession, releaseSandboxes })(cleanupArgs);
+
+      const bindings = await storage.listRunBindings('org-1', PROJECT_ID, item.id);
+      expect(bindings.map(b => [b.role, b.status])).toEqual([
+        ['review', 'revoked'],
+        ['triage', 'active'],
+      ]);
+      expect(abortSession.mock.calls.map(([binding]) => binding.id)).toEqual([review.binding.id]);
+      expect(releaseSandboxes).toHaveBeenCalledWith(expect.objectContaining({ preserveSessionIds: ['session-1'] }));
+    });
+  });
+
   it("approves a plan on the project's behalf when plan review is off", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
@@ -5906,14 +6155,12 @@ describe('custom-board deferred targets', () => {
 
   it('materializes its declared initial phase and dispatches its lifecycle-produced custom transition once', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const queued = vi.fn(
-      (): FactoryCommitDecision => ({
-        type: 'transition',
-        idempotencyKey: 'begin-release',
-        board: 'release',
-        stage: 'shipping',
-      }),
-    );
+    const queued = vi.fn((): FactoryCommitDecision => ({
+      type: 'transition',
+      idempotencyKey: 'begin-release',
+      board: 'release',
+      stage: 'shipping',
+    }));
     const shipping = vi.fn();
     const board = defineBoard({
       id: 'release',
@@ -6269,13 +6516,11 @@ describe('custom-board deferred targets', () => {
   it('does not mistake a committed linked initial entry for a completed destination after uninstall', async () => {
     const seed = await createFactoryStorageForTests();
     const storage = seed.workItems;
-    const entered = vi.fn(
-      (): FactoryCommitDecision => ({
-        type: 'notify',
-        idempotencyKey: 'initial-effect',
-        title: 'Initial entry committed',
-      }),
-    );
+    const entered = vi.fn((): FactoryCommitDecision => ({
+      type: 'notify',
+      idempotencyKey: 'initial-effect',
+      title: 'Initial entry committed',
+    }));
     const destination = vi.fn();
     const boards = createBoardRegistry({
       includeDefaultBoards: false,
