@@ -10,10 +10,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
-import { createPinnedTools } from '@mastra/core/knowledge';
+import { Knowledge, createPinnedTools } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-import { Memory, Subconscious } from '@mastra/memory';
+import { Memory } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
 
 import { afterAll, describe, expect, it } from 'vitest';
@@ -78,12 +78,9 @@ describe('Pinned knowledge live proof', () => {
       embedder,
       options: {
         lastMessages: 20,
-        observationalMemory: {
-          model,
-          experimental_subconscious: new Subconscious({ pins: true }),
-        },
       },
     });
+    const knowledge = new Knowledge({ id: 'proof', storage, pins: { maxPins: 20, maxTokens: 500 } });
 
     const agent = new Agent({
       id: 'proof-agent',
@@ -91,6 +88,7 @@ describe('Pinned knowledge live proof', () => {
       instructions: 'Help the user.',
       model,
       memory,
+      knowledge,
     });
 
     const threadId = randomUUID();
