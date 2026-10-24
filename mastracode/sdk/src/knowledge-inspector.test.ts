@@ -70,11 +70,11 @@ function createSessionHarness(initialState: Partial<MastraCodeState> = {}) {
   };
 }
 
-async function createHarness(state: Partial<MastraCodeState> = {}) {
+async function createHarness(state: Partial<MastraCodeState> = {}, hostScopes?: string[]) {
   const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
   const storage = new MastraCompositeStore({ id: 'knowledge-inspector-test', domains: { knowledge } });
   const session = createSessionHarness(state);
-  const inspector = await createKnowledgeInspector({ storage, session: session.session });
+  const inspector = await createKnowledgeInspector({ storage, session: session.session, hostScopes });
   if (!inspector) throw new Error('Expected knowledge inspector');
   return { knowledge, storage, inspector, session };
 }
@@ -483,6 +483,13 @@ describe('KnowledgeInspector', () => {
     const factory = await createHarness({ factoryProjectId: 'proj-7', factoryOrgUnresolved: true });
     await expect(factory.inspector.getScopeTree()).rejects.toMatchObject({ code: 'unavailable' });
     await expect(factory.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('fails closed when a host tag conflicts with the Factory org, or stands in for a missing one', async () => {
+    const conflict = await createHarness({ factoryOrgId: 'o', factoryProjectId: 'p' }, ['org:other']);
+    await expect(conflict.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
+    const noOrg = await createHarness({ factoryProjectId: 'p', factoryOrgUnresolved: true }, ['org:acme']);
+    await expect(noOrg.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
   });
 
   it('uses the selected keyed Knowledge runtime instead of the legacy composite domain', async () => {

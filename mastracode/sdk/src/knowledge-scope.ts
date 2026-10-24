@@ -58,6 +58,14 @@ export function resolveKnowledgeSessionScopes(
   return { resolved: true, scopes: [...hostScopes, `org:${LOCAL_KNOWLEDGE_ORG_ID}`] };
 }
 
+/**
+ * The scopes a run acts with when its session is unresolved: only the host's `resource:`/`thread:`
+ * tags, so its writes stay private to the run and no host tag stands in for the missing org.
+ */
+export function knowledgeUnresolvedScopes(hostScopes: readonly AgentScopeEntry[]): AgentScopeEntry[] {
+  return hostScopes.filter(entry => isIdentityTag(tagOf(entry)));
+}
+
 /** The non-identity tags of a session's scopes, as plain strings. */
 export function knowledgeSessionTags(scopes: readonly AgentScopeEntry[]): string[] {
   return scopes.map(tagOf).filter(tag => !isIdentityTag(tag));
