@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { ProviderInfo } from '../../../../../api/types';
+import { datedModels } from '../../../settings/components/__tests__/fixtures/models';
 import { CreateFactoryModelStep } from '../create-factory/CreateFactoryModelStep';
 import { ModelProviderFactoryStep } from '../ModelProviderFactoryStep';
 
@@ -350,6 +351,36 @@ describe('Model provider onboarding', () => {
 
       expect(await screen.findByText('openai/gpt-5.6-sol')).toBeInTheDocument();
       expect(screen.queryByRole('dialog', { name: 'Connect OpenAI' })).not.toBeInTheDocument();
+    });
+
+    it('offers newer models first', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: datedModels })),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(
+        <Command>
+          <CreateFactoryModelStep query="" onPick={vi.fn()} />
+        </Command>,
+      );
+
+      await user.click(await screen.findByText('OpenAI'));
+      await screen.findByText('openai/gpt-5');
+
+      expect(screen.getAllByRole('option').map(option => option.getAttribute('data-value'))).toEqual([
+        'openai/gpt-5',
+        'openai/gpt-4.1',
+        'openai/gpt-4o',
+        'change-provider',
+      ]);
     });
   });
 
