@@ -1352,6 +1352,7 @@ export class DurableAgent<
           },
           generation: executionFence.generation,
           ownershipLost: () => executionFence.isLost(),
+          stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
         },
       );
       this.#assertRecoveryActive();
@@ -3288,6 +3289,7 @@ export class DurableAgent<
         continuation: closeOnSuspend ? undefined : 'across-suspension',
         generation: executionFence.generation,
         ownershipLost: () => executionFence.isLost(),
+        stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
       },
     );
 
@@ -4123,6 +4125,7 @@ export class DurableAgent<
           continuation: closeOnSuspend ? undefined : 'across-suspension',
           generation: executionFence.generation,
           ownershipLost: () => executionFence.isLost(),
+          stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
         },
       );
     }
