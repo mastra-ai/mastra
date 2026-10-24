@@ -373,7 +373,10 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
   }
 
   if (engine === 'durable' || engine === 'evented' || engine === 'inngest') {
-    it('keeps the first call delegation callbacks when a warm resume supplies only hooks', async () => {
+    const resumeDelegationRun = async (defaultDelegation?: {
+      onDelegationStart: () => { proceed: boolean };
+      onDelegationComplete: () => void;
+    }) => {
       const llm = getMock();
       const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
       const worker = new Agent({
@@ -403,7 +406,12 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
         const last = req.messages.at(-1);
         return last?.role === 'tool' ? last.tool_call_id : undefined;
       };
-      const shared = await createSharedAgent(llm, { engine, tools: { guarded_tool: tool }, agents: { worker } });
+      const shared = await createSharedAgent(llm, {
+        engine,
+        tools: { guarded_tool: tool },
+        agents: { worker },
+        ...(defaultDelegation ? { defaultOptions: { delegation: defaultDelegation } } : {}),
+      });
       const { output, chunks } = await runLoopScenario({
         engine,
         llm,
@@ -440,11 +448,25 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
 
       expect(execute).toHaveBeenCalledTimes(2);
       expect(resumeBefore).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'guarded_tool' }));
+      return { onDelegationStart, onDelegationComplete };
+    };
+
+    it('keeps the first call delegation callbacks when a warm resume supplies only hooks', async () => {
+      const { onDelegationStart, onDelegationComplete } = await resumeDelegationRun();
       expect(onDelegationStart).toHaveBeenCalledTimes(1);
       expect(onDelegationComplete).toHaveBeenCalledTimes(1);
       expect(onDelegationComplete).toHaveBeenCalledWith(
         expect.objectContaining({ result: expect.objectContaining({ text: 'sub done' }) }),
       );
+    });
+
+    it('prefers the first call delegation over defaultOptions.delegation on a hooks-only warm resume', async () => {
+      const defaultDelegation = { onDelegationStart: vi.fn(() => ({ proceed: true })), onDelegationComplete: vi.fn() };
+      const { onDelegationStart, onDelegationComplete } = await resumeDelegationRun(defaultDelegation);
+      expect(onDelegationStart).toHaveBeenCalledTimes(1);
+      expect(onDelegationComplete).toHaveBeenCalledTimes(1);
+      expect(defaultDelegation.onDelegationStart).not.toHaveBeenCalled();
+      expect(defaultDelegation.onDelegationComplete).not.toHaveBeenCalled();
     });
   }
 

@@ -1470,7 +1470,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             requestContext: resumeRequestContext,
             memoryConfig: execOptions.memory?.options,
             autoResumeSuspendedTools: execOptions.autoResumeSuspendedTools,
-            delegation: execOptions.delegation ?? existingRegistryEntry.delegation,
+            // Resume options carry no delegation, so execOptions.delegation is only the
+            // agent default; the first call parked its own delegation on the entry.
+            delegation: existingRegistryEntry.delegation ?? execOptions.delegation,
             hooks: resumeOptions.hooks,
             methodType: resumeOptions.closeOnSuspend ? 'generate' : 'stream',
             backgroundTaskEnabled: Boolean(existingRegistryEntry.backgroundTaskManager),
@@ -1500,7 +1502,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           // Tools this rebuild did not produce still hold their earlier build, so
           // keep that as their baseline; otherwise a later resume can never refresh them.
           existingRegistryEntry.requestTools = { ...previous, ...requestTools };
-          if (execOptions.delegation) existingRegistryEntry.delegation = execOptions.delegation;
         } catch (error) {
           mastra?.getLogger?.()?.warn?.(`[InngestAgent] resume(${runId}) tool resolution failed: ${error}`);
         }

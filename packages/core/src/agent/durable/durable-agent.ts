@@ -3680,7 +3680,11 @@ export class DurableAgent<
           requestContext: resumeRequestContext,
           memoryConfig: resolvedOptions.memory?.options,
           autoResumeSuspendedTools: resolvedOptions.autoResumeSuspendedTools,
-          delegation: resolvedOptions.delegation ?? entry.delegation,
+          // resolvedOptions always carries defaultOptions.delegation, so only a delegation passed
+          // to this resume may replace the one the first call parked on the entry.
+          delegation: options?.delegation
+            ? resolvedOptions.delegation
+            : (entry.delegation ?? resolvedOptions.delegation),
           hooks: resolvedOptions.hooks,
           methodType: resolvedOptions.closeOnSuspend ? 'generate' : 'stream',
           backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
@@ -3704,7 +3708,7 @@ export class DurableAgent<
           // Tools this rebuild did not produce still hold their earlier build, so
           // keep that as their baseline; otherwise a later resume can never refresh them.
           reg.requestTools = { ...reg.requestTools, ...requestTools };
-          if (resolvedOptions.delegation) reg.delegation = resolvedOptions.delegation;
+          if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }
       } catch (error) {
         this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
