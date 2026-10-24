@@ -7,6 +7,8 @@ import {
   Processor,
   Workflow,
   Vector,
+  Knowledge,
+  type KnowledgeInstanceSummary,
   BaseResource,
   A2A,
   A2AV1,
@@ -688,6 +690,23 @@ export class MastraClient extends BaseResource {
    */
   public getVector(vectorName: string) {
     return new Vector(this.options, vectorName);
+  }
+
+  /**
+   * Lists the Knowledge instances registered on the server
+   * @returns Promise containing each instance's application key and id
+   */
+  public listKnowledge(): Promise<{ instances: KnowledgeInstanceSummary[] }> {
+    return this.request('/knowledge');
+  }
+
+  /**
+   * Gets read-only access to a registered Knowledge instance
+   * @param knowledgeKey - Application key the instance is registered under
+   * @returns Knowledge resource
+   */
+  public getKnowledge(knowledgeKey: string) {
+    return new Knowledge(this.options, knowledgeKey);
   }
 
   /**

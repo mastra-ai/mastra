@@ -28,7 +28,7 @@ import { normalizeRoutePath } from '../utils';
 import type { SetMcpRequestAuth } from './mcp-auth';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import type { ServerRoute } from './routes';
-import { SERVER_ROUTES, getEffectivePermission } from './routes';
+import { OPT_IN_ROUTES, SERVER_ROUTES, getEffectivePermission } from './routes';
 import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
 export * from './routes';
@@ -42,6 +42,7 @@ export {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
+  MASTRA_KNOWLEDGE_SCOPE_KEY,
   MASTRA_STUDIO_CLIENT_TYPE,
   RESERVED_REQUEST_CONTEXT_KEYS,
   isReservedRequestContextKey,
@@ -1140,7 +1141,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
     const schemaRoutes = routes.filter(isSchemaApiRoute);
     for (const route of schemaRoutes) {
-      await this.registerRoute(this.app, route as unknown as ServerRoute, { prefix: '' });
+      // Opt-in built-in routes are first-party: Studio and the client SDK call them under the API prefix,
+      // so they mount there like any built-in route. Other custom routes mount at the root.
+      // Matched by identity: a cloned route object lands back at the root.
+      const prefix = (OPT_IN_ROUTES as readonly unknown[]).includes(route) ? this.prefix : '';
+      await this.registerRoute(this.app, route as unknown as ServerRoute, { prefix });
     }
 
     return routes.filter((route): route is HonoCustomApiRoute => !isSchemaApiRoute(route));
@@ -1370,7 +1375,14 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const allCustomRoutes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
     if (allCustomRoutes && allCustomRoutes.length > 0) {
       const componentSchemas = openApiSpec.components?.schemas ?? Object.create(null);
-      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes, componentSchemas);
+      // Opt-in built-in routes are mounted under the API prefix (see registerSchemaApiRoutes), so they keep the
+      // top-level server; every other custom route is served at the root.
+      const isPrefixed = (route: ApiRoute) => (OPT_IN_ROUTES as readonly unknown[]).includes(route);
+      const customPaths = convertCustomRoutesToOpenAPIPaths(
+        allCustomRoutes.filter(route => !isPrefixed(route)),
+        componentSchemas,
+      );
+      const prefixedPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes.filter(isPrefixed), componentSchemas);
       if (Object.keys(componentSchemas).length > 0) {
         openApiSpec.components = { ...openApiSpec.components, schemas: componentSchemas };
       }
@@ -1381,6 +1393,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
           }
         }
       }
+      Object.assign(customPaths, prefixedPaths);
       openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
     }
 

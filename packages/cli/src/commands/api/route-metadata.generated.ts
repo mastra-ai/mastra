@@ -3064,6 +3064,88 @@ export const API_ROUTE_METADATA = {
       "listProperty": "embedders"
     }
   },
+  "GET /knowledge": {
+    "method": "GET",
+    "path": "/knowledge",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "instances"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/graph": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/graph",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "scope"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/nodes/:nodeId": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/nodes/:nodeId",
+    "pathParams": [
+      "knowledgeKey",
+      "nodeId"
+    ],
+    "queryParams": [
+      "scope"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/search": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/search",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "q",
+      "scope"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "results"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/activity": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/activity",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "cursor",
+      "limit",
+      "scope"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
   "GET /workspaces": {
     "method": "GET",
     "path": "/workspaces",

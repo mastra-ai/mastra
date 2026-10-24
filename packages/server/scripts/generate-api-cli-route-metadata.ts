@@ -2,11 +2,14 @@ import { writeFileSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildApiSchemaManifest, getApiSchemaPropertyNames } from '../src/server/server-adapter/api-schema-manifest';
+import { ALL_SERVER_ROUTES } from '../src/server/server-adapter/routes/index.js';
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const outputPath = resolve(rootDir, join('packages', 'cli', 'src', 'commands', 'api', 'route-metadata.generated.ts'));
 
-const apiSchemaManifest = buildApiSchemaManifest();
+// Covers the opt-in routes too: the CLI describes what the package can serve, and a route
+// that is not mounted simply 404s when called.
+const apiSchemaManifest = buildApiSchemaManifest(ALL_SERVER_ROUTES);
 
 const metadata = Object.fromEntries(
   apiSchemaManifest.routes.map(route => [

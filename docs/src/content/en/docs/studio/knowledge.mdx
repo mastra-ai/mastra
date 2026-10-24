@@ -1,0 +1,89 @@
+---
+title: 'Knowledge'
+description: 'Browse the Knowledge instances registered on your Mastra server from Studio, and control who can read which scopes.'
+packages:
+  - '@mastra/core'
+  - '@mastra/server'
+---
+
+# Knowledge
+
+Studio can browse the Knowledge instances registered on your Mastra server: a graph of nodes, records and pins, name search, activity, and a scope view. The page is read-only.
+
+The routes that feed it are **off by default**. Until you enable them, the Knowledge page in Studio shows "Knowledge browsing is not enabled".
+
+## Enable the routes
+
+Register the Knowledge routes explicitly:
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter';
+
+export const mastra = new Mastra({
+  server: { apiRoutes: [...KNOWLEDGE_ROUTES] },
+});
+```
+
+They mount under your configured API prefix (`/api/knowledge` by default) and are gated by the `knowledge:read` permission.
+
+| Route                                        | Returns                                 |
+| -------------------------------------------- | --------------------------------------- |
+| `GET /knowledge`                             | The Knowledge instances you can read    |
+| `GET /knowledge/:knowledgeKey/graph`         | A bounded graph window for a scope      |
+| `GET /knowledge/:knowledgeKey/nodes/:nodeId` | One node with its records and pin state |
+| `GET /knowledge/:knowledgeKey/search`        | Name search within a scope              |
+| `GET /knowledge/:knowledgeKey/activity`      | Recent activity within a scope          |
+
+## How scope works
+
+Every read takes the scope tags the viewer holds, and returns only what those tags can see. By default Studio lets the viewer choose the tags.
+
+If the viewer's tags exceed what a caller should be allowed to hold, bind them per caller by setting the `MASTRA_KNOWLEDGE_SCOPE_KEY` request-context key (the string `mastra__knowledgeScope`).
+
+Set it in `server.auth.authorize`, which runs after the caller is authenticated and receives the framework context. Don't set it in `server.middleware`: middleware runs **before** authentication, so the caller isn't known yet.
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { KNOWLEDGE_ROUTES, MASTRA_KNOWLEDGE_SCOPE_KEY } from '@mastra/server/server-adapter';
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [...KNOWLEDGE_ROUTES],
+    auth: {
+      authenticateToken: async token => verifyToken(token),
+      authorize: async (path, _method, user, context) => {
+        if (path.startsWith('/api/knowledge')) {
+          const tags = tagsFor(user);
+          // Refuse rather than leave the key unset: an unset key means unbound.
+          if (!Array.isArray(tags)) return false;
+          context.get('requestContext').set(MASTRA_KNOWLEDGE_SCOPE_KEY, tags);
+        }
+        return true;
+      },
+    },
+  },
+});
+```
+
+If you configure `studio.auth`, Studio requests use it **instead of** `server.auth`, so `server.auth.authorize` never runs for them and nothing is bound. Put the same `authorize` in `studio.auth` (or in both) so the binding applies to whichever config the request uses.
+
+Never set the key to `undefined`. It reads back the same as an unset key, so the request is treated as unbound and the scope is trusted as sent.
+
+Once the key is set:
+
+- A request for any tag outside the set returns `403`, and Studio shows the refusal next to the scope form.
+- An empty set permits nothing.
+- A malformed set returns `400`.
+
+:::warning
+
+Match on the **mounted** path, `/api/knowledge/*` by default, not the route path `/knowledge/*`. A check that misses the prefix leaves scope binding silently inactive.
+
+:::
+
+## Deployment notes
+
+- **No RBAC provider:** the `knowledge:read` check is skipped, so any authenticated user can read any named scope unless your auth config binds scopes with the key above.
+- **Unbound scope:** if a user is authenticated but no scope is bound, requests are trusted as sent. The server logs a one-time warning. This suits an operator-controlled Studio, not a multi-tenant host.
+- **With an FGA provider:** `GET /knowledge` lists only the instances the caller can read, and the other routes answer `404` for any other instance.

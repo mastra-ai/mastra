@@ -182,7 +182,7 @@ type InputShared_Auxiliary_278 =
           };
     };
 
-type InputShared_Auxiliary_710 =
+type InputShared_Auxiliary_715 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,27 +227,27 @@ type InputShared_Auxiliary_710 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_710[];
+      args: InputShared_Auxiliary_715[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_710;
+      arg: InputShared_Auxiliary_715;
     };
 
-type InputShared_Auxiliary_784 = {
+type InputShared_Auxiliary_789 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_784[] | undefined;
+  children?: InputShared_Auxiliary_789[] | undefined;
 };
 
-type Shared_Auxiliary_777 = {
+type Shared_Auxiliary_780 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_777[] | undefined;
+  children?: Shared_Auxiliary_780[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1833,7 +1833,7 @@ type InputShared_Type_89 = {
       }
     | undefined;
   steps: InputShared_Type_84[];
-  predicates: InputShared_Auxiliary_710[];
+  predicates: InputShared_Auxiliary_715[];
 };
 
 type InputShared_Type_90 = {
@@ -1847,7 +1847,7 @@ type InputShared_Type_90 = {
     | undefined;
   step: InputShared_Type_84;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_710;
+  predicate: InputShared_Auxiliary_715;
 };
 
 type InputShared_Type_91 =
@@ -4299,7 +4299,7 @@ type Shared_Type_84 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_777[] | undefined;
+  files?: Shared_Auxiliary_780[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -13112,6 +13112,177 @@ export interface GetEmbedders_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /knowledge
+// ============================================================================
+export type GetKnowledge_Response = {
+  instances: {
+    key: string;
+    id: string;
+  }[];
+};
+
+export type GetKnowledge_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledge_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetKnowledge_Request;
+  response: GetKnowledge_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /knowledge/:knowledgeKey/graph
+// ============================================================================
+export type GetKnowledgeKnowledgeKeyGraph_PathParams = {
+  /** Application key the Knowledge instance is registered under */
+  knowledgeKey: string;
+};
+
+export type GetKnowledgeKnowledgeKeyGraph_QueryParams = {
+  /** Scope tags the viewer holds. A record is visible when all of its tags are in this set. */
+  scope: string | string[];
+};
+
+export type GetKnowledgeKnowledgeKeyGraph_Response = {
+  [key: string]: unknown;
+};
+
+export type GetKnowledgeKnowledgeKeyGraph_Request = Simplify<
+  (GetKnowledgeKnowledgeKeyGraph_PathParams extends never ? {} : { params: GetKnowledgeKnowledgeKeyGraph_PathParams }) &
+    (GetKnowledgeKnowledgeKeyGraph_QueryParams extends never
+      ? {}
+      : {} extends GetKnowledgeKnowledgeKeyGraph_QueryParams
+        ? { query?: GetKnowledgeKnowledgeKeyGraph_QueryParams }
+        : { query: GetKnowledgeKnowledgeKeyGraph_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeKnowledgeKeyGraph_RouteContract {
+  pathParams: GetKnowledgeKnowledgeKeyGraph_PathParams;
+  queryParams: GetKnowledgeKnowledgeKeyGraph_QueryParams;
+  body: never;
+  request: GetKnowledgeKnowledgeKeyGraph_Request;
+  response: GetKnowledgeKnowledgeKeyGraph_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /knowledge/:knowledgeKey/nodes/:nodeId
+// ============================================================================
+export type GetKnowledgeKnowledgeKeyNodesNodeId_PathParams = {
+  /** Application key the Knowledge instance is registered under */
+  knowledgeKey: string;
+  /** Knowledge node id */
+  nodeId: string;
+};
+
+export type GetKnowledgeKnowledgeKeyNodesNodeId_QueryParams = GetKnowledgeKnowledgeKeyGraph_QueryParams;
+
+export type GetKnowledgeKnowledgeKeyNodesNodeId_Response = GetKnowledgeKnowledgeKeyGraph_Response;
+
+export type GetKnowledgeKnowledgeKeyNodesNodeId_Request = Simplify<
+  (GetKnowledgeKnowledgeKeyNodesNodeId_PathParams extends never
+    ? {}
+    : { params: GetKnowledgeKnowledgeKeyNodesNodeId_PathParams }) &
+    (GetKnowledgeKnowledgeKeyNodesNodeId_QueryParams extends never
+      ? {}
+      : {} extends GetKnowledgeKnowledgeKeyNodesNodeId_QueryParams
+        ? { query?: GetKnowledgeKnowledgeKeyNodesNodeId_QueryParams }
+        : { query: GetKnowledgeKnowledgeKeyNodesNodeId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeKnowledgeKeyNodesNodeId_RouteContract {
+  pathParams: GetKnowledgeKnowledgeKeyNodesNodeId_PathParams;
+  queryParams: GetKnowledgeKnowledgeKeyNodesNodeId_QueryParams;
+  body: never;
+  request: GetKnowledgeKnowledgeKeyNodesNodeId_Request;
+  response: GetKnowledgeKnowledgeKeyNodesNodeId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /knowledge/:knowledgeKey/search
+// ============================================================================
+export type GetKnowledgeKnowledgeKeySearch_PathParams = GetKnowledgeKnowledgeKeyGraph_PathParams;
+
+export type GetKnowledgeKnowledgeKeySearch_QueryParams = {
+  /** Scope tags the viewer holds. A record is visible when all of its tags are in this set. */
+  scope: string | string[];
+  /** Case-insensitive name search; shorter than 2 characters returns nothing */
+  q: string;
+};
+
+export type GetKnowledgeKnowledgeKeySearch_Response = {
+  results: {
+    [key: string]: unknown;
+  }[];
+  truncated: boolean;
+};
+
+export type GetKnowledgeKnowledgeKeySearch_Request = Simplify<
+  (GetKnowledgeKnowledgeKeySearch_PathParams extends never
+    ? {}
+    : { params: GetKnowledgeKnowledgeKeySearch_PathParams }) &
+    (GetKnowledgeKnowledgeKeySearch_QueryParams extends never
+      ? {}
+      : {} extends GetKnowledgeKnowledgeKeySearch_QueryParams
+        ? { query?: GetKnowledgeKnowledgeKeySearch_QueryParams }
+        : { query: GetKnowledgeKnowledgeKeySearch_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeKnowledgeKeySearch_RouteContract {
+  pathParams: GetKnowledgeKnowledgeKeySearch_PathParams;
+  queryParams: GetKnowledgeKnowledgeKeySearch_QueryParams;
+  body: never;
+  request: GetKnowledgeKnowledgeKeySearch_Request;
+  response: GetKnowledgeKnowledgeKeySearch_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /knowledge/:knowledgeKey/activity
+// ============================================================================
+export type GetKnowledgeKnowledgeKeyActivity_PathParams = GetKnowledgeKnowledgeKeyGraph_PathParams;
+
+export type GetKnowledgeKnowledgeKeyActivity_QueryParams = {
+  /** Scope tags the viewer holds. A record is visible when all of its tags are in this set. */
+  scope: string | string[];
+  cursor?: string | undefined;
+  limit?: number | undefined;
+};
+
+export type GetKnowledgeKnowledgeKeyActivity_Response = GetKnowledgeKnowledgeKeyGraph_Response;
+
+export type GetKnowledgeKnowledgeKeyActivity_Request = Simplify<
+  (GetKnowledgeKnowledgeKeyActivity_PathParams extends never
+    ? {}
+    : { params: GetKnowledgeKnowledgeKeyActivity_PathParams }) &
+    (GetKnowledgeKnowledgeKeyActivity_QueryParams extends never
+      ? {}
+      : {} extends GetKnowledgeKnowledgeKeyActivity_QueryParams
+        ? { query?: GetKnowledgeKnowledgeKeyActivity_QueryParams }
+        : { query: GetKnowledgeKnowledgeKeyActivity_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeKnowledgeKeyActivity_RouteContract {
+  pathParams: GetKnowledgeKnowledgeKeyActivity_PathParams;
+  queryParams: GetKnowledgeKnowledgeKeyActivity_QueryParams;
+  body: never;
+  request: GetKnowledgeKnowledgeKeyActivity_Request;
+  response: GetKnowledgeKnowledgeKeyActivity_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /.well-known/:agentId/agent-card.json
 // ============================================================================
 export type GetWellKnownAgentIdAgentCardJson_PathParams = GetAgentsAgentId_PathParams;
@@ -19011,7 +19182,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_784[] | undefined;
+  files?: InputShared_Auxiliary_789[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -19069,7 +19240,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_784[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_789[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -19360,9 +19531,7 @@ export type GetToolProvidersProviderIdToolsToolSlugSchema_PathParams = {
   toolSlug: string;
 };
 
-export type GetToolProvidersProviderIdToolsToolSlugSchema_Response = {
-  [key: string]: unknown;
-};
+export type GetToolProvidersProviderIdToolsToolSlugSchema_Response = GetKnowledgeKnowledgeKeyGraph_Response;
 
 export type GetToolProvidersProviderIdToolsToolSlugSchema_Request = Simplify<
   (GetToolProvidersProviderIdToolsToolSlugSchema_PathParams extends never
@@ -24778,6 +24947,11 @@ export interface RouteTypes {
   'DELETE /vector/:vectorName/indexes/:indexName': DeleteVectorVectorNameIndexesIndexName_RouteContract;
   'GET /vectors': GetVectors_RouteContract;
   'GET /embedders': GetEmbedders_RouteContract;
+  'GET /knowledge': GetKnowledge_RouteContract;
+  'GET /knowledge/:knowledgeKey/graph': GetKnowledgeKnowledgeKeyGraph_RouteContract;
+  'GET /knowledge/:knowledgeKey/nodes/:nodeId': GetKnowledgeKnowledgeKeyNodesNodeId_RouteContract;
+  'GET /knowledge/:knowledgeKey/search': GetKnowledgeKnowledgeKeySearch_RouteContract;
+  'GET /knowledge/:knowledgeKey/activity': GetKnowledgeKnowledgeKeyActivity_RouteContract;
   'GET /.well-known/:agentId/agent-card.json': GetWellKnownAgentIdAgentCardJson_RouteContract;
   'POST /a2a/:agentId': PostA2aAgentId_RouteContract;
   'GET /workspaces': GetWorkspaces_RouteContract;
@@ -25499,6 +25673,21 @@ export interface Client {
   };
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;
+  };
+  '/knowledge': {
+    GET: GetKnowledge_RouteContract;
+  };
+  '/knowledge/:knowledgeKey/activity': {
+    GET: GetKnowledgeKnowledgeKeyActivity_RouteContract;
+  };
+  '/knowledge/:knowledgeKey/graph': {
+    GET: GetKnowledgeKnowledgeKeyGraph_RouteContract;
+  };
+  '/knowledge/:knowledgeKey/nodes/:nodeId': {
+    GET: GetKnowledgeKnowledgeKeyNodesNodeId_RouteContract;
+  };
+  '/knowledge/:knowledgeKey/search': {
+    GET: GetKnowledgeKnowledgeKeySearch_RouteContract;
   };
   '/logs': {
     GET: GetLogs_RouteContract;

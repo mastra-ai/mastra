@@ -18,6 +18,7 @@ import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
 import { DYNAMIC_WORKFLOWS_ROUTES } from './dynamic-workflows';
 import { EDITOR_BUILDER_ROUTES } from './editor-builder';
+import { KNOWLEDGE_ROUTES } from './knowledge';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -162,7 +163,32 @@ export type ServerRoute<
   readonly __schemas?: TSchemas;
 };
 
-export const SERVER_ROUTES: readonly ServerRoute[] = [
+/**
+ * Routes the package can serve that are **not** mounted by default. An app opts in
+ * by spreading them into `server.apiRoutes`:
+ *
+ * ```ts
+ * import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter';
+ *
+ * new Mastra({
+ *   server: { apiRoutes: [...KNOWLEDGE_ROUTES] },
+ * });
+ * ```
+ *
+ * Knowledge browsing is opt-in because the viewer picks the scope tags to read
+ * through, so a host that needs per-user scoping should decide deliberately,
+ * and bind the caller's tags with `MASTRA_KNOWLEDGE_SCOPE_KEY` from `server.auth.authorize`.
+ */
+export const OPT_IN_ROUTES: readonly ServerRoute[] = [...KNOWLEDGE_ROUTES];
+
+const OPT_IN_ROUTE_SET = new Set<ServerRoute>(OPT_IN_ROUTES);
+
+/**
+ * Every route the package can serve: the routes every server mounts, plus the opt-in
+ * ones. Code generators derive from this, so a route an app registers deliberately
+ * still has types, permissions and CLI metadata.
+ */
+export const ALL_SERVER_ROUTES: readonly ServerRoute[] = [
   ...AGENTS_ROUTES,
   ...AUTH_ROUTES,
   ...WORKFLOWS_ROUTES,
@@ -175,6 +201,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...OBSERVABILITY_ROUTES,
   ...LOGS_ROUTES,
   ...VECTORS_ROUTES,
+  ...KNOWLEDGE_ROUTES,
   ...A2A_ROUTES,
   ...WORKSPACE_ROUTES,
   ...LEGACY_ROUTES,
@@ -199,6 +226,12 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
 ];
 
 /**
+ * Routes every Mastra server mounts: everything in {@link ALL_SERVER_ROUTES} except the
+ * {@link OPT_IN_ROUTES} an app has to register itself.
+ */
+export const SERVER_ROUTES: readonly ServerRoute[] = ALL_SERVER_ROUTES.filter(route => !OPT_IN_ROUTE_SET.has(route));
+
+/**
  * Union type of all individual route arrays.
  * Built from the per-domain `as const` tuples to preserve each route's specific schema types.
  */
@@ -215,6 +248,7 @@ export type ServerRoutes = readonly [
   ...typeof OBSERVABILITY_ROUTES,
   ...typeof LOGS_ROUTES,
   ...typeof VECTORS_ROUTES,
+  ...typeof KNOWLEDGE_ROUTES,
   ...typeof A2A_ROUTES,
   ...typeof AGENT_BUILDER_ROUTES,
   ...typeof WORKSPACE_ROUTES,
@@ -237,6 +271,9 @@ export type ServerRoutes = readonly [
 // Export route builder and OpenAPI utilities
 export { createRoute, createPublicRoute, pickParams, jsonQueryParam, wrapSchemaForQueryParams } from './route-builder';
 export { generateOpenAPIDocument } from '../openapi-utils';
+
+// Opt-in route sets, for apps that register them through `server.apiRoutes`.
+export { KNOWLEDGE_ROUTES } from './knowledge';
 
 // Export permission utilities
 export { derivePermission, extractResource, deriveAction, getEffectivePermission } from './permissions';
