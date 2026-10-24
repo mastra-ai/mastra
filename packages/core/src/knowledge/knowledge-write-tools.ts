@@ -1,13 +1,13 @@
-import type { KnowledgeNode, KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '@mastra/core/storage';
+import type { KnowledgeNode, KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '../storage';
 import {
   MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
   MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
   expandKnowledgeScope,
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
-} from '@mastra/core/storage';
-import type { ToolAction } from '@mastra/core/tools';
-import { createTool } from '@mastra/core/tools';
+} from '../storage';
+import type { ToolAction } from '../tools';
+import { createTool } from '../tools';
 import type { JSONSchema7 } from 'json-schema';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
