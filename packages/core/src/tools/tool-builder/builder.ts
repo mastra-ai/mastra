@@ -681,7 +681,12 @@ export class CoreToolBuilder extends MastraBase {
     const mcpMeta =
       !isVercelTool(tool) && 'mcpMetadata' in tool ? (tool as { mcpMetadata?: McpMetadata }).mcpMetadata : undefined;
 
-    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions, toolSpan?: AnySpan) => {
+    const execFunction = async (
+      args: unknown,
+      execOptions: MastraToolInvocationOptions,
+      toolSpan?: AnySpan,
+      builderValidated = false,
+    ) => {
       // Without a tool span (skipToolSpan), nested work attaches to the caller's span instead.
       const contextSpan = toolSpan ?? (execOptions?.tracingContext || options.tracingContext)?.currentSpan;
       try {
@@ -860,14 +865,12 @@ export class CoreToolBuilder extends MastraBase {
           result = await executeWithContext({
             span: contextSpan,
             fn: async () => {
-              if (inputValidationSchema || this.injectedInputSchema) {
-                // The injected keys are only declared on the builder-local
-                // schema. `Tool.execute` validates against the user's original
-                // schema, which would strip them (breaking sub-agent/workflow
-                // resume via `suspendedToolRunId`), so once this builder has
-                // validated the args itself — against the injected schema or a
-                // compat-processed version of it — mark the context to skip
-                // that second validation.
+              if (builderValidated) {
+                // The builder already validated (and decoded) the raw args.
+                // Validating again in `Tool.execute` would run the schema on
+                // already-transformed values (e.g. a `string -> URL` transform
+                // rejecting the decoded URL) and would strip builder-injected
+                // keys such as `suspendedToolRunId`, so skip that second pass.
                 markBuilderValidatedInput(toolContext);
               }
               return tool?.execute?.(executionArgs, toolContext);
@@ -967,6 +970,7 @@ export class CoreToolBuilder extends MastraBase {
         const isResuming = execOptions?.resumeData != null;
 
         const parameters = inputValidationSchema ?? this.getParameters();
+        let builderValidated = false;
         if (!isResuming || this.injectedInputSchema) {
           const { data, error } = validateToolInput(
             parameters as StandardSchemaWithJSON | undefined,
@@ -984,13 +988,14 @@ export class CoreToolBuilder extends MastraBase {
           if (data !== undefined) {
             args = data;
           }
+          builderValidated = !error && !!parameters && typeof parameters === 'object' && '~standard' in parameters;
         }
 
         // there is a small delay in stream output so we add an immediate to ensure the stream is ready
         return await new Promise((resolve, reject) => {
           setImmediate(async () => {
             try {
-              const result = await execFunction(args, execOptions!, toolSpan);
+              const result = await execFunction(args, execOptions!, toolSpan, builderValidated);
               resolve(result);
             } catch (err) {
               reject(err);
@@ -1124,7 +1129,7 @@ export class CoreToolBuilder extends MastraBase {
                       error: createStandardSchemaIssuesError(r.issues),
                     };
                   }
-                  return { success: true as const, value: (r as { value: unknown }).value };
+                  return { success: true as const, value };
                 });
               }
               // standard-schema returns { value } on success or { issues } on failure,
@@ -1135,7 +1140,11 @@ export class CoreToolBuilder extends MastraBase {
                   error: createStandardSchemaIssuesError(result.issues),
                 };
               }
-              return { success: true as const, value: (result as { value: unknown }).value };
+              // Return the raw input rather than the decoded output: `execute` and
+              // `beforeApproval` validate and decode the raw args themselves, so
+              // passing transformed values (e.g. a URL decoded from a string) here
+              // would make them get validated as raw input a second time.
+              return { success: true as const, value };
             },
           },
         );
