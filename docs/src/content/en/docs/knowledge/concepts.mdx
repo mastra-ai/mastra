@@ -50,10 +50,12 @@ Here a run that holds `org:acme` can read and write `team:acme:director`, but no
 
 | Role | Can |
 |---|---|
-| `readonly` | Read |
-| `append` | Read, create, and append |
-| `edit` | All of the above, plus remove, rescope, and merge |
-| `owner` | Everything |
+| `readonly` | Search and read |
+| `append` | Read, plus create and append |
+| `edit` | All of the above, plus remove, update, rename, merge, and rescope |
+| `owner` | Same as `edit` |
+
+A tool that needs a stronger role fails with `This run reaches "team:acme:support" with role append; this needs edit.` Owned scopes are only reached when the model names them in `scope`. A scope the run holds directly isn't limited by role.
 
 Ownership is checked each time a tool runs. A type you don't declare can be held but not owned, and a read-only tag never owns anything. Holding an owner tag gives a run everything that tag owns, so set it only on runs meant to have that reach.
 
