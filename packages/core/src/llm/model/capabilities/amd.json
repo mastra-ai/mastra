@@ -35,10 +35,10 @@
     "Qwen3.8-Flash-Next"
   ],
   "reasoning": {
-    "DeepSeek-V4-Flash": [
+    "Qwen3.8-Flash-Next": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "DeepSeek-V4-Flash-Vision-Exp": [
@@ -47,7 +47,19 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "DeepSeek-V4-Flash": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
@@ -57,18 +69,6 @@
       {
         "type": "effort",
         "values": ["low", "medium"]
-      }
-    ],
-    "Qwen3.8-Flash-Next": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

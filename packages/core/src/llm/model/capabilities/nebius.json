@@ -65,16 +65,10 @@
         "type": "toggle"
       }
     ],
-    "reflection/beam": [
+    "deepseek-ai/DeepSeek-V4-Pro": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V4-Flash-0731": [
@@ -83,7 +77,7 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro": [
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -95,10 +89,22 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
+    "nvidia/Nemotron-3_5-Lightning": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "high"]
+      }
+    ],
+    "nvidia/Nemotron-3-Ultra-550b-a55b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "nvidia/Nemotron-3.5-Super-VL": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "meta-models/muse-spark-open": [
@@ -111,24 +117,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "nvidia/Nemotron-3.5-Super-VL": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "nvidia/Nemotron-3-Ultra-550b-a55b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "nvidia/Nemotron-3_5-Lightning": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ],
     "zai-org/GLM-5.3": [
@@ -147,6 +135,18 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "reflection/beam": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

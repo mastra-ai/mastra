@@ -58,21 +58,15 @@
         "type": "toggle"
       }
     ],
-    "openai/gpt-oss-120b": [
+    "mistralai/Mistral-Medium-3.5-128B": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "high"]
       }
     ],
     "moonshotai/Kimi-K2.6": [
       {
         "type": "budget_tokens"
-      }
-    ],
-    "mistralai/Mistral-Medium-3.5-128B": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ],
     "zai-org/GLM-5.2": [
@@ -82,6 +76,12 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }
