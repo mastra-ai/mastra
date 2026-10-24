@@ -13,7 +13,7 @@ import { KnowledgeSearch } from '../KnowledgeSearch';
 
 const scope: KnowledgeScopeNode = {
   id: 's1',
-  address: 'resource:p1',
+  address: 'project:p1',
   name: 'Payments',
   parentIds: [],
   memberCount: 2,
@@ -41,7 +41,7 @@ const searchPayload: KnowledgeSearchPayload = {
 };
 
 // The host seam: real React Query hooks over fixtures, the way Factory and Studio wrap their routes.
-function makeSource(overrides: Partial<KnowledgeDataSource> = {}): KnowledgeDataSource {
+function makeSource(): KnowledgeDataSource {
   return {
     useNode: () => useQuery({ queryKey: ['node'], queryFn: skipToken }),
     useActivity: () =>
@@ -56,15 +56,13 @@ function makeSource(overrides: Partial<KnowledgeDataSource> = {}): KnowledgeData
         queryKey: ['search', query],
         queryFn: query.trim().length >= 2 ? async () => searchPayload : skipToken,
       }),
-    ...overrides,
   };
 }
 
 describe('Knowledge components with a host data source', () => {
-  it('shows the host-provided label and activity in the scope flyout', async () => {
-    const source = makeSource({ displayAddress: address => address.replace('resource:', 'project:') });
+  it("shows the scope address and the host's activity in the scope flyout", async () => {
     renderWithProviders(
-      <KnowledgeDataSourceProvider value={source}>
+      <KnowledgeDataSourceProvider value={makeSource()}>
         <KnowledgeScopeFlyout
           selection={{ scopeNodeId: 's1' }}
           scope={scope}
@@ -79,23 +77,6 @@ describe('Knowledge components with a host data source', () => {
 
     expect(screen.getByText('project:p1')).toBeTruthy();
     expect(await screen.findByRole('button', { name: 'Refund policy' })).toBeTruthy();
-  });
-
-  it('falls back to the raw address when the host gives no label', () => {
-    renderWithProviders(
-      <KnowledgeDataSourceProvider value={makeSource()}>
-        <KnowledgeScopeFlyout
-          selection={{ scopeNodeId: 's1' }}
-          scope={scope}
-          childScopeCount={1}
-          contentNodeCount={1}
-          countsTruncated={false}
-          onSelectActivity={() => {}}
-          onClose={() => {}}
-        />
-      </KnowledgeDataSourceProvider>,
-    );
-    expect(screen.getByText('resource:p1')).toBeTruthy();
   });
 
   it('searches through the host and reports the chosen result', async () => {

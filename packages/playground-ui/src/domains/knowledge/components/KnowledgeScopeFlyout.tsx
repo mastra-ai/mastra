@@ -28,11 +28,9 @@ export function KnowledgeScopeFlyout({
   onClose,
 }: KnowledgeScopeFlyoutProps) {
   const count = (value: number) => (countsTruncated ? `${value}+` : String(value));
-  const source = useKnowledgeDataSource();
-  const activity = source.useActivity(selection);
+  const activity = useKnowledgeDataSource().useActivity(selection);
   const recentActivity = activity.data?.pages[0]?.events.slice(0, 5) ?? [];
   const activityTruncated = activity.data?.pages[0]?.truncated === true;
-  const displayAddress = source.displayAddress?.(scope.address) ?? scope.address;
   return (
     <aside
       data-testid="knowledge-scope-flyout"
@@ -60,7 +58,7 @@ export function KnowledgeScopeFlyout({
         {scope.description?.trim() ? <p className="text-foreground leading-relaxed">{scope.description}</p> : null}
         <dl className="text-caption text-muted-foreground grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
           <dt>Address</dt>
-          <dd className="text-foreground text-right break-all">{displayAddress}</dd>
+          <dd className="text-foreground text-right break-all">{scope.address}</dd>
           <dt>Kind</dt>
           <dd className="text-foreground text-right">{scope.kind ?? 'scope'}</dd>
           <dt>Content nodes</dt>

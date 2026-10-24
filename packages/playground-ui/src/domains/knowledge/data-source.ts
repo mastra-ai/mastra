@@ -20,6 +20,4 @@ export interface KnowledgeDataSource {
   useActivity: (selection: KnowledgeSelection) => UseInfiniteQueryResult<InfiniteData<KnowledgeActivityPayload>>;
   /** Search across scopes and nodes; hosts skip short queries. */
   useSearch: (query: string) => UseQueryResult<KnowledgeSearchPayload>;
-  /** Host-specific label for a scope address (for example Factory shows its project tag). Defaults to the address. */
-  displayAddress?: (address: string) => string;
 }

@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 // A run's Knowledge scope with no tags is its Memory identity.
 const threadScope = ['resource:user-42', 'thread:alpha'];
 
-describe('Subconscious pinned facts against LibSQL', () => {
+describe('Knowledge pinned facts against LibSQL', () => {
   const directories: string[] = [];
 
   afterEach(async () => {
@@ -18,7 +18,7 @@ describe('Subconscious pinned facts against LibSQL', () => {
   });
 
   async function createHarness() {
-    const directory = await mkdtemp(join(tmpdir(), 'subconscious-pins-libsql-'));
+    const directory = await mkdtemp(join(tmpdir(), 'knowledge-pins-libsql-'));
     directories.push(directory);
     const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'pins.db')}` });
     await storage.init();

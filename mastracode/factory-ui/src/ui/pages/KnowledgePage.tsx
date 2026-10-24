@@ -932,8 +932,6 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     useNode: (nodeId, scopeLevel) => useKnowledgeNode(factoryProjectId, nodeId, scopeLevel, threadId),
     useActivity: activitySelection => useKnowledgeActivity(factoryProjectId, activitySelection, threadId),
     useSearch: query => useKnowledgeSearch(factoryProjectId, query, threadId),
-    displayAddress: address =>
-      factoryProjectId && address === `resource:${factoryProjectId}` ? `project:${factoryProjectId}` : address,
   };
 
   return (
