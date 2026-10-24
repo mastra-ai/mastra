@@ -1500,7 +1500,9 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     void output.finishReason.then(() => (settled = true));
     pubsub.partition = 'hang';
     const ticksAtCut = ticks;
-    await new Promise(resolve => setTimeout(resolve, 1_000));
+    // Long enough for the 300ms lease to run out, and well short of the 1.5s grace that follows it,
+    // so a slow machine can't push the run past the grace before the check.
+    await new Promise(resolve => setTimeout(resolve, 500));
     // The tool that was running finishes; no other starts without the lease, and the run isn't stopped.
     expect(ticks - ticksAtCut).toBeLessThanOrEqual(1);
     expect(settled).toBe(false);
