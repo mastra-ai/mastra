@@ -400,7 +400,7 @@ describe('KnowledgeInspector', () => {
     await expect(pending).rejects.toMatchObject({ code: 'stale-handle' });
   });
 
-  it('reads the same org rung the subconscious writes instead of the session owner id', async () => {
+  it('reads the same org rung Knowledge writes instead of the session owner id', async () => {
     // Regression: the inspector keyed the org rung on the session owner id
     // (`mastracode-<hash>`), a scope nothing ever writes to, so /knowledge showed
     // nothing even though curation had populated `org:local`.

@@ -21,7 +21,7 @@ export type KnowledgeScopeIdentity =
 
 /**
  * The single source of truth for which org/resource rungs a session's knowledge
- * lives under. Every reader and writer of the knowledge store (the subconscious
+ * lives under. Every reader and writer of the knowledge store (Knowledge
  * memory factory, the /knowledge inspector) must derive its scope from here so
  * that what curation writes is what the browser reads.
  *
