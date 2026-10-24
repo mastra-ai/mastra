@@ -21,10 +21,12 @@ import type { Knowledge } from '@mastra/core/knowledge';
 import {
   knowledgeSearchHit,
   knowledgeSearchRank,
-  listPinnedKnowledge,
+  loadKnowledgePins,
   readKnowledgeActivity,
+  readKnowledgeGraph,
   readKnowledgeNode,
   searchKnowledgeNodes,
+  windowKnowledgeGraph,
 } from '@mastra/core/knowledge';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -49,13 +51,6 @@ import type { Context } from 'hono';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
-
-/** Hover-card budget for record text shipped in the graph payload. */
-const RECORD_TEXT_LIMIT = 240;
-
-function truncateRecordText(text: string): string {
-  return text.length > RECORD_TEXT_LIMIT ? `${text.slice(0, RECORD_TEXT_LIMIT - 1)}…` : text;
-}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -442,90 +437,6 @@ interface ResolvedView {
   pins: boolean;
 }
 
-/**
- * In-record + capped-fallback wikilink resolver, shared by both endpoints.
- * Resolution uses the store's own algorithm: a descending-prefix walk over the
- * record's canonical scope matching canonical name + exact scope key at each
- * prefix, so an edge never depends on whether the target landed in the window.
- */
-class WikilinkResolver {
-  /** exact `${scopeKey}\u0000${lowerName}` → node, from the fetched window. */
-  readonly #inWindow = new Map<string, KnowledgeNode>();
-  readonly #windowIds = new Set<string>();
-  /** `${recordScopeKey}\u0000${lowerName}` → fallback result (null = dangling). */
-  readonly #fallbackCache = new Map<string, KnowledgeNode | null>();
-  #fallbackLookups = 0;
-  readonly #store: KnowledgeStorage;
-  readonly #maxFallbackLookups: number;
-  readonly outOfWindow = new Map<
-    string,
-    { id: string; name: string; scope: KnowledgeScope; rung: 'org' | 'resource' | 'thread' }
-  >();
-  readonly cappedNames: string[] = [];
-  #cappedSeen = new Set<string>();
-
-  constructor(store: KnowledgeStorage, nodes: KnowledgeNode[], maxFallbackLookups: number) {
-    this.#store = store;
-    this.#maxFallbackLookups = maxFallbackLookups;
-    for (const node of nodes) {
-      this.#inWindow.set(`${knowledgeScopeKey(node.scope)}\u0000${node.name.trim().toLocaleLowerCase()}`, node);
-      this.#windowIds.add(node.id);
-    }
-  }
-
-  inWindowId(id: string): boolean {
-    return this.#windowIds.has(id);
-  }
-
-  /** Resolve a wikilink name from a knowledge record's scope. Returns the node or null (dangling/capped). */
-  async resolve(name: string, recordScope: KnowledgeScope): Promise<KnowledgeNode | null> {
-    const canonical = canonicalizeKnowledgeScope(recordScope);
-    const lower = name.trim().toLocaleLowerCase();
-    for (let length = canonical.length; length > 0; length--) {
-      const hit = this.#inWindow.get(`${knowledgeScopeKey(canonical.slice(0, length))}\u0000${lower}`);
-      if (hit) return hit;
-    }
-    const cacheKey = `${knowledgeScopeKey(canonical)}\u0000${lower}`;
-    if (this.#fallbackCache.has(cacheKey)) {
-      return this.#trackOutOfWindow(this.#fallbackCache.get(cacheKey) ?? null);
-    }
-    if (this.#fallbackLookups >= this.#maxFallbackLookups) {
-      if (!this.#cappedSeen.has(lower) && this.cappedNames.length < 100) {
-        this.#cappedSeen.add(lower);
-        this.cappedNames.push(name.trim());
-      } else if (!this.#cappedSeen.has(lower)) {
-        this.#cappedSeen.add(lower);
-      }
-      return null;
-    }
-    this.#fallbackLookups += 1;
-    let resolved: KnowledgeNode | null = null;
-    try {
-      resolved = await this.#store.resolveNode({ name, scope: canonical });
-    } catch {
-      resolved = null;
-    }
-    this.#fallbackCache.set(cacheKey, resolved);
-    return this.#trackOutOfWindow(resolved);
-  }
-
-  #trackOutOfWindow(node: KnowledgeNode | null): KnowledgeNode | null {
-    if (node && !this.#windowIds.has(node.id)) {
-      this.outOfWindow.set(node.id, {
-        id: node.id,
-        name: node.name,
-        scope: node.scope,
-        rung: deepestRung(node.scope),
-      });
-    }
-    return node;
-  }
-
-  get cappedCount(): number {
-    return this.#cappedSeen.size;
-  }
-}
-
 export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   readonly #limits: KnowledgeRouteLimits;
 
@@ -808,14 +719,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     records: Array<{ rung: 'resource' | 'thread'; record: KnowledgeRecord }>;
   }> {
     if (!view.pins) return { nodeIds: [], records: [] };
-    const { nodeIds, pins } = await listPinnedKnowledge({ store: view.store, scope: view.scope });
-    return {
-      nodeIds,
-      records: pins.map(record => ({
-        rung: deepestRung(record.scope) === 'thread' ? ('thread' as const) : ('resource' as const),
-        record,
-      })),
-    };
+    return loadKnowledgePins(view.store, view.scope);
   }
 
   routes(): ApiRoute[] {
@@ -1189,49 +1093,14 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
 
             // Record window over content members (newest-first overall), then
             // wikilink resolution — member lenses are connected, not dots.
-            const recordWindow: KnowledgeRecord[] = [];
-            for (const node of contentMembers) {
-              if (recordWindow.length > limits.maxRecords) break;
-              const { records } = await store.listKnowledgeAbout({
-                node: node.id,
-                scope: node.scope as KnowledgeScope,
-                limit: limits.maxRecords + 1 - recordWindow.length,
-              });
-              recordWindow.push(...records);
-            }
-            recordWindow.sort((a, b) => b.id.localeCompare(a.id));
-            if (recordWindow.length > limits.maxRecords) {
-              truncated = true;
-              recordWindow.length = limits.maxRecords;
-            }
-
-            const resolver = new WikilinkResolver(store, contentMembers, limits.maxFallbackLookups);
-            const edges: KnowledgeGraphEdge[] = [];
-            const graphRecords: KnowledgeGraphRecord[] = [];
-            const edgeSeen = new Set<string>();
-            const recordCounts = new Map<string, number>();
-            for (const record of recordWindow) {
-              recordCounts.set(record.node, (recordCounts.get(record.node) ?? 0) + 1);
-              const nodeIds = [record.node];
-              for (const name of parseKnowledgeWikilinks(record.text)) {
-                const target = await resolver.resolve(name, record.scope);
-                if (!target) continue;
-                if (target.id === record.node) continue;
-                if (!resolver.inWindowId(target.id)) continue;
-                if (!nodeIds.includes(target.id)) nodeIds.push(target.id);
-                const key = `${record.node}\u0000${target.id}`;
-                if (edgeSeen.has(key)) continue;
-                edgeSeen.add(key);
-                edges.push({
-                  id: `wikilink:${record.node}:${target.id}`,
-                  source: record.node,
-                  target: target.id,
-                  type: 'wikilink',
-                  recordId: record.id,
-                });
-              }
-              graphRecords.push({ id: record.id, nodeIds, pinned: false, text: truncateRecordText(record.text) });
-            }
+            const window = await windowKnowledgeGraph(store, {
+              nodes: contentMembers,
+              recordScope: node => node.scope,
+              limits,
+            });
+            if (window.recordsTruncated) truncated = true;
+            const { resolver, edges, recordCounts } = window;
+            const graphRecords = window.records;
 
             // Containment: the clicked scope node is the root of its own view.
             for (const member of members) {
@@ -1306,131 +1175,19 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const { store, scope } = view;
           const limits = this.#limits;
 
-          // Nodes, newest-first; +1 to detect truncation. SQL adapters return
-          // global scope nodes (scope: null) from identity-scope reads — they
-          // are already surfaced via /knowledge/scopes, so exclude them here
-          // before truncation, records, and wikilink resolution.
-          const fetched = (await store.listNodes({ scope, limit: limits.maxNodes + 1 })).filter(node =>
-            Array.isArray(node.scope),
-          );
-          let truncated = fetched.length > limits.maxNodes;
           const pins = await this.#pins(view);
-          const pinnedNodeIdSet = new Set(pins.nodeIds);
-          const nodes = fetched.slice(0, limits.maxNodes).filter(node => !pinnedNodeIdSet.has(node.id));
-
-          // Record window: per-node owned records, then newest-first overall.
-          const recordWindow: KnowledgeRecord[] = [];
-          for (const node of nodes) {
-            if (recordWindow.length > limits.maxRecords) break;
-            const { records } = await store.listKnowledgeAbout({
-              node: node.id,
-              scope,
-              limit: limits.maxRecords + 1 - recordWindow.length,
-            });
-            recordWindow.push(...records);
-          }
-          // Record ids are ULIDs — descending id = newest-first.
-          recordWindow.sort((a, b) => b.id.localeCompare(a.id));
-          if (recordWindow.length > limits.maxRecords) {
-            truncated = true;
-            recordWindow.length = limits.maxRecords;
-          }
-
-          const resolver = new WikilinkResolver(store, nodes, limits.maxFallbackLookups);
-
-          // Edges: owner node (the record's parent link) → wikilinked node.
-          // Graph records: every windowed record with its in-window node set,
-          // owner first. The client renders dots, lines, or junctions by arity.
-          const edges: KnowledgeGraphEdge[] = [];
-          const graphRecords: KnowledgeGraphRecord[] = [];
-          const edgeSeen = new Set<string>();
-          const recordCounts = new Map<string, number>();
-          for (const record of recordWindow) {
-            recordCounts.set(record.node, (recordCounts.get(record.node) ?? 0) + 1);
-            const nodeIds = [record.node];
-            for (const name of parseKnowledgeWikilinks(record.text)) {
-              const target = await resolver.resolve(name, record.scope);
-              if (!target) continue;
-              if (target.id === record.node) continue;
-              if (!resolver.inWindowId(target.id)) continue;
-              if (!nodeIds.includes(target.id)) nodeIds.push(target.id);
-              const key = `${record.node}\u0000${target.id}`;
-              if (edgeSeen.has(key)) continue;
-              edgeSeen.add(key);
-              edges.push({
-                id: `wikilink:${record.node}:${target.id}`,
-                source: record.node,
-                target: target.id,
-                type: 'wikilink',
-                recordId: record.id,
-              });
-            }
-            graphRecords.push({ id: record.id, nodeIds, pinned: false, text: truncateRecordText(record.text) });
-          }
-
-          // Pins mark relationships. The reserved owner node is omitted, so
-          // arity comes purely from wikilink targets.
-          const pinnedRecords = pins.records;
-          const accented = new Set<string>();
-          for (const { record } of pinnedRecords) {
-            const targets: string[] = [];
-            for (const name of parseKnowledgeWikilinks(record.text)) {
-              const target = await resolver.resolve(name, record.scope);
-              if (target && resolver.inWindowId(target.id) && !targets.includes(target.id)) {
-                targets.push(target.id);
-              }
-            }
-            graphRecords.push({ id: record.id, nodeIds: targets, pinned: true, text: truncateRecordText(record.text) });
-            if (targets.length === 1) {
-              accented.add(targets[0]!);
-              continue;
-            }
-            for (let a = 0; a < targets.length; a += 1) {
-              for (let b = a + 1; b < targets.length; b += 1) {
-                const key = `${targets[a]}\u0000${targets[b]}\u0000pin`;
-                if (edgeSeen.has(key)) continue;
-                edgeSeen.add(key);
-                edges.push({
-                  id: `pin:${record.id}:${targets[a]}:${targets[b]}`,
-                  source: targets[a]!,
-                  target: targets[b]!,
-                  type: 'wikilink',
-                  recordId: record.id,
-                  pinned: true,
-                });
-              }
-            }
-          }
-          const pinCensus = {
-            resource: pinnedRecords.filter(p => p.rung === 'resource').length,
-            thread: view.view === 'thread' ? pinnedRecords.filter(p => p.rung === 'thread').length : null,
-          };
-
-          const activity = await store.listActivity({ scope, limit: 1 });
-
+          const graph = await readKnowledgeGraph(store, scope, {
+            limits,
+            pins: { nodeIds: pins.nodeIds, records: pins.records },
+          });
           const payload: KnowledgeGraphPayload = {
             view: view.view,
             ...(view.threadId ? { threadId: view.threadId } : {}),
-            nodes: nodes.map(node => ({
-              id: node.id,
-              name: node.name,
-              kind: node.kind,
-              // Empty string is a curator clear — omit it so the payload carries no dead keys.
-              ...(node.description ? { description: node.description } : {}),
-              scope: node.scope,
-              rung: deepestRung(node.scope),
-              pinned: accented.has(node.id),
-              recordCount: recordCounts.get(node.id) ?? 0,
-              createdAt: node.createdAt.toISOString(),
-              updatedAt: node.updatedAt.toISOString(),
-            })),
-            edges,
-            records: graphRecords,
-            truncated,
-            outOfWindow: [...resolver.outOfWindow.values()],
-            unresolvedCapped: { count: resolver.cappedCount, names: resolver.cappedNames },
-            pinCensus,
-            version: activity[0]?.id ?? null,
+            ...graph,
+            pinCensus: {
+              resource: graph.pinCensus.resource,
+              thread: view.view === 'thread' ? graph.pinCensus.thread : null,
+            },
           };
           return c.json(payload);
         },

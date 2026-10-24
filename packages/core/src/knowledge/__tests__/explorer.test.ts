@@ -3,11 +3,11 @@ import { InMemoryStore } from '../../storage';
 import {
   knowledgeViewScope,
   readKnowledgeActivity,
-  readKnowledgeGraph,
   readKnowledgeNode,
   knowledgeSearchRank,
   searchKnowledgeNodes,
 } from '../explorer';
+import { readKnowledgeGraph } from '../explorer-graph';
 import { Knowledge } from '../index';
 import { createPinnedTools } from '../pinned';
 
@@ -55,7 +55,7 @@ describe('Knowledge explorer reads', () => {
     ]);
     expect(graph.nodes.find(node => node.id === payments.id)?.pinned).toBe(true);
     expect(graph.nodes.find(node => node.id === runbook.id)?.pinned).toBe(false);
-    expect(graph.pinCount).toBe(1);
+    expect(graph.pinCensus.resource + graph.pinCensus.thread).toBe(1);
     expect(graph.records.some(record => record.pinned)).toBe(true);
   });
 

@@ -499,6 +499,7 @@ export * from './knowledge-tools';
 export * from './knowledge-write-tools';
 export * from './pinned';
 export * from './explorer';
+export * from './explorer-graph';
 export * from './pinned-state-processor';
 export * from './semantic-index';
 export * from './instructions';
