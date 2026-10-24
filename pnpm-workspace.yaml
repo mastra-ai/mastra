@@ -187,8 +187,8 @@ minimumReleaseAgeExclude:
   # Renovate security update: axios@1.20.0
   - axios@1.18.0
   - axios@1.20.0
-  # Renovate security update: body-parser@2.3.0
-  - body-parser@2.3.0
+  # Renovate security update: body-parser@2.3.0 || 2.4.0
+  - body-parser@2.3.0 || 2.4.0
   # Renovate security update: protobufjs@8.6.6 || 7.6.5
   - protobufjs@8.6.6 || 7.6.5 || 7.6.6 || 8.8.0
   # Renovate security update: tar@7.5.21
@@ -251,7 +251,8 @@ minimumReleaseAgeExclude:
   - fastify@5.12.5 || 5.12.6
   - '@blaxel/core@0.3.20'
   - '@fastify/proxy-addr@5.1.1'
-  - 'fast-uri@3.1.8'
+  # Renovate security update: fast-uri@3.1.9 || 4.2.3
+  - 'fast-uri@3.1.8 || 3.1.9 || 4.2.3'
   - 'fast-uri@4.2.1'
   - 'compression@1.8.2'
   - 'undici@8.11.2'
@@ -278,8 +279,8 @@ minimumReleaseAgeExclude:
   - better-auth@1.6.26
   # Renovate security update: katex@0.18.2
   - katex@0.18.2
-  # Renovate security update: multer@2.4.0
-  - multer@2.4.0
+  # Renovate security update: multer@2.4.0 || 2.5.0
+  - multer@2.4.0 || 2.5.0
   # Renovate security update: postcss-selector-parser@7.1.6
   - postcss-selector-parser@7.1.6
   # Renovate security update: simple-git@4.0.1
@@ -294,8 +295,10 @@ minimumReleaseAgeExclude:
   - "@vitest/mocker@4.1.12"
   # Renovate security update: @storybook/addon-mcp@10.6.2
   - "@storybook/addon-mcp@10.6.2"
-  # Renovate security update: storybook@10.6.2
-  - storybook@10.6.2
+  # Renovate security update: storybook@10.6.2 || 9.1.21
+  - storybook@10.6.2 || 9.1.21
+  # Renovate security update: serialize-javascript@7.1.2
+  - serialize-javascript@7.1.2
 trustPolicyExclude:
   # Vanta 2026-10-02: 7.4.6 fixes GHSA-g84c-rxfj-3j2c; earlier 7.4.x had trusted publisher
   # but 7.4.6 lacks that evidence (pnpm trustPolicy no-downgrade).
@@ -337,13 +340,13 @@ overrides:
   '@better-auth/drizzle-adapter@<1.7.7': 1.7.7
   js-yaml@>=5.0.0 <5.4.1: 5.4.1
   glob@<=10.5.0: 10.5.0
-  body-parser@<2.3.0: 2.3.0
+  body-parser@<2.3.0: 2.4.0
   inngest: ^4.2.2
   fast-xml-parser@<5.5.7: ^5.10.1
   langsmith@<0.6.0: ^0.6.0
   lodash@<=4.17.23: ^4.18.0
   prismjs@<1.30.0: ^1.30.0
-  serialize-javascript@<7.0.5: ^7.0.5
+  serialize-javascript@<7.0.5: ^7.1.2
   # Security floors for Dependabot alerts (transitive deps; patched versions
   # are within the parents' declared ranges).
   simple-git@<3.36.0: 4.0.1
@@ -353,8 +356,8 @@ overrides:
   ws@>=8.0.0 <8.21.3: 8.22.0
   webpack-dev-server@<5.2.5: 5.2.6
   qs@>=6.7.0 <6.16.0: 6.16.0
-  fast-uri@<3.1.8: 3.1.8
-  fast-uri@>=4.0.0 <4.1.5: 4.2.1
+  fast-uri@<3.1.8: 3.1.9
+  fast-uri@>=4.0.0 <4.1.5: 4.2.3
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
@@ -367,7 +370,7 @@ overrides:
   joi@>=17.0.0 <17.13.8: 17.13.8
   svgo@>=3.0.0 <3.3.5: 3.3.5
   e2b>undici8: npm:undici@8.12.2
-  multer@<2.3.0: 2.4.0
+  multer@<2.3.0: 2.5.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0
   '@opentelemetry/sdk-node@<0.217.0': 0.221.0

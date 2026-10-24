@@ -29,7 +29,7 @@ overrides:
   # Vanta 2026-09-28: nested-lock security floors
   'postcss@<8.5.23': 8.5.23
   '@hono/node-server@<1.19.15': 1.19.15
-  'fast-uri@<3.1.8': 3.1.8
+  'fast-uri@<3.1.8': 3.1.9
   'js-yaml@>=3.0.0 <3.15.2': 3.15.2
   # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
   'nanoid@<5.1.16': 5.1.16
