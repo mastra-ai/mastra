@@ -34,6 +34,7 @@ import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
 import type { ReasoningLevel } from '../loop/types';
+import type { Knowledge } from '../knowledge';
 import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
@@ -930,6 +931,12 @@ interface AgentConfigBase<
    * When configured, workspace tools are automatically injected into the agent.
    */
   workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
+  /**
+   * Knowledge attached to this agent: a Knowledge instance or the key it is registered under on Mastra.
+   * The agent gets its tools, usage instructions and pins without needing Memory.
+   * @experimental
+   */
+  knowledge?: Knowledge | string;
   /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or
