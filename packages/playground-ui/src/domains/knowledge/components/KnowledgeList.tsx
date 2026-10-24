@@ -1,15 +1,17 @@
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/utils/cn';
 import { ChevronRight, Pin } from 'lucide-react';
 
-import type { KnowledgeGraphNode, KnowledgeGraphPayload } from '../types';
 import { parseRecordSegments } from '../lib/recordText';
+import type { KnowledgeGraphNode, KnowledgeGraphPayload } from '../types';
+
+import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/utils/cn';
 
 /**
  * Tap-friendly reading of the same bounded lens payload the canvas renders:
  * child scopes first, then content nodes; the selected node expands to the
  * records it owns inside the window.
  */
+
 export function KnowledgeList({
   payload,
   rootScopeId,
@@ -42,9 +44,9 @@ export function KnowledgeList({
         )}
         onClick={() => onNodeClick(node)}
       >
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{node.name}</span>
+        <span className="text-body-sm min-w-0 flex-1 truncate font-medium">{node.name}</span>
         {node.pinned ? <Pin size={12} className="text-badge-amber-indicator shrink-0" aria-label="Pinned" /> : null}
-        <span className="text-muted-foreground shrink-0 text-xs">{meta}</span>
+        <span className="text-caption text-muted-foreground shrink-0">{meta}</span>
       </button>
     );
   };
@@ -53,7 +55,7 @@ export function KnowledgeList({
     <div data-testid="knowledge-list" className="min-h-0 flex-1 overflow-y-auto pb-16">
       {childScopes.length > 0 ? (
         <section aria-label="Child scopes" className="mb-4">
-          <Txt as="h3" variant="caption" className="text-muted-foreground mb-1 px-3 font-semibold">
+          <Txt as="h3" variant="caption" tone="muted" className="mb-1 px-3 font-semibold">
             Scopes
           </Txt>
           <ul className="flex flex-col gap-0.5">
@@ -73,7 +75,7 @@ export function KnowledgeList({
       ) : null}
       {contentNodes.length > 0 ? (
         <section aria-label="Knowledge nodes">
-          <Txt as="h3" variant="caption" className="text-muted-foreground mb-1 px-3 font-semibold">
+          <Txt as="h3" variant="caption" tone="muted" className="mb-1 px-3 font-semibold">
             Nodes
           </Txt>
           <ul className="flex flex-col gap-0.5">
@@ -91,7 +93,7 @@ export function KnowledgeList({
                             type="button"
                             aria-pressed={record.id === selectedRecordId}
                             className={cn(
-                              'text-muted-foreground hover:text-foreground min-h-11 w-full px-3 py-2 text-left text-sm',
+                              'min-h-11 w-full px-3 py-2 text-left text-body-sm text-muted-foreground hover:text-foreground',
                               record.id === selectedRecordId && 'bg-fill text-foreground',
                             )}
                             onClick={() => onRecordClick(node, record.id)}

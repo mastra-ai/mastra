@@ -1,6 +1,21 @@
-import { cn } from '@/utils/cn';
-import { textStyle } from '@/ds/primitives/text';
+import { ExternalLink, Pin, Sparkles, X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+
+import { useKnowledgeDataSource } from '../data-source-context';
+import { knowledgeScopes } from '../lib/knowledgeScope';
+import { getRecordBorderClass, getRecordRingClass } from '../lib/knowledgeStyles';
+import { parseRecordSegments } from '../lib/recordText';
+import type { KnowledgeNodeRecord, KnowledgeRung } from '../types';
+
+import { Badge } from '@/ds/components/Badge';
+import { Button } from '@/ds/components/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
+import { textStyle } from '@/ds/primitives/text';
+import { cn } from '@/utils/cn';
+
 /**
  * The right-side flyout: all the juicy details for a clicked node, organized
  * as collapsible sections — Knowledge node (identity + counts), Knowledge records (the node's
@@ -8,20 +23,6 @@ import { Txt } from '@/ds/components/Txt';
  * provenance including the capture agent's reasoning (`metadata.reason`) and
  * the "captured in session" link that opens the thread view (Amendment A2).
  */
-
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { Notice } from '@/ds/components/Notice';
-import { ExternalLink, Pin, Sparkles, X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
-import { Button } from '@/ds/components/Button';
-import { Badge } from '@/ds/components/Badge';
-import { knowledgeScopes } from '../lib/knowledgeScope';
-import { getRecordBorderClass, getRecordRingClass } from '../lib/knowledgeStyles';
-
-import { useKnowledgeDataSource } from '../data-source';
-import type { KnowledgeNodeRecord, KnowledgeRung } from '../types';
-import { parseRecordSegments } from '../lib/recordText';
 
 const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
 
@@ -287,7 +288,9 @@ export function KnowledgeFlyout({
 
           <div className="min-h-0 flex-1 overflow-y-auto pb-4">
             {nodeQuery.data.node.description?.trim() ? (
-              <p className="text-foreground px-4 pb-3 text-sm leading-relaxed">{nodeQuery.data.node.description}</p>
+              <p className="text-body-sm text-foreground px-4 pb-3 leading-relaxed">
+                {nodeQuery.data.node.description}
+              </p>
             ) : null}
             {nodeQuery.data.node.content.trim() ? (
               <Collapsible defaultOpen>
