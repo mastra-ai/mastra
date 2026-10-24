@@ -29,17 +29,21 @@ type StreamTransformerStructuredOutput<OUTPUT> = Omit<StructuredOutputOptions<OU
  * @returns JSON text with control characters properly escaped inside string values
  */
 export function escapeUnescapedControlCharsInJsonStrings(text: string): string {
-  let result = '';
+  if (!/[\n\r\t]/.test(text)) {
+    return text;
+  }
+
+  // Copy unchanged runs with slice() instead of building the result char by char.
+  const parts: string[] = [];
+  let runStart = 0;
   let inString = false;
   let i = 0;
 
   while (i < text.length) {
     const char = text[i];
 
-    // Check for escape sequences
+    // Escape sequence - pass through both characters
     if (char === '\\' && i + 1 < text.length) {
-      // This is an escape sequence - pass through both characters
-      result += char + text[i + 1];
       i += 2;
       continue;
     }
@@ -47,35 +51,23 @@ export function escapeUnescapedControlCharsInJsonStrings(text: string): string {
     // Track string boundaries (unescaped quotes)
     if (char === '"') {
       inString = !inString;
-      result += char;
       i++;
       continue;
     }
 
-    // If inside a string, escape control characters
     if (inString) {
-      if (char === '\n') {
-        result += '\\n';
-        i++;
-        continue;
-      }
-      if (char === '\r') {
-        result += '\\r';
-        i++;
-        continue;
-      }
-      if (char === '\t') {
-        result += '\\t';
-        i++;
-        continue;
+      const escaped = char === '\n' ? '\\n' : char === '\r' ? '\\r' : char === '\t' ? '\\t' : undefined;
+      if (escaped) {
+        parts.push(text.slice(runStart, i), escaped);
+        runStart = i + 1;
       }
     }
 
-    result += char;
     i++;
   }
 
-  return result;
+  parts.push(text.slice(runStart));
+  return parts.join('');
 }
 
 function extractBalancedJsonObject(text: string): string | undefined {
@@ -629,6 +621,11 @@ export function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: P
   }
 }
 
+/** Below this accumulated length, partial objects are parsed on every non-whitespace delta. */
+const PARTIAL_PARSE_EAGER_LIMIT = 4096;
+/** Above the eager limit, re-parse once the unparsed tail reaches 1/N of the accumulated text. */
+const PARTIAL_PARSE_GROWTH_DIVISOR = 32;
+
 /**
  * Transforms raw text-delta chunks into structured object chunks for JSON mode streaming.
  *
@@ -655,6 +652,40 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   let finalResult: ValidateAndTransformFinalResult<OUTPUT> | undefined;
   let finishReason: MastraFinishReason | undefined;
   let hasPendingToolCalls = false;
+  // Characters appended since the last partial parse, and the chunk they came from.
+  let pendingChars = 0;
+  let lastTextChunk: ChunkType<OUTPUT> | undefined;
+
+  // Partial parsing reprocesses the whole accumulated text, so parsing on every
+  // delta is quadratic. Skip whitespace-only deltas and, once the text is large,
+  // only re-parse after it has grown by a fixed fraction (amortized linear).
+  const shouldParsePartial = (delta: string) =>
+    !/^\s*$/.test(delta) &&
+    (accumulatedText.length <= PARTIAL_PARSE_EAGER_LIMIT ||
+      pendingChars * PARTIAL_PARSE_GROWTH_DIVISOR >= accumulatedText.length);
+
+  async function parsePartial(
+    chunk: ChunkType<OUTPUT>,
+    controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
+  ) {
+    pendingChars = 0;
+    const result = await handler.processPartialChunk({
+      accumulatedText,
+      previousObject,
+    });
+
+    if (result.shouldEmit) {
+      previousObject = result.newPreviousResult ?? previousObject;
+      const chunkData = {
+        from: chunk.from,
+        runId: chunk.runId,
+        type: 'object',
+        object: result.emitValue as Partial<OUTPUT>, // TODO: handle partial runtime type validation of json chunks
+      };
+
+      controller.enqueue(chunkData as ChunkType<OUTPUT>);
+    }
+  }
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
@@ -671,6 +702,8 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         finalResult = undefined;
         finishReason = undefined;
         hasPendingToolCalls = false;
+        pendingChars = 0;
+        lastTextChunk = undefined;
       }
 
       if (chunk.type === 'tool-call' && !chunk.payload?.providerExecuted) {
@@ -679,22 +712,11 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
 
       if (chunk.type === 'text-delta' && typeof chunk.payload?.text === 'string') {
         accumulatedText += chunk.payload.text;
+        pendingChars += chunk.payload.text.length;
+        lastTextChunk = chunk;
 
-        const result = await handler.processPartialChunk({
-          accumulatedText,
-          previousObject,
-        });
-
-        if (result.shouldEmit) {
-          previousObject = result.newPreviousResult ?? previousObject;
-          const chunkData = {
-            from: chunk.from,
-            runId: chunk.runId,
-            type: 'object',
-            object: result.emitValue as Partial<OUTPUT>, // TODO: handle partial runtime type validation of json chunks
-          };
-
-          controller.enqueue(chunkData as ChunkType<OUTPUT>);
+        if (shouldParsePartial(chunk.payload.text)) {
+          await parsePartial(chunk, controller);
         }
       }
 
@@ -717,6 +739,11 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   async function finalize(controller: TransformStreamDefaultController<ChunkType<OUTPUT>>) {
     if (!accumulatedText?.trim() || finalResult) {
       return;
+    }
+
+    // Catch up on text skipped by partial-parse throttling so the last object chunk is current.
+    if (pendingChars > 0 && lastTextChunk) {
+      await parsePartial(lastTextChunk, controller);
     }
 
     // Text from a step that calls client-executed tools is narration before the tools run, not the
