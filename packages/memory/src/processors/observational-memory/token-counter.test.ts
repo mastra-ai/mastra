@@ -1562,6 +1562,86 @@ describe('TokenCounter', () => {
     });
   });
 
+  describe('reasoning a provider replays', () => {
+    /** Deterministic base64-like payload, the shape providers use for encrypted reasoning. */
+    function opaquePayload(length: number, seed: number) {
+      const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+      let state = seed;
+      let out = '';
+      for (let i = 0; i < length; i++) {
+        state = (state * 1103515245 + 12345) % 2147483648;
+        out += alphabet[state % 64];
+      }
+      return out;
+    }
+
+    function reasoningMessage(text: string, providerMetadata?: Record<string, Record<string, unknown>>) {
+      return createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'reasoning',
+            reasoning: text,
+            details: [{ type: 'text', text }],
+            ...(providerMetadata ? { providerMetadata } : {}),
+          },
+        ],
+      });
+    }
+
+    const THOUGHT = 'The config file is the next thing to read.';
+
+    it('counts the encrypted content an OpenAI Responses reasoning part sends back', async () => {
+      const counter = new TokenCounter();
+      // About the size each reasoning step carries with store: false. The payload alone estimates
+      // at 2,167 tokens; before reasoning was counted the whole message came to 6.
+      const encrypted = opaquePayload(13_000, 7);
+      const expectedAtLeast = counter.countString(encrypted) + counter.countString(THOUGHT);
+      expect(expectedAtLeast).toBeGreaterThanOrEqual(2_167);
+
+      const message = reasoningMessage(THOUGHT, { openai: { itemId: 'rs_1', reasoningEncryptedContent: encrypted } });
+
+      expect(counter.countMessage(message)).toBeGreaterThanOrEqual(expectedAtLeast);
+      expect(await counter.countMessagesAsync([message])).toBeGreaterThanOrEqual(expectedAtLeast);
+    });
+
+    it('counts the thinking text and signature an Anthropic thinking block sends back', () => {
+      const counter = new TokenCounter();
+      const signature = opaquePayload(600, 11);
+      const message = reasoningMessage(THOUGHT, { anthropic: { signature } });
+
+      expect(counter.countMessage(message)).toBeGreaterThanOrEqual(
+        counter.countString(THOUGHT) + counter.countString(signature),
+      );
+    });
+
+    it('counts the data an Anthropic redacted thinking block sends back', () => {
+      const counter = new TokenCounter();
+      const redactedData = opaquePayload(4_000, 13);
+      const message = reasoningMessage('', { anthropic: { redactedData } });
+
+      expect(counter.countMessage(message)).toBeGreaterThanOrEqual(counter.countString(redactedData));
+    });
+
+    it('counts the thought text and signature a Gemini thought sends back', () => {
+      const counter = new TokenCounter();
+      const thoughtSignature = opaquePayload(2_000, 17);
+      const message = reasoningMessage(THOUGHT, { google: { thoughtSignature } });
+
+      expect(counter.countMessage(message)).toBeGreaterThanOrEqual(
+        counter.countString(THOUGHT) + counter.countString(thoughtSignature),
+      );
+    });
+
+    it('gives the same count from the cached estimate on the next pass', () => {
+      const encrypted = opaquePayload(13_000, 19);
+      const message = reasoningMessage(THOUGHT, { openai: { itemId: 'rs_2', reasoningEncryptedContent: encrypted } });
+
+      const first = new TokenCounter().countMessage(message);
+      expect(new TokenCounter().countMessage(message)).toBe(first);
+    });
+  });
+
   describe('countObservations', () => {
     it('delegates to countString', () => {
       const counter = new TokenCounter();
