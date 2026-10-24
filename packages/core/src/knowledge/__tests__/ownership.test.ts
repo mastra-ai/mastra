@@ -290,6 +290,20 @@ describe('Knowledge ownership computed from the structure', () => {
     ]);
   });
 
+  it('refuses a write whose run tags plus named scope exceed the 8-tag cap, naming the cap', async () => {
+    const knowledge = companyKnowledge('own-cap');
+    // org:acme + seven more held tags + resource:/thread: from Memory = 10 tags.
+    const held = ['org:acme', ...Array.from({ length: 7 }, (_, index) => `agent:a${index}`)];
+    const result = await run(knowledge, held, [
+      { toolName: 'knowledge_create', input: { name: 'Too wide', kind: 'doc', text: 'x' } },
+      { toolName: 'knowledge_search', input: { query: 'x', scope: ['team:acme:support'] } },
+    ]);
+    const errors = toolErrors(result);
+    expect(errors).toHaveLength(2);
+    for (const error of errors) expect(error).toContain('at most 8 tags');
+    expect((await knowledge.listKnowledgeAbout({ node: 'Too wide', scope: held.slice(0, 8) })).records).toEqual([]);
+  });
+
   it("needs edit to overwrite an existing node's content, append to create one", async () => {
     const knowledge = companyKnowledge('own-content', 'append');
     const created = await run(
