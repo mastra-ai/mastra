@@ -218,10 +218,13 @@ import {
   applyResolvedAgentScopes,
   parseAgentScope,
   resolveAgentScopes,
+  getRunAgentScopes,
+  MASTRA_SCOPE_ACCESS_KEY,
+  readOnlyTags,
   setRunAgentScopes,
   withoutIdentityAgentScopes,
 } from './scopes';
-import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
+import type { AgentScopeEntry, AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { AgentSignalInput, CreatedAgentSignal } from './signals';
 import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
@@ -867,7 +870,7 @@ export class Agent<
   #tools: DynamicArgument<TTools, TRequestContext>;
   #hooks?: ToolHooks;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
-  #scopes?: DynamicArgument<string[], TRequestContext>;
+  #scopes?: DynamicArgument<AgentScopeEntry[], TRequestContext>;
   #agents: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
   #voice: DynamicArgument<MastraVoice, TRequestContext>;
   #agentChannels: AgentChannels | null = null;
@@ -3109,7 +3112,7 @@ export class Agent<
    * Per-call `scopes` and the reserved `mastra__scopes` request-context key are not included.
    */
   async getScopes({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}): Promise<
-    string[] | undefined
+    AgentScopeEntry[] | undefined
   > {
     if (typeof this.#scopes !== 'function') {
       return this.#scopes;
@@ -5842,8 +5845,15 @@ export class Agent<
             const parentScopes = subAgentRequestContext.get(MASTRA_SCOPES_KEY);
             if (Array.isArray(parentScopes)) {
               const inheritedScopes = withoutIdentityAgentScopes(parentScopes);
-              if (inheritedScopes.length > 0) setRunAgentScopes(subAgentRequestContext, inheritedScopes);
-              else subAgentRequestContext.delete(MASTRA_SCOPES_KEY);
+              if (inheritedScopes.length > 0) {
+                setRunAgentScopes(
+                  subAgentRequestContext,
+                  inheritedScopes,
+                  getRunAgentScopes(subAgentRequestContext)
+                    .filter(scope => scope.access === 'read')
+                    .map(scope => scope.tag),
+                );
+              } else subAgentRequestContext.delete(MASTRA_SCOPES_KEY);
             }
 
             // Expand `contextFromRefs` into the prompt before any hook runs so
@@ -8505,6 +8515,7 @@ export class Agent<
       // suspended before the scopes upgrade — it adopts the supplied scopes, the same trust
       // posture as a fresh run (identity stays pinned by the snapshot's resource/thread above).
       scopes: Array.isArray(scopes) ? scopes : undefined,
+      readOnly: readOnlyTags(snapshot.requestContext?.[MASTRA_SCOPE_ACCESS_KEY]),
     };
   }
 
@@ -8528,6 +8539,16 @@ export class Agent<
         });
       }
       return persisted;
+    }
+    return undefined;
+  }
+
+  /** Tags the suspended run held read-only, persisted beside its scopes. */
+  #getSnapshotReadOnly(existingSnapshot: WorkflowRunState | null | undefined): string[] | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      const persisted = step?.status === 'suspended' ? step.suspendPayload?.__resolvedReadOnly : undefined;
+      if (Array.isArray(persisted) && persisted.every(tag => typeof tag === 'string')) return persisted;
     }
     return undefined;
   }
@@ -8557,8 +8578,8 @@ export class Agent<
       existingSnapshot,
       snapshot,
     }: {
-      callScopes?: string[];
-      defaultScopes?: string[];
+      callScopes?: AgentScopeEntry[];
+      defaultScopes?: AgentScopeEntry[];
       existingSnapshot?: WorkflowRunState | null;
       snapshot?: AgentScopesSnapshot;
     },
@@ -8577,6 +8598,7 @@ export class Agent<
             // same trust posture as a fresh run (identity is still pinned by the snapshot's
             // resource/thread above).
             scopes: this.#getSnapshotScopes(existingSnapshot),
+            readOnly: this.#getSnapshotReadOnly(existingSnapshot),
           }
         : undefined);
     // A resumed run keeps its suspended scopes, so the Agent's configuration is not consulted.
@@ -9099,6 +9121,7 @@ export class Agent<
       actor: options.actor,
       agentVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
       resolvedScopes: options.resolvedScopes,
+      resolvedReadOnly: options.resolvedReadOnly,
       agentName: this.name,
       toolCallId: options.toolCallId,
       workspace,
@@ -9798,6 +9821,7 @@ export class Agent<
         : undefined,
       messages,
       resolvedScopes: resolvedScopes.scopes,
+      resolvedReadOnly: resolvedScopes.readOnly,
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
@@ -10641,6 +10665,7 @@ export class Agent<
         : undefined,
       messages,
       resolvedScopes: resolvedScopes.scopes,
+      resolvedReadOnly: resolvedScopes.readOnly,
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
@@ -11036,6 +11061,7 @@ export class Agent<
           : undefined,
         messages: [],
         resolvedScopes: resolvedScopes.scopes,
+        resolvedReadOnly: resolvedScopes.readOnly,
         resumeContext: {
           resumeData,
           snapshot: resumeSnapshot,
@@ -11242,6 +11268,7 @@ export class Agent<
           : undefined,
         messages: [],
         resolvedScopes: resolvedScopes.scopes,
+        resolvedReadOnly: resolvedScopes.readOnly,
         resumeContext: {
           resumeData,
           snapshot: resumeSnapshot,

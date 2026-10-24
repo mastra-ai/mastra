@@ -25,6 +25,7 @@ import { createRecentRequests } from './recent-requests';
 import { clearRunLeaseFence, setRunLeaseFence } from './run-lease-fence';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { resolveAgentScopes } from './scopes';
+import type { AgentScopeEntry } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
@@ -278,13 +279,20 @@ function releaseReplyTopic(pubsub: PubSub, replyTopic: string, cb: EventCallback
     .catch(() => {});
 }
 
-function unionScopes(...lists: Array<readonly string[] | undefined>): string[] {
-  return [...new Set(lists.flatMap(list => list ?? []))];
+/** Unions scope entries by tag; a tag any list holds read-only stays read-only. */
+function unionScopes(...lists: Array<readonly AgentScopeEntry[] | undefined>): AgentScopeEntry[] {
+  const byTag = new Map<string, AgentScopeEntry>();
+  for (const entry of lists.flatMap(list => list ?? [])) {
+    const tag = typeof entry === 'string' ? entry : entry.tag;
+    const existing = byTag.get(tag);
+    if (existing === undefined || typeof existing === 'string') byTag.set(tag, entry);
+  }
+  return [...byTag.values()];
 }
 
 type ThreadTargetScopes = {
-  scopes?: string[];
-  ifIdle?: { streamOptions?: { scopes?: string[]; requestContext?: RequestContext } };
+  scopes?: AgentScopeEntry[];
+  ifIdle?: { streamOptions?: { scopes?: AgentScopeEntry[]; requestContext?: RequestContext } };
 };
 
 /**
@@ -301,7 +309,7 @@ function resolveThreadTargetScopes(
   target: ThreadTargetScopes,
   ids: { resourceId?: string; threadId?: string },
   mastra?: { getMastraServer?(): unknown },
-): string[] | undefined {
+): AgentScopeEntry[] | undefined {
   const idleScopes = target.ifIdle?.streamOptions?.scopes;
   if (target.scopes === undefined && idleScopes === undefined) return undefined;
   const scopes = unionScopes(target.scopes, idleScopes);

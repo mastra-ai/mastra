@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import type { ProviderDefinedTool } from '@internal/external-types';
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { assertType, describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { RequestContext } from '../request-context';
@@ -7,6 +7,7 @@ import type { PublicSchema } from '../schema';
 import { createTool, webSearchTool } from '../tools';
 import { Agent } from './agent';
 import type { AgentExecutionOptions, PublicAgentExecutionOptions } from './agent.types';
+import type { AgentScopeEntry } from './scopes';
 import type { AgentConfig } from './types';
 
 /**
@@ -440,12 +441,12 @@ describe('Agent Type Tests', () => {
       type QueueMessage = Parameters<Agent['queueMessage']>[1];
       type SendSignal = Parameters<Agent['sendSignal']>[1];
 
-      expectTypeOf<Stream['scopes']>().toEqualTypeOf<string[] | undefined>();
-      expectTypeOf<Generate['scopes']>().toEqualTypeOf<string[] | undefined>();
-      expectTypeOf<Network['scopes']>().toEqualTypeOf<string[] | undefined>();
-      expectTypeOf<SendMessage['scopes']>().toEqualTypeOf<string[] | undefined>();
-      expectTypeOf<QueueMessage['scopes']>().toEqualTypeOf<string[] | undefined>();
-      expectTypeOf<SendSignal['scopes']>().toEqualTypeOf<string[] | undefined>();
+      expectTypeOf<Stream['scopes']>().toEqualTypeOf<AgentScopeEntry[] | undefined>();
+      expectTypeOf<Generate['scopes']>().toEqualTypeOf<AgentScopeEntry[] | undefined>();
+      expectTypeOf<Network['scopes']>().toEqualTypeOf<AgentScopeEntry[] | undefined>();
+      expectTypeOf<SendMessage['scopes']>().toEqualTypeOf<AgentScopeEntry[] | undefined>();
+      expectTypeOf<QueueMessage['scopes']>().toEqualTypeOf<AgentScopeEntry[] | undefined>();
+      expectTypeOf<SendSignal['scopes']>().toEqualTypeOf<AgentScopeEntry[] | undefined>();
 
       assertType<AgentConfig>({
         id: 'a',

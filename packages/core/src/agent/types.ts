@@ -76,6 +76,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
+import type { AgentScopeEntry } from './scopes';
 import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
 export type {
@@ -216,7 +217,7 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
        * Validated, but does not change the scopes of the run receiving the signal:
        * a run's scopes are fixed when it starts.
        */
-      scopes?: string[];
+      scopes?: AgentScopeEntry[];
     }
   | {
       runId?: string;
@@ -228,7 +229,7 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
        * Scopes for a run this signal starts, unioned with `ifIdle.streamOptions.scopes`.
        * `resource:`/`thread:` scopes must equal `resourceId`/`threadId`.
        */
-      scopes?: string[];
+      scopes?: AgentScopeEntry[];
     };
 
 /**
@@ -835,11 +836,12 @@ interface AgentConfigBase<
    */
   memory?: DynamicArgument<MastraMemory, TRequestContext>;
   /**
-   * Scopes every run of this agent acts with, as `<type>:<value>` addresses such as `org:acme`.
+   * Scopes every run of this agent acts with, as `<type>:<value>` addresses such as `org:acme`,
+   * or `{ tag, access: 'read' }` to hold a tag read-only.
    * Unioned with per-call `scopes` and the reserved `mastra__scopes` request-context key.
    * A resolver function runs once per call with the request context.
    */
-  scopes?: DynamicArgument<string[], TRequestContext>;
+  scopes?: DynamicArgument<AgentScopeEntry[], TRequestContext>;
   /**
    * Skills that guide agent behavior — reusable instructions the model loads on demand.
    *
