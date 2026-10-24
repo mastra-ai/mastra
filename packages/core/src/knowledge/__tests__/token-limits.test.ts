@@ -18,7 +18,6 @@ describe('Knowledge limits are counted in tokens', () => {
     const tools = createPinnedTools(host, {
       scope,
       sourceThreadId: 'thread-1',
-      defaultScope: 'resource',
       maxPins: 20,
       maxTokens: 300,
     });

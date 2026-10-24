@@ -1,4 +1,5 @@
 import type { JSONSchema7 } from 'json-schema';
+import { getRunAgentScopes } from '../agent/scopes';
 import type {
   KnowledgeRecord,
   KnowledgeNode,
@@ -6,11 +7,10 @@ import type {
   KnowledgeStorage,
   SearchKnowledgeResult,
 } from '../storage';
-import { createKnowledgeNodeCursor, isKnowledgeScopeVisible } from '../storage';
+import { canonicalizeKnowledgeScope, createKnowledgeNodeCursor, isKnowledgeScopeVisible } from '../storage';
 import type { ToolAction } from '../tools';
-import { createTool } from '../tools';
 
-import { resolveKnowledgeResourceId } from './scope';
+import { createTool } from '../tools';
 import type { KnowledgeSemanticIndexCoordinator } from './semantic-index';
 
 const DEFAULT_LIMIT = 10;
@@ -32,16 +32,22 @@ export type KnowledgeToolContext = {
   requestContext?: { get(key: string): unknown };
 };
 
-export function resolveKnowledgeToolScope(context: KnowledgeToolContext | undefined): KnowledgeScope {
-  const organizationId = context?.requestContext?.get('organizationId');
-  const resourceId = resolveKnowledgeResourceId(context?.requestContext, context?.agent?.resourceId);
+/**
+ * The run's Knowledge scope: the tags Core resolved for the run plus its Memory identity
+ * (`resource:`/`thread:`), which Core strips from `mastra__scopes`. Nothing else is trusted.
+ */
+export function resolveKnowledgeRunScope(context: KnowledgeToolContext | undefined): KnowledgeScope {
+  const tags = [...getRunAgentScopes(context?.requestContext)];
+  const resourceId = context?.agent?.resourceId;
   const threadId = context?.agent?.threadId;
-  if (typeof organizationId !== 'string' || !organizationId.trim()) {
-    throw new Error('Knowledge tools require requestContext.organizationId.');
+  if (resourceId) tags.push(`resource:${resourceId}`);
+  if (threadId) tags.push(`thread:${threadId}`);
+  if (tags.length === 0) {
+    throw new Error(
+      'Knowledge tools need run scopes: give the agent or the call `scopes`, or run it with a Memory resource or thread.',
+    );
   }
-  if (!resourceId) throw new Error('Knowledge tools require an active resourceId.');
-  if (!threadId) throw new Error('Knowledge tools require an active threadId.');
-  return [`org:${organizationId}`, `resource:${resourceId}`, `thread:${threadId}`];
+  return canonicalizeKnowledgeScope(tags);
 }
 
 export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<KnowledgeStorage> {
@@ -167,7 +173,7 @@ export function createKnowledgeTools(
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const { query, limit: requestedLimit } = input as { query: string; limit?: number };
-      const scope = fixedScope ?? resolveKnowledgeToolScope(context as KnowledgeToolContext);
+      const scope = fixedScope ?? resolveKnowledgeRunScope(context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
       const semanticIndex = await memory.getKnowledgeSemanticIndex();
@@ -213,7 +219,7 @@ export function createKnowledgeTools(
         limit?: number;
       };
       if (!id && !name) throw new Error('knowledge_read requires id or name.');
-      const scope = fixedScope ?? resolveKnowledgeToolScope(context as KnowledgeToolContext);
+      const scope = fixedScope ?? resolveKnowledgeRunScope(context as KnowledgeToolContext);
       const store = await getKnowledgeStore(memory);
       const node = id ? await store.getNode(id) : await store.resolveNode({ name: name!, scope });
       if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
@@ -269,7 +275,7 @@ export function createKnowledgeTools(
         cursor?: string;
         limit?: number;
       };
-      const scope = fixedScope ?? resolveKnowledgeToolScope(context as KnowledgeToolContext);
+      const scope = fixedScope ?? resolveKnowledgeRunScope(context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
       if (nodeReference) {
