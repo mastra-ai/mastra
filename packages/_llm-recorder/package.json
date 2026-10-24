@@ -52,7 +52,7 @@
   },
   "dependencies": {
     "diff": "^8.0.3",
-    "msw": "^2.12.11",
+    "msw": "^2.15.0",
     "string-similarity": "^4.0.4"
   },
   "homepage": "https://mastra.ai",

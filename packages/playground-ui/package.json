@@ -269,7 +269,7 @@
     "oxlint-tailwindcss": "1.16.0",
     "jsdom": "^30.1.1",
     "lucide-react": "catalog:",
-    "msw": "^2.12.11",
+    "msw": "^2.15.0",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router": "^8.0.0",
