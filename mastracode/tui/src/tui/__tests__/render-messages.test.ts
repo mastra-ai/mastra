@@ -280,6 +280,30 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
   });
 
+  it('labels the Knowledge pins state signal as pinned knowledge, not by its legacy id', () => {
+    const state = createState();
+    addUserMessage(
+      state,
+      createStateSignalMessage(
+        {
+          stateId: 'subconscious-pins',
+          mode: 'snapshot',
+          version: 1,
+          message: '<pinned-knowledge count="1">Always answer in French.</pinned-knowledge>',
+        },
+        'pins-1',
+      ),
+    );
+
+    const rendered = state.messageComponentsById
+      .get('pins-1')!
+      .render(100)
+      .map(line => stripAnsi(line))
+      .join('\n');
+    expect(rendered).toContain('State snapshot: pinned knowledge');
+    expect(rendered).not.toContain('subconscious');
+  });
+
   it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {
     const state = createState();
 
