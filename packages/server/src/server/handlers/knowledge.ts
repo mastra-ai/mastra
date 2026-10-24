@@ -1,5 +1,3 @@
-import type { Mastra } from '@mastra/core/mastra';
-import type { RequestContext } from '@mastra/core/request-context';
 import {
   knowledgeSearchHit,
   readKnowledgeActivity,
@@ -7,6 +5,8 @@ import {
   readKnowledgeNode,
   searchKnowledgeNodes,
 } from '@mastra/core/knowledge';
+import type { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 import type { KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import { MASTRA_KNOWLEDGE_SCOPE_KEY } from '../constants';

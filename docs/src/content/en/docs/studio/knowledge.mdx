@@ -44,6 +44,7 @@ If the viewer's tags exceed what a caller should be allowed to hold, bind them p
 Set it in `server.auth.authorize`, which runs after the caller is authenticated and receives the framework context. Don't set it in `server.middleware`: middleware runs **before** authentication, so the caller isn't known yet.
 
 ```typescript
+import { Mastra } from '@mastra/core';
 import { KNOWLEDGE_ROUTES, MASTRA_KNOWLEDGE_SCOPE_KEY } from '@mastra/server/server-adapter';
 
 export const mastra = new Mastra({
@@ -52,7 +53,7 @@ export const mastra = new Mastra({
     auth: {
       authenticateToken: async token => verifyToken(token),
       authorize: async (path, _method, user, context) => {
-        if (path.includes('/knowledge')) {
+        if (path.startsWith('/api/knowledge')) {
           const tags = tagsFor(user);
           // Refuse rather than leave the key unset: an unset key means unbound.
           if (!Array.isArray(tags)) return false;
@@ -64,6 +65,8 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+If you configure `studio.auth`, Studio requests use it **instead of** `server.auth`, so `server.auth.authorize` never runs for them and nothing is bound. Put the same `authorize` in `studio.auth` (or in both) so the binding applies to whichever config the request uses.
 
 Never set the key to `undefined`. It reads back the same as an unset key, so the request is treated as unbound and the scope is trusted as sent.
 
