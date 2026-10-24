@@ -1,0 +1,514 @@
+/**
+ * Tests for WebMCP host integration in AgentBrowser:
+ * tool registration gating, init-script injection, origin allowlist,
+ * and the list/call paths.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { mockPage, mockContext, mockManager } = vi.hoisted(() => {
+  const mockContext = {
+    addInitScript: vi.fn().mockResolvedValue(undefined),
+  };
+  const mockPage = {
+    url: vi.fn().mockReturnValue('https://example.com/'),
+    evaluate: vi.fn(),
+  };
+  const mockManager = {
+    launch: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+    isLaunched: vi.fn().mockReturnValue(true),
+    getPage: vi.fn().mockReturnValue(mockPage),
+    getContext: vi.fn().mockReturnValue(mockContext),
+  };
+  return { mockPage, mockContext, mockManager };
+});
+
+vi.mock('agent-browser', () => ({
+  BrowserManager: class {
+    launch = mockManager.launch;
+    close = mockManager.close;
+    isLaunched = mockManager.isLaunched;
+    getPage = mockManager.getPage;
+    getContext = mockManager.getContext;
+  },
+}));
+
+import { AgentBrowser } from '../agent-browser';
+import { BROWSER_TOOLS } from '../tools/constants';
+import { WEBMCP_PREPARE_STEP_PROCESSOR_ID } from '../webmcp-prepare-step';
+
+describe('WebMCP: tool registration gating', () => {
+  it('hides browser_webmcp_discover by default (no webmcp config)', () => {
+    const browser = new AgentBrowser({ scope: 'shared' });
+    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP_DISCOVER);
+  });
+
+  it('hides browser_webmcp_discover when webmcp is an empty object (enabled not set)', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: {} });
+    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP_DISCOVER);
+  });
+
+  it('hides browser_webmcp_discover in auto mode (default)', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
+    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP_DISCOVER);
+  });
+
+  it('exposes browser_webmcp_discover when toolDiscovery is manual', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true, toolDiscovery: 'manual' } });
+    expect(Object.keys(browser.getTools())).toContain(BROWSER_TOOLS.WEBMCP_DISCOVER);
+  });
+
+  it('hides browser_webmcp_discover when webmcp.enabled is false', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: false, toolDiscovery: 'manual' } });
+    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP_DISCOVER);
+  });
+
+  it('respects excludeTools for browser_webmcp_discover', () => {
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, toolDiscovery: 'manual' },
+      excludeTools: [BROWSER_TOOLS.WEBMCP_DISCOVER],
+    });
+    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP_DISCOVER);
+  });
+});
+
+describe('WebMCP: getInputProcessors (Agent auto-wiring)', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const processorIds = (browser: AgentBrowser) => browser.getInputProcessors().map(p => p.id);
+
+  it('omits the prepare-step processor when WebMCP is disabled', () => {
+    const browser = new AgentBrowser({ scope: 'shared' });
+    expect(processorIds(browser)).not.toContain(WEBMCP_PREPARE_STEP_PROCESSOR_ID);
+  });
+
+  it('omits the prepare-step processor when webmcp is an empty object', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: {} });
+    expect(processorIds(browser)).not.toContain(WEBMCP_PREPARE_STEP_PROCESSOR_ID);
+  });
+
+  it('omits the prepare-step processor when webmcp.enabled is false', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: false } });
+    expect(processorIds(browser)).not.toContain(WEBMCP_PREPARE_STEP_PROCESSOR_ID);
+  });
+
+  it('includes the prepare-step processor when WebMCP is enabled, delegating to browser.prepareStep', async () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
+    await browser.launch();
+    const processors = browser.getInputProcessors();
+    const processor = processors.find(p => p.id === WEBMCP_PREPARE_STEP_PROCESSOR_ID);
+    expect(processor).toBeDefined();
+    // Keeps the base browser-context processor alongside.
+    expect(processors.some(p => p.id === 'browser-context')).toBe(true);
+    // processInputStep runs the same hook as browser.prepareStep: page tools
+    // discovered by the bridge surface in the returned toolset.
+    mockPage.evaluate.mockResolvedValueOnce([
+      { name: 'add_to_cart', source: 'mcpb', description: 'adds', inputSchema: { type: 'object', properties: {} } },
+    ]);
+    const result = (await (processor as { processInputStep: (args: unknown) => Promise<unknown> }).processInputStep({
+      stepNumber: 0,
+      tools: { browser_goto: {} },
+    })) as { tools: Record<string, unknown> };
+    expect(Object.keys(result.tools)).toEqual(expect.arrayContaining(['browser_goto', 'page_add_to_cart']));
+    await browser.close();
+  });
+
+  it('includes the prepare-step processor in manual mode too', () => {
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, toolDiscovery: 'manual' },
+    });
+    expect(processorIds(browser)).toContain(WEBMCP_PREPARE_STEP_PROCESSOR_ID);
+  });
+
+  it('skips the prepare-step processor when the user already configured one with the same id', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
+    const userProcessor = { id: WEBMCP_PREPARE_STEP_PROCESSOR_ID, name: 'user-supplied', processInputStep: () => {} };
+    const processors = browser.getInputProcessors([userProcessor as never]);
+    expect(processors.map(p => p.id)).not.toContain(WEBMCP_PREPARE_STEP_PROCESSOR_ID);
+  });
+});
+
+describe('WebMCP: bridge installation', () => {
+  afterEach(async () => {
+    vi.clearAllMocks();
+  });
+
+  it('installs the init script when webmcp is enabled', async () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
+    await browser.launch();
+    expect(mockContext.addInitScript).toHaveBeenCalledTimes(1);
+    const callArgs = mockContext.addInitScript.mock.calls[0]?.[0];
+    expect(callArgs).toHaveProperty('content');
+    expect(typeof callArgs.content).toBe('string');
+    expect(callArgs.content).toContain('__mastraWebMcp');
+    await browser.close();
+  });
+
+  it('does not install the init script by default', async () => {
+    const browser = new AgentBrowser({ scope: 'shared' });
+    await browser.launch();
+    expect(mockContext.addInitScript).not.toHaveBeenCalled();
+    await browser.close();
+  });
+
+  it('defaults the injected protocols to all supported protocols', async () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
+    await browser.launch();
+    const content = mockContext.addInitScript.mock.calls[0]?.[0]?.content as string;
+    expect(content).toMatch(/PROTOCOLS = \["mcpb","w3c"\]/);
+    await browser.close();
+  });
+
+  it('treats an empty protocols array like unset (all protocols)', async () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true, protocols: [] } });
+    await browser.launch();
+    const content = mockContext.addInitScript.mock.calls[0]?.[0]?.content as string;
+    expect(content).toMatch(/PROTOCOLS = \["mcpb","w3c"\]/);
+    await browser.close();
+  });
+
+  it('passes protocols=[w3c] through to the bridge', async () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true, protocols: ['w3c'] } });
+    await browser.launch();
+    const content = mockContext.addInitScript.mock.calls[0]?.[0]?.content as string;
+    expect(content).toMatch(/PROTOCOLS = \["w3c"\]/);
+    await browser.close();
+  });
+
+  it('passes protocols=[mcpb] through to the bridge', async () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true, protocols: ['mcpb'] } });
+    await browser.launch();
+    const content = mockContext.addInitScript.mock.calls[0]?.[0]?.content as string;
+    expect(content).toMatch(/PROTOCOLS = \["mcpb"\]/);
+    await browser.close();
+  });
+});
+
+describe('WebMCP: list', () => {
+  let browser: AgentBrowser;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockPage.url.mockReturnValue('https://example.com/');
+    browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
+    await browser.launch();
+  });
+
+  afterEach(async () => {
+    await browser.close();
+  });
+
+  it('returns the tools reported by the in-page bridge', async () => {
+    mockPage.evaluate.mockResolvedValueOnce([
+      { name: 'add', source: 'w3c', description: 'Add two numbers', inputSchema: null },
+    ]);
+    const result = await browser.listWebMcpTools();
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.tools).toEqual([{ name: 'add', source: 'w3c', description: 'Add two numbers', inputSchema: null }]);
+      expect(result.origin).toBe('https://example.com');
+      expect(result.hint).toMatch(/browser_webmcp_discover|prepareStep/);
+    }
+  });
+
+  it('returns an empty list with a navigation hint when the page has no tools', async () => {
+    mockPage.evaluate.mockResolvedValueOnce([]);
+    const result = await browser.listWebMcpTools();
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.tools).toEqual([]);
+      expect(result.hint).toMatch(/No WebMCP tools/);
+    }
+  });
+
+  it('returns an error when webmcp.enabled is false', async () => {
+    const other = new AgentBrowser({ scope: 'shared', webmcp: { enabled: false } });
+    await other.launch();
+    const result = await other.listWebMcpTools();
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.message).toMatch(/not enabled/);
+    }
+    await other.close();
+  });
+});
+
+describe('WebMCP: call', () => {
+  let browser: AgentBrowser;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockPage.url.mockReturnValue('https://example.com/');
+    browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
+    await browser.launch();
+  });
+
+  afterEach(async () => {
+    await browser.close();
+  });
+
+  it('forwards the tool name and args to the in-page bridge', async () => {
+    mockPage.evaluate.mockResolvedValueOnce({ ok: true });
+    const result = await browser.callWebMcpTool({ toolName: 'checkout', args: { items: 2 } });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.result).toEqual({ ok: true });
+    const callArgs = mockPage.evaluate.mock.calls[0];
+    expect(callArgs?.[1]).toEqual({ name: 'checkout', args: { items: 2 }, expectedOrigin: null });
+  });
+
+  it('surfaces bridge errors from page.evaluate rejections', async () => {
+    mockPage.evaluate.mockRejectedValueOnce(new Error('WebMCP tool "ghost" is not registered on this page'));
+    const result = await browser.callWebMcpTool({ toolName: 'ghost' });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('WebMCP: origin allowlist', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('allows any origin when allowedOrigins is unset', async () => {
+    mockPage.url.mockReturnValue('https://any-site.test/path');
+    mockPage.evaluate.mockResolvedValue([]);
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
+    await browser.launch();
+    const result = await browser.listWebMcpTools();
+    expect(result.success).toBe(true);
+    await browser.close();
+  });
+
+  it('allows pages whose origin is in the allowlist', async () => {
+    mockPage.url.mockReturnValue('https://example.com/some/path?x=1');
+    mockPage.evaluate.mockResolvedValue([]);
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, allowedOrigins: ['https://example.com'] },
+    });
+    await browser.launch();
+    const result = await browser.listWebMcpTools();
+    expect(result.success).toBe(true);
+    await browser.close();
+  });
+
+  it('rejects pages whose origin is not in the allowlist', async () => {
+    mockPage.url.mockReturnValue('https://untrusted.example/path');
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, allowedOrigins: ['https://example.com'] },
+    });
+    await browser.launch();
+    const result = await browser.listWebMcpTools();
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toMatch(/not allowed/);
+    await browser.close();
+  });
+
+  it('rejects about:blank when an allowlist is configured', async () => {
+    mockPage.url.mockReturnValue('about:blank');
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, allowedOrigins: ['https://example.com'] },
+    });
+    await browser.launch();
+    const result = await browser.listWebMcpTools();
+    expect(result.success).toBe(false);
+    await browser.close();
+  });
+
+  it('matches file:// pages against a file:// allowlist entry', async () => {
+    mockPage.url.mockReturnValue('file:///tmp/fixture.html');
+    mockPage.evaluate.mockResolvedValue([]);
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, allowedOrigins: ['file://'] },
+    });
+    await browser.launch();
+    const result = await browser.listWebMcpTools();
+    expect(result.success).toBe(true);
+    await browser.close();
+  });
+
+  it('also enforces the allowlist on call', async () => {
+    mockPage.url.mockReturnValue('https://untrusted.example/');
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, allowedOrigins: ['https://example.com'] },
+    });
+    await browser.launch();
+    const result = await browser.callWebMcpTool({ toolName: 'foo' });
+    expect(result.success).toBe(false);
+    expect(mockPage.evaluate).not.toHaveBeenCalled();
+    await browser.close();
+  });
+});
+
+describe('WebMCP: delayed-navigation (TOCTOU) regression', () => {
+  // The host checks `originIsAllowed(page.url())` before `page.evaluate`, but
+  // the page can navigate in between. These tests execute the real evaluate
+  // callback against a `location` that no longer matches the checked URL and
+  // assert the in-page re-check fails closed.
+  const runEvaluateCallback = async (fn: (arg: unknown) => unknown, arg: unknown) => fn(arg);
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    delete (globalThis as { location?: unknown }).location;
+  });
+
+  it('fails closed when the page navigates between the allowlist check and list', async () => {
+    mockPage.url.mockReturnValue('https://example.com/');
+    (globalThis as { location?: unknown }).location = { protocol: 'https:', origin: 'https://attacker.example' };
+    mockPage.evaluate.mockImplementation(runEvaluateCallback);
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, allowedOrigins: ['https://example.com'] },
+    });
+    await browser.launch();
+    const result = await browser.listWebMcpTools();
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toMatch(/navigated/);
+    await browser.close();
+  });
+
+  it('fails closed when the page navigates between the allowlist check and call', async () => {
+    mockPage.url.mockReturnValue('https://example.com/');
+    (globalThis as { location?: unknown }).location = { protocol: 'https:', origin: 'https://attacker.example' };
+    mockPage.evaluate.mockImplementation(runEvaluateCallback);
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, allowedOrigins: ['https://example.com'] },
+    });
+    await browser.launch();
+    const result = await browser.callWebMcpTool({ toolName: 'checkout', args: {} });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toMatch(/navigated/);
+    await browser.close();
+  });
+
+  it('skips the in-page origin check when no allowlist is configured', async () => {
+    mockPage.url.mockReturnValue('https://example.com/');
+    // No `location` stub: with no allowlist, expectedOrigin is null and the
+    // callback must not touch `location` at all.
+    mockPage.evaluate.mockImplementation(runEvaluateCallback);
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
+    await browser.launch();
+    const result = await browser.listWebMcpTools();
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.tools).toEqual([]);
+    await browser.close();
+  });
+});
+
+describe('WebMCP: attachWebMcpTools URL binding (regression)', () => {
+  // If the page navigates between the list call and the record store, the
+  // tools from page A would otherwise end up stamped with page B's URL,
+  // producing a mismatch the next step cannot invalidate.
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('rejects when the page navigates between list and store', async () => {
+    const urls = ['https://a.example/', 'https://a.example/', 'https://b.example/'];
+    let callIndex = 0;
+    mockPage.url.mockImplementation(() => urls[Math.min(callIndex++, urls.length - 1)]);
+    mockPage.evaluate.mockResolvedValueOnce([
+      { name: 'get_price', source: 'mcpb', description: 'd', inputSchema: { type: 'object' } },
+    ]);
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, toolDiscovery: 'manual' },
+    });
+    await browser.launch();
+    const result = await browser.attachWebMcpTools();
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toMatch(/navigated/);
+    // No tools should have been stored under either URL.
+    expect(browser.getAttachedWebMcpTools()).toEqual([]);
+    await browser.close();
+  });
+});
+
+describe('WebMCP: attachWebMcpTools cache invalidation (regression)', () => {
+  // When attachWebMcpTools updates an existing tool record (same name + URL)
+  // with changed description or inputSchema, the prepare-step cache keyed on
+  // the attached-id set would otherwise return stale wrapper definitions.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPage.url.mockReturnValue('https://shop.test/');
+  });
+
+  it('rebuilds the prepare-step tool when a reattached tool changes its schema', async () => {
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, toolDiscovery: 'manual' },
+    });
+    await browser.launch();
+
+    mockPage.evaluate.mockResolvedValueOnce([
+      {
+        name: 'add_to_cart',
+        source: 'mcpb',
+        description: 'v1',
+        inputSchema: { type: 'object', properties: { sku: { type: 'string' } } },
+      },
+    ]);
+    await browser.attachWebMcpTools();
+    const first = (await browser.prepareStep({ stepNumber: 1, tools: {} })) as {
+      tools: Record<string, { description?: string }>;
+    };
+    expect(first.tools.page_add_to_cart?.description).toBe('v1');
+
+    // Same name + URL, different description/schema. Attachment order
+    // (and ID set) is identical so an attached-key-based cache would hit;
+    // the invalidation must notice the structural change.
+    mockPage.evaluate.mockResolvedValueOnce([
+      {
+        name: 'add_to_cart',
+        source: 'mcpb',
+        description: 'v2',
+        inputSchema: {
+          type: 'object',
+          properties: { sku: { type: 'string' }, qty: { type: 'number' } },
+          required: ['sku', 'qty'],
+        },
+      },
+    ]);
+    await browser.attachWebMcpTools();
+    const second = (await browser.prepareStep({ stepNumber: 2, tools: {} })) as {
+      tools: Record<string, { description?: string }>;
+    };
+    expect(second.tools.page_add_to_cart?.description).toBe('v2');
+
+    await browser.close();
+  });
+});
+
+describe('WebMCP: close clears all state (regression)', () => {
+  // Reopening the browser to the same URL must not resurrect the previous
+  // session's prepare-step cache or attached-tool records.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPage.url.mockReturnValue('https://shop.test/');
+  });
+
+  it('clears prepare-step cache and attached tools on close', async () => {
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, toolDiscovery: 'manual' },
+    });
+    await browser.launch();
+    mockPage.evaluate.mockResolvedValueOnce([
+      { name: 'ping', source: 'mcpb', description: 'p', inputSchema: { type: 'object' } },
+    ]);
+    await browser.attachWebMcpTools();
+    expect(browser.getAttachedWebMcpTools().length).toBeGreaterThan(0);
+
+    await browser.close();
+    // After close, no tools should remain for any thread.
+    expect(browser.getAttachedWebMcpTools()).toEqual([]);
+  });
+});

@@ -252,6 +252,25 @@ export const evaluateInputSchema = z.object({
 export type EvaluateInput = z.output<typeof evaluateInputSchema>;
 
 // =============================================================================
+// WebMCP (1)
+// =============================================================================
+
+/**
+ * browser_webmcp_discover - Attach WebMCP tools from the current page to the
+ * agent's toolset. Supports pages that use the W3C `navigator.modelContext`
+ * draft or an in-page MCP server over the MCP-B Tab transport. Attached
+ * tools surface on the next step as first-class `page_*` tools (via
+ * `browser.prepareStep`) and are only valid while the page remains loaded.
+ */
+export const webmcpDiscoverInputSchema = z.object({
+  names: z
+    .array(z.string().min(1))
+    .optional()
+    .describe('Optional subset of page tool names to attach. When omitted, every page tool is attached.'),
+});
+export type WebmcpDiscoverInput = z.output<typeof webmcpDiscoverInputSchema>;
+
+// =============================================================================
 // All Schemas
 // =============================================================================
 
@@ -276,4 +295,6 @@ export const browserSchemas = {
   screenshot: screenshotInputSchema,
   // Escape hatch
   evaluate: evaluateInputSchema,
+  // WebMCP
+  webmcpDiscover: webmcpDiscoverInputSchema,
 } as const;
