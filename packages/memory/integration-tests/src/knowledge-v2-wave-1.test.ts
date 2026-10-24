@@ -3,15 +3,14 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-import { Memory, Subconscious } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/pg';
-import type { EmbeddingModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 type Adapter = 'libsql' | 'pg';
@@ -26,7 +25,6 @@ const outputPath = process.env.KNOWLEDGE_PROOF_OUTPUT;
 const temporaryDirectories: string[] = [];
 const stores: MastraCompositeStore[] = [];
 const memories: Memory[] = [];
-const subconsciousInstances: Subconscious[] = [];
 const postgresSchemas: string[] = [];
 // Same default as with-pg-storage.test.ts: this package's docker-compose.yml PostgreSQL.
 const postgresConnectionString = process.env.DB_URL || 'postgres://postgres:password@localhost:5434/mastra';
@@ -77,8 +75,7 @@ function deterministicObservationModel(curate = false) {
               name: 'Atlas refund launch',
               kind: 'feature',
               text: '[[Maya Chen]] owns the [[Atlas refund launch]].',
-              nodeScope: 'resource',
-              scope: 'resource',
+              scope: ['org:acme', 'resource:shipyard'],
             }),
           });
           controller.enqueue({
@@ -110,7 +107,7 @@ function deterministicObservationModel(curate = false) {
     warnings: [],
   }));
   const doGenerate = vi.fn(async () => {
-    throw new Error('Wave 1 proof requires streaming observation-time curate, not structured capture extraction.');
+    throw new Error('Wave 1 proof curates through a streaming agent turn.');
   });
   return {
     model: {
@@ -150,52 +147,35 @@ async function createStorage(
   return { storage, location };
 }
 
-const embedder: EmbeddingModel<string> = {
-  specificationVersion: 'v1',
-  provider: 'aimock',
-  modelId: 'deterministic-embedding',
-  maxEmbeddingsPerCall: 128,
-  supportsParallelCalls: true,
-  async doEmbed({ values }) {
-    return { embeddings: values.map(() => [0.1, 0.2, 0.3, 0.4]) };
-  },
-};
-
-async function createVector() {
-  const directory = await mkdtemp(join(tmpdir(), 'knowledge-v2-wave-1-vector-'));
-  temporaryDirectories.push(directory);
-  return new LibSQLVector({ id: `wave-1-vector-${randomUUID()}`, url: `file:${join(directory, 'vector.db')}` });
-}
-
-function createRuntime(storage: MastraCompositeStore, vector: LibSQLVector) {
+function createRuntime(storage: MastraCompositeStore) {
   const knowledge = new Knowledge({
     id: 'mastra',
     name: 'Mastra Knowledge',
     description: 'Product architecture, repository work, and operational knowledge for Mastra.',
     storage,
     structure,
+    tools: { read: true, write: true },
   });
-  const { model, doGenerate } = deterministicObservationModel();
   const curator = deterministicObservationModel(true);
-  const subconscious = new Subconscious({ observation: [{ name: 'curate', model: curator.model }] });
-  const memory = new Memory({
-    storage,
-    vector,
-    embedder,
-    knowledge: 'mastra',
-    options: {
-      observationalMemory: {
-        enabled: true,
-        model,
-        experimental_subconscious: subconscious,
-        observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
-      },
-    },
-  });
+  const memory = new Memory({ storage });
   memories.push(memory);
-  subconsciousInstances.push(subconscious);
-  const mastra = new Mastra({ knowledge: { mastra: knowledge }, memory: { default: memory }, logger: false });
-  return { knowledge: mastra.getKnowledge('mastra'), memory, subconscious, doGenerate, curator };
+  // Knowledge attaches to the agent: the run's scope is its `scopes` plus its Memory resource and thread.
+  const agent = new Agent({
+    id: 'curator',
+    name: 'Curator',
+    instructions: 'Record durable facts.',
+    model: curator.model,
+    memory,
+    knowledge: 'mastra',
+    scopes: ['org:acme'],
+  });
+  const mastra = new Mastra({
+    agents: { curator: agent },
+    knowledge: { mastra: knowledge },
+    memory: { default: memory },
+    logger: false,
+  });
+  return { knowledge: mastra.getKnowledge('mastra'), memory, agent: mastra.getAgent('curator'), curator };
 }
 
 /**
@@ -302,13 +282,6 @@ afterEach(async () => {
       cleanupErrors.push(error);
     }
   }
-  for (const subconscious of subconsciousInstances.splice(0)) {
-    try {
-      await subconscious.settled();
-    } catch (error) {
-      cleanupErrors.push(error);
-    }
-  }
   for (const storage of stores.splice(0).reverse()) {
     if (storage instanceof PostgresStore) {
       const schemaName = postgresSchemas.pop();
@@ -336,13 +309,7 @@ afterEach(async () => {
 });
 
 describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapter => {
-  it('rejects obsolete observation-agent configuration with migration guidance', () => {
-    expect(() => new Subconscious(JSON.parse('{"observation":["capture"]}'))).toThrow(
-      'Unknown Subconscious observation agent: capture. Use "curate" for observation-time ingestion or "remind" for retrieval.',
-    );
-  });
-
-  it('reconciles, curates through OM, and survives a fresh runtime restart', async () => {
+  it('reconciles, curates through an agent with Knowledge tools, and survives a fresh runtime restart', async () => {
     const resolvedPackages = {
       core: import.meta.resolve('@mastra/core/knowledge'),
       memory: import.meta.resolve('@mastra/memory'),
@@ -353,8 +320,7 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     expect(resolvedPackages.adapter).toContain(adapter === 'pg' ? '/stores/pg/dist/' : '/stores/libsql/dist/');
 
     const { storage, location } = await createStorage(`wave-1-${adapter}`, adapter);
-    const vector = await createVector();
-    const first = createRuntime(storage, vector);
+    const first = createRuntime(storage);
     const reconciled = await first.knowledge.reconcile();
     expect(Object.keys(reconciled.scopes)).toEqual(
       expect.arrayContaining(structure.scopes.map(scope => scope.address)),
@@ -362,24 +328,17 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
 
     const threadId = `proof-${randomUUID()}`;
     await first.memory.createThread({ threadId, resourceId: 'shipyard', title: 'Wave 1 proof' });
-    await first.memory.saveMessages({ messages: [message(threadId)] });
-    const requestContext = new RequestContext();
-    requestContext.set('organizationId', 'acme');
-    const observed = await (await first.memory.omEngine)!.observe({
-      threadId,
-      resourceId: 'shipyard',
-      requestContext,
-      sendStateSignal: async () => ({ skipped: false }) as never,
-    });
-    expect(observed.observed).toBe(true);
+    await (
+      await first.agent.stream('Maya Chen owns the Atlas refund launch.', {
+        memory: { thread: threadId, resource: 'shipyard' },
+      })
+    ).consumeStream();
     const visibleScope = ['org:acme', 'resource:shipyard'];
     await first.memory.settled();
-    await first.subconscious.settled();
     expect(await first.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope })).toMatchObject({
       kind: 'feature',
       scope: ['org:acme', 'resource:shipyard'],
     });
-    expect(first.doGenerate).not.toHaveBeenCalled();
     expect(first.curator.doGenerate).not.toHaveBeenCalled();
     expect(first.curator.doStream).toHaveBeenCalled();
     const captured = await first.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope });
@@ -404,7 +363,6 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     );
 
     await first.memory.settled();
-    await first.subconscious.settled();
     memories.splice(memories.indexOf(first.memory), 1);
     await storage.close();
     stores.splice(stores.indexOf(storage), 1);
@@ -418,7 +376,7 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
           })
         : new LibSQLStore({ id: `wave-1-${adapter}-restart`, url: `file:${location}` });
     stores.push(restartedStorage);
-    const restarted = createRuntime(restartedStorage, vector);
+    const restarted = createRuntime(restartedStorage);
     const replay = await restarted.knowledge.reconcile();
     expect(replay.createdScopeIds).toEqual([]);
     const persisted = await restarted.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope });
@@ -484,24 +442,19 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     expect(await countV1Nodes()).toBe(1);
 
     // Knowledge v1 data is not migrated: turning Knowledge on replaces the published v1 tables, rows included.
-    const upgraded = createRuntime(storage, await createVector());
+    const upgraded = createRuntime(storage);
     await upgraded.knowledge.reconcile();
     expect(await storage.stores!.knowledge!.getNode('v1-node')).toBeNull();
     // Replacement removes the retired v1 cursor table from this store's own schema.
     if (hasTable) expect(await hasTable('mastra_knowledge_cursors')).toBe(false);
     const threadId = `upgrade-${randomUUID()}`;
     await upgraded.memory.createThread({ threadId, resourceId: 'shipyard', title: 'After upgrade' });
-    await upgraded.memory.saveMessages({ messages: [message(threadId)] });
-    const requestContext = new RequestContext();
-    requestContext.set('organizationId', 'acme');
-    await (await upgraded.memory.omEngine)!.observe({
-      threadId,
-      resourceId: 'shipyard',
-      requestContext,
-      sendStateSignal: async () => ({ skipped: false }) as never,
-    });
+    await (
+      await upgraded.agent.stream('Maya Chen owns the Atlas refund launch.', {
+        memory: { thread: threadId, resource: 'shipyard' },
+      })
+    ).consumeStream();
     await upgraded.memory.settled();
-    await upgraded.subconscious.settled();
     expect(
       await upgraded.knowledge.resolveNode({ name: 'Atlas refund launch', scope: ['org:acme', 'resource:shipyard'] }),
     ).toMatchObject({ kind: 'feature' });
