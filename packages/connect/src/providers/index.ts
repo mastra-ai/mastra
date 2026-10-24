@@ -20,6 +20,7 @@ import { linearProvider } from './linear/index.js';
 import { microsoftTeamsProvider } from './microsoft-teams/index.js';
 import { notionProvider } from './notion/index.js';
 import { openaiProvider } from './openai/index.js';
+import { outlookProvider } from './outlook/index.js';
 import { posthogProvider } from './posthog/index.js';
 import { resendProvider } from './resend/index.js';
 import { slackProvider } from './slack/index.js';
@@ -48,6 +49,7 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   microsoftTeamsProvider,
   notionProvider,
   openaiProvider,
+  outlookProvider,
   posthogProvider,
   resendProvider,
   slackProvider,
