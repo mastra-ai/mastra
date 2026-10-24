@@ -1,4 +1,5 @@
 import type { JSONSchema7 } from 'json-schema';
+import { estimateTokenCount } from 'tokenx';
 import type { KnowledgeRecord, KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '../storage';
 import { expandKnowledgeScope, isKnowledgeScopeVisible } from '../storage';
 import type { ToolAction } from '../tools';
@@ -18,8 +19,8 @@ export const PINNED_NODE_KIND = 'system';
 export const PINNED_NODE_SCOPE_LEVEL: KnowledgeScopeLevel = 'resource';
 /** Budget defaults. A pin costs context every turn, so both bounds are enforced in the tool. */
 export const DEFAULT_MAX_PINS = 20;
-export const DEFAULT_PINNED_MAX_CHARACTERS = 2_000;
-export const MAX_PINNED_MAX_CHARACTERS = 8_000;
+export const DEFAULT_PINNED_MAX_TOKENS = 500;
+export const MAX_PINNED_MAX_TOKENS = 2_000;
 
 const PIN_IDENTITY = 'subconscious:pin';
 
@@ -36,7 +37,8 @@ export interface PinnedToolsOptions {
   sourceThreadId: string;
   defaultScope: KnowledgeScopeLevel;
   maxPins: number;
-  maxCharacters: number;
+  /** Estimated-token budget for the whole pin set. */
+  maxTokens: number;
 }
 
 // Resolution walks every visible scope level (nearest first), so the node is
@@ -86,8 +88,8 @@ export async function listPinnedKnowledge(input: {
   return { nodeId, pins };
 }
 
-function totalCharacters(pins: KnowledgeRecord[]): number {
-  return pins.reduce((sum, pin) => sum + pin.text.length, 0);
+function totalTokens(pins: KnowledgeRecord[]): number {
+  return pins.reduce((sum, pin) => sum + estimateTokenCount(pin.text), 0);
 }
 
 function assertBudget(
@@ -100,8 +102,8 @@ function assertBudget(
   if (!replacing && kept.length >= options.maxPins) {
     throw new Error(`Pin limit reached: the set holds at most ${options.maxPins}. Unpin something first.`);
   }
-  if (totalCharacters(kept) + incomingText.length > options.maxCharacters) {
-    throw new Error(`Pin budget exceeded: the pin set is limited to ${options.maxCharacters} characters in total.`);
+  if (totalTokens(kept) + estimateTokenCount(incomingText) > options.maxTokens) {
+    throw new Error(`Pin budget exceeded: the pin set is limited to about ${options.maxTokens} tokens in total.`);
   }
 }
 

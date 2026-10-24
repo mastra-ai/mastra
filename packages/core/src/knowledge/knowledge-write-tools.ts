@@ -1,8 +1,9 @@
 import type { JSONSchema7 } from 'json-schema';
+import { estimateTokenCount } from 'tokenx';
 import type { KnowledgeNode, KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '../storage';
 import {
-  MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
-  MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
+  MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS,
+  MAX_KNOWLEDGE_RECORD_TOKENS,
   expandKnowledgeScope,
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
@@ -21,15 +22,14 @@ const nodePlacementSchema: JSONSchema7 = {
 const recordTextSchema: JSONSchema7 = {
   type: 'string',
   minLength: 1,
-  maxLength: MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
-  description: `One durable fact, or a few closely related facts, in your own words. Hard limit ${MAX_KNOWLEDGE_RECORD_TEXT_LENGTH} UTF-16 code units. Never paste files, command output, or logs.`,
+  description: `One durable fact, or a few closely related facts, in your own words. Hard limit about ${MAX_KNOWLEDGE_RECORD_TOKENS} tokens. Never paste files, command output, or logs.`,
 };
 
-/** Schema maxLength counts code points; this UTF-16 check matches the storage limit and runs before any write. */
+/** A schema can't count tokens; this check matches the storage limit and runs before any write. */
 function requireRecordTextWithinBound(text: string): void {
-  if (text.length > MAX_KNOWLEDGE_RECORD_TEXT_LENGTH) {
+  if (estimateTokenCount(text) > MAX_KNOWLEDGE_RECORD_TOKENS) {
     throw new Error(
-      `Knowledge records are limited to ${MAX_KNOWLEDGE_RECORD_TEXT_LENGTH} UTF-16 code units. Split this into separate records, one fact each, or summarize it, then retry.`,
+      `Knowledge records are limited to about ${MAX_KNOWLEDGE_RECORD_TOKENS} tokens. Split this into separate records, one fact each, or summarize it, then retry.`,
     );
   }
 }
@@ -499,7 +499,7 @@ export function createKnowledgeWriteTools(
     }),
     knowledge_write_node_description: createTool({
       id: 'knowledge_write_node_description',
-      description: `Write the bounded synopsis (max ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code units) on an existing visible node using optimistic concurrency. Pass an empty string to clear it. Does not create nodes.`,
+      description: `Write the bounded synopsis (about ${MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} tokens at most) on an existing visible node using optimistic concurrency. Pass an empty string to clear it. Does not create nodes.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -508,8 +508,7 @@ export function createKnowledgeWriteTools(
           description: {
             type: 'string',
             minLength: 0,
-            maxLength: MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
-            description: `One or two plain-text sentences describing the node, targeting 40-75 tokens. Hard limit ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code units, enforced by storage on every write; the length check on execution is authoritative. Long-form detail belongs in node content, not here. An empty string clears the description.`,
+            description: `One or two plain-text sentences describing the node, targeting 40-75 tokens. Hard limit about ${MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} tokens, enforced by storage on every write. Long-form detail belongs in node content, not here. An empty string clears the description.`,
           },
         },
         required: ['node', 'expectedVersion', 'description'],
@@ -517,10 +516,9 @@ export function createKnowledgeWriteTools(
       } satisfies JSONSchema7,
       execute: async input => {
         const value = input as { node: string; expectedVersion: number; description: string };
-        // Schema maxLength counts code points; this UTF-16 check matches the storage-level limit.
-        if (value.description.length > MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH) {
+        if (estimateTokenCount(value.description) > MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS) {
           throw new Error(
-            `Node descriptions are limited to ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code units. Shorten the description and retry.`,
+            `Node descriptions are limited to about ${MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} tokens. Shorten the description and retry.`,
           );
         }
         const store = await getStore(memory);
