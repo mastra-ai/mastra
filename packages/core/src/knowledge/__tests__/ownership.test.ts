@@ -1,0 +1,212 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { describe, expect, it } from 'vitest';
+import { Agent } from '../../agent';
+import { InMemoryStore } from '../../storage';
+import { Knowledge } from '../index';
+
+type Call = { toolName: string; input: unknown };
+
+function scriptedModel(calls: Call[]) {
+  let step = 0;
+  return new MockLanguageModelV2({
+    doGenerate: async () => {
+      const call = calls[step++];
+      const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+      if (!call) {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage,
+          content: [{ type: 'text' as const, text: 'Done.' }],
+          warnings: [],
+        };
+      }
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'tool-calls' as const,
+        usage,
+        content: [
+          {
+            type: 'tool-call' as const,
+            toolCallId: `call-${step}`,
+            toolName: call.toolName,
+            input: JSON.stringify(call.input),
+          },
+        ],
+        warnings: [],
+      };
+    },
+  });
+}
+
+function toolErrors(result: Awaited<ReturnType<Agent['generate']>>): string[] {
+  return result.steps.flatMap(step =>
+    step.content.flatMap((part: any) =>
+      part.type === 'tool-result' && part.output?.type === 'error-text' ? [String(part.output.value)] : [],
+    ),
+  );
+}
+
+function toolResults(result: Awaited<ReturnType<Agent['generate']>>): any[] {
+  return result.steps.flatMap(step =>
+    step.content.flatMap((part: any) =>
+      part.type === 'tool-result' && part.output?.type !== 'error-text' ? [part.output?.value ?? part.output] : [],
+    ),
+  );
+}
+
+function companyKnowledge(id: string, role: 'owner' | 'edit' | 'append' | 'readonly' = 'owner') {
+  return new Knowledge({
+    storage: new InMemoryStore({ id }),
+    tools: { write: true },
+    scopes: {
+      'team:$orgId:$teamId': { access: [{ principal: 'org:$orgId', role }] },
+    },
+  });
+}
+
+async function run(knowledge: Knowledge, scopes: any[], calls: Call[], thread = 't-1') {
+  const agent = new Agent({ id: 'a', name: 'a', instructions: 'x', model: scriptedModel(calls), knowledge, scopes });
+  return agent.generate('go', { maxSteps: calls.length + 1, memory: { thread, resource: 'r' } });
+}
+
+describe('Knowledge ownership computed from the structure', () => {
+  it('lets a run holding org:acme write and read team:acme:* by naming it, and refuses other orgs', async () => {
+    const knowledge = companyKnowledge('own-basic');
+
+    const wrote = await run(
+      knowledge,
+      ['org:acme'],
+      [
+        {
+          toolName: 'knowledge_create',
+          input: { name: 'Plan', kind: 'doc', text: 'ship it', scope: ['team:acme:director'] },
+        },
+        {
+          toolName: 'knowledge_create',
+          input: { name: 'Theirs', kind: 'doc', text: 'x', scope: ['team:other:director'] },
+        },
+      ],
+    );
+    expect(toolResults(wrote)[0].record.scope).toEqual(['team:acme:director']);
+    expect(toolErrors(wrote)).toEqual(['This run does not hold scope "team:other:director".']);
+
+    const unnamed = await run(knowledge, ['org:acme'], [{ toolName: 'knowledge_search', input: { query: 'ship' } }]);
+    expect(toolResults(unnamed)[0].results).toEqual([]);
+
+    const named = await run(
+      knowledge,
+      ['org:acme'],
+      [{ toolName: 'knowledge_search', input: { query: 'ship', scope: ['team:acme:director'] } }],
+    );
+    expect(toolResults(named)[0].results.map((hit: any) => hit.text)).toContain('ship it');
+  });
+
+  it("shows a member team write to the director through ownership, but not the member's private default write", async () => {
+    const knowledge = companyKnowledge('own-director');
+    await run(
+      knowledge,
+      [{ tag: 'org:acme', access: 'read' }, 'team:acme:x', 'agent:alex'],
+      [
+        {
+          toolName: 'knowledge_create',
+          input: { name: 'Team fact', kind: 'doc', text: 'shared fact', scope: ['team:acme:x'] },
+        },
+        { toolName: 'knowledge_create', input: { name: 'Private fact', kind: 'doc', text: 'private fact' } },
+      ],
+      'member-thread',
+    );
+
+    const director = await run(
+      knowledge,
+      ['org:acme', 'team:acme:director'],
+      [{ toolName: 'knowledge_search', input: { query: 'fact', scope: ['team:acme:x'] } }],
+    );
+    const texts = toolResults(director)[0].results.map((hit: any) => hit.text);
+    expect(texts).toContain('shared fact');
+    expect(texts).not.toContain('private fact');
+  });
+
+  it('never treats a read-only owner tag as an ownership principal', async () => {
+    const knowledge = companyKnowledge('own-readonly-principal');
+    await run(
+      knowledge,
+      ['org:acme'],
+      [
+        {
+          toolName: 'knowledge_create',
+          input: { name: 'Other team', kind: 'doc', text: 'secret', scope: ['team:acme:other'] },
+        },
+      ],
+    );
+
+    const member = await run(
+      knowledge,
+      [{ tag: 'org:acme', access: 'read' }, 'team:acme:x'],
+      [
+        { toolName: 'knowledge_search', input: { query: 'secret', scope: ['team:acme:other'] } },
+        { toolName: 'knowledge_create', input: { name: 'Sneak', kind: 'doc', text: 'x', scope: ['team:acme:other'] } },
+      ],
+    );
+    expect(toolErrors(member)).toEqual([
+      'This run does not hold scope "team:acme:other".',
+      'This run does not hold scope "team:acme:other".',
+    ]);
+  });
+
+  it('applies the declared role: readonly reads but cannot write; edit can rescope', async () => {
+    const readonly = companyKnowledge('own-role-readonly', 'readonly');
+    const refused = await run(
+      readonly,
+      ['org:acme'],
+      [
+        { toolName: 'knowledge_search', input: { query: 'x', scope: ['team:acme:p'] } },
+        { toolName: 'knowledge_create', input: { name: 'N', kind: 'doc', text: 'x', scope: ['team:acme:p'] } },
+      ],
+    );
+    expect(toolResults(refused)[0].results).toEqual([]);
+    expect(toolErrors(refused)).toEqual(['This run reaches "team:acme:p" with role readonly; this needs append.']);
+
+    const append = companyKnowledge('own-role-append', 'append');
+    const created = await run(
+      append,
+      ['org:acme'],
+      [{ toolName: 'knowledge_create', input: { name: 'N', kind: 'doc', text: 'x', scope: ['team:acme:p'] } }],
+    );
+    const recordId = toolResults(created)[0].record.id;
+    const noEdit = await run(
+      append,
+      ['org:acme'],
+      [{ toolName: 'knowledge_rescope', input: { recordId, scope: ['org:acme'] } }],
+    );
+    expect(toolErrors(noEdit)).toEqual(['This run reaches "team:acme:p" with role append; this needs edit.']);
+
+    const edit = companyKnowledge('own-role-edit', 'edit');
+    const createdEdit = await run(
+      edit,
+      ['org:acme'],
+      [{ toolName: 'knowledge_create', input: { name: 'N', kind: 'doc', text: 'x', scope: ['team:acme:p'] } }],
+    );
+    const rescoped = await run(
+      edit,
+      ['org:acme'],
+      [
+        {
+          toolName: 'knowledge_rescope',
+          input: { recordId: toolResults(createdEdit)[0].record.id, scope: ['org:acme'] },
+        },
+      ],
+    );
+    expect(toolErrors(rescoped)).toEqual([]);
+  });
+
+  it('never reaches an undeclared tag type through ownership', async () => {
+    const knowledge = companyKnowledge('own-undeclared');
+    const result = await run(
+      knowledge,
+      ['org:acme'],
+      [{ toolName: 'knowledge_create', input: { name: 'N', kind: 'doc', text: 'x', scope: ['request:r25'] } }],
+    );
+    expect(toolErrors(result)).toEqual(['This run does not hold scope "request:r25".']);
+  });
+});

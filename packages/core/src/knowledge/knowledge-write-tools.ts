@@ -1,6 +1,6 @@
 import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
-import type { KnowledgeNode, KnowledgeScope, KnowledgeStorage } from '../storage';
+import type { KnowledgeConcreteRole, KnowledgeNode, KnowledgeScope, KnowledgeStorage } from '../storage';
 import {
   MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS,
   MAX_KNOWLEDGE_RECORD_TOKENS,
@@ -10,7 +10,8 @@ import {
 } from '../storage';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
-import { requireWritableTags } from './knowledge-tools';
+import type { KnowledgeOwnerLookup } from './knowledge-tools';
+import { requireScopeAccess, resolveNamedScope } from './knowledge-tools';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
 const scopeTagsSchema: JSONSchema7 = {
@@ -71,6 +72,8 @@ export interface KnowledgeWriteToolsOptions {
   scope: KnowledgeScope;
   /** Tags of `scope` the run holds read-only: visible, never written. */
   readOnly?: KnowledgeScope;
+  /** What the run reaches through ownership on scopes it doesn't hold. */
+  owner?: KnowledgeOwnerLookup;
   sourceThreadId: string;
 }
 
@@ -81,29 +84,28 @@ async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeSto
   return store;
 }
 
-/** The tags a write lands at: the requested subset of the run's tags, or all of them. */
+/**
+ * The tags a write lands at: every writable run tag, or the named tags, each held writable or
+ * owned with at least `append`.
+ */
 function resolveWriteScope(options: KnowledgeWriteToolsOptions, requested?: string[]): KnowledgeScope {
-  const readOnly = options.readOnly ?? [];
   if (!requested) {
+    const readOnly = options.readOnly ?? [];
     const writable = options.scope.filter(tag => !readOnly.includes(tag));
     if (writable.length === 0) throw new Error('This run holds no writable scope tags.');
     return writable;
   }
-  requireWritableTags(requested, readOnly);
-  const held = new Set(options.scope);
-  const missing = requested.filter(tag => !held.has(tag));
-  if (missing.length > 0) {
-    throw new Error(`This run does not hold scope ${missing.map(tag => `"${tag}"`).join(', ')}.`);
-  }
-  return canonicalizeKnowledgeScope(requested);
+  return resolveNamedScope(requested, options, 'append');
 }
 
-/** Visible to the run, and carrying no tag the run holds read-only. */
-function requireVisible(scope: KnowledgeScope, options: KnowledgeWriteToolsOptions, label: string): void {
-  requireWritableTags(scope, options.readOnly ?? []);
-  if (!isKnowledgeScopeVisible(scope, options.scope)) {
-    throw new Error(`${label} is outside this run's visible scope.`);
-  }
+/** The run reaches every tag of `scope` with at least `needed`. */
+function requireVisible(
+  scope: KnowledgeScope,
+  options: KnowledgeWriteToolsOptions,
+  label: string,
+  needed: KnowledgeConcreteRole,
+): void {
+  requireScopeAccess(scope, options, needed, label);
 }
 
 /**
@@ -236,7 +238,7 @@ export function createKnowledgeWriteTools(
     const store = await getStore(memory);
     const node = await store.getNode(id);
     if (!node || node.mergedInto) throw new Error(`Knowledge node not found: ${id}`);
-    requireVisible(node.scope, options, 'Knowledge node');
+    requireVisible(node.scope, options, 'Knowledge node', 'edit');
     return node;
   }
 
@@ -333,7 +335,7 @@ export function createKnowledgeWriteTools(
         const store = await getStore(memory);
         const parent = await store.getNode(value.node);
         if (!parent || parent.mergedInto) throw new Error(`Knowledge node not found: ${value.node}`);
-        requireVisible(parent.scope, options, 'Knowledge node');
+        requireVisible(parent.scope, options, 'Knowledge node', 'append');
         const scope = resolveWriteScope(options, value.scope);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
@@ -364,7 +366,7 @@ export function createKnowledgeWriteTools(
         const store = await getStore(memory);
         const record = await store.getKnowledge({ id: (input as { recordId: string }).recordId, includeDeleted: true });
         if (!record) throw new Error(`KnowledgeRecord not found: ${(input as { recordId: string }).recordId}`);
-        requireVisible(record.scope, options, 'KnowledgeRecord');
+        requireVisible(record.scope, options, 'KnowledgeRecord', 'edit');
         return store.removeKnowledge({ id: record.id, deletedBy: CURATOR_IDENTITY });
       },
     }),
@@ -463,8 +465,8 @@ export function createKnowledgeWriteTools(
         const store = await getStore(memory);
         const [source, target] = await Promise.all([store.getNode(value.sourceId), store.getNode(value.targetId)]);
         if (!source || !target) throw new Error('Knowledge merge requires two existing nodes.');
-        requireVisible(source.scope, options, 'Knowledge merge source');
-        requireVisible(target.scope, options, 'Knowledge merge target');
+        requireVisible(source.scope, options, 'Knowledge merge source', 'edit');
+        requireVisible(target.scope, options, 'Knowledge merge target', 'edit');
         return store.mergeNodes(value);
       },
     }),
@@ -482,7 +484,7 @@ export function createKnowledgeWriteTools(
         const store = await getStore(memory);
         const record = await store.getKnowledge({ id: value.recordId });
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
-        requireVisible(record.scope, options, 'KnowledgeRecord');
+        requireVisible(record.scope, options, 'KnowledgeRecord', 'edit');
         const scope = resolveWriteScope(options, value.scope);
         const node = await store.getNode(record.node);
         if (node && !node.mergedInto) await ensureNodeCoversRecord(store, node, scope);
@@ -518,7 +520,7 @@ export function createKnowledgeWriteTools(
         const store = await getStore(memory);
         const node = await store.getNode(value.node);
         if (!node || node.mergedInto) throw new Error(`Knowledge node not found: ${value.node}`);
-        requireVisible(node.scope, options, 'Knowledge node');
+        requireVisible(node.scope, options, 'Knowledge node', 'edit');
         return store.updateNode({
           id: node.id,
           version: value.expectedVersion,
