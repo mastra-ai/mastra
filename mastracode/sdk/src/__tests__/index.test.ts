@@ -1037,6 +1037,46 @@ describe('createMastraCode', () => {
     ).rejects.toThrow('knowledge.key must be a non-empty string.');
   });
 
+  it('warns once at startup that the removed Subconscious flag does nothing, naming the Knowledge flag', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', '1');
+    vi.stubEnv('MASTRACODE_EXPERIMENTAL_KNOWLEDGE', '');
+    try {
+      const { createMastraCode } = await import('../index.js');
+      const code = await createMastraCode();
+
+      const flagWarnings = warn.mock.calls.filter(([message]) =>
+        String(message).includes('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS'),
+      );
+      expect(flagWarnings).toEqual([
+        [
+          'MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS no longer does anything: Subconscious was removed. Set MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1 to turn on Knowledge.',
+        ],
+      ]);
+      // The old flag is no alias: Knowledge stays off.
+      expect(code.knowledge).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+      warn.mockRestore();
+    }
+  });
+
+  it.each(['', '0'])(
+    'says nothing about the Subconscious flag when it is %j, which never turned it on',
+    async value => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', value);
+      try {
+        const { createMastraCode } = await import('../index.js');
+        await createMastraCode();
+        expect(warn.mock.calls.some(([message]) => String(message).includes('SUBCONSCIOUS'))).toBe(false);
+      } finally {
+        vi.unstubAllEnvs();
+        warn.mockRestore();
+      }
+    },
+  );
+
   it('does not touch Knowledge storage at startup when Knowledge is off', async () => {
     vi.stubEnv('MASTRACODE_EXPERIMENTAL_KNOWLEDGE', '');
     try {
