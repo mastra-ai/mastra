@@ -465,7 +465,7 @@ export class AgentChannels {
             'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
           );
         }
-        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId());
+        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId(), this.logger);
         this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
       }
 
@@ -2235,6 +2235,50 @@ export class AgentChannels {
     }
 
     return { thread: undefined, memoryStore, metadata };
+  }
+
+  /**
+   * Map a chat thread to a Mastra thread (creating the mapping if needed) and
+   * subscribe to it, so follow-up replies reach the agent without a mention.
+   *
+   * Use this for threads the bot started itself, e.g. a scheduled digest posted
+   * to Slack. Inbound messages create the mapping automatically, but a thread
+   * the bot opened has none until someone mentions it. An existing mapping is
+   * reused and keeps its original owner.
+   *
+   * @example
+   * ```ts
+   * const sent = await channel.post('Daily digest');
+   * await agent.getChannels()!.subscribeThread({ thread: sent.thread, resourceId: 'digest-bot' });
+   * ```
+   */
+  async subscribeThread({
+    thread,
+    resourceId,
+    threadId,
+  }: {
+    thread: Thread;
+    /** Owner of the Mastra thread when a new mapping is created. */
+    resourceId: string;
+    /** Id for a newly created Mastra thread. Defaults to a random UUID. */
+    threadId?: string;
+  }): Promise<StorageThreadType> {
+    const mastra = this.getMastra();
+    if (!mastra) {
+      throw new Error('subscribeThread requires the agent to be registered with a Mastra instance.');
+    }
+    await this.initialize(mastra);
+
+    const mastraThread = await this.getOrCreateThread({
+      externalThreadId: thread.id,
+      channelId: thread.channelId,
+      platform: thread.adapter.name,
+      resourceId,
+      threadId: threadId ? () => threadId : undefined,
+      mastra,
+    });
+    await this.stateAdapter.subscribe(thread.id);
+    return mastraThread;
   }
 
   /**

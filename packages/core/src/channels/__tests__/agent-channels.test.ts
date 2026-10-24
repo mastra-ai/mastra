@@ -365,6 +365,68 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('subscribeThread', () => {
+    const externalThreadId = 'slack:C1:1700000000.000100';
+    let memoryStore: InMemoryMemory;
+
+    beforeEach(() => {
+      memoryStore = new InMemoryMemory({ db: new InMemoryDB() });
+      mockAgent.getMastraInstance = () => ({
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      });
+    });
+
+    function botThread() {
+      return {
+        id: externalThreadId,
+        channelId: 'slack:C1',
+        adapter: agentChannels.adapters.slack,
+      } as unknown as Thread;
+    }
+
+    it('maps and subscribes a thread the bot started itself', async () => {
+      const mastraThread = await agentChannels.subscribeThread({ thread: botThread(), resourceId: 'digest-bot' });
+
+      expect(mastraThread.resourceId).toBe('digest-bot');
+      const stored = await memoryStore.getThreadById({ threadId: mastraThread.id });
+      expect(stored?.metadata).toMatchObject({
+        channel_platform: 'slack',
+        channel_externalThreadId: externalThreadId,
+        channel_subscribed: 'true',
+      });
+      expect(await agentChannels.sdk!.getState().isSubscribed(externalThreadId)).toBe(true);
+    });
+
+    it('reuses an existing mapping and keeps its owner', async () => {
+      const first = await agentChannels.subscribeThread({ thread: botThread(), resourceId: 'original-owner' });
+      const second = await agentChannels.subscribeThread({ thread: botThread(), resourceId: 'someone-else' });
+
+      expect(second.id).toBe(first.id);
+      expect(second.resourceId).toBe('original-owner');
+      const { threads } = await memoryStore.listThreads({
+        filter: { metadata: { channel_externalThreadId: externalThreadId } },
+      });
+      expect(threads).toHaveLength(1);
+    });
+
+    it('uses the provided threadId for a new mapping', async () => {
+      const mastraThread = await agentChannels.subscribeThread({
+        thread: botThread(),
+        resourceId: 'digest-bot',
+        threadId: 'digest-thread-1',
+      });
+      expect(mastraThread.id).toBe('digest-thread-1');
+    });
+
+    it('throws when the agent is not registered with Mastra', async () => {
+      mockAgent.getMastraInstance = () => undefined;
+      await expect(agentChannels.subscribeThread({ thread: botThread(), resourceId: 'x' })).rejects.toThrow(
+        /registered with a Mastra instance/,
+      );
+    });
+  });
+
   describe('repeated initialization', () => {
     it('does not accumulate duplicate handler registrations when initialize is called again', async () => {
       const chatMod = await getChatModule();
