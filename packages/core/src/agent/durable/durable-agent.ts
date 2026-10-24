@@ -1141,10 +1141,12 @@ export class DurableAgent<
     return { snapshot, workflowInput };
   }
 
-  async #loadSuspendedToolCalls(runId: string): Promise<ToolCallChunk[]> {
+  async #loadSuspendedIteration(
+    runId: string,
+  ): Promise<{ toolCalls: ToolCallChunk[]; resumedText?: { priorText: string; stepText: string } }> {
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
     const outerRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
-    if (!outerRun) return [];
+    if (!outerRun) return { toolCalls: [] };
     const outerSnapshot: WorkflowRunState =
       typeof outerRun.snapshot === 'string' ? JSON.parse(outerRun.snapshot) : outerRun.snapshot;
     const iteration = outerSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION];
@@ -1153,24 +1155,31 @@ export class DurableAgent<
       runId: nestedRunId,
       workflowName: DurableStepIds.AGENTIC_EXECUTION,
     });
-    if (!persisted) return [];
+    if (!persisted) return { toolCalls: [] };
 
     const snapshot =
       typeof persisted.snapshot === 'string'
         ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
         : persisted.snapshot;
     const llmStep = snapshot.context?.[DurableStepIds.LLM_EXECUTION];
-    if (llmStep?.status !== 'success') return [];
+    if (llmStep?.status !== 'success') return { toolCalls: [] };
     // The nested input holds completed iterations; the LLM output holds the
     // current iteration, which has not reached the accumulator yet.
+    const accumulatedSteps: Array<{ text?: string; toolCalls?: DurableToolCallInput[]; finishReason?: string }> =
+      snapshot.context.input?.accumulatedSteps ?? [];
     const toolCalls: DurableToolCallInput[] = [
-      ...(snapshot.context.input?.accumulatedSteps ?? []).flatMap(
-        (step: { toolCalls?: DurableToolCallInput[] }) => step.toolCalls ?? [],
-      ),
+      ...accumulatedSteps.flatMap(step => step.toolCalls ?? []),
       ...(llmStep.output.toolCalls ?? []),
     ];
+    // The text streamed before the suspension belongs to the resumed run's text, as on the
+    // plain Agent, which restores it from its own snapshot (#27504).
+    const stepText: string = llmStep.output.text ?? '';
+    const priorText = accumulatedSteps
+      .filter(step => step.finishReason !== 'retry')
+      .map(step => step.text ?? '')
+      .join('');
 
-    return toolCalls.map(toolCall => ({
+    const toolCallChunks: ToolCallChunk[] = toolCalls.map(toolCall => ({
       type: 'tool-call',
       runId,
       from: ChunkFrom.AGENT,
@@ -1183,6 +1192,7 @@ export class DurableAgent<
         output: toolCall.output,
       },
     }));
+    return { toolCalls: toolCallChunks, resumedText: { priorText, stepText } };
   }
 
   /**
@@ -3720,6 +3730,7 @@ export class DurableAgent<
     // resume that lost the race never raises the memory fence past the winner.
     const executionFence = await this.#claimExecution(runId, 'acquire');
     let initialToolCalls: ToolCallChunk[];
+    let resumedText: { priorText: string; stepText: string } | undefined;
     let resumeOffset: number | 'latest';
     try {
       // A concurrent resume of the same suspension may have claimed and run it while this one
@@ -3755,7 +3766,7 @@ export class DurableAgent<
       }
       if (resumeRequestContext) await this.#coverMemory(executionFence, resumeRequestContext);
       await this.#loadRecalledMessages(runId, coldSnapshot, resumeRequestContext);
-      initialToolCalls = await this.#loadSuspendedToolCalls(runId);
+      ({ toolCalls: initialToolCalls, resumedText } = await this.#loadSuspendedIteration(runId));
       // Skip events already broadcast by the original run (e.g. the SUSPENDED
       // chunk that paused it). Without this, a resume that closes on suspend
       // (resumeGenerate) would immediately close on the replayed SUSPENDED.
@@ -3934,6 +3945,7 @@ export class DurableAgent<
       minGeneration: executionFence.generation,
       messageId: crypto.randomUUID(),
       initialToolCalls,
+      resumedText,
       model: {
         modelId: resumeModel?.modelId,
         provider: resumeModel?.provider,

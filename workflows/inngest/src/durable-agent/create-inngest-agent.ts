@@ -831,20 +831,20 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   }
 
   /**
-   * Tool calls made before the suspension, seeded into the resumed stream so its
-   * `toolCalls` includes them without replaying their chunks. Mirrors core
-   * `DurableAgent.#loadSuspendedToolCalls`. The outer suspension can persist
+   * Tool calls and text from before the suspension, seeded into the resumed stream
+   * so its `toolCalls` and `text` include them without replaying their chunks.
+   * Mirrors core `DurableAgent.#loadSuspendedIteration`. The outer suspension can persist
    * before the nested execution snapshot catches up, so wait until the nested
    * snapshot carries every suspended call rather than reading an earlier iteration.
    */
-  async function loadSuspendedToolCalls(
+  async function loadSuspendedIteration(
     runId: string,
     suspendedSnapshot: { context?: Record<string, any>; resumeLabels?: Record<string, unknown> } | undefined,
-  ): Promise<ToolCallChunk[]> {
+  ): Promise<{ toolCalls: ToolCallChunk[]; resumedText?: { priorText: string; stepText: string } }> {
     const suspendedToolCallIds = Object.keys(suspendedSnapshot?.resumeLabels ?? {});
-    if (suspendedToolCallIds.length === 0) return [];
+    if (suspendedToolCallIds.length === 0) return { toolCalls: [] };
     const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
-    if (!workflowsStore) return [];
+    if (!workflowsStore) return { toolCalls: [] };
     const nestedRunId =
       suspendedSnapshot?.context?.[InngestDurableStepIds.AGENTIC_EXECUTION]?.suspendPayload?.__workflow_meta?.runId ??
       runId;
@@ -875,26 +875,35 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     }
     // The nested input holds completed iterations; the LLM output holds the
     // current iteration, which has not reached the accumulator yet.
+    const accumulatedSteps: { text?: string; finishReason?: string; toolCalls?: ToolCallChunk['payload'][] }[] =
+      snapshot.context.input?.accumulatedSteps ?? [];
     const toolCalls: ToolCallChunk['payload'][] = [
-      ...(
-        (snapshot.context.input as { accumulatedSteps?: { toolCalls?: ToolCallChunk['payload'][] }[] } | undefined)
-          ?.accumulatedSteps ?? []
-      ).flatMap(step => step.toolCalls ?? []),
+      ...accumulatedSteps.flatMap(step => step.toolCalls ?? []),
       ...(llmStep.output?.toolCalls ?? []),
     ];
-    return toolCalls.map(toolCall => ({
-      type: 'tool-call',
-      runId,
-      from: ChunkFrom.AGENT,
-      payload: {
-        toolCallId: toolCall.toolCallId,
-        toolName: toolCall.toolName,
-        args: toolCall.args,
-        providerMetadata: toolCall.providerMetadata,
-        providerExecuted: toolCall.providerExecuted,
-        output: toolCall.output,
-      },
-    }));
+    const resumedText = {
+      priorText: accumulatedSteps
+        .filter(step => step.finishReason !== 'retry')
+        .map(step => step.text ?? '')
+        .join(''),
+      stepText: llmStep.output?.text ?? '',
+    };
+    return {
+      resumedText,
+      toolCalls: toolCalls.map(toolCall => ({
+        type: 'tool-call',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          args: toolCall.args,
+          providerMetadata: toolCall.providerMetadata,
+          providerExecuted: toolCall.providerExecuted,
+          output: toolCall.output,
+        },
+      })),
+    };
   }
 
   // Route agent stream and control events through the exact PubSub exposed to
@@ -1417,7 +1426,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         steps = suspendedStepIds[0] ? expandToLeafPath(suspendedStepIds[0]) : [];
       }
       const resumeOffset = await getPubsubOffset(runId);
-      const initialToolCalls = await loadSuspendedToolCalls(runId, suspendedSnapshot);
+      // The resumed segment only receives new pubsub chunks, so output state from
+      // before the suspension is restored from the suspended iteration snapshot.
+      const { toolCalls: initialToolCalls, resumedText } = await loadSuspendedIteration(runId, suspendedSnapshot);
 
       // Install a fresh abort controller scoped to the resumed segment and
       // attach it to the run-registry entry so the durable LLM step (when
@@ -1535,6 +1546,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         offset: resumeOffset,
         initialToolCalls,
         messageId: crypto.randomUUID(),
+        resumedText,
         model: {
           modelId: undefined,
           provider: undefined,
