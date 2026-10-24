@@ -29,7 +29,7 @@ import {
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
 } from '@mastra/core/storage';
-import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
+import type { WorkflowRunState, WorkflowRunStatus, StepResult } from '@mastra/core/workflows';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import type { SqliteClient as Client, SqliteInValue as InValue, SqliteValue } from '../../db/client';
@@ -50,6 +50,24 @@ function toRunOwnershipRecord(runId: string, row: Record<string, SqliteValue>): 
     leaseExpiresAt: leaseExpiresAt === null ? null : new Date(leaseExpiresAt),
     live: leaseExpiresAt !== null && leaseExpiresAt > Number(row.nowMs),
   };
+}
+
+const WORKFLOW_RUN_STATUSES: Record<WorkflowRunStatus, true> = {
+  running: true,
+  success: true,
+  failed: true,
+  tripwire: true,
+  suspended: true,
+  waiting: true,
+  pending: true,
+  canceled: true,
+  bailed: true,
+  paused: true,
+  skipped: true,
+};
+
+function isWorkflowRunStatus(value: unknown): value is WorkflowRunStatus {
+  return typeof value === 'string' && Object.hasOwn(WORKFLOW_RUN_STATUSES, value);
 }
 
 export class WorkflowsLibSQL extends WorkflowsStorage {
@@ -92,6 +110,10 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
+  supportsGuardedSnapshotWrites(): boolean {
     return true;
   }
 
@@ -437,6 +459,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -445,7 +468,8 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }) {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     const now = new Date();
     const createdAtValue = (createdAt ?? now).toISOString();
     const updatedAtValue = (updatedAt ?? now).toISOString();
@@ -456,20 +480,55 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     // original createdAt and only advances updatedAt. The generic INSERT OR REPLACE helper
     // would rewrite the whole row, resetting createdAt on every step persist. This mirrors
     // updateWorkflowResults above and the pg/mysql/mongodb stores.
+    // The status guard sits on the upsert itself, so it is checked and applied in one
+    // statement and a concurrent status change can't land between the check and the write.
+    const expected =
+      expectedStatus === undefined ? [] : Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+    // An explicit empty list matches no status, so an existing row is never overwritten.
+    const guard =
+      expectedStatus === undefined
+        ? ''
+        : expected.length
+          ? ` WHERE json_extract(${TABLE_WORKFLOW_SNAPSHOT}.snapshot, '$.status') IN (${expected.map(() => '?').join(', ')})`
+          : ' WHERE 0';
     const check = this.#runFenceCheck(fence, runId, 'persistWorkflowSnapshot');
-    await this.executeWithRetry(
+    const result = await this.executeWithRetry(
       () =>
         withRunFence(this.#client, check, writer =>
           writer.execute({
             sql: `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, resourceId, snapshot, createdAt, updatedAt)
                 VALUES (?, ?, ?, jsonb(?), ?, ?)
                 ON CONFLICT(workflow_name, run_id)
-                DO UPDATE SET resourceId = COALESCE(excluded.resourceId, ${TABLE_WORKFLOW_SNAPSHOT}.resourceId), snapshot = excluded.snapshot, updatedAt = excluded.updatedAt`,
-            args: [workflowName, runId, resourceId ?? null, safeStringify(snapshot), createdAtValue, updatedAtValue],
+                DO UPDATE SET resourceId = COALESCE(excluded.resourceId, ${TABLE_WORKFLOW_SNAPSHOT}.resourceId), snapshot = excluded.snapshot, updatedAt = excluded.updatedAt${guard}`,
+            args: [
+              workflowName,
+              runId,
+              resourceId ?? null,
+              safeStringify(snapshot),
+              createdAtValue,
+              updatedAtValue,
+              ...expected,
+            ],
           }),
         ),
       'persistWorkflowSnapshot',
     );
+    return result.rowsAffected > 0;
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    const result = await this.#client.execute({
+      sql: `SELECT json_extract(snapshot, '$.status') AS status FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
+      args: [workflowName, runId],
+    });
+    const status = result.rows?.[0]?.status;
+    return isWorkflowRunStatus(status) ? status : null;
   }
 
   async loadWorkflowSnapshot({

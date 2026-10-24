@@ -32,7 +32,7 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 import sql from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
@@ -52,6 +52,24 @@ function toRunOwnershipRecord(runId: string, row: Record<string, unknown>): RunO
     leaseExpiresAt: leaseExpiresAt === null ? null : new Date(leaseExpiresAt),
     live: leaseExpiresAt !== null && leaseExpiresAt > Number(row.nowMs),
   };
+}
+
+const WORKFLOW_RUN_STATUSES: Record<WorkflowRunStatus, true> = {
+  running: true,
+  success: true,
+  failed: true,
+  tripwire: true,
+  suspended: true,
+  waiting: true,
+  pending: true,
+  canceled: true,
+  bailed: true,
+  paused: true,
+  skipped: true,
+};
+
+function isWorkflowRunStatus(value: unknown): value is WorkflowRunStatus {
+  return typeof value === 'string' && Object.hasOwn(WORKFLOW_RUN_STATUSES, value);
 }
 
 export class WorkflowsMSSQL extends WorkflowsStorage {
@@ -84,6 +102,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     this.skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
     this.indexes = indexes?.filter(idx => (WorkflowsMSSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  supportsGuardedSnapshotWrites(): boolean {
+    return true;
   }
 
   supportsConcurrentUpdates(): boolean {
@@ -521,17 +543,28 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     resourceId,
     snapshot,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
     const now = new Date().toISOString();
+    const expectedStatuses =
+      expectedStatus === undefined ? undefined : Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+    // An explicit empty list matches no status, so an existing row is never overwritten.
+    const guard =
+      expectedStatuses === undefined
+        ? ''
+        : expectedStatuses.length === 0
+          ? ' AND 1 = 0'
+          : ` AND JSON_VALUE(target.[snapshot], '$.status') IN (${expectedStatuses.map((_, i) => `@expectedStatus${i}`).join(', ')})`;
     try {
-      await withRunFence(
+      return await withRunFence(
         this.pool,
         this.#runOwnersTable,
         resolveRunFence(this, fence, runId),
@@ -544,16 +577,18 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           request.input('snapshot', JSON.stringify(snapshot));
           request.input('createdAt', sql.DateTime2, new Date(now));
           request.input('updatedAt', sql.DateTime2, new Date(now));
+          expectedStatuses?.forEach((status, i) => request.input(`expectedStatus${i}`, status));
           const mergeSql = `MERGE INTO ${table} AS target
             USING (SELECT @workflow_name AS workflow_name, @run_id AS run_id) AS src
             ON target.workflow_name = src.workflow_name AND target.run_id = src.run_id
-            WHEN MATCHED THEN UPDATE SET
+            WHEN MATCHED${guard} THEN UPDATE SET
               resourceId = @resourceId,
               snapshot = @snapshot,
               [updatedAt] = @updatedAt
             WHEN NOT MATCHED THEN INSERT (workflow_name, run_id, resourceId, snapshot, [createdAt], [updatedAt])
               VALUES (@workflow_name, @run_id, @resourceId, @snapshot, @createdAt, @updatedAt);`;
-          await request.query(mergeSql);
+          const result = await request.query(mergeSql);
+          return (result.rowsAffected[0] ?? 0) > 0;
         },
       );
     } catch (error) {
@@ -567,6 +602,35 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
             workflowName,
             runId,
           },
+        },
+        error,
+      );
+    }
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    try {
+      const request = this.pool.request();
+      request.input('workflow_name', workflowName);
+      request.input('run_id', runId);
+      const result = await request.query(
+        `SELECT TOP 1 JSON_VALUE([snapshot], '$.status') AS status FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) })} WHERE workflow_name = @workflow_name AND run_id = @run_id`,
+      );
+      const status: unknown = result.recordset?.[0]?.status;
+      return isWorkflowRunStatus(status) ? status : null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'LOAD_WORKFLOW_RUN_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
         },
         error,
       );
