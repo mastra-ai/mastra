@@ -177,7 +177,7 @@ export type ServerRoute<
  *
  * Knowledge browsing is opt-in because the viewer picks the scope tags to read
  * through, so a host that needs per-user scoping should decide deliberately,
- * and bind the caller's tags with `MASTRA_KNOWLEDGE_SCOPE_KEY` from server middleware.
+ * and bind the caller's tags with `MASTRA_KNOWLEDGE_SCOPE_KEY` from `server.auth.authorize`.
  */
 export const OPT_IN_ROUTES: readonly ServerRoute[] = [...KNOWLEDGE_ROUTES];
 

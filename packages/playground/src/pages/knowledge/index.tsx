@@ -69,7 +69,7 @@ export default function KnowledgePage() {
         <EmptyState
           variant="fill"
           titleSlot="Knowledge browsing is not enabled"
-          descriptionSlot="This server does not register the Knowledge routes. Add them to `server.apiRoutes` with `KNOWLEDGE_ROUTES` from `@mastra/server/server-adapter`, then reload."
+          descriptionSlot="This server does not register the Knowledge routes. Add KNOWLEDGE_ROUTES from @mastra/server/server-adapter to server.apiRoutes, then reload."
         />
       </Shell>
     );

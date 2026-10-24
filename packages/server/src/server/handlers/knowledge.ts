@@ -33,7 +33,7 @@ import { handleError } from './error';
  * holds and returns only what those tags can see; nothing here writes. Permissions derive from the path
  * (`GET /knowledge/...` -> `knowledge:read`).
  *
- * The viewer chooses the scope unless the app narrows it: server middleware may set the
+ * The viewer chooses the scope unless the app narrows it: the app may set the
  * request-context key `mastra__knowledgeScope` (MASTRA_KNOWLEDGE_SCOPE_KEY) to the tags a caller may hold, and a request for any tag outside
  * that set is a 403. With FGA configured, instances are filtered (and gated) by `knowledge:read`.
  * Without either, any caller who passes `knowledge:read` can view any scope, which suits a developer tool
@@ -109,7 +109,7 @@ async function resolveStore(
     mastra
       .getLogger?.()
       ?.warn(
-        `Knowledge routes trust the requested scope as sent. Bound it per caller by setting request context key "${MASTRA_KNOWLEDGE_SCOPE_KEY}" in server middleware.`,
+        `Knowledge routes trust the requested scope as sent. Bound it per caller by setting request context key "${MASTRA_KNOWLEDGE_SCOPE_KEY}" in server.auth.authorize (it runs after authentication; server.middleware does not).`,
       );
   }
   return { store: await instance.getStorage(), view };
@@ -122,7 +122,7 @@ export const LIST_KNOWLEDGE_ROUTE = createRoute({
   responseSchema: listKnowledgeResponseSchema,
   summary: 'List Knowledge instances',
   description:
-    'Returns the Knowledge instances registered on this Mastra instance, by application key. The `scope` param on the other Knowledge routes is trusted as sent; bound it per caller by setting MASTRA_KNOWLEDGE_SCOPE_KEY in server middleware.',
+    'Returns the Knowledge instances registered on this Mastra instance, by application key. The `scope` param on the other Knowledge routes is trusted as sent; bound it per caller by setting MASTRA_KNOWLEDGE_SCOPE_KEY in server.auth.authorize (it runs after authentication; server.middleware does not).',
   tags: ['Knowledge'],
   requiresAuth: true,
   handler: async ({ mastra, requestContext }) => {

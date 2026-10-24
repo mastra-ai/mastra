@@ -39,25 +39,33 @@ They mount under your configured API prefix (`/api/knowledge` by default) and ar
 
 Every read takes the scope tags the viewer holds, and returns only what those tags can see. By default Studio lets the viewer choose the tags.
 
-If the viewer's tags exceed what a caller should be allowed to hold, bound them in server middleware by setting the `mastra__knowledgeScope` request-context key:
+If the viewer's tags exceed what a caller should be allowed to hold, bind them per caller by setting the `MASTRA_KNOWLEDGE_SCOPE_KEY` request-context key (the string `mastra__knowledgeScope`).
+
+Set it in `server.auth.authorize`, which runs after the caller is authenticated and receives the framework context. Don't set it in `server.middleware`: middleware runs **before** authentication, so the caller isn't known yet.
 
 ```typescript
+import { KNOWLEDGE_ROUTES, MASTRA_KNOWLEDGE_SCOPE_KEY } from '@mastra/server/server-adapter';
+
 export const mastra = new Mastra({
   server: {
     apiRoutes: [...KNOWLEDGE_ROUTES],
-    middleware: [
-      {
-        path: '/api/knowledge/*',
-        handler: async (c, next) => {
-          const user = c.get('user');
-          c.get('requestContext').set('mastra__knowledgeScope', tagsFor(user));
-          await next();
-        },
+    auth: {
+      authenticateToken: async token => verifyToken(token),
+      authorize: async (path, _method, user, context) => {
+        if (path.includes('/knowledge')) {
+          const tags = tagsFor(user);
+          // Refuse rather than leave the key unset: an unset key means unbound.
+          if (!Array.isArray(tags)) return false;
+          context.get('requestContext').set(MASTRA_KNOWLEDGE_SCOPE_KEY, tags);
+        }
+        return true;
       },
-    ],
+    },
   },
 });
 ```
+
+Never set the key to `undefined`. It reads back the same as an unset key, so the request is treated as unbound and the scope is trusted as sent.
 
 Once the key is set:
 
@@ -67,12 +75,12 @@ Once the key is set:
 
 :::warning
 
-Match the middleware to the **mounted** path, `/api/knowledge/*` by default, not the route path `/knowledge/*`. A pattern that misses the prefix leaves scope binding silently inactive.
+Match on the **mounted** path, `/api/knowledge/*` by default, not the route path `/knowledge/*`. A check that misses the prefix leaves scope binding silently inactive.
 
 :::
 
 ## Deployment notes
 
-- **No RBAC provider:** the `knowledge:read` check is skipped, so any authenticated user can read any named scope unless your middleware binds scopes with the key above.
+- **No RBAC provider:** the `knowledge:read` check is skipped, so any authenticated user can read any named scope unless your auth config binds scopes with the key above.
 - **Unbound scope:** if a user is authenticated but no scope is bound, requests are trusted as sent. The server logs a one-time warning. This suits an operator-controlled Studio, not a multi-tenant host.
 - **With an FGA provider:** `GET /knowledge` lists only the instances the caller can read, and the other routes answer `404` for any other instance.
