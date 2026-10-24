@@ -1,5 +1,5 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { failureSchema, IntakeError, safely } from '../domain/operation-errors.js';
 import {
@@ -7,13 +7,14 @@ import {
   comparisonResultSchema,
   type ComparisonRunner,
 } from '../domain/reconciliation-contracts.js';
-import { reportRequestSchema, reviewCheckpointSchema } from '../domain/report-contracts.js';
+import { reportRequestSchema } from '../domain/report-contracts.js';
 import type { ReviewDecision } from '../domain/review-contracts.js';
 import { operation } from '../runtime/operation-logger.js';
 import type { CaseService } from '../services/case-service.js';
 import type { ReconciliationService } from '../services/reconciliation-service.js';
 import type { ReportService } from '../services/report-service.js';
-import { operationContext } from '../tools/tool-context.js';
+import { createReconcileEvidenceStep } from './reconcile-evidence-step.js';
+import { createReviewCheckpointStep } from './review-checkpoint-step.js';
 
 export function createPolicyCheckingWorkflow(
   service: ReconciliationService,
@@ -22,113 +23,15 @@ export function createPolicyCheckingWorkflow(
   reports?: ReportService,
 ) {
   const outputSchema = z.union([comparisonResultSchema, failureSchema]);
-  const step = createStep({
-    id: 'reconcile-insurance-evidence',
-    inputSchema: compareRequestSchema,
-    outputSchema,
-    execute: async ({ inputData, requestContext, runId }) =>
-      safely(async () => {
-        const context = operationContext(cases, operatorId, requestContext);
-        const record = await cases.repository.requireCase(context, inputData.caseId);
-        if (reports && record.state === 'REVISION_REQUESTED' && record.revisionAuthority?.kind === 'presentation') {
-          if (record.revision !== inputData.expectedRevision)
-            throw new IntakeError(
-              'STALE_CASE',
-              'The case changed before the requested revision started.',
-              'Read /status and use the current case revision.',
-              409,
-            );
-          const saved = await service.completed(context);
-          if (!saved)
-            throw new IntakeError(
-              'ANALYSIS_UNAVAILABLE',
-              'The original analysis for this revision is unavailable.',
-              'Restore the paired case records before retrying.',
-              409,
-            );
-          await reports.repository.reconciliation.transaction(async transaction => {
-            const current = await cases.repository.requireCase(context, inputData.caseId);
-            if (
-              current.state !== 'REVISION_REQUESTED' ||
-              current.revision !== inputData.expectedRevision ||
-              current.revisionAuthority?.kind !== 'presentation'
-            )
-              throw new IntakeError(
-                'STALE_CASE',
-                'Another workflow started this revision.',
-                'Read /report for the active workflow.',
-                409,
-              );
-            await transaction.execute({
-              sql: 'UPDATE insurance_cases SET data=? WHERE id=? AND data=?',
-              args: [
-                JSON.stringify({
-                  ...current,
-                  state: 'PROCESSING',
-                  revision: current.revision + 1,
-                  revisionAuthority: { ...current.revisionAuthority, runId },
-                }),
-                current.id,
-                JSON.stringify(current),
-              ],
-            });
-          });
-          return { ...saved.result, workflowRunId: runId };
-        }
-        return service.process(context, inputData, runId, Boolean(reports));
-      }),
-  });
-  const reviewCheckpoint = createStep({
-    id: 'publish-and-await-broker-review',
-    inputSchema: outputSchema,
-    outputSchema,
-    resumeSchema: z.unknown(),
-    suspendSchema: reviewCheckpointSchema,
-    execute: async ({ inputData, requestContext, runId, suspend }) => {
-      if ('ok' in inputData || !reports) return inputData;
-      const frozen = await reports.repository.forRun(runId);
-      const context = frozen?.context ?? operationContext(cases, operatorId, requestContext);
-      const publication = frozen ?? (await reports.prepare(context, inputData.analysisId, runId));
-      const record = await cases.repository.requireCase(context, publication.snapshot.caseId);
-      if (
-        record.latestReportId !== publication.snapshot.id ||
-        ['REJECTED', 'REVISION_REQUESTED'].includes(record.state)
-      )
-        throw new IntakeError(
-          'STALE_REVIEW',
-          'This workflow is bound to a rejected or superseded report.',
-          'Read /report and use the current report workflow.',
-          409,
-        );
-      // Resume payloads never establish authority. Every entry re-reads the bound approval.
-      if (reports.review && ['APPROVED', 'FINALIZED'].includes(record.state)) {
-        await reports.review.finalize(context, publication.snapshot.id);
-        return inputData;
-      }
-      await safely(() => reports.publish(publication));
-      const result = await reports.current(context, {
-        caseId: publication.snapshot.caseId,
-        reportId: publication.snapshot.id,
-      });
-      return suspend({
-        caseId: publication.snapshot.caseId,
-        reportId: publication.snapshot.id,
-        version: publication.snapshot.version,
-        workflowRunId: runId,
-        snapshotHash: publication.hash,
-        ...(result.available ? { artifactId: publication.artifactId } : {}),
-        phase: result.available ? 'AWAITING_REVIEW' : 'PUBLICATION_FAILED',
-        ...(result.failure ? { failure: result.failure } : {}),
-      });
-    },
-  });
   const definition = createWorkflow({
     id: 'policy-checking-workflow',
     inputSchema: compareRequestSchema,
     outputSchema,
     options: { shouldPersistSnapshot: () => true, autoRestartActiveRuns: false },
-  }).then(step);
-  const workflow = (reports ? definition.then(reviewCheckpoint) : definition).commit();
+  }).then(createReconcileEvidenceStep(service, cases, operatorId, reports));
+  const workflow = (
+    reports ? definition.then(createReviewCheckpointStep(cases, operatorId, reports)) : definition
+  ).commit();
   const runner: ComparisonRunner = {
     async compare(context, input) {
       const request = compareRequestSchema.parse(input);

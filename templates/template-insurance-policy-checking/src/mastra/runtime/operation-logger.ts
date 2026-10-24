@@ -276,7 +276,10 @@ const metadataSchema = z
   })
   .strict();
 
-/** General operations never accept source text, identity, review prose or provider errors. */
+/**
+ * Correlate processing, publication and review using a stable event name and validated metadata.
+ * The strict schema rejects unknown fields; callers must omit source text, identity and raw errors.
+ */
 export function operation(metadata: z.input<typeof metadataSchema>) {
   logger.info('insurance.operation', metadataSchema.parse(metadata));
 }

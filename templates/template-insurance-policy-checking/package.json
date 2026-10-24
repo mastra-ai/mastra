@@ -8,6 +8,10 @@
   "engines": {
     "node": "^22.19.0 || >=24.11.0"
   },
+  "os": [
+    "darwin",
+    "linux"
+  ],
   "scripts": {
     "dev": "node scripts/mastra-cli.mjs dev",
     "build": "node scripts/mastra-cli.mjs build",

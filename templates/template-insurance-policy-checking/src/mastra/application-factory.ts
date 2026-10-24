@@ -26,27 +26,15 @@ import { createPolicyCheckingWorkflow } from './workflows/policy-checking-workfl
 
 export async function createApplication() {
   operation({ stage: 'startup', outcome: 'started', costMicros: null });
-  const limits = inputLimitsSchema.parse(inputLimits);
-  insuranceConfigurationSchema.parse(insuranceConfiguration);
+
   const { port, operatorId, dataDirectory } = applicationConfigurationSchema.parse({
     port: process.env.PORT,
     operatorId: process.env.POLICY_OPERATOR_ID,
     dataDirectory: process.env.POLICY_DATA_DIR,
   });
-  const testEndpoint = resolveControlledProviderEndpoint();
   const root = resolve(projectRoot(), dataDirectory);
   await ensurePrivateDirectory(root);
-  const repository = new CaseRepository(root);
-  await repository.initialize();
-  const reconciliationRepository = new ReconciliationRepository(repository);
-  await reconciliationRepository.initialize();
-  const processingModel = createInsuranceProcessingModel(reconciliationRepository, { endpoint: testEndpoint });
-  const reconciliation = createReconciliationService(
-    reconciliationRepository,
-    processingModel,
-    processingConfiguration,
-    insuranceConfiguration,
-  );
+
   const storage = new LibSQLStore({ id: 'insurance-history', url: `file:${resolve(root, 'history.db')}` });
   const memory = new Memory({
     storage,
@@ -57,13 +45,32 @@ export async function createApplication() {
       workingMemory: { enabled: true, scope: 'thread', schema: workingMemorySchema, agentManaged: false },
     },
   });
-  const registry = createRegistry(registrations, registrations.providerDefaults);
+
+  const caseRepository = new CaseRepository(root);
+  await caseRepository.initialize();
+  const reconciliationRepository = new ReconciliationRepository(caseRepository);
+  await reconciliationRepository.initialize();
+  // Deterministic tests may use a loopback model server; production uses the default provider.
+  const controlledProviderEndpoint = resolveControlledProviderEndpoint();
+  const processingModel = createInsuranceProcessingModel(reconciliationRepository, {
+    endpoint: controlledProviderEndpoint,
+  });
+  const limits = inputLimitsSchema.parse(inputLimits);
+  insuranceConfigurationSchema.parse(insuranceConfiguration);
   const reportRepository = new ReportRepository(reconciliationRepository);
   await reportRepository.initialize();
   const reviewRepository = new ReviewRepository(reportRepository);
   await reviewRepository.initialize();
   const finalizations = new FinalizationRepository(reviewRepository);
   await finalizations.initialize();
+
+  const registry = createRegistry(registrations, registrations.providerDefaults);
+  const reconciliation = createReconciliationService(
+    reconciliationRepository,
+    processingModel,
+    processingConfiguration,
+    insuranceConfiguration,
+  );
   const review = createReviewService(
     reviewRepository,
     finalizations,
@@ -76,28 +83,32 @@ export async function createApplication() {
     review,
   );
   const caseService = createCaseService(
-    repository,
+    caseRepository,
     registry.resolve('input', undefined, 'pdf-attachments'),
     limits,
     reconciliation.status,
     reports.status,
   );
+
   const comparison = createPolicyCheckingWorkflow(reconciliation, caseService, operatorId, reports);
+
   return {
-    logger: privateFrameworkLogger,
     storage,
     agents: {
       policyCheckingAgent: createPolicyCheckingAgent(
         caseService,
         memory,
         operatorId,
-        process.env.NODE_ENV === 'test' && process.env.POLICY_TEST_PROCESSING_ONLY === '1' ? undefined : testEndpoint,
+        process.env.NODE_ENV === 'test' && process.env.POLICY_TEST_PROCESSING_ONLY === '1'
+          ? undefined
+          : controlledProviderEndpoint,
         comparison.runner,
         comparison.report,
         comparison.review,
       ),
     },
     workflows: { policyCheckingWorkflow: comparison.workflow },
+    logger: privateFrameworkLogger,
     server: createLocalServer(port, limits, reportRepository, operatorId, finalizations),
   };
 }

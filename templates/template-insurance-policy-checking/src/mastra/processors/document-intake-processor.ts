@@ -146,10 +146,19 @@ export function createDocumentIntakeProcessor(
               'Read /status for available analysis.',
             );
           const record = await caseService.repository.requireCase(context);
-          const result = await report(
-            context,
-            text.trim() === '/report' ? { caseId: record.id } : JSON.parse(text.slice('/report '.length)),
-          );
+          let reportInput: unknown = { caseId: record.id };
+          if (text.trim() !== '/report') {
+            try {
+              reportInput = JSON.parse(text.slice('/report '.length));
+            } catch {
+              throw new IntakeError(
+                'REPORT_FORMAT',
+                'The report request is not valid JSON.',
+                'Use /report alone, or /report followed by the documented caseId and retryPublication fields.',
+              );
+            }
+          }
+          const result = await report(context, reportInput);
           evidence = JSON.stringify(result);
           reportSummary = reportNotice(result, context);
         }

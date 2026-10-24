@@ -10,6 +10,7 @@ export const reportOutput: OutputProvider<'reportOutput'>[] = [createApprovedOut
 export const correctionOutput: OutputProvider<'correctionOutput'>[] = [
   createApprovedOutputProvider('correctionOutput'),
 ];
+
 export const providerDefaults = {
   input: 'local-pdf',
   draftOutput: 'local-pdf-draft',

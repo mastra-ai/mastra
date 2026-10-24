@@ -13,7 +13,11 @@ export interface ProcessingReservation {
   inputTokens: number;
 }
 
-/** Per-generation transport control. The SDK owns request construction and response parsing. */
+/**
+ * Reserve a durable budget before one SDK request, reject redirects and cap response bytes.
+ * The SDK owns request construction, parsing and the abort signal enforcing the generation deadline.
+ * Usage is settled separately by the processing usage processor; missing usage retains the reservation.
+ */
 export function createBoundedModelTransport(
   repository: ReconciliationRepository,
   context: OperationContext,

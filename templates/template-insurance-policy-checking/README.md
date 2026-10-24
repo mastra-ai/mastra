@@ -1,16 +1,14 @@
 # Insurance Policy Checking
 
-Compare insurance proposals, contracts and issued policies in Mastra Studio. Findings retain exact source evidence, documented changes and unresolved questions. A broker reviews an immutable PDF draft before approving a final report and, when applicable, an editable correction request.
+Insurance proposals, contracts and issued policies can disagree on coverage, limits and exclusions. This Mastra template brings those documents into a single review, linking each finding to its source and keeping agreed changes separate from unresolved questions. Brokers can review a PDF draft, record their decisions and approve a final report with a proposed correction request when needed.
 
 ## Why we built this
 
-A selected reference does not prove that its terms were accepted. Policy checking needs explicit document roles, verified evidence and a record of the broker's decisions.
+Checking an issued policy against the agreed terms means more than spotting different wording. Brokers need to trace each difference to the original documents, account for accepted changes and decide what needs correction. This template keeps that evidence and review history together so the broker can make and explain the final decision.
 
 ## Prerequisites
 
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` for document comparison. Local intake, evidence retrieval and report review do not require model calls.
-- An explicitly approved processing budget: set `POLICY_PROCESSING_BUDGET` as described in the [operating guide](./docs/usage.md#configure-processing). Paid processing is disabled by default.
-- Textual PDF documents. Encrypted PDFs, remote URLs and OCR are unsupported.
 
 ## Quickstart 🚀
 
@@ -25,15 +23,17 @@ A selected reference does not prove that its terms were accepted. Policy checkin
 
 ## Try it out
 
-- Run `npm run prepare:use-cases` to generate sample PDFs and a manifest in `.runtime/use-cases`.
-- Send `/status`, then `/evidence SOURCE_ID 2` to inspect physical page 2 of a saved source.
-- Follow the [operating guide](./docs/usage.md) to clarify document roles, run `/compare` and retrieve the PDF with `/report`.
-- Review an exact report version with `/review`. Only explicitly confirmed actionable discrepancies in agreed-term checking produce a correction request. Delivery is a separate manual action.
+Optionally run `npm run prepare:use-cases` in your terminal to generate sample PDFs in `.runtime/use-cases`. In the **Policy Checking** conversation in **Mastra Studio**:
+
+- Attach a proposal and an issued policy, then send `/status` to see their source IDs and the current case revision.
+- Send `/evidence SOURCE_ID 2` to inspect the saved text from physical page 2.
+- Follow the [usage guide](./docs/usage.md) to declare document roles with `/clarify`, compare them with `/compare` and download the draft with `/report`.
+- Read the draft and send `/review` with the exact report version to record your decision. Confirmed actionable discrepancies in agreed-term checking produce a proposed correction request for manual delivery.
 
 ## Customization
 
-- Ask your coding agent: “Explore the provider contracts and propose a plan for adding a structured-record input provider.” Registrations live in `src/mastra/provider-config.ts`.
-- Change upload capacities or insurance profiles in `src/mastra/config/`. See [development and validation](./docs/development.md) for file conventions, provider contracts and checks.
+Set the model and processing budget in `.env`, for example `POLICY_EXTRACTION_MODEL=gpt-6.1-sol` and `POLICY_PROCESSING_BUDGET='<budget JSON>'`.
+Copy the budget example from [.env.example](./.env.example), adjust its limits and token prices, then restart Studio.
 
 ## About Mastra templates
 

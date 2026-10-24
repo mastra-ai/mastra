@@ -1,5 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { inputLimits, inputLimitsSchema } from '../src/mastra/config/input-limits-config.js';
@@ -7,6 +9,7 @@ import { insuranceConfiguration, insuranceConfigurationSchema } from '../src/mas
 import {
   applicationConfigurationSchema,
   clarifySchema,
+  hashBytes,
   sourceBundleSchema,
 } from '../src/mastra/domain/case-contracts.js';
 import { compareDecimals, normalizeDecimal } from '../src/mastra/domain/decimal-utils.js';
@@ -21,6 +24,28 @@ import { resolveControlledProviderEndpoint } from '../src/mastra/runtime/local-s
 import { processingDiagnostics } from '../src/mastra/runtime/operation-logger.js';
 import { recordProvider } from './input-fixtures.js';
 import { propertyMoney } from './reconciliation-fixtures.js';
+
+it.each(['en_US.UTF-8', 'sv_SE.UTF-8', 'tr_TR.UTF-8'])(
+  'keeps nested record serialization and checksums independent of the process locale (%s)',
+  async locale => {
+    const records = { z: [{ ä: 'umlaut', Z: 'capital', a: 'lower' }], A: 1, a: 2, ä: 3, '10': null, '2': true };
+    const expected = '{"10":null,"2":true,"A":1,"a":2,"z":[{"Z":"capital","a":"lower","ä":"umlaut"}],"ä":3}';
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      [
+        '--import',
+        './tests/source-loader.mjs',
+        '--input-type=module',
+        '-e',
+        `import { canonicalJson, hashBytes } from './src/mastra/domain/case-contracts.js';
+         const encoded = canonicalJson(${JSON.stringify(records)});
+         console.log(JSON.stringify({ encoded, hash: hashBytes(encoded) }));`,
+      ],
+      { env: { ...process.env, LANG: locale, LC_ALL: locale } },
+    );
+    expect(JSON.parse(stdout)).toEqual({ encoded: expected, hash: hashBytes(expected) });
+  },
+);
 
 it('native_diagnostics_survive_serialization_without_copying_error_content', () => {
   const validationError = new z.ZodError([

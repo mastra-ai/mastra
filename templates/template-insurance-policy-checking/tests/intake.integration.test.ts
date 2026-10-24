@@ -36,6 +36,46 @@ afterEach(async () => {
 });
 
 describe('Durable insurance intake across real boundaries', () => {
+  it('treats SQL syntax in case context and source data as literals without exposing another case', async () => {
+    const payloads = ["' OR 1=1 --", "x'; DROP TABLE insurance_cases; --"];
+    const { service, repository } = await setup(inputLimits, recordProvider());
+    const original = await service.capture(context, {});
+    const originalSource = (await repository.sources(context))[0]!;
+    for (const payload of payloads) {
+      for (const injectedContext of [
+        { ...context, operatorId: payload },
+        { ...context, threadId: payload },
+      ]) {
+        expect((await service.status(injectedContext)).case).toBeNull();
+        await expect(repository.select(injectedContext, original.id)).rejects.toMatchObject({ code: 'CASE_CONTEXT' });
+        const isolated = await service.capture(injectedContext, {});
+        expect(isolated.id).not.toBe(original.id);
+        expect((await service.status(injectedContext)).case?.id).toBe(isolated.id);
+        await expect(
+          service.evidence(injectedContext, originalSource.sourceId, { recordId: 'contract', field: 'limit' }),
+        ).rejects.toMatchObject({ code: 'SOURCE_CONTEXT' });
+      }
+      const dataService = createCaseService(
+        repository,
+        recordProvider('records', { contract: { limit: payload } }),
+        inputLimits,
+      );
+      const dataContext = { ...context, threadId: `data-${payload}` };
+      await dataService.capture(dataContext, {});
+      const source = (await repository.sources(dataContext))[0]!;
+      expect(
+        await dataService.evidence(dataContext, source.sourceId, { recordId: 'contract', field: 'limit' }),
+      ).toMatchObject({ value: payload });
+      await expect(service.evidence(context, payload, { recordId: 'contract', field: 'limit' })).rejects.toMatchObject({
+        code: 'SOURCE_CONTEXT',
+      });
+      await expect(repository.select(context, payload)).rejects.toMatchObject({ code: 'CASE_CONTEXT' });
+    }
+    expect((await service.status(context)).case).toEqual(original);
+    expect(
+      await service.evidence(context, originalSource.sourceId, { recordId: 'contract', field: 'limit' }),
+    ).toMatchObject({ value: 'USD 250000' });
+  });
   it('contains parser crashes, excessive output, heap exhaustion, CPU loops and stalled children', async () => {
     const root = await mkdtemp(join(tmpdir(), 'policy-parser-bounds-'));
     roots.push(root);

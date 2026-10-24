@@ -177,6 +177,29 @@ function jsonProvider(
 }
 
 describe('Immutable review drafts across real workflow, database, file and HTTP boundaries', () => {
+  it('explains malformed report JSON without changing the saved report or its publication', async () => {
+    const runtime = await setup();
+    const report = await runtime.compare();
+    const publication = await runtime.reportRepository.get(reportContext);
+    const record = await runtime.cases.requireCase(reportContext);
+    const requestCount = runtime.wire.requests.length;
+    const memory = { thread: reportContext.threadId, resource: reportContext.operatorId };
+    for (const command of ['/report {caseId: "invalid"}', '/report {"caseId":', '/report not-json']) {
+      const response = await runtime.agent.generate(command, { memory });
+      expect(response.tripwire?.reason).toContain('REPORT_FORMAT');
+      expect(response.tripwire?.reason).toContain('The report request is not valid JSON.');
+      expect(response.tripwire?.reason).toContain('Use /report alone');
+      expect(response.tripwire?.reason).not.toContain('SERVICE_UNAVAILABLE');
+    }
+    for (const command of ['/report', `/report ${JSON.stringify({ caseId: record.id, retryPublication: true })}`]) {
+      const response = await runtime.agent.generate(command, { memory });
+      expect(response.tripwire?.reason).toContain('Download draft report');
+      expect(response.tripwire?.reason).toContain(report.report.id);
+    }
+    expect(await runtime.cases.requireCase(reportContext)).toEqual(record);
+    expect(await runtime.reportRepository.get(reportContext)).toEqual(publication);
+    expect(runtime.wire.requests).toHaveLength(requestCount);
+  });
   it('draft_pdf_preserves_findings_and_paginated_layout', async () => {
     const documents = propertyDocuments();
     for (const document of documents.slice(0, 2))

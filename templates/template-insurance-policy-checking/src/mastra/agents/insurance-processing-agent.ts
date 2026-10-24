@@ -17,7 +17,11 @@ import {
 } from '../runtime/operation-logger.js';
 import type { ReconciliationRepository } from '../storage/reconciliation-repository.js';
 
-/** Internal, attempt-bound agents are never registered as independently callable Studio agents. */
+/**
+ * Create internal agents for schema-bound evidence extraction and semantic clause assessment.
+ * Each generation uses the persisted attempt's model and budget; only the workflow calls this adapter.
+ * Evidence verification and broker approval stay in the services, outside the model's authority.
+ */
 export function createInsuranceProcessingModel(
   repository: ReconciliationRepository,
   options: { endpoint?: string; apiKey?: () => string | undefined } = {},
