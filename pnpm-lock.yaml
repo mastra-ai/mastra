@@ -1450,8 +1450,8 @@ importers:
         specifier: 'catalog:'
         version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       zod:
-        specifier: ^3.25.76
-        version: 3.25.76
+        specifier: 4.6.7
+        version: 4.6.7
 
   code-mode/isolated-vm:
     dependencies:
@@ -1640,8 +1640,8 @@ importers:
         specifier: ^4.152.0
         version: 4.154.0(@types/node@22.19.15)(bufferutil@4.1.0)
       zod:
-        specifier: ^3.25.76
-        version: 3.25.76
+        specifier: 4.6.7
+        version: 4.6.7
 
   deployers/netlify:
     dependencies:
@@ -5092,10 +5092,10 @@ importers:
         version: 2.4.1
       '@composio/core':
         specifier: ^0.18.1
-        version: 0.18.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@3.25.76)
+        version: 0.18.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
       '@composio/mastra':
         specifier: ^0.10.6
-        version: 0.10.6(@composio/core@0.18.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@3.25.76))(@mastra/core@packages+core)(zod@3.25.76)
+        version: 0.10.6(@composio/core@0.18.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(@mastra/core@packages+core)(zod@4.6.7)
       '@mastra/memory':
         specifier: workspace:*
         version: link:../memory
@@ -5143,8 +5143,8 @@ importers:
         specifier: 'catalog:'
         version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       zod:
-        specifier: ^3.25.76
-        version: 3.25.76
+        specifier: 4.6.7
+        version: 4.6.7
 
   packages/evals:
     dependencies:
@@ -5756,8 +5756,8 @@ importers:
         specifier: ^10.1.1
         version: 10.1.1(react@19.3.1)
       zod:
-        specifier: ^3.25.76
-        version: 3.25.76
+        specifier: 4.6.7
+        version: 4.6.7
       zod-v4:
         specifier: npm:zod@^4.6.7
         version: zod@4.6.7
@@ -5973,8 +5973,8 @@ importers:
         specifier: ^10.1.1
         version: 10.1.1(react@19.3.1)
       zod:
-        specifier: ^3.25.76
-        version: 3.25.76
+        specifier: 4.6.7
+        version: 4.6.7
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -5999,7 +5999,7 @@ importers:
         version: link:../schema-compat
       '@modelcontextprotocol/sdk':
         specifier: ^1.32.2
-        version: 1.32.2(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)
+        version: 1.32.2(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.7)
       '@storybook/addon-a11y':
         specifier: ^10.6.2
         version: 10.6.5(storybook@10.6.5(@types/react@19.3.0)(bufferutil@4.1.0)(prettier@3.9.5)(react@19.3.1))
@@ -6279,8 +6279,8 @@ importers:
         specifier: ^3.25.2
         version: 3.25.2(zod@4.6.7)
       zod-v3:
-        specifier: npm:zod@^3.25.76
-        version: zod@3.25.76
+        specifier: npm:zod@^4.6.6
+        version: zod@4.6.7
 
   packages/server:
     dependencies:
@@ -6911,7 +6911,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.136
-        version: 2.0.138(zod@3.25.76)
+        version: 2.0.138(zod@4.6.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -6988,8 +6988,8 @@ importers:
         specifier: ^4.1.12
         version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       zod:
-        specifier: ^3.25.76
-        version: 3.25.76
+        specifier: 4.6.7
+        version: 4.6.7
 
   server-adapters/next:
     dependencies:
@@ -9280,8 +9280,8 @@ importers:
         specifier: 'catalog:'
         version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       zod:
-        specifier: ^3.25.76
-        version: 3.25.76
+        specifier: 4.6.7
+        version: 4.6.7
 
   workflows/inngest:
     dependencies:
@@ -34757,19 +34757,19 @@ snapshots:
 
   '@composio/client@0.1.0-alpha.76': {}
 
-  '@composio/core@0.18.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@3.25.76)':
+  '@composio/core@0.18.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)':
     dependencies:
       '@composio/client': 0.1.0-alpha.76
-      '@composio/json-schema-to-zod': 0.3.2(zod@3.25.76)
+      '@composio/json-schema-to-zod': 0.3.2(zod@4.6.7)
       '@types/json-schema': 7.0.15
       is-fs-case-sensitive: 2.0.0
-      openai: 7.45.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@3.25.76)
+      openai: 7.45.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
       picocolors: 1.1.1
       pusher-js: 8.6.0
       semver: 7.8.5
       undici: 8.12.2
-      zod: 3.25.76
-      zod-to-json-schema: 3.25.2(zod@3.25.76)
+      zod: 4.6.7
+      zod-to-json-schema: 3.25.2(zod@4.6.7)
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
       - '@smithy/hash-node'
@@ -34777,18 +34777,18 @@ snapshots:
       - google-auth-library
       - ws
 
-  '@composio/json-schema-to-zod@0.3.2(zod@3.25.76)':
+  '@composio/json-schema-to-zod@0.3.2(zod@4.6.7)':
     dependencies:
       '@cfworker/json-schema': 4.1.1
       dequal: 2.0.3
-      zod: 3.25.76
+      zod: 4.6.7
 
-  '@composio/mastra@0.10.6(@composio/core@0.18.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@3.25.76))(@mastra/core@packages+core)(zod@3.25.76)':
+  '@composio/mastra@0.10.6(@composio/core@0.18.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(@mastra/core@packages+core)(zod@4.6.7)':
     dependencies:
-      '@composio/core': 0.18.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@3.25.76)
+      '@composio/core': 0.18.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
       '@mastra/core': link:packages/core
-      '@mastra/schema-compat': 1.3.17(zod@3.25.76)
-      zod: 3.25.76
+      '@mastra/schema-compat': 1.3.17(zod@4.6.7)
+      zod: 4.6.7
 
   '@connectrpc/connect-web@1.7.0(@bufbuild/protobuf@1.10.0)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.0))':
     dependencies:
@@ -38781,10 +38781,10 @@ snapshots:
       - supports-color
       - zod
 
-  '@mastra/schema-compat@1.3.17(zod@3.25.76)':
+  '@mastra/schema-compat@1.3.17(zod@4.6.7)':
     dependencies:
       json-schema-to-zod: 2.8.1
-      zod: 3.25.76
+      zod: 4.6.7
       zod-from-json-schema: 0.5.2
 
   '@mcp-ui/client@7.1.1(@cfworker/json-schema@4.1.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)':
@@ -39116,30 +39116,6 @@ snapshots:
       raw-body: 4.0.0
       zod: 4.6.7
       zod-to-json-schema: 3.25.2(zod@4.6.7)
-    optionalDependencies:
-      '@cfworker/json-schema': 4.1.1
-    transitivePeerDependencies:
-      - supports-color
-
-  '@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)':
-    dependencies:
-      '@hono/node-server': 1.19.15(hono@4.13.13)
-      ajv: 8.20.0
-      ajv-formats: 3.0.1(ajv@8.20.0)
-      content-type: 1.0.5
-      cors: 2.8.6
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.1.1
-      express: 5.3.0(supports-color@10.2.2)
-      express-rate-limit: 8.7.1(express@5.3.0(supports-color@10.2.2))(supports-color@10.2.2)
-      hono: 4.13.13
-      jose: 6.2.12
-      json-schema-typed: 8.0.2
-      pkce-challenge: 5.0.1
-      raw-body: 4.0.0
-      zod: 3.25.76
-      zod-to-json-schema: 3.25.2(zod@3.25.76)
     optionalDependencies:
       '@cfworker/json-schema': 4.1.1
     transitivePeerDependencies:
@@ -52016,15 +51992,6 @@ snapshots:
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 4.6.7
 
-  openai@7.45.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@3.25.76):
-    optionalDependencies:
-      '@aws-sdk/credential-provider-node': 3.972.89
-      '@smithy/signature-v4': 5.7.4
-      google-auth-library: 11.3.1(supports-color@10.2.2)
-      undici: 8.12.2
-      ws: 8.22.0(bufferutil@4.1.0)
-      zod: 3.25.76
-
   openai@7.45.1(@aws-sdk/credential-provider-node@3.972.89)(@smithy/signature-v4@5.7.4)(google-auth-library@11.3.1(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7):
     optionalDependencies:
       '@aws-sdk/credential-provider-node': 3.972.89
@@ -52033,7 +52000,6 @@ snapshots:
       undici: 8.12.2
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 4.6.7
-    optional: true
 
   openapi-fetch@0.13.8:
     dependencies:
