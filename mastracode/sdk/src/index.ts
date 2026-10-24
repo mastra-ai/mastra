@@ -3,9 +3,8 @@ import { statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir, hostname } from 'node:os';
 import path from 'node:path';
-import type { AgentScopeEntry } from '@mastra/core/agent';
 
-import type { Agent } from '@mastra/core/agent';
+import type { Agent, AgentScopeEntry } from '@mastra/core/agent';
 import { AgentController, migratePersistedModelSelection } from '@mastra/core/agent-controller';
 import type {
   IntervalHandler,
@@ -100,7 +99,7 @@ import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/ind
 import { resolveExperimentalAgent, validateExperimentalAgent, wrapExperimentalAgent } from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
-import { resolveKnowledgeSessionScopes } from './knowledge-scope.js';
+import { knowledgeUnresolvedScopes, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
 import type { ProviderAccess } from './onboarding/packs.js';
@@ -1325,13 +1324,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ? {
           knowledge,
           // The session's tags (Factory org + project, or the local default) join the host's.
-          // An unresolved Factory session adds none, so its writes stay private to the run.
+          // An unresolved Factory session keeps only identity tags, so its writes stay private to
+          // the run, matching the inspector, which refuses to read for it.
           scopes: ({ requestContext }) => {
             const controller = requestContext.get('controller') as
               | AgentControllerRequestContext<MastraCodeState>
               | undefined;
             const session = resolveKnowledgeSessionScopes(controller?.state, knowledgeHostScopes);
-            return session.resolved ? session.scopes : [...knowledgeHostScopes];
+            return session.resolved ? session.scopes : knowledgeUnresolvedScopes(knowledgeHostScopes);
           },
         }
       : {}),

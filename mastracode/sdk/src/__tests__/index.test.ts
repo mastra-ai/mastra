@@ -964,6 +964,31 @@ describe('createMastraCode', () => {
     expect(await plainScopes({ requestContext: factory })).toEqual(['org:o', 'project:p']);
   });
 
+  it('gives an unresolved Factory session only identity tags, never the host tags', async () => {
+    const { Knowledge } = await import('@mastra/core/knowledge');
+    const { RequestContext } = await import('@mastra/core/request-context');
+    const { resolveKnowledgeSessionScopes } = await import('../knowledge-scope.js');
+    const { createMastraCode } = await import('../index.js');
+    const cases = [
+      // A host org that conflicts with the session's org.
+      { host: ['org:other', 'resource:r'], state: { factoryOrgId: 'o', factoryProjectId: 'p' } },
+      // A Factory session with no org, where the host org must not stand in for it.
+      { host: ['org:acme'], state: { factoryProjectId: 'p', factoryOrgUnresolved: true } },
+    ];
+    for (const [index, { host, state }] of cases.entries()) {
+      await createMastraCode({
+        knowledge: { key: `unresolved-${index}`, instance: new Knowledge({ id: 'mastra' }), scopes: host },
+      });
+      const context = new RequestContext([['controller', { state }]]);
+      expect(await codeAgentConfig().scopes({ requestContext: context })).toEqual(
+        host.filter(tag => tag.startsWith('resource:')),
+      );
+      // The inspector uses the same resolver with the same host tags, and refuses an unresolved session.
+      expect(createKnowledgeInspectorMock).toHaveBeenLastCalledWith(expect.objectContaining({ hostScopes: host }));
+      expect(resolveKnowledgeSessionScopes(state as any, host).resolved).toBe(false);
+    }
+  });
+
   it('attaches the flag-enabled default Knowledge with read, write and pin tools, and knowledge: false turns it off', async () => {
     vi.stubEnv('MASTRACODE_EXPERIMENTAL_KNOWLEDGE', '1');
     try {
