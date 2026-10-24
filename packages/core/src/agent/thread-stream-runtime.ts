@@ -7152,7 +7152,6 @@ export class AgentThreadStreamRuntime {
         blockingRecord?.output.status === 'suspended' ||
         blockingRecord?.lifecycle === 'suspended'
       ) {
-        if (blockingRecord?.agent.id === agent.id && scopeMismatch(blockingRunId)) return refuseScopes(blockingRunId);
         return {
           signal,
           accepted: Promise.resolve({
