@@ -546,6 +546,10 @@ describe('bundled Factory skill assets', () => {
     for (const skill of [review, await read('factory-rereview')]) {
       expect(skill).toContain('**The head must not have moved.**');
       expect(skill).toContain('If the head moved, do not publish');
+      expect(skill).toContain(
+        'Immediately before publishing, run `gh pr view <number> --json headRefOid --jq .headRefOid`',
+      );
+      expect(skill).toContain('Name the reviewed head SHA in the handoff.');
     }
     // Existing review signal (bot and human) must be collected from every
     // source — submitted reviews, unresolved inline threads with their
