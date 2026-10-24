@@ -39,7 +39,7 @@ pnpm simulate:replay \
   --knowledge-resource my-project-id
 ```
 
-`--knowledge-resource <id>` anchors resource-scoped knowledge on a shared project identifier, matching production callers that set `knowledgeResourceId`. Use it when the replayed threads shared a project resource in production so the curator can retrieve and reconcile knowledge across source threads.
+`--knowledge-resource <id>` anchors resource-scoped knowledge on a shared project identifier, matching production callers that set the reserved `mastra__knowledgeResourceId` request-context key. Use it when the replayed threads shared a project resource in production so the curator can retrieve and reconcile knowledge across source threads.
 
 The target database is local-only, must differ from the input database, and is recreated for the run. Replay prints a `CURATOR` line for each cycle followed by one JSON object per thread. The JSON includes curator outcomes, knowledge totals, reconstruction warnings, and the number of excluded reflection heads. Missing generations, empty chunks, and unparseable dates therefore remain visible to operators.
 

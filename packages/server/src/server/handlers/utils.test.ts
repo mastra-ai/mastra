@@ -122,3 +122,13 @@ describe('utils', () => {
     });
   });
 });
+
+describe('mergeBodyRequestContext knowledge resource override', () => {
+  it('drops a body-supplied reserved Knowledge resource override', async () => {
+    const { mergeBodyRequestContext } = await import('./utils');
+    const { RequestContext } = await import('@mastra/core/request-context');
+    const serverRequestContext = new RequestContext();
+    mergeBodyRequestContext(serverRequestContext, { mastra__knowledgeResourceId: 'victim-project' });
+    expect(serverRequestContext.get('mastra__knowledgeResourceId')).toBeUndefined();
+  });
+});

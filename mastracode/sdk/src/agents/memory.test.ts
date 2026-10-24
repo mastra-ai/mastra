@@ -316,7 +316,7 @@ describe('getDynamicMemory', () => {
     });
     expect(requestContext.get('organizationId')).toBe(LOCAL_KNOWLEDGE_ORG_ID);
     // Outside the factory there is no project id, so the knowledge scope is untouched.
-    expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
+    expect(requestContext.get('mastra__knowledgeResourceId')).toBeUndefined();
   });
 
   it('prefers the factory org id from session state over the session owner for organizationId', async () => {
@@ -472,8 +472,8 @@ describe('getDynamicMemory', () => {
       'thread',
       { vector: true },
     );
-    expect(requestContext.set).toHaveBeenCalledWith('knowledgeResourceId', 'project-1');
-    expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
+    expect(requestContext.set).toHaveBeenCalledWith('mastra__knowledgeResourceId', 'project-1');
+    expect(requestContext.get('mastra__knowledgeResourceId')).toBe('project-1');
   });
 
   it('configures factory curation scope and limits', async () => {
