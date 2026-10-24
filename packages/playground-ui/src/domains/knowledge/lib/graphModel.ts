@@ -228,7 +228,8 @@ export function deriveRecordElements(
     if (!record.nodeIds.every(id => byId.has(id))) continue;
     const nodeId = `record:${record.id}`;
     if (record.nodeIds.length === 1) {
-      const owner = byId.get(record.nodeIds[0]!)!;
+      const owner = byId.get(record.nodeIds[0] ?? '');
+      if (!owner) continue;
       if (!record.pinned && owner.recordCount === 1) continue; // the circle represents the record
       recordNodes.push({
         id: nodeId,
@@ -240,7 +241,7 @@ export function deriveRecordElements(
       continue;
     }
     if (record.nodeIds.length === 2 && !record.pinned) {
-      recordEdges.push({ id: nodeId, source: record.nodeIds[0]!, target: record.nodeIds[1]!, record });
+      recordEdges.push({ id: nodeId, source: record.nodeIds[0] ?? '', target: record.nodeIds[1] ?? '', record });
       continue;
     }
     recordNodes.push({
@@ -267,8 +268,8 @@ export function recordPairEdges(records: KnowledgeGraphRecord[]): KnowledgeGraph
     for (let i = 1; i < record.nodeIds.length; i += 1) {
       edges.push({
         id: `pair:${record.id}:${i}`,
-        source: record.nodeIds[0]!,
-        target: record.nodeIds[i]!,
+        source: record.nodeIds[0] ?? '',
+        target: record.nodeIds[i] ?? '',
         type: 'wikilink',
         recordId: record.id,
         pinned: record.pinned || undefined,

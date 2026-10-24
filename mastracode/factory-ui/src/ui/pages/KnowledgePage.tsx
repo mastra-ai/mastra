@@ -16,7 +16,7 @@ import {
   useKnowledgeScopePage,
   useKnowledgeScopes,
 } from '../../hooks/useKnowledgeGraph';
-import { KnowledgeDataSourceProvider } from '@mastra/playground-ui/domains/knowledge/data-source';
+import { KnowledgeDataSourceProvider } from '@mastra/playground-ui/domains/knowledge/data-source-provider';
 import type { KnowledgeDataSource } from '@mastra/playground-ui/domains/knowledge/data-source';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';

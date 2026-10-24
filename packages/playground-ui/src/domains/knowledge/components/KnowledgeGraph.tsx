@@ -1,15 +1,4 @@
-import { textStyle } from '@/ds/primitives/text';
-import { cn } from '@/utils/cn';
-import { Txt } from '@/ds/components/Txt';
-/**
- * The force-directed knowledge graph: React Flow renders DOM nodes/edges while
- * d3-force computes positions (synchronously, deterministic). Knowledge nodes are
- * nodes sized by edge degree (Amendment A3), wikilink relationships are edges,
- * pinned knowledge carries a distinct accent, and hovering a node or edge
- * shows a summary card. Dragging a node re-pins it (the layout keeps it put).
- */
-
-import { Badge } from '@/ds/components/Badge';
+import type { EdgeProps, NodeProps } from '@xyflow/react';
 import {
   Background,
   BackgroundVariant,
@@ -24,14 +13,12 @@ import {
   useReactFlow,
   EdgeLabelRenderer,
 } from '@xyflow/react';
-import type { EdgeProps, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { Boxes, Globe, Pin } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../types';
+import type { Arrivals } from '../lib/graphDiff';
 import type { NodeFlowNode, KnowledgeFlowEdge, KnowledgeGraphFilters, RecordFlowNode } from '../lib/graphModel';
 import {
   deriveRecordElements,
@@ -47,9 +34,8 @@ import {
   toFlowGraph,
   toRecordFlow,
 } from '../lib/graphModel';
-import type { Arrivals } from '../lib/graphDiff';
-import { runLayout } from '../lib/layout';
 import { knowledgeScopes } from '../lib/knowledgeScope';
+import type { KnowledgeFlowNode } from '../lib/knowledgeStyles';
 import {
   getKnowledgeEdgeStyle,
   getKnowledgeNodeStyle,
@@ -58,8 +44,24 @@ import {
   isKnowledgeNode,
   isRecordNode,
 } from '../lib/knowledgeStyles';
-import type { KnowledgeFlowNode } from '../lib/knowledgeStyles';
+import { runLayout } from '../lib/layout';
+import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../types';
+
+import { Badge } from '@/ds/components/Badge';
+import { Txt } from '@/ds/components/Txt';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { textStyle } from '@/ds/primitives/text';
+import { cn } from '@/utils/cn';
+
 import './knowledge.css';
+
+/**
+ * The force-directed knowledge graph: React Flow renders DOM nodes/edges while
+ * d3-force computes positions (synchronously, deterministic). Knowledge nodes are
+ * nodes sized by edge degree (Amendment A3), wikilink relationships are edges,
+ * pinned knowledge carries a distinct accent, and hovering a node or edge
+ * shows a summary card. Dragging a node re-pins it (the layout keeps it put).
+ */
 
 const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
 
@@ -80,7 +82,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
       {/* A11: nodes never carry pin visuals — pins belong to their record
           markers (dot / line / junction). */}
       <div
-        className="knowledge-circle shadow-raised flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center"
+        className="knowledge-circle shadow-raised flex size-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center"
         data-selected={selected || undefined}
         style={getKnowledgeNodeStyle(node.isBoundary ? null : node.rung)}
       >
@@ -158,7 +160,7 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
         <EdgeLabelRenderer>
           <span
             // Nodes always render above lines and their badges — no z lift.
-            className="shadow-raised bg-badge-amber-strong text-badge-amber-foreground absolute rounded-full p-1"
+            className="bg-badge-amber-strong text-badge-amber-foreground shadow-raised absolute rounded-full p-1"
             style={{
               zIndex: 0,
               // Quadratic bezier midpoint: B(0.5) = 0.25·start + 0.5·control + 0.25·end
@@ -514,7 +516,7 @@ function KnowledgeGraphInner({
 
   return (
     <div
-      className="knowledge-canvas border-border bg-background relative h-full w-full overflow-hidden rounded-xl border"
+      className="knowledge-canvas border-border bg-background relative size-full overflow-hidden rounded-xl border"
       data-testid="knowledge-graph"
     >
       <TruncationBanner payload={payload} />

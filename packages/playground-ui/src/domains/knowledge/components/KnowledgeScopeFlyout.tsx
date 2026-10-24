@@ -1,9 +1,10 @@
-import { Txt } from '@/ds/components/Txt';
 import { X } from 'lucide-react';
 
-import { useKnowledgeDataSource } from '../data-source';
-import type { KnowledgeActivityEvent, KnowledgeScopeNode, KnowledgeSelection } from '../types';
+import { useKnowledgeDataSource } from '../data-source-context';
 import { knowledgeActivityLabel, KNOWLEDGE_ACTIVITY_TRUNCATED } from '../lib/activityLabel';
+import type { KnowledgeActivityEvent, KnowledgeScopeNode, KnowledgeSelection } from '../types';
+
+import { Txt } from '@/ds/components/Txt';
 
 interface KnowledgeScopeFlyoutProps {
   selection: KnowledgeSelection;
@@ -40,10 +41,10 @@ export function KnowledgeScopeFlyout({
     >
       <header className="border-border flex items-start gap-3 border-b p-4">
         <div className="min-w-0 flex-1">
-          <Txt as="h2" variant="subheading" className="text-foreground truncate font-semibold">
+          <Txt as="h2" variant="subheading" tone="ink" className="truncate font-semibold">
             {scope.name}
           </Txt>
-          <div className="text-badge-purple-indicator mt-1 text-xs">{scope.kind || 'topic'}</div>
+          <div className="text-caption text-badge-purple-indicator mt-1">{scope.kind || 'topic'}</div>
         </div>
         <button
           type="button"
@@ -55,9 +56,9 @@ export function KnowledgeScopeFlyout({
         </button>
       </header>
 
-      <div className="space-y-5 p-4 text-sm">
+      <div className="text-body-sm space-y-5 p-4">
         {scope.description?.trim() ? <p className="text-foreground leading-relaxed">{scope.description}</p> : null}
-        <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
+        <dl className="text-caption text-muted-foreground grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
           <dt>Address</dt>
           <dd className="text-foreground text-right break-all">{displayAddress}</dd>
           <dt>Kind</dt>
@@ -71,19 +72,19 @@ export function KnowledgeScopeFlyout({
         </dl>
 
         <section aria-labelledby="scope-recent-activity">
-          <Txt id="scope-recent-activity" as="h3" variant="caption" className="text-foreground font-medium">
+          <Txt id="scope-recent-activity" as="h3" variant="caption" tone="ink" className="font-medium">
             Recent activity
           </Txt>
           {activity.isPending ? (
-            <p className="text-muted-foreground mt-2 text-xs">Loading…</p>
+            <p className="text-caption text-muted-foreground mt-2">Loading…</p>
           ) : activity.isError ? (
-            <p className="text-muted-foreground mt-2 text-xs">Unable to load recent activity.</p>
+            <p className="text-caption text-muted-foreground mt-2">Unable to load recent activity.</p>
           ) : recentActivity.length === 0 ? (
-            <p className="text-muted-foreground mt-2 text-xs">No recent activity.</p>
+            <p className="text-caption text-muted-foreground mt-2">No recent activity.</p>
           ) : (
             <ol className="mt-2 space-y-2">
               {recentActivity.map(event => (
-                <li key={event.id} className="border-border border-l pl-2 text-xs">
+                <li key={event.id} className="border-border text-caption border-l pl-2">
                   <span className="text-foreground">{knowledgeActivityLabel(event)}</span>
                   <span className="text-muted-foreground"> · </span>
                   <button
@@ -101,7 +102,7 @@ export function KnowledgeScopeFlyout({
             </ol>
           )}
           {activityTruncated ? (
-            <p className="text-muted-foreground mt-2 text-xs">{KNOWLEDGE_ACTIVITY_TRUNCATED}</p>
+            <p className="text-caption text-muted-foreground mt-2">{KNOWLEDGE_ACTIVITY_TRUNCATED}</p>
           ) : null}
         </section>
       </div>

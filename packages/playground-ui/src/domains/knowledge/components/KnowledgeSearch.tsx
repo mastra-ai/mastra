@@ -1,10 +1,11 @@
-import { Input } from '@/ds/components/Input';
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { Search } from 'lucide-react';
 import { useDeferredValue, useId, useState } from 'react';
 
-import { useKnowledgeDataSource } from '../data-source';
+import { useKnowledgeDataSource } from '../data-source-context';
 import type { KnowledgeSearchResult } from '../types';
+
+import { Input } from '@/ds/components/Input';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 
 interface KnowledgeSearchProps {
   onSelect: (result: KnowledgeSearchResult) => void;
@@ -90,9 +91,9 @@ export function KnowledgeSearch({ onSelect }: KnowledgeSearchProps) {
           onMouseDown={event => event.preventDefault()}
         >
           {search.isPending || deferredQuery !== query ? (
-            <div className="text-muted-foreground px-3 py-2 text-xs">Searching…</div>
+            <div className="text-caption text-muted-foreground px-3 py-2">Searching…</div>
           ) : search.isError ? (
-            <div className="px-3 py-2 text-xs text-red-400">Unable to search knowledge.</div>
+            <div className="text-caption px-3 py-2 text-red-400">Unable to search knowledge.</div>
           ) : search.data?.results.length ? (
             <>
               {results.map((result, index) => (
@@ -111,23 +112,23 @@ export function KnowledgeSearch({ onSelect }: KnowledgeSearchProps) {
                   onClick={() => selectResult(result)}
                 >
                   <span className="min-w-0">
-                    <span className="text-foreground block truncate text-sm">{result.name}</span>
+                    <span className="text-body-sm text-foreground block truncate">{result.name}</span>
                     {result.type === 'scope' && result.address ? ' ' : null}
                     {result.type === 'scope' && result.address ? (
-                      <span className="text-muted-foreground block truncate text-xs">{result.address}</span>
+                      <span className="text-caption text-muted-foreground block truncate">{result.address}</span>
                     ) : null}
                   </span>{' '}
-                  <span className="text-muted-foreground shrink-0 text-xs">
+                  <span className="text-caption text-muted-foreground shrink-0">
                     {result.type === 'scope' ? 'scope' : result.kind}
                   </span>
                 </button>
               ))}
               {search.data.truncated ? (
-                <div className="text-muted-foreground px-3 py-1.5 text-xs">Keep typing to narrow the results.</div>
+                <div className="text-caption text-muted-foreground px-3 py-1.5">Keep typing to narrow the results.</div>
               ) : null}
             </>
           ) : (
-            <div className="text-muted-foreground px-3 py-2 text-xs">No matching knowledge.</div>
+            <div className="text-caption text-muted-foreground px-3 py-2">No matching knowledge.</div>
           )}
         </div>
       ) : null}

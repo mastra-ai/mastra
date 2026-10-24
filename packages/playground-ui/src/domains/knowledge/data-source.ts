@@ -1,5 +1,4 @@
 import type { InfiniteData, UseInfiniteQueryResult, UseQueryResult } from '@tanstack/react-query';
-import { createContext, useContext } from 'react';
 import type {
   KnowledgeActivityPayload,
   KnowledgeNodePayload,
@@ -23,14 +22,4 @@ export interface KnowledgeDataSource {
   useSearch: (query: string) => UseQueryResult<KnowledgeSearchPayload>;
   /** Host-specific label for a scope address (for example Factory shows its project tag). Defaults to the address. */
   displayAddress?: (address: string) => string;
-}
-
-const KnowledgeDataSourceContext = createContext<KnowledgeDataSource | null>(null);
-
-export const KnowledgeDataSourceProvider = KnowledgeDataSourceContext.Provider;
-
-export function useKnowledgeDataSource(): KnowledgeDataSource {
-  const source = useContext(KnowledgeDataSourceContext);
-  if (!source) throw new Error('Knowledge components must render inside a KnowledgeDataSourceProvider.');
-  return source;
 }

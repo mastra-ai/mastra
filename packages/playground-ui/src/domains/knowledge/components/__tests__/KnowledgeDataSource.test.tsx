@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../test/render';
 import type { KnowledgeDataSource } from '../../data-source';
-import { KnowledgeDataSourceProvider } from '../../data-source';
+import { KnowledgeDataSourceProvider } from '../../data-source-provider';
 import type { KnowledgeActivityPayload, KnowledgeScopeNode, KnowledgeSearchPayload } from '../../types';
 import { KnowledgeScopeFlyout } from '../KnowledgeScopeFlyout';
 import { KnowledgeSearch } from '../KnowledgeSearch';
