@@ -17,7 +17,7 @@ import { createSlackAdapter, type SlackAdapter } from '@chat-adapter/slack';
 
 import { SlackManifestClient } from './client';
 import { verifySlackRequest, parseSlackFormBody, encrypt, decrypt } from './crypto';
-import { buildManifest } from './manifest';
+import { applyManagedManifestFields, buildManifest } from './manifest';
 import {
   SlackInstallationDataSchema,
   SlackPendingDataSchema,
@@ -111,6 +111,9 @@ export function hashConfig(
     description: resolvedDescription,
     slashCommands: opts.slashCommands,
     baseUrl,
+    // Bumped when the generated manifest changes shape, so apps created before
+    // the change get the new manifest on their next startup.
+    manifestVersion: 2,
   });
   return crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 16);
 }
@@ -796,7 +799,7 @@ export class SlackProvider implements ChannelProvider {
     console.log(`[Slack] Config drift detected for "${installation.agentId}" — updating manifest...`);
 
     try {
-      const manifest = buildManifest({
+      const generated = buildManifest({
         name: resolvedAppName,
         description: resolvedDescription,
         webhookUrl: `${baseUrl}/slack/events/${installation.webhookId}`,
@@ -809,7 +812,11 @@ export class SlackProvider implements ChannelProvider {
         })),
       });
 
-      await this.#requireManifestClient().updateApp(installation.appId, manifest);
+      // Start from the app's live manifest so a `manifest` transform applied at
+      // connect() time is not wiped by the update.
+      const client = this.#requireManifestClient();
+      const current = await client.exportManifest(installation.appId);
+      await client.updateApp(installation.appId, applyManagedManifestFields(current, generated));
 
       // Persist the new hash (keep stored overrides unchanged)
       const updated: SlackInstallation = { ...installation, configHash: currentHash };
@@ -820,7 +827,7 @@ export class SlackProvider implements ChannelProvider {
       );
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      const isAppGone = errMsg.includes('app_not_found') || errMsg.includes('no_permission');
+      const isAppGone = errMsg.includes('app_not_found') || errMsg.includes('invalid_app_id');
 
       if (isAppGone) {
         console.warn(
