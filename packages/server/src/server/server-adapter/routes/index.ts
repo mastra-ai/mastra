@@ -18,6 +18,7 @@ import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
 import { DYNAMIC_WORKFLOWS_ROUTES } from './dynamic-workflows';
 import { EDITOR_BUILDER_ROUTES } from './editor-builder';
+import { KNOWLEDGE_ROUTES } from './knowledge';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -39,7 +40,6 @@ import type { MastraStreamReturn } from './stream-types';
 import { SYSTEM_ROUTES } from './system';
 import { TOOL_PROVIDER_ROUTES } from './tool-providers';
 import { TOOLS_ROUTES } from './tools';
-import { KNOWLEDGE_ROUTES } from './knowledge';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
 import { WORKSPACE_ROUTES } from './workspace';
@@ -163,7 +163,32 @@ export type ServerRoute<
   readonly __schemas?: TSchemas;
 };
 
-export const SERVER_ROUTES: readonly ServerRoute[] = [
+/**
+ * Routes the package can serve that are **not** mounted by default. An app opts in
+ * by spreading them into `server.apiRoutes`:
+ *
+ * ```ts
+ * import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter';
+ *
+ * new Mastra({
+ *   server: { apiRoutes: [...KNOWLEDGE_ROUTES] },
+ * });
+ * ```
+ *
+ * Knowledge browsing is opt-in because the viewer picks the scope tags to read
+ * through, so a host that needs per-user scoping should decide deliberately,
+ * and bind the caller's tags with `MASTRA_KNOWLEDGE_SCOPE_KEY` from server middleware.
+ */
+export const OPT_IN_ROUTES: readonly ServerRoute[] = [...KNOWLEDGE_ROUTES];
+
+const OPT_IN_ROUTE_SET = new Set<ServerRoute>(OPT_IN_ROUTES);
+
+/**
+ * Every route the package can serve: the routes every server mounts, plus the opt-in
+ * ones. Code generators derive from this, so a route an app registers deliberately
+ * still has types, permissions and CLI metadata.
+ */
+export const ALL_SERVER_ROUTES: readonly ServerRoute[] = [
   ...AGENTS_ROUTES,
   ...AUTH_ROUTES,
   ...WORKFLOWS_ROUTES,
@@ -199,6 +224,12 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...CHANNELS_ROUTES,
   ...AGENT_CONTROLLER_ROUTES,
 ];
+
+/**
+ * Routes every Mastra server mounts: everything in {@link ALL_SERVER_ROUTES} except the
+ * {@link OPT_IN_ROUTES} an app has to register itself.
+ */
+export const SERVER_ROUTES: readonly ServerRoute[] = ALL_SERVER_ROUTES.filter(route => !OPT_IN_ROUTE_SET.has(route));
 
 /**
  * Union type of all individual route arrays.
@@ -240,6 +271,9 @@ export type ServerRoutes = readonly [
 // Export route builder and OpenAPI utilities
 export { createRoute, createPublicRoute, pickParams, jsonQueryParam, wrapSchemaForQueryParams } from './route-builder';
 export { generateOpenAPIDocument } from '../openapi-utils';
+
+// Opt-in route sets, for apps that register them through `server.apiRoutes`.
+export { KNOWLEDGE_ROUTES } from './knowledge';
 
 // Export permission utilities
 export { derivePermission, extractResource, deriveAction, getEffectivePermission } from './permissions';

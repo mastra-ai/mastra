@@ -52,6 +52,15 @@ describe('Knowledge page', () => {
     expect(await screen.findByText('No Knowledge instances')).toBeTruthy();
   });
 
+  it('explains how to opt into the routes when the server does not register them', async () => {
+    // The Knowledge routes are opt-in, so a server that has not registered them answers 404.
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/knowledge`, () => HttpResponse.json({ error: 'Not found' }, { status: 404 })),
+    );
+    renderPage();
+    expect(await screen.findByText('Knowledge browsing is not enabled')).toBeTruthy();
+  });
+
   it('asks for a scope before reading anything', async () => {
     let graphRequests = 0;
     server.use(

@@ -7,7 +7,7 @@ import { KnowledgeFlyout } from '@mastra/playground-ui/domains/knowledge/compone
 import { KnowledgeGraph } from '@mastra/playground-ui/domains/knowledge/components/KnowledgeGraph';
 import { KnowledgeSearch } from '@mastra/playground-ui/domains/knowledge/components/KnowledgeSearch';
 import { KnowledgeDataSourceProvider } from '@mastra/playground-ui/domains/knowledge/data-source-provider';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -58,6 +58,18 @@ export default function KnowledgePage() {
     return (
       <Shell>
         <PermissionDenied variant="fill" resource="knowledge" />
+      </Shell>
+    );
+  }
+  // The Knowledge routes are opt-in, so a server that has not registered them 404s.
+  if (instances.error && is404NotFoundError(instances.error)) {
+    return (
+      <Shell>
+        <EmptyState
+          variant="fill"
+          titleSlot="Knowledge browsing is not enabled"
+          descriptionSlot="This server does not register the Knowledge routes. Add them to `server.apiRoutes` with `KNOWLEDGE_ROUTES` from `@mastra/server/server-adapter`, then reload."
+        />
       </Shell>
     );
   }
