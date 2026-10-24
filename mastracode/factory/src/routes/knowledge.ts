@@ -18,7 +18,14 @@
  */
 
 import type { Knowledge } from '@mastra/core/knowledge';
-import { listPinnedKnowledge, readKnowledgeActivity, readKnowledgeNode } from '@mastra/core/knowledge';
+import {
+  knowledgeSearchHit,
+  knowledgeSearchRank,
+  listPinnedKnowledge,
+  readKnowledgeActivity,
+  readKnowledgeNode,
+  searchKnowledgeNodes,
+} from '@mastra/core/knowledge';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type {
@@ -395,13 +402,6 @@ async function findOrgScopeNode(
 ): Promise<KnowledgeScopeNodeSummary | undefined> {
   const { scopes } = await store.listScopeNodes({ withinAddress: `org:${orgId}`, ids: [scopeNodeId], limit: 1 });
   return scopes[0];
-}
-
-function knowledgeSearchRank(name: string, query: string): number {
-  const normalized = name.toLocaleLowerCase();
-  if (normalized === query) return 0;
-  if (normalized.startsWith(query)) return 1;
-  return 2;
 }
 
 /**
@@ -1012,22 +1012,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           }
 
           const scanLimit = Math.min(SEARCH_SCAN_CAP, this.#limits.maxNodes);
-          const [prefixNodes, scannedNodes] = await Promise.all([
-            view.store.listNodes({ scope: view.scope, namePrefix: query, limit: SEARCH_RESULT_LIMIT + 1 }),
-            view.store.listNodes({ scope: view.scope, limit: scanLimit }),
-          ]);
-          const contentById = new Map<string, KnowledgeNode>();
-          for (const node of [...prefixNodes, ...scannedNodes]) {
-            if (
-              node.isScope ||
-              !Array.isArray(node.scope) ||
-              !withinViewBoundary(node.scope, view.scope) ||
-              !node.name.toLocaleLowerCase().includes(query)
-            ) {
-              continue;
-            }
-            contentById.set(node.id, node);
-          }
+          const content = await searchKnowledgeNodes(view.store, view.scope, query, {
+            limit: SEARCH_RESULT_LIMIT,
+            scanLimit,
+          });
 
           let structuralScopes: KnowledgeScopeNodeSummary[] = [];
           let scopesTruncated = false;
@@ -1068,19 +1056,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 ...(scopeNode.description ? { description: scopeNode.description } : {}),
               };
             }),
-            ...[...contentById.values()].map(node => {
-              const rung = deepestRung(node.scope);
-              const threadId =
-                rung === 'thread' ? node.scope.find(address => address.startsWith('thread:'))?.slice(7) : undefined;
-              return {
-                id: node.id,
-                name: node.name,
-                kind: node.kind,
-                type: 'node' as const,
-                rung,
-                ...(threadId ? { threadId } : {}),
-              };
-            }),
+            ...content.nodes.map(knowledgeSearchHit),
           ].sort(
             (a, b) =>
               knowledgeSearchRank(a.name, query) - knowledgeSearchRank(b.name, query) ||
@@ -1090,11 +1066,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
 
           return c.json({
             results: results.slice(0, SEARCH_RESULT_LIMIT),
-            truncated:
-              scopesTruncated ||
-              results.length > SEARCH_RESULT_LIMIT ||
-              prefixNodes.length > SEARCH_RESULT_LIMIT ||
-              scannedNodes.length >= scanLimit,
+            truncated: scopesTruncated || results.length > SEARCH_RESULT_LIMIT || content.truncated,
           } satisfies KnowledgeSearchPayload);
         },
       }),

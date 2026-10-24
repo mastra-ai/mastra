@@ -5,6 +5,7 @@ import {
   readKnowledgeActivity,
   readKnowledgeGraph,
   readKnowledgeNode,
+  knowledgeSearchRank,
   searchKnowledgeNodes,
 } from '../explorer';
 import { Knowledge } from '../index';
@@ -81,15 +82,26 @@ describe('Knowledge explorer reads', () => {
     expect(runbookDetail?.records.map(record => record.relation)).toEqual(['mentions']);
   });
 
-  it('searches and lists activity inside the view only', async () => {
-    const { store, org } = await seed();
-    const found = await searchKnowledgeNodes(store, org, 'Payments');
-    expect(found.results.map(result => result.name)).toContain('Payments');
-    expect(found.results.map(result => result.name)).not.toContain('Secret');
+  it('searches node names inside the view only, exact first', async () => {
+    const { store, org, team } = await seed();
+    const found = await searchKnowledgeNodes(store, org, 'pay');
+    expect(found.nodes.map(node => node.name)).toEqual(['Payments']);
+    expect((await searchKnowledgeNodes(store, org, 'secret')).nodes).toEqual([]);
+    expect((await searchKnowledgeNodes(store, team, 'secret')).nodes.map(node => node.name)).toEqual(['Secret']);
+    expect((await searchKnowledgeNodes(store, org, 'p')).nodes).toEqual([]);
+    expect(knowledgeSearchRank('Payments', 'payments')).toBe(0);
+    expect(knowledgeSearchRank('Payments', 'pay')).toBe(1);
+    expect(knowledgeSearchRank('Payments', 'ent')).toBe(2);
+  });
 
+  it('lists activity inside the view only and pages past hidden rows', async () => {
+    const { store, org } = await seed();
     const activity = await readKnowledgeActivity(store, org);
     expect(activity.events.length).toBeGreaterThan(0);
     expect(activity.events.every(event => event.scope.every(tag => org.includes(tag)))).toBe(true);
+    const one = await readKnowledgeActivity(store, org, { limit: 1 });
+    expect(one.events).toHaveLength(1);
+    expect(one.nextCursor).toBe(one.events[0]!.id);
   });
 
   it('rejects an invalid view', () => {
