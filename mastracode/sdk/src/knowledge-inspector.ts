@@ -142,7 +142,7 @@ export class KnowledgeInspectorError extends Error {
 }
 
 interface Binding {
-  /** Org rung shared with the subconscious writers (see knowledge-scope.ts). */
+  /** Org rung shared with Knowledge writers (see knowledge-scope.ts). */
   organizationId: string;
   /** Resource rung of the knowledge scope: the Factory project id, else the session resource. */
   resourceId: string;
@@ -459,7 +459,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   }
 
   async #binding(): Promise<Binding> {
-    // Scope rungs come from the same resolver the subconscious writes under; an
+    // Scope rungs come from the same resolver Knowledge writes under; an
     // owner id is a USER id and never names a knowledge org.
     const identity = resolveKnowledgeScopeIdentity(this.#session.state.get());
     const sessionResourceId = this.#session.identity.getResourceId();
