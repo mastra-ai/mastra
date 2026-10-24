@@ -2,13 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createPinnedTools, listPinnedKnowledge, PinnedStateProcessor } from '@mastra/core/knowledge';
+
 import { LibSQLStore } from '@mastra/libsql';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createPinnedTools, listPinnedKnowledge } from '@mastra/core/knowledge';
-import { PinnedStateProcessor } from '@mastra/core/knowledge';
-
-const threadScope = ['org:acme', 'resource:user-42', 'thread:alpha'];
+// A run's Knowledge scope with no tags is its Memory identity.
+const threadScope = ['resource:user-42', 'thread:alpha'];
 
 describe('Subconscious pinned facts against LibSQL', () => {
   const directories: string[] = [];
@@ -26,7 +26,6 @@ describe('Subconscious pinned facts against LibSQL', () => {
     const tools = createPinnedTools(memory, {
       scope: threadScope,
       sourceThreadId: 'alpha',
-      defaultScope: 'resource',
       maxPins: 20,
       maxTokens: 500,
     });
@@ -35,7 +34,7 @@ describe('Subconscious pinned facts against LibSQL', () => {
   }
 
   function makeArgs(overrides: Record<string, unknown> = {}) {
-    const context = new Map<string, unknown>([['organizationId', 'acme']]);
+    const context = new Map<string, unknown>();
     return {
       threadId: 'alpha',
       resourceId: 'user-42',

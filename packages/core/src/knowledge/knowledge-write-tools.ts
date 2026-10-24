@@ -1,10 +1,10 @@
 import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
-import type { KnowledgeNode, KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '../storage';
+import type { KnowledgeNode, KnowledgeScope, KnowledgeStorage } from '../storage';
 import {
   MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS,
   MAX_KNOWLEDGE_RECORD_TOKENS,
-  expandKnowledgeScope,
+  canonicalizeKnowledgeScope,
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
 } from '../storage';
@@ -12,12 +12,17 @@ import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
-const SCOPE_RUNGS = ['org', 'resource', 'thread'] as const;
-const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: [...SCOPE_RUNGS] };
+const scopeTagsSchema: JSONSchema7 = {
+  type: 'array',
+  items: { type: 'string', minLength: 3 },
+  minItems: 1,
+  description:
+    "Scope tags for this write, chosen from the run's scope tags (for example ['team:acme:support']). When omitted, the write uses every run tag, so it is private to this run's identity.",
+};
 const nodePlacementSchema: JSONSchema7 = {
   type: 'string',
   description:
-    "Placement for the node: an identity rung ('org', 'resource', or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory'). When omitted, the node uses the first record's scope. A structural node is visible at least as widely as its structural scope.",
+    "A structural scope address from the host-configured placement context (for example 'features:memory'). When omitted, the node uses the first record's scope.",
 };
 const recordTextSchema: JSONSchema7 = {
   type: 'string',
@@ -61,9 +66,9 @@ type KnowledgeWriteToolsMemory = {
 };
 
 export interface KnowledgeWriteToolsOptions {
+  /** The run's full Knowledge scope. */
   scope: KnowledgeScope;
   sourceThreadId: string;
-  defaultScope: KnowledgeScopeLevel;
 }
 
 async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeStorage> {
@@ -73,62 +78,40 @@ async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeSto
   return store;
 }
 
-function resolveWriteScope(options: KnowledgeWriteToolsOptions, level?: KnowledgeScopeLevel): KnowledgeScope {
-  return expandKnowledgeScope(options.scope, level ?? options.defaultScope);
+/** The tags a write lands at: the requested subset of the run's tags, or all of them. */
+function resolveWriteScope(options: KnowledgeWriteToolsOptions, requested?: string[]): KnowledgeScope {
+  if (!requested) return options.scope;
+  const held = new Set(options.scope);
+  const missing = requested.filter(tag => !held.has(tag));
+  if (missing.length > 0) {
+    throw new Error(`This run does not hold scope ${missing.map(tag => `"${tag}"`).join(', ')}.`);
+  }
+  return canonicalizeKnowledgeScope(requested);
 }
 
 function requireVisible(scope: KnowledgeScope, options: KnowledgeWriteToolsOptions, label: string): void {
   if (!isKnowledgeScopeVisible(scope, options.scope)) {
-    throw new Error(`${label} is outside the curator's visible scope.`);
+    throw new Error(`${label} is outside this run's visible scope.`);
   }
 }
 
-/** Broadest of the given rungs (org is broader than resource, resource broader than thread). */
-function broadestLevel(levels: KnowledgeScopeLevel[]): KnowledgeScopeLevel {
-  return SCOPE_RUNGS.find(rung => levels.includes(rung)) ?? levels[0]!;
-}
-
-function rungOf(address: string): KnowledgeScopeLevel | undefined {
-  const namespace = address.slice(0, address.indexOf(':'));
-  return (SCOPE_RUNGS as readonly string[]).includes(namespace) ? (namespace as KnowledgeScopeLevel) : undefined;
-}
-
 /**
- * Resolve the node placement argument. A rung sets the node's identity scope, widened to the
- * first record's level when the rung is narrower. Without a rung the node takes the first record's level, so a node is never narrower than
- * the record created with it. A structural scope address must be inside the host-configured
- * frontier visible to the curator's held scope; the node is placed there and its identity
- * scope widens to the structural scope's held identity ancestor, so the node is readable
- * wherever the structural scope is.
+ * Resolve the node placement argument. Without one the node takes the first record's scope, so a
+ * node is never narrower than the record created with it. A structural scope address must be inside
+ * the host-configured frontier visible to the run's scope.
  */
 async function resolveNodePlacement(
   memory: KnowledgeWriteToolsMemory,
   options: KnowledgeWriteToolsOptions,
   placement: string | undefined,
-  recordLevel: KnowledgeScopeLevel | undefined,
+  recordScope: KnowledgeScope,
 ): Promise<{ nodeScope: KnowledgeScope; scopeAddresses?: string[] }> {
-  const firstRecordLevel = recordLevel ?? options.defaultScope;
-  if (placement !== undefined && (SCOPE_RUNGS as readonly string[]).includes(placement)) {
-    return {
-      nodeScope: expandKnowledgeScope(
-        options.scope,
-        broadestLevel([placement as KnowledgeScopeLevel, firstRecordLevel]),
-      ),
-    };
-  }
-  if (placement === undefined) {
-    return { nodeScope: expandKnowledgeScope(options.scope, firstRecordLevel) };
-  }
+  if (placement === undefined) return { nodeScope: recordScope };
   const visible = (await memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.scope)) ?? [];
-  const structural = visible.find(visibleScope => visibleScope.address === placement);
-  if (!structural) {
-    throw new Error(`Structural scope is outside the curator's visible scope: ${placement}`);
+  if (!visible.some(visibleScope => visibleScope.address === placement)) {
+    throw new Error(`Structural scope is outside this run's visible scope: ${placement}`);
   }
-  const ancestorLevels = (structural.heldAncestors ?? []).flatMap(address => rungOf(address) ?? []);
-  return {
-    nodeScope: expandKnowledgeScope(options.scope, broadestLevel([firstRecordLevel, ...ancestorLevels])),
-    scopeAddresses: [placement],
-  };
+  return { nodeScope: recordScope, scopeAddresses: [placement] };
 }
 
 /**
@@ -258,7 +241,7 @@ export function createKnowledgeWriteTools(
           kind: { type: 'string', minLength: 1 },
           text: recordTextSchema,
           nodeScope: nodePlacementSchema,
-          scope: scopeLevelSchema,
+          scope: scopeTagsSchema,
           when: dateTimeSchema,
           confirmDistinct: {
             type: 'boolean',
@@ -275,7 +258,7 @@ export function createKnowledgeWriteTools(
           kind: string;
           text: string;
           nodeScope?: string;
-          scope?: KnowledgeScopeLevel;
+          scope?: string[];
           when?: string;
           confirmDistinct?: boolean;
         };
@@ -291,8 +274,8 @@ export function createKnowledgeWriteTools(
             );
           }
         }
-        const { nodeScope, scopeAddresses } = await resolveNodePlacement(memory, options, value.nodeScope, value.scope);
         const recordScope = resolveWriteScope(options, value.scope);
+        const { nodeScope, scopeAddresses } = await resolveNodePlacement(memory, options, value.nodeScope, recordScope);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
         const node = await ensureNodeCoversRecord(
@@ -327,14 +310,14 @@ export function createKnowledgeWriteTools(
         properties: {
           node: { type: 'string', minLength: 1 },
           text: recordTextSchema,
-          scope: scopeLevelSchema,
+          scope: scopeTagsSchema,
           when: dateTimeSchema,
         },
         required: ['node', 'text'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { node: string; text: string; scope?: KnowledgeScopeLevel; when?: string };
+        const value = input as { node: string; text: string; scope?: string[]; when?: string };
         requireRecordTextWithinBound(value.text);
         const store = await getStore(memory);
         const parent = await store.getNode(value.node);
@@ -351,7 +334,7 @@ export function createKnowledgeWriteTools(
           sourceThreadId: options.sourceThreadId,
           when,
           resolutionScope: options.scope,
-          defaultScope: expandKnowledgeScope(options.scope, options.defaultScope),
+          defaultScope: scope,
         });
         await vouchThreadScope(scope);
         return record;
@@ -476,15 +459,15 @@ export function createKnowledgeWriteTools(
     }),
     knowledge_rescope: createTool({
       id: 'knowledge_rescope',
-      description: 'Change a record visibility scope to any scope level visible in this conversation.',
+      description: "Change a record's scope to other tags this run holds.",
       inputSchema: {
         type: 'object',
-        properties: { recordId: { type: 'string', minLength: 1 }, scope: scopeLevelSchema },
+        properties: { recordId: { type: 'string', minLength: 1 }, scope: scopeTagsSchema },
         required: ['recordId', 'scope'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { recordId: string; scope: KnowledgeScopeLevel };
+        const value = input as { recordId: string; scope: string[] };
         const store = await getStore(memory);
         const record = await store.getKnowledge({ id: value.recordId });
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
@@ -542,7 +525,7 @@ export function createKnowledgeWriteTools(
           name: { type: 'string', minLength: 1 },
           kind: { type: 'string', minLength: 1 },
           content: { type: 'string', minLength: 1 },
-          scope: scopeLevelSchema,
+          scope: scopeTagsSchema,
           expectedVersion: { type: 'integer', minimum: 1 },
         },
         required: ['name', 'content'],
@@ -553,7 +536,7 @@ export function createKnowledgeWriteTools(
           name: string;
           kind?: string;
           content: string;
-          scope?: KnowledgeScopeLevel;
+          scope?: string[];
           expectedVersion?: number;
         };
         const name = value.name.trim();

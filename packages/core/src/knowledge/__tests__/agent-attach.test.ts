@@ -1,7 +1,6 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent';
-import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { Knowledge } from '../index';
 import { KNOWLEDGE_READ_INSTRUCTIONS, KNOWLEDGE_WRITE_INSTRUCTIONS } from '../instructions';
@@ -54,8 +53,7 @@ function toolResults(result: Awaited<ReturnType<Agent['generate']>>) {
 }
 
 describe('Knowledge attached to an Agent without Memory', () => {
-  const requestContext = () => new RequestContext([['organizationId', 'acme']]);
-  const runOptions = () => ({ memory: { thread: 'thread-1', resource: 'user-1' }, requestContext: requestContext() });
+  const runOptions = () => ({ memory: { thread: 'thread-1', resource: 'user-1' } });
 
   it('gives the agent read and write tools and its usage instructions', async () => {
     const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'attach' }), tools: { write: true } });
@@ -76,6 +74,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
         prompts,
       ),
       knowledge,
+      scopes: ['org:acme'],
     });
 
     expect(agent.hasOwnMemory()).toBe(false);
@@ -125,5 +124,62 @@ describe('Knowledge attached to an Agent without Memory', () => {
     });
     new Mastra({ agents: { keyed: agent }, knowledge: { company: knowledge }, logger: false });
     expect(agent.getKnowledge()).toBe(knowledge);
+  });
+
+  it('scopes tools by the run tags: another run with different tags sees nothing', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tags' }), tools: { write: true } });
+    const writer = new Agent({
+      id: 'writer',
+      name: 'writer',
+      instructions: 'x',
+      model: scriptedModel(
+        [
+          {
+            toolName: 'knowledge_create',
+            input: { name: 'Plan', kind: 'doc', text: 'Ship Friday.', scope: ['team:acme:support'] },
+          },
+        ],
+        [],
+      ),
+      knowledge,
+      scopes: ['team:acme:support', 'agent:alex'],
+    });
+    const result = await writer.generate('Note it.', { maxSteps: 2, memory: { thread: 'w-1', resource: 'alex' } });
+    const [created] = toolResults(result) as any[];
+    expect(created.result.record.scope).toEqual(['team:acme:support']);
+
+    const search = (scopes: string[]) =>
+      new Agent({
+        id: 'reader',
+        name: 'reader',
+        instructions: 'x',
+        model: scriptedModel([{ toolName: 'knowledge_search', input: { query: 'Friday' } }], []),
+        knowledge,
+        scopes,
+      })
+        .generate('Find it.', { maxSteps: 2, memory: { thread: 'r-1', resource: 'sam' } })
+        .then(run => (toolResults(run)[0] as any).result.results.map((hit: any) => hit.text));
+
+    expect(await search(['team:acme:support'])).toContain('Ship Friday.');
+    expect(await search(['team:acme:sales'])).toEqual([]);
+  });
+
+  it('refuses a write naming a tag the run does not hold', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'refuse' }), tools: { write: true } });
+    const agent = new Agent({
+      id: 'writer',
+      name: 'writer',
+      instructions: 'x',
+      model: scriptedModel(
+        [{ toolName: 'knowledge_create', input: { name: 'X', kind: 'doc', text: 'y', scope: ['team:acme:sales'] } }],
+        [],
+      ),
+      knowledge,
+      scopes: ['team:acme:support'],
+    });
+    const result = await agent.generate('x', { maxSteps: 2, memory: { thread: 't', resource: 'r' } });
+    expect(toolResults(result)).toHaveLength(0);
+    expect(JSON.stringify(result.steps.map(step => step.content))).toContain('does not hold scope');
+    expect(await (await knowledge.getStorage()).listNodes({ scope: ['team:acme:sales'] })).toEqual([]);
   });
 });
