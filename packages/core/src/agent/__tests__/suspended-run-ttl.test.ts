@@ -50,7 +50,7 @@ const threadTopic = (resourceId: string, threadId: string) =>
   `agent.thread-stream.${encodeURIComponent(threadKey(resourceId, threadId))}`;
 
 const RESOURCE_ID = 'resource-1';
-const fakeAgent = { id: 'ttl-test-agent' } as unknown as Agent<any, any, any, any>;
+const fakeAgent = { id: 'ttl-test-agent', abortRunStream: () => true } as unknown as Agent<any, any, any, any>;
 
 /**
  * Minimal stand-in for the run output `registerRun` consumes: a run id, a live
@@ -803,6 +803,90 @@ describe('suspended run in-memory TTL', () => {
         expect(stream).not.toHaveBeenCalled();
       } finally {
         subscription.unsubscribe();
+      }
+    });
+  });
+
+  describe('a run whose lease renewal is refused', () => {
+    // The abort runs in a detached renewal callback, so a throw there is an unhandled rejection that
+    // fails the whole test process, not just the run.
+    it.each([
+      ['has no abortRunStream', {}],
+      [
+        'throws from abortRunStream',
+        {
+          abortRunStream: () => {
+            throw new Error('abort failed');
+          },
+        },
+      ],
+    ])('stays quiet when the agent %s', async (_name, abilities) => {
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        renewLease.mockResolvedValue(false);
+        const agent = { id: 'lease-lost-agent', ...abilities } as unknown as Agent<any, any, any, any>;
+        const run = createFakeRun('run-1');
+        await runtime.registerRun(agent, run.output, { memory: { thread: 'thread-1', resource: RESOURCE_ID } }, pubsub);
+
+        await vi.waitFor(() => expect(renewLease).toHaveBeenCalled());
+        await new Promise(resolve => setTimeout(resolve, LEASE_RENEW_INTERVAL_MS * 5));
+
+        expect(unhandled).toEqual([]);
+        run.settle('success');
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    });
+  });
+
+  describe('a remote abort request', () => {
+    it.each([
+      ['has no abortRunStream', undefined],
+      [
+        'throws from abortRunStream',
+        () => {
+          throw new Error('abort failed');
+        },
+      ],
+    ])('stays quiet when the agent %s', async (_name, abortRunStream) => {
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      // The in-memory pubsub logs a failing subscriber instead of rethrowing; a transport that doesn't
+      // would surface the same failure as an unhandled rejection.
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const watcher = await watchThread(pubsub, 'thread-1');
+      const abort = abortRunStream && vi.fn(abortRunStream);
+      const agent = { id: 'remote-abort-agent', abortRunStream: abort } as unknown as Agent<any, any, any, any>;
+      const run = createFakeRun('run-1');
+      await runtime.registerRun(agent, run.output, { memory: { thread: 'thread-1', resource: RESOURCE_ID } }, pubsub);
+      const subscription = await runtime.subscribeToThread(
+        agent,
+        { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+        pubsub,
+      );
+      try {
+        const registration = watcher.find('run-registered', 'run-1')!;
+        await pubsub.publish(threadTopic(RESOURCE_ID, 'thread-1'), {
+          type: 'run-abort-requested',
+          runId: 'run-1',
+          data: { type: 'run-abort-requested', runId: 'run-1', streamId: registration.data.streamId },
+        });
+        await pubsub.flush();
+        // Leave room for the handler's own async work before judging it quiet.
+        await new Promise(resolve => setTimeout(resolve, LEASE_RENEW_INTERVAL_MS * 5));
+
+        if (abort) expect(abort).toHaveBeenCalledWith('run-1');
+        expect(logged.mock.calls.map(call => String(call[0]))).not.toContainEqual(
+          expect.stringContaining('subscriber failed'),
+        );
+        expect(unhandled).toEqual([]);
+      } finally {
+        subscription.unsubscribe();
+        process.off('unhandledRejection', onUnhandled);
+        run.settle('success');
       }
     });
   });
