@@ -407,6 +407,80 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
     expect(messageList.getSystemMessages('observational-memory')).toEqual([]);
     expect(memoryProvider.persistMessages).not.toHaveBeenCalled();
   });
+
+  it('does not add the continuation hint on threads with no observations when retrieval is enabled', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'retrieval-no-observations-thread';
+    const resourceId = 'retrieval-no-observations-resource';
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      retrieval: true,
+      model: mockModel as any,
+      // High thresholds: nothing gets observed in this test.
+      observation: { messageTokens: 100_000, bufferTokens: false },
+      reflection: { observationTokens: 100_000 },
+    });
+    const memoryProvider: MemoryContextProvider = {
+      getContext: vi.fn(async () => ({
+        systemMessage: undefined,
+        messages: [],
+        hasObservations: false,
+        omRecord: await om.getOrCreateRecord(threadId, resourceId),
+        continuationMessage: undefined,
+        otherThreadsContext: undefined,
+      })),
+      persistMessages: vi.fn(async () => {}),
+    };
+
+    const processor = new ObservationalMemoryProcessor(om, memoryProvider);
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(createTestMessage('Hello there', 'user', 'fresh-user-1'), 'user');
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
+      thread: { id: threadId },
+      resourceId,
+      memoryConfig: {},
+    });
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // Retrieval guidance still applies before the first observation…
+    expect(
+      messageList
+        .getSystemMessages('observational-memory')
+        .map(m => m.content)
+        .join('\n'),
+    ).not.toEqual('');
+    // …but the continuation hint only makes sense once observations replaced messages.
+    expect(messageList.get.all.db().map(m => m.id)).not.toContain('om-continuation');
+  });
 });
 
 function createStreamCapableMockModel(config: Record<string, any>) {
