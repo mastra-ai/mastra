@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Added read-only Knowledge explorer helpers (`readKnowledgeGraph`, `readKnowledgeNode`, `searchKnowledgeNodes`, `readKnowledgeActivity`) to `@mastra/core/knowledge`. They return the graph, node detail, search hits and activity a viewer sees for a given set of scope tags, and never write.
+Added read-only Knowledge explorer helpers to `@mastra/core/knowledge`: `readKnowledgeGraph` and `windowKnowledgeGraph` (node and record windows with wikilink edges and pin accents, via `KnowledgeWikilinkResolver` and `loadKnowledgePins`), `readKnowledgeNode`, `readKnowledgeActivity`, and `searchKnowledgeNodes` with `knowledgeSearchHit` and `knowledgeSearchRank`. They take a resolved scope and return what a viewer of that scope sees; they never write.

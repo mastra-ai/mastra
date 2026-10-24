@@ -291,7 +291,7 @@ export async function windowKnowledgeGraph(
 }
 
 /**
- * The graph a viewer sees from `scope`: content nodes (newest first, pins' reserved owner excluded), their
+ * The graph a viewer sees from `scope`: content nodes (newest first; the reserved pinned owner node is excluded only when pins are read, so `pins: false` returns it like any other node), their
  * records and wikilink edges, pins accenting nodes and edges. Structural scope-node members are not included.
  * `pins` is read from the store when omitted; pass `false` to ignore pins.
  */
