@@ -3,8 +3,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { setRunAgentScopes } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
@@ -129,6 +130,7 @@ function deterministicObservationModel(curate = false) {
 async function createStorage(
   id: string,
   adapter: Adapter,
+  prepareFile?: (location: string) => void,
 ): Promise<{ storage: MastraCompositeStore; location: string }> {
   if (adapter === 'pg') {
     const schemaName = `knowledge_w1_${randomUUID().replaceAll('-', '')}`;
@@ -145,6 +147,7 @@ async function createStorage(
   const directory = await mkdtemp(join(tmpdir(), 'knowledge-v2-wave-1-'));
   temporaryDirectories.push(directory);
   const location = join(directory, 'knowledge.db');
+  prepareFile?.(location);
   const storage = new LibSQLStore({ id, url: `file:${location}` });
   stores.push(storage);
   return { storage, location };
@@ -173,6 +176,7 @@ function createRuntime(storage: MastraCompositeStore, vector: LibSQLVector) {
     name: 'Mastra Knowledge',
     description: 'Product architecture, repository work, and operational knowledge for Mastra.',
     storage,
+    scopes: memoryScopeTypes,
     structure,
   });
   const { model, doGenerate } = deterministicObservationModel();
@@ -199,15 +203,19 @@ function createRuntime(storage: MastraCompositeStore, vector: LibSQLVector) {
 }
 
 /**
- * Loads the Knowledge tables a published v1 store created, with one node and one curation cursor,
- * and returns probes that read the seeded database directly. `hasTable` is PostgreSQL-only: a separate
- * node:sqlite connection does not see what LibSQL writes to its WAL, so it cannot observe a LibSQL reset.
+ * Creates a store over the Knowledge tables a published v1 store created, with one node and one curation
+ * cursor, and returns probes that read the seeded database directly. LibSQL probes use node:sqlite, a second
+ * SQLite library in this process: closing its handle drops the POSIX locks LibSQL holds on the same file, so
+ * the LibSQL file is seeded before the store opens it and probed only after the store is closed.
  */
 async function seedPublishedKnowledgeV1(
+  id: string,
   adapter: Adapter,
-  storage: MastraCompositeStore,
-  location: string,
-): Promise<{ countV1Nodes: () => Promise<number>; hasTable?: (name: string) => Promise<boolean> }> {
+): Promise<{
+  storage: MastraCompositeStore;
+  countV1Nodes: () => Promise<number>;
+  hasTable: (name: string) => Promise<boolean>;
+}> {
   const fixture = await readFile(publishedKnowledgeV1Fixtures[adapter], 'utf8');
   const node = [
     'v1-node',
@@ -220,7 +228,9 @@ async function seedPublishedKnowledgeV1(
     '2026-01-01T00:00:00.000Z',
   ] as const;
   const cursor = ['v1-thread', 'curate', 'v1-record', '2026-01-01T00:00:00.000Z'] as const;
-  if (storage instanceof PostgresStore) {
+  if (adapter === 'pg') {
+    const { storage, location } = await createStorage(id, adapter);
+    if (!(storage instanceof PostgresStore)) throw new Error('Expected a PostgreSQL store');
     const client = await storage.pool.connect();
     try {
       // SET LOCAL keeps the unqualified fixture inside the proof schema and off the pooled connection.
@@ -242,11 +252,12 @@ async function seedPublishedKnowledgeV1(
       client.release();
     }
     return {
+      storage,
       countV1Nodes: async () =>
         Number(
           (
             await storage.db.one<{ count: string }>(
-              `SELECT count(*) AS count FROM "${location}".mastra_knowledge_nodes`,
+              `SELECT count(*) AS count FROM "${location}".mastra_knowledge_nodes WHERE id = 'v1-node'`,
             )
           ).count,
         ),
@@ -256,30 +267,48 @@ async function seedPublishedKnowledgeV1(
     };
   }
 
-  const seed = new DatabaseSync(location);
-  seed.exec(fixture);
-  seed
-    .prepare(
-      'INSERT INTO mastra_knowledge_nodes (id, type, name, canonicalName, scope, scopeKey, version, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    )
-    .run(...node, node[7]);
-  seed
-    .prepare(
-      'INSERT INTO mastra_knowledge_cursors (sourceThreadId, agent, lastKnowledgeId, updatedAt) VALUES (?, ?, ?, ?)',
-    )
-    .run(...cursor);
-  seed.close();
+  const seedFile = (location: string) => {
+    const seed = new DatabaseSync(location);
+    seed.exec(fixture);
+    seed
+      .prepare(
+        'INSERT INTO mastra_knowledge_nodes (id, type, name, canonicalName, scope, scopeKey, version, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(...node, node[7]);
+    seed
+      .prepare(
+        'INSERT INTO mastra_knowledge_cursors (sourceThreadId, agent, lastKnowledgeId, updatedAt) VALUES (?, ?, ?, ?)',
+      )
+      .run(...cursor);
+    expect(seed.prepare('SELECT count(*) AS count FROM mastra_knowledge_nodes').get()).toEqual({ count: 1 });
+    expect(seed.prepare('SELECT count(*) AS count FROM mastra_knowledge_cursors').get()).toEqual({ count: 1 });
+    seed.close();
+  };
+  const { storage, location } = await createStorage(id, adapter, seedFile);
+  const read = <T>(query: (rows: DatabaseSync) => T): T => {
+    const rows = new DatabaseSync(location, { readOnly: true });
+    try {
+      return query(rows);
+    } finally {
+      rows.close();
+    }
+  };
   return {
-    countV1Nodes: async () => {
-      const rows = new DatabaseSync(location, { readOnly: true });
-      try {
-        return Number(
-          (rows.prepare('SELECT count(*) AS count FROM mastra_knowledge_nodes').get() as { count: number }).count,
-        );
-      } finally {
-        rows.close();
-      }
-    },
+    storage,
+    countV1Nodes: async () =>
+      read(rows =>
+        Number(
+          (
+            rows.prepare("SELECT count(*) AS count FROM mastra_knowledge_nodes WHERE id = 'v1-node'").get() as {
+              count: number;
+            }
+          ).count,
+        ),
+      ),
+    hasTable: async name =>
+      read(
+        rows => rows.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) !== undefined,
+      ),
   };
 }
 
@@ -359,12 +388,28 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     expect(Object.keys(reconciled.scopes)).toEqual(
       expect.arrayContaining(structure.scopes.map(scope => scope.address)),
     );
+    expect(
+      Object.values(reconciled.scopes).every(id =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id),
+      ),
+    ).toBe(true);
+    const knowledgeStore = await first.knowledge.getStorage();
+    expect(await knowledgeStore.getNodeScopeIds(reconciled.scopes['features:memory:subconscious']!)).toEqual([
+      reconciled.scopes['features:memory'],
+    ]);
+    expect(await knowledgeStore.getNodeScopeIds(reconciled.scopes['repo:mastra:issues']!)).toEqual([
+      reconciled.scopes['repo:mastra'],
+    ]);
+    expect(await knowledgeStore.getNodeScopeIds(reconciled.scopes['repo:mastra:prs']!)).toEqual([
+      reconciled.scopes['repo:mastra'],
+    ]);
 
     const threadId = `proof-${randomUUID()}`;
     await first.memory.createThread({ threadId, resourceId: 'shipyard', title: 'Wave 1 proof' });
     await first.memory.saveMessages({ messages: [message(threadId)] });
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
+    setRunAgentScopes(requestContext, [`org:${'acme'}`]);
     const observed = await (await first.memory.omEngine)!.observe({
       threadId,
       resourceId: 'shipyard',
@@ -372,33 +417,36 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
       sendStateSignal: async () => ({ skipped: false }) as never,
     });
     expect(observed.observed).toBe(true);
-    const visibleScope = ['org:acme', 'resource:shipyard'];
+    const visibleScopeIds = [reconciled.scopes['org:acme']!, reconciled.scopes['resource:shipyard']!];
     await first.memory.settled();
     await first.subconscious.settled();
-    expect(await first.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope })).toMatchObject({
-      kind: 'feature',
-      scope: ['org:acme', 'resource:shipyard'],
-    });
+    expect(await first.knowledge.resolveNode({ name: 'Atlas refund launch', scopeIds: visibleScopeIds })).toMatchObject(
+      {
+        kind: 'feature',
+      },
+    );
     expect(first.doGenerate).not.toHaveBeenCalled();
     expect(first.curator.doGenerate).not.toHaveBeenCalled();
     expect(first.curator.doStream).toHaveBeenCalled();
-    const captured = await first.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope });
-    const records = await first.knowledge.listKnowledgeAbout({ node: captured!.id, scope: visibleScope });
+    const captured = await first.knowledge.resolveNode({ name: 'Atlas refund launch', scopeIds: visibleScopeIds });
+    const records = await first.knowledge.listRecords({ node: captured!.id, scopeIds: visibleScopeIds });
     expect(records.records).toHaveLength(1);
     expect(records.records[0]).toMatchObject({
       text: '[[Maya Chen]] owns the [[Atlas refund launch]].',
-      sourceThreadId: threadId,
-      scope: ['org:acme', 'resource:shipyard'],
+      metadata: { sourceThreadId: threadId },
     });
-    expect(records.records[0]?.capturedAt).toBeInstanceOf(Date);
-    expect(await first.knowledge.listActivity({ scope: visibleScope, limit: 100 })).toEqual(
+    expect(records.records[0]?.createdAt).toBeInstanceOf(Date);
+    expect(await knowledgeStore.getNodeScopeIds(captured!.id)).toEqual([reconciled.scopes['resource:shipyard']]);
+    expect(await knowledgeStore.getRecordScopeIds(records.records[0]!.id)).toEqual([
+      reconciled.scopes['resource:shipyard'],
+    ]);
+    expect(await first.knowledge.listActivity({ scopeIds: visibleScopeIds, limit: 100 })).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ action: 'node-created', recordId: captured!.id, scope: visibleScope }),
+        expect.objectContaining({ action: 'create', targetType: 'node', targetId: captured!.id }),
         expect.objectContaining({
-          action: 'record-created',
-          recordId: records.records[0]!.id,
-          sourceThreadId: threadId,
-          scope: visibleScope,
+          action: 'create',
+          targetType: 'record',
+          targetId: records.records[0]!.id,
         }),
       ]),
     );
@@ -421,10 +469,15 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     const restarted = createRuntime(restartedStorage, vector);
     const replay = await restarted.knowledge.reconcile();
     expect(replay.createdScopeIds).toEqual([]);
-    const persisted = await restarted.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope });
+    expect(replay.scopes).toEqual(reconciled.scopes);
+    const restartedScopeIds = [replay.scopes['org:acme']!, replay.scopes['resource:shipyard']!];
+    const persisted = await restarted.knowledge.resolveNode({
+      name: 'Atlas refund launch',
+      scopeIds: restartedScopeIds,
+    });
     expect(persisted?.id).toBe(captured?.id);
     expect(
-      (await restarted.knowledge.listKnowledgeAbout({ node: persisted!.id, scope: visibleScope })).records,
+      (await restarted.knowledge.listRecords({ node: persisted!.id, scopeIds: restartedScopeIds })).records,
     ).toHaveLength(1);
 
     await writeProofOutput({
@@ -438,42 +491,34 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     });
   });
 
-  it.skipIf(adapter !== 'libsql')(
-    'detects incompatibility without mutation and resets only disposable Knowledge data',
-    async () => {
-      const directory = await mkdtemp(join(tmpdir(), 'knowledge-v2-wave-1-reset-'));
-      temporaryDirectories.push(directory);
-      const databasePath = join(directory, 'reset.db');
-      const initialStorage = new LibSQLStore({ id: 'wave-1-reset-seed', url: `file:${databasePath}` });
-      stores.push(initialStorage);
-      const initialMemory = new Memory({ storage: initialStorage });
-      await initialMemory.createThread({ threadId: 'preserved-thread', resourceId: 'proof', title: 'Preserved' });
-      await initialStorage.getStore('knowledge');
-      await initialStorage.close();
-      stores.splice(stores.indexOf(initialStorage), 1);
+  it.skipIf(adapter !== 'libsql')('clears only disposable Knowledge data', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'knowledge-wave-1-clear-'));
+    temporaryDirectories.push(directory);
+    const databasePath = join(directory, 'clear.db');
+    const storage = new LibSQLStore({ id: 'wave-1-clear', url: `file:${databasePath}` });
+    stores.push(storage);
+    const memory = new Memory({ storage });
+    await memory.createThread({ threadId: 'preserved-thread', resourceId: 'proof', title: 'Preserved' });
 
-      const database = new DatabaseSync(databasePath);
-      database.exec('DROP TABLE mastra_knowledge_proposals');
-      database.close();
+    const runtime = createRuntime(storage, await createVector());
+    const reconciled = await runtime.knowledge.reconcile();
+    const resourceScopeId = reconciled.scopes['resource:shipyard']!;
+    const node = await runtime.knowledge.createNode({
+      name: 'Disposable Knowledge',
+      scopeIds: [resourceScopeId],
+      isScope: false,
+    });
+    expect(await runtime.knowledge.getNode(node.id)).not.toBeNull();
 
-      const storage = new LibSQLStore({ id: 'wave-1-reset', url: `file:${databasePath}` });
-      stores.push(storage);
-      const domain = storage.stores.knowledge!;
-      expect(await domain.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+    if (!databasePath.startsWith(tmpdir())) throw new Error(`Refusing to clear non-temporary database ${databasePath}`);
+    await storage.stores.knowledge!.dangerouslyClearAll();
 
-      if (!databasePath.startsWith(tmpdir()))
-        throw new Error(`Refusing to reset non-temporary database ${databasePath}`);
-      await domain.dangerouslyReset();
-      expect(await domain.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
-      expect(await new Memory({ storage }).getThreadById({ threadId: 'preserved-thread' })).toMatchObject({
-        title: 'Preserved',
-      });
-    },
-  );
+    expect(await runtime.knowledge.getNode(node.id)).toBeNull();
+    expect(await memory.getThreadById({ threadId: 'preserved-thread' })).toMatchObject({ title: 'Preserved' });
+  });
 
   it('upgrades a database written by the published v1 Knowledge release', async () => {
-    const { storage, location } = await createStorage('wave-1-upgrade', adapter);
-    const { countV1Nodes, hasTable } = await seedPublishedKnowledgeV1(adapter, storage, location);
+    const { storage, countV1Nodes, hasTable } = await seedPublishedKnowledgeV1('wave-1-upgrade', adapter);
 
     // Ordinary memory keeps working on the upgraded database while Knowledge is unused.
     const plainMemory = new Memory({ storage });
@@ -481,19 +526,23 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     await plainMemory.createThread({ threadId: 'kept-thread', resourceId: 'shipyard', title: 'Kept' });
     await plainMemory.saveMessages({ messages: [message('kept-thread')] });
 
-    expect(await countV1Nodes()).toBe(1);
-
     // Knowledge v1 data is not migrated: turning Knowledge on replaces the published v1 tables, rows included.
+    if (adapter === 'pg') expect(await countV1Nodes()).toBe(1);
     const upgraded = createRuntime(storage, await createVector());
-    await upgraded.knowledge.reconcile();
-    expect(await storage.stores!.knowledge!.getNode('v1-node')).toBeNull();
-    // Replacement removes the retired v1 cursor table from this store's own schema.
-    if (hasTable) expect(await hasTable('mastra_knowledge_cursors')).toBe(false);
+    await storage.getStore('knowledge');
+    expect(await upgraded.knowledge.getNode('v1-node')).toBeNull();
+    if (adapter === 'pg') {
+      expect(await countV1Nodes()).toBe(0);
+      // Replacement removes the retired v1 cursor table from this store's own schema.
+      expect(await hasTable('mastra_knowledge_cursors')).toBe(false);
+    }
+    const reconciled = await upgraded.knowledge.reconcile();
     const threadId = `upgrade-${randomUUID()}`;
     await upgraded.memory.createThread({ threadId, resourceId: 'shipyard', title: 'After upgrade' });
     await upgraded.memory.saveMessages({ messages: [message(threadId)] });
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
+    setRunAgentScopes(requestContext, [`org:${'acme'}`]);
     await (await upgraded.memory.omEngine)!.observe({
       threadId,
       resourceId: 'shipyard',
@@ -502,9 +551,19 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     });
     await upgraded.memory.settled();
     await upgraded.subconscious.settled();
+    const visibleScopeIds = [reconciled.scopes['org:acme']!, reconciled.scopes['resource:shipyard']!];
     expect(
-      await upgraded.knowledge.resolveNode({ name: 'Atlas refund launch', scope: ['org:acme', 'resource:shipyard'] }),
+      await upgraded.knowledge.resolveNode({ name: 'Atlas refund launch', scopeIds: visibleScopeIds }),
     ).toMatchObject({ kind: 'feature' });
     expect(await upgraded.memory.getThreadById({ threadId: 'kept-thread' })).toMatchObject({ title: 'Kept' });
+
+    if (adapter === 'libsql') {
+      memories.splice(memories.indexOf(upgraded.memory), 1);
+      subconsciousInstances.splice(subconsciousInstances.indexOf(upgraded.subconscious), 1);
+      await storage.close();
+      stores.splice(stores.indexOf(storage), 1);
+      expect(await countV1Nodes()).toBe(0);
+      expect(await hasTable('mastra_knowledge_cursors')).toBe(false);
+    }
   });
 });

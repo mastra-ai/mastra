@@ -9,51 +9,63 @@ import {
   SUBCONSCIOUS_ACTIVITY_STATE_ID,
 } from '../subconscious';
 
-const resourceScope = ['org:acme', 'resource:user-42'];
-const alphaScope = [...resourceScope, 'thread:alpha'];
-const betaScope = [...resourceScope, 'thread:beta'];
+const resourceScope = ['10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002'];
+const alphaScope = [...resourceScope, '10000000-0000-4000-8000-000000000003'];
+const betaScope = [...resourceScope, '10000000-0000-4000-8000-000000000004'];
 
 async function createStore() {
   const storage = new InMemoryStore();
-  return (await storage.getStore('knowledge'))!;
+  const store = (await storage.getStore('knowledge'))!;
+  await store.createNode({ id: resourceScope[0], name: 'Acme', isScope: true, scopeIds: [] });
+  await store.createNode({ id: resourceScope[1], name: 'User 42', isScope: true, scopeIds: [resourceScope[0]!] });
+  await store.createNode({ id: alphaScope[2], name: 'Thread alpha', isScope: true, scopeIds: [resourceScope[1]!] });
+  await store.createNode({ id: betaScope[2], name: 'Thread beta', isScope: true, scopeIds: [resourceScope[1]!] });
+  return store;
 }
 
 describe('Subconscious activity', () => {
   it('returns bounded ancestor-visible activity without sibling thread-private updates', async () => {
     const store = await createStore();
-    const atlas = await store.createNode({ name: 'Project Atlas', kind: 'project', scope: resourceScope });
-    await store.appendKnowledge({
+    const atlas = await store.createNode({
+      name: 'Project Atlas',
+      kind: 'project',
+      scopeIds: [resourceScope.at(-1)!],
+      contextScopeId: resourceScope.at(-1),
+    });
+    await store.createRecord({
       node: atlas.id,
       text: '[[Project Atlas]] launches in January.',
-      scope: resourceScope,
-      sourceThreadId: 'alpha',
-      resolutionScope: alphaScope,
-      defaultScope: resourceScope,
+      scopeIds: [resourceScope.at(-1)!],
+      source: 'alpha',
+      contextScopeId: resourceScope.at(-1),
     });
-    await store.appendKnowledge({
+    await store.createRecord({
       node: atlas.id,
       text: 'The private alpha code is cobalt.',
-      scope: alphaScope,
-      sourceThreadId: 'alpha',
-      resolutionScope: alphaScope,
-      defaultScope: resourceScope,
+      scopeIds: [alphaScope.at(-1)!],
+      source: 'alpha',
+      contextScopeId: alphaScope.at(-1),
     });
-    const secret = await store.createNode({ name: 'Alpha Secret', kind: 'note', scope: alphaScope });
-    const sharedSecretRecord = await store.appendKnowledge({
+    const secret = await store.createNode({
+      name: 'Alpha Secret',
+      kind: 'note',
+      scopeIds: [alphaScope.at(-1)!],
+      contextScopeId: alphaScope.at(-1),
+    });
+    const sharedSecretRecord = await store.createRecord({
       node: secret.id,
       text: 'A shared policy exists.',
-      scope: resourceScope,
-      sourceThreadId: 'alpha',
-      resolutionScope: alphaScope,
-      defaultScope: alphaScope,
+      scopeIds: [resourceScope.at(-1)!],
+      source: 'alpha',
+      contextScopeId: resourceScope.at(-1),
     });
 
-    const snapshot = await buildSubconsciousActivitySnapshot({ store, scope: betaScope, recentUpdates: 10 });
+    const snapshot = await buildSubconsciousActivitySnapshot({ store, scopeIds: betaScope, recentUpdates: 10 });
 
     expect(snapshot.updates.map(update => update.name)).toContain('Project Atlas');
     expect(snapshot.updates.map(update => update.name)).not.toContain('Alpha Secret');
-    expect(snapshot.updates.some(update => update.type === 'record' && !('name' in update))).toBe(true);
-    expect(snapshot.updates).toHaveLength(3);
+    expect(snapshot.updates.some(update => update.type === 'record' && update.name === 'Project Atlas')).toBe(true);
+    expect(snapshot.updates).toHaveLength(2);
     expect(snapshot.updates.every(update => !('recordId' in update) && !('targetId' in update))).toBe(true);
     expect(snapshot.updates.every(update => !('sourceThreadId' in update))).toBe(true);
     expect(snapshot.hot.every(record => !('id' in record))).toBe(true);
@@ -63,20 +75,34 @@ describe('Subconscious activity', () => {
 
   it('does not expose names after an activity target moves outside the visible scope', async () => {
     const store = await createStore();
-    const secret = await store.createNode({ name: 'Moved secret', kind: 'note', scope: resourceScope });
-    await store.updateNode({ id: secret.id, version: secret.version, scope: alphaScope });
+    const secret = await store.createNode({
+      name: 'Moved secret',
+      kind: 'note',
+      scopeIds: [resourceScope.at(-1)!],
+      contextScopeId: resourceScope.at(-1),
+    });
+    await store.updateNode({
+      id: secret.id,
+      version: secret.version,
+      scopeIds: [alphaScope.at(-1)!],
+      contextScopeId: alphaScope.at(-1),
+    });
     const document = await store.createNode({
       name: 'Moved document',
       kind: 'document',
-      content: 'Private notes',
-      scope: resourceScope,
+      metadata: { description: 'Private notes' },
+      scopeIds: [resourceScope.at(-1)!],
     });
-    await store.updateNode({ id: document.id, version: document.version, scope: alphaScope });
+    await store.updateNode({
+      id: document.id,
+      version: document.version,
+      scopeIds: [alphaScope.at(-1)!],
+      contextScopeId: alphaScope.at(-1),
+    });
 
-    const snapshot = await buildSubconsciousActivitySnapshot({ store, scope: betaScope, recentUpdates: 10 });
+    const snapshot = await buildSubconsciousActivitySnapshot({ store, scopeIds: betaScope, recentUpdates: 10 });
 
-    expect(snapshot.updates).toHaveLength(2);
-    expect(snapshot.updates.every(update => update.type === 'node' && !('name' in update))).toBe(true);
+    expect(snapshot.updates).toEqual([]);
     expect(snapshot.hot.map(record => record.name)).not.toContain('Moved secret');
     expect(snapshot.hot.map(record => record.name)).not.toContain('Moved document');
     expect(JSON.stringify(snapshot)).not.toContain(secret.id);
@@ -88,7 +114,12 @@ describe('Subconscious activity', () => {
   it('bounds updates and hot records, renders errors, and generates stable cache keys', async () => {
     const store = await createStore();
     for (let index = 0; index < 5; index++) {
-      await store.createNode({ name: `Node ${index}`, kind: 'note', scope: resourceScope });
+      await store.createNode({
+        name: `Node ${index}`,
+        kind: 'note',
+        scopeIds: [resourceScope.at(-1)!],
+        contextScopeId: resourceScope.at(-1),
+      });
     }
     const cache = new Map<string, string>();
     let emissions = 0;
@@ -101,14 +132,14 @@ describe('Subconscious activity', () => {
 
     const first = await publishSubconsciousActivity({
       store,
-      scope: alphaScope,
+      scopeIds: alphaScope,
       recentUpdates: 3,
       sendStateSignal,
       errors: ['capture failed'],
     });
     const second = await publishSubconsciousActivity({
       store,
-      scope: alphaScope,
+      scopeIds: alphaScope,
       recentUpdates: 3,
       sendStateSignal,
       errors: ['capture failed'],

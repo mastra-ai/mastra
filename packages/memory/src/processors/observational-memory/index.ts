@@ -53,6 +53,7 @@ export {
 } from './subconscious';
 export type {
   KnowledgeSemanticIndexCoordinatorConfig,
+  KnowledgeSemanticSearchResult,
   ResolvedSubconsciousAgent,
   SubconsciousActivitySnapshot,
   SubconsciousActivityUpdate,

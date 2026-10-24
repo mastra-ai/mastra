@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Knowledge } from '@mastra/core/knowledge';
+import { setRunAgentScopes } from '@mastra/core/agent';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore } from '@mastra/libsql';
@@ -30,6 +31,7 @@ try {
   const knowledge = new Knowledge({
     id: 'mastra',
     storage,
+    scopes: memoryScopeTypes,
     structure: {
       scopes: [
         { address: 'org:acme', name: 'Acme' },
@@ -85,6 +87,7 @@ try {
   });
   const requestContext = new RequestContext();
   requestContext.set('organizationId', 'acme');
+  setRunAgentScopes(requestContext, ['org:acme']);
   const observed = await (await memory.omEngine)!.observe({ threadId, resourceId: 'shipyard', requestContext });
   assert(observed.observed, 'Observer must process the synthetic message');
   await memory.settled();
@@ -120,7 +123,7 @@ try {
   memory = undefined;
   await storage.close();
   storage = new LibSQLStore({ id: 'real-curate-reopened', url });
-  const restartedKnowledge = new Knowledge({ id: 'mastra', storage });
+  const restartedKnowledge = new Knowledge({ id: 'mastra', storage, scopes: memoryScopeTypes });
   memory = new Memory({ storage, knowledge: 'mastra', options: { observationalMemory: false } });
   const restartedMastra = new Mastra({
     knowledge: { mastra: restartedKnowledge },

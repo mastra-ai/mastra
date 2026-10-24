@@ -1,13 +1,19 @@
 import type { InMemoryDB } from '../inmemory-db';
 import {
-  assertKnowledgeDescriptionWithinBound,
-  assertKnowledgeRecordTextWithinBound,
-  canonicalizeKnowledgeScope,
+  canonicalizeKnowledgeImporterBindingKey,
+  canonicalizeKnowledgeNodeId,
+  canonicalizeKnowledgeScopeIds,
   createKnowledgeUlid,
+  isKnowledgeNodeVisible,
+  knowledgeImportClaimKey,
+  parseKnowledgeImportClaim,
+  knowledgeReleaseMarkerVersion,
+  reconcileKnowledgeClaimScopes,
+  serializeKnowledgeImportClaim,
+  assertKnowledgeSourceProbeLimit,
+  assertKnowledgeVisibilityProbeLimit,
   isKnowledgeScopeVisible,
-  knowledgeScopeKey,
-  pageKnowledgeScopeMembers,
-  parseListKnowledgeScopeMembersInput,
+  knowledgeScopeIdsKey,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
@@ -19,41 +25,59 @@ import {
   parseKnowledgeNodeCursor,
   parseListKnowledgeScopeNodesInput,
   parseKnowledgeWikilinks,
+  sanitizeKnowledgeImportError,
 } from './base';
 import type {
-  AppendKnowledgeInput,
+  ClaimKnowledgeImportRunInput,
+  ClaimKnowledgeRecordInput,
+  KnowledgeImportClaim,
+  KnowledgeImportClaimant,
+  ReleaseKnowledgeRecordClaimInput,
+  ReleaseKnowledgeRecordClaimResult,
+  SetKnowledgeNodeScopesInput,
+  CreateKnowledgeRecordInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
+  CreateKnowledgeImportRunInput,
+  EnqueueKnowledgeImportRunInput,
+  FinalizeKnowledgeImportRunInput,
+  HeartbeatKnowledgeImportRunInput,
+  KnowledgeImportRun,
+  KnowledgeImportState,
   KnowledgeNode,
+  KnowledgeNodeAddress,
   KnowledgeRecord,
-  KnowledgeMention,
-  KnowledgeScope,
+  KnowledgeScopeAddress,
+  KnowledgeScopeIds,
   KnowledgeScopeNodeSummary,
   KnowledgeSemanticDocumentType,
-  ListKnowledgeScopeNodesInput,
-  ListKnowledgeScopeMembersInput,
-  ListKnowledgeScopeMembersOutput,
-  ListKnowledgeScopeNodesOutput,
-  KnowledgeScopeMember,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
   KnowledgeStructureReconcileResult,
-  QueryKnowledgeBySourceInput,
-  QueryKnowledgeInput,
-  QueryKnowledgeOutput,
+  ListKnowledgeSourcesWithVisibleRecordsInput,
+  ListVisibleKnowledgeIdsInput,
+  ListVisibleKnowledgeIdsOutput,
+  QueryKnowledgeRecordsBySourceInput,
+  QueryKnowledgeRecordsInput,
+  QueryKnowledgeRecordsOutput,
+  RecoverKnowledgeImportRunInput,
+  ListKnowledgeImportRunsInput,
+  ListKnowledgeImportRunsOutput,
   ListKnowledgeNodesInput,
+  ListKnowledgeScopeNodesInput,
+  ListKnowledgeScopeNodesOutput,
   SearchKnowledgeInput,
   SearchKnowledgeResult,
+  UpdateKnowledgeImportRunInput,
   UpdateKnowledgeNodeInput,
 } from './base';
 
 function cloneNode(node: KnowledgeNode): KnowledgeNode {
   return {
     ...node,
-    scope: [...node.scope],
     createdAt: new Date(node.createdAt),
     updatedAt: new Date(node.updatedAt),
   };
@@ -66,9 +90,8 @@ function nodeReferenceId(node: KnowledgeNode | string): string {
 function cloneRecord(record: KnowledgeRecord): KnowledgeRecord {
   return {
     ...record,
-    scope: [...record.scope],
-    capturedAt: new Date(record.capturedAt),
-    when: record.when ? new Date(record.when) : undefined,
+    createdAt: new Date(record.createdAt),
+    updatedAt: new Date(record.updatedAt),
     deletedAt: record.deletedAt ? new Date(record.deletedAt) : undefined,
   };
 }
@@ -76,7 +99,7 @@ function cloneRecord(record: KnowledgeRecord): KnowledgeRecord {
 function cloneSemanticOutboxEntry(entry: KnowledgeSemanticOutboxEntry): KnowledgeSemanticOutboxEntry {
   return {
     ...entry,
-    scope: [...entry.scope],
+    scopeIds: [...entry.scopeIds],
     availableAt: new Date(entry.availableAt),
     createdAt: new Date(entry.createdAt),
     claimedAt: entry.claimedAt ? new Date(entry.claimedAt) : undefined,
@@ -84,18 +107,12 @@ function cloneSemanticOutboxEntry(entry: KnowledgeSemanticOutboxEntry): Knowledg
   };
 }
 
-function recordKey(name: string, scope: KnowledgeScope): string {
-  return `${knowledgeScopeKey(scope)}\u0000${name.trim().toLocaleLowerCase()}`;
+function recordKey(name: string, scopeIds: KnowledgeScopeIds): string {
+  return `${knowledgeScopeIdsKey(scopeIds)}\u0000${name.trim().toLocaleLowerCase()}`;
 }
 
 export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   readonly #db: InMemoryDB;
-  readonly #structureScopes = new Map<
-    string,
-    { id: string; name: string; kind?: string; description?: string; createdAt: Date; deletedAt?: Date }
-  >();
-  readonly #structureParents = new Set<string>();
-  readonly #structureGrants = new Set<string>();
   #accessEpoch = 0;
 
   constructor({ db }: { db: InMemoryDB }) {
@@ -107,14 +124,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return {
       contractVersion: KNOWLEDGE_STORAGE_CONTRACT_VERSION,
       schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
-      supportsV2: true,
-      supportsSchemaInspection: true,
-      supportsExplicitReset: true,
+      supported: true,
     } as const;
-  }
-
-  override async inspectSchema() {
-    return { status: 'compatible', schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION } as const;
   }
 
   override async dangerouslyReset(): Promise<void> {
@@ -124,253 +135,156 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async dangerouslyClearAll(): Promise<void> {
     this.#db.knowledgeNodes.clear();
     this.#db.knowledgeNodeKeys.clear();
+    this.#db.knowledgeNodeAddresses.clear();
+    this.#db.knowledgeScopeAddresses.clear();
+    this.#db.knowledgeScopeGrants.clear();
+    this.#db.knowledgeNodeScopes.clear();
     this.#db.knowledgeRecords.clear();
+    this.#db.knowledgeRecordScopes.clear();
     this.#db.knowledgeMentions.clear();
     this.#db.knowledgeActivity.length = 0;
+    this.#db.knowledgeImportState.clear();
+    this.#db.knowledgeImportRuns.clear();
     this.#db.knowledgeSemanticOutbox.clear();
     this.#db.knowledgeSemanticIdempotency.clear();
-    this.#structureScopes.clear();
-    this.#structureParents.clear();
-    this.#structureGrants.clear();
     this.#accessEpoch = 0;
   }
 
   override async reconcileStructure(plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
-    const scopes: Record<string, string> = {};
-    const createdScopeIds: string[] = [];
-    const createdAddresses = new Set<string>();
-    const addedParentEdges = new Set<string>();
-    const addedGrantEdges = new Set<string>();
-    const retrofit = plan.retrofit ?? true;
+    return this.#runAtomicMutation(() => {
+      const scopes: Record<string, string> = {};
+      const createdScopeIds: string[] = [];
+      let changed = false;
 
-    for (const scope of plan.scopes) {
-      const existing = this.#structureScopes.get(scope.address);
-      if (existing) {
-        scopes[scope.address] = existing.id;
-        continue;
-      }
-      const id = crypto.randomUUID();
-      this.#structureScopes.set(scope.address, {
-        id,
-        name: scope.name,
-        createdAt: new Date(),
-        ...(scope.kind ? { kind: scope.kind } : {}),
-        ...(scope.description ? { description: scope.description } : {}),
-      });
-      scopes[scope.address] = id;
-      createdAddresses.add(scope.address);
-      createdScopeIds.push(id);
-    }
-
-    const scopeById = new Map([...this.#structureScopes.values()].map(scope => [scope.id, scope]));
-    try {
       for (const scope of plan.scopes) {
-        if (
-          !createdAddresses.has(scope.address) &&
-          (!retrofit || this.#structureScopes.get(scope.address)?.deletedAt)
-        ) {
+        const existingId = this.#db.knowledgeScopeAddresses.get(scope.address);
+        if (existingId) {
+          scopes[scope.address] = existingId;
           continue;
         }
+        const now = new Date();
+        const id = crypto.randomUUID();
+        this.#db.knowledgeNodes.set(id, {
+          id,
+          type: 'node',
+          name: scope.name,
+          kind: scope.kind,
+          isScope: true,
+          metadata: scope.metadata,
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        });
+        this.#db.knowledgeNodeScopes.set(id, new Set());
+        this.#db.knowledgeScopeAddresses.set(scope.address, id);
+        scopes[scope.address] = id;
+        createdScopeIds.push(id);
+        changed = true;
+      }
+
+      for (const scope of plan.scopes) {
         const scopeNodeId = scopes[scope.address]!;
-        for (const parentAddress of scope.parentAddresses ?? []) {
-          const parent = this.#structureScopes.get(parentAddress);
-          const edge = parent ? `${scopeNodeId}\u0000${parent.id}` : undefined;
-          if (!parent || (parent.deletedAt && !this.#structureParents.has(edge!))) {
-            throw new Error(`Knowledge parent scope does not exist: ${parentAddress}`);
+        const node = this.#db.knowledgeNodes.get(scopeNodeId)!;
+        if (node.deletedAt) continue;
+        if (plan.retrofit === false && !createdScopeIds.includes(scopeNodeId)) continue;
+        const parentIds = (scope.parentAddresses ?? []).map(address => {
+          const parentId = this.#db.knowledgeScopeAddresses.get(address);
+          const parent = parentId ? this.#db.knowledgeNodes.get(parentId) : undefined;
+          if (!parent || parent.deletedAt || !parent.isScope) {
+            throw new Error(`Knowledge parent scope does not exist: ${address}`);
           }
-          if (parent.deletedAt || this.#structureParents.has(edge!)) continue;
-          const name = scope.name.trim().toLocaleLowerCase();
-          const sibling = [...this.#structureParents]
-            .map(edge => edge.split('\u0000'))
-            .find(
-              ([nodeId, parentId]) =>
-                parentId === parent.id &&
-                nodeId !== scopeNodeId &&
-                scopeById.get(nodeId!)?.name.trim().toLocaleLowerCase() === name,
-            );
-          if (sibling) throw new Error(`Knowledge scope name ${scope.name} already exists under ${parentAddress}`);
-          this.#structureParents.add(edge!);
-          addedParentEdges.add(edge!);
+          return parentId!;
+        });
+        const memberships = this.#db.knowledgeNodeScopes.get(scopeNodeId)!;
+        for (const parentId of parentIds) {
+          if (!memberships.has(parentId)) {
+            memberships.add(parentId);
+            changed = true;
+          }
         }
         for (const grant of scope.grants ?? []) {
-          const scopeRef = this.#structureScopes.get(grant.scopeRefAddress);
-          const edge = scopeRef ? `${scopeNodeId}\u0000${scopeRef.id}` : undefined;
-          if (!scopeRef || (scopeRef.deletedAt && !this.#structureGrants.has(edge!))) {
+          const scopeRefId = this.#db.knowledgeScopeAddresses.get(grant.scopeRefAddress);
+          const scopeRef = scopeRefId ? this.#db.knowledgeNodes.get(scopeRefId) : undefined;
+          if (!scopeRef || scopeRef.deletedAt || !scopeRef.isScope) {
             throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
           }
-          if (scopeRef.deletedAt || this.#structureGrants.has(edge!)) continue;
-          this.#structureGrants.add(edge!);
-          addedGrantEdges.add(edge!);
+          const grantKey = JSON.stringify([scopeNodeId, scopeRefId]);
+          if (!this.#db.knowledgeScopeGrants.has(grantKey)) {
+            this.#db.knowledgeScopeGrants.set(grantKey, {
+              scopeNodeId,
+              scopeRefId: scopeRef.id,
+              role: grant.role,
+              canSuggest: grant.canSuggest,
+            });
+            changed = true;
+          }
         }
       }
-    } catch (error) {
-      for (const edge of addedParentEdges) this.#structureParents.delete(edge);
-      for (const edge of addedGrantEdges) this.#structureGrants.delete(edge);
-      for (const address of createdAddresses) this.#structureScopes.delete(address);
-      for (const id of createdScopeIds) {
-        for (const edge of this.#structureParents)
-          if (edge.startsWith(`${id}\u0000`)) this.#structureParents.delete(edge);
-        for (const grant of this.#structureGrants)
-          if (grant.startsWith(`${id}\u0000`)) this.#structureGrants.delete(grant);
-      }
-      throw error;
-    }
 
-    const changed = createdScopeIds.length > 0 || addedParentEdges.size > 0 || addedGrantEdges.size > 0;
-    if (changed) this.#accessEpoch += 1;
-    return {
-      scopes,
-      createdScopeIds,
-      deletedScopeAddresses: plan.scopes
-        .filter(scope => this.#structureScopes.get(scope.address)?.deletedAt)
-        .map(scope => scope.address),
-      changed,
-      accessEpoch: this.#accessEpoch,
-    };
-  }
-
-  override async listScopeNodes(input: ListKnowledgeScopeNodesInput = {}): Promise<ListKnowledgeScopeNodesOutput> {
-    const { limit, after } = parseListKnowledgeScopeNodesInput(input);
-    const parentsByScopeId = new Map<string, string[]>();
-    const childrenByScopeId = new Map<string, string[]>();
-    for (const edge of this.#structureParents) {
-      const [scopeId, parentId] = edge.split('\u0000');
-      if (!scopeId || !parentId) continue;
-      parentsByScopeId.set(scopeId, [...(parentsByScopeId.get(scopeId) ?? []), parentId]);
-      childrenByScopeId.set(parentId, [...(childrenByScopeId.get(parentId) ?? []), scopeId]);
-    }
-    const liveScopes = new Map<string, { address: string; name: string; kind?: string; description?: string }>();
-    for (const [address, scope] of this.#structureScopes) {
-      if (!scope.deletedAt) liveScopes.set(scope.id, { ...scope, address });
-    }
-    let candidateIds: Set<string> | undefined;
-    if (input.withinAddress !== undefined) {
-      candidateIds = new Set();
-      const root = this.#structureScopes.get(input.withinAddress);
-      const queue = root && !root.deletedAt ? [root.id] : [];
-      for (const id of queue) {
-        if (candidateIds.has(id) || !liveScopes.has(id)) continue;
-        candidateIds.add(id);
-        queue.push(...(childrenByScopeId.get(id) ?? []));
-      }
-    }
-    const addresses = input.addresses ? new Set(input.addresses) : undefined;
-    const ids = input.ids ? new Set(input.ids) : undefined;
-    const summaries: KnowledgeScopeNodeSummary[] = [];
-    for (const [id, scope] of liveScopes) {
-      const { address } = scope;
-      if (candidateIds && !candidateIds.has(id)) continue;
-      if (addresses && !addresses.has(address)) continue;
-      if (ids && !ids.has(id)) continue;
-      if (after && (scope.name < after.name || (scope.name === after.name && id <= after.id))) continue;
-      summaries.push({
-        id,
-        address,
-        name: scope.name,
-        ...(scope.kind ? { kind: scope.kind } : {}),
-        ...(scope.description ? { description: scope.description } : {}),
-        parentIds: [...(parentsByScopeId.get(id) ?? [])].sort(),
-      });
-    }
-    summaries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    return pageKnowledgeScopeNodes(summaries.slice(0, limit + 1), limit, input);
-  }
-
-  override async listScopeMembers(input: ListKnowledgeScopeMembersInput): Promise<ListKnowledgeScopeMembersOutput> {
-    const { limit, after } = parseListKnowledgeScopeMembersInput(input);
-    const memberIds = new Set<string>();
-    for (const edge of this.#structureParents) {
-      const [scopeId, parentId] = edge.split('\u0000');
-      if (scopeId && parentId === input.scopeNodeId) memberIds.add(scopeId);
-    }
-    // Child scopes live in the structure maps, not the node table; return them as scope nodes the way
-    // the persistent adapters do (no content scope, empty kind when unset).
-    const scopesById = new Map([...this.#structureScopes.values()].map(scope => [scope.id, scope]));
-    const members: KnowledgeScopeMember[] = [];
-    for (const id of memberIds) {
-      const node = await this.getNode(id);
-      if (node) {
-        if (!node.mergedInto) members.push(node);
-        continue;
-      }
-      const scope = scopesById.get(id);
-      if (!scope || scope.deletedAt) continue;
-      members.push({
-        id: scope.id,
-        type: 'node',
-        name: scope.name,
-        kind: scope.kind ?? '',
-        ...(scope.description ? { description: scope.description } : {}),
-        scope: null,
-        version: 1,
-        createdAt: scope.createdAt,
-        updatedAt: scope.createdAt,
-      });
-    }
-    const page = members
-      .sort(
-        (a, b) =>
-          b.updatedAt.getTime() - a.updatedAt.getTime() ||
-          (a.name === b.name ? (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : a.name < b.name ? -1 : 1),
-      )
-      .filter(
-        member =>
-          !after ||
-          member.updatedAt < after.updatedAt ||
-          (member.updatedAt.getTime() === after.updatedAt.getTime() &&
-            (member.name > after.name || (member.name === after.name && member.id > after.id))),
-      );
-    return pageKnowledgeScopeMembers(page.slice(0, limit + 1), limit, input);
+      if (changed) this.#accessEpoch += 1;
+      return {
+        scopes,
+        createdScopeIds,
+        deletedScopeAddresses: plan.scopes
+          .filter(scope => this.#db.knowledgeNodes.get(scopes[scope.address]!)?.deletedAt)
+          .map(scope => scope.address),
+        changed,
+        accessEpoch: this.#accessEpoch,
+      };
+    });
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
     return this.#runAtomicMutation(() => this.#createNode(input));
   }
 
-  #createNode(input: CreateKnowledgeNodeInput): KnowledgeNode {
-    assertKnowledgeDescriptionWithinBound(input.description);
-    const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = recordKey(input.name, scope);
-    // Validate structural placement before mutating anything: every address must
-    // resolve to a live reconciled scope node.
-    const placementIds = (input.scopeAddresses ?? []).map(address => {
-      const target = this.#structureScopes.get(address);
-      if (!target || target.deletedAt) throw new KnowledgeNotFoundError('scope', address);
-      return target.id;
+  override async createNodeWithRecord(input: {
+    node: CreateKnowledgeNodeInput;
+    record: Omit<CreateKnowledgeRecordInput, 'node'>;
+  }): Promise<{ node: KnowledgeNode; record: KnowledgeRecord }> {
+    return this.#runAtomicMutation(() => {
+      this.#assertImportRunExists(input.record.importRunId);
+      const node = this.#createNode(input.node);
+      const record = this.#createRecord({ ...input.record, node });
+      return { node, record };
     });
+  }
+
+  #createNode(input: CreateKnowledgeNodeInput, { coalesceByName = true } = {}): KnowledgeNode {
+    if (!input.name.trim()) throw new Error('Knowledge node names must not be blank.');
+    this.#assertImportRunExists(input.importRunId);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    this.#assertScopeNodes(scopeIds);
+    const key = recordKey(input.name, scopeIds);
     const existingId = this.#db.knowledgeNodeKeys.get(key);
     if (existingId) {
-      const terminal = this.#resolveTerminalNode(existingId)!;
-      if (!isKnowledgeScopeVisible(terminal.scope, scope)) {
-        throw new Error(`Merged knowledge node is not visible from scope: ${input.name}`);
-      }
-      // Writing about a node that already exists still places it where the caller asked.
-      for (const scopeId of placementIds) this.#structureParents.add(`${terminal.id}\u0000${scopeId}`);
-      return cloneNode(terminal);
+      if (!coalesceByName) throw new KnowledgeConflictError(existingId);
+      const existing = this.#db.knowledgeNodes.get(existingId);
+      if (!existing) throw new KnowledgeNotFoundError('node', existingId);
+      return cloneNode(existing);
     }
+    const collision = this.#findSiblingNameCollision(input.name, scopeIds);
+    if (collision) throw new KnowledgeConflictError(collision.id);
 
     const now = new Date();
     const node: KnowledgeNode = {
-      id: input.id ?? crypto.randomUUID(),
+      id: input.id ? canonicalizeKnowledgeNodeId(input.id) : crypto.randomUUID(),
       type: 'node',
       name: input.name.trim(),
       kind: input.kind,
-      content: input.content,
-      description: input.description,
-      scope,
+      isScope: input.isScope ?? false,
+      metadata: input.metadata,
       version: 1,
       createdAt: now,
       updatedAt: now,
     };
-    if (this.#db.knowledgeNodes.has(node.id)) throw new Error(`Knowledge node already exists: ${node.id}`);
+    if (this.#db.knowledgeNodes.has(node.id)) throw new KnowledgeConflictError(node.id);
     this.#db.knowledgeNodes.set(node.id, node);
+    this.#db.knowledgeNodeScopes.set(node.id, new Set(scopeIds));
     this.#db.knowledgeNodeKeys.set(key, node.id);
-    this.#replaceMentions('node', node.id, node.content ?? '', input.resolutionScope ?? scope, scope);
-    this.#recordActivity('node-created', 'node', node.id, scope);
-    this.#enqueue('node', node.id, 'upsert', node.version, scope);
-    // Placement edges go last so no later step can fail after they are added
-    // (#structureParents is instance state, outside the atomic #db snapshot).
-    for (const scopeId of placementIds) this.#structureParents.add(`${node.id}\u0000${scopeId}`);
+    this.#recordActivity('create', 'node', node.id, input.contextScopeId, input.importRunId);
+    this.#enqueue('node', node.id, 'upsert', node.version, scopeIds);
+    if (input.claimant) this.#writeClaim(input.claimant, 'node', node.id, scopeIds, node.version);
     return cloneNode(node);
   }
 
@@ -379,48 +293,502 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return node ? cloneNode(node) : null;
   }
 
-  async getNodeByName({ name, scope }: { name: string; scope: KnowledgeScope }): Promise<KnowledgeNode | null> {
-    const id = this.#db.knowledgeNodeKeys.get(recordKey(name, scope));
+  async getNodeScopeIds(nodeId: string): Promise<KnowledgeScopeIds> {
+    return this.#nodeScopeIds(nodeId);
+  }
+
+  async getScopeAddress(address: string): Promise<KnowledgeScopeAddress | null> {
+    const scopeNodeId = this.#db.knowledgeScopeAddresses.get(address);
+    if (!scopeNodeId) return null;
+    const scope = this.#db.knowledgeNodes.get(scopeNodeId);
+    return scope && !scope.deletedAt && scope.isScope ? { address, scopeNodeId } : null;
+  }
+
+  async listScopeAddresses(input: { after?: string; limit?: number } = {}): Promise<KnowledgeScopeAddress[]> {
+    const limit = Math.max(1, Math.min(input.limit ?? 100, 1000));
+    return [...this.#db.knowledgeScopeAddresses]
+      .filter(([address, scopeNodeId]) => {
+        if (input.after && address <= input.after) return false;
+        const scope = this.#db.knowledgeNodes.get(scopeNodeId);
+        return scope?.isScope === true && !scope.deletedAt;
+      })
+      .sort(([left], [right]) => left.localeCompare(right))
+      .slice(0, limit)
+      .map(([address, scopeNodeId]) => ({ address, scopeNodeId }));
+  }
+
+  async listScopeNodes(input: ListKnowledgeScopeNodesInput = {}): Promise<ListKnowledgeScopeNodesOutput> {
+    const { limit, after } = parseListKnowledgeScopeNodesInput(input);
+    const live = (id: string) => {
+      const node = this.#db.knowledgeNodes.get(id);
+      return node?.isScope === true && !node.deletedAt ? node : undefined;
+    };
+    let within: Set<string> | undefined;
+    if (input.withinAddress !== undefined) {
+      within = new Set();
+      const rootId = this.#db.knowledgeScopeAddresses.get(input.withinAddress);
+      if (rootId && live(rootId)) {
+        const children = new Map<string, string[]>();
+        for (const [nodeId, parents] of this.#db.knowledgeNodeScopes) {
+          if (!live(nodeId)) continue;
+          for (const parentId of parents) children.set(parentId, [...(children.get(parentId) ?? []), nodeId]);
+        }
+        const queue = [rootId];
+        while (queue.length) {
+          const id = queue.pop()!;
+          if (within.has(id)) continue;
+          within.add(id);
+          queue.push(...(children.get(id) ?? []));
+        }
+      }
+    }
+    const addresses = input.addresses ? new Set(input.addresses) : undefined;
+    const ids = input.ids ? new Set(input.ids) : undefined;
+    const rows: KnowledgeScopeNodeSummary[] = [];
+    for (const [address, id] of this.#db.knowledgeScopeAddresses) {
+      const node = live(id);
+      if (!node || (within && !within.has(id)) || (addresses && !addresses.has(address)) || (ids && !ids.has(id))) {
+        continue;
+      }
+      if (after && (node.name < after.name || (node.name === after.name && id <= after.id))) continue;
+      const description = node.metadata?.description;
+      rows.push({
+        id,
+        address,
+        name: node.name,
+        ...(node.kind ? { kind: node.kind } : {}),
+        ...(typeof description === 'string' ? { description } : {}),
+        parentIds: this.#nodeScopeIds(id),
+      });
+    }
+    rows.sort((left, right) =>
+      left.name === right.name ? (left.id < right.id ? -1 : 1) : left.name < right.name ? -1 : 1,
+    );
+    return pageKnowledgeScopeNodes(rows.slice(0, limit + 1), limit, input);
+  }
+
+  async getNodeAddress(input: { source: string; address: string }): Promise<KnowledgeNodeAddress | null> {
+    const entry = this.#db.knowledgeNodeAddresses.get(JSON.stringify([input.source, input.address]));
+    return entry ? { ...entry } : null;
+  }
+
+  async listNodeAddresses(input: { source: string }): Promise<KnowledgeNodeAddress[]> {
+    return [...this.#db.knowledgeNodeAddresses.values()]
+      .filter(entry => entry.source === input.source)
+      .sort((left, right) => left.address.localeCompare(right.address))
+      .map(entry => ({ ...entry }));
+  }
+
+  async setNodeAddress(input: KnowledgeNodeAddress): Promise<KnowledgeNodeAddress> {
+    const node = this.#db.knowledgeNodes.get(input.nodeId);
+    if (!node || node.deletedAt) throw new KnowledgeNotFoundError('node', input.nodeId);
+    const key = JSON.stringify([input.source, input.address]);
+    const existing = this.#db.knowledgeNodeAddresses.get(key);
+    if (existing && existing.nodeId !== input.nodeId) {
+      throw new KnowledgeConflictError(`Knowledge node address already belongs to another node: ${input.address}`);
+    }
+    const entry = { ...input };
+    this.#db.knowledgeNodeAddresses.set(key, entry);
+    return { ...entry };
+  }
+
+  async createNodeWithAddress(input: {
+    source: string;
+    address: string;
+    node: CreateKnowledgeNodeInput;
+  }): Promise<KnowledgeNode> {
+    return this.#runAtomicMutation(() => {
+      const key = JSON.stringify([input.source, input.address]);
+      const existing = this.#db.knowledgeNodeAddresses.get(key);
+      if (existing) {
+        const node = this.#db.knowledgeNodes.get(existing.nodeId);
+        if (!node || node.deletedAt) throw new KnowledgeNotFoundError('node', existing.nodeId);
+        return cloneNode(node);
+      }
+      const node = this.#createNode(input.node, { coalesceByName: false });
+      this.#db.knowledgeNodeAddresses.set(key, { source: input.source, address: input.address, nodeId: node.id });
+      return node;
+    });
+  }
+
+  async removeNodeAddress(input: { source: string; address: string; nodeId: string }): Promise<void> {
+    const key = JSON.stringify([input.source, input.address]);
+    const existing = this.#db.knowledgeNodeAddresses.get(key);
+    if (existing?.nodeId === input.nodeId) this.#db.knowledgeNodeAddresses.delete(key);
+  }
+
+  async rebindNodeAddress(input: {
+    source: string;
+    address: string;
+    newAddress: string;
+    nodeId: string;
+    importRunId?: string;
+  }): Promise<KnowledgeNodeAddress> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => {
+      const oldKey = JSON.stringify([input.source, input.address]);
+      const newKey = JSON.stringify([input.source, input.newAddress]);
+      const node = this.#db.knowledgeNodes.get(input.nodeId);
+      if (!node || node.deletedAt) throw new KnowledgeNotFoundError('node', input.nodeId);
+      const existing = this.#db.knowledgeNodeAddresses.get(oldKey);
+      const collision = this.#db.knowledgeNodeAddresses.get(newKey);
+      if (!existing) {
+        if (collision?.nodeId === input.nodeId) return { ...collision };
+        throw new KnowledgeNotFoundError('node address', input.address);
+      }
+      if (existing.nodeId !== input.nodeId) throw new KnowledgeNotFoundError('node address', input.address);
+      if (oldKey === newKey) return { ...existing };
+
+      if (collision && collision.nodeId !== input.nodeId) {
+        throw new KnowledgeConflictError(`Knowledge node address already belongs to another node: ${input.newAddress}`);
+      }
+      const rebound = { source: input.source, address: input.newAddress, nodeId: input.nodeId };
+      this.#db.knowledgeNodeAddresses.set(newKey, rebound);
+      this.#db.knowledgeNodeAddresses.delete(oldKey);
+      this.#recordActivity('rebind', 'node', node.id, this.#nodeScopeIds(node.id)[0], input.importRunId);
+      return { ...rebound };
+    });
+  }
+
+  async deleteNodeByAddress(input: {
+    source: string;
+    address: string;
+    scopeId: string;
+    importRunId?: string;
+  }): Promise<{ node: KnowledgeNode; deleted: boolean }> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => {
+      const key = JSON.stringify([input.source, input.address]);
+      const binding = this.#db.knowledgeNodeAddresses.get(key);
+      if (!binding) throw new KnowledgeNotFoundError('node address', input.address);
+      const node = this.#db.knowledgeNodes.get(binding.nodeId);
+      if (!node) throw new KnowledgeNotFoundError('node', binding.nodeId);
+      if (node.isScope) throw new KnowledgeConflictError(`Knowledge scopes cannot be permanently deleted: ${node.id}`);
+      this.#db.knowledgeNodeAddresses.delete(key);
+      for (const record of [...this.#db.knowledgeRecords.values()]) {
+        if (record.nodeId !== node.id || record.source !== input.source) continue;
+        const recordScopeIds = this.#recordScopeIds(record.id);
+        if (recordScopeIds.length !== 1 || recordScopeIds[0] !== input.scopeId) continue;
+        this.#recordActivity('delete', 'record', record.id, recordScopeIds[0], input.importRunId);
+        this.#enqueue('record', record.id, 'delete', record.version + 1, recordScopeIds);
+        this.#db.knowledgeMentions.delete(`record:${record.id}`);
+        this.#db.knowledgeRecordScopes.delete(record.id);
+        this.#db.knowledgeRecords.delete(record.id);
+      }
+      if (
+        [...this.#db.knowledgeNodeAddresses.values()].some(entry => entry.nodeId === node.id) ||
+        [...this.#db.knowledgeRecords.values()].some(record => record.nodeId === node.id)
+      ) {
+        return { node: cloneNode(node), deleted: false };
+      }
+      const nodeScopeIds = this.#nodeScopeIds(node.id);
+      this.#recordActivity('delete', 'node', node.id, nodeScopeIds[0], input.importRunId);
+      this.#enqueue('node', node.id, 'delete', node.version + 1, nodeScopeIds);
+      for (const mentions of this.#db.knowledgeMentions.values()) mentions.delete(node.id);
+      this.#db.knowledgeMentions.delete(`node:${node.id}`);
+      this.#db.knowledgeNodeKeys.delete(recordKey(node.name, nodeScopeIds));
+      this.#db.knowledgeNodeScopes.delete(node.id);
+      this.#db.knowledgeNodes.delete(node.id);
+      return { node: cloneNode(node), deleted: true };
+    });
+  }
+
+  async listImportClaims(input: {
+    targetType: KnowledgeSemanticDocumentType;
+    targetId: string;
+  }): Promise<KnowledgeImportClaim[]> {
+    return this.#claims(input.targetType, input.targetId);
+  }
+
+  async setNodeScopes(input: SetKnowledgeNodeScopesInput): Promise<KnowledgeNode> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => {
+      const existing = this.#db.knowledgeNodes.get(input.id);
+      if (!existing || existing.deletedAt) throw new KnowledgeNotFoundError('node', input.id);
+      if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
+      const next = canonicalizeKnowledgeScopeIds(input.scopeIds);
+      if (next.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
+      this.#assertScopeNodes(next);
+      const claims = this.#claims('node', input.id);
+      const previous = claims.find(claim => isSameClaimant(claim, input.claimant));
+      const current = this.#nodeScopeIds(input.id);
+      const scopeIds = reconcileKnowledgeClaimScopes({
+        current,
+        previous: previous?.scopeIds ?? [],
+        next,
+        others: claims.filter(claim => !isSameClaimant(claim, input.claimant)).flatMap(claim => claim.scopeIds),
+      });
+      if (knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) {
+        this.#writeClaim(input.claimant, 'node', input.id, next, existing.version);
+        return cloneNode(existing);
+      }
+      const oldKey = recordKey(existing.name, current);
+      const newKey = recordKey(existing.name, scopeIds);
+      const collision = this.#db.knowledgeNodeKeys.get(newKey);
+      if (collision && collision !== input.id) throw new KnowledgeConflictError(collision);
+      const siblingCollision = this.#findSiblingNameCollision(existing.name, scopeIds, input.id);
+      if (siblingCollision) throw new KnowledgeConflictError(siblingCollision.id);
+      const updated: KnowledgeNode = { ...existing, version: existing.version + 1, updatedAt: new Date() };
+      if (oldKey !== newKey) {
+        this.#db.knowledgeNodeKeys.delete(oldKey);
+        this.#db.knowledgeNodeKeys.set(newKey, input.id);
+      }
+      this.#db.knowledgeNodes.set(input.id, updated);
+      this.#db.knowledgeNodeScopes.set(input.id, new Set(scopeIds));
+      this.#recordActivity('move', 'node', input.id, input.contextScopeId ?? next[0], input.importRunId);
+      this.#enqueue('node', input.id, 'delete', updated.version, current);
+      this.#enqueue('node', input.id, 'upsert', updated.version, scopeIds);
+      this.#advanceClaims('node', input.id, existing.version, updated.version);
+      this.#writeClaim(input.claimant, 'node', input.id, next, updated.version);
+      return cloneNode(updated);
+    });
+  }
+
+  async claimRecord(input: ClaimKnowledgeRecordInput): Promise<KnowledgeRecord> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => {
+      const record = this.#db.knowledgeRecords.get(input.id);
+      if (!record || record.deletedAt) throw new KnowledgeNotFoundError('record', input.id);
+      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
+      const next = canonicalizeKnowledgeScopeIds(input.scopeIds);
+      if (next.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
+      this.#assertScopeNodes(next);
+      const claims = this.#claims('record', input.id);
+      const previous = claims.find(claim => isSameClaimant(claim, input.claimant));
+      const current = this.#recordScopeIds(input.id);
+      const scopeIds = reconcileKnowledgeClaimScopes({
+        current,
+        previous: previous?.scopeIds ?? [],
+        next,
+        others: claims.filter(claim => !isSameClaimant(claim, input.claimant)).flatMap(claim => claim.scopeIds),
+      });
+      const updated = this.#replaceRecordScopes(
+        record,
+        current,
+        scopeIds,
+        input.contextScopeId ?? next[0],
+        input.importRunId,
+      );
+      this.#advanceClaims('record', input.id, record.version, updated.version);
+      this.#writeClaim(input.claimant, 'record', input.id, next, updated.version);
+      return cloneRecord(updated);
+    });
+  }
+
+  async releaseRecordClaim(input: ReleaseKnowledgeRecordClaimInput): Promise<ReleaseKnowledgeRecordClaimResult> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => {
+      const record = this.#db.knowledgeRecords.get(input.id);
+      if (!record) throw new KnowledgeNotFoundError('record', input.id);
+      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
+      return this.#releaseRecordClaim(record, input.claimant, input.importRunId);
+    });
+  }
+
+  async releaseImportClaims(input: { importerId: string; binding: string; importRunId?: string }): Promise<void> {
+    this.#assertImportRunExists(input.importRunId);
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
+    this.#runAtomicMutation(() => {
+      const owned = this.#allClaims().filter(
+        claim => claim.importerId === input.importerId && claim.binding === binding,
+      );
+      for (const claim of owned) {
+        if (claim.targetType === 'record') {
+          const record = this.#db.knowledgeRecords.get(claim.targetId);
+          if (record) this.#releaseRecordClaim(record, claim, input.importRunId);
+          else this.#deleteClaim(claim, 'record', claim.targetId);
+          continue;
+        }
+        const node = this.#db.knowledgeNodes.get(claim.targetId);
+        this.#deleteClaim(claim, 'node', claim.targetId);
+        if (!node || node.deletedAt) continue;
+        const current = this.#nodeScopeIds(node.id);
+        const remaining = this.#claims('node', node.id);
+        const others = remaining.flatMap(other => other.scopeIds);
+        const scopeIds = reconcileKnowledgeClaimScopes({ current, previous: claim.scopeIds, next: [], others });
+        // With no claim from this importer and source left, a scope-less marker keeps its version on record.
+        const marker = (after: number) => knowledgeReleaseMarkerVersion(claim, remaining, node.version, after);
+        // A node keeps at least one membership; one only this binding held stays rather than orphaning it.
+        if (scopeIds.length === 0 || knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) {
+          const version = marker(node.version);
+          if (version !== null) this.#writeClaim(claim, 'node', node.id, [], version);
+          continue;
+        }
+        const updated: KnowledgeNode = { ...node, version: node.version + 1, updatedAt: new Date() };
+        this.#db.knowledgeNodeKeys.delete(recordKey(node.name, current));
+        this.#db.knowledgeNodeKeys.set(recordKey(node.name, scopeIds), node.id);
+        this.#db.knowledgeNodes.set(node.id, updated);
+        this.#db.knowledgeNodeScopes.set(node.id, new Set(scopeIds));
+        this.#recordActivity('move', 'node', node.id, scopeIds[0], input.importRunId);
+        this.#enqueue('node', node.id, 'delete', updated.version, current);
+        this.#enqueue('node', node.id, 'upsert', updated.version, scopeIds);
+        this.#advanceClaims('node', node.id, node.version, updated.version);
+        const version = marker(updated.version);
+        if (version !== null) this.#writeClaim(claim, 'node', node.id, [], version);
+      }
+    });
+  }
+
+  #releaseRecordClaim(
+    record: KnowledgeRecord,
+    claimant: KnowledgeImportClaimant,
+    importRunId: string | undefined,
+  ): ReleaseKnowledgeRecordClaimResult {
+    const claims = this.#claims('record', record.id);
+    const previous = claims.find(claim => isSameClaimant(claim, claimant));
+    const others = claims.filter(claim => !isSameClaimant(claim, claimant));
+    this.#deleteClaim(claimant, 'record', record.id);
+    const current = this.#recordScopeIds(record.id);
+    if (others.length === 0) {
+      this.#recordActivity('delete', 'record', record.id, current[0], importRunId);
+      this.#enqueue('record', record.id, 'delete', record.version + 1, current);
+      this.#db.knowledgeMentions.delete(`record:${record.id}`);
+      this.#db.knowledgeRecordScopes.delete(record.id);
+      this.#db.knowledgeRecords.delete(record.id);
+      return { record: cloneRecord(record), deleted: true };
+    }
+    const scopeIds = reconcileKnowledgeClaimScopes({
+      current,
+      previous: previous?.scopeIds ?? [],
+      next: [],
+      others: others.flatMap(claim => claim.scopeIds),
+    });
+    const updated = this.#replaceRecordScopes(record, current, scopeIds, scopeIds[0], importRunId);
+    this.#advanceClaims('record', record.id, record.version, updated.version);
+    return { record: cloneRecord(updated), deleted: false };
+  }
+
+  #replaceRecordScopes(
+    record: KnowledgeRecord,
+    current: KnowledgeScopeIds,
+    scopeIds: KnowledgeScopeIds,
+    contextScopeId: string | undefined,
+    importRunId: string | undefined,
+  ): KnowledgeRecord {
+    if (knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) return record;
+    const updated = { ...record, version: record.version + 1, updatedAt: new Date() };
+    this.#db.knowledgeRecords.set(record.id, updated);
+    this.#db.knowledgeRecordScopes.set(record.id, new Set(scopeIds));
+    this.#recordActivity('move', 'record', record.id, contextScopeId, importRunId);
+    this.#enqueue('record', record.id, 'delete', updated.version, current);
+    if (!record.deletedAt) this.#enqueue('record', record.id, 'upsert', updated.version, scopeIds);
+    return updated;
+  }
+
+  /**
+   * A claim operation bumps its target's version without anyone editing it from outside, so every
+   * claim that was current before the bump stays current after it.
+   */
+  #advanceClaims(targetType: KnowledgeSemanticDocumentType, targetId: string, from: number, to: number): void {
+    if (from === to) return;
+    for (const claim of this.#claims(targetType, targetId)) {
+      if (claim.version === from) this.#writeClaim(claim, targetType, targetId, claim.scopeIds, to);
+    }
+  }
+
+  #allClaims(): KnowledgeImportClaim[] {
+    return [...this.#db.knowledgeImportState.values()]
+      .map(state => parseKnowledgeImportClaim(state))
+      .filter((claim): claim is KnowledgeImportClaim => claim !== null);
+  }
+
+  #claims(targetType: KnowledgeSemanticDocumentType, targetId: string): KnowledgeImportClaim[] {
+    return this.#allClaims().filter(claim => claim.targetType === targetType && claim.targetId === targetId);
+  }
+
+  #writeClaim(
+    claimant: KnowledgeImportClaimant,
+    targetType: KnowledgeSemanticDocumentType,
+    targetId: string,
+    scopeIds: KnowledgeScopeIds,
+    version: number,
+  ): void {
+    const binding = canonicalizeKnowledgeImporterBindingKey(claimant.binding);
+    const key = knowledgeImportClaimKey(targetType, targetId);
+    this.#db.knowledgeImportState.set(JSON.stringify([claimant.importerId, binding, key]), {
+      importerId: claimant.importerId,
+      binding,
+      key,
+      value: serializeKnowledgeImportClaim({ source: claimant.source, scopeIds, version }),
+    });
+  }
+
+  #deleteClaim(
+    claimant: Pick<KnowledgeImportClaimant, 'importerId' | 'binding'>,
+    targetType: KnowledgeSemanticDocumentType,
+    targetId: string,
+  ): void {
+    const binding = canonicalizeKnowledgeImporterBindingKey(claimant.binding);
+    this.#db.knowledgeImportState.delete(
+      JSON.stringify([claimant.importerId, binding, knowledgeImportClaimKey(targetType, targetId)]),
+    );
+  }
+
+  async deleteRecordBySource(input: {
+    id: string;
+    source: string;
+    version: number;
+    importRunId?: string;
+  }): Promise<KnowledgeRecord> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => {
+      const record = this.#db.knowledgeRecords.get(input.id);
+      if (!record || record.source !== input.source) throw new KnowledgeNotFoundError('record', input.id);
+      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
+      const scopeIds = this.#recordScopeIds(record.id);
+      this.#recordActivity('delete', 'record', record.id, scopeIds[0], input.importRunId);
+      this.#enqueue('record', record.id, 'delete', record.version + 1, scopeIds);
+      this.#db.knowledgeMentions.delete(`record:${record.id}`);
+      this.#db.knowledgeRecordScopes.delete(record.id);
+      this.#db.knowledgeRecords.delete(record.id);
+      return cloneRecord(record);
+    });
+  }
+
+  async getNodeByName({
+    name,
+    scopeIds,
+  }: {
+    name: string;
+    scopeIds: KnowledgeScopeIds;
+  }): Promise<KnowledgeNode | null> {
+    const id = this.#db.knowledgeNodeKeys.get(recordKey(name, scopeIds));
     if (!id) return null;
     const node = this.#db.knowledgeNodes.get(id);
     return node ? cloneNode(node) : null;
   }
 
-  async resolveNode(input: { name: string; scope: KnowledgeScope }): Promise<KnowledgeNode | null> {
+  async resolveNode(input: { name: string; scopeIds: KnowledgeScopeIds }): Promise<KnowledgeNode | null> {
     return this.#resolveNode(input);
   }
 
-  #resolveNode({ name, scope }: { name: string; scope: KnowledgeScope }): KnowledgeNode | null {
-    const canonical = canonicalizeKnowledgeScope(scope);
+  #resolveNode({ name, scopeIds }: { name: string; scopeIds: KnowledgeScopeIds }): KnowledgeNode | null {
+    const canonical = canonicalizeKnowledgeScopeIds(scopeIds);
     const canonicalName = name.trim().toLocaleLowerCase();
-    // An unmerged node outside the caller's scope resolves to itself and can never be visible, so only
-    // visible nodes and merged aliases (whose terminal may be visible) are candidates.
     const visible = [...this.#db.knowledgeNodes.values()]
       .filter(node => node.name.trim().toLocaleLowerCase() === canonicalName)
-      .filter(node => node.mergedInto || isKnowledgeScopeVisible(node.scope, canonical))
       .map(node => this.#resolveTerminalNode(node.id)!)
-      .filter(node => isKnowledgeScopeVisible(node.scope, canonical))
-      .sort((left, right) => right.scope.length - left.scope.length);
+      .filter(node => isKnowledgeNodeVisible(node, this.#nodeScopeIds(node.id), canonical))
+      .sort((left, right) => this.#nodeScopeIds(right.id).length - this.#nodeScopeIds(left.id).length);
     return visible[0] ? cloneNode(visible[0]) : null;
   }
 
   async listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]> {
-    const queryScope = canonicalizeKnowledgeScope(input.scope);
+    const queryScope = canonicalizeKnowledgeScopeIds(input.scopeIds);
     const cursor = input.cursor
       ? parseKnowledgeNodeCursor(input.cursor, {
           namePrefix: input.namePrefix,
           kind: input.kind,
-          hasContent: input.hasContent,
+          isScope: input.isScope,
         })
       : undefined;
     return [...this.#db.knowledgeNodes.values()]
-      .filter(node => !node.mergedInto)
-      .filter(node => isKnowledgeScopeVisible(node.scope, queryScope))
+      .filter(node => isKnowledgeNodeVisible(node, this.#nodeScopeIds(node.id), queryScope))
       .filter(
         node => !input.namePrefix || node.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase()),
       )
       .filter(node => !input.kind || node.kind === input.kind)
-      .filter(node => input.hasContent === undefined || Boolean(node.content) === input.hasContent)
+      .filter(node => input.isScope === undefined || node.isScope === input.isScope)
       .sort(
         (a, b) =>
           b.updatedAt.getTime() - a.updatedAt.getTime() ||
@@ -438,30 +806,34 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    this.#assertImportRunExists(input.importRunId);
     return this.#runAtomicMutation(() => this.#updateNode(input));
   }
 
   #updateNode(input: UpdateKnowledgeNodeInput): KnowledgeNode {
-    assertKnowledgeDescriptionWithinBound(input.description);
+    if (input.name !== undefined && !input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const existing = this.#db.knowledgeNodes.get(input.id);
     if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
-    if (existing.mergedInto) throw new Error(`Cannot update merged knowledge node: ${input.id}`);
 
-    const scope = canonicalizeKnowledgeScope(input.scope ?? existing.scope);
+    const oldScopeIds = this.#nodeScopeIds(existing.id);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds ?? oldScopeIds);
+    this.#assertScopeNodes(scopeIds);
     const name = (input.name ?? existing.name).trim();
-    const oldKey = recordKey(existing.name, existing.scope);
-    const newKey = recordKey(name, scope);
+    const oldKey = recordKey(existing.name, oldScopeIds);
+    const newKey = recordKey(name, scopeIds);
     const collision = this.#db.knowledgeNodeKeys.get(newKey);
-    if (collision && collision !== input.id) throw new Error(`Knowledge node already exists in scope: ${name}`);
+    if (collision && collision !== input.id) throw new KnowledgeConflictError(collision);
+    const siblingCollision = this.#findSiblingNameCollision(name, scopeIds, input.id);
+    if (siblingCollision) throw new KnowledgeConflictError(siblingCollision.id);
+    if (existing.isScope && input.isScope === false) this.#assertScopeHasNoDependents(existing.id);
 
     const updated: KnowledgeNode = {
       ...existing,
       name,
       kind: input.kind ?? existing.kind,
-      content: input.content ?? existing.content,
-      description: input.description ?? existing.description,
-      scope,
+      isScope: input.isScope ?? existing.isScope,
+      metadata: input.metadata ?? existing.metadata,
       version: existing.version + 1,
       updatedAt: new Date(),
     };
@@ -470,125 +842,166 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       this.#db.knowledgeNodeKeys.set(newKey, input.id);
     }
     this.#db.knowledgeNodes.set(input.id, updated);
-    if (input.content !== undefined || input.name !== undefined || input.scope !== undefined) {
-      this.#replaceMentions('node', input.id, updated.content ?? '', input.resolutionScope ?? scope, scope);
-    }
-    this.#recordActivity('node-updated', 'node', input.id, scope);
-    const scopeChanged = knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope);
-    if (scopeChanged) {
-      this.#enqueue('node', input.id, 'delete', createKnowledgeUlid(), existing.scope);
-      for (const record of this.#db.knowledgeRecords.values()) {
-        if (record.node !== input.id) continue;
-        this.#enqueue('record', record.id, 'delete', createKnowledgeUlid(), record.scope);
-        if (!record.deletedAt) this.#enqueue('record', record.id, 'upsert', createKnowledgeUlid(), record.scope);
+    this.#db.knowledgeNodeScopes.set(input.id, new Set(scopeIds));
+    this.#recordActivity('edit', 'node', input.id, input.contextScopeId, input.importRunId);
+    const scopeChanged = knowledgeScopeIdsKey(oldScopeIds) !== knowledgeScopeIdsKey(scopeIds);
+    if (scopeChanged) this.#enqueue('node', input.id, 'delete', updated.version, oldScopeIds);
+    for (const record of this.#db.knowledgeRecords.values()) {
+      if (record.nodeId !== input.id) continue;
+      const updatedRecord = { ...record, version: record.version + 1, updatedAt: updated.updatedAt };
+      this.#db.knowledgeRecords.set(record.id, updatedRecord);
+      // A node edit bumps its records without changing them, so importer claims follow the bump.
+      for (const claim of this.#claims('record', record.id)) {
+        if (claim.version === record.version) {
+          this.#writeClaim(claim, 'record', record.id, claim.scopeIds, updatedRecord.version);
+        }
       }
+      this.#enqueue(
+        'record',
+        record.id,
+        record.deletedAt ? 'delete' : 'upsert',
+        updatedRecord.version,
+        this.#recordScopeIds(record.id),
+      );
     }
-    this.#enqueue('node', input.id, 'upsert', updated.version, scope);
+    this.#enqueue('node', input.id, 'upsert', updated.version, scopeIds);
+    if (input.claimant) {
+      const previous = this.#claims('node', input.id).find(claim => isSameClaimant(claim, input.claimant!));
+      this.#writeClaim(input.claimant, 'node', input.id, previous?.scopeIds ?? [], updated.version);
+    }
     return cloneNode(updated);
   }
 
-  async mergeNodes(input: { sourceId: string; targetId: string; sourceVersion: number }): Promise<KnowledgeNode> {
-    if (input.sourceId === input.targetId) throw new Error('Cannot merge a knowledge node into itself');
-    const source = this.#db.knowledgeNodes.get(input.sourceId);
-    if (!source) throw new KnowledgeNotFoundError('node', input.sourceId);
-    if (source.version !== input.sourceVersion) throw new KnowledgeConflictError(input.sourceId);
-    const target = this.#resolveTerminalNode(input.targetId);
-    if (!target) throw new KnowledgeNotFoundError('node', input.targetId);
-    if (target.id === source.id) throw new Error('Cannot create a knowledge merge cycle');
-    if (!isKnowledgeScopeVisible(target.scope, source.scope)) {
-      throw new Error('Cannot merge a knowledge node into a target that is narrower than its source scope');
-    }
+  async mergeNodes(input: {
+    sourceId: string;
+    targetId: string;
+    sourceVersion: number;
+    importRunId?: string;
+  }): Promise<KnowledgeNode> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => {
+      if (input.sourceId === input.targetId) throw new Error('Cannot merge a knowledge node into itself');
+      const source = this.#db.knowledgeNodes.get(input.sourceId);
+      if (!source) throw new KnowledgeNotFoundError('node', input.sourceId);
+      if (source.version !== input.sourceVersion) throw new KnowledgeConflictError(input.sourceId);
+      const target = this.#db.knowledgeNodes.get(input.targetId);
+      if (!target) throw new KnowledgeNotFoundError('node', input.targetId);
 
-    for (const [id, record] of this.#db.knowledgeRecords) {
-      if (record.node === source.id) {
-        this.#db.knowledgeRecords.set(id, { ...record, node: target.id });
-        this.#enqueue('record', id, record.deletedAt ? 'delete' : 'upsert', createKnowledgeUlid(), record.scope);
+      for (const [id, record] of this.#db.knowledgeRecords) {
+        if (record.nodeId !== source.id) continue;
+        this.#db.knowledgeRecords.set(id, {
+          ...record,
+          nodeId: target.id,
+          version: record.version + 1,
+          updatedAt: new Date(),
+        });
+        this.#enqueue(
+          'record',
+          id,
+          record.deletedAt ? 'delete' : 'upsert',
+          record.version + 1,
+          this.#recordScopeIds(record.id),
+        );
       }
-    }
-    for (const [key, mentions] of this.#db.knowledgeMentions) {
-      if (mentions.has(source.id)) {
-        const next = new Set(mentions);
-        next.delete(source.id);
-        next.add(target.id);
-        this.#db.knowledgeMentions.set(key, next);
-        const separator = key.indexOf(':');
-        const sourceType = key.slice(0, separator);
-        const sourceId = key.slice(separator + 1);
-        if (sourceType === 'record') {
-          const record = this.#db.knowledgeRecords.get(sourceId);
-          if (record)
-            this.#enqueue(
-              'record',
-              sourceId,
-              record.deletedAt ? 'delete' : 'upsert',
-              createKnowledgeUlid(),
-              record.scope,
-            );
-        } else {
-          const sourceNode = this.#db.knowledgeNodes.get(sourceId);
-          if (sourceNode) this.#enqueue('node', sourceId, 'upsert', createKnowledgeUlid(), sourceNode.scope);
+      for (const address of this.#db.knowledgeNodeAddresses.values()) {
+        if (address.nodeId === source.id) address.nodeId = target.id;
+      }
+      const sourceScopeIds = this.#nodeScopeIds(source.id);
+      this.#db.knowledgeNodeKeys.delete(recordKey(source.name, sourceScopeIds));
+      this.#db.knowledgeNodes.delete(source.id);
+      this.#recordActivity('merge', 'node', source.id, sourceScopeIds[0], input.importRunId, {
+        targetId: target.id,
+      });
+      this.#enqueue('node', source.id, 'delete', source.version + 1, sourceScopeIds);
+      this.#db.knowledgeNodeScopes.delete(source.id);
+      return cloneNode(target);
+    });
+  }
+
+  override async replaceNodeRecords(input: {
+    node: UpdateKnowledgeNodeInput;
+    record: Omit<CreateKnowledgeRecordInput, 'node'> & { source: string };
+    visibilityScopeIds: KnowledgeScopeIds;
+  }): Promise<KnowledgeRecord> {
+    this.#assertImportRunExists(input.node.importRunId);
+    this.#assertImportRunExists(input.record.importRunId);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.visibilityScopeIds);
+    return this.#runAtomicMutation(() => {
+      const node = this.#updateNode(input.node);
+      let after = '';
+      while (true) {
+        const page = [...this.#db.knowledgeRecords.values()]
+          .filter(
+            record =>
+              record.nodeId === node.id &&
+              record.source === input.record.source &&
+              !record.deletedAt &&
+              record.id > after,
+          )
+          .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
+          .slice(0, 100);
+        if (!page.length) break;
+        for (const record of page) {
+          if (this.#isRecordVisible(record, scopeIds))
+            this.#deleteRecord({
+              id: record.id,
+              deletedBy: input.record.source,
+              importRunId: input.record.importRunId,
+            });
+          after = record.id;
         }
       }
-    }
-    const updatedSource: KnowledgeNode = {
-      ...source,
-      mergedInto: target.id,
-      version: source.version + 1,
-      updatedAt: new Date(),
-    };
-    this.#db.knowledgeNodes.set(source.id, updatedSource);
-    // Merge matrix: a target that NEVER had a description (undefined — '' is an explicit curator
-    // clear and wins) adopts the source's; otherwise the target's state is preserved.
-    let mergedTarget = target;
-    // No version predicate is needed here: the whole merge runs inside #runAtomicMutation, so `target`
-    // cannot change between the read above and this write. The persistent adapters guard the same
-    // adoption with an explicit version + description predicate, where that window is real.
-    if (target.description === undefined && source.description) {
-      mergedTarget = {
-        ...target,
-        description: source.description,
-        version: target.version + 1,
-        updatedAt: new Date(),
-      };
-      this.#db.knowledgeNodes.set(target.id, mergedTarget);
-      this.#recordActivity('node-updated', 'node', target.id, target.scope);
-    }
-    this.#recordActivity('node-merged', 'node', source.id, source.scope);
-    this.#enqueue('node', source.id, 'delete', updatedSource.version, source.scope);
-    this.#enqueue('node', target.id, 'upsert', createKnowledgeUlid(), mergedTarget.scope);
-    return cloneNode(mergedTarget);
+      return this.#createRecord({ ...input.record, node });
+    });
   }
 
-  async appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord> {
-    return this.#runAtomicMutation(() => this.#appendKnowledge(input));
+  async createRecord(input: CreateKnowledgeRecordInput): Promise<KnowledgeRecord> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => this.#createRecord(input));
   }
 
-  #appendKnowledge(input: AppendKnowledgeInput): KnowledgeRecord {
-    assertKnowledgeRecordTextWithinBound(input.text);
-    const node = nodeReferenceId(input.node);
-    const parent = this.#resolveTerminalNode(node);
-    if (!parent) throw new KnowledgeNotFoundError('node', node);
-    const scope = canonicalizeKnowledgeScope(input.scope);
+  #createRecord(input: CreateKnowledgeRecordInput): KnowledgeRecord {
+    const nodeId = nodeReferenceId(input.node);
+    const parent = this.#db.knowledgeNodes.get(nodeId);
+    if (!parent || parent.deletedAt) throw new KnowledgeNotFoundError('node', nodeId);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
+    this.#assertScopeNodes(scopeIds);
+    this.#assertScopeNodes(input.resolutionScopeIds ?? scopeIds);
+    const now = new Date();
     const record: KnowledgeRecord = {
       id: input.id ?? createKnowledgeUlid(),
-      node: parent.id,
+      nodeId: parent.id,
       text: input.text,
-      scope,
-      sourceThreadId: input.sourceThreadId,
-      capturedAt: new Date(),
-      when: input.when ? new Date(input.when) : undefined,
       metadata: input.metadata,
+      source: input.source,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
     };
-    if (this.#db.knowledgeRecords.has(record.id)) throw new Error(`Knowledge already exists: ${record.id}`);
+    if (this.#db.knowledgeRecords.has(record.id)) throw new KnowledgeConflictError(record.id);
     this.#db.knowledgeRecords.set(record.id, record);
-    this.#replaceMentions('record', record.id, record.text, input.resolutionScope, input.defaultScope);
-    parent.updatedAt = new Date();
-    this.#recordActivity('record-created', 'record', record.id, scope, input.sourceThreadId);
-    this.#enqueue('record', record.id, 'upsert', record.id, scope);
+    this.#db.knowledgeRecordScopes.set(record.id, new Set(scopeIds));
+    this.#replaceMentions(
+      record.id,
+      record.text,
+      record.source,
+      input.resolutionScopeIds ?? input.scopeIds,
+      input.scopeIds,
+      input.importRunId,
+    );
+    parent.updatedAt = now;
+    this.#recordActivity('create', 'record', record.id, input.contextScopeId, input.importRunId);
+    this.#enqueue('record', record.id, 'upsert', record.version, scopeIds);
+    if (input.claimant) this.#writeClaim(input.claimant, 'record', record.id, scopeIds, record.version);
     return cloneRecord(record);
   }
 
-  async getKnowledge({
+  async getRecordScopeIds(recordId: string): Promise<KnowledgeScopeIds> {
+    return this.#recordScopeIds(recordId);
+  }
+
+  async getRecord({
     id,
     includeDeleted = false,
   }: {
@@ -600,26 +1013,26 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return cloneRecord(record);
   }
 
-  async listKnowledgeAbout(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+  async listRecords(input: QueryKnowledgeRecordsInput): Promise<QueryKnowledgeRecordsOutput> {
     return this.#queryKnowledge(input, 'about');
   }
 
-  async listKnowledgeMentioning(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+  async listMentioningRecords(input: QueryKnowledgeRecordsInput): Promise<QueryKnowledgeRecordsOutput> {
     return this.#queryKnowledge(input, 'mentioning');
   }
 
-  async listKnowledgeRelatedTo(input: QueryKnowledgeInput): Promise<QueryKnowledgeOutput> {
+  async listRelatedRecords(input: QueryKnowledgeRecordsInput): Promise<QueryKnowledgeRecordsOutput> {
     return this.#queryKnowledge(input, 'related');
   }
 
-  async knowledgeBySource(input: QueryKnowledgeBySourceInput): Promise<QueryKnowledgeOutput> {
-    const scope = canonicalizeKnowledgeScope(input.scope);
+  async listRecordsBySource(input: QueryKnowledgeRecordsBySourceInput): Promise<QueryKnowledgeRecordsOutput> {
+    const scope = canonicalizeKnowledgeScopeIds(input.scopeIds);
     const limit = input.limit ?? 100;
     const records = [...this.#db.knowledgeRecords.values()]
       .filter(
         record =>
-          record.sourceThreadId === input.sourceThreadId &&
-          isKnowledgeScopeVisible(record.scope, scope) &&
+          record.source === input.source &&
+          this.#isRecordVisible(record, scope) &&
           (input.includeDeleted || !record.deletedAt) &&
           (!input.after || record.id > input.after),
       )
@@ -631,120 +1044,450 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     };
   }
 
-  async removeKnowledge({ id, deletedBy }: { id: string; deletedBy: string }): Promise<KnowledgeRecord> {
+  async listSourcesWithVisibleRecords(input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
+    assertKnowledgeSourceProbeLimit(input.sources);
+    const scopesBySource = new Map<string, KnowledgeScopeIds[]>();
+    for (const probe of input.sources) {
+      const scope = canonicalizeKnowledgeScopeIds(probe.scopeId ? [...input.scopeIds, probe.scopeId] : input.scopeIds);
+      scopesBySource.set(probe.source, [...(scopesBySource.get(probe.source) ?? []), scope]);
+    }
+    const found = new Set<string>();
+    for (const record of this.#db.knowledgeRecords.values()) {
+      if (record.deletedAt || !record.source || found.has(record.source)) continue;
+      if (scopesBySource.get(record.source)?.some(scope => this.#isRecordVisible(record, scope)))
+        found.add(record.source);
+    }
+    return [...found];
+  }
+
+  async listVisibleKnowledgeIds(input: ListVisibleKnowledgeIdsInput): Promise<ListVisibleKnowledgeIdsOutput> {
+    assertKnowledgeVisibilityProbeLimit(input);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const nodeIds = [...new Set(input.nodeIds)].filter(id => {
+      const node = this.#db.knowledgeNodes.get(id);
+      return Boolean(node && !node.deletedAt && isKnowledgeNodeVisible(node, this.#nodeScopeIds(id), scopeIds));
+    });
+    const recordIds = [...new Set(input.recordIds)].filter(id => {
+      const record = this.#db.knowledgeRecords.get(id);
+      return Boolean(record && !record.deletedAt && this.#isRecordVisible(record, scopeIds, input.recordScopeIds));
+    });
+    return { nodeIds, recordIds, ...(input.recordScopeIds ? { recordScopeIdsApplied: true as const } : {}) };
+  }
+
+  async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => this.#deleteRecord(input));
+  }
+
+  #deleteRecord({
+    id,
+    deletedBy,
+    importRunId,
+  }: {
+    id: string;
+    deletedBy: string;
+    importRunId?: string;
+  }): KnowledgeRecord {
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
     if (record.deletedAt) return cloneRecord(record);
-    const updated = { ...record, deletedAt: new Date(), deletedBy };
+    const updated = {
+      ...record,
+      version: record.version + 1,
+      updatedAt: new Date(),
+      deletedAt: new Date(),
+      deletedBy,
+    };
     this.#db.knowledgeRecords.set(id, updated);
-    this.#recordActivity('record-deleted', 'record', id, record.scope, record.sourceThreadId);
-    this.#enqueue('record', id, 'delete', updated.deletedAt.toISOString(), record.scope);
+    this.#recordActivity('delete', 'record', id, this.#recordScopeIds(record.id)[0], importRunId);
+    this.#enqueue('record', id, 'delete', updated.version, this.#recordScopeIds(record.id));
     return cloneRecord(updated);
   }
 
-  async restoreKnowledge({ id }: { id: string }): Promise<KnowledgeRecord> {
+  async restoreRecord({ id, importRunId }: { id: string; importRunId?: string }): Promise<KnowledgeRecord> {
+    this.#assertImportRunExists(importRunId);
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
     if (!record.deletedAt) return cloneRecord(record);
-    const updated = { ...record, deletedAt: undefined, deletedBy: undefined };
+    const updated = {
+      ...record,
+      version: record.version + 1,
+      updatedAt: new Date(),
+      deletedAt: undefined,
+      deletedBy: undefined,
+    };
     this.#db.knowledgeRecords.set(id, updated);
-    this.#recordActivity('record-restored', 'record', id, record.scope, record.sourceThreadId);
-    this.#enqueue('record', id, 'upsert', createKnowledgeUlid(), record.scope);
+    this.#recordActivity('restore', 'record', id, this.#recordScopeIds(record.id)[0], importRunId);
+    this.#enqueue('record', id, 'upsert', updated.version, this.#recordScopeIds(record.id));
     return cloneRecord(updated);
   }
 
-  async rescopeKnowledge({ id, scope }: { id: string; scope: KnowledgeScope }): Promise<KnowledgeRecord> {
+  async setRecordScopes({
+    id,
+    version,
+    scopeIds,
+    importRunId,
+    contextScopeId,
+  }: {
+    id: string;
+    version: number;
+    scopeIds: KnowledgeScopeIds;
+    importRunId?: string;
+    contextScopeId?: string;
+  }): Promise<KnowledgeRecord> {
+    this.#assertImportRunExists(importRunId);
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
-    const canonical = canonicalizeKnowledgeScope(scope);
-    const updated = { ...record, scope: canonical };
+    if (record.version !== version) throw new KnowledgeConflictError(id);
+    const canonical = canonicalizeKnowledgeScopeIds(scopeIds);
+    if (canonical.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
+    this.#assertScopeNodes(canonical);
+    const oldScopeIds = this.#recordScopeIds(record.id);
+    const updated = { ...record, version: record.version + 1, updatedAt: new Date() };
     this.#db.knowledgeRecords.set(id, updated);
-    this.#recordActivity('record-rescoped', 'record', id, canonical, record.sourceThreadId);
-    if (knowledgeScopeKey(record.scope) !== knowledgeScopeKey(canonical)) {
-      this.#enqueue('record', id, 'delete', createKnowledgeUlid(), record.scope);
+    this.#db.knowledgeRecordScopes.set(id, new Set(canonical));
+    this.#recordActivity('move', 'record', id, contextScopeId ?? canonical[0], importRunId);
+    if (knowledgeScopeIdsKey(oldScopeIds) !== knowledgeScopeIdsKey(canonical)) {
+      this.#enqueue('record', id, 'delete', updated.version, oldScopeIds);
     }
     if (!record.deletedAt) {
-      this.#enqueue('record', id, 'upsert', createKnowledgeUlid(), canonical);
+      this.#enqueue('record', id, 'upsert', updated.version, canonical);
     }
     return cloneRecord(updated);
   }
 
   async search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]> {
-    const queryScope = canonicalizeKnowledgeScope(input.scope);
+    const queryScope = canonicalizeKnowledgeScopeIds(input.scopeIds);
     const query = input.query.trim().toLocaleLowerCase();
     if (!query) return [];
     const results: SearchKnowledgeResult[] = [];
-    for (const node of await this.listNodes({ scope: queryScope, limit: Number.MAX_SAFE_INTEGER })) {
-      if (
-        node.name.toLocaleLowerCase().includes(query) ||
-        node.kind.toLocaleLowerCase().includes(query) ||
-        node.content?.toLocaleLowerCase().includes(query) ||
-        node.description?.toLocaleLowerCase().includes(query)
-      ) {
-        // Description joins the snippet only when present so description-less results stay byte-identical.
-        const parts = [
-          node.name,
-          ...(node.description ? [node.description] : []),
-          ...(node.content ? [node.content] : []),
-        ];
+    for (const node of await this.listNodes({ scopeIds: queryScope, limit: Number.MAX_SAFE_INTEGER })) {
+      const searchable = [node.name, node.kind, node.metadata ? JSON.stringify(node.metadata) : undefined]
+        .filter(Boolean)
+        .join('\n');
+      if (searchable.toLocaleLowerCase().includes(query)) {
         results.push({
           type: 'node',
           id: node.id,
           recordId: node.id,
           name: node.name,
-          text: parts.join('\n'),
-          scope: [...node.scope],
+          text: searchable,
+          scopeIds: [...this.#nodeScopeIds(node.id)],
         });
       }
     }
     for (const record of this.#db.knowledgeRecords.values()) {
       if (
         record.deletedAt ||
-        !isKnowledgeScopeVisible(record.scope, queryScope) ||
+        !this.#isRecordVisible(record, queryScope) ||
         !record.text.toLocaleLowerCase().includes(query)
       ) {
         continue;
       }
-      const parent = this.#resolveTerminalNode(record.node);
+      const parent = this.#resolveTerminalNode(record.nodeId);
       if (!parent) continue;
-      const parentVisible = isKnowledgeScopeVisible(parent.scope, queryScope);
+      const parentVisible = isKnowledgeNodeVisible(parent, this.#nodeScopeIds(parent.id), queryScope);
       results.push({
         type: 'record',
         id: record.id,
         recordId: parentVisible ? parent.id : record.id,
         name: parentVisible ? parent.name : '(private node)',
         text: record.text,
-        scope: [...record.scope],
+        scopeIds: [...this.#recordScopeIds(record.id)],
       });
     }
     return results.slice(0, input.limit ?? 20);
   }
 
+  async getImportState(input: {
+    importerId: string;
+    binding: string;
+    key: string;
+  }): Promise<KnowledgeImportState | null> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
+    const state = this.#db.knowledgeImportState.get(JSON.stringify([input.importerId, binding, input.key]));
+    return state ? { ...state } : null;
+  }
+
+  async setImportState(input: {
+    importerId: string;
+    binding: string;
+    key: string;
+    value: string;
+  }): Promise<KnowledgeImportState> {
+    const state = { ...input, binding: canonicalizeKnowledgeImporterBindingKey(input.binding) };
+    this.#db.knowledgeImportState.set(JSON.stringify([state.importerId, state.binding, state.key]), state);
+    return { ...state };
+  }
+
+  async createImportRun(input: CreateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    if (input.status === 'skipped' && input.triggerKind !== 'cron') {
+      throw new Error('Only cron-triggered Knowledge import runs can be created as skipped');
+    }
+    const queuedAt = input.queuedAt ? new Date(input.queuedAt) : new Date();
+    const status = input.status ?? 'queued';
+    const run: KnowledgeImportRun = {
+      id: input.id ?? createKnowledgeUlid(),
+      importerId: input.importerId,
+      binding: canonicalizeKnowledgeImporterBindingKey(input.binding),
+      importKind: input.importKind,
+      triggerKind: input.triggerKind,
+      status,
+      queuedAt,
+      completedAt: status === 'skipped' ? queuedAt : undefined,
+    };
+    if (this.#db.knowledgeImportRuns.has(run.id))
+      throw new KnowledgeConflictError(`Import run ${run.id} already exists`);
+    this.#db.knowledgeImportRuns.set(run.id, run);
+    return this.#cloneImportRun(run);
+  }
+
+  async enqueueImportRun(input: EnqueueKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
+    const hasActive = [...this.#db.knowledgeImportRuns.values()].some(
+      run =>
+        run.importerId === input.importerId &&
+        run.binding === binding &&
+        (run.status === 'queued' || run.status === 'running'),
+    );
+    const status = input.skipIfActiveCron && hasActive ? 'skipped' : (input.status ?? 'queued');
+    const queuedAt = input.queuedAt ? new Date(input.queuedAt) : new Date();
+    const run: KnowledgeImportRun = {
+      id: input.id,
+      importerId: input.importerId,
+      binding,
+      importKind: input.importKind,
+      triggerKind: input.triggerKind,
+      status,
+      queuedAt,
+      completedAt: status === 'skipped' ? queuedAt : undefined,
+    };
+    if (this.#db.knowledgeImportRuns.has(run.id)) {
+      throw new KnowledgeConflictError(`Import run ${run.id} already exists`);
+    }
+    this.#db.knowledgeImportRuns.set(run.id, run);
+    if (run.status !== 'skipped') {
+      this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, binding, input.payloadKey]), {
+        importerId: input.importerId,
+        binding,
+        key: input.payloadKey,
+        value: input.payload,
+      });
+    }
+    return this.#cloneImportRun(run);
+  }
+
+  async claimImportRun(input: ClaimKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
+    const hasRunning = [...this.#db.knowledgeImportRuns.values()].some(
+      run => run.importerId === input.importerId && run.binding === binding && run.status === 'running',
+    );
+    if (hasRunning) return null;
+    const run = [...this.#db.knowledgeImportRuns.values()]
+      .filter(run => run.importerId === input.importerId && run.binding === binding && run.status === 'queued')
+      .sort((left, right) => left.queuedAt.getTime() - right.queuedAt.getTime() || left.id.localeCompare(right.id))[0];
+    if (!run) return null;
+    const timestamp = input.timestamp ? new Date(input.timestamp) : new Date();
+    run.status = 'running';
+    run.startedAt = timestamp;
+    const key = `${input.leaseKey}${run.id}`;
+    this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, binding, key]), {
+      importerId: input.importerId,
+      binding,
+      key,
+      value: JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
+    });
+    return this.#cloneImportRun(run);
+  }
+
+  async heartbeatImportRun(input: HeartbeatKnowledgeImportRunInput): Promise<boolean> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
+    const run = this.#db.knowledgeImportRuns.get(input.id);
+    if (!run || run.importerId !== input.importerId || run.binding !== binding || run.status !== 'running')
+      return false;
+    const stateKey = JSON.stringify([input.importerId, binding, input.leaseKey]);
+    const lease = this.#db.knowledgeImportState.get(stateKey);
+    if (!lease) return false;
+    try {
+      if ((JSON.parse(lease.value) as { workerId?: string }).workerId !== input.workerId) return false;
+    } catch {
+      return false;
+    }
+    const timestamp = input.timestamp ? new Date(input.timestamp) : new Date();
+    this.#db.knowledgeImportState.set(stateKey, {
+      importerId: input.importerId,
+      binding,
+      key: input.leaseKey,
+      value: JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
+    });
+    if (input.transcriptThreadId) {
+      this.#db.knowledgeImportRuns.set(run.id, { ...run, transcriptThreadId: input.transcriptThreadId });
+    }
+    return true;
+  }
+
+  async finalizeImportRun(input: FinalizeKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
+    const run = this.#db.knowledgeImportRuns.get(input.id);
+    if (!run || run.importerId !== input.importerId || run.binding !== binding || run.status !== 'running') return null;
+    const lease = this.#db.knowledgeImportState.get(JSON.stringify([input.importerId, binding, input.leaseKey]));
+    if (!lease) return null;
+    try {
+      if ((JSON.parse(lease.value) as { workerId?: string }).workerId !== input.workerId) return null;
+    } catch {
+      return null;
+    }
+    for (const state of input.state) {
+      this.#db.knowledgeImportState.set(JSON.stringify([input.importerId, binding, state.key]), {
+        importerId: input.importerId,
+        binding,
+        ...state,
+      });
+    }
+    const timestamp = input.timestamp ? new Date(input.timestamp) : new Date();
+    run.status = input.status;
+    run.error = input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined;
+    run.transcriptThreadId = input.transcriptThreadId ?? run.transcriptThreadId;
+    run.completedAt = timestamp;
+    this.#db.knowledgeImportState.delete(JSON.stringify([input.importerId, binding, input.leaseKey]));
+    if (input.payloadKey) {
+      this.#db.knowledgeImportState.delete(JSON.stringify([input.importerId, binding, input.payloadKey]));
+    }
+    return this.#cloneImportRun(run);
+  }
+
+  async recoverImportRun(input: RecoverKnowledgeImportRunInput): Promise<KnowledgeImportRun | null> {
+    const run = this.#db.knowledgeImportRuns.get(input.id);
+    if (!run || run.status !== 'running') return null;
+    const lease = this.#db.knowledgeImportState.get(JSON.stringify([run.importerId, run.binding, input.leaseKey]));
+    if (lease) {
+      try {
+        const heartbeatAt = new Date((JSON.parse(lease.value) as { heartbeatAt: string }).heartbeatAt);
+        if (heartbeatAt >= input.staleBefore) return null;
+      } catch {
+        // Malformed internal leases are treated as stale and recovered.
+      }
+    }
+    const payload = this.#db.knowledgeImportState.get(JSON.stringify([run.importerId, run.binding, input.payloadKey]));
+    run.status = payload ? 'interrupted' : 'failed';
+    run.error = payload ? undefined : 'Import failed: durable payload is missing';
+    run.completedAt = input.queuedAt ? new Date(input.queuedAt) : new Date();
+    this.#db.knowledgeImportState.delete(JSON.stringify([run.importerId, run.binding, input.leaseKey]));
+    this.#db.knowledgeImportState.delete(JSON.stringify([run.importerId, run.binding, input.payloadKey]));
+    if (!payload) return null;
+    const replacement: KnowledgeImportRun = {
+      id: input.replacementId,
+      importerId: run.importerId,
+      binding: run.binding,
+      importKind: run.importKind,
+      triggerKind: run.triggerKind,
+      status: 'queued',
+      queuedAt: new Date(run.queuedAt.getTime() - 1),
+    };
+    this.#db.knowledgeImportRuns.set(replacement.id, replacement);
+    this.#db.knowledgeImportState.set(JSON.stringify([run.importerId, run.binding, input.replacementPayloadKey]), {
+      ...payload,
+      key: input.replacementPayloadKey,
+    });
+    return this.#cloneImportRun(replacement);
+  }
+
+  async getImportRun(id: string): Promise<KnowledgeImportRun | null> {
+    const run = this.#db.knowledgeImportRuns.get(id);
+    return run ? this.#cloneImportRun(run) : null;
+  }
+
+  async listImportRuns(input: ListKnowledgeImportRunsInput = {}): Promise<ListKnowledgeImportRunsOutput> {
+    const cursor = input.after ? this.#db.knowledgeImportRuns.get(input.after) : undefined;
+    const binding = input.binding ? canonicalizeKnowledgeImporterBindingKey(input.binding) : undefined;
+    const limit = input.limit ?? 100;
+    if (input.after && !cursor) return { runs: [], nextCursor: undefined };
+    const runs = [...this.#db.knowledgeImportRuns.values()]
+      .filter(run => !input.importerId || run.importerId === input.importerId)
+      .filter(run => !binding || run.binding === binding)
+      .filter(run => !input.status || run.status === input.status)
+      .filter(
+        run =>
+          !cursor ||
+          run.queuedAt < cursor.queuedAt ||
+          (run.queuedAt.getTime() === cursor.queuedAt.getTime() && run.id < cursor.id),
+      )
+      .sort((left, right) => right.queuedAt.getTime() - left.queuedAt.getTime() || right.id.localeCompare(left.id));
+    const page = runs.slice(0, limit);
+    return {
+      runs: page.map(run => this.#cloneImportRun(run)),
+      nextCursor: runs.length > limit ? page.at(-1)?.id : undefined,
+    };
+  }
+
+  async updateImportRun(input: UpdateKnowledgeImportRunInput): Promise<KnowledgeImportRun> {
+    const run = this.#db.knowledgeImportRuns.get(input.id);
+    if (!run) throw new KnowledgeNotFoundError('import run', input.id);
+    this.#assertImportRunTransition(run.status, input.status);
+    const timestamp = input.timestamp ? new Date(input.timestamp) : new Date();
+    run.status = input.status;
+    run.error = input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined;
+    run.transcriptThreadId = input.transcriptThreadId ?? run.transcriptThreadId;
+    run.traceId = input.traceId ?? run.traceId;
+    if (input.status === 'running') run.startedAt = timestamp;
+    else run.completedAt = timestamp;
+    return this.#cloneImportRun(run);
+  }
+
+  async recordImportSkip(input: {
+    targetType: KnowledgeSemanticDocumentType;
+    targetId: string;
+    contextScopeId: string;
+    importRunId: string;
+    details: Record<string, unknown>;
+  }): Promise<void> {
+    this.#assertImportRunExists(input.importRunId);
+    this.#recordActivity(
+      'skip',
+      input.targetType,
+      input.targetId,
+      input.contextScopeId,
+      input.importRunId,
+      input.details,
+    );
+  }
+
   async listActivity(input: {
-    scope: KnowledgeScope;
+    scopeIds: KnowledgeScopeIds;
+    importRunId?: string;
     after?: string;
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
-    const queryScope = canonicalizeKnowledgeScope(input.scope);
+    const queryScope = canonicalizeKnowledgeScopeIds(input.scopeIds);
     return this.#db.knowledgeActivity
-      .filter(event => isKnowledgeScopeVisible(event.scope, queryScope))
+      .filter(event => {
+        if (event.contextScopeId && !queryScope.includes(event.contextScopeId)) return false;
+        const visibleDeletion = event.action === 'delete' && Boolean(event.contextScopeId);
+        if (event.targetType === 'node') {
+          const node = this.#db.knowledgeNodes.get(event.targetId);
+          return visibleDeletion || Boolean(node && isKnowledgeScopeVisible(this.#nodeScopeIds(node.id), queryScope));
+        }
+        const record = this.#db.knowledgeRecords.get(event.targetId);
+        return visibleDeletion || Boolean(record && this.#isRecordVisible(record, queryScope));
+      })
+      .filter(event => !input.importRunId || event.importRunId === input.importRunId)
       .filter(event => !input.after || event.id < input.after)
       .sort((a, b) => b.id.localeCompare(a.id))
       .slice(0, input.limit ?? 100)
-      .map(event => ({ ...event, scope: [...event.scope], createdAt: new Date(event.createdAt) }));
+      .map(event => ({ ...event, createdAt: new Date(event.createdAt) }));
   }
 
   async listSemanticOutbox(
     input: {
       status?: KnowledgeSemanticOutboxEntry['status'];
-      scope?: KnowledgeScope;
+      scopeIds?: KnowledgeScopeIds;
       limit?: number;
     } = {},
   ): Promise<KnowledgeSemanticOutboxEntry[]> {
-    const queryScope = input.scope ? canonicalizeKnowledgeScope(input.scope) : undefined;
+    const queryScope = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
     return [...this.#db.knowledgeSemanticOutbox.values()]
       .filter(entry => !input.status || entry.status === input.status)
-      .filter(entry => !queryScope || isKnowledgeScopeVisible(entry.scope, queryScope))
+      .filter(entry => !queryScope || isKnowledgeScopeVisible(entry.scopeIds, queryScope))
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
       .slice(0, input.limit ?? 100)
       .map(cloneSemanticOutboxEntry);
@@ -753,7 +1496,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async claimSemanticOutbox(input: ClaimKnowledgeSemanticOutboxInput): Promise<KnowledgeSemanticOutboxEntry[]> {
     const now = input.now ? new Date(input.now) : new Date();
     const timeout = input.claimTimeoutMs ?? 60_000;
-    const queryScope = input.scope ? canonicalizeKnowledgeScope(input.scope) : undefined;
+    const queryScope = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
     const claimed = [...this.#db.knowledgeSemanticOutbox.values()]
       .filter(
         entry =>
@@ -761,7 +1504,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           (entry.status === 'processing' && entry.claimedAt && now.getTime() - entry.claimedAt.getTime() >= timeout),
       )
       .filter(entry => entry.availableAt <= now)
-      .filter(entry => !queryScope || isKnowledgeScopeVisible(entry.scope, queryScope))
+      .filter(entry => !queryScope || isKnowledgeScopeVisible(entry.scopeIds, queryScope))
       .filter(
         entry =>
           ![...this.#db.knowledgeSemanticOutbox.values()].some(
@@ -783,15 +1526,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return claimed.map(cloneSemanticOutboxEntry);
   }
 
-  async completeSemanticOutbox({ ids, workerId }: { ids: string[]; workerId: string }): Promise<void> {
-    const now = new Date();
+  async completeSemanticOutbox({ ids, workerId }: { ids: string[]; workerId: string }): Promise<string[]> {
+    const completed: string[] = [];
     for (const id of ids) {
       const entry = this.#db.knowledgeSemanticOutbox.get(id);
       if (entry?.status === 'processing' && entry.claimedBy === workerId) {
-        entry.status = 'completed';
-        entry.completedAt = now;
+        this.#db.knowledgeSemanticOutbox.delete(id);
+        completed.push(id);
       }
     }
+    return completed;
   }
 
   async releaseSemanticOutbox({
@@ -814,21 +1558,46 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     }
   }
 
+  #cloneImportRun(run: KnowledgeImportRun): KnowledgeImportRun {
+    return {
+      ...run,
+      queuedAt: new Date(run.queuedAt),
+      startedAt: run.startedAt ? new Date(run.startedAt) : undefined,
+      completedAt: run.completedAt ? new Date(run.completedAt) : undefined,
+    };
+  }
+
+  #assertImportRunTransition(from: KnowledgeImportRun['status'], to: UpdateKnowledgeImportRunInput['status']): void {
+    const allowed =
+      from === 'queued'
+        ? to === 'running' || to === 'interrupted'
+        : from === 'running'
+          ? to === 'succeeded' || to === 'failed' || to === 'interrupted'
+          : false;
+    if (!allowed) throw new KnowledgeConflictError(`Import run cannot transition from ${from} to ${to}`);
+  }
+
   #runAtomicMutation<T>(mutation: () => T): T {
     const snapshot = {
       nodes: new Map([...this.#db.knowledgeNodes].map(([id, node]) => [id, cloneNode(node)])),
       nodeKeys: new Map(this.#db.knowledgeNodeKeys),
+      nodeAddresses: new Map([...this.#db.knowledgeNodeAddresses].map(([key, address]) => [key, { ...address }])),
+      scopeAddresses: new Map(this.#db.knowledgeScopeAddresses),
+      scopeGrants: new Map([...this.#db.knowledgeScopeGrants].map(([key, grant]) => [key, { ...grant }])),
+      nodeScopes: new Map([...this.#db.knowledgeNodeScopes].map(([id, scopes]) => [id, new Set(scopes)])),
       records: new Map([...this.#db.knowledgeRecords].map(([id, record]) => [id, cloneRecord(record)])),
+      recordScopes: new Map([...this.#db.knowledgeRecordScopes].map(([id, scopes]) => [id, new Set(scopes)])),
+      accessEpoch: this.#accessEpoch,
       mentions: new Map([...this.#db.knowledgeMentions].map(([key, mentions]) => [key, new Set(mentions)])),
       activity: this.#db.knowledgeActivity.map(event => ({
         ...event,
-        scope: [...event.scope],
         createdAt: new Date(event.createdAt),
       })),
       outbox: new Map(
         [...this.#db.knowledgeSemanticOutbox].map(([id, entry]) => [id, cloneSemanticOutboxEntry(entry)]),
       ),
       idempotency: new Map(this.#db.knowledgeSemanticIdempotency),
+      importState: new Map([...this.#db.knowledgeImportState].map(([key, state]) => [key, { ...state }])),
     };
 
     try {
@@ -838,8 +1607,19 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       snapshot.nodes.forEach((node, id) => this.#db.knowledgeNodes.set(id, node));
       this.#db.knowledgeNodeKeys.clear();
       snapshot.nodeKeys.forEach((id, key) => this.#db.knowledgeNodeKeys.set(key, id));
+      this.#db.knowledgeNodeAddresses.clear();
+      snapshot.nodeAddresses.forEach((address, key) => this.#db.knowledgeNodeAddresses.set(key, address));
+      this.#db.knowledgeScopeAddresses.clear();
+      snapshot.scopeAddresses.forEach((id, address) => this.#db.knowledgeScopeAddresses.set(address, id));
+      this.#db.knowledgeScopeGrants.clear();
+      snapshot.scopeGrants.forEach((grant, key) => this.#db.knowledgeScopeGrants.set(key, grant));
+      this.#db.knowledgeNodeScopes.clear();
+      snapshot.nodeScopes.forEach((scopes, id) => this.#db.knowledgeNodeScopes.set(id, scopes));
       this.#db.knowledgeRecords.clear();
       snapshot.records.forEach((record, id) => this.#db.knowledgeRecords.set(id, record));
+      this.#db.knowledgeRecordScopes.clear();
+      snapshot.recordScopes.forEach((scopes, id) => this.#db.knowledgeRecordScopes.set(id, scopes));
+      this.#accessEpoch = snapshot.accessEpoch;
       this.#db.knowledgeMentions.clear();
       snapshot.mentions.forEach((mentions, key) => this.#db.knowledgeMentions.set(key, mentions));
       this.#db.knowledgeActivity.splice(0, this.#db.knowledgeActivity.length, ...snapshot.activity);
@@ -847,57 +1627,134 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       snapshot.outbox.forEach((entry, id) => this.#db.knowledgeSemanticOutbox.set(id, entry));
       this.#db.knowledgeSemanticIdempotency.clear();
       snapshot.idempotency.forEach((id, key) => this.#db.knowledgeSemanticIdempotency.set(key, id));
+      this.#db.knowledgeImportState.clear();
+      snapshot.importState.forEach((state, key) => this.#db.knowledgeImportState.set(key, state));
       throw error;
     }
   }
 
-  #resolveTerminalNode(id: string): KnowledgeNode | null {
-    let node = this.#db.knowledgeNodes.get(id);
-    const seen = new Set<string>();
-    while (node?.mergedInto) {
-      if (seen.has(node.id)) throw new Error(`Knowledge merge cycle detected at ${node.id}`);
-      seen.add(node.id);
-      node = this.#db.knowledgeNodes.get(node.mergedInto);
+  #assertScopeNodes(scopeIds: KnowledgeScopeIds): void {
+    for (const scopeId of canonicalizeKnowledgeScopeIds(scopeIds)) {
+      const scope = this.#db.knowledgeNodes.get(scopeId);
+      if (!scope?.isScope || scope.deletedAt) throw new KnowledgeNotFoundError('scope', scopeId);
     }
-    return node ?? null;
+  }
+
+  #findSiblingNameCollision(name: string, scopeIds: KnowledgeScopeIds, excludeId?: string): KnowledgeNode | undefined {
+    const normalizedName = name.trim().toLocaleLowerCase();
+    const memberships = new Set(scopeIds);
+    return [...this.#db.knowledgeNodes.values()].find(node => {
+      if (node.id === excludeId || node.deletedAt || node.name.trim().toLocaleLowerCase() !== normalizedName)
+        return false;
+      const existingMemberships = this.#nodeScopeIds(node.id);
+      return (
+        (memberships.size === 0 && existingMemberships.length === 0) ||
+        existingMemberships.some(scopeId => memberships.has(scopeId))
+      );
+    });
+  }
+
+  #assertScopeHasNoDependents(scopeId: string): void {
+    const hasNodeMembers = [...this.#db.knowledgeNodeScopes.entries()].some(
+      ([nodeId, memberships]) => nodeId !== scopeId && memberships.has(scopeId),
+    );
+    const hasRecordMembers = [...this.#db.knowledgeRecordScopes.values()].some(memberships => memberships.has(scopeId));
+    const hasGrants = [...this.#db.knowledgeScopeGrants.values()].some(
+      grant => grant.scopeNodeId === scopeId || grant.scopeRefId === scopeId,
+    );
+    const hasScopeAddress = [...this.#db.knowledgeScopeAddresses.values()].some(nodeId => nodeId === scopeId);
+    if (hasNodeMembers || hasRecordMembers || hasGrants || hasScopeAddress) {
+      throw new KnowledgeConflictError(`Knowledge scope has dependents: ${scopeId}`);
+    }
+  }
+
+  #nodeScopeIds(nodeId: string): KnowledgeScopeIds {
+    return [...(this.#db.knowledgeNodeScopes.get(nodeId) ?? [])].sort();
+  }
+
+  #recordScopeIds(recordId: string): KnowledgeScopeIds {
+    return [...(this.#db.knowledgeRecordScopes.get(recordId) ?? [])].sort();
+  }
+
+  #isRecordVisible(
+    record: KnowledgeRecord,
+    visibleScopeIds: KnowledgeScopeIds,
+    recordScopeIds = this.#recordScopeIds(record.id),
+  ): boolean {
+    if (!isKnowledgeScopeVisible(recordScopeIds, visibleScopeIds)) return false;
+    const relatedNodeIds = [record.nodeId, ...(this.#db.knowledgeMentions.get(`record:${record.id}`) ?? [])];
+    return relatedNodeIds.every(nodeId => {
+      const node = this.#db.knowledgeNodes.get(nodeId);
+      return Boolean(
+        node && !node.deletedAt && isKnowledgeNodeVisible(node, this.#nodeScopeIds(nodeId), visibleScopeIds),
+      );
+    });
+  }
+
+  #resolveTerminalNode(id: string): KnowledgeNode | null {
+    return this.#db.knowledgeNodes.get(id) ?? null;
   }
 
   #replaceMentions(
-    sourceType: KnowledgeMention['sourceType'],
-    sourceId: string,
+    recordId: string,
     text: string,
-    resolutionScope: KnowledgeScope,
-    defaultScope: KnowledgeScope,
+    source: string | undefined,
+    resolutionScopeIds: KnowledgeScopeIds,
+    recordScopeIds: KnowledgeScopeIds,
+    importRunId?: string,
   ): void {
     const mentions = new Set<string>();
     for (const name of parseKnowledgeWikilinks(text)) {
-      let node = this.#resolveNode({ name, scope: resolutionScope });
-      node ??= this.#createNode({ name, kind: 'node', scope: defaultScope });
+      const addressed = [...this.#db.knowledgeNodeAddresses.values()]
+        .filter(entry => entry.address === name)
+        .map(entry => ({ entry, node: this.#db.knowledgeNodes.get(entry.nodeId) }))
+        .filter((candidate): candidate is { entry: KnowledgeNodeAddress; node: KnowledgeNode } =>
+          Boolean(
+            candidate.node &&
+            isKnowledgeNodeVisible(candidate.node, this.#nodeScopeIds(candidate.node.id), resolutionScopeIds),
+          ),
+        )
+        .sort(
+          (left, right) =>
+            Number(right.entry.source === source) - Number(left.entry.source === source) ||
+            this.#nodeScopeIds(right.node.id).length - this.#nodeScopeIds(left.node.id).length ||
+            left.node.id.localeCompare(right.node.id),
+        );
+      const preferred = addressed.find(candidate => candidate.entry.source === source)?.node;
+      const uniqueAddressedNodeIds = new Set(addressed.map(candidate => candidate.node.id));
+      let node = preferred ?? (uniqueAddressedNodeIds.size === 1 ? addressed[0]?.node : undefined);
+      node ??= this.#resolveNode({ name, scopeIds: resolutionScopeIds }) ?? undefined;
+      node ??= this.#createNode({ name, kind: 'node', scopeIds: recordScopeIds, importRunId });
       mentions.add(node.id);
     }
-    this.#db.knowledgeMentions.set(`${sourceType}:${sourceId}`, mentions);
+    this.#db.knowledgeMentions.set(`record:${recordId}`, mentions);
   }
 
-  #queryKnowledge(input: QueryKnowledgeInput, relationship: 'about' | 'mentioning' | 'related'): QueryKnowledgeOutput {
-    const queryScope = canonicalizeKnowledgeScope(input.scope);
+  #queryKnowledge(
+    input: QueryKnowledgeRecordsInput,
+    relationship: 'about' | 'mentioning' | 'related',
+  ): QueryKnowledgeRecordsOutput {
+    const queryScope = canonicalizeKnowledgeScopeIds(input.scopeIds);
     const terminal = this.#resolveTerminalNode(nodeReferenceId(input.node));
     if (!terminal) return { records: [] };
     return this.#paginateKnowledge(
       [...this.#db.knowledgeRecords.values()].filter(record => {
-        const about = record.node === terminal.id;
+        const about = record.nodeId === terminal.id;
         const mentioning = this.#db.knowledgeMentions.get(`record:${record.id}`)?.has(terminal.id) ?? false;
         if (relationship === 'about') return about;
         if (relationship === 'mentioning') return mentioning;
         return about || mentioning;
       }),
-      { ...input, scope: queryScope },
+      { ...input, scopeIds: queryScope },
     );
   }
 
-  #paginateKnowledge(records: KnowledgeRecord[], input: QueryKnowledgeInput): QueryKnowledgeOutput {
+  #paginateKnowledge(records: KnowledgeRecord[], input: QueryKnowledgeRecordsInput): QueryKnowledgeRecordsOutput {
+    const membershipScopeIds = input.membershipScopeIds ?? input.scopeIds;
     const filtered = records
       .filter(record => input.includeDeleted || !record.deletedAt)
-      .filter(record => isKnowledgeScopeVisible(record.scope, input.scope))
+      .filter(record => isKnowledgeScopeVisible(this.#recordScopeIds(record.id), membershipScopeIds))
+      .filter(record => this.#isRecordVisible(record, input.scopeIds))
       .filter(record => !input.after || record.id < input.after)
       .sort((a, b) => b.id.localeCompare(a.id));
     const limit = input.limit ?? 100;
@@ -908,20 +1765,30 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     };
   }
 
+  #assertImportRunExists(importRunId?: string): void {
+    if (!importRunId) return;
+    const run = this.#db.knowledgeImportRuns.get(importRunId);
+    if (!run) throw new KnowledgeNotFoundError('import run', importRunId);
+    // Mutation bodies are synchronous after this check, so a recovered run cannot interleave a write.
+    if (run.status !== 'running') throw new Error(`Knowledge import run ${importRunId} is not active`);
+  }
+
   #recordActivity(
     action: KnowledgeActivityAction,
-    recordType: KnowledgeSemanticDocumentType,
-    recordId: string,
-    scope: KnowledgeScope,
-    sourceThreadId?: string,
+    targetType: KnowledgeSemanticDocumentType,
+    targetId: string,
+    contextScopeId?: string,
+    importRunId?: string,
+    details?: Record<string, unknown>,
   ): void {
     const event: KnowledgeActivityEvent = {
       id: createKnowledgeUlid(),
       action,
-      recordType,
-      recordId,
-      scope: [...scope],
-      sourceThreadId,
+      targetType,
+      targetId,
+      contextScopeId,
+      importRunId,
+      details,
       createdAt: new Date(),
     };
     this.#db.knowledgeActivity.push(event);
@@ -932,7 +1799,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     id: string,
     operation: KnowledgeSemanticOperation,
     version: number | string,
-    scope: KnowledgeScope,
+    scopes: KnowledgeScopeIds,
   ): void {
     const documentId = knowledgeSemanticDocumentId(documentType, id);
     const idempotencyKey = knowledgeSemanticIdempotencyKey(documentId, operation, version);
@@ -944,7 +1811,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       documentId,
       documentType,
       operation,
-      scope: [...scope],
+      scopeIds: [...scopes],
       status: 'pending',
       attempts: 0,
       availableAt: now,
@@ -953,4 +1820,14 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#db.knowledgeSemanticOutbox.set(entry.id, entry);
     this.#db.knowledgeSemanticIdempotency.set(idempotencyKey, entry.id);
   }
+}
+
+function isSameClaimant(
+  left: Pick<KnowledgeImportClaimant, 'importerId' | 'binding'>,
+  right: Pick<KnowledgeImportClaimant, 'importerId' | 'binding'>,
+): boolean {
+  return (
+    left.importerId === right.importerId &&
+    canonicalizeKnowledgeImporterBindingKey(left.binding) === canonicalizeKnowledgeImporterBindingKey(right.binding)
+  );
 }
