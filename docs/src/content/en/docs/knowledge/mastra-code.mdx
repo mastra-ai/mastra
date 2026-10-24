@@ -58,6 +58,19 @@ A run's scopes are fixed when it starts:
 
 A thread whose owner is in another process refuses scoped messages with "scopes don't cross processes".
 
+### Remote callers
+
+`@mastra/client-js` passes the same option: `client.session(id).sendMessage({ content, scopes })`. The host accepts only tag types listed in the `allowedMessageScopeTypes` option of `AgentController`, and the default is none. For any other tag it answers 403 with `This host doesn't accept message scope "<tag>": allowed tag types are ...`.
+
+```typescript
+new AgentController({
+  // ...
+  allowedMessageScopeTypes: ['request'],
+})
+```
+
+The Mastra Code remote Factory session forwards `scopes`, but the Factory doesn't set `allowedMessageScopeTypes`, so a remote Factory message with scopes is refused for now. The Factory still adds its own `org:` and `project:` tags on the server.
+
 ## Upgrading
 
 `experimental_subconscious` is removed. Attach Knowledge to the agent instead.
