@@ -2421,12 +2421,17 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
         permission: MastraFGAPermissions.MEMORY_WRITE,
       });
 
-      const aborted = await agent.abortThreadStream({
+      const abortOptions = {
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
         ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }),
         expectedRunId,
-      });
+      };
+      // The run may execute on another server, which only the async variant can reach and report on.
+      const aborted =
+        typeof agent.__abortThreadStreamAcrossProcesses === 'function'
+          ? await agent.__abortThreadStreamAcrossProcesses(abortOptions)
+          : await agent.abortThreadStream(abortOptions);
       return { aborted };
     } catch (error) {
       return handleError(error, 'error aborting agent thread');

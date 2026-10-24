@@ -351,6 +351,354 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(await oldRun.finishReason).toBe('aborted');
   }, 20_000);
 
+  // A server answering a bare abort request has never subscribed to the thread, so it
+  // knows no run on it; only the shared lease names the run (#28310). Non-durable runs
+  // can only be stopped cross-process by a replica that subscribed to the thread.
+  function coldReplicaSetup(
+    thread: string,
+    prompt: string,
+    ownerPubSubFor: (shared: SharedLeases, events: EventEmitter) => ReplicaPubSub = (shared, events) =>
+      new ReplicaPubSub(shared, events),
+  ) {
+    for (let i = 0; i < 200; i++) {
+      llm.on(
+        { userMessage: prompt, sequenceIndex: i },
+        { toolCalls: [{ id: `call_${thread}_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    const events = new EventEmitter();
+    events.setMaxListeners(0);
+    const memory = new MockMemory();
+    const counter = { ticks: 0 };
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        counter.ticks++;
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return 'ticked';
+      },
+    });
+    const ownerReplica = replica(shared, memory, { tick }, ownerPubSubFor(shared, events));
+    const coldPubsub = new ReplicaPubSub(shared, events);
+    const coldReplica = replica(shared, memory, {}, coldPubsub);
+    return { ownerReplica, coldReplica, coldPubsub, counter };
+  }
+
+  it.skipIf(!isDurableEngineVariant(engine)).each([
+    ['abortThreadStream', false],
+    ['__abortThreadStreamAcrossProcesses', true],
+  ] as const)(
+    'stops a run on %s from a replica that never saw the run',
+    async (method, reported) => {
+      const thread = `cold-abort-${method}`;
+      const { ownerReplica, coldReplica, counter } = coldReplicaSetup(thread, `cold abort ${method}`);
+      const { output: run, drain } = await startStream(ownerReplica, `cold abort ${method}`, {
+        maxSteps: 200,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      await vi.waitFor(() => expect(counter.ticks).toBeGreaterThanOrEqual(3), { timeout: 5_000 });
+
+      // The synchronous call can't wait for the lease lookup, so it reports only what it stopped locally.
+      expect(await coldReplica[method]({ resourceId: RESOURCE, threadId: thread })).toBe(reported);
+      const ticksAtAbort = counter.ticks;
+      await done;
+
+      expect(counter.ticks - ticksAtAbort).toBeLessThanOrEqual(1);
+      expect(await run.finishReason).toBe('aborted');
+    },
+    20_000,
+  );
+
+  it.skipIf(!isDurableEngineVariant(engine))(
+    'releases a run parked on a tool approval when a cold replica aborts its thread',
+    async () => {
+      const thread = 'cold-abort-parked';
+      const prompt = 'cold abort parked';
+      const key = [RESOURCE, thread].join('\u0000');
+      llm.on({ userMessage: prompt }, { toolCalls: [{ id: 'call_parked', name: 'approve', arguments: {} }] });
+      const shared = new SharedLeases();
+      const events = new EventEmitter();
+      events.setMaxListeners(0);
+      const memory = new MockMemory();
+      const approve = createTool({
+        id: 'approve',
+        description: 'Needs approval',
+        inputSchema: z.object({}),
+        requireApproval: true,
+        execute: async () => 'approved',
+      });
+      const ownerReplica = replica(shared, memory, { approve }, new ReplicaPubSub(shared, events));
+      const coldReplica = replica(shared, memory, {}, new ReplicaPubSub(shared, events));
+      const result = await ownerReplica.stream(prompt, { maxSteps: 5, memory: { thread, resource: RESOURCE } });
+      let awaitingApproval = false;
+      // The stream stays open while the run is parked.
+      void (async () => {
+        for await (const chunk of result.fullStream) if (chunk.type === 'tool-call-approval') awaitingApproval = true;
+      })().catch(() => undefined);
+      await vi.waitFor(() => expect(awaitingApproval).toBe(true), { timeout: 5_000 });
+      const parkedRunId = shared.owner(key);
+      expect(parkedRunId).toBeTruthy();
+      // Still parked well after the stream ended.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(shared.owner(key)).toBe(parkedRunId);
+
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({ resourceId: RESOURCE, threadId: thread }),
+      ).resolves.toBe(true);
+      await vi.waitFor(() => expect(shared.owner(key)).toBeUndefined(), { timeout: 3_000 });
+    },
+    20_000,
+  );
+
+  it.skipIf(!isDurableEngineVariant(engine))(
+    'clears input queued on the owner when a cold replica aborts with clearPendingSignals',
+    async () => {
+      const thread = 'cold-abort-clear';
+      const { ownerReplica, coldReplica, counter } = coldReplicaSetup(thread, 'cold abort clear');
+      llm.on({ userMessage: 'queued before cold abort' }, { content: 'should never run' });
+      const { output: run, drain } = await startStream(ownerReplica, 'cold abort clear', {
+        maxSteps: 200,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      await vi.waitFor(() => expect(counter.ticks).toBeGreaterThanOrEqual(3), { timeout: 5_000 });
+      const queued = ownerReplica.queueMessage('queued before cold abort', { resourceId: RESOURCE, threadId: thread });
+      await queued.accepted;
+
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({
+          resourceId: RESOURCE,
+          threadId: thread,
+          clearPendingSignals: true,
+        }),
+      ).resolves.toBe(true);
+      await done;
+      expect(await run.finishReason).toBe('aborted');
+
+      // Give a follow-up run that drains the queued input time to reach the model.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const queuedRequests = llm
+        .getRequests()
+        .filter(request => JSON.stringify(request.body?.messages ?? []).includes('queued before cold abort'));
+      expect(queuedRequests).toHaveLength(0);
+    },
+    20_000,
+  );
+
+  it.skipIf(!isDurableEngineVariant(engine))(
+    'clears input queued on the owner when a cold replica aborts while the owner is retaking its lease',
+    async () => {
+      const thread = 'cold-abort-clear-retake';
+      const key = [RESOURCE, thread].join('\u0000');
+      const prompt = 'cold abort clear retake';
+      const queuedText = 'queued during retake';
+      llm.on(
+        { userMessage: prompt, sequenceIndex: 0 },
+        { toolCalls: [{ id: 'call_cold_clear_retake', name: 'tick', arguments: {} }] },
+      );
+      llm.on({ userMessage: prompt, sequenceIndex: 1 }, { content: 'owner finished' });
+      llm.on({ userMessage: queuedText }, { content: 'should never run' });
+      const shared = new SharedLeases();
+      const events = new EventEmitter();
+      events.setMaxListeners(0);
+      let releaseTransfer!: () => void;
+      const transferGate = new Promise<void>(resolve => (releaseTransfer = resolve));
+      let releaseTool!: () => void;
+      const toolGate = new Promise<void>(resolve => (releaseTool = resolve));
+      class RetakingPubSub extends ReplicaPubSub {
+        cut = false;
+        tokenHeld = false;
+        override async renewLease(key: string, owner: string, ttlMs: number) {
+          if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+          return super.renewLease(key, owner, ttlMs);
+        }
+        override async transferLease(key: string, from: string, to: string) {
+          if (from.includes('\u0000retake\u0000')) {
+            this.tokenHeld = true;
+            await transferGate;
+          }
+          return super.transferLease(key, from, to);
+        }
+      }
+      const ownerPubSub = new RetakingPubSub(shared, events);
+      let ticking = false;
+      const tick = createTool({
+        id: 'tick',
+        description: 'Wait while the lease is retaken',
+        inputSchema: z.object({}),
+        execute: async () => {
+          ticking = true;
+          await toolGate;
+          return 'ticked';
+        },
+      });
+      const memory = new MockMemory();
+      const ownerReplica = replica(shared, memory, { tick }, ownerPubSub);
+      const coldReplica = replica(shared, memory, {}, new ReplicaPubSub(shared, events));
+      const { output: run, drain } = await startStream(ownerReplica, prompt, {
+        maxSteps: 3,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      try {
+        await vi.waitFor(() => expect(ticking).toBe(true));
+        await ownerReplica.queueMessage(queuedText, { resourceId: RESOURCE, threadId: thread }).accepted;
+        ownerPubSub.cut = true;
+        shared.drop(key);
+        await vi.waitFor(() => expect(ownerPubSub.tokenHeld).toBe(true));
+        expect(shared.owner(key)).toContain('\u0000retake\u0000');
+        const aborted = coldReplica.__abortThreadStreamAcrossProcesses({
+          resourceId: RESOURCE,
+          threadId: thread,
+          clearPendingSignals: true,
+        });
+        setTimeout(releaseTransfer, 20);
+        await expect(aborted).resolves.toBe(true);
+      } finally {
+        ownerPubSub.cut = false;
+        releaseTransfer();
+        releaseTool();
+        await done;
+      }
+      expect(await run.finishReason).toBe('aborted');
+
+      // Give a follow-up run that drains the queued input time to reach the model.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const queuedRequests = llm
+        .getRequests()
+        .filter(request => JSON.stringify(request.body?.messages ?? []).includes(queuedText));
+      expect(queuedRequests).toHaveLength(0);
+    },
+    20_000,
+  );
+
+  it.skipIf(!isDurableEngineVariant(engine))(
+    'clears input queued on the owner when its lease retake finished just before the abort check',
+    async () => {
+      const thread = 'cold-abort-clear-retake-settled';
+      const queuedText = 'queued before settled retake';
+      // The owner's first lease read for the abort still sees its retake token, but the
+      // retake has already handed the lease back to the run id by the time it looks.
+      class SettledRetakePubSub extends ReplicaPubSub {
+        staleRetakeRead = false;
+        #wrapped = new Map<unknown, unknown>();
+        override async getLeaseOwner(key: string) {
+          const owner = await super.getLeaseOwner(key);
+          if (!this.staleRetakeRead || !owner) return owner;
+          this.staleRetakeRead = false;
+          return `${owner}\u0000retake\u0000settled`;
+        }
+        override async subscribe(...[topic, cb, options]: Parameters<ReplicaPubSub['subscribe']>) {
+          const wrapped: typeof cb = (event, ...rest) => {
+            if (event.type === 'run-abort-requested') this.staleRetakeRead = true;
+            return cb(event, ...rest);
+          };
+          this.#wrapped.set(cb, wrapped);
+          return super.subscribe(topic, wrapped, options);
+        }
+        override async unsubscribe(...[topic, cb]: Parameters<ReplicaPubSub['unsubscribe']>) {
+          return super.unsubscribe(topic, (this.#wrapped.get(cb) as typeof cb | undefined) ?? cb);
+        }
+      }
+      const { ownerReplica, coldReplica, counter } = coldReplicaSetup(
+        thread,
+        'cold abort settled retake',
+        (shared, events) => new SettledRetakePubSub(shared, events),
+      );
+      llm.on({ userMessage: queuedText }, { content: 'should never run' });
+      const { output: run, drain } = await startStream(ownerReplica, 'cold abort settled retake', {
+        maxSteps: 200,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      await vi.waitFor(() => expect(counter.ticks).toBeGreaterThanOrEqual(3), { timeout: 5_000 });
+      await ownerReplica.queueMessage(queuedText, { resourceId: RESOURCE, threadId: thread }).accepted;
+
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({
+          resourceId: RESOURCE,
+          threadId: thread,
+          clearPendingSignals: true,
+        }),
+      ).resolves.toBe(true);
+      await done;
+      expect(await run.finishReason).toBe('aborted');
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const queuedRequests = llm
+        .getRequests()
+        .filter(request => JSON.stringify(request.body?.messages ?? []).includes(queuedText));
+      expect(queuedRequests).toHaveLength(0);
+    },
+    20_000,
+  );
+
+  it.skipIf(!isDurableEngineVariant(engine)).each([
+    ['reject', 'lease backend unreachable'],
+    ['hang', 'Thread lease backend did not answer'],
+  ] as const)(
+    "fails a cold replica's thread abort when its lease backend can't name the run (%s)",
+    async (partition, error) => {
+      const thread = `cold-abort-unreachable-${partition}`;
+      const { ownerReplica, coldReplica, coldPubsub, counter } = coldReplicaSetup(thread, 'cold abort unreachable');
+      const { output: run, drain } = await startStream(ownerReplica, 'cold abort unreachable', {
+        maxSteps: 200,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      await vi.waitFor(() => expect(counter.ticks).toBeGreaterThanOrEqual(3), { timeout: 5_000 });
+
+      // An unreachable backend says nothing about the thread, so it must not read as an idle one.
+      coldPubsub.partition = partition;
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({ resourceId: RESOURCE, threadId: thread }),
+      ).rejects.toThrow(error);
+
+      coldPubsub.partition = undefined;
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({ resourceId: RESOURCE, threadId: thread }),
+      ).resolves.toBe(true);
+      await done;
+      expect(await run.finishReason).toBe('aborted');
+    },
+    20_000,
+  );
+
+  it.skipIf(!isDurableEngineVariant(engine))(
+    'leaves the run alone when a cold replica aborts a run id that no longer holds the thread',
+    async () => {
+      const thread = 'cold-abort-expected-run';
+      const { ownerReplica, coldReplica, counter } = coldReplicaSetup(thread, 'cold abort expected');
+      const { output: run, drain } = await startStream(ownerReplica, 'cold abort expected', {
+        maxSteps: 200,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      await vi.waitFor(() => expect(counter.ticks).toBeGreaterThanOrEqual(3), { timeout: 5_000 });
+
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({
+          resourceId: RESOURCE,
+          threadId: thread,
+          expectedRunId: 'an-earlier-run',
+        }),
+      ).resolves.toBe(false);
+      const ticksAfterStaleAbort = counter.ticks;
+      await vi.waitFor(() => expect(counter.ticks).toBeGreaterThan(ticksAfterStaleAbort + 2), { timeout: 5_000 });
+
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({ resourceId: RESOURCE, threadId: thread }),
+      ).resolves.toBe(true);
+      await done;
+      expect(await run.finishReason).toBe('aborted');
+    },
+    20_000,
+  );
+
   it('runs no tool once a successor holds the lease, even before the next renewal', async () => {
     const thread = 'lease-takeover-thread';
     const key = [RESOURCE, thread].join('\u0000');
