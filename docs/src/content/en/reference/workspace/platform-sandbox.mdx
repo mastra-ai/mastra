@@ -36,7 +36,6 @@ Configure the platform credentials. The access token, project ID, and environmen
     MASTRA_PLATFORM_ACCESS_TOKEN=your-platform-access-token
     MASTRA_PROJECT_ID=your-project-id
     MASTRA_ENVIRONMENT_ID=your-environment-id
-    SANDBOX_PROVIDER=railway
     ```
   </TabItem>
 
@@ -53,7 +52,7 @@ Configure the platform credentials. The access token, project ID, and environmen
 
 On a Mastra Platform deployment, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ENVIRONMENT_ID` are injected automatically, so the constructor can be called with no options. For local development, `MASTRA_PLATFORM_ACCESS_TOKEN` can contain an `sk_` API token from your organization's settings page under **API Tokens**.
 
-The sandbox provider resolves from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `railway`.
+Platform sandboxes use E2B. The client resolves the provider from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `e2b`. Older clients can still request `railway`, but Platform no longer provisions Railway sandboxes. Use the separate [`RailwaySandbox`](/integrations/sandboxes/railway) integration if you manage your own Railway sandboxes.
 
 ## Usage
 
@@ -160,8 +159,6 @@ await sandbox.start()
 
 For E2B, `cpuCount()` and `memoryMB()` set the template build resources inherited by sandboxes created from the exact template or a resource-matched stale template. Both methods accept a positive safe integer. They default to 2 CPUs and 1,024 MB. Resource setters use last-value-wins semantics, and their effective values are part of the content identity. Omitting both setters is equivalent to explicitly selecting the defaults. If a pending build falls back to the provider base, that sandbox may use the provider's default resources. Check `templatePending` to detect this case.
 
-Railway converts the command, working directory, environment, and package operations to Railway template instructions. Railway currently ignores `cpuCount()` and `memoryMB()` because its sandbox template API doesn't expose matching resource settings.
-
 For public GitHub repositories, `createRepoTemplate()` can resolve and build the commit-pinned definition lazily when `start()` needs a fresh sandbox:
 
 ```typescript
@@ -238,7 +235,7 @@ if (sandbox.templatePending) {
 
 :::warning
 
-By default, every template operation is serialized and sent to Platform, which interprets it according to the selected provider's capabilities. Use `setEnvs(values, { ephemeral: true })` for short-lived build credentials: these values are sent separately and excluded from both content identity and persistence. They're unavailable at runtime and take precedence over serialized environment values with the same key. Supply them again on every build or fresh provision that may need to build. On Railway, the provider cache includes the transient build variables. Rotating a value can therefore trigger another provider build even though the Platform template ID stays stable.
+By default, every template operation is serialized and sent to Platform. Use `setEnvs(values, { ephemeral: true })` for short-lived build credentials: these values are sent separately and excluded from both content identity and persistence. They're unavailable at runtime and take precedence over serialized environment values with the same key. Supply them again on every build or fresh provision that may need to build.
 
 :::
 
@@ -352,7 +349,8 @@ A long-running process's output stream reconnects periodically, and the process 
   {
     name: 'sandboxProvider',
     type: "'railway' | 'e2b'",
-    description: 'Provider used for sandbox and template routes. Falls back to SANDBOX_PROVIDER, then railway.',
+    description:
+      'Platform uses e2b. Falls back to SANDBOX_PROVIDER, then e2b. The railway value is retained in the client for older installations, but Platform rejects Railway sandbox operations.',
     isOptional: true,
   },
   {
@@ -573,27 +571,7 @@ try {
 
 `code` and `proxyMessage` are `undefined` when the response body isn't JSON, for example an HTML 502 from a load balancer.
 
-`executeCommand` runs over the direct-exec data plane (a WebSocket to the Railway tcp-proxy) and can also throw two typed sandbox errors on unrecoverable failure:
-
-```typescript
-import { SandboxDestroyedError, SandboxExecTransportError } from '@mastra/platform-workspace'
-
-try {
-  await sandbox.executeCommand('pytest')
-} catch (err) {
-  if (err instanceof SandboxDestroyedError) {
-    // /exec-lease returned 410; the sandbox has been destroyed.
-    // The cached sandbox id and lease have already been cleared,
-    // so reusing the instance will reprovision on the next call.
-  } else if (err instanceof SandboxExecTransportError) {
-    // Both the initial WebSocket attempt and the built-in retry
-    // closed without an exit frame against a live sandbox.
-    console.error(err.closeCode, err.closeReason, err.wsEndpoint)
-  }
-}
-```
-
-`SandboxExecTransportError` carries diagnostic fields (`opened`, `closeCode`, `closeReason`, `wsEndpoint`, plus `sandboxId`, `command`, and `attempts`) so operators can distinguish a broken Railway data plane from a failed command.
+E2B `executeCommand` runs through the provider's commands API. `SandboxDestroyedError` and `SandboxExecTransportError` describe failures on the older Railway direct-exec transport; they don't apply to new Platform sandboxes.
 
 ## Related
 
