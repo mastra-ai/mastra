@@ -186,6 +186,11 @@ const sidebars = {
           id: 'code-sdk/mount-agent-controller',
           label: 'mountAgentControllerOnMastra()',
         },
+        {
+          type: 'doc',
+          id: 'code-sdk/mount-restricted-agent-controller',
+          label: 'mountRestrictedAgentControllerOnMastra()',
+        },
       ],
     },
     {

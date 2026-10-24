@@ -2875,35 +2875,46 @@ class SessionOM {
  */
 class SessionPermissions {
   #getState: (() => Record<string, unknown>) | undefined;
-  #setState: ((updates: Record<string, unknown>) => Promise<void>) | undefined;
+  #updateState: ((updater: (state: Record<string, unknown>) => Record<string, unknown>) => Promise<void>) | undefined;
 
-  /** Attach the session-state read/write. The AgentController injects these once. */
+  /** Attach the session-state read and serialized update. The AgentController injects these once. */
   setResolver(options: {
     getState: () => Record<string, unknown>;
-    setState: (updates: Record<string, unknown>) => Promise<void>;
+    updateState: (updater: (state: Record<string, unknown>) => Record<string, unknown>) => Promise<void>;
   }): void {
     this.#getState = options.getState;
-    this.#setState = options.setState;
+    this.#updateState = options.updateState;
   }
 
   /** The current permission rules, or empty rules when none are set. */
   getRules(): PermissionRules {
-    const rules = this.#getState?.().permissionRules as PermissionRules | undefined;
+    return SessionPermissions.#rulesFrom(this.#getState?.());
+  }
+
+  static #rulesFrom(state: Record<string, unknown> | undefined): PermissionRules {
+    const rules = state?.permissionRules as PermissionRules | undefined;
     return rules ?? { categories: {}, tools: {} };
+  }
+
+  /**
+   * Derive new rules from the latest state inside the serialized update, so
+   * concurrent changes merge and a rejected update leaves the live rules untouched.
+   */
+  #updateRules(change: (rules: PermissionRules) => PermissionRules): Promise<void> {
+    return (
+      this.#updateState?.(state => ({ permissionRules: change(SessionPermissions.#rulesFrom(state)) })) ??
+      Promise.resolve()
+    );
   }
 
   /** Set the approval policy for a tool category. Resolves once persisted. */
   setForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): Promise<void> {
-    const rules = this.getRules();
-    rules.categories[category] = policy;
-    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+    return this.#updateRules(rules => ({ ...rules, categories: { ...rules.categories, [category]: policy } }));
   }
 
   /** Set the approval policy for an individual tool. Resolves once persisted. */
   setForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): Promise<void> {
-    const rules = this.getRules();
-    rules.tools[toolName] = policy;
-    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+    return this.#updateRules(rules => ({ ...rules, tools: { ...rules.tools, [toolName]: policy } }));
   }
 }
 
@@ -6387,12 +6398,9 @@ export class Session<TState = unknown> {
    * Re-supplies the shared run budget so the resumed run doesn't stop mid-task
    * on the agent's small default maxSteps.
    *
-   * Interactive builtins (`ask_user`, `request_access`) are exempted from the
-   * approval re-check on resume: their resume schema is `z.string()` /
-   * `z.array(z.string())` which cannot carry the `{ approved }` field the
-   * approval gate demands, so re-entering the approval branch would always
-   * reject the answer. The caller already handled approval (setForTool policy,
-   * yolo mode, or a prior explicit approval gate).
+   * The resumed call is an execution suspension, not an approval suspension, so
+   * the tool-call step delivers the answer without an approval re-check. Tools
+   * the model calls afterward in the same turn keep the normal approval policy.
    */
   async resumeToolCall({
     resumeData,
@@ -6452,14 +6460,6 @@ export class Session<TState = unknown> {
       this.suspensions.delete(address);
       this.displayState.deletePendingSuspension(address);
       const sharedOptions = this.machinery.buildSharedRunOptions(requestContext);
-      // Interactive builtins suspend to collect user input, not for approval.
-      // The resume data is the user's answer (a bare string), which the approval
-      // re-check would reject because it cannot carry an `{ approved }` field.
-      // Exempt these tools so the answer reaches the model as-is.
-      const isInteractive = suspension.toolName === 'ask_user' || suspension.toolName === 'request_access';
-      if (isInteractive) {
-        sharedOptions.requireToolApproval = false;
-      }
       sharedOptions.onStepFinish = this.#resumeUsageRecorder(agent, suspension.runId, requestContext);
       const activeTools = this.machinery.resolveModeActiveTools(modeId);
       await agent.sendStreamResume({

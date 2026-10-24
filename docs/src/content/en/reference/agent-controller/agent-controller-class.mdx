@@ -284,6 +284,22 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
     isOptional: true,
   },
   {
+    name: 'includeDefaultGateways',
+    type: 'boolean',
+    description:
+      'Whether the model catalog and auth checks also use the built-in gateways, which read provider credentials from the process environment. Set to `false` to use only `gateways`.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'modelFallbacks',
+    type: 'boolean',
+    description:
+      "Whether runs add provider-side fallback models for the selected model. For example, a blocked `claude-fable-5` turn is retried on `claude-opus-4-8`. Set to `false` so only the agent's own model runs.",
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
     name: 'omConfig',
     type: 'AgentControllerOMConfig',
     description: 'Default observational memory model selections, automatic model resolver, and thresholds.',

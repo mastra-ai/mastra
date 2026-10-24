@@ -280,9 +280,13 @@ export class AgentController<TState = {}> {
       this.#channels.__setController(this);
     }
     // Gateway manager merges configured gateways with the router defaults
-    // (custom takes precedence). Shared by listAvailableModels,
-    // getCurrentModelAuthStatus, and the OM model resolver.
-    this.#gatewayManager = new GatewayManager([...(config.gateways ?? []), ...defaultGateways]);
+    // (custom takes precedence) unless the host opts out of the defaults.
+    // Shared by listAvailableModels, getCurrentModelAuthStatus, and the OM
+    // model resolver.
+    this.#gatewayManager = new GatewayManager([
+      ...(config.gateways ?? []),
+      ...(config.includeDefaultGateways === false ? [] : defaultGateways),
+    ]);
 
     const defaultMode = config.defaultModeId
       ? config.modes.find(mode => mode.id === config.defaultModeId)
@@ -427,7 +431,12 @@ export class AgentController<TState = {}> {
     });
     session.permissions.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
-      setState: updates => session.state.set(updates as Partial<TState>),
+      updateState: async updater => {
+        await session.state.update(state => ({
+          updates: updater(state as Record<string, unknown>) as Partial<TState>,
+          result: undefined,
+        }));
+      },
     });
     session.subagents.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
@@ -2276,7 +2285,10 @@ export class AgentController<TState = {}> {
 
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
     // block is transparently retried on the fallback model instead of failing.
-    const fableFallback = buildFableFallbackProviderOptions(context?.session.modelId ?? session.model.get());
+    const fableFallback =
+      this.config.modelFallbacks === false
+        ? undefined
+        : buildFableFallbackProviderOptions(context?.session.modelId ?? session.model.get());
     if (fableFallback) {
       shared.providerOptions = { anthropic: { ...fableFallback.anthropic } };
     }
