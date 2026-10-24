@@ -1,5 +1,20 @@
 # @mastra/redis
 
+## 1.4.12-alpha.0
+
+### Patch Changes
+
+- `RedisServerCache.listPushIndexed` accepts an optional TTL as its fourth argument. Durable run logs use it to stay cached for 24 hours, so an approval wait that outlives the cache's default TTL keeps its frames. ([#27352](https://github.com/mastra-ai/mastra/pull/27352))
+
+  Every append sets the list and its counter to `ttlSeconds` (default 300 seconds), or to the longer TTL passed in. A requested TTL never shortens `ttlSeconds`, and a cache configured with `ttlSeconds: 0` stays without expiry. The same TTL applies when scripting is unavailable or Redis Cluster rejects the script with `CROSSSLOT` and the cache falls back to `INCR` + `RPUSH`.
+
+  ```ts
+  await cache.listPushIndexed('pubsub:run', 'pubsub:run:counter', frame, 24 * 60 * 60 * 1000);
+  ```
+
+- Updated dependencies [[`b7ff751`](https://github.com/mastra-ai/mastra/commit/b7ff751ed0fd87a3f93ce438c355c2dcc16e79d5), [`ca04e2c`](https://github.com/mastra-ai/mastra/commit/ca04e2cbb6f5ae13edf006905d9810434b4163fe), [`decd0a0`](https://github.com/mastra-ai/mastra/commit/decd0a0066286996a4558f63e91a8edfa1143feb), [`2ca9e35`](https://github.com/mastra-ai/mastra/commit/2ca9e3522f117cc12fee7a9dad2f5961cd41164e), [`2ded35c`](https://github.com/mastra-ai/mastra/commit/2ded35cb0c97b26f641a9eb9a5747d32164d45c9), [`2b9f9a5`](https://github.com/mastra-ai/mastra/commit/2b9f9a55799ee7a6020a063d2419096429254481), [`34ee1d1`](https://github.com/mastra-ai/mastra/commit/34ee1d16226852f57d1f8bb34ee7a88397e5cce2), [`b7ff751`](https://github.com/mastra-ai/mastra/commit/b7ff751ed0fd87a3f93ce438c355c2dcc16e79d5), [`1e31034`](https://github.com/mastra-ai/mastra/commit/1e31034b30cb9661e38af548dfda646aee74f08f)]:
+  - @mastra/core@1.80.0-alpha.3
+
 ## 1.4.11
 
 ### Patch Changes
