@@ -8,8 +8,12 @@ import { createTool } from '../tools';
 import { getKnowledgeStore, requireWritableTags } from './knowledge-tools';
 import type { KnowledgeStoreMemory } from './knowledge-tools';
 
-/** Processor id and state-signal id for the pinned-knowledge lane. */
-export const SUBCONSCIOUS_PINS_STATE_ID = 'subconscious-pins';
+/**
+ * Processor id and state-signal id for the pinned-knowledge lane. The value predates Knowledge
+ * owning pins and stays as is: threads persist snapshots under it, and a new id would replay their
+ * old pins beside a fresh snapshot.
+ */
+export const PINNED_KNOWLEDGE_STATE_ID = 'subconscious-pins';
 /** Snapshot tag the model sees; the delta tag appends `-update`. */
 export const PINNED_SNAPSHOT_TAG = 'pinned-knowledge';
 export const PINNED_DELTA_TAG = 'pinned-knowledge-update';

@@ -29,7 +29,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Knowledge } from '../knowledge';
 import { KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID, KnowledgeInstructionsProcessor } from '../knowledge/instructions';
-import { SUBCONSCIOUS_PINS_STATE_ID } from '../knowledge/pinned';
+import { PINNED_KNOWLEDGE_STATE_ID } from '../knowledge/pinned';
 import { PinnedStateProcessor } from '../knowledge/pinned-state-processor';
 import { resolveModelConfig } from '../llm';
 import type { CoreMessage } from '../llm';
@@ -1876,7 +1876,7 @@ export class Agent<
     if (instructions && !configuredIds.has(KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID)) {
       processors.push(new KnowledgeInstructionsProcessor(instructions));
     }
-    if (knowledge.pinsEnabled && !configuredIds.has(SUBCONSCIOUS_PINS_STATE_ID)) {
+    if (knowledge.pinsEnabled && !configuredIds.has(PINNED_KNOWLEDGE_STATE_ID)) {
       processors.push(new PinnedStateProcessor({ getKnowledgeStore: () => knowledge.getStorage() }));
     }
     return processors;

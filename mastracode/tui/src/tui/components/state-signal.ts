@@ -10,11 +10,16 @@ export interface StateSignalOptions {
   message?: string;
 }
 
+/** Readable names for state ids whose wire value would mislead (Knowledge pins keep a legacy id). */
+const STATE_LABELS: Record<string, string> = { 'subconscious-pins': 'pinned knowledge' };
+
 export class StateSignalComponent extends Container {
   constructor(options: StateSignalOptions) {
     super();
 
-    const title = chalk.hex(mastra.blue).bold(`State ${options.mode}: ${options.stateId}`);
+    const title = chalk
+      .hex(mastra.blue)
+      .bold(`State ${options.mode}: ${STATE_LABELS[options.stateId] ?? options.stateId}`);
     this.addChild(new Text(title, BOX_INDENT, 0));
 
     const message = options.message?.trim();

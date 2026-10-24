@@ -70,7 +70,7 @@ function isLegacySubconsciousSignalPart(part: unknown): boolean {
   );
 }
 
-function stripLegacySubconsciousSignals(messages: MastraDBMessage[]): MastraDBMessage[] {
+export function stripLegacySubconsciousSignals(messages: MastraDBMessage[]): MastraDBMessage[] {
   return messages.flatMap(message => {
     if (isLegacySubconsciousSignalMessage(message)) return [];
     if (typeof message.content === 'string') return [message];
