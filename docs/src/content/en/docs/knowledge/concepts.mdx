@@ -58,7 +58,7 @@ await agent.generate('What did the team decide?', {
 })
 ```
 
-The same entries work in the agent's `scopes`. Read-only tags are searched by reads and left out of default writes. A write that names one fails with `"org:acme" is read-only for this run.` The `resource:` and `thread:` tags can't be read-only. The `scope` argument the model passes to a tool is a plain list of tags.
+The same entries work in the agent's `scopes`. Read-only tags are searched by reads and left out of default writes. A write that names one fails with `"org:acme" is read-only for this run.` (or `are read-only` when it names several). The `resource:` and `thread:` tags can't be read-only. The `scope` argument the model passes to a tool is a plain list of tags.
 
 The narrowest source wins, and a model never widens its access. A read-only tag never grants ownership of other scopes.
 
