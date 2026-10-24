@@ -1484,9 +1484,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 modelSpanTracker?.getTracingContext()?.currentSpan ?? tracingContext?.currentSpan,
               )?.externalTraceId;
               const responseModelMetadata =
-                responseModelId || currentModel.provider || responseTraceId
+                responseModelId || currentModel.provider || responseTraceId || currentModel.messageMetadata
                   ? {
                       metadata: {
+                        ...currentModel.messageMetadata,
                         ...(responseModelId ? { modelId: responseModelId } : {}),
                         ...(currentModel.provider ? { provider: currentModel.provider } : {}),
                         ...(responseTraceId ? { traceId: responseTraceId } : {}),
@@ -1750,6 +1751,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     startedAt: inferenceStartedAt,
                     modelId: currentModel.modelId,
                     provider: currentModel.provider,
+                    ...(currentModel.messageMetadata && { messageMetadata: currentModel.messageMetadata }),
                     warnings,
                   });
                 }

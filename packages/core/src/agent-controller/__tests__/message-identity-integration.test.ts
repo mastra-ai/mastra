@@ -252,4 +252,43 @@ describe('stream ↔ persisted message identity', () => {
     },
     30000,
   );
+
+  it.each<Engine>(['default', 'durable'])(
+    'stamps the message metadata of the model that answered, never overriding its identity (%s engine)',
+    async engine => {
+      const { events, persistedAssistant } = await sendOneMessage(
+        {
+          errorProcessorDefaults: false,
+          model: [
+            {
+              model: {
+                id: 'primary/primary-model',
+                model: createFailingModel({ provider: 'primary-provider', modelId: 'primary-model' }),
+                messageMetadata: { thinkingLevel: 'low' },
+              },
+              maxRetries: 0,
+            },
+            {
+              model: {
+                id: 'fallback/fallback-model',
+                model: createTextStreamModel('Good to hear.', {
+                  provider: 'fallback-provider',
+                  modelId: 'fallback-model',
+                }),
+                messageMetadata: { thinkingLevel: 'high', modelId: 'spoofed-model' },
+              },
+              maxRetries: 0,
+            },
+          ],
+        },
+        engine,
+      );
+
+      const reply = persistedAssistant[0]!;
+      const expected = { thinkingLevel: 'high', modelId: 'fallback-model', provider: 'fallback-provider' };
+      expect(reply.content.metadata).toMatchObject(expected);
+      expect(liveAssistantMetadata(events, reply.id)).toMatchObject(expected);
+    },
+    30000,
+  );
 });

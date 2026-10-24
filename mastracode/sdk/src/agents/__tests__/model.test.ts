@@ -54,7 +54,6 @@ vi.mock('../../providers/openai-codex.js', () => ({
   createReasoningEffortMiddleware: vi.fn((providerKey: string, effort?: string) =>
     effort === undefined ? undefined : { __middleware: 'reasoning-effort', providerKey, effort },
   ),
-  getEffectiveThinkingLevel: vi.fn((_modelId: string, level: string) => level),
   THINKING_LEVEL_TO_REASONING_EFFORT: {
     off: undefined,
     low: 'low',
@@ -132,6 +131,7 @@ vi.mock('ai', () => ({
 vi.mock('@mastra/core/llm', () => ({
   MastraModelGateway: class MockMastraModelGateway {},
   PROVIDER_REGISTRY: {},
+  getModelReasoningOptions: vi.fn(() => undefined),
   ModelRouterLanguageModel: vi.fn(function (
     this: Record<string, unknown>,
     config: string | { id: string; url?: string; apiKey?: string; headers?: Record<string, string> },
@@ -687,6 +687,33 @@ describe('resolveModel', () => {
         headers: undefined,
         authStorage: scopedAuthStorage(),
       });
+    });
+
+    it('stamps each route entry with the thinking level its own model runs at', () => {
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'oauth-access-token',
+        refresh: 'oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+      const state = {
+        thinkingLevel: 'off',
+        modelRoute: {
+          entries: [
+            { id: 'primary', modelId: 'openai/gpt-5.2' },
+            { id: 'fallback', modelId: 'anthropic/claude-sonnet-4-5' },
+          ],
+        },
+      };
+      const requestContext = new RequestContext();
+      requestContext.set('controller', { session: { modelId: 'openai/gpt-5.2' }, state, getState: () => state });
+
+      const route = getDynamicModel({ requestContext });
+
+      expect(route).toMatchObject([
+        { id: 'primary', model: { messageMetadata: { thinkingLevel: 'low' } } },
+        { id: 'fallback', model: { messageMetadata: { thinkingLevel: 'off' } } },
+      ]);
     });
 
     it.each([
