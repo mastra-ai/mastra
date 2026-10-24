@@ -5,6 +5,7 @@ import type { KnowledgeToolContext } from './knowledge-tools';
 import { createKnowledgeTools, resolveKnowledgeRunAccess } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { createPinnedTools } from './pinned';
+import { PINNED_READ_MEMO_KEY } from './pinned-state-processor';
 import type { KnowledgeSemanticIndexCoordinator } from './semantic-index';
 
 /** What the moved tool factories need from whoever hosts them. */
@@ -35,27 +36,34 @@ type Tools = Record<string, ToolAction<any, any, any>>;
 /** Placeholder options used only to read the static tool definitions (ids, descriptions, schemas). */
 const TEMPLATE_SCOPE: KnowledgeScope = ['thread:template'];
 
-function sourceThreadId(context: KnowledgeToolContext | undefined): string {
+/** Where a record came from: the writing agent's thread, stamped with the agent as its source. */
+function provenance(context: KnowledgeToolContext | undefined): { sourceThreadId: string; source?: string } {
   const threadId = context?.agent?.threadId;
   if (!threadId) throw new Error('Knowledge tools require an active threadId.');
-  return threadId;
+  const agentId = context?.agent?.agentId;
+  return { sourceThreadId: threadId, ...(agentId ? { source: `agent:${agentId}` } : {}) };
 }
 
 /**
  * Write and pin tools take their scope at construction. Attached tools rebuild them per call
- * from the calling run, keeping the static definition (id, description, schema) from a template.
+ * from the calling run, keeping every other field of the template (schemas, approval, MCP and
+ * background settings) and replacing only `execute`.
  */
-function perCall(template: Tools, build: (context: KnowledgeToolContext | undefined) => Tools): Tools {
+function perCall(
+  template: Tools,
+  build: (context: KnowledgeToolContext | undefined) => Tools,
+  after?: (context: KnowledgeToolContext | undefined) => void,
+): Tools {
   return Object.fromEntries(
     Object.entries(template).map(([name, tool]) => [
       name,
       createTool({
-        id: tool.id,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
+        ...(tool as any),
         execute: async (input: unknown, context: unknown) => {
           const inner = build(context as KnowledgeToolContext)[name];
-          return inner!.execute!(input as never, context as never);
+          const result = await inner!.execute!(input as never, context as never);
+          after?.(context as KnowledgeToolContext);
+          return result;
         },
       }),
     ]),
@@ -68,7 +76,7 @@ export function buildKnowledgeTools(host: KnowledgeToolHost, groups: KnowledgeTo
   if (groups.write) {
     const options = (context: KnowledgeToolContext | undefined) => ({
       ...resolveKnowledgeRunAccess(context, host.getKnowledgeInstance()),
-      sourceThreadId: sourceThreadId(context),
+      ...provenance(context),
     });
     Object.assign(
       tools,
@@ -79,16 +87,23 @@ export function buildKnowledgeTools(host: KnowledgeToolHost, groups: KnowledgeTo
   }
   if (groups.pins) {
     const { maxPins, maxTokens } = groups.pins;
-    const options = (access: { scope: KnowledgeScope; readOnly?: KnowledgeScope }, threadId: string) => ({
+    const options = (
+      access: { scope: KnowledgeScope; readOnly?: KnowledgeScope },
+      origin: { sourceThreadId: string; source?: string },
+    ) => ({
       ...access,
-      sourceThreadId: threadId,
+      ...origin,
       maxPins,
       maxTokens,
     });
     Object.assign(
       tools,
-      perCall(createPinnedTools(host, options({ scope: TEMPLATE_SCOPE }, 'template')), context =>
-        createPinnedTools(host, options(resolveKnowledgeRunAccess(context), sourceThreadId(context))),
+      perCall(
+        createPinnedTools(host, options({ scope: TEMPLATE_SCOPE }, { sourceThreadId: 'template' })),
+        context => createPinnedTools(host, options(resolveKnowledgeRunAccess(context), provenance(context))),
+        // A pin write changes what the pins lane shows; drop the turn's memoized read.
+        context =>
+          (context?.requestContext as { delete?(key: string): void } | undefined)?.delete?.(PINNED_READ_MEMO_KEY),
       ),
     );
   }

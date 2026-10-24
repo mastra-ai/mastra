@@ -237,4 +237,58 @@ describe('Knowledge attached to an Agent without Memory', () => {
     const appended = await member([{ toolName: 'knowledge_append', input: { node: orgNode.id, text: 'z' } }]);
     expect(toolErrors(appended)).toEqual(['"org:self" is read-only for this run.']);
   });
+
+  it('delivers pins to an agent without Memory within the call that pins and on the next call', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'pins-no-memory' }), pins: true });
+    const prompts: unknown[][] = [];
+    const agent = (calls: Call[]) =>
+      new Agent({
+        id: 'pins',
+        name: 'pins',
+        instructions: 'x',
+        model: scriptedModel(calls, prompts),
+        knowledge,
+        scopes: ['team:acme:x'],
+      });
+    expect(agent([]).hasOwnMemory()).toBe(false);
+
+    const noThread = await agent([{ toolName: 'knowledge_pin', input: { text: 'x' } }]).generate('pin', {
+      maxSteps: 2,
+    });
+    expect(toolErrors(noThread)).toEqual(['Knowledge tools require an active threadId.']);
+    prompts.length = 0;
+
+    const pinned = await agent([{ toolName: 'knowledge_pin', input: { text: 'Always answer in French.' } }]).generate(
+      'pin it',
+      { maxSteps: 2, memory: { thread: 'p-1', resource: 'u' } },
+    );
+    expect(toolErrors(pinned)).toEqual([]);
+    const pin = (
+      await knowledge
+        .getStorage()
+        .then(store => store.search({ query: 'French', scope: ['resource:u', 'team:acme:x'], limit: 5 }))
+    )[0];
+    expect(pin?.text).toBe('Always answer in French.');
+    expect(JSON.stringify(prompts[0])).not.toContain('Always answer in French.');
+    // No pins at step 0, so the first emission after pinning is a snapshot.
+    expect(JSON.stringify(prompts[1])).toContain('<pinned-knowledge');
+    expect(JSON.stringify(prompts[1])).toContain('Always answer in French.');
+
+    prompts.length = 0;
+    await agent([]).generate('hello', { memory: { thread: 'p-2', resource: 'u' } });
+    expect(JSON.stringify(prompts[0])).toContain('<pinned-knowledge');
+    expect(JSON.stringify(prompts[0])).toContain('Always answer in French.');
+
+    const other = new Agent({
+      id: 'other',
+      name: 'other',
+      instructions: 'x',
+      model: scriptedModel([], prompts),
+      knowledge,
+      scopes: ['team:acme:y'],
+    });
+    prompts.length = 0;
+    await other.generate('hello', { memory: { thread: 'p-3', resource: 'v' } });
+    expect(JSON.stringify(prompts[0])).not.toContain('Always answer in French.');
+  });
 });

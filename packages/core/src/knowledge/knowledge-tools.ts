@@ -31,7 +31,7 @@ type KnowledgeToolsMemory = KnowledgeStoreMemory & {
 };
 
 export type KnowledgeToolContext = {
-  agent?: { threadId?: string; resourceId?: string };
+  agent?: { threadId?: string; resourceId?: string; agentId?: string };
   requestContext?: { get(key: string): unknown };
 };
 

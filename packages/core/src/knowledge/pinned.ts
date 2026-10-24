@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
 import type { KnowledgeRecord, KnowledgeScope, KnowledgeStorage } from '../storage';
-import { canonicalizeKnowledgeScope, isKnowledgeScopeVisible } from '../storage';
+import { canonicalizeKnowledgeScope, createKnowledgeNodeCursor, isKnowledgeScopeVisible } from '../storage';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 
@@ -24,7 +24,8 @@ export const MAX_PINNED_MAX_TOKENS = 2_000;
 const PIN_IDENTITY = 'subconscious:pin';
 
 export interface PinnedKnowledgeSet {
-  nodeId?: string;
+  /** Every visible `pinned` node the set was read from. */
+  nodeIds: string[];
   pins: KnowledgeRecord[];
 }
 
@@ -36,6 +37,8 @@ export interface PinnedToolsOptions {
   /** Tags of `scope` the run holds read-only: pins there are delivered, never changed. */
   readOnly?: KnowledgeScope;
   sourceThreadId: string;
+  /** Stamped as `metadata.source` on every pin written, e.g. `agent:<id>`. */
+  source?: string;
   maxPins: number;
   /** Estimated-token budget for the whole pin set. */
   maxTokens: number;
@@ -43,49 +46,72 @@ export interface PinnedToolsOptions {
 
 // Resolution walks every visible scope level (nearest first), so the node is
 // found wherever it was created rather than only at one fixed level.
-async function resolvePinnedNodeId(store: KnowledgeStorage, scope: KnowledgeScope): Promise<string | undefined> {
-  const node = await store.resolveNode({ name: PINNED_NODE_NAME, scope });
-  return node?.id;
+/**
+ * Every `pinned` node the scope can see. Pins live on one node per pin scope, so a run holding
+ * `org:self` and `team:self:x` sees the org's pins and the team's pins together.
+ */
+async function listPinnedNodeIds(store: KnowledgeStorage, scope: KnowledgeScope): Promise<string[]> {
+  const ids: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const nodes = await store.listNodes({
+      scope,
+      namePrefix: PINNED_NODE_NAME,
+      kind: PINNED_NODE_KIND,
+      cursor,
+      limit: 100,
+    });
+    for (const node of nodes) if (node.name === PINNED_NODE_NAME && !node.mergedInto) ids.push(node.id);
+    cursor =
+      nodes.length === 100
+        ? createKnowledgeNodeCursor(nodes.at(-1)!, { namePrefix: PINNED_NODE_NAME, kind: PINNED_NODE_KIND })
+        : undefined;
+  } while (cursor);
+  return ids;
 }
 
-/** Reuse the node wherever it is visible; otherwise create it. `createNode` is an idempotent upsert on (name, scope). */
-async function ensurePinnedNodeId(store: KnowledgeStorage, scope: KnowledgeScope): Promise<string> {
-  const existing = await resolvePinnedNodeId(store, scope);
-  if (existing) return existing;
+/** The `pinned` node at exactly the pin's scope, created when missing (`createNode` upserts on name+scope). */
+async function ensurePinnedNodeId(
+  store: KnowledgeStorage,
+  pinScope: KnowledgeScope,
+  runScope: KnowledgeScope,
+): Promise<string> {
   const node = await store.createNode({
     name: PINNED_NODE_NAME,
     kind: PINNED_NODE_KIND,
-    scope: defaultPinScope(scope),
+    scope: pinScope,
+    resolutionScope: runScope,
   });
   return node.id;
 }
 
 /**
- * Assembles the current pin set.
+ * Assembles the current pin set from every visible `pinned` node.
  *
- * Reads use the FULL visible scope context, never a level-narrowed write scope: visibility is
- * subset containment, so querying at the node's level would drop pins written at narrower
- * levels. Deleted records are excluded explicitly.
+ * Reads use the FULL visible scope, never a narrowed write scope: visibility is subset
+ * containment, so a narrower query would drop pins. Deleted records are excluded.
  */
 export async function listPinnedKnowledge(input: {
   store: KnowledgeStorage;
   scope: KnowledgeScope;
 }): Promise<PinnedKnowledgeSet> {
-  const nodeId = await resolvePinnedNodeId(input.store, input.scope);
-  if (!nodeId) return { pins: [] };
+  const nodeIds = await listPinnedNodeIds(input.store, input.scope);
   const pins: KnowledgeRecord[] = [];
-  let after: string | undefined;
-  do {
-    const page = await input.store.listKnowledgeAbout({
-      node: nodeId,
-      scope: input.scope,
-      after,
-      includeDeleted: false,
-    });
-    pins.push(...page.records);
-    after = page.nextCursor;
-  } while (after);
-  return { nodeId, pins };
+  for (const nodeId of nodeIds) {
+    let after: string | undefined;
+    do {
+      const page = await input.store.listKnowledgeAbout({
+        node: nodeId,
+        scope: input.scope,
+        after,
+        includeDeleted: false,
+      });
+      pins.push(...page.records);
+      after = page.nextCursor;
+    } while (after);
+  }
+  pins.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+  return { nodeIds, pins };
 }
 
 function totalTokens(pins: KnowledgeRecord[]): number {
@@ -148,13 +174,14 @@ async function writePinnedKnowledge(
 ): Promise<KnowledgeRecord> {
   const { pins } = await listPinnedKnowledge({ store, scope: options.scope });
   assertBudget(options, pins, text);
-  const nodeId = await ensurePinnedNodeId(store, options.scope);
+  const scope = resolveWriteScope(options, requested);
+  const nodeId = await ensurePinnedNodeId(store, scope, options.scope);
   return store.appendKnowledge({
     node: nodeId,
     text,
-    scope: resolveWriteScope(options, requested),
+    scope,
     sourceThreadId: options.sourceThreadId,
-    metadata,
+    metadata: options.source ? { ...metadata, source: options.source } : metadata,
     resolutionScope: options.scope,
     defaultScope: defaultPinScope(options.scope),
   });
@@ -171,8 +198,8 @@ async function requirePin(
 ): Promise<KnowledgeRecord> {
   const record = await store.getKnowledge({ id: recordId, includeDeleted: false });
   if (!record) throw new Error(`Pin not found: ${recordId}`);
-  const nodeId = await resolvePinnedNodeId(store, options.scope);
-  if (!nodeId || record.node !== nodeId) throw new Error(`Record is not a pin: ${recordId}`);
+  const nodeIds = await listPinnedNodeIds(store, options.scope);
+  if (!nodeIds.includes(record.node)) throw new Error(`Record is not a pin: ${recordId}`);
   if (!isKnowledgeScopeVisible(record.scope, options.scope)) throw new Error('Pin is outside the visible scope.');
   requireWritableTags(record.scope, options.readOnly ?? []);
   return record;
@@ -262,7 +289,11 @@ export function createPinnedTools(
           text: value.text,
           scope: record.scope,
           sourceThreadId: options.sourceThreadId,
-          metadata: value.reason ? { ...record.metadata, reason: value.reason } : record.metadata,
+          metadata: {
+            ...record.metadata,
+            ...(value.reason ? { reason: value.reason } : {}),
+            ...(options.source ? { source: options.source } : {}),
+          },
           resolutionScope: options.scope,
           defaultScope: defaultPinScope(options.scope),
         });
