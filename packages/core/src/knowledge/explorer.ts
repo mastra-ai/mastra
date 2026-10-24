@@ -125,7 +125,7 @@ export interface KnowledgeExplorerActivityEvent {
   recordType: string;
   recordId?: string;
   scope: string[];
-  node: { id: string; name: string; rung: KnowledgeExplorerRung };
+  node: { id: string; name: string; rung: KnowledgeExplorerRung; threadId?: string };
   createdAt: string;
 }
 
@@ -385,34 +385,87 @@ export async function searchKnowledgeNodes(
   return { results: results.slice(0, limit), truncated: results.length > limit || hits.length > limit };
 }
 
-/** Recent writes visible from `view`, newest first. `cursor` is the `nextCursor` of the previous page. */
+const ACTIVITY_BATCH = 100;
+const ACTIVITY_SCAN_CAP = 1000;
+export const DEFAULT_KNOWLEDGE_ACTIVITY_PAGE_SIZE = 25;
+
+/**
+ * Newest-first activity page where EVERY returned event targets a node visible in `view`. Visibility is decided
+ * BEFORE the page is shaped: hidden rows are skipped entirely (no action, type, id or time metadata leaks) and a
+ * hidden backlog can never displace visible events. When the scan cap stops the walk before the stream ends,
+ * `nextCursor` is the last scanned event so the caller can continue past hidden rows.
+ * `memberIds` further limits events to those nodes (a scope's members).
+ */
 export async function readKnowledgeActivity(
   store: KnowledgeStorage,
   view: KnowledgeScope,
-  options: { cursor?: string; limit?: number } = {},
-): Promise<{ events: KnowledgeExplorerActivityEvent[]; nextCursor?: string }> {
-  const limit = options.limit ?? 25;
-  const rows: KnowledgeActivityEvent[] = await store.listActivity({
-    scope: view,
-    after: options.cursor,
-    limit: limit + 1,
-  });
-  const page = rows.slice(0, limit);
-  const events: KnowledgeExplorerActivityEvent[] = [];
-  for (const row of page) {
-    const record =
-      row.recordType === 'record' ? await store.getKnowledge({ id: row.recordId, includeDeleted: true }) : null;
-    const node = await store.getNode(record?.node ?? row.recordId);
-    if (!node) continue;
-    events.push({
-      id: row.id,
-      action: row.action,
-      recordType: row.recordType,
-      recordId: row.recordId,
-      scope: row.scope,
-      node: { id: node.id, name: node.name, rung: knowledgeExplorerRung(node.scope) },
-      createdAt: row.createdAt.toISOString(),
-    });
+  options: { cursor?: string; limit?: number; memberIds?: Set<string>; truncated?: boolean } = {},
+): Promise<{ events: KnowledgeExplorerActivityEvent[]; nextCursor?: string; truncated?: true }> {
+  const pageSize = options.limit ?? DEFAULT_KNOWLEDGE_ACTIVITY_PAGE_SIZE;
+  const want = pageSize + 1;
+  const items: Array<{ event: KnowledgeActivityEvent; node: KnowledgeNode }> = [];
+  // Many events in a scan target the same node; read each node once per request.
+  const nodes = new Map<string, Promise<KnowledgeNode | null>>();
+  const getNode = (id: string) => {
+    let node = nodes.get(id);
+    if (!node) {
+      node = store.getNode(id);
+      nodes.set(id, node);
+    }
+    return node;
+  };
+  let after = options.cursor;
+  let scanned = 0;
+  let exhausted = false;
+  while (items.length < want && scanned < ACTIVITY_SCAN_CAP) {
+    const batch = await store.listActivity({ scope: view, after, limit: ACTIVITY_BATCH });
+    if (batch.length === 0) {
+      exhausted = true;
+      break;
+    }
+    for (const event of batch) {
+      after = event.id;
+      scanned += 1;
+      let targetNode: KnowledgeNode | null;
+      if (event.recordType === 'node') {
+        targetNode = await getNode(event.recordId);
+      } else {
+        const record = await store.getKnowledge({ id: event.recordId });
+        targetNode = record ? await getNode(record.node) : null;
+        if (record && !isKnowledgeScopeVisible(record.scope, view)) targetNode = null;
+      }
+      if (
+        targetNode?.scope &&
+        isKnowledgeScopeVisible(targetNode.scope, view) &&
+        (options.memberIds === undefined || options.memberIds.has(targetNode.id))
+      ) {
+        items.push({ event, node: targetNode });
+      }
+      if (items.length >= want || scanned >= ACTIVITY_SCAN_CAP) break;
+    }
   }
-  return { events, ...(rows.length > limit && page.at(-1) ? { nextCursor: page.at(-1)!.id } : {}) };
+  const stoppedAtCap = !exhausted && items.length < want && scanned >= ACTIVITY_SCAN_CAP;
+  const page = items.slice(0, pageSize);
+  const lastVisible = page.at(-1);
+  return {
+    events: page.map(({ event, node }) => {
+      const rung = knowledgeExplorerRung(node.scope);
+      const threadId = rung === 'thread' ? node.scope.find(tag => tag.startsWith('thread:'))?.slice(7) : undefined;
+      return {
+        id: event.id,
+        action: event.action,
+        recordType: event.recordType,
+        ...(event.recordType === 'record' ? { recordId: event.recordId } : {}),
+        scope: event.scope,
+        node: { id: node.id, name: node.name, rung, ...(threadId ? { threadId } : {}) },
+        createdAt: event.createdAt.toISOString(),
+      };
+    }),
+    ...(items.length > pageSize && lastVisible
+      ? { nextCursor: lastVisible.event.id }
+      : stoppedAtCap && after
+        ? { nextCursor: after }
+        : {}),
+    ...(options.truncated ? { truncated: true as const } : {}),
+  };
 }
