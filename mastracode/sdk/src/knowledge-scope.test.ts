@@ -1,52 +1,60 @@
 import { describe, expect, it } from 'vitest';
 
-import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from './knowledge-scope.js';
+import { knowledgeSessionTags, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 
-describe('resolveKnowledgeScopeIdentity', () => {
-  it('defaults TUI/studio sessions to the fixed local org regardless of project or machine', () => {
-    const expected = { resolved: true, organizationId: LOCAL_KNOWLEDGE_ORG_ID };
+describe('resolveKnowledgeSessionScopes', () => {
+  it('gives a local session with no host tags the fixed local org, regardless of project or machine', () => {
+    const expected = { resolved: true, scopes: ['org:local'] };
     expect(LOCAL_KNOWLEDGE_ORG_ID).toBe('local');
-    expect(resolveKnowledgeScopeIdentity(undefined)).toEqual(expected);
-    expect(resolveKnowledgeScopeIdentity({ projectPath: '/tmp/p' } as never)).toEqual(expected);
-    expect(resolveKnowledgeScopeIdentity({ projectPath: '/tmp/other' } as never)).toEqual(expected);
-  });
-
-  it('anchors Factory project sessions on the seeded org and project ids', () => {
-    expect(resolveKnowledgeScopeIdentity({ factoryOrgId: 'org-1', factoryProjectId: 'proj-1' } as never)).toEqual({
+    expect(resolveKnowledgeSessionScopes(undefined)).toEqual(expected);
+    expect(resolveKnowledgeSessionScopes({ projectPath: '/tmp/p' } as never)).toEqual(expected);
+    expect(resolveKnowledgeSessionScopes({ projectPath: '/tmp/other' } as never, ['resource:u1'])).toEqual({
       resolved: true,
-      organizationId: 'org-1',
-      knowledgeResourceId: 'proj-1',
+      scopes: ['resource:u1', 'org:local'],
     });
   });
 
-  it('trims the org id the way the Factory seeder stores it', () => {
-    expect(resolveKnowledgeScopeIdentity({ factoryOrgId: ' org-1 ' } as never)).toEqual({
+  it('adds no org:local once the host gives any shared tag, read-only included', () => {
+    expect(resolveKnowledgeSessionScopes(undefined, ['team:self:x', 'agent:alex'])).toEqual({
       resolved: true,
-      organizationId: 'org-1',
-      knowledgeResourceId: undefined,
+      scopes: ['team:self:x', 'agent:alex'],
+    });
+    const member = [{ tag: 'org:self', access: 'read' as const }, 'team:self:x'];
+    expect(resolveKnowledgeSessionScopes(undefined, member)).toEqual({ resolved: true, scopes: member });
+  });
+
+  it('requires the Factory org and project tags, trimmed the way the seeder stores them', () => {
+    expect(resolveKnowledgeSessionScopes({ factoryOrgId: ' org-1 ', factoryProjectId: 'proj-1' } as never)).toEqual({
+      resolved: true,
+      scopes: ['org:org-1', 'project:proj-1'],
+    });
+    expect(resolveKnowledgeSessionScopes({ factoryOrgId: 'org-1' } as never, ['agent:a'])).toEqual({
+      resolved: true,
+      scopes: ['agent:a', 'org:org-1'],
     });
   });
 
-  it('keeps the session resource for an org-only Factory session', () => {
-    expect(resolveKnowledgeScopeIdentity({ factoryOrgId: 'org-1' } as never)).toEqual({
-      resolved: true,
-      organizationId: 'org-1',
-      knowledgeResourceId: undefined,
-    });
+  it('keeps two Factory projects apart and refuses a host tag that names another org or project', () => {
+    const a = resolveKnowledgeSessionScopes({ factoryOrgId: 'o', factoryProjectId: 'a' } as never);
+    const b = resolveKnowledgeSessionScopes({ factoryOrgId: 'o', factoryProjectId: 'b' } as never);
+    expect(a.resolved && knowledgeSessionTags(a.scopes)).toEqual(['org:o', 'project:a']);
+    expect(b.resolved && knowledgeSessionTags(b.scopes)).toEqual(['org:o', 'project:b']);
+
+    expect(resolveKnowledgeSessionScopes({ factoryOrgId: 'o', factoryProjectId: 'a' } as never, ['org:other'])).toEqual(
+      {
+        resolved: false,
+        reason: "Scope org:other conflicts with this Factory session's org:o.",
+      },
+    );
+    expect(resolveKnowledgeSessionScopes({ factoryOrgId: 'o', factoryProjectId: 'a' } as never, ['project:b'])).toEqual(
+      { resolved: false, reason: "Scope project:b conflicts with this Factory session's project:a." },
+    );
   });
 
   it('fails closed for Factory-owned sessions without a resolved org', () => {
-    expect(resolveKnowledgeScopeIdentity({ factoryProjectId: 'proj-1' } as never)).toEqual({
-      resolved: false,
-      knowledgeResourceId: 'proj-1',
-    });
-    expect(resolveKnowledgeScopeIdentity({ factoryProjectId: 'proj-1', factoryOrgId: '   ' } as never)).toEqual({
-      resolved: false,
-      knowledgeResourceId: 'proj-1',
-    });
-    expect(resolveKnowledgeScopeIdentity({ factoryOrgUnresolved: true } as never)).toEqual({
-      resolved: false,
-      knowledgeResourceId: undefined,
-    });
+    const closed = { resolved: false, reason: 'This Factory session has no resolved organization.' };
+    expect(resolveKnowledgeSessionScopes({ factoryProjectId: 'proj-1' } as never)).toEqual(closed);
+    expect(resolveKnowledgeSessionScopes({ factoryProjectId: 'proj-1', factoryOrgId: '   ' } as never)).toEqual(closed);
+    expect(resolveKnowledgeSessionScopes({ factoryOrgUnresolved: true } as never)).toEqual(closed);
   });
 });
