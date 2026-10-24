@@ -153,16 +153,18 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
 /**
  * Overlay the provider-managed fields of `generated` onto the app's current
  * manifest, so customizations made at connect time (extra scopes, events,
- * App Home settings, suggested prompts) survive a drift update. Scopes and
- * events are merged, never dropped.
+ * App Home settings, suggested prompts) survive a drift update.
+ *
+ * Bot scopes and events are the union of the live app's and the generated
+ * ones, on every drift update. The live manifest can't tell a scope the
+ * provider once generated apart from one added via `connect({ manifest })`,
+ * so a scope or event the provider stops generating is never removed;
+ * remove it from the app's manifest by hand.
  */
 export function applyManagedManifestFields(current: SlackAppManifest, generated: SlackAppManifest): SlackAppManifest {
   const union = (a: string[] = [], b: string[] = []) => [...new Set([...a, ...b])];
   // Slack rejects a manifest that declares both views.
-  type Features = NonNullable<SlackAppManifest['features']>;
-  const { assistant_view: legacyView, ...features } = (current.features ?? {}) as Features & {
-    assistant_view?: Pick<NonNullable<Features['agent_view']>, 'suggested_prompts'>;
-  };
+  const { assistant_view: legacyView, ...features } = current.features ?? {};
 
   return {
     ...current,
