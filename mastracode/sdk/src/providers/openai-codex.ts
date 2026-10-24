@@ -15,7 +15,7 @@ import type { LanguageModelMiddleware } from 'ai';
 import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
-import { runCatalogThinkingLevel } from '../thinking-catalog.js';
+import { appliedThinkingLevel } from '../thinking-catalog.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 export { supportsMaxReasoningEffort } from '../thinking.js';
 
@@ -50,18 +50,9 @@ const CODEX_INSTRUCTIONS = `You are an interactive CLI tool that helps users wit
 IMPORTANT: You should be concise, direct, and helpful. Focus on solving the user's problem efficiently.`;
 
 export type ThinkingLevel = ThinkingLevelSetting;
-
-const GPT5_MODEL_RE = /^gpt-5(?:\.|-|$)/;
-
-export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel): ThinkingLevel {
-  // GPT-5.* models on Codex require at least low reasoning.
-  const requestedLevel = GPT5_MODEL_RE.test(modelId) && level === 'off' ? 'low' : level;
-  return runCatalogThinkingLevel(`openai/${modelId}`, requestedLevel);
-}
-
 // Map thinkingLevel state values to OpenAI reasoningEffort values.
 // undefined means omit the parameter (no reasoning). Model-dependent fitting
-// happens in getEffectiveThinkingLevel before this lookup.
+// happens in appliedThinkingLevel before this lookup.
 export const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefined> = {
   off: undefined,
   low: 'low',
@@ -445,7 +436,7 @@ export function openaiCodexProvider(
   options?: { thinkingLevel?: ThinkingLevel; headers?: Record<string, string>; authStorage?: CredentialStore },
 ): MastraModelConfig {
   const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
-  const effectiveLevel = getEffectiveThinkingLevel(modelId, requestedLevel);
+  const effectiveLevel = appliedThinkingLevel(`openai/${modelId}`, requestedLevel);
   const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
   const middleware = createCodexMiddleware(reasoningEffort);
   const headers = options?.headers;

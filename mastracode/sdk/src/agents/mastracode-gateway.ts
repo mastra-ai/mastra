@@ -44,7 +44,6 @@ import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
   createReasoningEffortMiddleware,
-  getEffectiveThinkingLevel,
   openaiCodexProvider,
   THINKING_LEVEL_TO_REASONING_EFFORT,
 } from '../providers/openai-codex.js';
@@ -55,6 +54,7 @@ import {
   withThinkingOptionsModel,
 } from '../providers/provider-thinking.js';
 import { xaiProvider } from '../providers/xai.js';
+import { appliedThinkingLevel } from '../thinking-catalog.js';
 import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 
@@ -172,7 +172,7 @@ function openaiApiKeyProvider(
     thinkingLevel && thinkingLevel !== 'off'
       ? createReasoningEffortMiddleware(
           'openai',
-          THINKING_LEVEL_TO_REASONING_EFFORT[getEffectiveThinkingLevel(modelId, thinkingLevel)],
+          THINKING_LEVEL_TO_REASONING_EFFORT[appliedThinkingLevel(`openai/${modelId}`, thinkingLevel)],
         )
       : undefined;
   return wrapLanguageModel({
@@ -658,7 +658,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       if (storedCred?.type === 'oauth') {
         const resolvedModelId = remapOpenAIModelForCodexOAuth(`openai/${args.modelId}`);
         const resolvedBareModelId = resolvedModelId.substring(OPENAI_PREFIX.length);
-        const effectiveLevel = getEffectiveThinkingLevel(args.modelId, this.#thinkingLevel ?? 'medium');
+        const effectiveLevel = appliedThinkingLevel(`openai/${args.modelId}`, this.#thinkingLevel ?? 'medium');
         const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
         const middleware = createCodexMiddleware(reasoningEffort);
         const openai = createOpenAI({
@@ -683,7 +683,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     if (storedCred?.type === 'oauth') {
       const resolvedModelId = remapOpenAIModelForCodexOAuth(`openai/${args.modelId}`);
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
-        thinkingLevel: this.#thinkingLevel && getEffectiveThinkingLevel(args.modelId, this.#thinkingLevel),
+        thinkingLevel: this.#thinkingLevel && appliedThinkingLevel(`openai/${args.modelId}`, this.#thinkingLevel),
         headers: args.headers,
         authStorage: this.#credentials,
       }) as unknown as GatewayLanguageModel;

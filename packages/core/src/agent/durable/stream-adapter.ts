@@ -1038,6 +1038,7 @@ export async function emitStepStartEvent(
     startedAt?: StepStartPayload['startedAt'];
     modelId?: StepStartPayload['modelId'];
     provider?: StepStartPayload['provider'];
+    messageMetadata?: StepStartPayload['messageMetadata'];
     request?: StepStartPayload['request'];
     warnings?: StepStartPayload['warnings'];
   },

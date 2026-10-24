@@ -16,12 +16,13 @@ function messageEntry(
   role: 'user' | 'assistant',
   parts: MastraDBMessage['content']['parts'],
   streaming?: boolean,
+  metadata?: MastraDBMessage['content']['metadata'],
 ): TimelineEntry {
   return {
     kind: 'message',
     id,
     streaming,
-    message: { id, role, createdAt: CREATED_AT, content: { format: 2, parts } },
+    message: { id, role, createdAt: CREATED_AT, content: { format: 2, parts, metadata } },
   };
 }
 
@@ -149,6 +150,41 @@ describe('message meta', () => {
 
     expect(screen.getAllByText('Claude Opus 4.6')).toHaveLength(1);
     expect(screen.queryByText('GPT-5')).toBeNull();
+  });
+
+  it('names the thinking level a finished reply ran at', async () => {
+    const user = userEvent.setup();
+    renderEntries([
+      messageEntry('assistant-1', 'assistant', [{ type: 'text', text: 'shipped' }], false, {
+        modelId: 'gpt-5',
+        thinkingLevel: 'xhigh',
+      }),
+    ]);
+
+    const level = screen.getByRole('img', { name: 'Thinking: Extra high' });
+    await user.hover(level);
+
+    expect(await screen.findByRole('tooltip', { name: 'Thinking: Extra high' })).toBeInTheDocument();
+  });
+
+  it('names an off thinking level too', () => {
+    renderEntries([
+      messageEntry('assistant-1', 'assistant', [{ type: 'text', text: 'shipped' }], false, {
+        modelId: 'gpt-5',
+        thinkingLevel: 'off',
+      }),
+    ]);
+
+    expect(screen.getByRole('img', { name: 'Thinking: Off' })).toBeInTheDocument();
+  });
+
+  it('shows only the model for a reply stamped before thinking levels were recorded', () => {
+    renderEntries([
+      messageEntry('assistant-1', 'assistant', [{ type: 'text', text: 'shipped' }], false, { modelId: 'gpt-5' }),
+    ]);
+
+    expect(screen.getByText('GPT-5')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /^Thinking:/ })).toBeNull();
   });
 
   const ward = { id: 'ward', name: 'Ward Peeters' };

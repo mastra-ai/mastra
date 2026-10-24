@@ -16,6 +16,7 @@ import {
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
 import { normalizeLegacyModelId } from '../providers/model-ids.js';
+import { appliedThinkingLevel } from '../thinking-catalog.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import {
@@ -192,8 +193,14 @@ export function resolveModel(
     ]);
   };
   let currentModel = createRequestModel();
+  const assignedByHost = new Map<PropertyKey, unknown>();
   return new Proxy(currentModel, {
+    set(_target, property, value) {
+      assignedByHost.set(property, value);
+      return true;
+    },
     get(_target, property) {
+      if (assignedByHost.has(property)) return assignedByHost.get(property);
       if (property === 'supportedUrls') return createRequestModel().supportedUrls;
       if (property === 'doStream' || property === 'doGenerate') {
         return async (...args: unknown[]) => {
@@ -416,7 +423,7 @@ export function getDynamicModel(
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
   // Label each resolved model with its full ID: the resolved gateway model only
   // knows its bare provider model, and Memory's `'auto'` reads this label.
-  const primary = identifyModel(modelId, resolveModel(modelId, resolveOptions));
+  const primary = identifyModel(modelId, resolveModel(modelId, resolveOptions), thinkingLevel);
   const route = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES);
   const pendingEntryId =
     pendingFallback && typeof pendingFallback.toEntryId === 'string' ? pendingFallback.toEntryId : undefined;
@@ -449,15 +456,23 @@ export function getDynamicModel(
     appearances.set(routeEntry.id, occurrence);
     entries.push({
       id: occurrence === 1 ? routeEntry.id : `${routeEntry.id}#${occurrence}`,
-      model: identifyModel(routeEntry.modelId, entryModel),
+      model: identifyModel(routeEntry.modelId, entryModel, thinkingLevel),
     });
   }
 
   return entries.length < 2 ? primary : entries;
 }
 
-function identifyModel(modelId: string, model: ResolvedModel): IdentifiedModelConfig {
-  return { model, id: toMemoryModelId(modelId) };
+function identifyModel(
+  modelId: string,
+  model: ResolvedModel,
+  thinkingLevel: ThinkingLevelSetting,
+): IdentifiedModelConfig {
+  return {
+    model,
+    id: toMemoryModelId(modelId),
+    messageMetadata: { thinkingLevel: appliedThinkingLevel(modelId, thinkingLevel) },
+  };
 }
 
 type MemoryRouteState = {
