@@ -1515,6 +1515,50 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     await done;
   }, 20_000);
 
+  it('stops a run whose lease backend stays silent for longer than the grace period after its lease ran out', async () => {
+    const thread = 'silent-past-grace-thread';
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'silent past grace', sequenceIndex: i },
+        { toolCalls: [{ id: `call_silent_grace_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 40));
+        return 'ticked';
+      },
+    });
+    const pubsub = new ReplicaPubSub(shared);
+    const agent = replica(shared, new MockMemory(), { tick }, pubsub);
+    const { output, drain } = await startStream(agent, 'silent past grace', {
+      maxSteps: 100,
+      memory: { thread, resource: RESOURCE },
+    });
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+    // Every lease call now hangs and never answers again.
+    pubsub.partition = 'hang';
+    const cutAt = Date.now();
+    const ticksAtCut = ticks;
+    await done;
+
+    // The run waited, running no tool, and stopped once the grace period (1.5s here) had passed since its lease
+    // ran out, instead of waiting for as long as the backend stays silent.
+    expect(await output.finishReason).toBe('aborted');
+    expect(ticks - ticksAtCut).toBeLessThanOrEqual(1);
+    const waited = Date.now() - cutAt;
+    expect(waited).toBeGreaterThanOrEqual(1_500);
+    expect(waited).toBeLessThan(6_000);
+  }, 20_000);
+
   // Durable runs share process-global registries by run id, so two live runs with one id is not a supported setup there.
   it.skipIf(isDurableEngineVariant(engine))(
     'documents that a run whose id a later live run reuses keeps calling tools after losing its lease',
