@@ -389,6 +389,34 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
     expect(restarted.result).toEqual(original.result);
   });
 
+  it('keeps progress for items that returned undefined, which JSON storage drops', async () => {
+    foreachCheckpointTiming.intervalMs = 0;
+    const build = (crash?: Crash): Built => {
+      const item = step('item', async ({ inputData }) => {
+        if (crash && inputData === 2) await crash();
+        return undefined;
+      });
+      const workflow = createWorkflow({
+        id: 'foreach-undefined-output',
+        inputSchema: anySchema,
+        outputSchema: anySchema,
+      })
+        .foreach(item.step, { concurrency: 1 })
+        .commit();
+      return { workflow, fns: { item: item.fn } };
+    };
+
+    const { original, restarted, fns } = await crashAndRestart(
+      build,
+      [0, 1, 2],
+      latest => progressCount(latest, 'item') >= 2,
+    );
+
+    expect(fns.item.mock.calls.map(call => call[0].inputData)).toEqual([2]);
+    expect(restarted.status).toBe('success');
+    expect(restarted.result).toEqual(original.result);
+  });
+
   it('writes a bounded number of snapshots for a foreach much longer than its concurrency', async () => {
     // Without throttling, every item rewrote the whole snapshot with all progress so far,
     // so bytes grew with the square of the item count.

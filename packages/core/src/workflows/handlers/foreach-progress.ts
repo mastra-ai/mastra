@@ -11,13 +11,11 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// `output` may be absent: JSON storage drops `output: undefined`, which reads back as undefined.
 function isForeachProgress(value: unknown): value is ForeachProgress {
   if (!isPlainRecord(value)) return false;
   return Object.values(value).every(
-    entry =>
-      isPlainRecord(entry) &&
-      'output' in entry &&
-      (entry.nestedRunId === undefined || typeof entry.nestedRunId === 'string'),
+    entry => isPlainRecord(entry) && (entry.nestedRunId === undefined || typeof entry.nestedRunId === 'string'),
   );
 }
 
