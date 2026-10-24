@@ -36,6 +36,15 @@ export function isMediaToolResult(value: unknown): value is MediaToolResult {
 }
 
 /**
+ * Default mime types surfaced to the model as media parts. The list is
+ * intentionally the intersection of image formats supported by the major
+ * model providers (Anthropic, OpenAI, Gemini) plus `application/pdf`.
+ * `image/*` is *not* used so we don't surface exotic subtypes like SVG/BMP
+ * that some providers reject. Override `mediaTypes` to broaden this.
+ */
+export const DEFAULT_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
+
+/**
  * Default cap (in bytes) on inline media results. Payloads larger than this
  * fall back to text-only output instead of being fully base64-encoded into
  * the model context (and persisted in storage on rehydration). 10 MiB is

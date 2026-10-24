@@ -81,6 +81,8 @@ Mastra also gives the agent three tools:
 | `skill_read` | Reads all or part of any file under the selected skill directory. |
 | `skill_search` | Searches skill instructions and reference files. |
 
+`skill_read` returns PNG, JPEG, WebP, and PDF files up to 10 MiB as native media parts so the model can view them. Media types are determined by the file extension. Larger media files and unsupported binary files return only their path and size. Text files remain text, with optional line ranges.
+
 Loading is stateless. The instructions remain in the conversation as a tool result, and the agent can call `skill` again if they leave the context after compaction.
 
 ## Configure skill paths
