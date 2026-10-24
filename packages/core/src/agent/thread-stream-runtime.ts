@@ -4,6 +4,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
+import { AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { parseMemoryRequestContext } from '../memory/types';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -18,8 +19,10 @@ import type {
   UserMessageCancelledChunk,
 } from '../stream/types';
 import { readPositiveIntEnv } from '../utils';
+import type { WorkflowRunStatus } from '../workflows/types';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
+import { DurableStepIds } from './durable/constants';
 import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
 import { clearRunLeaseFence, setRunLeaseFence } from './run-lease-fence';
@@ -41,6 +44,7 @@ import type {
   AgentThreadSubscription,
   AgentUpdateThreadPeerOptions,
   DiscoverAgentThreadPeersOptions,
+  DurableAgentLike,
   CancelQueuedAgentMessagesOptions,
   CancelQueuedAgentMessagesResult,
   AgentThreadEventListener,
@@ -77,6 +81,13 @@ function userMessageSignalId(part: unknown): string | undefined {
 }
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
+const TERMINAL_STORED_RUN_STATUSES = new Set<WorkflowRunStatus>([
+  'success',
+  'failed',
+  'canceled',
+  'bailed',
+  'tripwire',
+]);
 
 /**
  * Formats a thread key for use in error messages.
@@ -1647,6 +1658,36 @@ export class AgentThreadStreamRuntime {
 
   #isSuspendedRun(state: AgentThreadRuntimeState, runId: string) {
     return state.suspendedRunIds.has(runId) || this.#isApprovalSuspendedRun(state, runId);
+  }
+
+  /**
+   * Reads the persisted state of an agent run from the regular or durable agent
+   * loop row, including the namespaced loop name a durable engine advertises
+   * (e.g. Inngest). Returns 'missing' when storage was read but holds no row for the
+   * run (both loops delete the row once a run finishes), and undefined when the
+   * agent has no storage or the read fails, so callers keep the event-derived view.
+   */
+  async #readStoredRunStatus(
+    agent: Agent<any, any, any, any>,
+    runId: string,
+  ): Promise<WorkflowRunStatus | 'missing' | undefined> {
+    try {
+      const workflowsStore = await agent.getMastraInstance?.()?.getStorage?.()?.getStore('workflows');
+      if (!workflowsStore) return undefined;
+      const workflowNames = new Set([AGENTIC_LOOP_WORKFLOW_ID, DurableStepIds.AGENTIC_LOOP]);
+      const advertisedLoopWorkflowName = (agent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>>)
+        .durableLoopWorkflowName;
+      if (typeof advertisedLoopWorkflowName === 'string') workflowNames.add(advertisedLoopWorkflowName);
+      for (const workflowName of workflowNames) {
+        const run = await workflowsStore.getWorkflowRunById({ runId, workflowName });
+        if (!run) continue;
+        const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+        return typeof snapshot?.status === 'string' ? (snapshot.status as WorkflowRunStatus) : undefined;
+      }
+      return 'missing';
+    } catch {
+      return undefined;
+    }
   }
 
   #isThreadBlockingRun(state: AgentThreadRuntimeState, record: AgentThreadRunRecord<any>) {
@@ -5506,8 +5547,23 @@ export class AgentThreadStreamRuntime {
           return;
         }
 
+        // The lease alone cannot tell a parked run from a dead producer: a run
+        // suspended on approval releases its lease, and the prompt that would
+        // tell us so may never have reached this subscriber. A stored suspended
+        // row settles it; anything else keeps the prompt heuristic, since a
+        // running regular-loop run has no row either.
+        const storedStatus = await this.#readStoredRunStatus(agent, runId);
+        if (
+          done ||
+          remoteRunLeaseWatchTokens.get(streamId) !== watchToken ||
+          remoteRuns.get(streamId) !== remoteRun ||
+          remoteRun.done
+        ) {
+          return;
+        }
         stopRemoteRunLeaseWatch(streamId);
-        const parked = remoteRunSuspensionPrompts.delete(streamId);
+        const promptSeen = remoteRunSuspensionPrompts.delete(streamId);
+        const parked = storedStatus === 'suspended' || storedStatus === 'waiting' || promptSeen;
         if (parked) {
           const deferredRecord = deferredRunsByStreamId.get(streamId);
           if (deferredRecord) {
@@ -5849,6 +5905,23 @@ export class AgentThreadStreamRuntime {
             storedStreamIds.add(eventStreamId);
           }
         }
+        // A replayed run-suspended can describe a run that has since resumed and
+        // finished. Both loops persist the suspended row before publishing
+        // run-suspended and delete it when the run finishes, so a readable store
+        // without that row (or with a terminal one) means the run is no longer parked.
+        // A missing row only counts for backlog suspensions (deferred, or
+        // published before this subscription): a live suspension whose
+        // persistence policy skips suspended rows is still parked.
+        const storedStatus =
+          data.type === 'run-suspended' ? await this.#readStoredRunStatus(agent, data.runId) : undefined;
+        const suspendedAt = event.createdAt === undefined ? undefined : new Date(event.createdAt).getTime();
+        const historicalSuspension =
+          deferredRecord !== undefined || (suspendedAt !== undefined && suspendedAt < subscribedAt);
+        const suspendedRunEnded =
+          (storedStatus === 'missing' && historicalSuspension) ||
+          (storedStatus !== undefined && storedStatus !== 'missing' && TERMINAL_STORED_RUN_STATUSES.has(storedStatus));
+        // Its prompt was answered; keep the history but drop the stale prompt.
+        if (suspendedRunEnded) answeredStreamIds.add(eventStreamId);
         if (deferredRecord) {
           deferredRunsByStreamId.delete(eventStreamId);
           const bufferedRun = remoteRuns.get(eventStreamId);
@@ -5869,7 +5942,7 @@ export class AgentThreadStreamRuntime {
             discardDeferredRun(eventStreamId);
           }
         }
-        if (data.type === 'run-suspended') {
+        if (data.type === 'run-suspended' && !suspendedRunEnded) {
           suspendedStreamIdsByRunId.set(data.runId, eventStreamId);
           noteRunHalf(data.runId);
           state.suspendedRunIds.add(data.runId);
@@ -5878,7 +5951,7 @@ export class AgentThreadStreamRuntime {
         } else {
           clearActiveIfCurrent(data.runId, data.streamId);
         }
-        if (data.type !== 'run-suspended') {
+        if (data.type !== 'run-suspended' || suspendedRunEnded) {
           this.#clearSuspendedRun(state, data.runId);
         }
         const remoteRun = remoteRuns.get(eventStreamId);
@@ -5926,6 +5999,8 @@ export class AgentThreadStreamRuntime {
     };
 
     let historyReadAt: number | undefined;
+    /** Events published before this subscription started are backlog. */
+    const subscribedAt = Date.now();
     const storedStreamIds = new Set<string>();
     const suspendedStreamIdsByRunId = new Map<string, string>();
     /** streamSeq of each registered stream, per run. */
