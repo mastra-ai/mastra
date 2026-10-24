@@ -323,10 +323,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory, runState);
         if (stepNumber > 0) {
-          // The durable snapshot retains the run's inputs, but a background result may have
-          // landed in storage after the snapshot was saved. Reconcile those response messages
-          // before the unread-part scan; the snapshot's part keys represent what was seen.
-          this.turn.inputMessageIds = messageList.getPersisted.input.db().map(message => message.id);
+          // A background result may have landed in storage after the durable snapshot was saved.
+          // Reconcile those response messages before the unread-part scan; the snapshot's part
+          // keys represent what was seen.
           if (this.memory?.getPersistedMessages) {
             const responseIds = messageList.getPersisted.response.db().map(message => message.id);
             const snapshotMessages = new Map(messageList.get.all.db().map(message => [message.id, message]));
