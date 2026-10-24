@@ -420,6 +420,74 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     }
   }, 20_000);
 
+  it('sends no retry when the lease is lost while a failed request waits to be retried', async () => {
+    const thread = 'lease-lost-retry-delay-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    const models: string[] = [];
+    let failedAt = 0;
+    // The first request fails at once with a retryable 503; any further request answers normally.
+    const server = createServer(async (req, res) => {
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      const model = JSON.parse(body).model;
+      models.push(model);
+      if (models.length === 1) {
+        res.writeHead(503, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'temporarily unavailable', type: 'server_error' } }));
+        failedAt = Date.now();
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const chunk = (delta: object, finish_reason: string | null) =>
+        res.write(
+          `data: ${JSON.stringify({ id: 'r', object: 'chat.completion.chunk', created: 1, model, choices: [{ index: 0, delta, finish_reason }] })}\n\n`,
+        );
+      chunk({ role: 'assistant', content: 'must not be asked for' }, null);
+      chunk({}, 'stop');
+      res.end('data: [DONE]\n\n');
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address() as { port: number };
+    const provider = createOpenAI({ apiKey: 'local-test', baseURL: `http://127.0.0.1:${address.port}/v1` });
+    const shared = new SharedLeases();
+    const memory = new MockMemory();
+    const pubsub = new ReplicaPubSub(shared);
+    const model = [{ model: provider.chat('gpt-4o-mini'), maxRetries: 1 }];
+    const base =
+      engine === 'fs'
+        ? assembleAgentFromFsEntry({ name: 'retry-delay-agent', config: { model, memory }, instructionsMd: 'Test' })
+        : new Agent({ id: 'retry-delay-agent', name: 'retry-delay-agent', instructions: 'Test', model, memory });
+    const built =
+      engine === 'durable'
+        ? createDurableAgent({ agent: base })
+        : engine === 'evented'
+          ? createEventedAgent({ agent: base, pubsub })
+          : base;
+    const mastra = new Mastra({ agents: engine === 'fs' ? {} : { agent: built as any }, pubsub, logger: false });
+    if (engine === 'fs') mastra.__registerFsAgents({ agent: built as any });
+
+    try {
+      const { output, drain } = await startStream(mastra.getAgent('agent') as any, 'retry delay run', {
+        maxSteps: 4,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      await vi.waitFor(() => expect(failedAt).toBeGreaterThan(0), { timeout: 5_000 });
+
+      // The request has failed and its retry waits about a second. Another run takes the thread meanwhile.
+      shared.leases.set(key, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
+      await done;
+
+      expect(await output.finishReason).toBe('aborted');
+      // No request goes out after the lease is lost: the retry is never sent.
+      expect(models).toEqual(['gpt-4o-mini']);
+      expect(shared.owner(key)).toBe('successor-run');
+    } finally {
+      server.closeAllConnections();
+      await new Promise(resolve => server.close(resolve));
+    }
+  }, 20_000);
+
   it('keeps renewing while a step runs, and once another run owns the thread only waits for the step', async () => {
     const thread = 'lease-renewal-during-step-thread';
     const key = [RESOURCE, thread].join('\u0000');
