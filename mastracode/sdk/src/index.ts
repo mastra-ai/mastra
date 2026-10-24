@@ -3,6 +3,7 @@ import { statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir, hostname } from 'node:os';
 import path from 'node:path';
+import type { AgentScopeEntry } from '@mastra/core/agent';
 
 import type { Agent } from '@mastra/core/agent';
 import { AgentController, migratePersistedModelSelection } from '@mastra/core/agent-controller';
@@ -99,6 +100,7 @@ import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/ind
 import { resolveExperimentalAgent, validateExperimentalAgent, wrapExperimentalAgent } from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
+import { resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
 import type { ProviderAccess } from './onboarding/packs.js';
@@ -349,8 +351,15 @@ export interface MastraCodeConfig {
   storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
   vector?: MastraVector;
-  /** Host-owned Knowledge instance and the key used to register it on the mounted Mastra runtime. */
-  knowledge?: { key: string; instance: Knowledge };
+  /**
+   * Knowledge for the code agent. `instance` is attached to the agent (read, write and pin tools
+   * per its own options) and registered on the mounted Mastra runtime under `key` (default
+   * `'default'`). `scopes` are the tags every run acts with, e.g. `['team:acme:support']` or
+   * `[{ tag: 'org:acme', access: 'read' }]`; local sessions add `org:local` only when none are
+   * given, Factory sessions always add their `org:` and `project:` tags. `false` turns Knowledge
+   * off even when `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1`.
+   */
+  knowledge?: false | { instance: Knowledge; key?: string; scopes?: AgentScopeEntry[] };
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
@@ -847,29 +856,31 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
-  const configuredKnowledgeKey = config?.knowledge?.key.trim();
-  if (config?.knowledge && !configuredKnowledgeKey) {
+  const knowledgeConfig = config?.knowledge || undefined;
+  const configuredKnowledgeKey = knowledgeConfig?.key?.trim();
+  if (knowledgeConfig?.key !== undefined && !configuredKnowledgeKey) {
     throw new Error('knowledge.key must be a non-empty string.');
   }
   const knowledge =
-    config?.knowledge?.instance ??
-    // TODO(knowledge-alpha): the default Knowledge is attached to the agent with read, write and
-    // pins on in the Knowledge-attach slice (scope D5); until then this only enables the inspector.
-    (process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE === '1'
-      ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage })
-      : undefined);
+    config?.knowledge === false
+      ? undefined
+      : (knowledgeConfig?.instance ??
+        (process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE === '1'
+          ? new Knowledge({
+              id: 'mastracode',
+              name: 'MastraCode Knowledge',
+              storage,
+              tools: { read: true, write: true },
+              pins: true,
+            })
+          : undefined));
   const knowledgeKey = configuredKnowledgeKey ?? 'default';
+  const knowledgeHostScopes = knowledgeConfig?.scopes ?? [];
   const dynamicMemory =
     config?.memory === undefined
-      ? getDynamicMemory(
-          storage,
-          vector,
-          config?.settingsPath,
-          {
-            disableSettingsOmSeed: config?.disableSettingsOmSeed,
-          },
-          knowledge,
-        )
+      ? getDynamicMemory(storage, vector, config?.settingsPath, {
+          disableSettingsOmSeed: config?.disableSettingsOmSeed,
+        })
       : undefined;
   const memory =
     config?.memory === false
@@ -1310,6 +1321,20 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // workspace. An explicit `undefined` is required: the factory only builds a
     // default when the `workspace` key is absent.
     workspace: undefined,
+    ...(knowledge
+      ? {
+          knowledge,
+          // The session's tags (Factory org + project, or the local default) join the host's.
+          // An unresolved Factory session adds none, so its writes stay private to the run.
+          scopes: ({ requestContext }) => {
+            const controller = requestContext.get('controller') as
+              | AgentControllerRequestContext<MastraCodeState>
+              | undefined;
+            const session = resolveKnowledgeSessionScopes(controller?.state, knowledgeHostScopes);
+            return session.resolved ? session.scopes : [...knowledgeHostScopes];
+          },
+        }
+      : {}),
     instructions: async ({ requestContext }) => {
       const configured = config?.hostInstructions;
       const hostInstructions = typeof configured === 'function' ? await configured({ requestContext }) : configured;
@@ -1877,6 +1902,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         knowledge: knowledgeKey ?? knowledge,
         mastra: controller.getMastra(),
         session,
+        hostScopes: knowledgeHostScopes,
       }),
     observability,
     memory,
@@ -2281,7 +2307,7 @@ export async function prepareAgentControllerMount(
  */
 export const createMastraCode = bootLocalAgentController;
 export * from './knowledge-inspector.js';
-export { LOCAL_KNOWLEDGE_ORG_ID } from './knowledge-scope.js';
+export { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 
 /**
  * Programmatic headless API. `runMC` runs an already-built controller/session

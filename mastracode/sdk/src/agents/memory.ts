@@ -1,5 +1,4 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import type { Knowledge } from '@mastra/core/knowledge';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
@@ -225,7 +224,6 @@ export function getDynamicMemory(
   vector?: MastraVector,
   settingsPath?: string,
   options?: { disableSettingsOmSeed?: boolean },
-  knowledge?: Knowledge,
 ) {
   // Cache is scoped per storage instance (per getDynamicMemory call) so a
   // Memory bound to one storage is never reused after storage changes.
@@ -310,7 +308,6 @@ export function getDynamicMemory(
 
     cachedMemory = new Memory({
       storage,
-      ...(knowledge ? { knowledge } : {}),
       vector: vector || false,
       embedder: vector ? lazyFastembedSmall : undefined,
       options: {

@@ -33,6 +33,12 @@ vi.mock('../knowledge-inspector.js', () => ({
   createKnowledgeInspector: createKnowledgeInspectorMock,
 }));
 
+/** The config the code agent was built with (the last `createCodingAgent` call with id code-agent). */
+function codeAgentConfig(): any {
+  const calls = agentConstructorMock.mock.calls.map(call => call[0] as any);
+  return calls.filter(config => config?.knowledge !== undefined || config?.name === 'Code Agent').at(-1);
+}
+
 vi.mock('@mastra/core/llm', () => ({
   MastraModelGateway: class {},
   PROVIDER_REGISTRY: providerRegistryMock,
@@ -925,15 +931,55 @@ describe('createMastraCode', () => {
 
     expect(code.knowledge).toBe(instance);
     expect(code.knowledgeKey).toBe('mastra');
-    // No `settingsPath` configured; Knowledge follows the memory options.
-    expect(getDynamicMemoryMock).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      undefined,
-      { disableSettingsOmSeed: undefined },
-      instance,
-    );
+    // Knowledge attaches to the code agent, not to Memory.
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), undefined, {
+      disableSettingsOmSeed: undefined,
+    });
+    expect(codeAgentConfig().knowledge).toBe(instance);
     expect(createKnowledgeInspectorMock).toHaveBeenCalledWith(expect.objectContaining({ knowledge: instance }));
+  });
+
+  it("gives the code agent the host's knowledge scopes plus the local default only when none are shared", async () => {
+    const { Knowledge } = await import('@mastra/core/knowledge');
+    const { RequestContext } = await import('@mastra/core/request-context');
+    const { createMastraCode } = await import('../index.js');
+    const instance = new Knowledge({ id: 'mastra' });
+    await createMastraCode({
+      knowledge: { key: 'scoped', instance, scopes: [{ tag: 'org:self', access: 'read' }, 'team:self:x'] },
+    });
+    const context = new RequestContext([['controller', { state: {} }]]);
+    expect(codeAgentConfig().knowledge).toBe(instance);
+    expect(await codeAgentConfig().scopes({ requestContext: context })).toEqual([
+      { tag: 'org:self', access: 'read' },
+      'team:self:x',
+    ]);
+    expect(createKnowledgeInspectorMock).toHaveBeenCalledWith(
+      expect.objectContaining({ hostScopes: [{ tag: 'org:self', access: 'read' }, 'team:self:x'] }),
+    );
+
+    await createMastraCode({ knowledge: { key: 'plain', instance: new Knowledge({ id: 'plain' }) } });
+    const plainScopes = codeAgentConfig().scopes;
+    expect(await plainScopes({ requestContext: context })).toEqual(['org:local']);
+    const factory = new RequestContext([['controller', { state: { factoryOrgId: 'o', factoryProjectId: 'p' } }]]);
+    expect(await plainScopes({ requestContext: factory })).toEqual(['org:o', 'project:p']);
+  });
+
+  it('attaches the flag-enabled default Knowledge with read, write and pin tools, and knowledge: false turns it off', async () => {
+    vi.stubEnv('MASTRACODE_EXPERIMENTAL_KNOWLEDGE', '1');
+    try {
+      const { createMastraCode } = await import('../index.js');
+      const on = await createMastraCode();
+      const tools = Object.keys(on.knowledge!.createTools());
+      expect(tools).toEqual(expect.arrayContaining(['knowledge_search', 'knowledge_create', 'knowledge_pin']));
+      expect(on.knowledge!.pinsEnabled).toBe(true);
+      expect(codeAgentConfig().knowledge).toBe(on.knowledge);
+
+      const off = await createMastraCode({ knowledge: false });
+      expect(off.knowledge).toBeUndefined();
+      expect(codeAgentConfig()).not.toHaveProperty('knowledge');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('registers the selected Knowledge on the Mastra a local boot builds', async () => {
@@ -1005,13 +1051,9 @@ describe('createMastraCode', () => {
 
     // The settings path and model-pack option are threaded through for
     // observational-memory resolution; neither was configured here.
-    expect(getDynamicMemoryMock).toHaveBeenCalledWith(
-      expect.anything(),
-      vector,
-      undefined,
-      { disableSettingsOmSeed: undefined },
-      process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE === '1' ? expect.objectContaining({ id: 'mastracode' }) : undefined,
-    );
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector, undefined, {
+      disableSettingsOmSeed: undefined,
+    });
     expect(createVectorStoreMock).not.toHaveBeenCalled();
   });
 

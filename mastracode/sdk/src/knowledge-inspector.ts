@@ -1,3 +1,4 @@
+import type { AgentScopeEntry } from '@mastra/core/agent';
 import type { Session } from '@mastra/core/agent-controller';
 import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
@@ -11,7 +12,7 @@ import type {
   MastraCompositeStore,
 } from '@mastra/core/storage';
 
-import { resolveKnowledgeScopeIdentity } from './knowledge-scope.js';
+import { knowledgeSessionTags, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 import type { MastraCodeState } from './schema.js';
 
 export type KnowledgeInspectorScopeLevel = 'org' | 'resource' | 'thread';
@@ -142,9 +143,9 @@ export class KnowledgeInspectorError extends Error {
 }
 
 interface Binding {
-  /** Org rung shared with Knowledge writers (see knowledge-scope.ts). */
-  organizationId: string;
-  /** Resource rung of the knowledge scope: the Factory project id, else the session resource. */
+  /** The session's non-identity scope tags, shared with the code agent (see knowledge-scope.ts). */
+  sessionTags: string[];
+  /** The session's Memory resource. */
   resourceId: string;
   threadId?: string;
   fingerprint: string;
@@ -241,9 +242,16 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   #fingerprint?: string;
   #identityKey = opaqueToken();
 
-  constructor(input: { knowledge: KnowledgeStorage; session: Session<MastraCodeState> }) {
+  readonly #hostScopes: readonly AgentScopeEntry[];
+
+  constructor(input: {
+    knowledge: KnowledgeStorage;
+    session: Session<MastraCodeState>;
+    hostScopes?: readonly AgentScopeEntry[];
+  }) {
     this.#knowledge = input.knowledge;
     this.#session = input.session;
+    this.#hostScopes = input.hostScopes ?? [];
     this.#session.subscribe(event => {
       if (event.type === 'thread_changed' || event.type === 'thread_created' || event.type === 'thread_deleted') {
         this.#invalidateIdnode();
@@ -257,7 +265,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       identityKey: binding.identityKey,
       defaultLevel: 'resource',
       roots: [
-        { level: 'org', id: binding.organizationId, available: true },
+        { level: 'org', id: binding.sessionTags.join(' + '), available: true },
         { level: 'resource', id: binding.resourceId, available: true },
         binding.threadId
           ? { level: 'thread', id: binding.threadId, available: true }
@@ -459,42 +467,41 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   }
 
   async #binding(): Promise<Binding> {
-    // Scope rungs come from the same resolver Knowledge writes under; an
-    // owner id is a USER id and never names a knowledge org.
-    const identity = resolveKnowledgeScopeIdentity(this.#session.state.get());
+    // Session tags come from the same resolver the code agent's run scopes use.
+    const session = resolveKnowledgeSessionScopes(this.#session.state.get(), this.#hostScopes);
     const sessionResourceId = this.#session.identity.getResourceId();
-    if (!identity.resolved) {
-      // An unresolved org is its own identity: handles minted under the
+    if (!session.resolved) {
+      // An unresolved session is its own identity: handles minted under the
       // previous scope must not survive into whatever resolves next.
       this.#invalidateIdnode();
-      throw new KnowledgeInspectorError(
-        'unavailable',
-        identity.reason
-          ? `Knowledge inspection unavailable: ${identity.reason}`
-          : 'Knowledge inspection requires a resolved organization for this session.',
-      );
+      throw new KnowledgeInspectorError('unavailable', `Knowledge inspection unavailable: ${session.reason}`);
     }
     if (!sessionResourceId) {
       throw new KnowledgeInspectorError('unavailable', 'Knowledge inspection requires an active project.');
     }
-    const organizationId = identity.organizationId;
-    const resourceId = identity.knowledgeResourceId ?? sessionResourceId;
+    const sessionTags = knowledgeSessionTags(session.scopes);
+    const resourceId = sessionResourceId;
     const activeThreadId = this.#session.thread.getId() ?? undefined;
     const thread = activeThreadId ? await this.#session.thread.getById({ threadId: activeThreadId }) : null;
     const threadId = thread?.resourceId === sessionResourceId ? thread.id : undefined;
-    const fingerprint = `${organizationId}\0${resourceId}\0${threadId ?? ''}`;
+    const fingerprint = `${sessionTags.join('\u001f')}\0${resourceId}\0${threadId ?? ''}`;
     if (this.#fingerprint !== fingerprint) {
       this.#fingerprint = fingerprint;
       this.#identityKey = opaqueToken();
       this.#handles.clear();
       this.#cursors.clear();
     }
-    return { organizationId, resourceId, threadId, fingerprint, identityKey: this.#identityKey };
+    return { sessionTags, resourceId, threadId, fingerprint, identityKey: this.#identityKey };
   }
 
   #scope(binding: Binding, level: KnowledgeInspectorScopeLevel): KnowledgeScope {
-    if (level === 'org') return [`org:${binding.organizationId}`];
-    const scope = [`org:${binding.organizationId}`, `resource:${binding.resourceId}`];
+    if (level === 'org') {
+      if (binding.sessionTags.length === 0) {
+        throw new KnowledgeInspectorError('unavailable', 'This session holds no shared scope tags.');
+      }
+      return [...binding.sessionTags];
+    }
+    const scope = [...binding.sessionTags, `resource:${binding.resourceId}`];
     if (level === 'resource') return scope;
     if (!binding.threadId) {
       throw new KnowledgeInspectorError('unavailable', 'The active thread does not belong to this project.');
@@ -791,6 +798,8 @@ export async function createKnowledgeInspector(input: {
   knowledge?: Knowledge | string;
   mastra?: Pick<Mastra, 'getKnowledge'>;
   session: Session<MastraCodeState>;
+  /** The host's `knowledge.scopes`, so the inspector reads what the code agent writes. */
+  hostScopes?: readonly AgentScopeEntry[];
 }): Promise<KnowledgeInspector | undefined> {
   let selected: Knowledge | undefined;
   if (typeof input.knowledge === 'string') {
@@ -806,5 +815,7 @@ export async function createKnowledgeInspector(input: {
     selected = input.knowledge;
   }
   const knowledge = selected ? await selected.getStorage() : await input.storage.getStore('knowledge');
-  return knowledge ? new ScopedKnowledgeInspector({ knowledge, session: input.session }) : undefined;
+  return knowledge
+    ? new ScopedKnowledgeInspector({ knowledge, session: input.session, hostScopes: input.hostScopes })
+    : undefined;
 }
