@@ -1,6 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { stopGoalActivity } from '../../../agent/goal';
 import { MemoryMessageRefs } from '../../../agent/message-list/memory-message-refs';
+import { startRunStep } from '../../../agent/run-lease-fence';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
 import { executeAdoptedBackgroundOperation } from '../../../background-tasks/adoption';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -1420,6 +1421,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           };
         }
 
+        // A run that loses its thread lease while this call runs lets it finish before it stops.
+        const settleRunTool = startRunStep(options?.abortSignal);
         const outcome = await executeToolCall({
           tool: tool as any,
           args,
@@ -1448,7 +1451,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
           },
           logger,
-        });
+        }).finally(settleRunTool);
         if (outcome.status === 'aborted') {
           return { aborted: true, ...inputData };
         }
