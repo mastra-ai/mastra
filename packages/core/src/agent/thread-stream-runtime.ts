@@ -290,6 +290,19 @@ function unionScopes(...lists: Array<readonly AgentScopeEntry[] | undefined>): A
   return [...byTag.values()];
 }
 
+/** Two scope lists hold the same tags with the same access, ignoring order and duplicates. */
+function sameScopeEntries(a: readonly AgentScopeEntry[], b: readonly AgentScopeEntry[]): boolean {
+  const keys = (list: readonly AgentScopeEntry[]) =>
+    [
+      ...new Set(
+        unionScopes(list).map(entry => (typeof entry === 'string' ? `${entry}\u0000rw` : `${entry.tag}\u0000r`)),
+      ),
+    ].sort();
+  const left = keys(a);
+  const right = keys(b);
+  return left.length === right.length && left.every((key, index) => key === right[index]);
+}
+
 type ThreadTargetScopes = {
   scopes?: AgentScopeEntry[];
   ifIdle?: { streamOptions?: { scopes?: AgentScopeEntry[]; requestContext?: RequestContext } };
@@ -575,6 +588,8 @@ type AgentThreadRuntimeState = {
   claimedThreadOwnerDiscoveries: Map<string, Promise<string | undefined>>;
   /** Idle-start reservations whose execution lease has not resolved yet. */
   pendingThreadAdmissions: Map<string, PendingThreadAdmission>;
+  /** Call scopes of runs this process reserved through an idle start, until their record registers. */
+  reservedRunScopes: Map<string, AgentScopeEntry[] | undefined>;
   /**
    * Idle signals this process has already acted on, keyed by request id, with the
    * reply it sent. Backends deliver at least once, so a redelivery of a signal
@@ -814,6 +829,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     pendingContinuationsByThread: new Map(),
     claimedThreadOwnerDiscoveries: new Map(),
     pendingThreadAdmissions: new Map(),
+    reservedRunScopes: new Map(),
     handledIdleSignals: createRecentRequests<HandledIdleSignal>(),
     acceptedIdleMessagesByIdentity: createRecentRequests<AcceptedIdleMessage>(),
     claimedThreadOwners: new Map(),
@@ -925,6 +941,18 @@ export class AgentThreadStreamRuntime {
    * Whether `runId` is a suspended run this instance's TTL sweep evicted whose kept
    * lease may still be held. Nothing here consumes signals for it any more.
    */
+  /**
+   * Whether a run on this thread was started with exactly `scopes` as its call scopes. A run
+   * whose scopes this process can't see (owned by another process, or reserved without going
+   * through an idle start) never matches, so a signal naming scopes waits for it instead.
+   */
+  #runHoldsScopes(state: AgentThreadRuntimeState, runId: string, scopes: readonly AgentScopeEntry[]): boolean {
+    const record = state.threadRunsById.get(runId);
+    if (record) return sameScopeEntries(record.streamOptions?.scopes ?? [], scopes);
+    if (!state.reservedRunScopes.has(runId)) return false;
+    return sameScopeEntries(state.reservedRunScopes.get(runId) ?? [], scopes);
+  }
+
   #isSweptLeaseOwner(state: AgentThreadRuntimeState, runId: string): boolean {
     const sweptAt = state.sweptLeasedRunIds.get(runId);
     if (sweptAt === undefined || state.threadRunsById.has(runId)) return false;
@@ -6566,6 +6594,17 @@ export class AgentThreadStreamRuntime {
   ): SendAgentSignalResult<OUTPUT> {
     const target = withThreadTargetScopes(inputTarget, agent.getMastraInstance?.());
     const state = this.#getState(pubsub);
+    // A run's scopes are fixed when it starts. A thread-targeted signal that names its
+    // scopes joins an active run only when that run holds exactly those scopes; otherwise
+    // it is refused with `scope-mismatch`, and the sender waits for that run to end and
+    // sends again so the signal starts its own run.
+    const messageScopes = inputTarget.resourceId && inputTarget.threadId ? inputTarget.scopes : undefined;
+    const scopeMismatch = (activeRunId: string) =>
+      messageScopes !== undefined && !this.#runHoldsScopes(state, activeRunId, messageScopes);
+    const refuseScopes = (activeRunId: string) => ({
+      signal,
+      accepted: Promise.resolve({ action: 'blocked' as const, reason: 'scope-mismatch' as const, runId: activeRunId }),
+    });
     let key: string | undefined;
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';
@@ -6685,6 +6724,7 @@ export class AgentThreadStreamRuntime {
       if (activeRecord && this.#isThreadBlockingRun(state, activeRecord)) {
         key ??= this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
         if (activeRecord.agent.id === agent.id) {
+          if (scopeMismatch(runId)) return refuseScopes(runId);
           // Same-agent active run: queue the signal for in-loop draining so it becomes
           // the next model input instead of waiting for the run to finish.
           const queue = state.pendingSignalsByThread.get(key) ?? [];
@@ -6724,6 +6764,9 @@ export class AgentThreadStreamRuntime {
         // follow-up, since the sender cannot see the owner's request state.
         const isLocalReservedRun = state.threadKeysByRunId.get(runId) === key;
         const pendingAdmission = isLocalReservedRun ? state.pendingThreadAdmissions.get(key) : undefined;
+        // Scopes of a reserved run owned by another process are unknown here, so a
+        // signal naming scopes never joins one.
+        if (scopeMismatch(runId)) return refuseScopes(runId);
         if (pendingAdmission?.runId === runId) {
           const pendingKey = key;
           const queue = state.preRunSignalsByThread.get(key) ?? [];
@@ -6742,6 +6785,10 @@ export class AgentThreadStreamRuntime {
             // it, and a later run there must not replay acknowledged input.
             this.#discardQueuedPreRunSignal(state, pendingKey, signal.id);
             if (admission.action === 'remote') {
+              // The real owner's scopes are unknown here, so a signal naming scopes waits for it.
+              if (messageScopes !== undefined) {
+                return { action: 'blocked' as const, reason: 'scope-mismatch' as const, runId: admission.runId };
+              }
               // The reservation lost its lease; hand this signal to the same real
               // owner before acknowledging it.
               await this.#publishAndWait(pubsub, pendingKey, {
@@ -6839,6 +6886,7 @@ export class AgentThreadStreamRuntime {
         blockingRecord?.output.status === 'suspended' ||
         blockingRecord?.lifecycle === 'suspended'
       ) {
+        if (blockingRecord?.agent.id === agent.id && scopeMismatch(blockingRunId)) return refuseScopes(blockingRunId);
         return {
           signal,
           accepted: Promise.resolve({
@@ -6867,6 +6915,7 @@ export class AgentThreadStreamRuntime {
     // the idle stream so concurrent callers do not launch duplicate runs.
     state.activeThreadRunIds.set(key, runId);
     state.threadKeysByRunId.set(runId, key);
+    state.reservedRunScopes.set(runId, target.ifIdle?.streamOptions?.scopes);
     const reservedKey = key;
     const reservedRunId = runId;
     const resolvedPubSub = this.#getPubSub(pubsub);
@@ -6984,6 +7033,10 @@ export class AgentThreadStreamRuntime {
           return { action: 'blocked' as const, reason: 'thread-blocked' as const, runId: winnerRunId };
         }
 
+        // The winner's scopes are unknown here, so a signal naming scopes waits for it.
+        if (winnerRunId && messageScopes !== undefined) {
+          return { action: 'blocked' as const, reason: 'scope-mismatch' as const, runId: winnerRunId };
+        }
         // Forward the user signal to the winning runId so the message is not dropped.
         // Await the publish so that callers using `accepted` resolution as their
         // "safe to exit" boundary (e.g. a serverless Lambda holding the request open
@@ -7041,11 +7094,20 @@ export class AgentThreadStreamRuntime {
         accepted.then(admission => {
           if (admission.action === 'wake') return { action: 'local' as const, runId: admission.runId };
           if (admission.action === 'deliver') return { action: 'remote' as const, runId: admission.runId };
+          // This signal's scopes kept it from the run that won the lease; signals queued
+          // behind this reservation still go to that run.
+          if (admission.action === 'blocked' && admission.reason === 'scope-mismatch') {
+            return { action: 'remote' as const, runId: admission.runId };
+          }
           if (admission.action === 'blocked') return { action: 'blocked' as const, runId: admission.runId };
           throw new Error(`Unexpected ${admission.action} result while reserving ${describeThreadKey(reservedKey)}`);
         }),
       );
     }
+    void accepted.then(
+      () => state.reservedRunScopes.delete(reservedRunId),
+      () => state.reservedRunScopes.delete(reservedRunId),
+    );
     // Attach a detached no-op catch so that if stream setup throws (a misconfigured
     // agent: no/unsupported model, FGA denial) and the caller never awaits
     // `result.accepted`, the rejection does not surface as an unhandled rejection.

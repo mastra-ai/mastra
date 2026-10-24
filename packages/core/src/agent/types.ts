@@ -263,7 +263,14 @@ export type SendAgentSignalAccepted<OUTPUT = unknown> =
   | { action: 'deliver'; runId: string }
   | { action: 'persist' }
   | { action: 'discard' }
-  | { action: 'blocked'; reason: 'thread-blocked'; runId: string };
+  | { action: 'blocked'; reason: 'thread-blocked'; runId: string }
+  /**
+   * The signal named `scopes` that differ from those of the run active on the thread
+   * (or of a run whose scopes this process can't see). A run's scopes are fixed when it
+   * starts, so the signal did not join it: wait for `runId` to end and send it again to
+   * start its own run.
+   */
+  | { action: 'blocked'; reason: 'scope-mismatch'; runId: string };
 
 export interface SendAgentSignalResult<OUTPUT = unknown> {
   /**
