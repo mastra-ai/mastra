@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MASTRA_KNOWLEDGE_SCOPE_KEY, isReservedRequestContextKey } from '../constants';
 import { HTTPException } from '../http-exception';
 import { knowledgeActivityQuerySchema, knowledgeViewQuerySchema } from '../schemas/knowledge';
+import { deriveAction, extractResource } from '../server-adapter/routes/permissions';
 import {
   GET_KNOWLEDGE_ACTIVITY_ROUTE,
   GET_KNOWLEDGE_GRAPH_ROUTE,
@@ -13,7 +14,6 @@ import {
   LIST_KNOWLEDGE_ROUTE,
   SEARCH_KNOWLEDGE_ROUTE,
 } from './knowledge';
-import { deriveAction, extractResource } from '../server-adapter/routes/permissions';
 
 const org = ['org:acme'];
 const team = ['org:acme', 'team:acme:x'];
