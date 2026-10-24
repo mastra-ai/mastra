@@ -82,7 +82,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
       {/* A11: nodes never carry pin visuals — pins belong to their record
           markers (dot / line / junction). */}
       <div
-        className="knowledge-circle shadow-raised flex size-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center"
+        className="knowledge-circle flex size-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center shadow-raised"
         data-selected={selected || undefined}
         style={getKnowledgeNodeStyle(node.isBoundary ? null : node.rung)}
       >
@@ -160,7 +160,7 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
         <EdgeLabelRenderer>
           <span
             // Nodes always render above lines and their badges — no z lift.
-            className="bg-badge-amber-strong text-badge-amber-foreground shadow-raised absolute rounded-full p-1"
+            className="absolute rounded-full bg-badge-amber-strong p-1 text-badge-amber-foreground shadow-raised"
             style={{
               zIndex: 0,
               // Quadratic bezier midpoint: B(0.5) = 0.25·start + 0.5·control + 0.25·end
@@ -255,7 +255,7 @@ function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
       variant="caption"
       tone="muted"
       data-testid="knowledge-truncation-banner"
-      className="border-border bg-card pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1"
+      className="pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border border-border bg-card px-3 py-1"
     >
       Partial view — {parts.join(' · ')}
     </Txt>
@@ -516,7 +516,7 @@ function KnowledgeGraphInner({
 
   return (
     <div
-      className="knowledge-canvas border-border bg-background relative size-full overflow-hidden rounded-xl border"
+      className="knowledge-canvas relative size-full overflow-hidden rounded-xl border border-border bg-background"
       data-testid="knowledge-graph"
     >
       <TruncationBanner payload={payload} />
@@ -571,7 +571,7 @@ function KnowledgeGraphInner({
           if (!nodeEnd) return;
           onEdgeClick?.({ source: nodeEnd, target: edge.target, recordId: edge.data?.recordId ?? '' });
         }}
-        onNodeMouseEnter={(event: MouseEvent<Element>, node: KnowledgeFlowNode) => {
+        onNodeMouseEnter={(event: MouseEvent, node: KnowledgeFlowNode) => {
           if (isRecordNode(node)) {
             setHover({ kind: 'record', x: event.clientX, y: event.clientY, record: node });
             return;
@@ -579,7 +579,7 @@ function KnowledgeGraphInner({
           if (isKnowledgeNode(node)) setHover({ kind: 'node', x: event.clientX, y: event.clientY, node });
         }}
         onNodeMouseLeave={() => setHover(null)}
-        onEdgeMouseEnter={(event: MouseEvent<Element>, edge: KnowledgeFlowEdge) =>
+        onEdgeMouseEnter={(event: MouseEvent, edge: KnowledgeFlowEdge) =>
           setHover({ kind: 'edge', x: event.clientX, y: event.clientY, edge })
         }
         onEdgeMouseLeave={() => setHover(null)}
@@ -687,7 +687,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3`}
         style={style}
       >
-        <div className="text-foreground mb-1 flex items-center gap-1.5">
+        <div className="mb-1 flex items-center gap-1.5 text-foreground">
           <Txt as="span" variant="caption" className="block">
             Record
           </Txt>

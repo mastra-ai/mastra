@@ -7,13 +7,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../test/render';
 import type { KnowledgeDataSource } from '../../data-source';
 import { KnowledgeDataSourceProvider } from '../../data-source-provider';
-import type { KnowledgeActivityPayload, KnowledgeScopeNode, KnowledgeSearchPayload } from '../../types';
+import type {
+  KnowledgeActivityPayload,
+  KnowledgeNodePayload,
+  KnowledgeScopeNode,
+  KnowledgeSearchPayload,
+} from '../../types';
+import { KnowledgeFlyout } from '../KnowledgeFlyout';
 import { KnowledgeScopeFlyout } from '../KnowledgeScopeFlyout';
 import { KnowledgeSearch } from '../KnowledgeSearch';
 
 const scope: KnowledgeScopeNode = {
   id: 's1',
-  address: 'resource:p1',
+  address: 'project:p1',
   name: 'Payments',
   parentIds: [],
   memberCount: 2,
@@ -35,15 +41,43 @@ const activity: KnowledgeActivityPayload = {
   ],
 };
 
+const nodePayload: KnowledgeNodePayload = {
+  node: {
+    id: 'n1',
+    name: 'Refund policy',
+    kind: 'topic',
+    content: '',
+    description: 'How refunds work',
+    scope: ['org:o1', 'resource:p1'],
+    rung: 'resource',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+  },
+  records: [
+    {
+      id: 'r1',
+      node: 'n1',
+      relation: 'owned',
+      text: 'Refunds are issued within 14 days.',
+      scope: ['org:o1', 'resource:p1'],
+      rung: 'resource',
+      sourceThreadId: 't1',
+      capturedAt: '2026-01-01T00:00:00.000Z',
+      pinned: false,
+    },
+  ],
+};
+
 const searchPayload: KnowledgeSearchPayload = {
   results: [{ id: 'n1', name: 'Refund policy', kind: 'topic', type: 'node', rung: 'resource' }],
   truncated: false,
 };
 
 // The host seam: real React Query hooks over fixtures, the way Factory and Studio wrap their routes.
-function makeSource(overrides: Partial<KnowledgeDataSource> = {}): KnowledgeDataSource {
+function makeSource(): KnowledgeDataSource {
   return {
-    useNode: () => useQuery({ queryKey: ['node'], queryFn: skipToken }),
+    useNode: (nodeId, scopeLevel) =>
+      useQuery({ queryKey: ['node', nodeId, scopeLevel], queryFn: async () => nodePayload }),
     useActivity: () =>
       useInfiniteQuery({
         queryKey: ['activity'],
@@ -56,15 +90,13 @@ function makeSource(overrides: Partial<KnowledgeDataSource> = {}): KnowledgeData
         queryKey: ['search', query],
         queryFn: query.trim().length >= 2 ? async () => searchPayload : skipToken,
       }),
-    ...overrides,
   };
 }
 
 describe('Knowledge components with a host data source', () => {
-  it('shows the host-provided label and activity in the scope flyout', async () => {
-    const source = makeSource({ displayAddress: address => address.replace('resource:', 'project:') });
+  it("shows the scope address and the host's activity in the scope flyout", async () => {
     renderWithProviders(
-      <KnowledgeDataSourceProvider value={source}>
+      <KnowledgeDataSourceProvider value={makeSource()}>
         <KnowledgeScopeFlyout
           selection={{ scopeNodeId: 's1' }}
           scope={scope}
@@ -81,21 +113,16 @@ describe('Knowledge components with a host data source', () => {
     expect(await screen.findByRole('button', { name: 'Refund policy' })).toBeTruthy();
   });
 
-  it('falls back to the raw address when the host gives no label', () => {
+  it("renders the host's node and its record rows in the node flyout", async () => {
     renderWithProviders(
       <KnowledgeDataSourceProvider value={makeSource()}>
-        <KnowledgeScopeFlyout
-          selection={{ scopeNodeId: 's1' }}
-          scope={scope}
-          childScopeCount={1}
-          contentNodeCount={1}
-          countsTruncated={false}
-          onSelectActivity={() => {}}
-          onClose={() => {}}
-        />
+        <KnowledgeFlyout nodeId="n1" scopeLevel="resource" onClose={() => {}} />
       </KnowledgeDataSourceProvider>,
     );
-    expect(screen.getByText('resource:p1')).toBeTruthy();
+
+    expect(await screen.findByRole('heading', { name: 'Refund policy' })).toBeTruthy();
+    expect(screen.getByText('How refunds work')).toBeTruthy();
+    expect(await screen.findByText(/Refunds are issued within 14 days/)).toBeTruthy();
   });
 
   it('searches through the host and reports the chosen result', async () => {

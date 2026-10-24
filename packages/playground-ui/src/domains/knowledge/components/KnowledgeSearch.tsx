@@ -37,8 +37,8 @@ export function KnowledgeSearch({ onSelect }: KnowledgeSearchProps) {
 
   return (
     <div className="relative w-full max-w-sm">
-      <div className="border-border bg-field flex items-center gap-2 rounded-md border px-2">
-        <Search className="text-muted-foreground size-4 shrink-0" />
+      <div className="flex items-center gap-2 rounded-md border border-border bg-field px-2">
+        <Search className="size-4 shrink-0 text-muted-foreground" />
         <Input
           variant="unstyled"
           role="combobox"
@@ -48,7 +48,7 @@ export function KnowledgeSearch({ onSelect }: KnowledgeSearchProps) {
           aria-expanded={open}
           aria-activedescendant={activeResult ? `${listboxId}-option-${activeIndex}` : undefined}
           autoComplete="off"
-          className="text-foreground placeholder:text-placeholder h-9 min-w-0 flex-1 p-0"
+          className="h-9 min-w-0 flex-1 p-0 text-foreground placeholder:text-placeholder"
           placeholder="Search"
           value={query}
           onFocus={() => setFocused(true)}
@@ -91,9 +91,9 @@ export function KnowledgeSearch({ onSelect }: KnowledgeSearchProps) {
           onMouseDown={event => event.preventDefault()}
         >
           {search.isPending || deferredQuery !== query ? (
-            <div className="text-caption text-muted-foreground px-3 py-2">Searching…</div>
+            <div className="px-3 py-2 text-caption text-muted-foreground">Searching…</div>
           ) : search.isError ? (
-            <div className="text-caption px-3 py-2 text-red-400">Unable to search knowledge.</div>
+            <div className="px-3 py-2 text-caption text-red-400">Unable to search knowledge.</div>
           ) : search.data?.results.length ? (
             <>
               {results.map((result, index) => (
@@ -112,23 +112,23 @@ export function KnowledgeSearch({ onSelect }: KnowledgeSearchProps) {
                   onClick={() => selectResult(result)}
                 >
                   <span className="min-w-0">
-                    <span className="text-body-sm text-foreground block truncate">{result.name}</span>
+                    <span className="block truncate text-body text-foreground">{result.name}</span>
                     {result.type === 'scope' && result.address ? ' ' : null}
                     {result.type === 'scope' && result.address ? (
-                      <span className="text-caption text-muted-foreground block truncate">{result.address}</span>
+                      <span className="block truncate text-caption text-muted-foreground">{result.address}</span>
                     ) : null}
                   </span>{' '}
-                  <span className="text-caption text-muted-foreground shrink-0">
+                  <span className="shrink-0 text-caption text-muted-foreground">
                     {result.type === 'scope' ? 'scope' : result.kind}
                   </span>
                 </button>
               ))}
               {search.data.truncated ? (
-                <div className="text-caption text-muted-foreground px-3 py-1.5">Keep typing to narrow the results.</div>
+                <div className="px-3 py-1.5 text-caption text-muted-foreground">Keep typing to narrow the results.</div>
               ) : null}
             </>
           ) : (
-            <div className="text-caption text-muted-foreground px-3 py-2">No matching knowledge.</div>
+            <div className="px-3 py-2 text-caption text-muted-foreground">No matching knowledge.</div>
           )}
         </div>
       ) : null}
