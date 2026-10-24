@@ -84,6 +84,48 @@ describe('Agent signals: per-message scopes', () => {
     run.finish();
   });
 
+  it('refuses a scoped signal into a suspended run started with other scopes, and queues one with its scopes', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = agentNamed('suspended-scopes-agent');
+    const ids = { resourceId: 'suspended-scopes-resource', threadId: 'suspended-scopes-thread' };
+    const runId = 'suspended-scopes-run';
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => (finish = resolve));
+    const subscription = await runtime.subscribeToThread(agent, ids);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    runtime.registerRun(
+      agent,
+      {
+        runId,
+        status: 'suspended',
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'start', runId });
+            controller.enqueue({
+              type: 'tool-call-approval',
+              runId,
+              payload: { toolCallId: 'tool-call-1', toolName: 'testTool' },
+            });
+          },
+        }),
+        _waitUntilFinished: () => finished,
+      } as any,
+      { runId, memory: { resource: ids.resourceId, thread: ids.threadId }, scopes: ['request:r1'] } as any,
+    );
+    await iterator.next();
+    await iterator.next();
+    expect(runtime.getThreadState(ids)).toBe('active');
+    const send = (scopes: string[]) =>
+      runtime.sendSignal(agent, { type: 'user-message', contents: scopes.join() }, { ...ids, scopes }).accepted;
+
+    await expect(send(['request:r2'])).resolves.toEqual({ action: 'blocked', reason: 'scope-mismatch', runId });
+    await expect(send(['request:r1'])).resolves.toEqual({ action: 'deliver', runId });
+    expect(runtime.drainPendingSignals(runId).map(signal => signal.contents)).toEqual(['request:r1']);
+
+    finish();
+    subscription.unsubscribe();
+  });
+
   it('never delivers a signal naming scopes into a run another process owns', async () => {
     const pubsub = new EventEmitterPubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
