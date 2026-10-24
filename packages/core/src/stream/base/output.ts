@@ -2420,7 +2420,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
     // Calculate text from steps, which respects tripwire (rejected steps return empty text)
     // This ensures rejected responses are excluded from the final text output
-    const textFromSteps = steps.map((step: any) => step.text || '').join('');
+    // A run that suspends mid-step (e.g. awaiting tool approval) has streamed text the step results
+    // don't hold yet. The per-step buffer is reset on every step-finish, so this text is never in `steps`.
+    const textFromSteps =
+      steps.map((step: any) => step.text || '').join('') +
+      (this.#status === 'suspended' ? this.#bufferedByStep.text : '');
 
     const fullOutput: FullOutput<OUTPUT> = {
       // After a tripwire, `text` already holds the resolved output (and a processOutputStream
