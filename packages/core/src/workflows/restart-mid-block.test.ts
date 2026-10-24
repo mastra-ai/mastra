@@ -51,6 +51,7 @@ async function crashAndRestart(
   build: (crash?: Crash) => Built,
   inputData: unknown,
   ready?: (latest: WorkflowRunState | undefined) => boolean,
+  tamper?: (crashSnapshot: WorkflowRunState) => void,
 ) {
   const storage = new MockStore();
   let crashSnapshot: WorkflowRunState | undefined;
@@ -76,6 +77,8 @@ async function crashAndRestart(
   expect(original.status).toBe('success');
   expect(crashSnapshot, 'crash point was never reached').toBeDefined();
   expect(crashSnapshot!.status).toBe('running');
+
+  tamper?.(crashSnapshot!);
 
   const second = build();
   const freshStorage = new MockStore();
@@ -353,6 +356,33 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
     };
 
     const { original, restarted, fns } = await crashAndRestart(build, [0, 1, 2]);
+
+    expect(fns.item.mock.calls.map(call => call[0].inputData)).toEqual([0, 1, 2]);
+    expect(restarted.status).toBe('success');
+    expect(restarted.result).toEqual(original.result);
+  });
+
+  it('ignores malformed foreach progress in a stored snapshot and restarts every item', async () => {
+    foreachCheckpointTiming.intervalMs = 0;
+    const build = (crash?: Crash): Built => {
+      const item = step('item', async ({ inputData }) => {
+        if (crash && inputData === 2) await crash();
+        return { doubled: inputData * 2 };
+      });
+      const workflow = createWorkflow({ id: 'foreach-bad-progress', inputSchema: anySchema, outputSchema: anySchema })
+        .foreach(item.step, { concurrency: 1 })
+        .commit();
+      return { workflow, fns: { item: item.fn } };
+    };
+
+    const { original, restarted, fns } = await crashAndRestart(
+      build,
+      [0, 1, 2],
+      latest => progressCount(latest, 'item') >= 2,
+      snapshot => {
+        (snapshot.context.item as any).metadata.foreachProgress['0'] = null;
+      },
+    );
 
     expect(fns.item.mock.calls.map(call => call[0].inputData)).toEqual([0, 1, 2]);
     expect(restarted.status).toBe('success');

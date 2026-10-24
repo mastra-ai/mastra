@@ -12,7 +12,13 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isForeachProgress(value: unknown): value is ForeachProgress {
-  return isPlainRecord(value);
+  if (!isPlainRecord(value)) return false;
+  return Object.values(value).every(
+    entry =>
+      isPlainRecord(entry) &&
+      'output' in entry &&
+      (entry.nestedRunId === undefined || typeof entry.nestedRunId === 'string'),
+  );
 }
 
 /** The checkpointed foreach progress on a foreach step's running result, if any. */
