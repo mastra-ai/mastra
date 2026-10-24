@@ -967,7 +967,7 @@ describe('createMastraCode', () => {
   });
 
   it('does not touch Knowledge storage at startup when Knowledge is off', async () => {
-    vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', '');
+    vi.stubEnv('MASTRACODE_EXPERIMENTAL_KNOWLEDGE', '');
     try {
       const { createMastraCode } = await import('../index.js');
 
@@ -976,7 +976,7 @@ describe('createMastraCode', () => {
       expect(code.knowledge).toBeUndefined();
       expect(createKnowledgeInspectorMock).not.toHaveBeenCalled();
       expect(code.knowledgeInspector).toBeUndefined();
-      expect(code.knowledgeInspectorUnavailableReason).toContain('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1');
+      expect(code.knowledgeInspectorUnavailableReason).toContain('MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1');
     } finally {
       vi.unstubAllEnvs();
     }
@@ -1010,9 +1010,7 @@ describe('createMastraCode', () => {
       vector,
       undefined,
       { disableSettingsOmSeed: undefined },
-      process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
-        ? expect.objectContaining({ id: 'mastracode' })
-        : undefined,
+      process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE === '1' ? expect.objectContaining({ id: 'mastracode' }) : undefined,
     );
     expect(createVectorStoreMock).not.toHaveBeenCalled();
   });
