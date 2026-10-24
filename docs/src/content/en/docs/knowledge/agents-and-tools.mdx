@@ -54,6 +54,8 @@ A run's Knowledge scope is the tags from the agent's `scopes`, plus the Memory `
 - **Writes** land at every tag the run holds. A write tool also takes an optional `scope` argument, a list of tags such as `['team:acme:support']`, to write at only those tags. Each tag must be one the run holds.
 - **Pins** default to every run tag except `thread`.
 
+Tool errors come back to the model as tool-result text. Naming a tag the run doesn't hold returns `This run does not hold scope "team:acme:sales".`
+
 To wire the tools yourself, for example into an agent's `tools`, call `createTools`. It defaults to the groups configured on the instance:
 
 ```typescript
