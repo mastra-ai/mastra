@@ -297,6 +297,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    */
   agentVersionId?: string;
   resolvedScopes?: string[];
+  /** Tags of `resolvedScopes` the run holds read-only. Persisted beside them in suspend payloads. */
+  resolvedReadOnly?: string[];
   toolCallConcurrency?: ToolCallConcurrency;
   eagerToolExecution?: boolean;
   /**

@@ -32,12 +32,21 @@ export type KnowledgeToolContext = {
   requestContext?: { get(key: string): unknown };
 };
 
+/** The run's Knowledge scope and the tags of it the run may write. */
+export interface KnowledgeRunAccess {
+  scope: KnowledgeScope;
+  readOnly: KnowledgeScope;
+}
+
 /**
  * The run's Knowledge scope: the tags Core resolved for the run plus its Memory identity
  * (`resource:`/`thread:`), which Core strips from `mastra__scopes`. Nothing else is trusted.
+ * Tags the run holds read-only count for reads but are listed in `readOnly`.
  */
-export function resolveKnowledgeRunScope(context: KnowledgeToolContext | undefined): KnowledgeScope {
-  const tags = [...getRunAgentScopes(context?.requestContext)];
+export function resolveKnowledgeRunAccess(context: KnowledgeToolContext | undefined): KnowledgeRunAccess {
+  const entries = getRunAgentScopes(context?.requestContext);
+  const tags = entries.map(entry => entry.tag);
+  const readOnly = entries.filter(entry => entry.access === 'read').map(entry => entry.tag);
   const resourceId = context?.agent?.resourceId;
   const threadId = context?.agent?.threadId;
   if (resourceId) tags.push(`resource:${resourceId}`);
@@ -47,7 +56,22 @@ export function resolveKnowledgeRunScope(context: KnowledgeToolContext | undefin
       'Knowledge tools need run scopes: give the agent or the call `scopes`, or run it with a Memory resource or thread.',
     );
   }
-  return canonicalizeKnowledgeScope(tags);
+  return { scope: canonicalizeKnowledgeScope(tags), readOnly };
+}
+
+/** The run's full Knowledge scope, for reads. */
+export function resolveKnowledgeRunScope(context: KnowledgeToolContext | undefined): KnowledgeScope {
+  return resolveKnowledgeRunAccess(context).scope;
+}
+
+/** Refuses a write target carrying a tag the run holds read-only. */
+export function requireWritableTags(tags: readonly string[], readOnly: readonly string[]): void {
+  const blocked = tags.filter(tag => readOnly.includes(tag));
+  if (blocked.length > 0) {
+    throw new Error(
+      `${blocked.map(tag => `"${tag}"`).join(', ')} ${blocked.length === 1 ? 'is' : 'are'} read-only for this run.`,
+    );
+  }
 }
 
 export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<KnowledgeStorage> {

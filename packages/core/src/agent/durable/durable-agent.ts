@@ -47,9 +47,15 @@ import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
 import { SaveQueueManager } from '../save-queue';
-import type { AgentScopesSnapshot } from '../scopes';
-import { applyResolvedAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
-import type { PendingSignalListener, AgentSignalInput } from '../signals';
+import type { AgentScopeEntry, AgentScopesSnapshot } from '../scopes';
+import {
+  applyResolvedAgentScopes,
+  MASTRA_SCOPE_ACCESS_KEY,
+  readOnlyTags,
+  resolveAgentScopes,
+  restoreRunAgentScopes,
+} from '../scopes';
+import type { AgentSignalInput } from '../signals';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
@@ -2016,7 +2022,7 @@ export class DurableAgent<
       callScopes,
       defaultScopes,
       snapshot,
-    }: { callScopes?: string[]; defaultScopes?: string[]; snapshot?: AgentScopesSnapshot },
+    }: { callScopes?: AgentScopeEntry[]; defaultScopes?: AgentScopeEntry[]; snapshot?: AgentScopesSnapshot },
   ): Promise<T> {
     const requestContext = options.requestContext ?? new RequestContext();
     // A resumed run keeps its suspended scopes, so the Agent's configuration is not consulted.
@@ -3514,6 +3520,7 @@ export class DurableAgent<
     // Scopes persisted with a run rebuilt from storage. They are the suspended run's set even when
     // the caller passes its own request context.
     let rehydratedScopes: unknown;
+    let workflowInputAccess: unknown;
     let coldSnapshot: WorkflowRunState | undefined;
     if (!entry) {
       // A persisted durable run can outlive this process (or the registry TTL).
@@ -3643,6 +3650,7 @@ export class DurableAgent<
       // Absent (vs recorded []) marks a run suspended before the scopes upgrade; the resume
       // adopts the supplied scopes with the same trust posture as a fresh run.
       rehydratedScopes = persistedScopes;
+      workflowInputAccess = workflowInput.requestContextEntries?.[MASTRA_SCOPE_ACCESS_KEY];
       const memory = threadId
         ? {
             ...options?.memory,
@@ -3695,6 +3703,7 @@ export class DurableAgent<
       resourceId: memoryInfo?.resourceId,
       threadId: memoryInfo?.threadId,
       scopes: Array.isArray(snapshotScopes) ? snapshotScopes : undefined,
+      readOnly: readOnlyTags(coldSnapshot ? workflowInputAccess : entry.requestContext?.get(MASTRA_SCOPE_ACCESS_KEY)),
     };
 
     let resumeRequestContext = entry.requestContext;
@@ -3704,7 +3713,7 @@ export class DurableAgent<
       resumeRequestContext = options.requestContext;
       for (const [key, value] of entry.requestContext?.entries() ?? []) {
         // The suspended run's scopes are applied on the run's own context below, never the caller's.
-        if (key === MASTRA_SCOPES_KEY) continue;
+        if (key === MASTRA_SCOPES_KEY || key === MASTRA_SCOPE_ACCESS_KEY) continue;
         if (!resumeRequestContext.has(key)) resumeRequestContext.set(key, value);
       }
       if (entry.requestContext?.has('MastraMemory')) {

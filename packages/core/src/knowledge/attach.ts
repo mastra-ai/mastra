@@ -2,7 +2,7 @@ import type { KnowledgeScope, KnowledgeStorage } from '../storage';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 import type { KnowledgeToolContext } from './knowledge-tools';
-import { createKnowledgeTools, resolveKnowledgeRunScope } from './knowledge-tools';
+import { createKnowledgeTools, resolveKnowledgeRunAccess } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { createPinnedTools } from './pinned';
 import type { KnowledgeSemanticIndexCoordinator } from './semantic-index';
@@ -66,7 +66,7 @@ export function buildKnowledgeTools(host: KnowledgeToolHost, groups: KnowledgeTo
   if (groups.read) Object.assign(tools, createKnowledgeTools(host));
   if (groups.write) {
     const options = (context: KnowledgeToolContext | undefined) => ({
-      scope: resolveKnowledgeRunScope(context),
+      ...resolveKnowledgeRunAccess(context),
       sourceThreadId: sourceThreadId(context),
     });
     Object.assign(
@@ -78,16 +78,16 @@ export function buildKnowledgeTools(host: KnowledgeToolHost, groups: KnowledgeTo
   }
   if (groups.pins) {
     const { maxPins, maxTokens } = groups.pins;
-    const options = (scope: KnowledgeScope, threadId: string) => ({
-      scope,
+    const options = (access: { scope: KnowledgeScope; readOnly?: KnowledgeScope }, threadId: string) => ({
+      ...access,
       sourceThreadId: threadId,
       maxPins,
       maxTokens,
     });
     Object.assign(
       tools,
-      perCall(createPinnedTools(host, options(TEMPLATE_SCOPE, 'template')), context =>
-        createPinnedTools(host, options(resolveKnowledgeRunScope(context), sourceThreadId(context))),
+      perCall(createPinnedTools(host, options({ scope: TEMPLATE_SCOPE }, 'template')), context =>
+        createPinnedTools(host, options(resolveKnowledgeRunAccess(context), sourceThreadId(context))),
       ),
     );
   }

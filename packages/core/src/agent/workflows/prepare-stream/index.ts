@@ -53,6 +53,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   actor?: ActorSignal;
   agentVersionId?: string;
   resolvedScopes?: string[];
+  resolvedReadOnly?: string[];
   agentName?: string;
   toolCallId?: string;
   workspace?: Workspace;
@@ -92,6 +93,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   actor,
   agentVersionId,
   resolvedScopes,
+  resolvedReadOnly,
   agentName,
   toolCallId,
   workspace,
@@ -179,6 +181,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentId,
     agentVersionId,
     resolvedScopes,
+    resolvedReadOnly,
     agentName,
     toolCallId,
     methodType,
@@ -210,6 +213,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentId,
     agentVersionId,
     resolvedScopes,
+    resolvedReadOnly,
     methodType,
     saveQueueManager,
     authorizeMemory,

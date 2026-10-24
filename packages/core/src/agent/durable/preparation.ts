@@ -44,6 +44,7 @@ import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
 import { SaveQueueManager } from '../save-queue';
+import type { AgentScopeEntry } from '../scopes';
 import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import { mastraDBMessageToSignal, signalSpanAttributes } from '../signals';
@@ -163,7 +164,7 @@ interface DurablePreparationAgent {
   maxRetries?: number;
   requestContextSchema?: StandardSchemaWithJSON<unknown>;
   getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
-  getScopes?(opts: { requestContext: RequestContext }): Promise<string[] | undefined>;
+  getScopes?(opts: { requestContext: RequestContext }): Promise<AgentScopeEntry[] | undefined>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
   __getModelAndModelList(opts: { requestContext: RequestContext; model?: unknown }): Promise<{
     model: MastraLanguageModel;
@@ -262,7 +263,7 @@ export interface PreparationOptions<OUTPUT = undefined> {
    * undefined) when `options` already include the agent defaults, so the Agent's own
    * `defaultOptions.scopes` are not treated as caller input.
    */
-  callScopes?: string[];
+  callScopes?: AgentScopeEntry[];
   /** Run ID (will be generated if not provided) */
   runId?: string;
   /** Request context */
