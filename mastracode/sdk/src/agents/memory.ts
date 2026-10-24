@@ -345,7 +345,7 @@ export function getDynamicMemory(
         : (state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD);
     const caveman = state?.cavemanObservations ?? false;
 
-    const observerPreviousObservationTokens = 1000;
+    const observerPreviousObservationTokens = 2000;
     // The row is authoritative: an absent value means the user left it on Auto,
     // which the config API reports as 'auto' and Memory resolves by model
     // capability.

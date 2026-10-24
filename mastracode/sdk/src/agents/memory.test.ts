@@ -193,7 +193,7 @@ describe('getDynamicMemory', () => {
         bufferActivation: 2000,
         messageTokens: 30_000,
         blockAfter: 2,
-        previousObserverTokens: 1000,
+        previousObserverTokens: 2000,
         threadTitle: true,
         observeAttachments: undefined,
       },
