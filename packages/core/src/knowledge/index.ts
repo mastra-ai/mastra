@@ -25,7 +25,7 @@ import type { KnowledgeToolGroups, KnowledgeToolHost } from './attach';
 import type { KnowledgeConfig } from './config';
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
-import { DEFAULT_MAX_PINS } from './pinned';
+import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, MAX_PINNED_MAX_TOKENS } from './pinned';
 import {
   materializeKnowledgeScopePlan,
   validateKnowledgeScopeTypes,
@@ -33,6 +33,16 @@ import {
 } from './reconcile';
 import type { KnowledgeScopeTypesConfig, MaterializeKnowledgeScopeInput } from './reconcile';
 import { KnowledgeSemanticIndexCoordinator } from './semantic-index';
+
+function resolvePins(pins: KnowledgeConfig['pins']): false | { maxPins: number; maxTokens: number } {
+  if (!pins) return false;
+  const options = pins === true ? {} : pins;
+  const maxTokens = options.maxTokens ?? DEFAULT_PINNED_MAX_TOKENS;
+  if (maxTokens > MAX_PINNED_MAX_TOKENS) {
+    throw new Error(`Knowledge pins.maxTokens is at most ${MAX_PINNED_MAX_TOKENS}.`);
+  }
+  return { maxPins: options.maxPins ?? DEFAULT_MAX_PINS, maxTokens };
+}
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export class Knowledge extends MastraBase {
@@ -56,7 +66,7 @@ export class Knowledge extends MastraBase {
   #embedderOptions?: MastraEmbeddingOptions;
   #semanticIndex?: Promise<KnowledgeSemanticIndexCoordinator>;
   #tools: { read: boolean; write: boolean };
-  #pins: false | { maxPins: number };
+  #pins: false | { maxPins: number; maxTokens: number };
   #instructions?: KnowledgeInstructionsOption;
 
   constructor(config: KnowledgeConfig = {}) {
@@ -67,9 +77,7 @@ export class Knowledge extends MastraBase {
     this.#embedder = config.embedder;
     this.#embedderOptions = config.embedderOptions;
     this.#tools = { read: config.tools?.read ?? true, write: config.tools?.write ?? false };
-    this.#pins = config.pins
-      ? { maxPins: (config.pins === true ? undefined : config.pins.maxPins) ?? DEFAULT_MAX_PINS }
-      : false;
+    this.#pins = resolvePins(config.pins);
     this.#instructions = config.instructions;
     this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
     this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
@@ -117,7 +125,7 @@ export class Knowledge extends MastraBase {
     return {
       read: override?.read ?? this.#tools.read,
       write: override?.write ?? this.#tools.write,
-      pins: override?.pins === false ? false : this.#pins || (override?.pins ? { maxPins: DEFAULT_MAX_PINS } : false),
+      pins: override?.pins === false ? false : this.#pins || (override?.pins ? resolvePins(true) : false),
     };
   }
 

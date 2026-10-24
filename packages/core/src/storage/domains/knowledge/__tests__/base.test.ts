@@ -11,7 +11,7 @@ import {
   KnowledgeUnsupportedCapabilityError,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
-  MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
+  MAX_KNOWLEDGE_RECORD_TOKENS,
 } from '../base';
 import { InMemoryKnowledgeStorage } from '../inmemory';
 
@@ -45,8 +45,8 @@ describe('InMemoryKnowledgeStorage', () => {
         defaultScope: resource,
       });
 
-    await append('x'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH));
-    await expect(append('x'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH + 1))).rejects.toThrow(
+    await append('word '.repeat(MAX_KNOWLEDGE_RECORD_TOKENS).trimEnd());
+    await expect(append('word '.repeat(MAX_KNOWLEDGE_RECORD_TOKENS + 1).trimEnd())).rejects.toThrow(
       'split it into separate facts or summarize it',
     );
     expect((await store.listKnowledgeAbout({ node, scope: resource })).records).toHaveLength(1);
