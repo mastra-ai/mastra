@@ -130,7 +130,7 @@ describe('Knowledge read routes', () => {
     const filterAccessible = vi.fn(async (_user: unknown, items: Array<{ key: string }>) =>
       items.filter(i => i.key !== 'main'),
     );
-    (mastra as any).getServer = () => ({ fga: { filterAccessible, canAccess: async () => false } });
+    (mastra as any).getServer = () => ({ fga: { filterAccessible, check: async () => false } });
     const requestContext = new RequestContext();
     requestContext.set('user', { id: 'u1' });
     expect(await call(LIST_KNOWLEDGE_ROUTE, { mastra, requestContext })).toEqual({ instances: [] });
@@ -139,6 +139,16 @@ describe('Knowledge read routes', () => {
     await expect(
       call(GET_KNOWLEDGE_GRAPH_ROUTE, { mastra, requestContext, knowledgeKey: 'main', scope: org }),
     ).rejects.toMatchObject({ status: 404 });
+
+    // A provider that allows the instance reads it (check, the real IFGAProvider method).
+    const check = vi.fn(async () => true);
+    (mastra as any).getServer = () => ({ fga: { filterAccessible, check } });
+    const graph = await call(GET_KNOWLEDGE_GRAPH_ROUTE, { mastra, requestContext, knowledgeKey: 'main', scope: org });
+    expect(graph).toBeDefined();
+    expect(check).toHaveBeenCalledWith(
+      { id: 'u1' },
+      { resource: { type: 'knowledge', id: expect.any(String) }, permission: 'knowledge:read' },
+    );
   });
 
   it('parses one or many scope params and bounds them', () => {

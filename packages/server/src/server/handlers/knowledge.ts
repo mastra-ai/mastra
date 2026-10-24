@@ -75,11 +75,10 @@ async function resolveStore(
   const fgaProvider = (mastra as any).getServer?.()?.fga;
   const user = requestContext?.get('user');
   if (fgaProvider && user && typeof user === 'object') {
-    const allowed = await fgaProvider.canAccess(
-      user,
-      { type: 'knowledge', id: instance.id },
-      MastraFGAPermissions.KNOWLEDGE_READ,
-    );
+    const allowed = await fgaProvider.check(user, {
+      resource: { type: 'knowledge', id: instance.id },
+      permission: MastraFGAPermissions.KNOWLEDGE_READ,
+    });
     if (!allowed) throw new HTTPException(404, { message: `Knowledge ${knowledgeKey} not found` });
   }
 

@@ -109,7 +109,7 @@ export default function KnowledgePage() {
   return (
     <Shell>
       <KnowledgeDataSourceProvider value={dataSource}>
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="flex h-full min-h-0 flex-1 flex-col gap-3">
           <form onSubmit={apply} className="flex flex-wrap items-center gap-2">
             {instances.data && instances.data.length > 1 ? (
               <select
