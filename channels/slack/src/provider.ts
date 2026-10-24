@@ -827,7 +827,7 @@ export class SlackProvider implements ChannelProvider {
       );
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      const isAppGone = errMsg.includes('app_not_found') || errMsg.includes('no_permission');
+      const isAppGone = errMsg.includes('app_not_found') || errMsg.includes('invalid_app_id');
 
       if (isAppGone) {
         console.warn(

@@ -334,7 +334,7 @@ Returns: `Promise<void>`
 
 When `connect()` builds a Slack app, the generated manifest requests a default set of bot scopes and event subscriptions. Configuring slash commands also adds the `commands` scope. Override the defaults with the `manifest` option on `connect()`.
 
-The manifest declares the `agent_view` feature, so users can keep messaging the agent in a DM while it works. Provider-managed apps created with the older `assistant_view` feature move to `agent_view` the next time the provider starts, keeping any customizations made with `connect({ manifest })`. DMs with the app then use Slack's agent layout instead of the assistant chat list, and users may need to hard-refresh Slack. Slack documents the switch from `assistant_view` to `agent_view` as one that can't be reversed. Apps owned by an `AgentController` aren't updated automatically, so replace `features.assistant_view` with `features.agent_view` in their manifest yourself.
+The manifest declares the `agent_view` feature, so users can keep messaging the agent in a DM while it works. Provider-managed apps created with the older `assistant_view` feature move to `agent_view` the next time the provider starts, keeping customizations made with `connect({ manifest })` except slash commands, which are regenerated from `slashCommands`. DMs with the app then use Slack's agent layout instead of the assistant chat list, and users may need to hard-refresh Slack. Slack documents the switch from `assistant_view` to `agent_view` as one that can't be reversed. Apps owned by an `AgentController` aren't updated automatically, so replace `features.assistant_view` with `features.agent_view` in their manifest yourself.
 
 | Default bot scopes | Default bot events |
 | - | - |

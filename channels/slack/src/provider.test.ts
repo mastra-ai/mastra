@@ -87,7 +87,10 @@ describe('agent_view migration', () => {
     features: {
       app_home: { home_tab_enabled: true, messages_tab_enabled: true, messages_tab_read_only_enabled: false },
       bot_user: { display_name: 'Helper', always_online: true },
-      assistant_view: { assistant_description: 'Helps' },
+      assistant_view: {
+        assistant_description: 'Helps',
+        suggested_prompts: [{ title: 'Status', message: 'What is the status?' }],
+      },
     },
     oauth_config: {
       redirect_urls: ['https://old.example.com/slack/oauth/callback'],
@@ -105,11 +108,11 @@ describe('agent_view migration', () => {
     },
   };
 
-  async function restart(configHash: string) {
+  async function restart(configHash: string, exportError?: Error) {
     const updateApp = vi.spyOn(SlackManifestClient.prototype, 'updateApp').mockResolvedValue(undefined as never);
-    vi.spyOn(SlackManifestClient.prototype, 'exportManifest').mockResolvedValue(
-      structuredClone(customizedLegacyManifest) as never,
-    );
+    const exportManifest = vi.spyOn(SlackManifestClient.prototype, 'exportManifest');
+    if (exportError) exportManifest.mockRejectedValue(exportError);
+    else exportManifest.mockResolvedValue(structuredClone(customizedLegacyManifest) as never);
     const store = new InMemoryStore();
     const channels = (await store.getStore('channels'))!;
     const provider = new SlackProvider({
@@ -156,7 +159,10 @@ describe('agent_view migration', () => {
     expect(updateApp).toHaveBeenCalledTimes(1);
     const [appId, manifest] = updateApp.mock.calls[0]!;
     expect(appId).toBe('A1');
-    expect(manifest.features?.agent_view).toEqual({ agent_description: 'Helps' });
+    expect(manifest.features?.agent_view).toEqual({
+      agent_description: 'Helps',
+      suggested_prompts: [{ title: 'Status', message: 'What is the status?' }],
+    });
     expect(manifest.features).not.toHaveProperty('assistant_view');
     const [record] = (await channels.listInstallations('slack')) as Array<{ configHash?: string }>;
     expect(record?.configHash).toBe(hashConfig({}, 'https://example.com', 'Helper', 'Helps'));
@@ -174,6 +180,14 @@ describe('agent_view migration', () => {
     );
     expect(manifest.settings?.event_subscriptions?.request_url).toBe('https://example.com/slack/events/hook-1');
     expect(manifest.oauth_config?.redirect_urls).toEqual(['https://example.com/slack/oauth/callback']);
+  });
+
+  it('keeps the installation when Slack denies the manifest export', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { updateApp, channels } = await restart(legacyHash, new Error('App manifest export failed: no_permission'));
+
+    expect(updateApp).not.toHaveBeenCalled();
+    expect(await channels.listInstallations('slack')).toHaveLength(1);
   });
 
   it('leaves apps already on agent_view alone', async () => {

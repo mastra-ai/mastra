@@ -159,9 +159,10 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
 export function applyManagedManifestFields(current: SlackAppManifest, generated: SlackAppManifest): SlackAppManifest {
   const union = (a: string[] = [], b: string[] = []) => [...new Set([...a, ...b])];
   // Slack rejects a manifest that declares both views.
-  const { assistant_view: _legacy, ...features } = (current.features ?? {}) as NonNullable<
-    SlackAppManifest['features']
-  > & { assistant_view?: unknown };
+  type Features = NonNullable<SlackAppManifest['features']>;
+  const { assistant_view: legacyView, ...features } = (current.features ?? {}) as Features & {
+    assistant_view?: Pick<NonNullable<Features['agent_view']>, 'suggested_prompts'>;
+  };
 
   return {
     ...current,
@@ -171,9 +172,11 @@ export function applyManagedManifestFields(current: SlackAppManifest, generated:
       bot_user: { ...features.bot_user, ...generated.features?.bot_user } as NonNullable<
         SlackAppManifest['features']
       >['bot_user'],
-      agent_view: { ...features.agent_view, ...generated.features?.agent_view } as NonNullable<
-        SlackAppManifest['features']
-      >['agent_view'],
+      agent_view: {
+        suggested_prompts: legacyView?.suggested_prompts,
+        ...features.agent_view,
+        ...generated.features?.agent_view,
+      } as NonNullable<SlackAppManifest['features']>['agent_view'],
       slash_commands: generated.features?.slash_commands,
     },
     oauth_config: {
