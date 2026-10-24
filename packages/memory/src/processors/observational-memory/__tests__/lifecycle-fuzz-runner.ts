@@ -85,7 +85,7 @@ function createOM(env: FuzzEnv, storage: MemoryStorage, rng: () => number, ledge
   return om;
 }
 
-type Op = 'save' | 'buffer' | 'activate' | 'observe' | 'reflect' | 'maybeReflect';
+export type Op = 'save' | 'buffer' | 'activate' | 'observe' | 'reflect' | 'maybeReflect';
 const WEIGHTS: Array<[Op, number]> = [
   ['save', 5],
   ['buffer', 3],
@@ -94,11 +94,10 @@ const WEIGHTS: Array<[Op, number]> = [
   ['reflect', 1],
   ['maybeReflect', 2],
 ];
-const TOTAL_WEIGHT = WEIGHTS.reduce((sum, [, w]) => sum + w, 0);
 
-function pickOp(rng: () => number): Op {
-  let roll = rng() * TOTAL_WEIGHT;
-  for (const [op, weight] of WEIGHTS) {
+function pickOp(rng: () => number, weights: Array<[Op, number]>): Op {
+  let roll = rng() * weights.reduce((sum, [, w]) => sum + w, 0);
+  for (const [op, weight] of weights) {
     roll -= weight;
     if (roll < 0) return op;
   }
@@ -114,7 +113,17 @@ export interface SeedResult {
   stats: Record<string, number>;
 }
 
-export async function runFuzzSeed(env: FuzzEnv, seed: number, steps = 40): Promise<SeedResult> {
+/**
+ * With `ties`, messages are saved in pairs sharing one millisecond, so observation and buffering
+ * batches can end between two messages with the same timestamp (#27261). `ops` limits the operations.
+ */
+export async function runFuzzSeed(
+  env: FuzzEnv,
+  seed: number,
+  opts: { steps?: number; ties?: boolean; ops?: Op[] } = {},
+): Promise<SeedResult> {
+  const { steps = 40, ties = false } = opts;
+  const weights = opts.ops ? WEIGHTS.filter(([op]) => opts.ops!.includes(op)) : WEIGHTS;
   const rng = createRng(seed);
   const storage = await env.createStorage(seed);
   const ids = { threadId: `fuzz-thread-${seed}`, resourceId: `fuzz-resource-${seed}` };
@@ -142,7 +151,7 @@ export async function runFuzzSeed(env: FuzzEnv, seed: number, steps = 40): Promi
 
   const trace: string[] = [];
   const violations: Violation[] = [];
-  const state = { lastCursor: null as number | null };
+  const state = { lastCursor: null as number | null, ties };
   const pending: Promise<unknown>[] = [];
 
   const sample = async (label: string) => {
@@ -151,7 +160,7 @@ export async function runFuzzSeed(env: FuzzEnv, seed: number, steps = 40): Promi
   };
 
   for (let step = 0; step < steps; step++) {
-    const op = pickOp(rng);
+    const op = pickOp(rng, weights);
     const om = oms[rng() < 0.5 ? 0 : 1]!;
     const who = om === oms[0] ? 'A' : 'B';
     trace.push(`${step}:${who}.${op}`);
@@ -160,7 +169,7 @@ export async function runFuzzSeed(env: FuzzEnv, seed: number, steps = 40): Promi
         case 'save': {
           const n = ledger.messages.length;
           const id = `m${String(n).padStart(4, '0')}`;
-          const createdAt = new Date(t0 + (n + 1) * 1_000);
+          const createdAt = new Date(t0 + ((ties ? Math.floor(n / 2) : n) + 1) * 1_000);
           ledger.messages.push({ id, createdAt });
           await storage.saveMessages({
             messages: [
@@ -249,12 +258,12 @@ export async function runFuzzSeed(env: FuzzEnv, seed: number, steps = 40): Promi
 /** Runs `count` seeds from `first` and returns per-seed results plus a one-line report. */
 export async function runFuzzSeeds(
   env: FuzzEnv,
-  opts: { first: number; count: number; beforeSeed?: () => void },
+  opts: { first: number; count: number; beforeSeed?: () => void; ties?: boolean; ops?: Op[] },
 ): Promise<{ results: SeedResult[]; failing: SeedResult[]; report: string }> {
   const results: SeedResult[] = [];
   for (let seed = opts.first; seed < opts.first + opts.count; seed++) {
     opts.beforeSeed?.();
-    results.push(await runFuzzSeed(env, seed));
+    results.push(await runFuzzSeed(env, seed, { ties: opts.ties, ops: opts.ops }));
   }
   const byInvariant: Record<string, number> = {};
   for (const result of results) {
@@ -268,7 +277,7 @@ export async function runFuzzSeeds(
     for (const [key, value] of Object.entries(result.stats)) totals[key] = (totals[key] ?? 0) + value;
   }
   const lines = [
-    `OM_FUZZ seeds=${opts.count} first=${opts.first} failingSeeds=${failing.length} violations=${JSON.stringify(byInvariant)} explainedDuplicates=${explained} overlappingSyncDuplicates=${overlapping} activity=${JSON.stringify(totals)}`,
+    `OM_FUZZ${opts.ties ? ' ties' : ''}${opts.ops ? ` ops=${opts.ops.join(',')}` : ''} seeds=${opts.count} first=${opts.first} failingSeeds=${failing.length} [${failing.map(r => r.seed).join(',')}] violations=${JSON.stringify(byInvariant)} explainedDuplicates=${explained} overlappingSyncDuplicates=${overlapping} activity=${JSON.stringify(totals)}`,
     ...failing.slice(0, 3).map(
       result =>
         `OM_FUZZ seed ${result.seed}: ${result.violations
