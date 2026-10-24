@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type {
-  KnowledgeBoundaryNode,
-  KnowledgeGraphEdge,
-  KnowledgeGraphNode,
-  KnowledgeGraphRecord,
-} from '../../services/knowledge';
+import type { KnowledgeBoundaryNode, KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphRecord } from '../types';
 import {
   BOUNDARY_NODE_SIZE,
   degreeMap,
@@ -328,10 +323,11 @@ describe('toFlowGraph', () => {
 
   it('forces the focused node to max size and labels it even with zero incoming', () => {
     const { nodes } = toFlowGraph([node('a'), node('b')], [edge('a', 'b')], undefined, 'a');
-    const focused = nodes.find(node => node.id === 'a')!;
+    const focused = nodes.find(node => node.id === 'a');
+    if (!focused) throw new Error('missing node a');
     expect(focused.data.size).toBe(NODE_SIZE_MAX);
     expect(focused.data.focused).toBe(true); // 'a' has 0 incoming — focus labels it anyway
-    expect(nodes.find(node => node.id === 'b')!.data.focused).toBe(false);
+    expect(nodes.find(node => node.id === 'b')?.data.focused).toBe(false);
   });
 });
 
@@ -370,8 +366,9 @@ describe('runLayout', () => {
     const positions = runLayout(mixed, dense);
     for (let i = 0; i < mixed.length; i++) {
       for (let j = i + 1; j < mixed.length; j++) {
-        const p1 = positions.get(mixed[i].id)!;
-        const p2 = positions.get(mixed[j].id)!;
+        const p1 = positions.get(mixed[i]?.id ?? '');
+        const p2 = positions.get(mixed[j]?.id ?? '');
+        if (!p1 || !p2) throw new Error('missing layout position');
         const distance = Math.hypot(p1.x - p2.x, p1.y - p2.y);
         // Every pair clears the sum of radii — no node sits inside another.
         expect(distance).toBeGreaterThan(mixed[i].size / 2 + mixed[j].size / 2);

@@ -1,6 +1,21 @@
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { textStyle } from '@mastra/playground-ui/primitives/text';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ExternalLink, Pin, Sparkles, X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+
+import { useKnowledgeDataSource } from '../data-source-context';
+import { knowledgeScopes } from '../lib/knowledgeScope';
+import { getRecordBorderClass, getRecordRingClass } from '../lib/knowledgeStyles';
+import { parseRecordSegments } from '../lib/recordText';
+import type { KnowledgeNodeRecord, KnowledgeRung } from '../types';
+
+import { Badge } from '@/ds/components/Badge';
+import { Button } from '@/ds/components/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Notice } from '@/ds/components/Notice';
+import { Txt } from '@/ds/components/Txt';
+import { textStyle } from '@/ds/primitives/text';
+import { cn } from '@/utils/cn';
+
 /**
  * The right-side flyout: all the juicy details for a clicked node, organized
  * as collapsible sections — Knowledge node (identity + counts), Knowledge records (the node's
@@ -9,34 +24,20 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
  * the "captured in session" link that opens the thread view (Amendment A2).
  */
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { ExternalLink, Pin, Sparkles, X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { knowledgeScopes } from './knowledgeScope';
-import { getRecordBorderClass, getRecordRingClass } from './knowledgeStyles';
-
-import { useKnowledgeNode } from '../../../../../hooks/useKnowledgeGraph';
-import type { KnowledgeNodeRecord, KnowledgeRung } from '../../services/knowledge';
-import { parseRecordSegments } from './recordText';
-
 const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
 
 function SectionHeader({ title, count }: { title: string; count?: number }) {
   return (
-    <CollapsibleTrigger className="border-border flex w-full items-center gap-2 border-t px-4 py-3 text-left">
+    <CollapsibleTrigger className="flex w-full items-center gap-2 border-t border-border px-4 py-3 text-left">
       <Txt as="span" variant="subheading" tone="ink">
         {title}
       </Txt>
       {count !== undefined ? (
-        <Txt as="span" variant="meta" tone="muted" className="bg-fill rounded-full px-1.5 py-0.5">
+        <Txt as="span" variant="meta" tone="muted" className="rounded-full bg-fill px-1.5 py-0.5">
           {count}
         </Txt>
       ) : null}
-      <DisclosureChevron className="text-muted-foreground ml-auto size-3.5" />
+      <DisclosureChevron className="ml-auto size-3.5 text-muted-foreground" />
     </CollapsibleTrigger>
   );
 }
@@ -57,7 +58,7 @@ function RecordText({ text, onNodeRef }: { text: string; onNodeRef?: (name: stri
           <button
             key={index}
             type="button"
-            className="bg-badge-purple-subtle text-badge-purple-foreground hover:bg-badge-purple-strong rounded px-1"
+            className="rounded bg-badge-purple-subtle px-1 text-badge-purple-foreground hover:bg-badge-purple-strong"
             onClick={event => {
               event.stopPropagation();
               onNodeRef?.(segment.value);
@@ -142,10 +143,10 @@ function RecordCard({
         <div className="text-foreground">
           <RecordText text={record.text} onNodeRef={onNodeRef} />
           {record.pinned ? (
-            <Pin size={11} className="text-badge-amber-indicator ml-1 inline" aria-label="Pinned knowledge record" />
+            <Pin size={11} className="ml-1 inline text-badge-amber-indicator" aria-label="Pinned knowledge record" />
           ) : null}
         </div>
-        <div className="text-muted-foreground mt-1.5 flex items-center gap-2">
+        <div className="mt-1.5 flex items-center gap-2 text-muted-foreground">
           <RungBadge rung={record.rung} />
           {record.relation === 'mentions' ? (
             <Txt as="span" variant="meta" tone="muted">
@@ -158,14 +159,14 @@ function RecordCard({
         </div>
       </div>
       {expanded ? (
-        <div data-testid="knowledge-record-detail" className="border-border border-t px-3 py-2.5">
-          <dl className="text-muted-foreground grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
+        <div data-testid="knowledge-record-detail" className="border-t border-border px-3 py-2.5">
+          <dl className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1 text-muted-foreground">
             <dt className={textStyle({ variant: 'body-sm' })}>Captured in session</dt>
             <dd>
               {record.sourceThreadId ? (
                 <button
                   type="button"
-                  className="text-badge-purple-indicator flex items-center gap-1 hover:underline"
+                  className="flex items-center gap-1 text-badge-purple-indicator hover:underline"
                   onClick={() => onOpenThread?.(record.sourceThreadId)}
                 >
                   <Txt as="span" variant="body-sm" className="max-w-40 truncate">
@@ -193,9 +194,9 @@ function RecordCard({
           {reason ? (
             <div
               data-testid="knowledge-record-reason"
-              className="border-badge-amber-edge bg-badge-amber-subtle mt-2 rounded-md border p-2"
+              className="mt-2 rounded-md border border-badge-amber-edge bg-badge-amber-subtle p-2"
             >
-              <div className="text-badge-amber-foreground mb-1 flex items-center gap-1 uppercase">
+              <div className="mb-1 flex items-center gap-1 text-badge-amber-foreground uppercase">
                 <Sparkles size={10} />
                 <Txt as="span" variant="meta" className="block">
                   {' '}
@@ -230,10 +231,8 @@ function RecordCard({
 }
 
 export interface KnowledgeFlyoutProps {
-  factoryProjectId: string;
   nodeId: string;
   scopeLevel: KnowledgeRung;
-  threadId?: string;
   /** Highlight the knowledge record backing a clicked edge. */
   focusRecordId?: string;
   /** Card expand/collapse selects (or clears) the knowledge record page-wide — the graph lights it up too. */
@@ -244,22 +243,20 @@ export interface KnowledgeFlyoutProps {
 }
 
 export function KnowledgeFlyout({
-  factoryProjectId,
   nodeId,
   scopeLevel,
-  threadId,
   focusRecordId,
   onSelectRecord,
   onClose,
   onNodeRef,
   onOpenThread,
 }: KnowledgeFlyoutProps) {
-  const nodeQuery = useKnowledgeNode(factoryProjectId, nodeId, scopeLevel, threadId);
+  const nodeQuery = useKnowledgeDataSource().useNode(nodeId, scopeLevel);
 
   return (
     <aside
       data-testid="knowledge-flyout"
-      className="border-border bg-card shadow-overlay fixed inset-x-0 bottom-0 z-30 flex max-h-[70vh] flex-col overflow-hidden rounded-t-xl border-t md:static md:z-auto md:max-h-none md:w-[380px] md:shrink-0 md:rounded-none md:border-t-0 md:border-l md:shadow-none"
+      className="fixed inset-x-0 bottom-0 z-30 flex max-h-[70vh] flex-col overflow-hidden rounded-t-xl border-t border-border bg-card shadow-overlay md:static md:z-auto md:max-h-none md:w-[380px] md:shrink-0 md:rounded-none md:border-t-0 md:border-l md:shadow-none"
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (
@@ -278,7 +275,7 @@ export function KnowledgeFlyout({
                 {nodeQuery.data.node.name}
               </Txt>
               <div className="mt-1 flex items-center gap-2">
-                <Txt as="span" variant="meta" tone="muted" className="bg-fill rounded px-1.5 py-0.5">
+                <Txt as="span" variant="meta" tone="muted" className="rounded bg-fill px-1.5 py-0.5">
                   {nodeQuery.data.node.kind}
                 </Txt>
                 <RungBadge rung={nodeQuery.data.node.rung} />
@@ -291,7 +288,7 @@ export function KnowledgeFlyout({
 
           <div className="min-h-0 flex-1 overflow-y-auto pb-4">
             {nodeQuery.data.node.description?.trim() ? (
-              <p className="text-foreground px-4 pb-3 text-sm leading-relaxed">{nodeQuery.data.node.description}</p>
+              <p className="px-4 pb-3 text-body leading-relaxed text-foreground">{nodeQuery.data.node.description}</p>
             ) : null}
             {nodeQuery.data.node.content.trim() ? (
               <Collapsible defaultOpen>

@@ -1,15 +1,4 @@
-import { textStyle } from '@mastra/playground-ui/primitives/text';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-/**
- * The force-directed knowledge graph: React Flow renders DOM nodes/edges while
- * d3-force computes positions (synchronously, deterministic). Knowledge nodes are
- * nodes sized by edge degree (Amendment A3), wikilink relationships are edges,
- * pinned knowledge carries a distinct accent, and hovering a node or edge
- * shows a summary card. Dragging a node re-pins it (the layout keeps it put).
- */
-
-import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { EdgeProps, NodeProps } from '@xyflow/react';
 import {
   Background,
   BackgroundVariant,
@@ -24,14 +13,13 @@ import {
   useReactFlow,
   EdgeLabelRenderer,
 } from '@xyflow/react';
-import type { EdgeProps, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { Boxes, Globe, Pin } from 'lucide-react';
+import type { MouseEvent } from 'react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../../services/knowledge';
-import type { NodeFlowNode, KnowledgeFlowEdge, KnowledgeGraphFilters, RecordFlowNode } from './graphModel';
+import type { Arrivals } from '../lib/graphDiff';
+import type { NodeFlowNode, KnowledgeFlowEdge, KnowledgeGraphFilters, RecordFlowNode } from '../lib/graphModel';
 import {
   deriveRecordElements,
   egoGraph,
@@ -45,10 +33,9 @@ import {
   shouldShowLabel,
   toFlowGraph,
   toRecordFlow,
-} from './graphModel';
-import type { Arrivals } from './graphDiff';
-import { runLayout } from './layout';
-import { knowledgeScopes } from './knowledgeScope';
+} from '../lib/graphModel';
+import { knowledgeScopes } from '../lib/knowledgeScope';
+import type { KnowledgeFlowNode } from '../lib/knowledgeStyles';
 import {
   getKnowledgeEdgeStyle,
   getKnowledgeNodeStyle,
@@ -56,9 +43,25 @@ import {
   getRecordRingClass,
   isKnowledgeNode,
   isRecordNode,
-} from './knowledgeStyles';
-import type { KnowledgeFlowNode } from './knowledgeStyles';
+} from '../lib/knowledgeStyles';
+import { runLayout } from '../lib/layout';
+import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../types';
+
+import { Badge } from '@/ds/components/Badge';
+import { Txt } from '@/ds/components/Txt';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { textStyle } from '@/ds/primitives/text';
+import { cn } from '@/utils/cn';
+
 import './knowledge.css';
+
+/**
+ * The force-directed knowledge graph: React Flow renders DOM nodes/edges while
+ * d3-force computes positions (synchronously, deterministic). Knowledge nodes are
+ * nodes sized by edge degree (Amendment A3), wikilink relationships are edges,
+ * pinned knowledge carries a distinct accent, and hovering a node or edge
+ * shows a summary card. Dragging a node re-pins it (the layout keeps it put).
+ */
 
 const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
 
@@ -79,7 +82,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
       {/* A11: nodes never carry pin visuals — pins belong to their record
           markers (dot / line / junction). */}
       <div
-        className="knowledge-circle shadow-raised flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center"
+        className="knowledge-circle flex size-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center shadow-raised"
         data-selected={selected || undefined}
         style={getKnowledgeNodeStyle(node.isBoundary ? null : node.rung)}
       >
@@ -157,7 +160,7 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
         <EdgeLabelRenderer>
           <span
             // Nodes always render above lines and their badges — no z lift.
-            className="shadow-raised bg-badge-amber-strong text-badge-amber-foreground absolute rounded-full p-1"
+            className="absolute rounded-full bg-badge-amber-strong p-1 text-badge-amber-foreground shadow-raised"
             style={{
               zIndex: 0,
               // Quadratic bezier midpoint: B(0.5) = 0.25·start + 0.5·control + 0.25·end
@@ -252,7 +255,7 @@ function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
       variant="caption"
       tone="muted"
       data-testid="knowledge-truncation-banner"
-      className="border-border bg-card pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1"
+      className="pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border border-border bg-card px-3 py-1"
     >
       Partial view — {parts.join(' · ')}
     </Txt>
@@ -513,7 +516,7 @@ function KnowledgeGraphInner({
 
   return (
     <div
-      className="knowledge-canvas border-border bg-background relative h-full w-full overflow-hidden rounded-xl border"
+      className="knowledge-canvas relative size-full overflow-hidden rounded-xl border border-border bg-background"
       data-testid="knowledge-graph"
     >
       <TruncationBanner payload={payload} />
@@ -547,7 +550,7 @@ function KnowledgeGraphInner({
         minZoom={0.1}
         proOptions={{ hideAttribution: true }}
         nodesConnectable={false}
-        onNodeClick={(_, node) => {
+        onNodeClick={(_: unknown, node: KnowledgeFlowNode) => {
           // A11: a knowledge record marker click IS a knowledge record click — same behavior as
           // clicking its edge (dot and stub are one unit).
           if (isRecordNode(node)) {
@@ -561,14 +564,14 @@ function KnowledgeGraphInner({
           onNodeClick?.(node.data.node);
         }}
         onPaneClick={() => setFocusedId(null)}
-        onEdgeClick={(_, edge) => {
+        onEdgeClick={(_: unknown, edge: KnowledgeFlowEdge) => {
           // Stub/spoke edges have a `record:` marker on one end — the flyout
           // needs the knowledge-node end, never the synthetic record node id.
           const nodeEnd = getKnowledgeNodeEndpoint(edge);
           if (!nodeEnd) return;
           onEdgeClick?.({ source: nodeEnd, target: edge.target, recordId: edge.data?.recordId ?? '' });
         }}
-        onNodeMouseEnter={(event, node) => {
+        onNodeMouseEnter={(event: MouseEvent, node: KnowledgeFlowNode) => {
           if (isRecordNode(node)) {
             setHover({ kind: 'record', x: event.clientX, y: event.clientY, record: node });
             return;
@@ -576,9 +579,11 @@ function KnowledgeGraphInner({
           if (isKnowledgeNode(node)) setHover({ kind: 'node', x: event.clientX, y: event.clientY, node });
         }}
         onNodeMouseLeave={() => setHover(null)}
-        onEdgeMouseEnter={(event, edge) => setHover({ kind: 'edge', x: event.clientX, y: event.clientY, edge })}
+        onEdgeMouseEnter={(event: MouseEvent, edge: KnowledgeFlowEdge) =>
+          setHover({ kind: 'edge', x: event.clientX, y: event.clientY, edge })
+        }
         onEdgeMouseLeave={() => setHover(null)}
-        onNodeDragStop={(_, node) => {
+        onNodeDragStop={(_: unknown, node: KnowledgeFlowNode) => {
           // The layout pins CENTERS; node.position is the top-left corner.
           const size = node.data.size;
           pinnedPositions.current.set(node.id, { x: node.position.x + size / 2, y: node.position.y + size / 2 });
@@ -682,7 +687,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3`}
         style={style}
       >
-        <div className="text-foreground mb-1 flex items-center gap-1.5">
+        <div className="mb-1 flex items-center gap-1.5 text-foreground">
           <Txt as="span" variant="caption" className="block">
             Record
           </Txt>

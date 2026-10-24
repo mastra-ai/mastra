@@ -2503,12 +2503,6 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.14.5
         version: 3.14.13(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@xyflow/react':
-        specifier: ^12.10.1
-        version: 12.10.2(@types/react@19.2.17)(immer@11.1.9)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      d3-force:
-        specifier: ^3.0.0
-        version: 3.0.0
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
@@ -2546,9 +2540,6 @@ importers:
       '@testing-library/user-event':
         specifier: ^14.5.2
         version: 14.6.8(@testing-library/dom@10.4.2)
-      '@types/d3-force':
-        specifier: ^3.0.10
-        version: 3.0.10
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -5846,6 +5837,9 @@ importers:
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      d3-force:
+        specifier: ^3.0.0
+        version: 3.0.0
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
@@ -5958,6 +5952,9 @@ importers:
       '@testing-library/user-event':
         specifier: ^14.6.7
         version: 14.6.8(@testing-library/dom@10.4.2)
+      '@types/d3-force':
+        specifier: ^3.0.10
+        version: 3.0.10
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15
