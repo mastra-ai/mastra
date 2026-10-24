@@ -165,6 +165,14 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
     isOptional: true,
   },
   {
+    name: 'savePerStep',
+    type: 'boolean',
+    description:
+      'Saves messages to memory after each finished step instead of once when the run ends, so a run that stops mid-way keeps its earlier steps. Ignored when observational memory is enabled.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
     name: 'defaultModeId',
     type: 'string',
     description: 'Default mode identifier. It takes precedence over mode metadata.',

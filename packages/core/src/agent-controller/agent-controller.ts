@@ -2269,7 +2269,7 @@ export class AgentController<TState = {}> {
       this.#channels?.__isAutoApproveResource(context?.resourceId ?? session.identity.getResourceId()) === true;
     const shared: SharedRunOptions = {
       maxSteps: CONTROLLER_MAX_STEPS,
-      savePerStep: false,
+      savePerStep: this.config.savePerStep ?? false,
       requireToolApproval: !isYolo && !channelAutoApprove,
       onStepFinish: this.createUsageRecorder(context?.threadId ?? session.thread.getId()),
     };
