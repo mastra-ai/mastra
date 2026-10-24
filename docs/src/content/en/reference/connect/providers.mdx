@@ -9,7 +9,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-This page documents generated toolsets for 22 providers (910 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for 23 providers (963 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -35,6 +35,7 @@ MCP providers (Attio, Canva, Clay, Neon, Render, Robinhood, and Sanity) serve th
 | <ProviderLogo src="https://svgl.app/library/openai.svg" mono /> [OpenAI](#openai) | `openai` | 26 |
 | <ProviderLogo slug="posthog" /> [PostHog](#posthog) | `posthog` | 67 |
 | <ProviderLogo slug="resend" mono /> [Resend](#resend) | `resend` | 80 |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/sharepoint-online.svg" /> [SharePoint Online](#sharepoint-online) | `sharepoint-online` | 53 |
 | <ProviderLogo src="https://svgl.app/library/slack.svg" /> [Slack](#slack) | `slack` | 52 |
 | <ProviderLogo slug="snowflake" /> [Snowflake](#snowflake) | `snowflake` | 15 |
 | <ProviderLogo slug="supabase" /> [Supabase](#supabase) | `supabase` | 27 |
@@ -941,6 +942,66 @@ Provider ID: `resend` · 80 tools
 | `resend_update_webhook` | Update an existing webhook in Resend. |
 | `resend_verify_domain` | Verify domain in Resend. |
 | `resend_verify_domain_claim` | Verify a domain claim in Resend. |
+
+## SharePoint Online
+
+Provider ID: `sharepoint-online` · 53 tools
+
+| Tool | Description |
+| - | - |
+| `sharepoint_online_add_content_type_to_list` | Associate a content type with a SharePoint list. |
+| `sharepoint_online_add_drive_item_permission` | Invite users or groups to access a drive item. |
+| `sharepoint_online_copy_drive_item` | Copy a file or folder to another location in a site drive. |
+| `sharepoint_online_create_content_type` | Create a content type on a SharePoint site. |
+| `sharepoint_online_create_drive_folder` | Create a folder in a SharePoint document library. |
+| `sharepoint_online_create_drive_upload_session` | Start a large file upload session in a site drive. |
+| `sharepoint_online_create_list` | Create a SharePoint list on a site |
+| `sharepoint_online_create_list_column` | Create a column on a SharePoint list. |
+| `sharepoint_online_create_list_item` | Create an item in a SharePoint list. |
+| `sharepoint_online_create_sharing_link` | Create a shareable link for a drive item. |
+| `sharepoint_online_create_site_column` | Create a site-level column definition on a SharePoint site. |
+| `sharepoint_online_create_site_page` | Create a modern site page. |
+| `sharepoint_online_delete_content_type` | Delete a content type from a SharePoint site. |
+| `sharepoint_online_delete_drive_item` | Delete a file or folder from a site drive. |
+| `sharepoint_online_delete_list` | Delete a SharePoint list. |
+| `sharepoint_online_delete_list_column` | Delete a column from a SharePoint list. |
+| `sharepoint_online_delete_list_item` | Delete an item from a SharePoint list. |
+| `sharepoint_online_delete_site_column` | Delete a site-level column definition. |
+| `sharepoint_online_delete_site_page` | Delete a site page. |
+| `sharepoint_online_download_drive_item_content` | Download the file content of a SharePoint drive item |
+| `sharepoint_online_get_content_type` | Retrieve a single content type from a SharePoint site. |
+| `sharepoint_online_get_drive` | Retrieve a site drive by ID. |
+| `sharepoint_online_get_drive_item` | Retrieve a file or folder from a site drive. |
+| `sharepoint_online_get_drive_item_thumbnail` | Retrieve thumbnail URLs for a drive item. |
+| `sharepoint_online_get_list` | Retrieve a SharePoint list by ID. |
+| `sharepoint_online_get_list_item` | Retrieve a SharePoint list item by ID. |
+| `sharepoint_online_get_site` | Retrieve a SharePoint site by ID or path. |
+| `sharepoint_online_get_site_page` | Retrieve a site page by ID. |
+| `sharepoint_online_list_content_types` | List content types defined on a SharePoint site. |
+| `sharepoint_online_list_drive_children` | List items under a folder in a site drive. |
+| `sharepoint_online_list_drive_item_permissions` | List all permissions on a drive item. |
+| `sharepoint_online_list_drive_item_versions` | List the version history of a drive item. |
+| `sharepoint_online_list_drives` | List document libraries on a site. |
+| `sharepoint_online_list_list_columns` | List columns on a SharePoint list. |
+| `sharepoint_online_list_list_content_types` | List the content types associated with a SharePoint list. |
+| `sharepoint_online_list_list_items` | List items in a SharePoint list |
+| `sharepoint_online_list_lists` | List SharePoint lists on a site. |
+| `sharepoint_online_list_shared_sites` | List SharePoint sites for user selection workflows. |
+| `sharepoint_online_list_site_columns` | List site-level column definitions on a SharePoint site. |
+| `sharepoint_online_list_site_pages` | List modern site pages on a site. |
+| `sharepoint_online_publish_site_page` | Publish a site page. |
+| `sharepoint_online_remove_drive_item_permission` | Remove a permission from a drive item. |
+| `sharepoint_online_restore_drive_item_version` | Restore a previous version of a drive item. |
+| `sharepoint_online_search_drive_items` | Search for files and folders within a site drive. |
+| `sharepoint_online_search_sites` | Search for sites by keyword. |
+| `sharepoint_online_update_drive_item` | Rename or move a file or folder in a site drive. |
+| `sharepoint_online_update_drive_item_permission` | Update an existing permission on a drive item. |
+| `sharepoint_online_update_list` | Update mutable list properties. |
+| `sharepoint_online_update_list_column` | Update a SharePoint list column. |
+| `sharepoint_online_update_list_item` | Update fields on a SharePoint list item. |
+| `sharepoint_online_update_site_column` | Update a site-level column definition. |
+| `sharepoint_online_update_site_page` | Update a modern site page draft. |
+| `sharepoint_online_upload_drive_item` | Upload small file content directly to a site drive (≤4 MB). For larger files use create-drive-upload-session. |
 
 ## Slack
 

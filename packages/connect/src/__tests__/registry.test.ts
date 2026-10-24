@@ -30,6 +30,7 @@ describe('shipped provider registry', () => {
       'openai',
       'posthog',
       'resend',
+      'sharepoint-online',
       'slack',
       'snowflake',
       'stripe',
