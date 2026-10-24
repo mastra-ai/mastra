@@ -39,9 +39,22 @@ Keep unknown identity fields as `null`. `document_comparison` compares documents
 
 ## Configure processing
 
-In `.env`, set `OPENAI_API_KEY` and uncomment the `POLICY_PROCESSING_BUDGET` example from [.env.example](../.env.example), adjusting limits and token prices before use. Optionally set `POLICY_EXTRACTION_MODEL`, then restart Studio. Comparison is disabled until a budget is set; intake, evidence and report retrieval run locally.
+Set `POLICY_PROCESSING_BUDGET=./processing-budget-example.json` in `.env`. Adjust limits and token prices in [processing-budget-example.json](../processing-budget-example.json), or point the variable to your own JSON file, then restart Studio. Relative paths resolve from the project root; absolute paths are also accepted. Leaving the variable unset disables comparison; intake, evidence and report retrieval run locally.
 
 The budget limits attempts, requests, tokens, estimated cost, response bytes and time. Retries share the allocation; missing usage retains the full reservation. See `processingBudgetSchema` in `src/mastra/domain/reconciliation-contracts.ts` for field definitions.
+
+## Environment variables
+
+Set these in `.env` and restart Studio to apply changes. The application uses local defaults when optional overrides are omitted.
+
+| Variable                   | Default                     | Purpose                                                                                  |
+| -------------------------- | --------------------------- | ---------------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY`           | Unset                       | OpenAI credential for document comparison.                                               |
+| `POLICY_EXTRACTION_MODEL`  | `gpt-6.1-sol`               | Model used for extraction and semantic assessment.                                       |
+| `POLICY_PROCESSING_BUDGET` | Unset (comparison disabled) | Path to a JSON budget file. `.env.example` points to `./processing-budget-example.json`. |
+| `POLICY_OPERATOR_ID`       | `local-broker`              | Local operator identifier.                                                               |
+| `PORT`                     | `4111`                      | Local Studio port.                                                                       |
+| `POLICY_DATA_DIR`          | `.runtime`                  | Private data directory, relative to the project root or absolute.                        |
 
 ## Compare and read the draft
 
@@ -97,7 +110,7 @@ Each decision changes the case revision. Each new report version needs fresh app
 
 ## Local storage
 
-Use the configured `127.0.0.1` address. `POLICY_OPERATOR_ID`, `PORT` and `POLICY_DATA_DIR` override local defaults. Stop Studio before backing up or restoring the entire data directory, including databases, sources and reports. `/status` flags interrupted intake and missing source files.
+Use the configured `127.0.0.1` address. Stop Studio before backing up or restoring the entire data directory, including databases, sources and reports. `/status` flags interrupted intake and missing source files.
 
 If upgrading from locale-sorted checksums, use a fresh data directory and keep the old runtime with its matching code version; legacy hashes are not migrated.
 

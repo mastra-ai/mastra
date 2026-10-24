@@ -32,8 +32,8 @@ Optionally run `npm run prepare:use-cases` in your terminal to generate sample P
 
 ## Customization
 
-Set the model and processing budget in `.env`, for example `POLICY_EXTRACTION_MODEL=gpt-6.1-sol` and `POLICY_PROCESSING_BUDGET='<budget JSON>'`.
-Copy the budget example from [.env.example](./.env.example), adjust its limits and token prices, then restart Studio.
+Set the model and processing budget in `.env`, for example `POLICY_EXTRACTION_MODEL=gpt-6.1-sol` and `POLICY_PROCESSING_BUDGET=./processing-budget-example.json`.
+Adjust limits and token prices in [processing-budget-example.json](./processing-budget-example.json), then restart Studio.
 
 ## About Mastra templates
 

@@ -94,7 +94,7 @@ export function createReconciliationService(
         throw new IntakeError(
           'MODEL_BUDGET_REQUIRED',
           'Processing requires explicitly approved request, token, retry and cost budgets.',
-          'Configure an explicitly approved processing budget in src/mastra/config/processing-config.ts or POLICY_PROCESSING_BUDGET before paid execution.',
+          'Set POLICY_PROCESSING_BUDGET to an approved budget JSON file path and restart before paid execution.',
         );
       const input: AnalysisInput = {
         schemaVersion: 'reconciliation-1',

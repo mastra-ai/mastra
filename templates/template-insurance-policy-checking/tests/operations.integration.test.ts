@@ -1,11 +1,84 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
 import { expect, it } from 'vitest';
 import { evaluationCases } from './evaluation-fixtures.js';
 import { reportWire } from './report-provider.js';
+
+async function processingSettings(budgetPath: string, cwd: string, configuredRoot = resolve('.mastra')) {
+  const moduleUrl = pathToFileURL(resolve('src/mastra/config/processing-config.ts')).href;
+  const { stdout } = await promisify(execFile)(
+    process.execPath,
+    [
+      '--import',
+      resolve('tests/source-loader.mjs'),
+      '--input-type=module',
+      '-e',
+      `try {
+        const { processingConfiguration } = await import(${JSON.stringify(moduleUrl)});
+        console.log(JSON.stringify(processingConfiguration));
+      } catch (error) {
+        console.log(JSON.stringify({ code: error.code, name: error.name }));
+        process.exitCode = 1;
+      }`,
+    ],
+    {
+      cwd,
+      env: {
+        ...process.env,
+        MASTRA_PROJECT_ROOT: configuredRoot,
+        POLICY_PROCESSING_BUDGET: budgetPath,
+        POLICY_EXTRACTION_MODEL: 'gpt-6.1-sol',
+      },
+    },
+  );
+  return JSON.parse(stdout);
+}
+
+it('loads budget files from the project root and absolute paths when Studio changes its working directory', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'insurance-budget-'));
+  try {
+    const sample = JSON.parse(await readFile('processing-budget-example.json', 'utf8'));
+    const custom = { ...sample, maxRequests: 4 };
+    const customPath = join(root, 'custom budget.json');
+    await writeFile(customPath, JSON.stringify(custom));
+    expect(await processingSettings('./processing-budget-example.json', root)).toEqual({
+      model: 'gpt-6.1-sol',
+      budget: sample,
+    });
+    expect(await processingSettings(customPath, root, process.cwd())).toEqual({
+      model: 'gpt-6.1-sol',
+      budget: custom,
+    });
+    expect(await processingSettings('', root)).toEqual({ model: 'gpt-6.1-sol', budget: null });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('rejects unreadable, malformed and schema-invalid budget files instead of enabling fallback spending', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'insurance-budget-invalid-'));
+  try {
+    const malformed = join(root, 'malformed.json');
+    const invalid = join(root, 'invalid.json');
+    await writeFile(malformed, '{invalid json');
+    const sample = JSON.parse(await readFile('processing-budget-example.json', 'utf8'));
+    await writeFile(invalid, JSON.stringify({ ...sample, maxRequests: 0 }));
+    for (const path of [join(root, 'missing.json'), malformed, JSON.stringify(sample)]) {
+      await expect(processingSettings(path, root)).rejects.toMatchObject({
+        stdout: expect.stringContaining('PROCESSING_BUDGET_FILE'),
+      });
+    }
+    await expect(processingSettings(invalid, root)).rejects.toMatchObject({
+      stdout: expect.stringContaining('ZodError'),
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 it('operational_traces_correlate_without_exposing_documents', async () => {
   const root = await mkdtemp(join(tmpdir(), 'insurance-operations-'));
