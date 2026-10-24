@@ -64,4 +64,18 @@ const tools = knowledge.createTools({ write: true })
 
 ## Memory and pins
 
-Without Memory, pins are shown to the agent on every step. With Memory, pins are saved to the thread, so later steps send only changes.
+Pins work without Memory. With `pins` on, the agent gets the pin tools, the pins instructions, and the pinned Knowledge as a state signal on each step. Nothing is saved to a thread.
+
+A run sees every pin whose tags it holds, so org pins and team pins form one set.
+
+## Thread IDs and sources
+
+Write and pin tools need a thread ID on the call. Pass one with `memory`:
+
+```typescript
+await agent.generate('Remember that we ship on Fridays.', {
+  memory: { thread: 'thread-1', resource: 'user-1' },
+})
+```
+
+Records the agent writes get `metadata.source` set to `agent:<id>`.
