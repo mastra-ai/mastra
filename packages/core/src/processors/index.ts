@@ -748,6 +748,14 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   stateId?: string;
 
   /**
+   * Run `computeStateSignal` and `sendStateSignal` on agents without Memory. The signal is added
+   * to the run's message list only (nothing persisted), so the lane starts fresh every call: the
+   * first step gets a snapshot and later steps get deltas. `resourceId`/`threadId` are `''` when
+   * the run has none.
+   */
+  stateSignalWithoutMemory?: boolean;
+
+  /**
    * Compute this processor's thread-scoped state signal for the current model input step.
    *
    * Called after this processor's `processInputStep` hook and before the model request is finalized.

@@ -113,11 +113,15 @@ export interface PinnedStateProcessorDeps {
   getKnowledgeStore(): Promise<KnowledgeStorage | undefined>;
 }
 
-const MEMO_KEY = '__subconsciousPinnedRead';
+/** Request-context key memoizing a turn's pin read; pin writes clear it so the next step reads fresh. */
+export const PINNED_READ_MEMO_KEY = '__subconsciousPinnedRead';
+const MEMO_KEY = PINNED_READ_MEMO_KEY;
 
 export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_STATE_ID> {
   readonly id = SUBCONSCIOUS_PINS_STATE_ID;
   readonly stateId = SUBCONSCIOUS_PINS_STATE_ID;
+  // Pins reach agents without Memory too: the snapshot is rebuilt from the store each call.
+  readonly stateSignalWithoutMemory = true;
 
   constructor(private readonly deps: PinnedStateProcessorDeps) {}
 
