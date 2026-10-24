@@ -2091,9 +2091,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             fn: () =>
               execute({
                 runId,
-                // The request failed: a run that lost its lease meanwhile stops now instead of retrying it.
-                onRequestFailed: () => {
-                  settleRequest();
+                // The request failed: a run that lost its lease meanwhile stops now instead of retrying it. Nothing
+                // runs while the retry waits, so a lease lost during that wait stops the run too.
+                onRequestFailed: () => settleRequest(),
+                onRequestRetry: () => {
                   settleRequest = startRunStep(options?.abortSignal);
                 },
                 model: currentStep.model,
