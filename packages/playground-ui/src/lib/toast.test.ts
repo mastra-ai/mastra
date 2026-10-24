@@ -6,6 +6,8 @@ import { toast as sonnerToast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import '@/test/inert-resize-observer';
+import { ErrorNotice, errorToast } from '../utils/error-message';
+import type { ErrorMessage } from '../utils/error-message';
 import { Toaster, toast } from './toast';
 
 function latestToast() {
@@ -17,6 +19,7 @@ function latestToast() {
 afterEach(() => {
   cleanup();
   sonnerToast.dismiss();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -152,7 +155,109 @@ describe('toast entry point', () => {
   });
 });
 
+describe('structured error feedback', () => {
+  const message: ErrorMessage = {
+    title: 'Couldn’t delete orders-db',
+    why: 'Two environments still use it.',
+    reassurance: 'Nothing was deleted.',
+    fix: 'Detach it from both environments, then delete it.',
+    wayOut: { kind: 'docs', href: 'https://mastra.ai/docs' },
+  };
+
+  it('renders the helper through the existing toast stack', async () => {
+    render(createElement(Toaster));
+    act(() => {
+      errorToast(message);
+    });
+    await screen.findByText(message.title);
+    expect(screen.getByText(`${message.why} ${message.fix}`)).toBeTruthy();
+    expect(screen.queryByText('Nothing was deleted.')).toBeNull();
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const user = userEvent.setup();
+    screen.getByRole('button', { name: 'Docs ↗' }).focus();
+    await user.keyboard('{Enter}');
+    expect(open).toHaveBeenCalledExactlyOnceWith('https://mastra.ai/docs', '_blank', 'noopener,noreferrer');
+    await waitFor(() => expect(screen.queryByText(message.title)).toBeNull());
+  });
+
+  it('preserves the caller’s retry action and native dismissal', async () => {
+    const retry = vi.fn();
+    const user = userEvent.setup();
+    render(createElement(Toaster));
+    act(() => {
+      errorToast(message, { action: { label: 'Retry', onClick: retry } });
+    });
+    const action = await screen.findByRole('button', { name: 'Retry' });
+    expect(screen.queryByRole('button', { name: 'Docs ↗' })).toBeNull();
+    action.focus();
+    await user.keyboard('{Enter}');
+    expect(retry).toHaveBeenCalledOnce();
+    await waitFor(() => expect(screen.queryByText(message.title)).toBeNull());
+  });
+
+  it('uses the requested error duration and preserves its auto-close callback', async () => {
+    vi.useFakeTimers();
+    const onAutoClose = vi.fn();
+    render(createElement(Toaster));
+    act(() => {
+      errorToast(message, { duration: 3000, onAutoClose });
+    });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    await act(() => vi.advanceTimersByTimeAsync(2999));
+    expect(screen.queryByText(message.title)).not.toBeNull();
+    expect(onAutoClose).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(202));
+    expect(screen.queryByText(message.title)).toBeNull();
+    expect(onAutoClose).toHaveBeenCalledOnce();
+  });
+
+  it('shows reassurance and the external link in the matching notice', () => {
+    render(createElement(ErrorNotice, { message }));
+    expect(screen.getByText(message.title)).toBeTruthy();
+    expect(screen.getByText(`${message.why} ${message.reassurance} ${message.fix}`)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Docs' }).getAttribute('href')).toBe('https://mastra.ai/docs');
+  });
+
+  it('allows an error notice without reassurance or a way out', () => {
+    const { title, why, fix } = message;
+    render(createElement(ErrorNotice, { message: { title, why, fix } }));
+    expect(screen.getByText(`${why} ${fix}`)).toBeTruthy();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+});
+
 describe('toast.promise', () => {
+  it.each(['success', 'error'])('starts the %s timeout only after the loading operation settles', async outcome => {
+    vi.useFakeTimers();
+    const operation = Promise.withResolvers<number>();
+    const onAutoClose = vi.fn();
+    render(createElement(Toaster));
+    act(() => {
+      toast.promise({
+        myPromise: operation.promise,
+        loadingMessage: 'Saving changes',
+        successMessage: 'Changes saved',
+        errorMessage: 'Couldn’t save changes',
+        options: { duration: 1000, onAutoClose },
+      });
+    });
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    expect(screen.queryByText('Saving changes')).not.toBeNull();
+    expect(onAutoClose).not.toHaveBeenCalled();
+    await act(async () => {
+      if (outcome === 'success') operation.resolve(42);
+      else operation.reject(new Error('Connection interrupted'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const result = outcome === 'success' ? 'Changes saved' : 'Couldn’t save changes';
+    expect(screen.queryByText(result)).not.toBeNull();
+    await act(() => vi.advanceTimersByTimeAsync(999));
+    expect(screen.queryByText(result)).not.toBeNull();
+    await act(() => vi.advanceTimersByTimeAsync(202));
+    expect(screen.queryByText(result)).toBeNull();
+    expect(onAutoClose).toHaveBeenCalledOnce();
+  });
+
   describe('when the operation succeeds', () => {
     it('replaces the loading message with success', async () => {
       toast.promise({ myPromise: Promise.resolve({ id: 1 }), loadingMessage: 'Saving…', successMessage: 'Saved' });
