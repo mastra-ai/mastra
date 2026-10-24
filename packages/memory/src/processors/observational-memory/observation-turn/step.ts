@@ -84,7 +84,6 @@ export class ObservationStep {
     // new head (storage resolves the head and carries chunks across the rollover).
     const step0Messages = this.stepNumber === 0 ? getObservableMessages(messageList) : [];
     if (this.stepNumber === 0) {
-      this.turn.inputMessageIds = messageList.get.input.db().map(msg => msg.id);
       const activation = await om.activate({
         threadId,
         resourceId,
@@ -299,7 +298,7 @@ export class ObservationStep {
             return !seen || keys.some(key => !seen.has(key));
           })
           .map(msg => msg.id);
-        inFlightIds = [...new Set([...this.turn.inputMessageIds, ...unreadIds])];
+        inFlightIds = [...new Set(unreadIds)];
         if (messagesToSave.length > 0) {
           for (const msg of messagesToSave) {
             messageList.add(msg, 'memory');
@@ -365,11 +364,11 @@ export class ObservationStep {
           observed = true;
           didThresholdCleanup = true;
 
-          // Cleanup after observation. The just-observed messages include the request the
-          // model is working on and the output it has not read yet — preserve the in-flight
-          // messages by identity (the token-based retention floor resolves to 0 for sync-only,
-          // resource-scope, and explicit `bufferActivation: 1` configs, so it cannot be
-          // relied on to keep them).
+          // Cleanup after observation. The just-observed messages can include input and output the
+          // model has not read yet — preserve those by identity (the token-based retention floor
+          // resolves to 0 for sync-only, resource-scope, and explicit `bufferActivation: 1` configs,
+          // so it cannot be relied on to keep them). A request the model has already acted on is
+          // carried by the observations from here on.
           const observedIds = obsResult.cleanupMessageIds;
           const minRemaining = resolveRetentionFloor(
             om.getObservationConfig().bufferActivation ?? 1,
@@ -433,7 +432,7 @@ export class ObservationStep {
       const pendingMessageIds = new Set(
         [...messageList.get.input.db(), ...messageList.get.response.db()]
           .map(msg => msg.id)
-          .concat(inFlightIds ?? [], this.turn.inputMessageIds, this.changedSinceDrain(messageList))
+          .concat(inFlightIds ?? [], this.changedSinceDrain(messageList))
           .filter(Boolean),
       );
 

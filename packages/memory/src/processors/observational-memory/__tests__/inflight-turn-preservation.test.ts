@@ -226,7 +226,7 @@ describe('OM preserves the in-flight turn across mid-turn observation (#25372)',
     expect(requests[1]).toContain(`${RESULT_MARKER}-4471-0`);
   });
 
-  it('keeps the user message and the newest tool result on every later step and retires read results', async () => {
+  it('keeps the newest tool result on every later step and retires what the model already read', async () => {
     scriptLookupTurn(3);
     const { memory, openai } = createMemory();
     const agent = new Agent({
@@ -244,10 +244,12 @@ describe('OM preserves the in-flight turn across mid-turn observation (#25372)',
     const requests = actorRequests();
     expect(requests).toHaveLength(4);
     for (let step = 1; step < requests.length; step++) {
-      expect(requests[step], `step ${step} lost the user request`).toContain('USER_REQUEST_MARKER');
       expect(requests[step], `step ${step} lost the unread tool result`).toContain(`${RESULT_MARKER}-4471-${step - 1}`);
     }
-    // Mid-turn compaction still works: results the model already read are gone once observed.
+    // Mid-turn compaction still works: results the model already read are gone once observed,
+    // and so is the request it has acted on; the observations carry it.
+    expect(requests[3]).toContain('User asked to look up an order status');
+    expect(requests[3]).not.toContain('USER_REQUEST_MARKER');
     expect(requests[3]).not.toContain(`${RESULT_MARKER}-4471-0`);
     expect(requests[3]).not.toContain(`${RESULT_MARKER}-4471-1`);
   });
