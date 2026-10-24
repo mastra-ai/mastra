@@ -46,7 +46,16 @@ const knowledge = new Knowledge({
 })
 ```
 
-Here a run that holds `org:acme` can read and write `team:acme:director`, but not `team:other:director`, because `$orgId` is bound from the team's own address. Ownership is checked each time a tool runs. Holding an owner tag gives a run everything that tag owns, so set it only on runs meant to have that reach.
+Here a run that holds `org:acme` can read and write `team:acme:director`, but not `team:other:director`, because `$orgId` is bound from the team's own address. The model reaches `team:acme:support` by passing `scope: ['team:acme:support']` to a Knowledge tool. The role in `access` sets how far an owner can go:
+
+| Role | Can |
+|---|---|
+| `readonly` | Read |
+| `append` | Read, create, and append |
+| `edit` | All of the above, plus remove, rescope, and merge |
+| `owner` | Everything |
+
+Ownership is checked each time a tool runs. A type you don't declare can be held but not owned, and a read-only tag never owns anything. Holding an owner tag gives a run everything that tag owns, so set it only on runs meant to have that reach.
 
 ## Read-only scopes
 

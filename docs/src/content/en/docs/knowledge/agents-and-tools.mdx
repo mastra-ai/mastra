@@ -50,8 +50,8 @@ Set `pins: true` for the default limit of pins, or pass `maxPins` and `maxTokens
 
 A run's Knowledge scope is the tags from the agent's `scopes`, plus the Memory `resource:` and `thread:` tags when the run has them. The model can't add tags of its own.
 
-- **Reads** search every tag the run holds.
-- **Writes** land at every tag the run holds. A write tool also takes an optional `scope` argument, a list of tags such as `['team:acme:support']`, to write at only those tags. Each tag must be one the run holds.
+- **Reads** search every tag the run holds. A read tool also takes an optional `scope` argument to include a scope the run owns, such as `['team:acme:support']`.
+- **Writes** land at every tag the run holds. A write tool takes an optional `scope` argument to write at only those tags. Each tag must be one the run holds, or one it owns with a role that allows the write.
 - **Pins** default to every run tag except `thread`.
 
 Tool errors come back to the model as tool-result text. Naming a tag the run doesn't hold returns `This run does not hold scope "team:acme:sales".`
