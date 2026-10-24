@@ -38,46 +38,13 @@
     "kimi-k2.6"
   ],
   "reasoning": {
-    "claude-sonnet-4-6": [
+    "grok-4.3": [
       {
         "type": "toggle"
       },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "claude-opus-4-6": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "deepseek-v4-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gemini-3.1-pro-preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-opus-4-7": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "deepseek-v4-pro": [
@@ -95,13 +62,55 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "grok-4.3": [
+    "kimi-k2.5": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-opus-4-7": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gemini-3.1-pro-preview": [
+      {
+        "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "kimi-k2.6": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-opus-4-6": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
       }
     ],
     "gemini-2.5-flash": [
@@ -113,22 +122,13 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "kimi-k2.5": [
+    "claude-sonnet-4-6": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "kimi-k2.6": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high", "max"]
       }
     ]
   }

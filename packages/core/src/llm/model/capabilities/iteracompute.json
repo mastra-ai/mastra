@@ -46,18 +46,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "z-ai/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "z-ai/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "moonshotai/kimi-k3": [
       {
         "type": "effort",
@@ -80,6 +68,18 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "z-ai/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

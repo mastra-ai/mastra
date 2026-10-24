@@ -3,6 +3,8 @@ import { SpanPayloadAttachment } from './span-payload-attachment';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMarkdown, SpanPayloadLabel } from './span-payload-primitives';
 import { SpanPayloadTool } from './span-payload-tool';
+import { parseSkillMarkup } from '@/domains/chat/messages/skill-activation';
+import { SkillMessage } from '@/domains/chat/messages/skill-message';
 import { ReasoningActivity } from '@/ds/components/ai/activity';
 import { Message } from '@/ds/components/Message';
 
@@ -64,6 +66,13 @@ function MessageBody({ parts }: { parts: unknown[] }) {
   );
 }
 
+function skillOf(parts: unknown[]) {
+  if (parts.length !== 1) return undefined;
+  const [part] = parts;
+  const text = typeof part === 'string' ? part : isRecord(part) && part.type === 'text' ? part.text : undefined;
+  return typeof text === 'string' ? parseSkillMarkup(text) : undefined;
+}
+
 // `unknown` on purpose: SpanInputMessage is a wide union of SDK message shapes, and the
 // renderer only needs `isRecord` narrowing to read `role` / `content` / `parts` defensively.
 function SpanMessage({ message }: { message: unknown }) {
@@ -82,6 +91,16 @@ function SpanMessage({ message }: { message: unknown }) {
   const role = typeof message.role === 'string' ? message.role : 'unknown';
   const parts = messageParts(message);
   const body = parts.length > 0 ? <MessageBody parts={parts} /> : <SpanPayloadJson value={message} />;
+
+  // A skill reaches the model as `<skill name="…">` markup in a user message: show it as the skill.
+  const skill = role === 'user' ? skillOf(parts) : undefined;
+  if (skill) {
+    return (
+      <div data-role="skill">
+        <SkillMessage activation={skill} defaultOpen />
+      </div>
+    );
+  }
 
   if (role === 'user' || role === 'assistant') {
     return (

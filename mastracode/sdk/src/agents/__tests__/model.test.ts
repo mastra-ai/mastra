@@ -595,7 +595,7 @@ describe('resolveModel', () => {
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
 
       expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(
-        "No usable openai credential is available. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.",
+        "No usable openai credential is available for openai/gpt-4o. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.",
       );
       expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(ProviderAuthRequiredError);
       try {
@@ -634,7 +634,7 @@ describe('resolveModel', () => {
 
       await expect(resolution).rejects.toThrow(ProviderAuthRequiredError);
       await expect(resolution).rejects.toThrow(
-        "No usable openai credential is available. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.",
+        "No usable openai credential is available for openai/gpt-4o. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.",
       );
     });
 

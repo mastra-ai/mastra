@@ -10,6 +10,7 @@ import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentCont
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ComposerImagesProvider } from './ComposerImagesProvider';
@@ -22,6 +23,11 @@ import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatMessagePreparation } from './useChatMessagePreparation';
 import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
+
+function modelLockedReason(session: FactoryUserSession | undefined): string | undefined {
+  if (session?.capabilities?.switchModel !== false) return undefined;
+  return `Only ${session.owner?.name ?? 'the session owner'} can change this session’s model or thinking level.`;
+}
 
 /** Stable project/API configuration for chat shell consumers such as the sidebar. */
 export function ChatSessionConfigProvider({
@@ -149,6 +155,7 @@ export function ChatSessionConfigProvider({
     baseUrl,
     kind: userScoped ? ('user' as const) : ('factory' as const),
     owner,
+    modelLockedReason: modelLockedReason(storedSession),
   };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;

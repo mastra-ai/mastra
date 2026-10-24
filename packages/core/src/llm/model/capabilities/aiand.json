@@ -38,28 +38,22 @@
     "zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "zai-org/glm-5.2": [
+    "google/gemma-4-31b-it": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["none", "high"]
       }
     ],
-    "zai-org/glm-5.3": [
+    "motif-technologies/motif-3": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "high"]
       }
     ],
-    "zai-org/glm-5.3-flash": [
+    "openai/gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "deepseek-ai/deepseek-v4.1-flash": [
@@ -74,22 +68,10 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "motif-technologies/motif-3": [
+    "deepseek-ai/deepseek-v4-flash": [
       {
         "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "google/gemma-4-31b-it": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "high", "max"]
       }
     ],
     "moonshotai/kimi-k3": [
@@ -114,6 +96,24 @@
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "zai-org/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "zai-org/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

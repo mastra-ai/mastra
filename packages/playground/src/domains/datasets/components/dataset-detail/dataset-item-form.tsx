@@ -131,7 +131,7 @@ export function EditModeContent({
 
         <div className="flex gap-2 pt-4">
           <Button icon={<Check />} variant="primary" onClick={onSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save Changes'}
+            {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
           <Button icon={<X />} onClick={onCancel} disabled={isSaving}>
             Cancel

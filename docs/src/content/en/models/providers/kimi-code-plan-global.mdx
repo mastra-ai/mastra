@@ -7,7 +7,7 @@ description: "Browse Kimi For Coding (kimi.ai) model IDs, capabilities, and cont
 
 # <img src="https://models.dev/logos/kimi-code-plan-global.svg" alt="Kimi For Coding (kimi.ai) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kimi For Coding (kimi.ai)
 
-Access 4 Kimi For Coding (kimi.ai) models through Mastra's model router. Authentication is handled automatically using the `KIMI_API_KEY` environment variable.
+Access 6 Kimi For Coding (kimi.ai) models through Mastra's model router. Authentication is handled automatically using the `KIMI_API_KEY` environment variable.
 
 Learn more in the [Kimi For Coding (kimi.ai) documentation](https://www.kimi.ai/code/docs/en/kimi-code/models.html).
 
@@ -65,6 +65,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kimi-code-plan-global/k3.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kimi-code-plan-global/k3.1-pro-highspeed",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null

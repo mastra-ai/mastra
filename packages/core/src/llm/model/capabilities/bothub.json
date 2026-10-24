@@ -19,16 +19,16 @@
     "muse-spark-1.3-contributor"
   ],
   "reasoning": {
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "muse-spark-1.3-contributor": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "nemotron-3-ultra-550b-a55b:free": [
-      {
-        "type": "effort",
-        "values": ["none", "medium", "high"]
       }
     ],
     "gpt-5.6-luna": [
@@ -49,16 +49,16 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
+    "nemotron-3-ultra-550b-a55b:free": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "medium", "high"]
       }
     ],
     "gemma-4-31b-it:free": [

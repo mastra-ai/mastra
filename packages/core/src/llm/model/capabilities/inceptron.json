@@ -17,10 +17,10 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "zai-org/GLM-5.3-Flash": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["high", "max"]
       }
     ],
     "zai-org/GLM-5.3": [
@@ -29,13 +29,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.2": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+    "zai-org/GLM-5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]

@@ -7,7 +7,7 @@ description: "Browse Moonshot AI (China) model IDs, capabilities, context window
 
 # <img src="https://models.dev/logos/moonshotai-cn.svg" alt="Moonshot AI (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Moonshot AI (China)
 
-Access 4 Moonshot AI (China) models through Mastra's model router. Authentication is handled automatically using the `MOONSHOT_API_KEY` environment variable.
+Access 6 Moonshot AI (China) models through Mastra's model router. Authentication is handled automatically using the `MOONSHOT_API_KEY` environment variable.
 
 Learn more in the [Moonshot AI (China) documentation](https://platform.moonshot.cn).
 
@@ -92,6 +92,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 2.9879,
     "outputCost": 14.9395
+  },
+  {
+    "model": "moonshotai-cn/kimi-k3.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 1.9437,
+    "outputCost": 10.1671
+  },
+  {
+    "model": "moonshotai-cn/kimi-k3.1-pro-highspeed",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 3.8874,
+    "outputCost": 20.3342
   }
 ]}
 />
@@ -126,7 +150,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "moonshotai-cn/kimi-k3"
+      ? "moonshotai-cn/kimi-k3.1-pro-highspeed"
       : "moonshotai-cn/kimi-k2.6";
   }
 });

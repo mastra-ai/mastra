@@ -27,19 +27,7 @@
     "xpersona-gpt-5.5"
   ],
   "reasoning": {
-    "claude-sonnet-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-haiku-4-5": [
+    "gpt-5.6-terra": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -51,25 +39,13 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-5.6-sol": [
+    "claude-haiku-4-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-5.6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "xpersona-gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-opus-4-8": [
+    "gpt-5.4": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -81,7 +57,31 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-5.6-terra": [
+    "gpt-5.6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-opus-4-8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-sonnet-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-5.6-sol": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -93,13 +93,13 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-5.4-mini": [
+    "xpersona-gpt-5.5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-5.4": [
+    "gpt-5.4-mini": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]

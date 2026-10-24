@@ -15,12 +15,12 @@
         "type": "toggle"
       }
     ],
-    "MiniMax-M3": [
+    "DeepSeek-V3.1": [
       {
         "type": "toggle"
       }
     ],
-    "DeepSeek-V3.1": [
+    "MiniMax-M3": [
       {
         "type": "toggle"
       }

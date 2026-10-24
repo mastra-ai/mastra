@@ -39,10 +39,13 @@
     "o4-mini"
   ],
   "reasoning": {
-    "gpt-5": [
+    "deepseek-v4-pro": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["high", "max"]
       }
     ],
     "auto": [
@@ -51,10 +54,16 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-5.5": [
+    "gpt-5.4": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "claude-haiku-4.5": [
@@ -69,31 +78,10 @@
         "values": ["none", "high", "xhigh"]
       }
     ],
-    "deepseek-v4-pro": [
-      {
-        "type": "toggle"
-      },
+    "gpt-5.4-nano": [
       {
         "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "o4-mini": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-fable-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-opus-4.8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "claude-sonnet-5": [
@@ -102,19 +90,31 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "o4-mini": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "claude-opus-4.8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-5": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
     "gpt-5.4-mini": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "gpt-5.4": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "gpt-5.4-nano": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]

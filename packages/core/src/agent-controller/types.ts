@@ -847,7 +847,12 @@ export type AgentControllerEvent =
   | { type: 'thread_owner_changed'; threadId: string; fromOwnerId: string | undefined; toOwnerId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
-  | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
+  | {
+      type: 'agent_end';
+      reason?: 'complete' | 'aborted' | 'error' | 'suspended';
+      /** Why an aborted run stopped, when the abort said: `'thread-lease-lost'` when another run holds its thread lease. */
+      abortReason?: string;
+    }
   | { type: 'message_start'; message: MastraDBMessage }
   | {
       type: 'message_update';

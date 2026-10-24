@@ -41,13 +41,19 @@ import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import {
+  SessionBranchHeldError,
   SessionOwnershipMismatchError,
   SourceControlConnectionNotFoundError,
 } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { workItemBranch, workItemBranchSource, workItemThreadTitle } from '../work-item-branch.js';
+import {
+  legacyGithubWorkItemBranch,
+  workItemBranch,
+  workItemBranchSource,
+  workItemThreadTitle,
+} from '../work-item-branch.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
@@ -248,7 +254,11 @@ async function inheritEarlierSession(
   }
   for (const role of candidates) {
     const session = await reuseBoundSession(sourceControl, input, role);
-    if (session && session.branch === branch && session.projectRepositoryId === projectRepositoryId) {
+    if (
+      session &&
+      (session.branch === branch || session.branch === legacyGithubWorkItemBranch(branch)) &&
+      session.projectRepositoryId === projectRepositoryId
+    ) {
       return session;
     }
   }
@@ -371,6 +381,13 @@ export async function prepareFactoryRuleBinding(
           throw new FactoryDispatchError(
             'source_repository_missing',
             `Repository ${repository.slug} is linked but not in this Factory's environment. Turn it on under Settings → Environment, then retry.`,
+            { cause: error },
+          );
+        }
+        if (error instanceof SessionBranchHeldError) {
+          throw new FactoryDispatchError(
+            'session_unavailable',
+            `${error.message} The run cannot start until branch ${branch} is free for this repository.`,
             { cause: error },
           );
         }

@@ -1,6 +1,6 @@
 ---
 title: "MCP | Connections"
-description: "Connect Mastra agents to remote MCP servers, expose Mastra tools through MCPServer, manage approvals, and build interactive MCP Apps for Studio."
+description: "Connect Mastra agents to remote MCP servers, expose Mastra tools through MCPServer, manage approvals, subscribe to MCP events, and build interactive MCP Apps for Studio."
 packages:
   - "@mastra/mcp"
 ---
@@ -75,6 +75,58 @@ export const assistant = new Agent({
 })
 ```
 
+### Generate types for direct tool calls
+
+For stable server configurations, generate types from published tool schemas instead of redeclaring tool arguments and results. This optional workflow leaves dynamic discovery unchanged.
+
+Export a client with an output path and pass the generated `MCPServers` interface to its constructor:
+
+```typescript title="src/mcp/client.ts"
+import { MCPClient } from '@mastra/mcp'
+import type { MCPServers } from './mcp-types.generated'
+
+export const mcp = new MCPClient<MCPServers>({
+  id: 'weather-client',
+  servers: { weather: { url: new URL(process.env.WEATHER_MCP_URL!) } },
+  typegen: { outFile: 'src/mcp/mcp-types.generated.ts' },
+})
+```
+
+Set `WEATHER_MCP_URL` and configure any required authentication before running the command from your project root:
+
+```bash npm2yarn
+npx @mastra/mcp generate ./src/mcp/client.ts
+```
+
+The generated file can be absent on the first run because its import is type-only. Generation loads TypeScript modules without typechecking and lists schemas without executing tools. Run your project's typecheck afterward.
+
+Call a discovered tool using its generated arguments. The following assumes the server publishes `get_weather` with a string `location` and numeric `temperature`:
+
+```typescript title="src/mcp/call-weather.ts"
+import { mcp } from './client'
+
+try {
+  const tools = await mcp.listTools()
+  const weather = tools.weather_get_weather
+  if (weather?.execute) {
+    const result = await weather.execute({ location: 'Paris' })
+    if (result && 'temperature' in result && typeof result.temperature === 'number') {
+      console.log(result.temperature)
+    }
+  }
+} finally {
+  await mcp.disconnect()
+}
+```
+
+Tools can be absent, and execution can return a protocol envelope, validation error, or `undefined` alongside structured output. Narrow the result before using it. Missing output schemas produce `unknown`.
+
+Pass multiple explicit client files to generate several outputs. Export clients directly as named or default exports, use different output paths, and give independent clients distinct IDs when their server configurations match. Input and output paths resolve from the command's working directory. Repeated exports of the same client are processed once.
+
+Discovery failures leave existing files unchanged, as does a schema problem generation can't work around, such as a reference cycle, excessive depth, or an unresolved local reference. File replacement is atomic per file, not across the whole set. Regenerate when server schemas change, using equivalent permissions. Before generation, provide credentials and load any environment files yourself. Importing a client executes its module and transitive imports, so choose files without application startup side effects. Interactive authentication isn't part of the command.
+
+See [type generation reference](/reference/tools/mcp-client#generate-client-types) for export selection, instance caching, schema limitations, and failure handling.
+
 ### Static and runtime tools
 
 Choose how to load tools based on whether the server configuration changes between requests:
@@ -143,9 +195,9 @@ Treat tool annotations from servers you don't control as untrusted hints. Visit 
 
 MCP servers run code and return content on your agent's behalf, so configure them with the same care as any other external dependency:
 
-- **Stdio subprocess environment**: subprocesses inherit only the MCP SDK's curated environment whitelist (for example `PATH` and `HOME` on POSIX), not the full parent environment. Set `inheritDefaultEnv: false` on a server to pass only the variables you list in `env`.
-- **Outbound host restriction**: Set `allowedHosts` when HTTP server URLs come from untrusted configuration to restrict the hosts that the client can contact. The default fetch path also blocks redirect hops before sending them. A custom `fetch` is validated against its final response URL only after the request, so it must enforce its own redirect policy when outbound contact must be prevented.
-- **Tool response trust**: tool results are untrusted model input. Use [input and output processors](/docs/agents/processors) to inspect or sanitize content before it reaches the model, and `requireToolApproval` to gate sensitive tools.
+- **Stdio subprocess environment**: subprocesses inherit only the MCP SDK's curated environment whitelist (for example `PATH` and `HOME` on POSIX), not the full parent environment. Set `inheritDefaultEnv: false` on a server to pass only the variables listed in `env`.
+- **Outbound host restriction**: set `allowedHosts` when HTTP server URLs come from untrusted configuration, to restrict the hosts the client can contact. The default fetch path blocks redirect hops before sending them; a custom `fetch` is validated against its final response URL only after the request, so it must enforce its own redirect policy when outbound contact must be prevented.
+- **Tool response trust**: tool results are untrusted model input. Use [input and output processors](/docs/agents/processors) to sanitize content before it reaches the model, and `requireToolApproval` for sensitive tools.
 
 Visit the [MCPClient security reference](/reference/tools/mcp-client#security) for enforcement details of each option.
 
@@ -264,32 +316,24 @@ import { MCPServer } from '@mastra/mcp'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
-export const calculatorTool = createTool({
+const calculatorTool = createTool({
   id: 'calculatorWithUI',
   description: 'Calculate the sum of two numbers',
-  inputSchema: z.object({
-    num1: z.number(),
-    num2: z.number(),
-  }),
-  mcp: {
-    _meta: { ui: { resourceUri: 'ui://calculator/main' } },
-  },
+  inputSchema: z.object({ num1: z.number(), num2: z.number() }),
+  mcp: { _meta: { ui: { resourceUri: 'ui://calculator/main' } } },
   execute: async ({ num1, num2 }) => ({
     content: [{ type: 'text', text: 'The result is displayed in the calculator app.' }],
     structuredContent: { result: num1 + num2 },
   }),
 })
 
-export const calculatorMcpServer = new MCPServer({
+const calculatorMcpServer = new MCPServer({
   id: 'calculator-app-server',
   name: 'Calculator App Server',
   version: '1.0.0',
   tools: { calculatorTool },
   appResources: {
-    'ui://calculator/main': {
-      name: 'Calculator',
-      htmlPath: './src/mastra/mcp/calculator.html',
-    },
+    'ui://calculator/main': { name: 'Calculator', htmlPath: './src/mastra/mcp/calculator.html' },
   },
 })
 ```
@@ -323,11 +367,6 @@ Use the `App` class from `@modelcontextprotocol/ext-apps` inside the HTML resour
           arguments: toolInput,
         })
         document.querySelector('#result').textContent = JSON.stringify(result)
-
-        await app.sendMessage({
-          role: 'user',
-          content: [{ type: 'text', text: 'Explain the recalculated result.' }],
-        })
       })
 
       await app.connect()
@@ -345,37 +384,11 @@ The guest-side APIs serve different parts of the interaction:
 | `app.sendMessage()` | Add a user message to chat and start a new model turn |
 | `app.connect()` | Connect to the host after registering event handlers |
 
-The interaction follows this sequence:
-
-1. The agent calls the tool.
-1. The tool returns model-facing `content` and UI-facing `structuredContent`.
-1. Studio renders the associated app resource.
-1. The app receives tool input and can call server tools or send chat messages.
-
 Visit the external [`App` API reference](https://apps.extensions.modelcontextprotocol.io/api/classes/app.App.html) for all guest-side methods and lifecycle hooks.
 
 ### Register MCP Apps
 
-For a local app, pass the tool to an agent and register its MCP server on `Mastra`:
-
-```typescript title="src/mastra/index.ts"
-import { Agent } from '@mastra/core/agent'
-import { Mastra } from '@mastra/core/mastra'
-import { calculatorMcpServer, calculatorTool } from './mcp/calculator'
-
-const calculatorAgent = new Agent({
-  id: 'calculator-agent',
-  name: 'Calculator Agent',
-  instructions: 'Use the calculator tool for arithmetic.',
-  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
-  tools: { calculatorTool },
-})
-
-export const mastra = new Mastra({
-  agents: { calculatorAgent },
-  mcpServers: { calculatorMcpServer },
-})
-```
+Register the server on `Mastra` the same way as any other server in [Expose a Mastra MCP server](#expose-a-mastra-mcp-server), and pass its tool to the agent that should render the app.
 
 For an external MCP server that implements MCP Apps, load its tools with `MCPClient.listTools()` and register its proxy so Studio can resolve the remote app resources:
 
@@ -408,6 +421,84 @@ Tools loaded through `listTools()` include a `serverId` in `_meta.ui`, allowing 
 Mastra Studio uses [`@mcp-ui/client`](https://www.npmjs.com/package/@mcp-ui/client) to load app HTML through a sandbox proxy and communicate over JSON-RPC with `postMessage`.
 
 App iframes allow scripts, forms, and popups. They can't access the parent page's DOM, cookies, or storage. The host controls all communication with the guest app.
+
+## MCP events
+
+MCP events let a client react when something happens on a server, such as a ticket being opened or a build finishing, instead of calling a tool on a schedule to check. A server declares event types, a client subscribes with arguments, and the server delivers each matching occurrence over the same stdio or Streamable HTTP transport as its tools.
+
+:::warning
+MCP events implement [SEP-3415](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415), a draft MCP extension. The wire format and the Mastra API are experimental and may change in any release.
+:::
+
+- **Subscription:** one client request for one event type with arguments, such as `{ project: 'web' }`. The server delivers only matching occurrences.
+- **Occurrence:** one delivered event with an `eventId`, `name`, `timestamp`, and `data`. Delivery is at least once, and the client drops duplicates by `eventId` within a `dedupWindow` of recent ids. Handlers should still tolerate a repeat.
+- **Cursor:** an opaque position in the event sequence. Save it to resume from a later subscription. Replay covers only history the source retains. An `emit()` source buffers in one process, so a restart or another instance serving the subscription can miss occurrences, and durable replay needs a `poll` source backed by shared storage.
+
+### Publish events
+
+Declare each type with `defineEvent()` in the `events` option of `MCPServer`, then publish occurrences with `server.events.emit()`:
+
+```typescript title="src/mastra/mcp/tickets.ts"
+import { createTool } from '@mastra/core/tools'
+import { MCPServer, defineEvent } from '@mastra/mcp'
+import { z } from 'zod'
+
+const ticket = z.object({ id: z.string(), project: z.string(), title: z.string() })
+
+const server: MCPServer = new MCPServer({
+  id: 'tickets',
+  name: 'Tickets',
+  version: '1.0.0',
+  tools: {
+    openTicket: createTool({
+      id: 'openTicket',
+      description: 'Opens a support ticket',
+      inputSchema: ticket,
+      execute: async input => server.events.emit('ticket.created', input),
+    }),
+  },
+  events: {
+    'ticket.created': defineEvent({
+      description: 'A support ticket was opened',
+      inputSchema: z.object({ project: z.string() }),
+      payloadSchema: ticket,
+      match: (args, data) => data.project === args.project,
+    }),
+  },
+})
+```
+
+The examples serve this server over HTTP at `http://localhost:4111/mcp` with [`startHTTP()`](/reference/tools/mcp-server#starthttp).
+
+`match` decides which subscriptions receive an occurrence. It filters on arguments the client chooses, so it doesn't control who can subscribe; add `authorize` to restrict callers, since it runs on every poll and every subscription open and rejects the request when it returns `false`. An event type takes its occurrences from either `server.events.emit()`, which serves push and poll from an in-process buffer, or a `poll` function that reads an external system and supports poll only.
+
+### Subscribe to events
+
+List the types a server offers with `mcp.events.list()`, then subscribe with `mcp.events.subscribe()`. The returned subscription is an async iterable of occurrences:
+
+```typescript title="src/mastra/mcp/client.ts"
+import { MCPClient } from '@mastra/mcp'
+
+const mcp = new MCPClient({ servers: { tickets: { url: new URL('http://localhost:4111/mcp') } } })
+
+const eventTypes = await mcp.events.list('tickets')
+const subscription = await mcp.events.subscribe('tickets', 'ticket.created', { project: 'web' })
+
+for await (const event of subscription) {
+  console.log(event.eventId, event.data)
+  if (subscription.cursor) await saveCursor('tickets:web', subscription.cursor)
+}
+```
+
+`subscribe()` resolves once the server accepts the subscription. A new subscription starts from now, so pass `options.cursor` to resume from a saved position. The client picks the first mode the event offers, in the order `webhook` when the client has `webhook` settings, then `push`, then `poll`, and reopens dropped streams on its own.
+
+### Start runs from events
+
+Subscribe in a loop that starts one agent run or workflow run per occurrence. The occurrence comes from the server, so pass `event.data` as data rather than as instructions, and save `subscription.cursor` after handling each one. Because the loop handles one occurrence at a time and a slow run delays the next, when order doesn't matter you can start runs without awaiting them and save the cursor only after every earlier run has finished, since a crash otherwise loses the occurrences whose runs were still going.
+
+Under push or webhook delivery the client buffers occurrences the loop hasn't read, and a loop that falls more than `maxBufferedEvents` behind loses the oldest ones and reports `MCP_EVENTS_BUFFER_OVERFLOW`. To deliver occurrences to agent threads as notifications instead of writing your own loop, use [`MCPEventsSignalProvider`](/reference/tools/mcp-client#events-in-agents-and-workflows-experimental).
+
+When the server is remote and your application already serves HTTP, use webhook delivery instead: enable `webhook` in `eventsOptions` on the server and `webhook` on the client, and each occurrence arrives as a POST to your endpoint. For delivery modes, error codes, buffers, retries, and the `poll` source example, visit the [`MCPServer` events reference](/reference/tools/mcp-server#events-experimental) and the [`MCPClient` events reference](/reference/tools/mcp-client#events-property-experimental). The [MCP events example](https://github.com/mastra-ai/mastra/tree/main/examples/mcp-events) runs the agent flow end to end against a local stdio server.
 
 ## Next steps
 

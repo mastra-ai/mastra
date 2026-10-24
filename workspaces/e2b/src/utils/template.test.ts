@@ -27,6 +27,12 @@ describe('createDefaultMountableTemplate', () => {
     expect(createDefaultMountableTemplate({ nodeVersion: DEFAULT_NODE_VERSION }).id).toBe(plain.id);
   });
 
+  it('uses the patched Node runtime without reusing the previous default template', () => {
+    const current = createDefaultMountableTemplate();
+    expect(current.id).toBe(createDefaultMountableTemplate({ nodeVersion: '24.22.1' }).id);
+    expect(current.id).not.toBe(createDefaultMountableTemplate({ nodeVersion: '24.20.0' }).id);
+  });
+
   it('rejects a node version that is not an exact MAJOR.MINOR.PATCH', () => {
     expect(() => createDefaultMountableTemplate({ nodeVersion: 'lts' })).toThrow(/expected an exact version/);
     expect(() => createDefaultMountableTemplate({ nodeVersion: '24.20.0; rm -rf /' })).toThrow(

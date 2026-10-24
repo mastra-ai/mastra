@@ -17,14 +17,14 @@ type InputShared_Auxiliary_21 =
       [key: string]: InputShared_Auxiliary_21;
     };
 
-type InputShared_Auxiliary_115 = {
+type InputShared_Auxiliary_116 = {
   workflowId: string;
   runId: string;
   executionPath: number[];
-  parentWorkflow?: InputShared_Auxiliary_115 | undefined;
+  parentWorkflow?: InputShared_Auxiliary_116 | undefined;
 };
 
-type InputShared_Auxiliary_207 =
+type InputShared_Auxiliary_208 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -73,41 +73,41 @@ type InputShared_Auxiliary_207 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_207[];
+      args: InputShared_Auxiliary_208[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_207;
+      arg: InputShared_Auxiliary_208;
     }
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_230;
+            some: InputShared_Auxiliary_231;
           }
         | {
-            none: InputShared_Auxiliary_230;
+            none: InputShared_Auxiliary_231;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_230;
+            some: InputShared_Auxiliary_231;
           }
         | {
-            none: InputShared_Auxiliary_230;
+            none: InputShared_Auxiliary_231;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_230;
+            some: InputShared_Auxiliary_231;
           }
         | {
-            none: InputShared_Auxiliary_230;
+            none: InputShared_Auxiliary_231;
           };
     };
 
-type InputShared_Auxiliary_230 =
+type InputShared_Auxiliary_231 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -156,33 +156,33 @@ type InputShared_Auxiliary_230 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_230[];
+      args: InputShared_Auxiliary_231[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_230;
+      arg: InputShared_Auxiliary_231;
     };
 
-type InputShared_Auxiliary_277 =
+type InputShared_Auxiliary_278 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_277[];
+      args: InputShared_Auxiliary_278[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_277;
+      arg: InputShared_Auxiliary_278;
     }
   | {
       traces:
         | {
-            some: InputShared_Auxiliary_207;
+            some: InputShared_Auxiliary_208;
           }
         | {
-            none: InputShared_Auxiliary_207;
+            none: InputShared_Auxiliary_208;
           };
     };
 
-type InputShared_Auxiliary_709 =
+type InputShared_Auxiliary_710 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,19 +227,19 @@ type InputShared_Auxiliary_709 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_709[];
+      args: InputShared_Auxiliary_710[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_709;
+      arg: InputShared_Auxiliary_710;
     };
 
-type InputShared_Auxiliary_783 = {
+type InputShared_Auxiliary_784 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_783[] | undefined;
+  children?: InputShared_Auxiliary_784[] | undefined;
 };
 
 type Shared_Auxiliary_777 = {
@@ -1833,7 +1833,7 @@ type InputShared_Type_89 = {
       }
     | undefined;
   steps: InputShared_Type_84[];
-  predicates: InputShared_Auxiliary_709[];
+  predicates: InputShared_Auxiliary_710[];
 };
 
 type InputShared_Type_90 = {
@@ -1847,7 +1847,7 @@ type InputShared_Type_90 = {
     | undefined;
   step: InputShared_Type_84;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_709;
+  predicate: InputShared_Auxiliary_710;
 };
 
 type InputShared_Type_91 =
@@ -5465,6 +5465,37 @@ export interface PostAgentsAgentIdSignals_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /agents/:agentId/runs/:runId/abort
+// ============================================================================
+export type PostAgentsAgentIdRunsRunIdAbort_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+  /** Unique identifier for the agent run */
+  runId: string;
+};
+
+export type PostAgentsAgentIdRunsRunIdAbort_Response = {
+  aborted: boolean;
+};
+
+export type PostAgentsAgentIdRunsRunIdAbort_Request = Simplify<
+  (PostAgentsAgentIdRunsRunIdAbort_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdRunsRunIdAbort_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostAgentsAgentIdRunsRunIdAbort_RouteContract {
+  pathParams: PostAgentsAgentIdRunsRunIdAbort_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostAgentsAgentIdRunsRunIdAbort_Request;
+  response: PostAgentsAgentIdRunsRunIdAbort_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /agents/:agentId/threads/abort
 // ============================================================================
 export type PostAgentsAgentIdThreadsAbort_PathParams = GetAgentsAgentId_PathParams;
@@ -5476,9 +5507,7 @@ export type PostAgentsAgentIdThreadsAbort_Body = {
   expectedRunId?: string | undefined;
 };
 
-export type PostAgentsAgentIdThreadsAbort_Response = {
-  aborted: boolean;
-};
+export type PostAgentsAgentIdThreadsAbort_Response = PostAgentsAgentIdRunsRunIdAbort_Response;
 
 export type PostAgentsAgentIdThreadsAbort_Request = Simplify<
   (PostAgentsAgentIdThreadsAbort_PathParams extends never ? {} : { params: PostAgentsAgentIdThreadsAbort_PathParams }) &
@@ -8007,7 +8036,7 @@ export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams = GetWorkflo
 export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body = {
   stepId: string;
   executionPath: number[];
-  parentWorkflow?: InputShared_Auxiliary_115 | undefined;
+  parentWorkflow?: InputShared_Auxiliary_116 | undefined;
   stepResults: {
     [key: string]: unknown;
   };
@@ -10554,7 +10583,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_207 | undefined;
+  where?: InputShared_Auxiliary_208 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -10644,11 +10673,11 @@ export type PostObservabilityTracesAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_207 | undefined;
+  where?: InputShared_Auxiliary_208 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (InputShared_Type_16 | `countDistinct.${string}`)[];
-  having?: InputShared_Auxiliary_230 | undefined;
+  having?: InputShared_Auxiliary_231 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10729,11 +10758,11 @@ export type PostObservabilitySpansAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_230 | undefined;
+  where?: InputShared_Auxiliary_231 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (InputShared_Type_16 | `countDistinct.${string}`)[];
-  having?: InputShared_Auxiliary_230 | undefined;
+  having?: InputShared_Auxiliary_231 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10781,7 +10810,7 @@ export type PostObservabilityThreadsQuery_Body =
               field: 'startedAt' | 'endedAt';
             };
           };
-      where?: InputShared_Auxiliary_230 | undefined;
+      where?: InputShared_Auxiliary_231 | undefined;
       orderBy?: {
         field: 'startedAt' | 'endedAt';
         direction: 'asc' | 'desc';
@@ -10797,9 +10826,9 @@ export type PostObservabilityThreadsQuery_Body =
           from: string;
           to: string;
         };
-        where?: InputShared_Auxiliary_207 | undefined;
+        where?: InputShared_Auxiliary_208 | undefined;
       };
-      where?: InputShared_Auxiliary_277 | undefined;
+      where?: InputShared_Auxiliary_278 | undefined;
       page?: {
         limit?: number;
         after?: (string | null) | undefined;
@@ -10877,7 +10906,7 @@ export type PostObservabilitySpansQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_230 | undefined;
+  where?: InputShared_Auxiliary_231 | undefined;
   orderBy?: {
     field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs';
     direction: 'asc' | 'desc';
@@ -18987,7 +19016,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_783[] | undefined;
+  files?: InputShared_Auxiliary_784[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -19045,7 +19074,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_783[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_784[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -20833,6 +20862,13 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   version?: number | undefined;
   /** Agent version ID to use for experiment */
   agentVersion?: string | undefined;
+  /** Model to run an agent target on for this experiment only, instead of the model the agent is configured with. Passed per call; the agent itself is not changed and the model is not stored on the experiment. */
+  agentModel?:
+    | {
+        provider: string;
+        modelId: string;
+      }
+    | undefined;
   /** Maximum concurrent executions */
   maxConcurrency?: number | undefined;
   /** Caller-provided provenance claims for the experiment execution */
@@ -24575,6 +24611,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/queue-message': PostAgentsAgentIdQueueMessage_RouteContract;
   'POST /agents/:agentId/queue-signal': PostAgentsAgentIdQueueSignal_RouteContract;
   'POST /agents/:agentId/signals': PostAgentsAgentIdSignals_RouteContract;
+  'POST /agents/:agentId/runs/:runId/abort': PostAgentsAgentIdRunsRunIdAbort_RouteContract;
   'POST /agents/:agentId/threads/abort': PostAgentsAgentIdThreadsAbort_RouteContract;
   'POST /agents/:agentId/threads/signals/cancel': PostAgentsAgentIdThreadsSignalsCancel_RouteContract;
   'POST /agents/:agentId/threads/subscribe': PostAgentsAgentIdThreadsSubscribe_RouteContract;
@@ -25231,6 +25268,9 @@ export interface Client {
   };
   '/agents/:agentId/resume-stream-until-idle': {
     POST: PostAgentsAgentIdResumeStreamUntilIdle_RouteContract;
+  };
+  '/agents/:agentId/runs/:runId/abort': {
+    POST: PostAgentsAgentIdRunsRunIdAbort_RouteContract;
   };
   '/agents/:agentId/send-message': {
     POST: PostAgentsAgentIdSendMessage_RouteContract;
