@@ -26,13 +26,13 @@ import type { KnowledgeConfig } from './config';
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
 import { DEFAULT_MAX_PINS } from './pinned';
-import { KnowledgeSemanticIndexCoordinator } from './semantic-index';
 import {
   materializeKnowledgeScopePlan,
   validateKnowledgeScopeTypes,
   validateKnowledgeStructurePlan,
 } from './reconcile';
 import type { KnowledgeScopeTypesConfig, MaterializeKnowledgeScopeInput } from './reconcile';
+import { KnowledgeSemanticIndexCoordinator } from './semantic-index';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export class Knowledge extends MastraBase {

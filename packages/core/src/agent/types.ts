@@ -13,6 +13,7 @@ import type { ChannelConfig } from '../channels/types';
 import type { WaitUntilFn } from '../channels/wait-until';
 import type { MastraScorer, MastraScorers, ScoringFilter, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
+import type { Knowledge } from '../knowledge';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -34,7 +35,6 @@ import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
 import type { ReasoningLevel } from '../loop/types';
-import type { Knowledge } from '../knowledge';
 import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';

@@ -1,3 +1,4 @@
+import type { JSONSchema7 } from 'json-schema';
 import type {
   KnowledgeRecord,
   KnowledgeNode,
@@ -8,7 +9,6 @@ import type {
 import { createKnowledgeNodeCursor, isKnowledgeScopeVisible } from '../storage';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
-import type { JSONSchema7 } from 'json-schema';
 
 import { resolveKnowledgeResourceId } from './scope';
 import type { KnowledgeSemanticIndexCoordinator } from './semantic-index';

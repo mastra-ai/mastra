@@ -27,6 +27,10 @@ import type { ScoringFilter } from '../evals/predicate';
 
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
+import type { Knowledge } from '../knowledge';
+import { KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID, KnowledgeInstructionsProcessor } from '../knowledge/instructions';
+import { SUBCONSCIOUS_PINS_STATE_ID } from '../knowledge/pinned';
+import { PinnedStateProcessor } from '../knowledge/pinned-state-processor';
 import { resolveModelConfig } from '../llm';
 import type { CoreMessage } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
@@ -48,20 +52,16 @@ import type {
   WidenedMastraModelConfig,
 } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
-import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
-import { networkLoop } from '../loop/network';
-import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
-import type { AgentLoopResumeClaim } from '../loop/types';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
 // from `mastraCtorHolder` (populated by `mastra/index.ts` at load), with an
 // `await import('../mastra')` fallback for the standalone-agent case where the
 // Mastra module was never loaded. See `#getOrCreateEphemeralMastra`.
-import type { Knowledge } from '../knowledge';
-import { KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID, KnowledgeInstructionsProcessor } from '../knowledge/instructions';
-import { SUBCONSCIOUS_PINS_STATE_ID } from '../knowledge/pinned';
-import { PinnedStateProcessor } from '../knowledge/pinned-state-processor';
+import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
+import { networkLoop } from '../loop/network';
+import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
+import type { AgentLoopResumeClaim } from '../loop/types';
 import type { Mastra } from '../mastra';
 import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
