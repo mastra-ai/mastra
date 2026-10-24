@@ -1,44 +1,37 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Txt } from '@/ds/components/Txt';
 import { X } from 'lucide-react';
 
-import { useKnowledgeActivity } from '../../../../../hooks/useKnowledgeGraph';
-import type { KnowledgeActivityEvent, KnowledgeScopeNode, KnowledgeSelection } from '../../services/knowledge';
-import {
-  knowledgeActivityLabel,
-  KNOWLEDGE_ACTIVITY_TRUNCATED,
-} from '@mastra/playground-ui/domains/knowledge/lib/activityLabel';
+import { useKnowledgeDataSource } from '../data-source';
+import type { KnowledgeActivityEvent, KnowledgeScopeNode, KnowledgeSelection } from '../types';
+import { knowledgeActivityLabel, KNOWLEDGE_ACTIVITY_TRUNCATED } from '../lib/activityLabel';
 
 interface KnowledgeScopeFlyoutProps {
-  factoryProjectId: string;
   selection: KnowledgeSelection;
   scope: KnowledgeScopeNode;
   childScopeCount: number;
   contentNodeCount: number;
   /** True when the counts come from a truncated window and are lower bounds. */
   countsTruncated: boolean;
-  threadId?: string;
   onSelectActivity: (event: KnowledgeActivityEvent) => void;
   onClose: () => void;
 }
 
 /** Detail surface for the structural scope at the root of the active lens. */
 export function KnowledgeScopeFlyout({
-  factoryProjectId,
   selection,
   scope,
   childScopeCount,
   contentNodeCount,
   countsTruncated,
-  threadId,
   onSelectActivity,
   onClose,
 }: KnowledgeScopeFlyoutProps) {
   const count = (value: number) => (countsTruncated ? `${value}+` : String(value));
-  const activity = useKnowledgeActivity(factoryProjectId, selection, threadId);
+  const source = useKnowledgeDataSource();
+  const activity = source.useActivity(selection);
   const recentActivity = activity.data?.pages[0]?.events.slice(0, 5) ?? [];
   const activityTruncated = activity.data?.pages[0]?.truncated === true;
-  const displayAddress =
-    scope.address === `resource:${factoryProjectId}` ? `project:${factoryProjectId}` : scope.address;
+  const displayAddress = source.displayAddress?.(scope.address) ?? scope.address;
   return (
     <aside
       data-testid="knowledge-scope-flyout"

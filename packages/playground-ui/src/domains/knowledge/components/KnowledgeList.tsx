@@ -1,9 +1,9 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/utils/cn';
 import { ChevronRight, Pin } from 'lucide-react';
 
-import type { KnowledgeGraphNode, KnowledgeGraphPayload } from '../../services/knowledge';
-import { parseRecordSegments } from '@mastra/playground-ui/domains/knowledge/lib/recordText';
+import type { KnowledgeGraphNode, KnowledgeGraphPayload } from '../types';
+import { parseRecordSegments } from '../lib/recordText';
 
 /**
  * Tap-friendly reading of the same bounded lens payload the canvas renders:

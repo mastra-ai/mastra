@@ -11,21 +11,25 @@ import { useSearchParams } from 'react-router';
 import {
   useKnowledgeActivity,
   useKnowledgeGraph,
+  useKnowledgeNode,
+  useKnowledgeSearch,
   useKnowledgeScopePage,
   useKnowledgeScopes,
 } from '../../hooks/useKnowledgeGraph';
+import { KnowledgeDataSourceProvider } from '@mastra/playground-ui/domains/knowledge/data-source';
+import type { KnowledgeDataSource } from '@mastra/playground-ui/domains/knowledge/data-source';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
-import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
-import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
-import { KnowledgeList } from '../domains/factory/components/knowledge/KnowledgeList';
+import { KnowledgeGraph } from '@mastra/playground-ui/domains/knowledge/components/KnowledgeGraph';
+import { KnowledgeFlyout } from '@mastra/playground-ui/domains/knowledge/components/KnowledgeFlyout';
+import { KnowledgeList } from '@mastra/playground-ui/domains/knowledge/components/KnowledgeList';
 import {
   knowledgeActivityLabel,
   KNOWLEDGE_ACTIVITY_TRUNCATED,
 } from '@mastra/playground-ui/domains/knowledge/lib/activityLabel';
-import { KnowledgeSearch } from '../domains/factory/components/knowledge/KnowledgeSearch';
+import { KnowledgeSearch } from '@mastra/playground-ui/domains/knowledge/components/KnowledgeSearch';
 import type { Arrivals, DiffBaseline } from '@mastra/playground-ui/domains/knowledge/lib/graphDiff';
 import { computeArrivals } from '@mastra/playground-ui/domains/knowledge/lib/graphDiff';
 import type {
@@ -39,7 +43,7 @@ import type {
 } from '../domains/factory/services/knowledge';
 import { RequestError } from '../domains/factory/services/request';
 import { useInteractionIdle } from '@mastra/playground-ui/domains/knowledge/hooks/useInteractionIdle';
-import { KnowledgeScopeFlyout } from '../domains/factory/components/knowledge/KnowledgeScopeFlyout';
+import { KnowledgeScopeFlyout } from '@mastra/playground-ui/domains/knowledge/components/KnowledgeScopeFlyout';
 
 /**
  * The Knowledge page: a live force-directed graph of the project's knowledge —
@@ -858,24 +862,20 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         </div>
         {!detailsOpen ? null : selectedScope && factoryProjectId ? (
           <KnowledgeScopeFlyout
-            factoryProjectId={factoryProjectId}
             selection={selection}
             scope={selectedScope}
             childScopeCount={childScopeCount}
             contentNodeCount={contentNodeCount}
             countsTruncated={graphQuery.data.truncated || selectedScope.memberCountTruncated}
-            threadId={threadId}
             onSelectActivity={selectActivityEvent}
             onClose={() => setSelected(null)}
           />
         ) : selected && factoryProjectId && detailScopeLevel ? (
           <KnowledgeFlyout
-            factoryProjectId={factoryProjectId}
             nodeId={selected.nodeId}
             // Content surfaced through a structural lens is read at its own
             // identity rung, not the rung of the scope used to reach it.
             scopeLevel={detailScopeLevel}
-            threadId={threadId}
             focusRecordId={selected.recordId}
             onSelectRecord={recordId => {
               // Bidirectional selection: expanding a card selects the knowledge record
@@ -928,100 +928,110 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     });
   };
 
+  const dataSource: KnowledgeDataSource = {
+    useNode: (nodeId, scopeLevel) => useKnowledgeNode(factoryProjectId, nodeId, scopeLevel, threadId),
+    useActivity: activitySelection => useKnowledgeActivity(factoryProjectId, activitySelection, threadId),
+    useSearch: query => useKnowledgeSearch(factoryProjectId, query, threadId),
+    displayAddress: address =>
+      factoryProjectId && address === `resource:${factoryProjectId}` ? `project:${factoryProjectId}` : address,
+  };
+
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-4 pt-2" aria-label="Knowledge graph">
-      <header className="shrink-0">
-        <Txt tone="ink" as="h1" variant="heading">
-          Knowledge
-        </Txt>
-        <Txt tone="muted" as="p" variant="body" className="mt-1">
-          Explore captured knowledge and review how it changes over time.
-        </Txt>
-        <div className="mt-3 flex items-start justify-between gap-3">
-          <div className="flex gap-1" role="tablist" aria-label="Knowledge views">
-            {(['explore', 'activity'] as const).map(view => (
-              <button
-                key={view}
-                type="button"
-                role="tab"
-                aria-selected={activeView === view}
-                className={`rounded-md px-3 py-1.5 text-sm capitalize ${
-                  activeView === view ? 'bg-fill text-foreground' : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => setView(view)}
-              >
-                {view}
-              </button>
-            ))}
+    <KnowledgeDataSourceProvider value={dataSource}>
+      <section className="flex min-h-0 flex-1 flex-col gap-4 pt-2" aria-label="Knowledge graph">
+        <header className="shrink-0">
+          <Txt tone="ink" as="h1" variant="heading">
+            Knowledge
+          </Txt>
+          <Txt tone="muted" as="p" variant="body" className="mt-1">
+            Explore captured knowledge and review how it changes over time.
+          </Txt>
+          <div className="mt-3 flex items-start justify-between gap-3">
+            <div className="flex gap-1" role="tablist" aria-label="Knowledge views">
+              {(['explore', 'activity'] as const).map(view => (
+                <button
+                  key={view}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeView === view}
+                  className={`rounded-md px-3 py-1.5 text-sm capitalize ${
+                    activeView === view ? 'bg-fill text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => setView(view)}
+                >
+                  {view}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-start gap-2">
+              {activeView === 'explore' ? (
+                <div className="flex gap-1" role="group" aria-label="Knowledge layout">
+                  {(['graph', 'list'] as const).map(option => (
+                    <button
+                      key={option}
+                      type="button"
+                      aria-pressed={layout === option}
+                      className={`rounded-md px-3 py-1.5 text-sm capitalize ${
+                        layout === option ? 'bg-fill text-foreground' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      onClick={() => setLayout(option)}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <KnowledgeSearch onSelect={selectSearchResult} />
+            </div>
           </div>
-          <div className="flex items-start gap-2">
-            {activeView === 'explore' ? (
-              <div className="flex gap-1" role="group" aria-label="Knowledge layout">
-                {(['graph', 'list'] as const).map(option => (
-                  <button
-                    key={option}
-                    type="button"
-                    aria-pressed={layout === option}
-                    className={`rounded-md px-3 py-1.5 text-sm capitalize ${
-                      layout === option ? 'bg-fill text-foreground' : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                    onClick={() => setLayout(option)}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            <KnowledgeSearch factoryProjectId={factoryProjectId} threadId={threadId} onSelect={selectSearchResult} />
-          </div>
-        </div>
-        <Breadcrumb
-          threadId={threadId}
-          trail={visibleTrail}
-          onProjectClick={backToProject}
-          onTrailClick={index => {
-            const next = visibleTrail.slice(0, index + 1);
-            setTrail(next);
-            setSearchParams(params => {
-              const copy = new URLSearchParams(params);
-              writeNodeSelection(copy, next.at(-1) ?? null);
-              return copy;
-            });
-          }}
-        />
-      </header>
-      <div className={cn('flex min-h-0 flex-1 gap-4', layout === 'list' && 'flex-col')}>
-        <ScopeTree
-          className={layout === 'list' ? 'max-h-48 w-full' : 'w-56'}
-          key={`${factoryProjectId}:${threadId ?? 'project'}`}
-          factoryProjectId={factoryProjectId}
-          threadId={threadId}
-          scopes={scopesQuery.data}
-          selection={selection}
-          onSelect={selectScope}
-          onOpenSession={openThread}
-          onNodesLoaded={nodes =>
-            setLoadedScopeNodesByView(current => ({
-              ...current,
-              [scopePageKey]: [...(current[scopePageKey] ?? []), ...nodes],
-            }))
-          }
-        />
-        {/* Flex column so the graph container's `min-h-0 flex-1` chain connects
+          <Breadcrumb
+            threadId={threadId}
+            trail={visibleTrail}
+            onProjectClick={backToProject}
+            onTrailClick={index => {
+              const next = visibleTrail.slice(0, index + 1);
+              setTrail(next);
+              setSearchParams(params => {
+                const copy = new URLSearchParams(params);
+                writeNodeSelection(copy, next.at(-1) ?? null);
+                return copy;
+              });
+            }}
+          />
+        </header>
+        <div className={cn('flex min-h-0 flex-1 gap-4', layout === 'list' && 'flex-col')}>
+          <ScopeTree
+            className={layout === 'list' ? 'max-h-48 w-full' : 'w-56'}
+            key={`${factoryProjectId}:${threadId ?? 'project'}`}
+            factoryProjectId={factoryProjectId}
+            threadId={threadId}
+            scopes={scopesQuery.data}
+            selection={selection}
+            onSelect={selectScope}
+            onOpenSession={openThread}
+            onNodesLoaded={nodes =>
+              setLoadedScopeNodesByView(current => ({
+                ...current,
+                [scopePageKey]: [...(current[scopePageKey] ?? []), ...nodes],
+              }))
+            }
+          />
+          {/* Flex column so the graph container's `min-h-0 flex-1` chain connects
             to a sized parent; as a block wrapper it collapses to zero height. */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {activeView === 'activity' ? (
-            <ActivityPanel
-              factoryProjectId={factoryProjectId}
-              selection={selection}
-              threadId={threadId}
-              onSelect={selectActivityEvent}
-            />
-          ) : (
-            body
-          )}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {activeView === 'activity' ? (
+              <ActivityPanel
+                factoryProjectId={factoryProjectId}
+                selection={selection}
+                threadId={threadId}
+                onSelect={selectActivityEvent}
+              />
+            ) : (
+              body
+            )}
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </KnowledgeDataSourceProvider>
   );
 }

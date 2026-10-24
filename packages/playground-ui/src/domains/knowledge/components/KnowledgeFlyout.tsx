@@ -1,6 +1,6 @@
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { textStyle } from '@mastra/playground-ui/primitives/text';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@/utils/cn';
+import { textStyle } from '@/ds/primitives/text';
+import { Txt } from '@/ds/components/Txt';
 /**
  * The right-side flyout: all the juicy details for a clicked node, organized
  * as collapsible sections — Knowledge node (identity + counts), Knowledge records (the node's
@@ -9,19 +9,19 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
  * the "captured in session" link that opens the thread view (Amendment A2).
  */
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
-import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Notice } from '@/ds/components/Notice';
 import { ExternalLink, Pin, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { knowledgeScopes } from '@mastra/playground-ui/domains/knowledge/lib/knowledgeScope';
-import { getRecordBorderClass, getRecordRingClass } from '@mastra/playground-ui/domains/knowledge/lib/knowledgeStyles';
+import { Button } from '@/ds/components/Button';
+import { Badge } from '@/ds/components/Badge';
+import { knowledgeScopes } from '../lib/knowledgeScope';
+import { getRecordBorderClass, getRecordRingClass } from '../lib/knowledgeStyles';
 
-import { useKnowledgeNode } from '../../../../../hooks/useKnowledgeGraph';
-import type { KnowledgeNodeRecord, KnowledgeRung } from '../../services/knowledge';
-import { parseRecordSegments } from '@mastra/playground-ui/domains/knowledge/lib/recordText';
+import { useKnowledgeDataSource } from '../data-source';
+import type { KnowledgeNodeRecord, KnowledgeRung } from '../types';
+import { parseRecordSegments } from '../lib/recordText';
 
 const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
 
@@ -230,10 +230,8 @@ function RecordCard({
 }
 
 export interface KnowledgeFlyoutProps {
-  factoryProjectId: string;
   nodeId: string;
   scopeLevel: KnowledgeRung;
-  threadId?: string;
   /** Highlight the knowledge record backing a clicked edge. */
   focusRecordId?: string;
   /** Card expand/collapse selects (or clears) the knowledge record page-wide — the graph lights it up too. */
@@ -244,17 +242,15 @@ export interface KnowledgeFlyoutProps {
 }
 
 export function KnowledgeFlyout({
-  factoryProjectId,
   nodeId,
   scopeLevel,
-  threadId,
   focusRecordId,
   onSelectRecord,
   onClose,
   onNodeRef,
   onOpenThread,
 }: KnowledgeFlyoutProps) {
-  const nodeQuery = useKnowledgeNode(factoryProjectId, nodeId, scopeLevel, threadId);
+  const nodeQuery = useKnowledgeDataSource().useNode(nodeId, scopeLevel);
 
   return (
     <aside

@@ -1,24 +1,22 @@
-import { Input } from '@mastra/playground-ui/components/Input';
-import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { Input } from '@/ds/components/Input';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { Search } from 'lucide-react';
 import { useDeferredValue, useId, useState } from 'react';
 
-import { useKnowledgeSearch } from '../../../../../hooks/useKnowledgeGraph';
-import type { KnowledgeSearchResult } from '../../services/knowledge';
+import { useKnowledgeDataSource } from '../data-source';
+import type { KnowledgeSearchResult } from '../types';
 
 interface KnowledgeSearchProps {
-  factoryProjectId: string | undefined;
-  threadId?: string;
   onSelect: (result: KnowledgeSearchResult) => void;
 }
 
-export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: KnowledgeSearchProps) {
+export function KnowledgeSearch({ onSelect }: KnowledgeSearchProps) {
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const listboxId = useId();
   const deferredQuery = useDeferredValue(query);
-  const search = useKnowledgeSearch(factoryProjectId, deferredQuery, threadId);
+  const search = useKnowledgeDataSource().useSearch(deferredQuery);
   const results = search.data?.results ?? [];
   const open = focused && query.trim().length >= 2;
   const resultsReady = !search.isPending && !search.isError && deferredQuery === query && results.length > 0;

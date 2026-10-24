@@ -1,6 +1,6 @@
-import { textStyle } from '@mastra/playground-ui/primitives/text';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { textStyle } from '@/ds/primitives/text';
+import { cn } from '@/utils/cn';
+import { Txt } from '@/ds/components/Txt';
 /**
  * The force-directed knowledge graph: React Flow renders DOM nodes/edges while
  * d3-force computes positions (synchronously, deterministic). Knowledge nodes are
@@ -9,7 +9,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
  * shows a summary card. Dragging a node re-pins it (the layout keeps it put).
  */
 
-import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Badge } from '@/ds/components/Badge';
 import {
   Background,
   BackgroundVariant,
@@ -26,17 +26,13 @@ import {
 } from '@xyflow/react';
 import type { EdgeProps, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { Boxes, Globe, Pin } from 'lucide-react';
+import type { MouseEvent } from 'react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../../services/knowledge';
-import type {
-  NodeFlowNode,
-  KnowledgeFlowEdge,
-  KnowledgeGraphFilters,
-  RecordFlowNode,
-} from '@mastra/playground-ui/domains/knowledge/lib/graphModel';
+import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../types';
+import type { NodeFlowNode, KnowledgeFlowEdge, KnowledgeGraphFilters, RecordFlowNode } from '../lib/graphModel';
 import {
   deriveRecordElements,
   egoGraph,
@@ -50,10 +46,10 @@ import {
   shouldShowLabel,
   toFlowGraph,
   toRecordFlow,
-} from '@mastra/playground-ui/domains/knowledge/lib/graphModel';
-import type { Arrivals } from '@mastra/playground-ui/domains/knowledge/lib/graphDiff';
-import { runLayout } from '@mastra/playground-ui/domains/knowledge/lib/layout';
-import { knowledgeScopes } from '@mastra/playground-ui/domains/knowledge/lib/knowledgeScope';
+} from '../lib/graphModel';
+import type { Arrivals } from '../lib/graphDiff';
+import { runLayout } from '../lib/layout';
+import { knowledgeScopes } from '../lib/knowledgeScope';
 import {
   getKnowledgeEdgeStyle,
   getKnowledgeNodeStyle,
@@ -61,8 +57,8 @@ import {
   getRecordRingClass,
   isKnowledgeNode,
   isRecordNode,
-} from '@mastra/playground-ui/domains/knowledge/lib/knowledgeStyles';
-import type { KnowledgeFlowNode } from '@mastra/playground-ui/domains/knowledge/lib/knowledgeStyles';
+} from '../lib/knowledgeStyles';
+import type { KnowledgeFlowNode } from '../lib/knowledgeStyles';
 import './knowledge.css';
 
 const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
@@ -552,7 +548,7 @@ function KnowledgeGraphInner({
         minZoom={0.1}
         proOptions={{ hideAttribution: true }}
         nodesConnectable={false}
-        onNodeClick={(_, node) => {
+        onNodeClick={(_: unknown, node: KnowledgeFlowNode) => {
           // A11: a knowledge record marker click IS a knowledge record click — same behavior as
           // clicking its edge (dot and stub are one unit).
           if (isRecordNode(node)) {
@@ -566,14 +562,14 @@ function KnowledgeGraphInner({
           onNodeClick?.(node.data.node);
         }}
         onPaneClick={() => setFocusedId(null)}
-        onEdgeClick={(_, edge) => {
+        onEdgeClick={(_: unknown, edge: KnowledgeFlowEdge) => {
           // Stub/spoke edges have a `record:` marker on one end — the flyout
           // needs the knowledge-node end, never the synthetic record node id.
           const nodeEnd = getKnowledgeNodeEndpoint(edge);
           if (!nodeEnd) return;
           onEdgeClick?.({ source: nodeEnd, target: edge.target, recordId: edge.data?.recordId ?? '' });
         }}
-        onNodeMouseEnter={(event, node) => {
+        onNodeMouseEnter={(event: MouseEvent<Element>, node: KnowledgeFlowNode) => {
           if (isRecordNode(node)) {
             setHover({ kind: 'record', x: event.clientX, y: event.clientY, record: node });
             return;
@@ -581,9 +577,11 @@ function KnowledgeGraphInner({
           if (isKnowledgeNode(node)) setHover({ kind: 'node', x: event.clientX, y: event.clientY, node });
         }}
         onNodeMouseLeave={() => setHover(null)}
-        onEdgeMouseEnter={(event, edge) => setHover({ kind: 'edge', x: event.clientX, y: event.clientY, edge })}
+        onEdgeMouseEnter={(event: MouseEvent<Element>, edge: KnowledgeFlowEdge) =>
+          setHover({ kind: 'edge', x: event.clientX, y: event.clientY, edge })
+        }
         onEdgeMouseLeave={() => setHover(null)}
-        onNodeDragStop={(_, node) => {
+        onNodeDragStop={(_: unknown, node: KnowledgeFlowNode) => {
           // The layout pins CENTERS; node.position is the top-left corner.
           const size = node.data.size;
           pinnedPositions.current.set(node.id, { x: node.position.x + size / 2, y: node.position.y + size / 2 });
