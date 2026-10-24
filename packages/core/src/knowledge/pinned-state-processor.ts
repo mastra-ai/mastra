@@ -22,10 +22,9 @@ import type {
   ProcessInputResult,
 } from '../processors';
 import type { KnowledgeScope, KnowledgeStorage } from '../storage';
-import { canonicalizeKnowledgeScope } from '../storage';
 
+import { resolveKnowledgeRunScope } from './knowledge-tools';
 import { listPinnedKnowledge, PINNED_DELTA_TAG, PINNED_SNAPSHOT_TAG, SUBCONSCIOUS_PINS_STATE_ID } from './pinned';
-import { resolveKnowledgeResourceId } from './scope';
 
 export interface PinEntry {
   id: string;
@@ -135,16 +134,17 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
     };
   }
 
-  // The read scope mirrors how the Subconscious agents anchor scope: org from
-  // the request context, resource and thread from the turn. Reads use this full
-  // visible context (visibility is subset containment), never a level-narrowed
-  // write scope.
+  // Reads use the run's full Knowledge scope (visibility is subset containment), never a narrowed
+  // write scope, so pins written at fewer tags are still found.
   private resolveScope(args: ComputeStateSignalArgs): KnowledgeScope | undefined {
-    const organizationId = args.requestContext?.get?.('organizationId');
-    if (typeof organizationId !== 'string' || !organizationId.trim()) return undefined;
-    const resourceId = resolveKnowledgeResourceId(args.requestContext, args.resourceId);
-    if (!resourceId) return undefined;
-    return canonicalizeKnowledgeScope([`org:${organizationId}`, `resource:${resourceId}`, `thread:${args.threadId}`]);
+    try {
+      return resolveKnowledgeRunScope({
+        requestContext: args.requestContext,
+        agent: { resourceId: args.resourceId, threadId: args.threadId },
+      });
+    } catch {
+      return undefined;
+    }
   }
 
   // One node resolve plus one paged record read per turn; memoized on the

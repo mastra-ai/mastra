@@ -10,13 +10,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { createPinnedTools } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory, Subconscious } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
-import { afterAll, describe, expect, it } from 'vitest';
 
-import { createPinnedTools } from '@mastra/core/knowledge';
+import { afterAll, describe, expect, it } from 'vitest';
 
 const embedder: EmbeddingModel<string> = {
   specificationVersion: 'v1',
@@ -96,14 +96,12 @@ describe('Pinned knowledge live proof', () => {
     const threadId = randomUUID();
     const resourceId = 'proof-user';
     const requestContext = new RequestContext();
-    requestContext.set('organizationId', 'acme');
     const turnOptions = { memory: { thread: threadId, resource: resourceId }, requestContext } as any;
 
-    const scope = [`org:acme`, `resource:${resourceId}`, `thread:${threadId}`];
+    const scope = [`resource:${resourceId}`, `thread:${threadId}`];
     const tools = createPinnedTools({ storage } as any, {
       scope,
       sourceThreadId: threadId,
-      defaultScope: 'resource',
       maxPins: 20,
       maxTokens: 500,
     });

@@ -489,7 +489,6 @@ export * from './knowledge-write-tools';
 export * from './pinned';
 export * from './pinned-state-processor';
 export * from './semantic-index';
-export * from './scope';
 export * from './instructions';
 export type { KnowledgeToolGroups, KnowledgeToolHost } from './attach';
 export type { KnowledgeConfig } from './config';

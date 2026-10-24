@@ -2,7 +2,7 @@ import type { KnowledgeScope, KnowledgeStorage } from '../storage';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 import type { KnowledgeToolContext } from './knowledge-tools';
-import { createKnowledgeTools, resolveKnowledgeToolScope } from './knowledge-tools';
+import { createKnowledgeTools, resolveKnowledgeRunScope } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { createPinnedTools } from './pinned';
 import type { KnowledgeSemanticIndexCoordinator } from './semantic-index';
@@ -32,7 +32,7 @@ export interface KnowledgeToolGroups {
 type Tools = Record<string, ToolAction<any, any, any>>;
 
 /** Placeholder options used only to read the static tool definitions (ids, descriptions, schemas). */
-const TEMPLATE_SCOPE: KnowledgeScope = ['org:template', 'resource:template', 'thread:template'];
+const TEMPLATE_SCOPE: KnowledgeScope = ['thread:template'];
 
 function sourceThreadId(context: KnowledgeToolContext | undefined): string {
   const threadId = context?.agent?.threadId;
@@ -66,15 +66,13 @@ export function buildKnowledgeTools(host: KnowledgeToolHost, groups: KnowledgeTo
   if (groups.read) Object.assign(tools, createKnowledgeTools(host));
   if (groups.write) {
     const options = (context: KnowledgeToolContext | undefined) => ({
-      scope: resolveKnowledgeToolScope(context),
+      scope: resolveKnowledgeRunScope(context),
       sourceThreadId: sourceThreadId(context),
-      defaultScope: 'thread' as const,
     });
     Object.assign(
       tools,
-      perCall(
-        createKnowledgeWriteTools(host, { scope: TEMPLATE_SCOPE, sourceThreadId: 'template', defaultScope: 'thread' }),
-        context => createKnowledgeWriteTools(host, options(context)),
+      perCall(createKnowledgeWriteTools(host, { scope: TEMPLATE_SCOPE, sourceThreadId: 'template' }), context =>
+        createKnowledgeWriteTools(host, options(context)),
       ),
     );
   }
@@ -83,14 +81,13 @@ export function buildKnowledgeTools(host: KnowledgeToolHost, groups: KnowledgeTo
     const options = (scope: KnowledgeScope, threadId: string) => ({
       scope,
       sourceThreadId: threadId,
-      defaultScope: 'resource' as const,
       maxPins,
       maxTokens,
     });
     Object.assign(
       tools,
       perCall(createPinnedTools(host, options(TEMPLATE_SCOPE, 'template')), context =>
-        createPinnedTools(host, options(resolveKnowledgeToolScope(context), sourceThreadId(context))),
+        createPinnedTools(host, options(resolveKnowledgeRunScope(context), sourceThreadId(context))),
       ),
     );
   }

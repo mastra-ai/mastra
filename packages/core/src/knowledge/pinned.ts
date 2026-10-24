@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
-import type { KnowledgeRecord, KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '../storage';
-import { expandKnowledgeScope, isKnowledgeScopeVisible } from '../storage';
+import type { KnowledgeRecord, KnowledgeScope, KnowledgeStorage } from '../storage';
+import { canonicalizeKnowledgeScope, isKnowledgeScopeVisible } from '../storage';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 
@@ -16,7 +16,6 @@ export const PINNED_DELTA_TAG = 'pinned-knowledge-update';
 /** Reserved node holding the pin set. One record, at one fixed scope level. */
 export const PINNED_NODE_NAME = 'pinned';
 export const PINNED_NODE_KIND = 'system';
-export const PINNED_NODE_SCOPE_LEVEL: KnowledgeScopeLevel = 'resource';
 /** Budget defaults. A pin costs context every turn, so both bounds are enforced in the tool. */
 export const DEFAULT_MAX_PINS = 20;
 export const DEFAULT_PINNED_MAX_TOKENS = 500;
@@ -32,10 +31,9 @@ export interface PinnedKnowledgeSet {
 type PinnedMemory = KnowledgeStoreMemory;
 
 export interface PinnedToolsOptions {
-  /** Full visible scope context for the conversation (org + resource + thread entries). */
+  /** The run's full Knowledge scope. */
   scope: KnowledgeScope;
   sourceThreadId: string;
-  defaultScope: KnowledgeScopeLevel;
   maxPins: number;
   /** Estimated-token budget for the whole pin set. */
   maxTokens: number;
@@ -55,7 +53,7 @@ async function ensurePinnedNodeId(store: KnowledgeStorage, scope: KnowledgeScope
   const node = await store.createNode({
     name: PINNED_NODE_NAME,
     kind: PINNED_NODE_KIND,
-    scope: expandKnowledgeScope(scope, PINNED_NODE_SCOPE_LEVEL),
+    scope: defaultPinScope(scope),
   });
   return node.id;
 }
@@ -107,24 +105,37 @@ function assertBudget(
   }
 }
 
-// Pins cannot be written broader than the resource level: the reserved node
-// is anchored at (or below) the resource, and an org-scoped pin would only be
-// resolvable from the resource that created it, which is a silent-loss trap.
-function clampPinLevel(level: KnowledgeScopeLevel): KnowledgeScopeLevel {
-  return level === 'org' ? 'resource' : level;
+/**
+ * Pins land at the run's tags without its thread, so they follow the run across threads. A run
+ * that holds only a thread pins at the thread.
+ */
+export function defaultPinScope(scope: KnowledgeScope): KnowledgeScope {
+  const withoutThread = scope.filter(tag => !tag.startsWith('thread:'));
+  return withoutThread.length > 0 ? withoutThread : scope;
 }
 
-function resolveWriteScope(options: PinnedToolsOptions, level?: KnowledgeScopeLevel): KnowledgeScope {
-  return expandKnowledgeScope(options.scope, clampPinLevel(level ?? options.defaultScope));
+function resolveWriteScope(options: PinnedToolsOptions, requested?: string[]): KnowledgeScope {
+  if (!requested) return defaultPinScope(options.scope);
+  const held = new Set(options.scope);
+  const missing = requested.filter(tag => !held.has(tag));
+  if (missing.length > 0) {
+    throw new Error(`This run does not hold scope ${missing.map(tag => `"${tag}"`).join(', ')}.`);
+  }
+  return canonicalizeKnowledgeScope(requested);
 }
 
-const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['resource', 'thread'] };
+const scopeTagsSchema: JSONSchema7 = {
+  type: 'array',
+  items: { type: 'string', minLength: 3 },
+  minItems: 1,
+  description: "Scope tags for the pin, chosen from the run's scope tags. Defaults to every run tag except the thread.",
+};
 
 async function writePinnedKnowledge(
   store: KnowledgeStorage,
   options: PinnedToolsOptions,
   text: string,
-  level?: KnowledgeScopeLevel,
+  requested?: string[],
   metadata?: Record<string, unknown>,
 ): Promise<KnowledgeRecord> {
   const { pins } = await listPinnedKnowledge({ store, scope: options.scope });
@@ -133,11 +144,11 @@ async function writePinnedKnowledge(
   return store.appendKnowledge({
     node: nodeId,
     text,
-    scope: resolveWriteScope(options, level),
+    scope: resolveWriteScope(options, requested),
     sourceThreadId: options.sourceThreadId,
     metadata,
     resolutionScope: options.scope,
-    defaultScope: expandKnowledgeScope(options.scope, options.defaultScope),
+    defaultScope: defaultPinScope(options.scope),
   });
 }
 
@@ -176,7 +187,7 @@ export function createPinnedTools(
         type: 'object',
         properties: {
           text: { type: 'string', minLength: 1 },
-          scope: scopeLevelSchema,
+          scope: scopeTagsSchema,
           reason: {
             type: 'string',
             minLength: 1,
@@ -187,7 +198,7 @@ export function createPinnedTools(
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { text: string; scope?: KnowledgeScopeLevel; reason?: string };
+        const value = input as { text: string; scope?: string[]; reason?: string };
         const store = await getStore(memory);
         return writePinnedKnowledge(
           store,
@@ -244,7 +255,7 @@ export function createPinnedTools(
           sourceThreadId: options.sourceThreadId,
           metadata: value.reason ? { ...record.metadata, reason: value.reason } : record.metadata,
           resolutionScope: options.scope,
-          defaultScope: expandKnowledgeScope(options.scope, options.defaultScope),
+          defaultScope: defaultPinScope(options.scope),
         });
       },
     }),

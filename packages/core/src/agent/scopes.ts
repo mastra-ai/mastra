@@ -61,6 +61,16 @@ export function setRunAgentScopes(requestContext: RequestContext<any>, scopes: r
 }
 
 /**
+ * The run's non-identity scopes, as Core wrote them onto its request context. Returns `[]` unless
+ * the value is the exact array Core marked, so a caller that writes `mastra__scopes` itself (or sends
+ * it as JSON) gets nothing.
+ */
+export function getRunAgentScopes(requestContext: { get(key: string): unknown } | undefined): readonly string[] {
+  const scopes = requestContext?.get(MASTRA_SCOPES_KEY);
+  return Array.isArray(scopes) && runScopeValues.has(scopes) ? scopes : [];
+}
+
+/**
  * Re-marks `mastra__scopes` on a context Core rebuilt from its own persisted run state (durable
  * snapshots, durable step input). The mark does not survive JSON, and these scopes already passed
  * resolution when the run started.
