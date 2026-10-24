@@ -4,6 +4,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { MastraServer } from '@mastra/hono';
 import type { HonoApp } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import { Hono } from 'hono';
 import { handle } from 'hono/vercel';
 
@@ -120,7 +121,10 @@ async function initApp(mastra: Mastra, tools: ToolsInput, prefix: string): Promi
     taskStore,
     bodyLimitOptions: {
       maxSize: bodySizeLimit,
-      onError: (_err: unknown) => ({ error: 'Request body too large' }),
+      onError: (_err: unknown) => ({
+        error: 'Request body too large',
+        code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
+      }),
     },
     customRouteAuthConfig,
     customApiRoutes: apiRoutes,

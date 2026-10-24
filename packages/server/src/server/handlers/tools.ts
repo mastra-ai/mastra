@@ -2,6 +2,7 @@ import { isVercelTool, isProviderDefinedTool } from '@mastra/core/tools';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
@@ -120,6 +121,7 @@ export const LIST_TOOLS_ROUTE = createRoute({
   description: 'Returns a list of all available tools in the system',
   tags: ['Tools'],
   requiresAuth: true,
+  errors: ['TOOLS_LIST_FAILED'],
   handler: async ({ mastra, registeredTools, requestContext }) => {
     try {
       // Merge tools from two sources: mastra.listTools() includes dynamically created tools
@@ -170,7 +172,7 @@ export const LIST_TOOLS_ROUTE = createRoute({
 
       return serializedTools;
     } catch (error) {
-      return handleError(error, 'Error getting tools');
+      return handleError(error, { message: 'Error getting tools', code: SERVER_ERROR_CODES.TOOLS_LIST_FAILED });
     }
   },
 });
@@ -185,6 +187,7 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific tool including its schema and configuration',
   tags: ['Tools'],
   requiresAuth: true,
+  errors: ['TOOL_GET_FAILED', 'TOOL_NOT_FOUND'],
   handler: async ({ mastra, registeredTools, toolId, requestContext }) => {
     try {
       let tool: any;
@@ -207,12 +210,12 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
       }
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+        throw new HTTPException(404, { message: 'Tool not found', code: SERVER_ERROR_CODES.TOOL_NOT_FOUND });
       }
 
       return serializeTool(tool);
     } catch (error) {
-      return handleError(error, 'Error getting tool');
+      return handleError(error, { message: 'Error getting tool', code: SERVER_ERROR_CODES.TOOL_GET_FAILED });
     }
   },
 });
@@ -229,10 +232,17 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
   description: 'Executes a specific tool with the provided input data',
   tags: ['Tools'],
   requiresAuth: true,
+  errors: [
+    'REQUEST_ARGUMENT_REQUIRED',
+    'TOOL_EXECUTE_FAILED',
+    'TOOL_ID_REQUIRED',
+    'TOOL_NOT_EXECUTABLE',
+    'TOOL_NOT_FOUND',
+  ],
   handler: async ({ mastra, runId, toolId, registeredTools, requestContext, ...bodyParams }) => {
     try {
       if (!toolId) {
-        throw new HTTPException(400, { message: 'Tool ID is required' });
+        throw new HTTPException(400, { message: 'Tool ID is required', code: SERVER_ERROR_CODES.TOOL_ID_REQUIRED });
       }
 
       let tool: any;
@@ -255,11 +265,14 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
       }
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+        throw new HTTPException(404, { message: 'Tool not found', code: SERVER_ERROR_CODES.TOOL_NOT_FOUND });
       }
 
       if (!tool?.execute) {
-        throw new HTTPException(400, { message: 'Tool is not executable' });
+        throw new HTTPException(400, {
+          message: 'Tool is not executable',
+          code: SERVER_ERROR_CODES.TOOL_NOT_EXECUTABLE,
+        });
       }
 
       const { data } = bodyParams;
@@ -288,7 +301,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error executing tool');
+      return handleError(error, { message: 'Error executing tool', code: SERVER_ERROR_CODES.TOOL_EXECUTE_FAILED });
     }
   },
 });
@@ -307,10 +320,11 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
   description: 'Returns details for a specific tool assigned to the agent',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  errors: ['AGENT_ID_REQUIRED', 'AGENT_NOT_FOUND', 'AGENT_TOOL_GET_FAILED', 'TOOL_NOT_FOUND'],
   handler: async ({ mastra, agentId, toolId, requestContext }) => {
     try {
       if (!agentId) {
-        throw new HTTPException(400, { message: 'Agent ID is required' });
+        throw new HTTPException(400, { message: 'Agent ID is required', code: SERVER_ERROR_CODES.AGENT_ID_REQUIRED });
       }
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -319,12 +333,15 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
       const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+        throw new HTTPException(404, { message: 'Tool not found', code: SERVER_ERROR_CODES.TOOL_NOT_FOUND });
       }
 
       return serializeTool(tool);
     } catch (error) {
-      return handleError(error, 'Error getting agent tool');
+      return handleError(error, {
+        message: 'Error getting agent tool',
+        code: SERVER_ERROR_CODES.AGENT_TOOL_GET_FAILED,
+      });
     }
   },
 });
@@ -340,10 +357,17 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   description: 'Executes a specific tool assigned to the agent with the provided input data',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_TOOL_EXECUTE_FAILED',
+    'TOOL_NOT_EXECUTABLE',
+    'TOOL_NOT_FOUND',
+  ],
   handler: async ({ mastra, agentId, toolId, data, requestContext }) => {
     try {
       if (!agentId) {
-        throw new HTTPException(400, { message: 'Agent ID is required' });
+        throw new HTTPException(400, { message: 'Agent ID is required', code: SERVER_ERROR_CODES.AGENT_ID_REQUIRED });
       }
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -352,11 +376,14 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
       const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+        throw new HTTPException(404, { message: 'Tool not found', code: SERVER_ERROR_CODES.TOOL_NOT_FOUND });
       }
 
       if (!tool?.execute) {
-        throw new HTTPException(400, { message: 'Tool is not executable' });
+        throw new HTTPException(400, {
+          message: 'Tool is not executable',
+          code: SERVER_ERROR_CODES.TOOL_NOT_EXECUTABLE,
+        });
       }
 
       const result = await tool.execute(data, {
@@ -368,7 +395,10 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error executing agent tool');
+      return handleError(error, {
+        message: 'Error executing agent tool',
+        code: SERVER_ERROR_CODES.AGENT_TOOL_EXECUTE_FAILED,
+      });
     }
   },
 });

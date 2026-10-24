@@ -5,9 +5,12 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { describe, expect, it } from 'vitest';
 
 import { HTTPException } from '../http-exception';
-import { handleError } from './error';
+import { formatZodError, handleError } from './error';
+import type { HandleErrorFallback } from './error';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
+
+const FALLBACK: HandleErrorFallback = { message: 'default', code: 'AGENT_GET_FAILED' };
 
 describe('handleError', () => {
   describe('static @mastra/core/agent-builder/ee decoupling', () => {
@@ -41,7 +44,7 @@ describe('handleError', () => {
       details: { status: 400 },
     });
 
-    expect(() => handleError(err, 'default')).toThrow(
+    expect(() => handleError(err, FALLBACK)).toThrow(
       expect.objectContaining({
         status: 400,
         message: 'ObservationalMemory requires a threadId',
@@ -63,7 +66,7 @@ describe('handleError', () => {
       const err = makeModelNotAllowedError();
       let caught: unknown;
       try {
-        handleError(err, 'default');
+        handleError(err, FALLBACK);
       } catch (e) {
         caught = e;
       }
@@ -76,7 +79,7 @@ describe('handleError', () => {
       const err = makeModelNotAllowedError();
       let caught: HTTPException | undefined;
       try {
-        handleError(err, 'default');
+        handleError(err, FALLBACK);
       } catch (e) {
         caught = e as HTTPException;
       }
@@ -93,6 +96,8 @@ describe('handleError', () => {
           attempted: err.attempted,
           offendingLabel: err.offendingLabel,
         },
+        code: 'MODEL_NOT_ALLOWED',
+        metadata: { allowed: err.allowed, attempted: err.attempted, offendingLabel: err.offendingLabel },
       });
     });
 
@@ -100,7 +105,7 @@ describe('handleError', () => {
       const err = Object.assign(new Error('boom'), { status: 418 });
       let caught: HTTPException | undefined;
       try {
-        handleError(err, 'default');
+        handleError(err, FALLBACK);
       } catch (e) {
         caught = e as HTTPException;
       }
@@ -112,7 +117,7 @@ describe('handleError', () => {
     it('falls through to default handling when error is not an Error instance', () => {
       let caught: HTTPException | undefined;
       try {
-        handleError({ code: 'MODEL_NOT_ALLOWED' } as unknown, 'default');
+        handleError({ code: 'MODEL_NOT_ALLOWED' } as unknown, FALLBACK);
       } catch (e) {
         caught = e as HTTPException;
       }
@@ -128,7 +133,7 @@ describe('handleError', () => {
       const err = Object.assign(new Error('already being resumed'), { id: 'AGENT_RESUME_ALREADY_CLAIMED' });
       let caught: HTTPException | undefined;
       try {
-        handleError(err, 'default');
+        handleError(err, FALLBACK);
       } catch (e) {
         caught = e as HTTPException;
       }
@@ -143,7 +148,7 @@ describe('handleError', () => {
       const err = Object.assign(new Error('not suspended'), { id });
       let caught: HTTPException | undefined;
       try {
-        handleError(err, 'default');
+        handleError(err, FALLBACK);
       } catch (e) {
         caught = e as HTTPException;
       }
@@ -158,7 +163,7 @@ describe('handleError', () => {
       const err = Object.assign(new Error('already resumed'), { id: 'WORKFLOW_RESUME_ALREADY_CLAIMED' });
       let caught: HTTPException | undefined;
       try {
-        handleError(err, 'default');
+        handleError(err, FALLBACK);
       } catch (e) {
         caught = e as HTTPException;
       }
@@ -171,7 +176,7 @@ describe('handleError', () => {
       const err = Object.assign(new Error('boom'), { id: 'SOME_OTHER_ID' });
       let caught: HTTPException | undefined;
       try {
-        handleError(err, 'default');
+        handleError(err, FALLBACK);
       } catch (e) {
         caught = e as HTTPException;
       }
@@ -205,7 +210,7 @@ describe('handleError', () => {
       const err = Object.assign(new Error('run is busy'), { id });
       let caught: HTTPException | undefined;
       try {
-        handleError(err, 'default');
+        handleError(err, FALLBACK);
       } catch (e) {
         caught = e as HTTPException;
       }
@@ -214,11 +219,35 @@ describe('handleError', () => {
       expect(caught!.message).toBe('run is busy');
     });
 
+    it('keeps run ids and the retry hint but drops lease internals from error metadata', () => {
+      const err = Object.assign(new Error('run is busy'), {
+        id: 'DURABLE_AGENT_RUN_ACTIVE',
+        details: {
+          agentId: 'agent-1',
+          runId: 'run-1',
+          liveBy: 'lease',
+          holder: 'worker-7:pid-42',
+          leaseExpiresAt: '2026-10-20T09:00:00.000Z',
+          retryAt: 1_792_000_000_000,
+        },
+      });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, FALLBACK);
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect({ code: caught!.code, metadata: caught!.metadata }).toEqual({
+        code: 'DURABLE_AGENT_RUN_ACTIVE',
+        metadata: { agentId: 'agent-1', runId: 'run-1', retryAt: 1_792_000_000_000 },
+      });
+    });
+
     it('does not treat a superseded execution as a request conflict', () => {
       const err = Object.assign(new Error('superseded'), { id: 'DURABLE_AGENT_EXECUTION_SUPERSEDED' });
       let caught: HTTPException | undefined;
       try {
-        handleError(err, 'default');
+        handleError(err, FALLBACK);
       } catch (e) {
         caught = e as HTTPException;
       }
@@ -233,7 +262,7 @@ describe('handleError', () => {
       });
       let caught: HTTPException | undefined;
       try {
-        handleError(err, 'default');
+        handleError(err, FALLBACK);
       } catch (e) {
         caught = e as HTTPException;
       }
@@ -250,7 +279,7 @@ describe('handleError', () => {
       });
       let caught: HTTPException | undefined;
       try {
-        handleError(err, 'default');
+        handleError(err, FALLBACK);
       } catch (e) {
         caught = e as HTTPException;
       }
@@ -265,12 +294,206 @@ describe('handleError', () => {
       });
       let caught: HTTPException | undefined;
       try {
-        handleError(err, 'default');
+        handleError(err, FALLBACK);
       } catch (e) {
         caught = e as HTTPException;
       }
       expect(caught).toBeInstanceOf(HTTPException);
       expect(caught!.status).toBe(500);
     });
+  });
+
+  describe('error code resolution', () => {
+    function capture(error: unknown, fallback: HandleErrorFallback = FALLBACK): HTTPException {
+      try {
+        handleError(error, fallback);
+      } catch (e) {
+        return e as HTTPException;
+      }
+      throw new Error('handleError did not throw');
+    }
+
+    it('rethrows an HTTPException unchanged', () => {
+      const original = new HTTPException(404, {
+        message: 'Agent with id x not found',
+        code: 'AGENT_NOT_FOUND',
+        metadata: { agentId: 'x' },
+      });
+      expect(capture(original)).toBe(original);
+    });
+
+    it('uses the fallback code and metadata for an unknown error', async () => {
+      const caught = capture(new Error('boom'), { ...FALLBACK, metadata: { agentId: 'a1' } });
+      expect(caught.status).toBe(500);
+      expect({ code: caught.code, metadata: caught.metadata }).toEqual({
+        code: 'AGENT_GET_FAILED',
+        metadata: { agentId: 'a1' },
+      });
+      await expect(caught.getResponse().json()).resolves.toEqual({
+        error: 'boom',
+        code: 'AGENT_GET_FAILED',
+        metadata: { agentId: 'a1' },
+      });
+    });
+
+    it('omits metadata when there is nothing to add', () => {
+      expect(capture(new Error('boom')).code).toBe('AGENT_GET_FAILED');
+    });
+
+    it('keeps an error id that is already a catalog code', () => {
+      const err = Object.assign(new Error('missing'), { id: 'WORKFLOW_NOT_FOUND', status: 404 });
+      const caught = capture(err);
+      expect(caught.status).toBe(404);
+      expect(caught.code).toBe('WORKFLOW_NOT_FOUND');
+    });
+
+    it('sends the details of a core error id as the metadata its code declares', async () => {
+      const err = new MastraError({
+        id: 'PROCESSOR_WORKFLOW_FAILED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'Processor workflow p1 failed',
+        details: { processorId: 'p1', internalNote: 'not for clients' },
+      });
+      const caught = capture(err, { ...FALLBACK, metadata: { agentId: 'a1' } });
+      await expect(caught.getResponse().json()).resolves.toEqual({
+        error: 'Processor workflow p1 failed',
+        code: 'PROCESSOR_WORKFLOW_FAILED',
+        metadata: { processorId: 'p1' },
+      });
+    });
+
+    it('omits metadata when core details do not match the code schema', () => {
+      const err = new MastraError({
+        id: 'PROCESSOR_WORKFLOW_FAILED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'failed',
+        details: { processorId: 42 },
+      });
+      expect(capture(err).metadata).toBeUndefined();
+    });
+
+    it('falls back for an error id outside the catalog', () => {
+      const err = Object.assign(new Error('boom'), { id: 'SOME_INTERNAL_ID' });
+      expect(capture(err).code).toBe('AGENT_GET_FAILED');
+    });
+
+    it('maps resume conflicts to their id and merges MastraError details', () => {
+      const err = new MastraError({
+        id: 'WORKFLOW_RESUME_ALREADY_CLAIMED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: 'already resumed',
+        details: { runId: 'run-1' },
+      });
+      const caught = capture(err, { ...FALLBACK, metadata: { workflowId: 'wf-1' } });
+      expect(caught.status).toBe(409);
+      expect({ code: caught.code, metadata: caught.metadata }).toEqual({
+        code: 'WORKFLOW_RESUME_ALREADY_CLAIMED',
+        metadata: { workflowId: 'wf-1', runId: 'run-1' },
+      });
+    });
+
+    it('maps durable run conflicts to their id', () => {
+      const err = Object.assign(new Error('busy'), { id: 'DURABLE_AGENT_RUN_ACTIVE' });
+      expect(capture(err).code).toBe('DURABLE_AGENT_RUN_ACTIVE');
+    });
+
+    it('maps the feedback review-status conflict', () => {
+      const err = Object.assign(new Error('changed'), { id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT' });
+      expect(capture(err).code).toBe('OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT');
+    });
+
+    it('maps workflow schema validation failures', () => {
+      const err = Object.assign(new Error('bad input'), { id: 'WORKFLOW_SCHEMA_VALIDATION_FAILED' });
+      const caught = capture(err);
+      expect(caught.status).toBe(400);
+      expect(caught.code).toBe('WORKFLOW_SCHEMA_VALIDATION_FAILED');
+    });
+
+    it('maps every unimplemented observability storage method to OBSERVABILITY_OPERATION_NOT_SUPPORTED', () => {
+      const err = Object.assign(new Error('unsupported'), { id: 'OBSERVABILITY_STORAGE_LIST_METRICS_NOT_IMPLEMENTED' });
+      expect(capture(err).code).toBe('OBSERVABILITY_OPERATION_NOT_SUPPORTED');
+    });
+  });
+
+  describe('string fallback (pre-catalog signature)', () => {
+    function capture(error: unknown, message: string): HTTPException {
+      try {
+        handleError(error, message);
+      } catch (e) {
+        return e as HTTPException;
+      }
+      throw new Error('handleError did not throw');
+    }
+
+    it('uses the string as the message and UNEXPECTED_ERROR for an error without status', () => {
+      const caught = capture({}, 'Error getting agent');
+      expect(caught.status).toBe(500);
+      expect(caught.message).toBe('Error getting agent');
+      expect(caught.code).toBe('UNEXPECTED_ERROR');
+    });
+
+    it('uses UNCATEGORIZED_ERROR for an error that carries a status', () => {
+      const caught = capture(Object.assign(new Error('nope'), { status: 403 }), 'Error getting agent');
+      expect(caught.status).toBe(403);
+      expect(caught.code).toBe('UNCATEGORIZED_ERROR');
+    });
+
+    it('keeps an error id that is already a catalog code', () => {
+      const err = Object.assign(new Error('missing'), { id: 'AGENT_NOT_FOUND', status: 404 });
+      expect(capture(err, 'Error getting agent').code).toBe('AGENT_NOT_FOUND');
+    });
+  });
+});
+
+describe('HTTPException', () => {
+  it('defaults to status 500 and UNCATEGORIZED_ERROR without options', () => {
+    const error = new HTTPException();
+    expect(error.status).toBe(500);
+    expect(error.code).toBe('UNCATEGORIZED_ERROR');
+  });
+
+  it('defaults the code to UNCATEGORIZED_ERROR when only a message is given', () => {
+    const error = new HTTPException(404, { message: 'Not here' });
+    expect(error.status).toBe(404);
+    expect(error.message).toBe('Not here');
+    expect(error.code).toBe('UNCATEGORIZED_ERROR');
+  });
+});
+
+describe('formatZodError', () => {
+  it('uses REQUEST_VALIDATION_FAILED by default', () => {
+    const body = formatZodError({ issues: [{ path: ['name'], message: 'Required' }] }, 'request body', 'body');
+
+    expect({ code: body.code, issues: body.issues, metadata: body.metadata }).toEqual({
+      code: 'REQUEST_VALIDATION_FAILED',
+      issues: [{ field: 'name', message: 'Required' }],
+      metadata: { location: 'body' },
+    });
+  });
+
+  it('uses the catalog code carried by a custom issue', () => {
+    const body = formatZodError(
+      {
+        issues: [
+          { path: ['name'], message: 'Required' },
+          { path: ['limit'], message: 'bad limit', params: { errorCode: 'AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE' } },
+        ],
+      },
+      'query parameters',
+    );
+
+    expect(body.code).toBe('AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE');
+  });
+
+  it('ignores error codes that are not in the catalog', () => {
+    const body = formatZodError(
+      { issues: [{ path: ['limit'], message: 'bad limit', params: { errorCode: 'NOT_A_REAL_CODE' } }] },
+      'query parameters',
+    );
+
+    expect(body.code).toBe('REQUEST_VALIDATION_FAILED');
   });
 });

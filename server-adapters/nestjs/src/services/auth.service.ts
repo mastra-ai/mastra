@@ -127,8 +127,9 @@ export class AuthService {
 
     if (result.action === 'error') {
       const message = typeof result.body.error === 'string' ? result.body.error : 'Access denied';
-      if (result.status === 401) throw new UnauthorizedException(message);
-      if (result.status === 403) throw new ForbiddenException(message);
+      const { code, metadata } = result.body;
+      if (result.status === 401) throw new UnauthorizedException({ message, code, metadata });
+      if (result.status === 403) throw new ForbiddenException({ message, code, metadata });
       throw new HttpException(result.body, result.status);
     }
 

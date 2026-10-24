@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
@@ -52,19 +53,39 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_CREATE,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'CONVERSATION_CREATE_FAILED',
+    'CONVERSATION_MEMORY_NOT_CONFIGURED',
+    'MASTRA_INSTANCE_REQUIRED',
+    'MEMORY_STORAGE_NOT_INITIALIZED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({ mastra, requestContext, agent_id, conversation_id, resource_id, title, metadata }) => {
     try {
       if (!mastra) {
-        throw new HTTPException(500, { message: 'Mastra instance is required for conversations' });
+        throw new HTTPException(500, {
+          message: 'Mastra instance is required for conversations',
+          code: SERVER_ERROR_CODES.MASTRA_INSTANCE_REQUIRED,
+        });
       }
 
       const agent = await getAgentFromSystem({ mastra, agentId: agent_id });
       const memory = await agent.getMemory({ requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: `Agent "${agent.id}" does not have memory configured` });
+        throw new HTTPException(400, {
+          message: `Agent "${agent.id}" does not have memory configured`,
+          code: SERVER_ERROR_CODES.CONVERSATION_MEMORY_NOT_CONFIGURED,
+          metadata: { agentId: agent.id },
+        });
       }
       if (!(await getAgentMemoryStore({ agent, requestContext }))) {
-        throw new HTTPException(400, { message: `Memory storage is not configured for agent "${agent.id}"` });
+        throw new HTTPException(400, {
+          message: `Memory storage is not configured for agent "${agent.id}"`,
+          code: SERVER_ERROR_CODES.MEMORY_STORAGE_NOT_INITIALIZED,
+          metadata: { agentId: agent.id },
+        });
       }
 
       const threadId = conversation_id ?? globalThis.crypto.randomUUID();
@@ -85,7 +106,10 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
 
       return buildConversationObject({ thread });
     } catch (error) {
-      return handleError(error, 'Error creating conversation');
+      return handleError(error, {
+        message: 'Error creating conversation',
+        code: SERVER_ERROR_CODES.CONVERSATION_CREATE_FAILED,
+      });
     }
   },
 });
@@ -101,16 +125,24 @@ export const GET_CONVERSATION_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
+  errors: ['CONVERSATION_GET_FAILED', 'CONVERSATION_NOT_FOUND', 'THREAD_ACCESS_DENIED'],
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
       if (!match) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+        throw new HTTPException(404, {
+          message: `Conversation ${conversationId} was not found`,
+          code: SERVER_ERROR_CODES.CONVERSATION_NOT_FOUND,
+          metadata: { conversationId },
+        });
       }
 
       return buildConversationObject({ thread: match.thread });
     } catch (error) {
-      return handleError(error, 'Error retrieving conversation');
+      return handleError(error, {
+        message: 'Error retrieving conversation',
+        code: SERVER_ERROR_CODES.CONVERSATION_GET_FAILED,
+      });
     }
   },
 });
@@ -126,11 +158,16 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
+  errors: ['CONVERSATION_GET_FAILED', 'CONVERSATION_NOT_FOUND', 'THREAD_ACCESS_DENIED'],
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
       if (!match) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+        throw new HTTPException(404, {
+          message: `Conversation ${conversationId} was not found`,
+          code: SERVER_ERROR_CODES.CONVERSATION_NOT_FOUND,
+          metadata: { conversationId },
+        });
       }
 
       const { messages } = await match.memoryStore.listMessages({
@@ -141,7 +178,10 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
 
       return buildConversationItemsList(mapMastraMessagesToConversationItems(messages));
     } catch (error) {
-      return handleError(error, 'Error retrieving conversation');
+      return handleError(error, {
+        message: 'Error retrieving conversation',
+        code: SERVER_ERROR_CODES.CONVERSATION_GET_FAILED,
+      });
     }
   },
 });
@@ -157,18 +197,26 @@ export const DELETE_CONVERSATION_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_DELETE,
+  errors: ['CONVERSATION_DELETE_FAILED', 'CONVERSATION_NOT_FOUND', 'THREAD_ACCESS_DENIED'],
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
       if (!match) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+        throw new HTTPException(404, {
+          message: `Conversation ${conversationId} was not found`,
+          code: SERVER_ERROR_CODES.CONVERSATION_NOT_FOUND,
+          metadata: { conversationId },
+        });
       }
 
       await match.memoryStore.deleteThread({ threadId: conversationId });
 
       return buildConversationDeleted(conversationId);
     } catch (error) {
-      return handleError(error, 'Error deleting conversation');
+      return handleError(error, {
+        message: 'Error deleting conversation',
+        code: SERVER_ERROR_CODES.CONVERSATION_DELETE_FAILED,
+      });
     }
   },
 });

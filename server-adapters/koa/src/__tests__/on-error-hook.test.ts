@@ -443,9 +443,32 @@ describe('Koa onError hook integration tests', () => {
       expect(response.status).toBe(500);
       const result = await response.json();
       // Should fall back to default error response
-      expect(result).toEqual({ error: 'Original error' });
+      expect(result).toEqual({ error: 'Original error', code: 'UNEXPECTED_ERROR' });
       // onError should only be called once (guard prevents double invocation)
       expect(onErrorCallCount).toBe(1);
+    });
+
+    it('keeps the status of a non-Error value thrown by middleware', async () => {
+      const mastra = new Mastra({ logger: false });
+      const app = new Koa();
+      app.on('error', () => {});
+      const adapter = new MastraServer({ app, mastra });
+      await adapter.init();
+      app.use(async () => {
+        throw { status: 403, message: 'blocked' };
+      });
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/anything`);
+
+      expect(response.status).toBe(403);
+      const result = await response.json();
+      expect(result.code).toBe('UNCATEGORIZED_ERROR');
     });
   });
 });

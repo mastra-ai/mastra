@@ -50,7 +50,10 @@ describe('resource mapping at the HTTP authentication boundary', () => {
     const stream = vi.spyOn(agent, 'stream');
     const response = await app.request(`http://localhost${path}`, { ...request, headers });
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ error: 'Failed to map authenticated user to a resource ID' });
+    expect(await response.json()).toEqual({
+      error: 'Failed to map authenticated user to a resource ID',
+      code: 'AUTHENTICATED_USER_RESOURCE_MAPPING_FAILED',
+    });
     expect(listThreads).not.toHaveBeenCalled();
     expect(getThread).not.toHaveBeenCalled();
     expect(listRuns).not.toHaveBeenCalled();

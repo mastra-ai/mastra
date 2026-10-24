@@ -408,7 +408,24 @@ await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProje
       const body = await res.json();
       expect({ status: res.status, body }).toEqual({
         status: 400,
-        body: { error: expect.stringContaining('calculatorTool') },
+        body: {
+          error: expect.stringContaining('calculatorTool'),
+          code: 'MCP_TOOL_INPUT_INVALID',
+          metadata: { serverId: 'calculator', toolId: 'calculatorTool' },
+        },
+      });
+    });
+
+    it('should return a business error code for an unknown agent', async () => {
+      const res = await fetch(`http://localhost:${port}/api/agents/does-not-exist`);
+      const body = await res.json();
+      expect({ status: res.status, body }).toEqual({
+        status: 404,
+        body: {
+          error: expect.any(String),
+          code: 'AGENT_NOT_FOUND',
+          metadata: { agentId: 'does-not-exist' },
+        },
       });
     });
   }

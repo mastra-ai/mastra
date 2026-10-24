@@ -1,4 +1,5 @@
 import { Busboy } from '@fastify/busboy';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import { isSafeObjectKey } from '@mastra/server/server-adapter';
 import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
 import type { Request } from 'express';
@@ -30,7 +31,12 @@ export function parseMultipartFormData(
 
     const contentType = request.headers['content-type'];
     if (!contentType) {
-      reject(new BadRequestException('Content-Type header is required for multipart requests'));
+      reject(
+        new BadRequestException({
+          message: 'Content-Type header is required for multipart requests',
+          code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID,
+        }),
+      );
       return;
     }
 
@@ -49,9 +55,11 @@ export function parseMultipartFormData(
           if (!options.allowedMimeTypes.includes(mimetype)) {
             file.resume(); // Drain the stream
             reject(
-              new BadRequestException(
-                `Invalid file type: ${mimetype}. Allowed types: ${options.allowedMimeTypes.join(', ')}`,
-              ),
+              new BadRequestException({
+                message: `Invalid file type: ${mimetype}. Allowed types: ${options.allowedMimeTypes.join(', ')}`,
+                code: SERVER_ERROR_CODES.REQUEST_FILE_TYPE_NOT_ALLOWED,
+                metadata: { mimetype },
+              }),
             );
             return;
           }
@@ -68,7 +76,10 @@ export function parseMultipartFormData(
           limitExceeded = true;
           const maxSize = options.maxFileSize;
           reject(
-            new PayloadTooLargeException(`File size limit exceeded${maxSize ? ` (max: ${formatBytes(maxSize)})` : ''}`),
+            new PayloadTooLargeException({
+              message: `File size limit exceeded${maxSize ? ` (max: ${formatBytes(maxSize)})` : ''}`,
+              code: SERVER_ERROR_CODES.REQUEST_FILE_TOO_LARGE,
+            }),
           );
         });
 
@@ -97,7 +108,12 @@ export function parseMultipartFormData(
     });
 
     busboy.on('error', (error: Error) => {
-      reject(new BadRequestException(`Failed to parse multipart form data: ${error.message}`));
+      reject(
+        new BadRequestException({
+          message: `Failed to parse multipart form data: ${error.message}`,
+          code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID,
+        }),
+      );
     });
 
     request.pipe(busboy);

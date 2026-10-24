@@ -123,6 +123,7 @@ describe('Vector Handlers', () => {
       ).rejects.toThrow(
         new HTTPException(400, {
           message: 'Invalid request index, indexName and positive dimension number are required.',
+          code: 'VECTOR_INDEX_DIMENSION_INVALID',
         }),
       );
     });
@@ -208,6 +209,28 @@ describe('Vector Handlers', () => {
         filter: { key: 'value' },
         includeVector: true,
       });
+    });
+  });
+
+  describe('empty index name', () => {
+    const mastra = () =>
+      new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } });
+
+    it.each([
+      [
+        'upsertVectors',
+        () => upsertVectors({ mastra: mastra(), vectorName: 'test-vector', indexName: '', vectors: [[1]] }),
+      ],
+      ['createIndex', () => createIndex({ mastra: mastra(), vectorName: 'test-vector', indexName: '', dimension: 3 })],
+      [
+        'queryVectors',
+        () => queryVectors({ mastra: mastra(), vectorName: 'test-vector', indexName: '', queryVector: [1] }),
+      ],
+    ])('%s reports VECTOR_INDEX_NAME_REQUIRED', async (_name, run) => {
+      const error = await run().catch(e => e);
+      expect(error).toBeInstanceOf(HTTPException);
+      expect(error.status).toBe(400);
+      expect(error.code).toBe('VECTOR_INDEX_NAME_REQUIRED');
     });
   });
 

@@ -60,7 +60,13 @@ describe('Logs Handlers', () => {
     it('should throw error when transportId is not provided', async () => {
       await expect(
         LIST_LOGS_ROUTE.handler({ ...createTestServerContext({ mastra }), page: 1, transportId: undefined as any }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "transportId" is required' }));
+      ).rejects.toThrow(
+        new HTTPException(400, {
+          message: 'Argument "transportId" is required',
+          code: 'REQUEST_ARGUMENT_REQUIRED',
+          metadata: { argument: 'transportId' },
+        }),
+      );
     });
 
     it('should get logs successfully', async () => {
@@ -124,7 +130,13 @@ describe('Logs Handlers', () => {
           transportId: 'test-transport',
           page: 1,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "runId" is required' }));
+      ).rejects.toThrow(
+        new HTTPException(400, {
+          message: 'Argument "runId" is required',
+          code: 'REQUEST_ARGUMENT_REQUIRED',
+          metadata: { argument: 'runId' },
+        }),
+      );
     });
 
     it('should throw error when transportId is not provided', async () => {
@@ -135,7 +147,13 @@ describe('Logs Handlers', () => {
           page: 1,
           transportId: undefined as any,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "transportId" is required' }));
+      ).rejects.toThrow(
+        new HTTPException(400, {
+          message: 'Argument "transportId" is required',
+          code: 'REQUEST_ARGUMENT_REQUIRED',
+          metadata: { argument: 'transportId' },
+        }),
+      );
     });
 
     it('should get logs by run ID successfully', async () => {

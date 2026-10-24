@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   backgroundTaskResponseSchema,
@@ -8,6 +9,7 @@ import {
   backgroundTaskIdPathParams,
 } from '../schemas/background-tasks';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { handleError } from './error';
 import { getContextResourceId } from './utils';
 
 /**
@@ -24,10 +26,16 @@ function resolveResourceScope(
   // An empty resource id must not be mistaken for a privileged (unscoped) caller, and
   // storage filters ignore empty strings, so it cannot be scoped safely either.
   if (contextResourceId === '') {
-    throw new HTTPException(403, { message: 'Access denied: authenticated resourceId is empty' });
+    throw new HTTPException(403, {
+      message: 'Access denied: authenticated resourceId is empty',
+      code: SERVER_ERROR_CODES.THREAD_ACCESS_DENIED,
+    });
   }
   if (clientResourceId !== undefined && clientResourceId !== contextResourceId) {
-    throw new HTTPException(403, { message: 'Access denied: resourceId does not match the authenticated resource' });
+    throw new HTTPException(403, {
+      message: 'Access denied: resourceId does not match the authenticated resource',
+      code: SERVER_ERROR_CODES.THREAD_ACCESS_DENIED,
+    });
   }
   return { resourceId: contextResourceId, scoped: true };
 }
@@ -43,6 +51,7 @@ export const BACKGROUND_TASK_STREAM_ROUTE = createRoute({
   description: 'Real-time Server-Sent Events stream of background task completion/failure events.',
   tags: ['Background Tasks'],
   requiresAuth: true,
+  errors: ['THREAD_ACCESS_DENIED'],
   handler: async ({
     mastra,
     agentId,
@@ -87,15 +96,23 @@ export const LIST_BACKGROUND_TASKS_ROUTE = createRoute({
   description: 'Returns background tasks filtered by status, agent, run, etc.',
   tags: ['Background Tasks'],
   requiresAuth: true,
+  errors: ['BACKGROUND_TASKS_LIST_FAILED', 'THREAD_ACCESS_DENIED'],
   handler: async ({ mastra, requestContext, ...params }) => {
-    const { resourceId } = resolveResourceScope(requestContext, params.resourceId);
-    const bgManager = mastra.backgroundTaskManager;
-    if (!bgManager) {
-      // Background tasks not enabled — there are no tasks to return.
-      return { tasks: [], total: 0 };
-    }
+    try {
+      const { resourceId } = resolveResourceScope(requestContext, params.resourceId);
+      const bgManager = mastra.backgroundTaskManager;
+      if (!bgManager) {
+        // Background tasks not enabled — there are no tasks to return.
+        return { tasks: [], total: 0 };
+      }
 
-    return bgManager.listTasks({ ...params, resourceId });
+      return bgManager.listTasks({ ...params, resourceId });
+    } catch (error) {
+      return handleError(error, {
+        message: 'Error listing background tasks',
+        code: SERVER_ERROR_CODES.BACKGROUND_TASKS_LIST_FAILED,
+      });
+    }
   },
 });
 
@@ -109,19 +126,33 @@ export const GET_BACKGROUND_TASK_ROUTE = createRoute({
   description: 'Returns a background task by ID.',
   tags: ['Background Tasks'],
   requiresAuth: true,
+  errors: ['BACKGROUND_TASK_GET_FAILED', 'BACKGROUND_TASK_NOT_FOUND', 'THREAD_ACCESS_DENIED'],
   handler: async ({ mastra, backgroundTaskId, requestContext }) => {
-    const { resourceId, scoped } = resolveResourceScope(requestContext, undefined);
-    const bgManager = mastra.backgroundTaskManager;
-    if (!bgManager) {
-      // Background tasks not enabled — the task can't exist.
-      throw new HTTPException(404, { message: 'Background task not found' });
-    }
+    try {
+      const { resourceId, scoped } = resolveResourceScope(requestContext, undefined);
+      const bgManager = mastra.backgroundTaskManager;
+      if (!bgManager) {
+        // Background tasks not enabled — the task can't exist.
+        throw new HTTPException(404, {
+          message: 'Background task not found',
+          code: SERVER_ERROR_CODES.BACKGROUND_TASK_NOT_FOUND,
+        });
+      }
 
-    const task = await bgManager.getTask(backgroundTaskId);
-    // Report another resource's task as missing so its existence is not disclosed.
-    if (!task || (scoped && task.resourceId !== resourceId)) {
-      throw new HTTPException(404, { message: 'Background task not found' });
+      const task = await bgManager.getTask(backgroundTaskId);
+      // Report another resource's task as missing so its existence is not disclosed.
+      if (!task || (scoped && task.resourceId !== resourceId)) {
+        throw new HTTPException(404, {
+          message: 'Background task not found',
+          code: SERVER_ERROR_CODES.BACKGROUND_TASK_NOT_FOUND,
+        });
+      }
+      return task;
+    } catch (error) {
+      return handleError(error, {
+        message: 'Error getting background task',
+        code: SERVER_ERROR_CODES.BACKGROUND_TASK_GET_FAILED,
+      });
     }
-    return task;
   },
 });

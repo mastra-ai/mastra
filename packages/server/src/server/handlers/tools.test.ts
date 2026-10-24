@@ -644,6 +644,8 @@ describe('Tools Handlers', () => {
       ).rejects.toThrow(
         new HTTPException(404, {
           message: 'Agent with id non-existent not found',
+          code: 'AGENT_NOT_FOUND',
+          metadata: { agentId: 'non-existent' },
         }),
       );
     });
@@ -663,6 +665,7 @@ describe('Tools Handlers', () => {
       ).rejects.toThrow(
         new HTTPException(404, {
           message: 'Tool not found',
+          code: 'TOOL_NOT_FOUND',
         }),
       );
     });

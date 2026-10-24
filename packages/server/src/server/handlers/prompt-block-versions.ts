@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   promptBlockVersionPathParams,
@@ -42,22 +43,40 @@ export const LIST_PROMPT_BLOCK_VERSIONS_ROUTE = createRoute({
   summary: 'List prompt block versions',
   description: 'Returns a paginated list of all versions for a stored prompt block',
   tags: ['Prompt Block Versions'],
+  errors: [
+    'PROMPT_BLOCK_VERSIONS_LIST_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_PROMPT_BLOCK_NOT_FOUND',
+    'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, promptBlockId, page, perPage, orderBy, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const promptBlockStore = await storage.getStore('promptBlocks');
       if (!promptBlockStore) {
-        throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Prompt blocks storage domain is not available',
+          code: SERVER_ERROR_CODES.STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE,
+        });
       }
 
       const promptBlock = await promptBlockStore.getById(promptBlockId);
       if (!promptBlock) {
-        throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
+        throw new HTTPException(404, {
+          message: `Prompt block with id ${promptBlockId} not found`,
+          code: SERVER_ERROR_CODES.STORED_PROMPT_BLOCK_NOT_FOUND,
+          metadata: { storedPromptBlockId: promptBlockId },
+        });
       }
       assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
@@ -70,7 +89,10 @@ export const LIST_PROMPT_BLOCK_VERSIONS_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error listing prompt block versions');
+      return handleError(error, {
+        message: 'Error listing prompt block versions',
+        code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSIONS_LIST_FAILED,
+      });
     }
   },
 });
@@ -89,22 +111,41 @@ export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   summary: 'Create prompt block version',
   description: 'Creates a new version snapshot of the current prompt block configuration',
   tags: ['Prompt Block Versions'],
+  errors: [
+    'PROMPT_BLOCK_VERSION_CREATED_RESOLVE_FAILED',
+    'PROMPT_BLOCK_VERSION_CREATE_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_PROMPT_BLOCK_NOT_FOUND',
+    'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, promptBlockId, changeMessage, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const promptBlockStore = await storage.getStore('promptBlocks');
       if (!promptBlockStore) {
-        throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Prompt blocks storage domain is not available',
+          code: SERVER_ERROR_CODES.STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE,
+        });
       }
 
       const promptBlock = await promptBlockStore.getById(promptBlockId);
       if (!promptBlock) {
-        throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
+        throw new HTTPException(404, {
+          message: `Prompt block with id ${promptBlockId} not found`,
+          code: SERVER_ERROR_CODES.STORED_PROMPT_BLOCK_NOT_FOUND,
+          metadata: { storedPromptBlockId: promptBlockId },
+        });
       }
       assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
@@ -145,7 +186,10 @@ export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 
       const version = await promptBlockStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+        throw new HTTPException(500, {
+          message: 'Failed to retrieve created version',
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_CREATED_RESOLVE_FAILED,
+        });
       }
 
       await enforceRetentionLimit(
@@ -157,7 +201,10 @@ export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 
       return version;
     } catch (error) {
-      return handleError(error, 'Error creating prompt block version');
+      return handleError(error, {
+        message: 'Error creating prompt block version',
+        code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_CREATE_FAILED,
+      });
     }
   },
 });
@@ -175,28 +222,48 @@ export const GET_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   summary: 'Get prompt block version',
   description: 'Returns a specific version of a prompt block by its version ID',
   tags: ['Prompt Block Versions'],
+  errors: [
+    'PROMPT_BLOCK_VERSION_GET_FAILED',
+    'PROMPT_BLOCK_VERSION_NOT_FOUND',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, promptBlockId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const promptBlockStore = await storage.getStore('promptBlocks');
       if (!promptBlockStore) {
-        throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Prompt blocks storage domain is not available',
+          code: SERVER_ERROR_CODES.STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE,
+        });
       }
 
       const version = await promptBlockStore.getVersion(versionId);
 
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+          metadata: { versionId, promptBlockId },
+        });
       }
 
       if (version.blockId !== promptBlockId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for prompt block ${promptBlockId}`,
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+          metadata: { versionId, promptBlockId },
         });
       }
       const promptBlock = await promptBlockStore.getById(promptBlockId);
@@ -204,7 +271,10 @@ export const GET_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 
       return version;
     } catch (error) {
-      return handleError(error, 'Error getting prompt block version');
+      return handleError(error, {
+        message: 'Error getting prompt block version',
+        code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_GET_FAILED,
+      });
     }
   },
 });
@@ -222,32 +292,57 @@ export const ACTIVATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   summary: 'Activate prompt block version',
   description: 'Sets a specific version as the active version for the prompt block',
   tags: ['Prompt Block Versions'],
+  errors: [
+    'PROMPT_BLOCK_VERSION_ACTIVATE_FAILED',
+    'PROMPT_BLOCK_VERSION_NOT_FOUND',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_PROMPT_BLOCK_NOT_FOUND',
+    'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, promptBlockId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const promptBlockStore = await storage.getStore('promptBlocks');
       if (!promptBlockStore) {
-        throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Prompt blocks storage domain is not available',
+          code: SERVER_ERROR_CODES.STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE,
+        });
       }
 
       const promptBlock = await promptBlockStore.getById(promptBlockId);
       if (!promptBlock) {
-        throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
+        throw new HTTPException(404, {
+          message: `Prompt block with id ${promptBlockId} not found`,
+          code: SERVER_ERROR_CODES.STORED_PROMPT_BLOCK_NOT_FOUND,
+          metadata: { storedPromptBlockId: promptBlockId },
+        });
       }
       assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       const version = await promptBlockStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+          metadata: { versionId, promptBlockId },
+        });
       }
       if (version.blockId !== promptBlockId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for prompt block ${promptBlockId}`,
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+          metadata: { versionId, promptBlockId },
         });
       }
 
@@ -266,7 +361,10 @@ export const ACTIVATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
         activeVersionId: versionId,
       };
     } catch (error) {
-      return handleError(error, 'Error activating prompt block version');
+      return handleError(error, {
+        message: 'Error activating prompt block version',
+        code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_ACTIVATE_FAILED,
+      });
     }
   },
 });
@@ -284,32 +382,58 @@ export const RESTORE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   summary: 'Restore prompt block version',
   description: 'Restores the prompt block configuration from a version, creating a new version',
   tags: ['Prompt Block Versions'],
+  errors: [
+    'PROMPT_BLOCK_VERSION_CREATED_RESOLVE_FAILED',
+    'PROMPT_BLOCK_VERSION_NOT_FOUND',
+    'PROMPT_BLOCK_VERSION_RESTORE_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_PROMPT_BLOCK_NOT_FOUND',
+    'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, promptBlockId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const promptBlockStore = await storage.getStore('promptBlocks');
       if (!promptBlockStore) {
-        throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Prompt blocks storage domain is not available',
+          code: SERVER_ERROR_CODES.STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE,
+        });
       }
 
       const promptBlock = await promptBlockStore.getById(promptBlockId);
       if (!promptBlock) {
-        throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
+        throw new HTTPException(404, {
+          message: `Prompt block with id ${promptBlockId} not found`,
+          code: SERVER_ERROR_CODES.STORED_PROMPT_BLOCK_NOT_FOUND,
+          metadata: { storedPromptBlockId: promptBlockId },
+        });
       }
       assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       const versionToRestore = await promptBlockStore.getVersion(versionId);
       if (!versionToRestore) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+          metadata: { versionId, promptBlockId },
+        });
       }
       if (versionToRestore.blockId !== promptBlockId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for prompt block ${promptBlockId}`,
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+          metadata: { versionId, promptBlockId },
         });
       }
 
@@ -343,7 +467,10 @@ export const RESTORE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 
       const newVersion = await promptBlockStore.getVersion(newVersionId);
       if (!newVersion) {
-        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+        throw new HTTPException(500, {
+          message: 'Failed to retrieve created version',
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_CREATED_RESOLVE_FAILED,
+        });
       }
 
       await enforceRetentionLimit(
@@ -358,7 +485,10 @@ export const RESTORE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 
       return newVersion;
     } catch (error) {
-      return handleError(error, 'Error restoring prompt block version');
+      return handleError(error, {
+        message: 'Error restoring prompt block version',
+        code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_RESTORE_FAILED,
+      });
     }
   },
 });
@@ -376,38 +506,65 @@ export const DELETE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   summary: 'Delete prompt block version',
   description: 'Deletes a specific version (cannot delete the active version)',
   tags: ['Prompt Block Versions'],
+  errors: [
+    'PROMPT_BLOCK_VERSION_ACTIVE_DELETE_FORBIDDEN',
+    'PROMPT_BLOCK_VERSION_DELETE_FAILED',
+    'PROMPT_BLOCK_VERSION_NOT_FOUND',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_PROMPT_BLOCK_NOT_FOUND',
+    'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, promptBlockId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const promptBlockStore = await storage.getStore('promptBlocks');
       if (!promptBlockStore) {
-        throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Prompt blocks storage domain is not available',
+          code: SERVER_ERROR_CODES.STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE,
+        });
       }
 
       const promptBlock = await promptBlockStore.getById(promptBlockId);
       if (!promptBlock) {
-        throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
+        throw new HTTPException(404, {
+          message: `Prompt block with id ${promptBlockId} not found`,
+          code: SERVER_ERROR_CODES.STORED_PROMPT_BLOCK_NOT_FOUND,
+          metadata: { storedPromptBlockId: promptBlockId },
+        });
       }
       assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       const version = await promptBlockStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+          metadata: { versionId, promptBlockId },
+        });
       }
       if (version.blockId !== promptBlockId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for prompt block ${promptBlockId}`,
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+          metadata: { versionId, promptBlockId },
         });
       }
 
       if (promptBlock.activeVersionId === versionId) {
         throw new HTTPException(400, {
           message: 'Cannot delete the active version. Activate a different version first.',
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_ACTIVE_DELETE_FORBIDDEN,
         });
       }
 
@@ -421,7 +578,10 @@ export const DELETE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
         message: `Version ${version.versionNumber} deleted successfully`,
       };
     } catch (error) {
-      return handleError(error, 'Error deleting prompt block version');
+      return handleError(error, {
+        message: 'Error deleting prompt block version',
+        code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_DELETE_FAILED,
+      });
     }
   },
 });
@@ -440,38 +600,64 @@ export const COMPARE_PROMPT_BLOCK_VERSIONS_ROUTE = createRoute({
   summary: 'Compare prompt block versions',
   description: 'Compares two versions and returns the differences between them',
   tags: ['Prompt Block Versions'],
+  errors: [
+    'PROMPT_BLOCK_VERSIONS_COMPARE_FAILED',
+    'PROMPT_BLOCK_VERSION_NOT_FOUND',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, promptBlockId, from, to, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const promptBlockStore = await storage.getStore('promptBlocks');
       if (!promptBlockStore) {
-        throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Prompt blocks storage domain is not available',
+          code: SERVER_ERROR_CODES.STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE,
+        });
       }
       const promptBlock = await promptBlockStore.getById(promptBlockId);
       assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       const fromVersion = await promptBlockStore.getVersion(from);
       if (!fromVersion) {
-        throw new HTTPException(404, { message: `Version with id ${from} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${from} not found`,
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+          metadata: { versionId: from, promptBlockId },
+        });
       }
       if (fromVersion.blockId !== promptBlockId) {
         throw new HTTPException(404, {
           message: `Version with id ${from} not found for prompt block ${promptBlockId}`,
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+          metadata: { versionId: from, promptBlockId },
         });
       }
 
       const toVersion = await promptBlockStore.getVersion(to);
       if (!toVersion) {
-        throw new HTTPException(404, { message: `Version with id ${to} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${to} not found`,
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+          metadata: { versionId: to, promptBlockId },
+        });
       }
       if (toVersion.blockId !== promptBlockId) {
         throw new HTTPException(404, {
           message: `Version with id ${to} not found for prompt block ${promptBlockId}`,
+          code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+          metadata: { versionId: to, promptBlockId },
         });
       }
 
@@ -492,7 +678,10 @@ export const COMPARE_PROMPT_BLOCK_VERSIONS_ROUTE = createRoute({
         toVersion,
       };
     } catch (error) {
-      return handleError(error, 'Error comparing prompt block versions');
+      return handleError(error, {
+        message: 'Error comparing prompt block versions',
+        code: SERVER_ERROR_CODES.PROMPT_BLOCK_VERSIONS_COMPARE_FAILED,
+      });
     }
   },
 });

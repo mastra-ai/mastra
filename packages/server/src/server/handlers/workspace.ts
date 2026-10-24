@@ -10,6 +10,7 @@
 import { coreFeatures } from '@mastra/core/features';
 import type { Workspace, WorkspaceSkills, WorkspaceFilesystem, CompositeFilesystem } from '@mastra/core/workspace';
 
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   // Workspace info
@@ -60,6 +61,7 @@ import {
 } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
+import type { HandleErrorFallback } from './error';
 
 // =============================================================================
 // Constants
@@ -118,16 +120,16 @@ function isFilesystemPermissionError(error: unknown): boolean {
  * Converts filesystem errors to appropriate HTTP status codes,
  * then falls back to generic handler.
  */
-function handleWorkspaceError(error: unknown, defaultMessage: string): never {
+function handleWorkspaceError(error: unknown, fallback: HandleErrorFallback): never {
   if (isFilesystemNotFoundError(error)) {
     const message = error instanceof Error ? error.message : 'Not found';
-    throw new HTTPException(404, { message });
+    throw new HTTPException(404, { message, code: SERVER_ERROR_CODES.WORKSPACE_PATH_NOT_FOUND });
   }
   if (isFilesystemPermissionError(error)) {
     const message = error instanceof Error ? error.message : 'Permission denied';
-    throw new HTTPException(403, { message });
+    throw new HTTPException(403, { message, code: SERVER_ERROR_CODES.WORKSPACE_PATH_ACCESS_DENIED });
   }
-  return handleError(error, defaultMessage);
+  return handleError(error, fallback);
 }
 
 /**
@@ -137,6 +139,7 @@ function requireWorkspaceV1Support(): void {
   if (!coreFeatures.has('workspaces-v1')) {
     throw new HTTPException(501, {
       message: 'Workspace v1 not supported by this version of @mastra/core. Please upgrade to a newer version.',
+      code: SERVER_ERROR_CODES.WORKSPACE_VERSION_UNSUPPORTED,
     });
   }
 }
@@ -209,10 +212,16 @@ function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: str
       if (!mountFs) {
         throw new HTTPException(400, {
           message: `Mount "${requestedMount}" not found. Available mounts: ${filesystem.mountPaths.join(', ')}`,
+          code: SERVER_ERROR_CODES.WORKSPACE_MOUNT_NOT_FOUND,
+          metadata: { mount: requestedMount },
         });
       }
       if (mountFs.readOnly) {
-        throw new HTTPException(403, { message: `Mount "${requestedMount}" is read-only` });
+        throw new HTTPException(403, {
+          message: `Mount "${requestedMount}" is read-only`,
+          code: SERVER_ERROR_CODES.WORKSPACE_MOUNT_READ_ONLY,
+          metadata: { mount: requestedMount },
+        });
       }
       return `${stripTrailingSlash(requestedMount)}/${SKILLS_SH_DIR}/${safeSkillId}`;
     }
@@ -224,7 +233,10 @@ function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: str
       }
     }
 
-    throw new HTTPException(403, { message: 'No writable mount available for skill installation' });
+    throw new HTTPException(403, {
+      message: 'No writable mount available for skill installation',
+      code: SERVER_ERROR_CODES.WORKSPACE_NO_WRITABLE_MOUNT,
+    });
   }
 
   // Non-composite: standard path
@@ -243,6 +255,12 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
   summary: 'List all workspaces',
   description: 'Returns all workspaces from both Mastra instance and agents',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACES_LIST_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra }) => {
     try {
       requireWorkspaceV1Support();
@@ -362,7 +380,10 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
 
       return { workspaces };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error listing workspaces');
+      return handleWorkspaceError(error, {
+        message: 'Error listing workspaces',
+        code: SERVER_ERROR_CODES.WORKSPACES_LIST_FAILED,
+      });
     }
   },
 });
@@ -380,6 +401,12 @@ export const GET_WORKSPACE_ROUTE = createRoute({
   summary: 'Get workspace info',
   description: 'Returns information about a specific workspace and its capabilities',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_GET_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, workspaceId }) => {
     try {
       const workspace = await getWorkspaceById(mastra, workspaceId);
@@ -459,7 +486,10 @@ export const GET_WORKSPACE_ROUTE = createRoute({
         mounts,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error getting workspace info');
+      return handleWorkspaceError(error, {
+        message: 'Error getting workspace info',
+        code: SERVER_ERROR_CODES.WORKSPACE_GET_FAILED,
+      });
     }
   },
 });
@@ -478,24 +508,39 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
   summary: 'Read file content',
   description: 'Returns the content of a file at the specified path',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_FILE_READ_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, encoding, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
       if (!path) {
-        throw new HTTPException(400, { message: 'Path is required' });
+        throw new HTTPException(400, { message: 'Path is required', code: SERVER_ERROR_CODES.WORKSPACE_PATH_REQUIRED });
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace?.filesystem) {
-        throw new HTTPException(404, { message: 'No workspace filesystem configured' });
+        throw new HTTPException(404, {
+          message: 'No workspace filesystem configured',
+          code: SERVER_ERROR_CODES.WORKSPACE_FILESYSTEM_NOT_CONFIGURED,
+        });
       }
 
       const decodedPath = path;
 
       // Check if path exists
       if (!(await workspace.filesystem.exists(decodedPath))) {
-        throw new HTTPException(404, { message: `Path "${decodedPath}" not found` });
+        throw new HTTPException(404, {
+          message: `Path "${decodedPath}" not found`,
+          code: SERVER_ERROR_CODES.WORKSPACE_PATH_NOT_FOUND,
+          metadata: { path: decodedPath },
+        });
       }
 
       // Read file content
@@ -509,7 +554,10 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
         type: 'file' as const,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error reading file');
+      return handleWorkspaceError(error, {
+        message: 'Error reading file',
+        code: SERVER_ERROR_CODES.WORKSPACE_FILE_READ_FAILED,
+      });
     }
   },
 });
@@ -524,21 +572,39 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
   summary: 'Write file content',
   description: 'Writes content to a file at the specified path. Supports base64 encoding for binary files.',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_FILE_WRITE_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_READ_ONLY',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, content, encoding, recursive, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
       if (!path || content === undefined) {
-        throw new HTTPException(400, { message: 'Path and content are required' });
+        throw new HTTPException(400, {
+          message: 'Path and content are required',
+          code: SERVER_ERROR_CODES.WORKSPACE_PATH_REQUIRED,
+        });
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace?.filesystem) {
-        throw new HTTPException(404, { message: 'No workspace filesystem configured' });
+        throw new HTTPException(404, {
+          message: 'No workspace filesystem configured',
+          code: SERVER_ERROR_CODES.WORKSPACE_FILESYSTEM_NOT_CONFIGURED,
+        });
       }
 
       if (workspace.filesystem?.readOnly) {
-        throw new HTTPException(403, { message: 'Workspace is in read-only mode' });
+        throw new HTTPException(403, {
+          message: 'Workspace is in read-only mode',
+          code: SERVER_ERROR_CODES.WORKSPACE_READ_ONLY,
+        });
       }
 
       const decodedPath = path;
@@ -556,7 +622,10 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
         path: decodedPath,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error writing file');
+      return handleWorkspaceError(error, {
+        message: 'Error writing file',
+        code: SERVER_ERROR_CODES.WORKSPACE_FILE_WRITE_FAILED,
+      });
     }
   },
 });
@@ -571,12 +640,19 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
   summary: 'List directory contents',
   description: 'Returns a list of files and directories at the specified path',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_DIRECTORY_LIST_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, recursive, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
       if (!path) {
-        throw new HTTPException(400, { message: 'Path is required' });
+        throw new HTTPException(400, { message: 'Path is required', code: SERVER_ERROR_CODES.WORKSPACE_PATH_REQUIRED });
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
@@ -592,7 +668,11 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
 
       // Check if path exists
       if (!(await workspace.filesystem.exists(decodedPath))) {
-        throw new HTTPException(404, { message: `Path "${decodedPath}" not found` });
+        throw new HTTPException(404, {
+          message: `Path "${decodedPath}" not found`,
+          code: SERVER_ERROR_CODES.WORKSPACE_PATH_NOT_FOUND,
+          metadata: { path: decodedPath },
+        });
       }
 
       const entries = await workspace.filesystem.readdir(decodedPath, { recursive });
@@ -602,7 +682,10 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
         entries,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error listing directory');
+      return handleWorkspaceError(error, {
+        message: 'Error listing directory',
+        code: SERVER_ERROR_CODES.WORKSPACE_DIRECTORY_LIST_FAILED,
+      });
     }
   },
 });
@@ -617,21 +700,36 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
   summary: 'Delete file or directory',
   description: 'Deletes a file or directory at the specified path',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_FILE_DELETE_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_READ_ONLY',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, recursive, force, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
       if (!path) {
-        throw new HTTPException(400, { message: 'Path is required' });
+        throw new HTTPException(400, { message: 'Path is required', code: SERVER_ERROR_CODES.WORKSPACE_PATH_REQUIRED });
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace?.filesystem) {
-        throw new HTTPException(404, { message: 'No workspace filesystem configured' });
+        throw new HTTPException(404, {
+          message: 'No workspace filesystem configured',
+          code: SERVER_ERROR_CODES.WORKSPACE_FILESYSTEM_NOT_CONFIGURED,
+        });
       }
 
       if (workspace.filesystem?.readOnly) {
-        throw new HTTPException(403, { message: 'Workspace is in read-only mode' });
+        throw new HTTPException(403, {
+          message: 'Workspace is in read-only mode',
+          code: SERVER_ERROR_CODES.WORKSPACE_READ_ONLY,
+        });
       }
 
       const decodedPath = path;
@@ -639,7 +737,11 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
       // Check if path exists (unless force is true)
       const exists = await workspace.filesystem.exists(decodedPath);
       if (!exists && !force) {
-        throw new HTTPException(404, { message: `Path "${decodedPath}" not found` });
+        throw new HTTPException(404, {
+          message: `Path "${decodedPath}" not found`,
+          code: SERVER_ERROR_CODES.WORKSPACE_PATH_NOT_FOUND,
+          metadata: { path: decodedPath },
+        });
       }
 
       if (exists) {
@@ -656,7 +758,10 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
         path: decodedPath,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error deleting path');
+      return handleWorkspaceError(error, {
+        message: 'Error deleting path',
+        code: SERVER_ERROR_CODES.WORKSPACE_FILE_DELETE_FAILED,
+      });
     }
   },
 });
@@ -671,21 +776,36 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
   summary: 'Create directory',
   description: 'Creates a directory at the specified path',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_DIRECTORY_CREATE_FAILED',
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_READ_ONLY',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, recursive, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
       if (!path) {
-        throw new HTTPException(400, { message: 'Path is required' });
+        throw new HTTPException(400, { message: 'Path is required', code: SERVER_ERROR_CODES.WORKSPACE_PATH_REQUIRED });
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace?.filesystem) {
-        throw new HTTPException(404, { message: 'No workspace filesystem configured' });
+        throw new HTTPException(404, {
+          message: 'No workspace filesystem configured',
+          code: SERVER_ERROR_CODES.WORKSPACE_FILESYSTEM_NOT_CONFIGURED,
+        });
       }
 
       if (workspace.filesystem?.readOnly) {
-        throw new HTTPException(403, { message: 'Workspace is in read-only mode' });
+        throw new HTTPException(403, {
+          message: 'Workspace is in read-only mode',
+          code: SERVER_ERROR_CODES.WORKSPACE_READ_ONLY,
+        });
       }
 
       const decodedPath = path;
@@ -697,7 +817,10 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
         path: decodedPath,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error creating directory');
+      return handleWorkspaceError(error, {
+        message: 'Error creating directory',
+        code: SERVER_ERROR_CODES.WORKSPACE_DIRECTORY_CREATE_FAILED,
+      });
     }
   },
 });
@@ -712,24 +835,39 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
   summary: 'Get file/directory info',
   description: 'Returns metadata about a file or directory',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_FILE_STAT_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
       if (!path) {
-        throw new HTTPException(400, { message: 'Path is required' });
+        throw new HTTPException(400, { message: 'Path is required', code: SERVER_ERROR_CODES.WORKSPACE_PATH_REQUIRED });
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace?.filesystem) {
-        throw new HTTPException(404, { message: 'No workspace filesystem configured' });
+        throw new HTTPException(404, {
+          message: 'No workspace filesystem configured',
+          code: SERVER_ERROR_CODES.WORKSPACE_FILESYSTEM_NOT_CONFIGURED,
+        });
       }
 
       const decodedPath = path;
 
       // Check if path exists
       if (!(await workspace.filesystem.exists(decodedPath))) {
-        throw new HTTPException(404, { message: `Path "${decodedPath}" not found` });
+        throw new HTTPException(404, {
+          message: `Path "${decodedPath}" not found`,
+          code: SERVER_ERROR_CODES.WORKSPACE_PATH_NOT_FOUND,
+          metadata: { path: decodedPath },
+        });
       }
 
       const stat = await workspace.filesystem.stat(decodedPath);
@@ -743,7 +881,10 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
         mimeType: stat.mimeType,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error getting file info');
+      return handleWorkspaceError(error, {
+        message: 'Error getting file info',
+        code: SERVER_ERROR_CODES.WORKSPACE_FILE_STAT_FAILED,
+      });
     }
   },
 });
@@ -762,12 +903,22 @@ export const WORKSPACE_SEARCH_ROUTE = createRoute({
   summary: 'Search workspace content',
   description: 'Searches across indexed workspace content using BM25, vector, or hybrid search',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_SEARCH_FAILED',
+    'WORKSPACE_SEARCH_QUERY_REQUIRED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, query, topK, mode, minScore, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
       if (!query) {
-        throw new HTTPException(400, { message: 'Search query is required' });
+        throw new HTTPException(400, {
+          message: 'Search query is required',
+          code: SERVER_ERROR_CODES.WORKSPACE_SEARCH_QUERY_REQUIRED,
+        });
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
@@ -819,7 +970,10 @@ export const WORKSPACE_SEARCH_ROUTE = createRoute({
         mode: searchMode,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error searching workspace');
+      return handleWorkspaceError(error, {
+        message: 'Error searching workspace',
+        code: SERVER_ERROR_CODES.WORKSPACE_SEARCH_FAILED,
+      });
     }
   },
 });
@@ -834,22 +988,40 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
   summary: 'Index content for search',
   description: 'Indexes content for later search operations',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_INDEX_FAILED',
+    'WORKSPACE_NOT_FOUND',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_SEARCH_NOT_CONFIGURED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, content, metadata, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
 
       if (!path || content === undefined) {
-        throw new HTTPException(400, { message: 'Path and content are required' });
+        throw new HTTPException(400, {
+          message: 'Path and content are required',
+          code: SERVER_ERROR_CODES.WORKSPACE_PATH_REQUIRED,
+        });
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace) {
-        throw new HTTPException(404, { message: 'No workspace configured' });
+        throw new HTTPException(404, {
+          message: 'No workspace configured',
+          code: SERVER_ERROR_CODES.WORKSPACE_NOT_FOUND,
+        });
       }
 
       const canSearch = workspace.canBM25 || workspace.canVector;
       if (!canSearch) {
-        throw new HTTPException(400, { message: 'Workspace does not have search configured' });
+        throw new HTTPException(400, {
+          message: 'Workspace does not have search configured',
+          code: SERVER_ERROR_CODES.WORKSPACE_SEARCH_NOT_CONFIGURED,
+        });
       }
 
       await workspace.index(path, content, { metadata });
@@ -859,7 +1031,10 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
         path,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error indexing content');
+      return handleWorkspaceError(error, {
+        message: 'Error indexing content',
+        code: SERVER_ERROR_CODES.WORKSPACE_INDEX_FAILED,
+      });
     }
   },
 });
@@ -880,6 +1055,12 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
   summary: 'List all skills',
   description: 'Returns a list of all discovered skills with their metadata',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_SKILLS_LIST_FAILED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
@@ -934,7 +1115,10 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
         isSkillsConfigured: true,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error listing skills');
+      return handleWorkspaceError(error, {
+        message: 'Error listing skills',
+        code: SERVER_ERROR_CODES.WORKSPACE_SKILLS_LIST_FAILED,
+      });
     }
   },
 });
@@ -949,12 +1133,24 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
   summary: 'Get skill details',
   description: 'Returns the full details of a specific skill including instructions and file lists',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'SKILL_NAME_REQUIRED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_SKILLS_NOT_CONFIGURED',
+    'WORKSPACE_SKILL_GET_FAILED',
+    'WORKSPACE_SKILL_NOT_FOUND',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, skillName, path, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
       if (!skillName) {
-        throw new HTTPException(400, { message: 'Skill name is required' });
+        throw new HTTPException(400, {
+          message: 'Skill name is required',
+          code: SERVER_ERROR_CODES.SKILL_NAME_REQUIRED,
+        });
       }
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
@@ -962,7 +1158,10 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
-        throw new HTTPException(404, { message: 'No workspace with skills configured' });
+        throw new HTTPException(404, {
+          message: 'No workspace with skills configured',
+          code: SERVER_ERROR_CODES.WORKSPACE_SKILLS_NOT_CONFIGURED,
+        });
       }
 
       // Refresh skills with request context (handles dynamic skill resolvers)
@@ -970,7 +1169,11 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
 
       const skill = await skills.get(identifier);
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
+        throw new HTTPException(404, {
+          message: `Skill "${identifier}" not found`,
+          code: SERVER_ERROR_CODES.WORKSPACE_SKILL_NOT_FOUND,
+          metadata: { skillName: identifier },
+        });
       }
 
       return {
@@ -987,7 +1190,10 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
         assets: skill.assets,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error getting skill');
+      return handleWorkspaceError(error, {
+        message: 'Error getting skill',
+        code: SERVER_ERROR_CODES.WORKSPACE_SKILL_GET_FAILED,
+      });
     }
   },
 });
@@ -1002,12 +1208,24 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
   summary: 'List skill references',
   description: 'Returns a list of all reference file paths for a skill',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'SKILL_NAME_REQUIRED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_SKILLS_NOT_CONFIGURED',
+    'WORKSPACE_SKILL_NOT_FOUND',
+    'WORKSPACE_SKILL_REFERENCES_LIST_FAILED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, skillName, path, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
       if (!skillName) {
-        throw new HTTPException(400, { message: 'Skill name is required' });
+        throw new HTTPException(400, {
+          message: 'Skill name is required',
+          code: SERVER_ERROR_CODES.SKILL_NAME_REQUIRED,
+        });
       }
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
@@ -1015,7 +1233,10 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
-        throw new HTTPException(404, { message: 'No workspace with skills configured' });
+        throw new HTTPException(404, {
+          message: 'No workspace with skills configured',
+          code: SERVER_ERROR_CODES.WORKSPACE_SKILLS_NOT_CONFIGURED,
+        });
       }
 
       // Refresh skills with request context (handles dynamic skill resolvers)
@@ -1023,7 +1244,11 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
 
       const skill = await skills.get(identifier);
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
+        throw new HTTPException(404, {
+          message: `Skill "${identifier}" not found`,
+          code: SERVER_ERROR_CODES.WORKSPACE_SKILL_NOT_FOUND,
+          metadata: { skillName: identifier },
+        });
       }
 
       const references = await skills.listReferences(identifier);
@@ -1033,7 +1258,10 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
         references,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error listing skill references');
+      return handleWorkspaceError(error, {
+        message: 'Error listing skill references',
+        code: SERVER_ERROR_CODES.WORKSPACE_SKILL_REFERENCES_LIST_FAILED,
+      });
     }
   },
 });
@@ -1048,6 +1276,17 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
   summary: 'Get skill reference content',
   description: 'Returns the content of a specific reference file from a skill',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_TRAVERSAL',
+    'WORKSPACE_SKILLS_NOT_CONFIGURED',
+    'WORKSPACE_SKILL_NOT_FOUND',
+    'WORKSPACE_SKILL_REFERENCE_GET_FAILED',
+    'WORKSPACE_SKILL_REFERENCE_NOT_FOUND',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, skillName, path: skillPath, referencePath, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
@@ -1057,7 +1296,10 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
-        throw new HTTPException(404, { message: 'No workspace with skills configured' });
+        throw new HTTPException(404, {
+          message: 'No workspace with skills configured',
+          code: SERVER_ERROR_CODES.WORKSPACE_SKILLS_NOT_CONFIGURED,
+        });
       }
 
       // Refresh skills with request context (handles dynamic skill resolvers)
@@ -1066,7 +1308,11 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
       // Resolve skill to get its name for the response
       const skill = await skills.get(identifier);
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
+        throw new HTTPException(404, {
+          message: `Skill "${identifier}" not found`,
+          code: SERVER_ERROR_CODES.WORKSPACE_SKILL_NOT_FOUND,
+          metadata: { skillName: identifier },
+        });
       }
 
       const decodedPath = referencePath;
@@ -1080,6 +1326,8 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
       if (content === null) {
         throw new HTTPException(404, {
           message: `Reference "${decodedPath}" not found in skill "${identifier}"`,
+          code: SERVER_ERROR_CODES.WORKSPACE_SKILL_REFERENCE_NOT_FOUND,
+          metadata: { path: decodedPath, skill: identifier },
         });
       }
 
@@ -1089,7 +1337,10 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
         content,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error getting skill reference');
+      return handleWorkspaceError(error, {
+        message: 'Error getting skill reference',
+        code: SERVER_ERROR_CODES.WORKSPACE_SKILL_REFERENCE_GET_FAILED,
+      });
     }
   },
 });
@@ -1104,12 +1355,22 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
   summary: 'Search skills',
   description: 'Searches across all skills content using BM25 keyword search',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_SEARCH_QUERY_REQUIRED',
+    'WORKSPACE_SKILLS_SEARCH_FAILED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, query, topK, minScore, skillNames, includeReferences, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
       if (!query) {
-        throw new HTTPException(400, { message: 'Search query is required' });
+        throw new HTTPException(400, {
+          message: 'Search query is required',
+          code: SERVER_ERROR_CODES.WORKSPACE_SEARCH_QUERY_REQUIRED,
+        });
       }
 
       const skills = await getSkillsById(mastra, workspaceId);
@@ -1146,7 +1407,10 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
         query,
       };
     } catch (error) {
-      return handleWorkspaceError(error, 'Error searching skills');
+      return handleWorkspaceError(error, {
+        message: 'Error searching skills',
+        code: SERVER_ERROR_CODES.WORKSPACE_SKILLS_SEARCH_FAILED,
+      });
     }
   },
 });
@@ -1167,6 +1431,7 @@ export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
   summary: 'Search skills on skills.sh',
   description: 'Proxies search requests to skills.sh API to avoid CORS issues',
   tags: ['Workspace', 'Skills'],
+  errors: ['SKILLS_REGISTRY_REQUEST_FAILED', 'WORKSPACE_SKILLS_SEARCH_FAILED'],
   handler: async ({ q, limit }) => {
     try {
       const controller = new AbortController();
@@ -1179,6 +1444,8 @@ export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
       if (!response.ok) {
         throw new HTTPException(502, {
           message: `Skills API error: ${response.status} ${response.statusText}`,
+          code: SERVER_ERROR_CODES.SKILLS_REGISTRY_REQUEST_FAILED,
+          metadata: { upstreamStatus: response.status },
         });
       }
 
@@ -1208,7 +1475,10 @@ export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
       if (error instanceof HTTPException) {
         throw error;
       }
-      return handleError(error, 'Error searching skills');
+      return handleError(error, {
+        message: 'Error searching skills',
+        code: SERVER_ERROR_CODES.WORKSPACE_SKILLS_SEARCH_FAILED,
+      });
     }
   },
 });
@@ -1223,6 +1493,7 @@ export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
   summary: 'Get popular skills from skills.sh',
   description: 'Proxies popular skills requests to skills.sh API to avoid CORS issues',
   tags: ['Workspace', 'Skills'],
+  errors: ['SKILLS_REGISTRY_REQUEST_FAILED', 'WORKSPACE_POPULAR_SKILLS_FETCH_FAILED'],
   handler: async ({ limit, offset }) => {
     try {
       const controller = new AbortController();
@@ -1236,6 +1507,8 @@ export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
       if (!response.ok) {
         throw new HTTPException(502, {
           message: `Skills API error: ${response.status} ${response.statusText}`,
+          code: SERVER_ERROR_CODES.SKILLS_REGISTRY_REQUEST_FAILED,
+          metadata: { upstreamStatus: response.status },
         });
       }
 
@@ -1262,7 +1535,10 @@ export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
       if (error instanceof HTTPException) {
         throw error;
       }
-      return handleError(error, 'Error fetching popular skills');
+      return handleError(error, {
+        message: 'Error fetching popular skills',
+        code: SERVER_ERROR_CODES.WORKSPACE_POPULAR_SKILLS_FETCH_FAILED,
+      });
     }
   },
 });
@@ -1281,6 +1557,8 @@ function assertSafeSkillName(name: string): string {
   if (!SKILL_NAME_REGEX.test(name)) {
     throw new HTTPException(400, {
       message: `Invalid skill name "${name}". Names must start with alphanumeric and contain only letters, numbers, hyphens, and underscores.`,
+      code: SERVER_ERROR_CODES.SKILL_NAME_INVALID,
+      metadata: { skillName: name },
     });
   }
   return name;
@@ -1295,6 +1573,8 @@ function assertSafeFilePath(filePath: string): string {
   if (filePath.startsWith('/') || /^[a-zA-Z]:/.test(filePath)) {
     throw new HTTPException(400, {
       message: `Invalid file path "${filePath}". Absolute paths are not allowed.`,
+      code: SERVER_ERROR_CODES.WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED,
+      metadata: { path: filePath },
     });
   }
   // Reject path traversal attempts
@@ -1303,6 +1583,8 @@ function assertSafeFilePath(filePath: string): string {
     if (segment === '..' || segment === '.') {
       throw new HTTPException(400, {
         message: `Invalid file path "${filePath}". Path traversal is not allowed.`,
+        code: SERVER_ERROR_CODES.WORKSPACE_PATH_TRAVERSAL,
+        metadata: { path: filePath },
       });
     }
   }
@@ -1359,6 +1641,11 @@ export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
   summary: 'Preview skill content',
   description: 'Fetches the skill content from the Skills API.',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'SKILLS_REGISTRY_SKILL_CONTENT_UNAVAILABLE',
+    'SKILLS_REGISTRY_SKILL_NOT_FOUND',
+    'WORKSPACE_SKILL_PREVIEW_FETCH_FAILED',
+  ],
   handler: async ({ owner, repo, path: skillName }) => {
     try {
       const controller = new AbortController();
@@ -1371,6 +1658,8 @@ export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
       if (!response.ok) {
         throw new HTTPException(404, {
           message: `Could not find skill "${skillName}" for ${owner}/${repo}`,
+          code: SERVER_ERROR_CODES.SKILLS_REGISTRY_SKILL_NOT_FOUND,
+          metadata: { skillName, owner, repo },
         });
       }
 
@@ -1380,6 +1669,8 @@ export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
       if (!content) {
         throw new HTTPException(404, {
           message: `No content available for skill "${skillName}"`,
+          code: SERVER_ERROR_CODES.SKILLS_REGISTRY_SKILL_CONTENT_UNAVAILABLE,
+          metadata: { skillName },
         });
       }
 
@@ -1388,7 +1679,10 @@ export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
       if (error instanceof HTTPException) {
         throw error;
       }
-      return handleError(error, 'Error fetching skill preview');
+      return handleError(error, {
+        message: 'Error fetching skill preview',
+        code: SERVER_ERROR_CODES.WORKSPACE_SKILL_PREVIEW_FETCH_FAILED,
+      });
     }
   },
 });
@@ -1407,21 +1701,41 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
   summary: 'Install skill from Skills API',
   description: 'Installs a skill by fetching files from the Skills API and writing to workspace filesystem.',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'SKILLS_REGISTRY_SKILL_NOT_FOUND',
+    'SKILL_NAME_INVALID',
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_MOUNT_NOT_FOUND',
+    'WORKSPACE_MOUNT_READ_ONLY',
+    'WORKSPACE_NOT_FOUND',
+    'WORKSPACE_NO_WRITABLE_MOUNT',
+    'WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED',
+    'WORKSPACE_PATH_TRAVERSAL',
+    'WORKSPACE_READ_ONLY',
+    'WORKSPACE_SKILL_INSTALL_FAILED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, workspaceId, owner, repo, skillName, mount }) => {
     try {
       requireWorkspaceV1Support();
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace) {
-        throw new HTTPException(404, { message: 'Workspace not found' });
+        throw new HTTPException(404, { message: 'Workspace not found', code: SERVER_ERROR_CODES.WORKSPACE_NOT_FOUND });
       }
 
       if (!workspace.filesystem) {
-        throw new HTTPException(400, { message: 'Workspace filesystem not available' });
+        throw new HTTPException(400, {
+          message: 'Workspace filesystem not available',
+          code: SERVER_ERROR_CODES.WORKSPACE_FILESYSTEM_NOT_CONFIGURED,
+        });
       }
 
       if (workspace.filesystem.readOnly) {
-        throw new HTTPException(403, { message: 'Workspace is read-only' });
+        throw new HTTPException(403, {
+          message: 'Workspace is read-only',
+          code: SERVER_ERROR_CODES.WORKSPACE_READ_ONLY,
+        });
       }
 
       // Fetch skill files from the Skills API
@@ -1429,6 +1743,8 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
       if (!result || result.files.length === 0) {
         throw new HTTPException(404, {
           message: `Could not find skill "${skillName}" in ${owner}/${repo}.`,
+          code: SERVER_ERROR_CODES.SKILLS_REGISTRY_SKILL_NOT_FOUND,
+          metadata: { skillName, owner, repo },
         });
       }
 
@@ -1497,7 +1813,10 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
       if (error instanceof HTTPException) {
         throw error;
       }
-      return handleError(error, 'Error installing skill');
+      return handleError(error, {
+        message: 'Error installing skill',
+        code: SERVER_ERROR_CODES.WORKSPACE_SKILL_INSTALL_FAILED,
+      });
     }
   },
 });
@@ -1523,21 +1842,39 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
   summary: 'Remove an installed skill',
   description: 'Removes an installed skill by deleting its directory. Does not require sandbox.',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'SKILL_NAME_INVALID',
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_MOUNT_NOT_FOUND',
+    'WORKSPACE_MOUNT_READ_ONLY',
+    'WORKSPACE_NOT_FOUND',
+    'WORKSPACE_NO_WRITABLE_MOUNT',
+    'WORKSPACE_READ_ONLY',
+    'WORKSPACE_SKILL_NOT_FOUND',
+    'WORKSPACE_SKILL_REMOVE_FAILED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, workspaceId, skillName }) => {
     try {
       requireWorkspaceV1Support();
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace) {
-        throw new HTTPException(404, { message: 'Workspace not found' });
+        throw new HTTPException(404, { message: 'Workspace not found', code: SERVER_ERROR_CODES.WORKSPACE_NOT_FOUND });
       }
 
       if (!workspace.filesystem) {
-        throw new HTTPException(400, { message: 'Workspace filesystem not available' });
+        throw new HTTPException(400, {
+          message: 'Workspace filesystem not available',
+          code: SERVER_ERROR_CODES.WORKSPACE_FILESYSTEM_NOT_CONFIGURED,
+        });
       }
 
       if (workspace.filesystem.readOnly) {
-        throw new HTTPException(403, { message: 'Workspace is read-only' });
+        throw new HTTPException(403, {
+          message: 'Workspace is read-only',
+          code: SERVER_ERROR_CODES.WORKSPACE_READ_ONLY,
+        });
       }
 
       // Validate skill name to prevent path traversal
@@ -1554,7 +1891,11 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
       try {
         await workspace.filesystem.stat(skillPath);
       } catch {
-        throw new HTTPException(404, { message: `Skill "${skillName}" not found at ${skillPath}` });
+        throw new HTTPException(404, {
+          message: `Skill "${skillName}" not found at ${skillPath}`,
+          code: SERVER_ERROR_CODES.WORKSPACE_SKILL_NOT_FOUND,
+          metadata: { skillName },
+        });
       }
 
       // Delete the skill directory
@@ -1580,7 +1921,10 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
       if (error instanceof HTTPException) {
         throw error;
       }
-      return handleError(error, 'Error removing skill');
+      return handleError(error, {
+        message: 'Error removing skill',
+        code: SERVER_ERROR_CODES.WORKSPACE_SKILL_REMOVE_FAILED,
+      });
     }
   },
 });
@@ -1596,21 +1940,37 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
   description:
     'Updates installed skills by re-fetching from GitHub. Specify skillName to update one, or omit to update all.',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'SKILL_NAME_INVALID',
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_NOT_FOUND',
+    'WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED',
+    'WORKSPACE_PATH_TRAVERSAL',
+    'WORKSPACE_READ_ONLY',
+    'WORKSPACE_SKILLS_UPDATE_FAILED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, workspaceId, skillName }) => {
     try {
       requireWorkspaceV1Support();
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace) {
-        throw new HTTPException(404, { message: 'Workspace not found' });
+        throw new HTTPException(404, { message: 'Workspace not found', code: SERVER_ERROR_CODES.WORKSPACE_NOT_FOUND });
       }
 
       if (!workspace.filesystem) {
-        throw new HTTPException(400, { message: 'Workspace filesystem not available' });
+        throw new HTTPException(400, {
+          message: 'Workspace filesystem not available',
+          code: SERVER_ERROR_CODES.WORKSPACE_FILESYSTEM_NOT_CONFIGURED,
+        });
       }
 
       if (workspace.filesystem.readOnly) {
-        throw new HTTPException(403, { message: 'Workspace is read-only' });
+        throw new HTTPException(403, {
+          message: 'Workspace is read-only',
+          code: SERVER_ERROR_CODES.WORKSPACE_READ_ONLY,
+        });
       }
 
       const results: Array<{
@@ -1761,7 +2121,10 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
       if (error instanceof HTTPException) {
         throw error;
       }
-      return handleError(error, 'Error updating skills');
+      return handleError(error, {
+        message: 'Error updating skills',
+        code: SERVER_ERROR_CODES.WORKSPACE_SKILLS_UPDATE_FAILED,
+      });
     }
   },
 });

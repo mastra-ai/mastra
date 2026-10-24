@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import { HttpException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import type { CanActivate, ExecutionContext, OnModuleDestroy } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -109,6 +110,8 @@ export class MastraThrottleGuard implements CanActivate, OnModuleDestroy {
           error: 'Too Many Requests',
           message: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
           retryAfter,
+          code: SERVER_ERROR_CODES.REQUEST_RATE_LIMIT_EXCEEDED,
+          metadata: { retryAfter },
         },
         HttpStatus.TOO_MANY_REQUESTS,
       );

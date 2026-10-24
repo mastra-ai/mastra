@@ -10,6 +10,7 @@
  * filesystem writes, and DB writes happen in the callers.
  */
 
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 
 // =============================================================================
@@ -90,6 +91,8 @@ export function assertSafeSkillName(name: string): string {
   if (!SKILL_NAME_REGEX.test(name)) {
     throw new HTTPException(400, {
       message: `Invalid skill name "${name}". Names must start with alphanumeric and contain only letters, numbers, hyphens, and underscores.`,
+      code: SERVER_ERROR_CODES.SKILL_NAME_INVALID,
+      metadata: { skillName: name },
     });
   }
   return name;
@@ -104,6 +107,8 @@ export function assertSafeFilePath(filePath: string): string {
   if (filePath.startsWith('/') || filePath.startsWith('\\') || /^[a-zA-Z]:[\\/]/.test(filePath)) {
     throw new HTTPException(400, {
       message: `Invalid file path "${filePath}". Absolute paths are not allowed.`,
+      code: SERVER_ERROR_CODES.WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED,
+      metadata: { path: filePath },
     });
   }
   // Normalize backslashes to forward slashes so Windows-style traversal
@@ -113,6 +118,8 @@ export function assertSafeFilePath(filePath: string): string {
     if (segment === '..' || segment === '.') {
       throw new HTTPException(400, {
         message: `Invalid file path "${filePath}". Path traversal is not allowed.`,
+        code: SERVER_ERROR_CODES.WORKSPACE_PATH_TRAVERSAL,
+        metadata: { path: filePath },
       });
     }
   }
@@ -152,6 +159,8 @@ export async function searchSkillsSh({ q, limit }: { q: string; limit: number })
     if (!response.ok) {
       throw new HTTPException(502, {
         message: `Skills API error: ${response.status} ${response.statusText}`,
+        code: SERVER_ERROR_CODES.SKILLS_REGISTRY_REQUEST_FAILED,
+        metadata: { upstreamStatus: response.status },
       });
     }
 
@@ -186,6 +195,8 @@ export async function getPopularSkillsSh({
     if (!response.ok) {
       throw new HTTPException(502, {
         message: `Skills API error: ${response.status} ${response.statusText}`,
+        code: SERVER_ERROR_CODES.SKILLS_REGISTRY_REQUEST_FAILED,
+        metadata: { upstreamStatus: response.status },
       });
     }
 
@@ -226,10 +237,14 @@ export async function previewSkillsSh({
       if (response.status === 404) {
         throw new HTTPException(404, {
           message: `Could not find skill "${skillName}" for ${owner}/${repo}`,
+          code: SERVER_ERROR_CODES.SKILLS_REGISTRY_SKILL_NOT_FOUND,
+          metadata: { skillName, owner, repo },
         });
       }
       throw new HTTPException(502, {
         message: `Skills API error: ${response.status} ${response.statusText}`,
+        code: SERVER_ERROR_CODES.SKILLS_REGISTRY_REQUEST_FAILED,
+        metadata: { upstreamStatus: response.status },
       });
     }
 
@@ -239,6 +254,8 @@ export async function previewSkillsSh({
     if (!content) {
       throw new HTTPException(404, {
         message: `No content available for skill "${skillName}"`,
+        code: SERVER_ERROR_CODES.SKILLS_REGISTRY_SKILL_CONTENT_UNAVAILABLE,
+        metadata: { skillName },
       });
     }
 

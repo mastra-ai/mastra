@@ -939,6 +939,32 @@ describe('Fastify Server Adapter', () => {
       await app.close();
     });
 
+    it('returns ROUTE_NOT_FOUND when no custom route handler matches', async () => {
+      const customRoutes = [
+        registerApiRoute('/custom/missing', {
+          method: 'GET',
+          // No handler is produced, so the framework matches the path but no Mastra handler does.
+          createHandler: async () => undefined as any,
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = Fastify();
+      const adapter = new MastraServer({ app, mastra, customApiRoutes: customRoutes });
+      await adapter.init();
+      const address = await app.listen({ port: 0 });
+
+      const response = await fetch(`${address}/custom/missing?x=1`);
+
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({
+        error: 'Not Found',
+        code: 'ROUTE_NOT_FOUND',
+        metadata: { method: 'GET', path: '/custom/missing' },
+      });
+      await app.close();
+    });
+
     it('registers createRoute routes from customApiRoutes with runtime validation', async () => {
       const route = createRoute({
         method: 'POST',

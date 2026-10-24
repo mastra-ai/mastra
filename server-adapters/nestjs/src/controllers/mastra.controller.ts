@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { normalizeQueryParams } from '@mastra/server/server-adapter';
 import {
@@ -101,19 +102,31 @@ export class MastraController {
     }
 
     if (!routePath) {
-      throw new NotFoundException(`Route not found: ${method} ${path}`);
+      throw new NotFoundException({
+        message: `Route not found: ${method} ${path}`,
+        code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+        metadata: { method, path },
+      });
     }
 
     // Reject paths with double slashes (e.g., /api//agents)
     if (routePath.includes('//')) {
-      throw new NotFoundException(`Route not found: ${method} ${path}`);
+      throw new NotFoundException({
+        message: `Route not found: ${method} ${path}`,
+        code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+        metadata: { method, path },
+      });
     }
 
     // Find matching route using RouteHandlerService's consolidated route matching
     const matchResult = this.routeHandler.matchRoute(method, routePath);
 
     if (!matchResult) {
-      throw new NotFoundException(`Route not found: ${method} ${path}`);
+      throw new NotFoundException({
+        message: `Route not found: ${method} ${path}`,
+        code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+        metadata: { method, path },
+      });
     }
 
     const { route, pathParams } = matchResult;

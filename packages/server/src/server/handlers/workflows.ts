@@ -12,6 +12,7 @@ import type {
   WorkflowRunState,
 } from '@mastra/core/workflows';
 import { z } from 'zod/v4';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import { streamResponseSchema } from '../schemas/agents';
@@ -116,7 +117,7 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
   const logger = mastra.getLogger();
 
   if (!workflowId) {
-    throw new HTTPException(400, { message: 'Workflow ID is required' });
+    throw new HTTPException(400, { message: 'Workflow ID is required', code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED });
   }
 
   let workflow;
@@ -149,7 +150,11 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
   }
 
   if (!workflow) {
-    throw new HTTPException(404, { message: 'Workflow not found' });
+    throw new HTTPException(404, {
+      message: 'Workflow not found',
+      code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+      metadata: { workflowId },
+    });
   }
 
   return { workflow };
@@ -171,6 +176,7 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
   description: 'Returns a list of all available workflows in the system',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: ['WORKFLOWS_LIST_FAILED'],
   handler: (async ({ mastra, partial, requestContext }: any) => {
     try {
       const workflows = mastra.listWorkflows({ serialized: false });
@@ -204,7 +210,7 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
 
       return _workflows;
     } catch (error) {
-      return handleError(error, 'Error getting workflows');
+      return handleError(error, { message: 'Error getting workflows', code: SERVER_ERROR_CODES.WORKFLOWS_LIST_FAILED });
     }
   }) as any,
 });
@@ -231,6 +237,7 @@ export const LIST_WORKFLOW_RUN_COUNTS_ROUTE = createRoute({
     'Returns per-workflow counts of currently running and suspended (awaiting resume) runs, keyed by the workflow registry key used in the Mastra config',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: ['WORKFLOW_RUN_COUNTS_LIST_FAILED'],
   handler: (async ({ mastra, requestContext }: any) => {
     try {
       const fgaProvider = mastra.getServer?.()?.fga;
@@ -307,7 +314,10 @@ export const LIST_WORKFLOW_RUN_COUNTS_ROUTE = createRoute({
       }
       return counts;
     } catch (error) {
-      return handleError(error, 'Error getting workflow run counts');
+      return handleError(error, {
+        message: 'Error getting workflow run counts',
+        code: SERVER_ERROR_CODES.WORKFLOW_RUN_COUNTS_LIST_FAILED,
+      });
     }
   }) as any,
 });
@@ -322,15 +332,19 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific workflow',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: ['WORKFLOW_GET_FAILED', 'WORKFLOW_ID_REQUIRED', 'WORKFLOW_NOT_FOUND'],
   handler: (async ({ mastra, workflowId }: any) => {
     try {
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
       return getWorkflowInfo(workflow, false);
     } catch (error) {
-      return handleError(error, 'Error getting workflow');
+      return handleError(error, { message: 'Error getting workflow', code: SERVER_ERROR_CODES.WORKFLOW_GET_FAILED });
     }
   }) as any,
 });
@@ -346,6 +360,7 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
   description: 'Returns a paginated list of execution runs for the specified workflow',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: ['PAGINATION_PARAMS_INVALID', 'WORKFLOW_ID_REQUIRED', 'WORKFLOW_NOT_FOUND', 'WORKFLOW_RUNS_LIST_FAILED'],
   handler: async ({
     mastra,
     workflowId,
@@ -365,7 +380,10 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       // Support both page/perPage and limit/offset for backwards compatibility
@@ -384,14 +402,24 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
         finalPerPage !== undefined &&
         (typeof finalPerPage !== 'number' || !Number.isInteger(finalPerPage) || finalPerPage <= 0)
       ) {
-        throw new HTTPException(400, { message: 'perPage must be a positive integer' });
+        throw new HTTPException(400, {
+          message: 'perPage must be a positive integer',
+          code: SERVER_ERROR_CODES.PAGINATION_PARAMS_INVALID,
+        });
       }
       if (finalPage !== undefined && (!Number.isInteger(finalPage) || finalPage < 0)) {
-        throw new HTTPException(400, { message: 'page must be a non-negative integer' });
+        throw new HTTPException(400, {
+          message: 'page must be a non-negative integer',
+          code: SERVER_ERROR_CODES.PAGINATION_PARAMS_INVALID,
+        });
       }
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
       const workflowRuns = (await workflow.listWorkflowRuns({
         fromDate: fromDate ? (typeof fromDate === 'string' ? new Date(fromDate) : fromDate) : undefined,
@@ -414,7 +442,10 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
       }
       return workflowRuns;
     } catch (error) {
-      return handleError(error, 'Error getting workflow runs');
+      return handleError(error, {
+        message: 'Error getting workflow runs',
+        code: SERVER_ERROR_CODES.WORKFLOW_RUNS_LIST_FAILED,
+      });
     }
   },
 });
@@ -450,22 +481,41 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
     'Returns a workflow run with metadata and processed execution state. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=result,steps). Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_GET_FAILED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: async ({ mastra, workflowId, runId, fields, withNestedWorkflows, requestContext }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'Run ID is required' });
+        throw new HTTPException(400, {
+          message: 'Run ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       // Parse fields parameter (comma-separated string)
@@ -477,14 +527,20 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
       });
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
       return run;
     } catch (error) {
-      return handleError(error, 'Error getting workflow run');
+      return handleError(error, {
+        message: 'Error getting workflow run',
+        code: SERVER_ERROR_CODES.WORKFLOW_RUN_GET_FAILED,
+      });
     }
   },
 });
@@ -499,28 +555,50 @@ export const DELETE_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   description: 'Deletes a specific workflow run by ID',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_DELETE_FAILED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: async ({ mastra, workflowId, runId, requestContext }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'Run ID is required' });
+        throw new HTTPException(400, {
+          message: 'Run ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       // Validate ownership before deletion
       const run = await workflow.getWorkflowRunById(runId);
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
@@ -528,7 +606,10 @@ export const DELETE_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
 
       return { message: 'Workflow run deleted' };
     } catch (error) {
-      return handleError(error, 'Error deleting workflow run');
+      return handleError(error, {
+        message: 'Error deleting workflow run',
+        code: SERVER_ERROR_CODES.WORKFLOW_RUN_DELETE_FAILED,
+      });
     }
   },
 });
@@ -549,19 +630,33 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
   // starting/streaming a workflow), so allow either permission. `write` is kept
   // for back-compat with roles that already grant it.
   requiresPermission: ['workflows:write', 'workflows:execute'],
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_CREATE_FAILED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: async ({ mastra, workflowId, runId, resourceId, disableScorers, requestContext }) => {
     try {
       // Use effective resourceId (context key takes precedence over client-provided value)
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       if (runId) {
@@ -572,7 +667,10 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
 
       return { runId: run.runId };
     } catch (error) {
-      return handleError(error, 'Error creating workflow run');
+      return handleError(error, {
+        message: 'Error creating workflow run',
+        code: SERVER_ERROR_CODES.WORKFLOW_RUN_CREATE_FAILED,
+      });
     }
   },
 });
@@ -588,23 +686,43 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
   description: 'Executes a workflow and streams the results in real-time',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ALREADY_FINISHED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+    'WORKFLOW_STREAM_FAILED',
+  ],
   handler: async ({ mastra, workflowId, runId, resourceId, requestContext, ...params }) => {
     try {
       // Use effective resourceId (context key takes precedence over client-provided value)
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to stream workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to stream workflow',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const existingRun = await workflow.getWorkflowRunById(runId, { withNestedWorkflows: false });
@@ -615,6 +733,8 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
           message:
             `Workflow run ${runId} already finished with status "${existingRun.status}". ` +
             `Use /observe to read its stream back, or stream a new runId.`,
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ALREADY_FINISHED,
+          metadata: { runId, status: existingRun.status },
         });
       }
 
@@ -629,7 +749,10 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
 
       return result.fullStream;
     } catch (error) {
-      return handleError(error, 'Error streaming workflow');
+      return handleError(error, {
+        message: 'Error streaming workflow',
+        code: SERVER_ERROR_CODES.WORKFLOW_STREAM_FAILED,
+      });
     }
   },
 });
@@ -646,28 +769,53 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
   description: 'Resumes a suspended workflow execution and continues streaming results',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RESUME_ALREADY_CLAIMED',
+    'WORKFLOW_RESUME_FAILED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_NOT_SUSPENDED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+  ],
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to resume workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to resume workflow',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
@@ -683,7 +831,10 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
 
       return resumeResult.fullStream;
     } catch (error) {
-      return handleError(error, 'Error resuming workflow');
+      return handleError(error, {
+        message: 'Error resuming workflow',
+        code: SERVER_ERROR_CODES.WORKFLOW_RESUME_FAILED,
+      });
     }
   },
 });
@@ -700,19 +851,34 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
   description: 'Starts a workflow execution asynchronously without streaming results',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ASYNC_START_FAILED',
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+  ],
   handler: async ({ mastra, workflowId, runId, resourceId, requestContext, ...params }) => {
     try {
       // Use effective resourceId (context key takes precedence over client-provided value)
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       if (runId) {
@@ -723,7 +889,10 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
       const result = await _run.start({ ...params, requestContext });
       return result;
     } catch (error) {
-      return handleError(error, 'Error starting async workflow');
+      return handleError(error, {
+        message: 'Error starting async workflow',
+        code: SERVER_ERROR_CODES.WORKFLOW_ASYNC_START_FAILED,
+      });
     }
   },
 });
@@ -740,28 +909,51 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
   description: 'Starts execution of a specific workflow run by ID',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_START_FAILED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+  ],
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to start run' });
+        throw new HTTPException(400, {
+          message: 'runId required to start run',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
@@ -780,7 +972,10 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
 
       return { message: 'Workflow run started' };
     } catch (e) {
-      return handleError(e, 'Error starting workflow run');
+      return handleError(e, {
+        message: 'Error starting workflow run',
+        code: SERVER_ERROR_CODES.WORKFLOW_RUN_START_FAILED,
+      });
     }
   },
 });
@@ -797,28 +992,51 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
     'Observes and streams updates from an already running workflow execution. Supports position-based resume with offset for efficient reconnection.',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'SERVER_CACHE_NOT_FOUND',
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_STREAM_OBSERVE_FAILED',
+  ],
   handler: async ({ mastra, workflowId, runId, offset, requestContext }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to observe workflow stream' });
+        throw new HTTPException(400, {
+          message: 'runId required to observe workflow stream',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
@@ -826,7 +1044,10 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       const serverCache = mastra.getServerCache();
       if (!serverCache) {
-        throw new HTTPException(500, { message: 'Server cache not found' });
+        throw new HTTPException(500, {
+          message: 'Server cache not found',
+          code: SERVER_ERROR_CODES.SERVER_CACHE_NOT_FOUND,
+        });
       }
 
       // Get cached chunks from the specified index (or 0 if not specified)
@@ -839,7 +1060,10 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
         liveSource: liveStream,
       });
     } catch (error) {
-      return handleError(error, 'Error observing workflow stream');
+      return handleError(error, {
+        message: 'Error observing workflow stream',
+        code: SERVER_ERROR_CODES.WORKFLOW_STREAM_OBSERVE_FAILED,
+      });
     }
   },
 });
@@ -856,28 +1080,53 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
   description: 'Resumes a suspended workflow execution asynchronously without streaming',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RESUME_ALREADY_CLAIMED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_NOT_SUSPENDED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+    'WORKFLOW_STEP_RESUME_FAILED',
+  ],
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to resume workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to resume workflow',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
@@ -887,7 +1136,10 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error resuming workflow step');
+      return handleError(error, {
+        message: 'Error resuming workflow step',
+        code: SERVER_ERROR_CODES.WORKFLOW_STEP_RESUME_FAILED,
+      });
     }
   },
 });
@@ -915,28 +1167,53 @@ export const RESUME_NO_WAIT_WORKFLOW_ROUTE = createRoute({
     'Resumes a suspended workflow execution without waiting (fire-and-forget) and returns immediately with the runId. The workflow continues executing in the background.',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RESUME_ALREADY_CLAIMED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_NOT_SUSPENDED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+    'WORKFLOW_STEP_RESUME_FAILED',
+  ],
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to resume workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to resume workflow',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
@@ -946,7 +1223,10 @@ export const RESUME_NO_WAIT_WORKFLOW_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error resuming workflow step');
+      return handleError(error, {
+        message: 'Error resuming workflow step',
+        code: SERVER_ERROR_CODES.WORKFLOW_STEP_RESUME_FAILED,
+      });
     }
   },
 });
@@ -963,28 +1243,53 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
   description: 'Resumes a suspended workflow execution from a specific step',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RESUME_ALREADY_CLAIMED',
+    'WORKFLOW_RESUME_FAILED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_NOT_SUSPENDED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+  ],
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to resume workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to resume workflow',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
@@ -999,7 +1304,10 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
 
       return { message: 'Workflow run resumed' };
     } catch (error) {
-      return handleError(error, 'Error resuming workflow');
+      return handleError(error, {
+        message: 'Error resuming workflow',
+        code: SERVER_ERROR_CODES.WORKFLOW_RESUME_FAILED,
+      });
     }
   },
 });
@@ -1016,28 +1324,51 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
   description: 'Restarts an active workflow execution asynchronously',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RESTART_FAILED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+  ],
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to restart workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to restart workflow',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
@@ -1047,7 +1378,10 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error restarting workflow');
+      return handleError(error, {
+        message: 'Error restarting workflow',
+        code: SERVER_ERROR_CODES.WORKFLOW_RESTART_FAILED,
+      });
     }
   },
 });
@@ -1064,28 +1398,51 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
   description: 'Restarts an active workflow execution',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RESTART_FAILED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+  ],
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to restart workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to restart workflow',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
@@ -1098,7 +1455,10 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
 
       return { message: 'Workflow run restarted' };
     } catch (error) {
-      return handleError(error, 'Error restarting workflow');
+      return handleError(error, {
+        message: 'Error restarting workflow',
+        code: SERVER_ERROR_CODES.WORKFLOW_RESTART_FAILED,
+      });
     }
   },
 });
@@ -1113,26 +1473,43 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ASYNC_ROUTE = createRoute({
   description: 'Restarts all active workflow runs asynchronously',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RESTART_FAILED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: async ({ mastra, workflowId, requestContext }) => {
     try {
       // Restarting every active run spans all owners, so only a privileged caller may do it:
       // checked as access to a run with no owner.
       await validateRunOwnership({ resourceId: null }, getEffectiveResourceId(requestContext, undefined), mastra);
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       await workflow.restartAllActiveWorkflowRuns();
 
       return { message: 'All active workflow runs restarted' };
     } catch (error) {
-      return handleError(error, 'Error restarting workflow');
+      return handleError(error, {
+        message: 'Error restarting workflow',
+        code: SERVER_ERROR_CODES.WORKFLOW_RESTART_FAILED,
+      });
     }
   },
 });
@@ -1147,19 +1524,33 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE = createRoute({
   description: 'Restarts all active workflow runs',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RESTART_FAILED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: async ({ mastra, workflowId, requestContext }) => {
     try {
       // Restarting every active run spans all owners, so only a privileged caller may do it:
       // checked as access to a run with no owner.
       await validateRunOwnership({ resourceId: null }, getEffectiveResourceId(requestContext, undefined), mastra);
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       void workflow.restartAllActiveWorkflowRuns().catch(error => {
@@ -1168,7 +1559,10 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE = createRoute({
 
       return { message: 'All active workflow runs restarted' };
     } catch (error) {
-      return handleError(error, 'Error restarting workflow');
+      return handleError(error, {
+        message: 'Error restarting workflow',
+        code: SERVER_ERROR_CODES.WORKFLOW_RESTART_FAILED,
+      });
     }
   },
 });
@@ -1185,28 +1579,53 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
   description: 'Time travels a workflow run asynchronously without streaming',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+    'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED',
+    'WORKFLOW_TIME_TRAVEL_FAILED',
+    'WORKFLOW_TIME_TRAVEL_RUN_RUNNING',
+  ],
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to time travel workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to time travel workflow',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
@@ -1216,7 +1635,10 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error time traveling workflow');
+      return handleError(error, {
+        message: 'Error time traveling workflow',
+        code: SERVER_ERROR_CODES.WORKFLOW_TIME_TRAVEL_FAILED,
+      });
     }
   },
 });
@@ -1233,28 +1655,53 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
   description: 'Time travels a workflow run, starting from a specific step',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+    'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED',
+    'WORKFLOW_TIME_TRAVEL_FAILED',
+    'WORKFLOW_TIME_TRAVEL_RUN_RUNNING',
+  ],
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to time travel workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to time travel workflow',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
@@ -1269,7 +1716,10 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
 
       return { message: 'Workflow run time travel started' };
     } catch (error) {
-      return handleError(error, 'Error time traveling workflow');
+      return handleError(error, {
+        message: 'Error time traveling workflow',
+        code: SERVER_ERROR_CODES.WORKFLOW_TIME_TRAVEL_FAILED,
+      });
     }
   },
 });
@@ -1285,28 +1735,53 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
   description: 'Time travels a workflow run, starting from a specific step, and streams the results in real-time',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+    'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED',
+    'WORKFLOW_TIME_TRAVEL_RUN_RUNNING',
+    'WORKFLOW_TIME_TRAVEL_STREAM_FAILED',
+  ],
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to time travel workflow stream' });
+        throw new HTTPException(400, {
+          message: 'runId required to time travel workflow stream',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       // Validate ownership of existing run before time traveling
       const existingRun = await workflow.getWorkflowRunById(runId);
       if (!existingRun) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
       await validateRunOwnership(existingRun, effectiveResourceId, mastra);
 
@@ -1321,7 +1796,10 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
 
       return result.fullStream;
     } catch (error) {
-      return handleError(error, 'Error time traveling workflow stream');
+      return handleError(error, {
+        message: 'Error time traveling workflow stream',
+        code: SERVER_ERROR_CODES.WORKFLOW_TIME_TRAVEL_STREAM_FAILED,
+      });
     }
   },
 });
@@ -1336,28 +1814,50 @@ export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
   description: 'Cancels an in-progress workflow execution',
   tags: ['Workflows'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_CANCEL_FAILED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: async ({ mastra, workflowId, runId, requestContext }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to cancel workflow run' });
+        throw new HTTPException(400, {
+          message: 'runId required to cancel workflow run',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
@@ -1368,7 +1868,10 @@ export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
 
       return { message: 'Workflow run cancelled' };
     } catch (error) {
-      return handleError(error, 'Error canceling workflow run');
+      return handleError(error, {
+        message: 'Error canceling workflow run',
+        code: SERVER_ERROR_CODES.WORKFLOW_RUN_CANCEL_FAILED,
+      });
     }
   },
 });
@@ -1386,22 +1889,41 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
   description: 'Legacy endpoint for streaming workflow execution. Use /workflows/:workflowId/stream instead.',
   tags: ['Workflows', 'Legacy'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_EXECUTE_FAILED',
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+  ],
   handler: async ({ mastra, workflowId, runId, resourceId, requestContext, ...params }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to resume workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to resume workflow',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const serverCache = mastra.getServerCache();
@@ -1424,7 +1946,10 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
 
       return result.stream;
     } catch (error) {
-      return handleError(error, 'Error executing workflow');
+      return handleError(error, {
+        message: 'Error executing workflow',
+        code: SERVER_ERROR_CODES.WORKFLOW_EXECUTE_FAILED,
+      });
     }
   },
 });
@@ -1440,28 +1965,52 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
   description: 'Legacy endpoint for observing workflow stream. Use /workflows/:workflowId/observe instead.',
   tags: ['Workflows', 'Legacy'],
   requiresAuth: true,
+  errors: [
+    'SERVER_CACHE_NOT_FOUND',
+    'WORKFLOW_ID_REQUIRED',
+    'WORKFLOW_NOT_FOUND',
+    'WORKFLOW_OBSERVE_STREAM_UNAVAILABLE',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_ID_REQUIRED',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_STREAM_OBSERVE_FAILED',
+  ],
   handler: async ({ mastra, workflowId, runId, requestContext }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: SERVER_ERROR_CODES.WORKFLOW_ID_REQUIRED,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to observe workflow stream' });
+        throw new HTTPException(400, {
+          message: 'runId required to observe workflow stream',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+          metadata: { workflowId },
+        });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, {
+          message: 'Workflow run not found',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_NOT_FOUND,
+        });
       }
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
@@ -1469,7 +2018,10 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       const serverCache = mastra.getServerCache();
       if (!serverCache) {
-        throw new HTTPException(500, { message: 'Server cache not found' });
+        throw new HTTPException(500, {
+          message: 'Server cache not found',
+          code: SERVER_ERROR_CODES.SERVER_CACHE_NOT_FOUND,
+        });
       }
 
       // Get cached chunks and create replay stream
@@ -1477,7 +2029,10 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
       const result = _run.observeStreamLegacy();
 
       if (!result.stream) {
-        throw new HTTPException(500, { message: 'Failed to create observe stream' });
+        throw new HTTPException(500, {
+          message: 'Failed to create observe stream',
+          code: SERVER_ERROR_CODES.WORKFLOW_OBSERVE_STREAM_UNAVAILABLE,
+        });
       }
 
       return createReplayStream<StreamEvent>({
@@ -1485,7 +2040,10 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
         liveSource: result.stream,
       });
     } catch (error) {
-      return handleError(error, 'Error observing workflow stream');
+      return handleError(error, {
+        message: 'Error observing workflow stream',
+        code: SERVER_ERROR_CODES.WORKFLOW_STREAM_OBSERVE_FAILED,
+      });
     }
   },
 });
@@ -1576,6 +2134,11 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
     'Internal endpoint used by standalone OrchestrationWorker instances to execute workflow steps remotely via HttpRemoteStrategy.',
   tags: ['Workflows', 'Worker'],
   requiresAuth: true,
+  errors: [
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+    'WORKFLOW_STEP_EXECUTE_FAILED',
+  ],
   handler: (async ({ mastra, workflowId, runId, ...body }: StepExecutionHandlerArgs) => {
     try {
       // The adapter replaces the body's requestContext with the server-built context.
@@ -1611,7 +2174,10 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error executing workflow step');
+      return handleError(error, {
+        message: 'Error executing workflow step',
+        code: SERVER_ERROR_CODES.WORKFLOW_STEP_EXECUTE_FAILED,
+      });
     }
   }) as any,
 });
@@ -1677,6 +2243,12 @@ export const RECEIVE_WORKFLOW_EVENT_ROUTE = createRoute({
   // definitions, so `workflows:execute` is the more accurate fit. `write` is
   // kept for back-compat with service principals that already grant it.
   requiresPermission: ['workflows:write', 'workflows:execute'],
+  errors: [
+    'WORKFLOW_EVENT_RECEIVE_FAILED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_CREATED_AT_INVALID',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: (async ({ mastra, event, requestContext }: ReceiveWorkflowEventHandlerArgs) => {
     try {
       const workflowName = (event.data as { workflowId?: unknown } | undefined)?.workflowId;
@@ -1691,11 +2263,17 @@ export const RECEIVE_WORKFLOW_EVENT_ROUTE = createRoute({
       const rawCreatedAt = (event as unknown as { createdAt: unknown }).createdAt;
       const createdAt = rawCreatedAt instanceof Date ? rawCreatedAt : new Date(rawCreatedAt as string);
       if (Number.isNaN(createdAt.getTime())) {
-        throw new HTTPException(400, { message: 'Invalid createdAt' });
+        throw new HTTPException(400, {
+          message: 'Invalid createdAt',
+          code: SERVER_ERROR_CODES.WORKFLOW_RUN_CREATED_AT_INVALID,
+        });
       }
       return await mastra.handleWorkflowEvent({ ...event, createdAt });
     } catch (error) {
-      return handleError(error, 'Error receiving workflow event');
+      return handleError(error, {
+        message: 'Error receiving workflow event',
+        code: SERVER_ERROR_CODES.WORKFLOW_EVENT_RECEIVE_FAILED,
+      });
     }
   }) as any,
 });

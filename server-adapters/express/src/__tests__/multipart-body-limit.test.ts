@@ -107,7 +107,7 @@ describe('Express multipart body limit without Content-Length', () => {
     const response = await sendChunked(port, body);
 
     expect(response.status).toBe(413);
-    expect(JSON.parse(response.body)).toEqual({ error: 'Request body too large' });
+    expect(JSON.parse(response.body)).toEqual({ error: 'Request body too large', code: 'REQUEST_BODY_TOO_LARGE' });
     expect(response.connection).toBe('close');
     expect(handlerCalls).toBe(0);
   });

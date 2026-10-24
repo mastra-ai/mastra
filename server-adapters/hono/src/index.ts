@@ -3,6 +3,8 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
+import type { ServerErrorCode } from '@mastra/server/error-codes';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -11,8 +13,9 @@ import {
   applyMcpRequestAuth,
   checkRouteFGA,
   getFGAProvider,
-  getCustomHTTPExceptionResponse,
-  getHTTPErrorResponse,
+  ensureErrorCode,
+  formatErrorResponse,
+  getCustomHTTPExceptionResponseWithCode,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -297,7 +300,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     // Use queries() to get all values for repeated params (e.g., ?tags=a&tags=b -> { tags: ['a', 'b'] })
     const queryParams = normalizeQueryParams(request.queries());
     let body: unknown;
-    let bodyParseError: { message: string } | undefined;
+    let bodyParseError: { message: string; code: ServerErrorCode } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.header('content-type') || '';
@@ -316,6 +319,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
           bodyParseError = {
             message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+            code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID,
           };
         }
       } else if (contentType.includes('application/json')) {
@@ -335,6 +339,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             // Track JSON parse error to return 400 Bad Request
             bodyParseError = {
               message: error instanceof Error ? error.message : 'Invalid JSON in request body',
+              code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
             };
           }
         }
@@ -489,15 +494,21 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         bodyLimit({
           maxSize,
           onError: (c: Context) => {
-            let errorResponse: unknown = { error: 'Request body too large' };
+            let errorResponse: unknown = {
+              error: 'Request body too large',
+              code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
+            };
             if (route.maxBodySize === undefined && this.bodyLimitOptions) {
               try {
-                errorResponse = this.bodyLimitOptions.onError(errorResponse);
+                errorResponse = ensureErrorCode(
+                  this.bodyLimitOptions.onError(errorResponse),
+                  SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
+                );
               } catch {
                 // Fall back to the default response.
               }
             }
-            return c.json(errorResponse, 413);
+            return c.json(errorResponse as any, 413);
           },
         }),
       );
@@ -528,7 +539,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
           // If this is an auth error (not just a success-with-headers), return error response
           if (authResult.error) {
-            return c.json({ error: authResult.error }, authResult.status as any);
+            return c.json(
+              { error: authResult.error, code: authResult.code, metadata: authResult.metadata },
+              authResult.status as any,
+            );
           }
         }
 
@@ -536,10 +550,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
         // Return 400 Bad Request if body parsing failed (e.g., malformed JSON)
         if (params.bodyParseError) {
+          const issues = [{ field: 'body', message: params.bodyParseError.message }];
           return c.json(
             {
               error: 'Invalid request body',
-              issues: [{ field: 'body', message: params.bodyParseError.message }],
+              issues,
+              code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
             },
             400,
           );
@@ -556,10 +572,13 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               const { status, body } = this.resolveValidationError(route, error, 'query');
               return c.json(body as any, status as any);
             }
+            const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
             return c.json(
               {
                 error: 'Invalid query parameters',
-                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+                issues,
+                code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+                metadata: { location: 'query' },
               },
               400,
             );
@@ -577,10 +596,13 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               const { status, body } = this.resolveValidationError(route, error, 'body');
               return c.json(body as any, status as any);
             }
+            const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
             return c.json(
               {
                 error: 'Invalid request body',
-                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+                issues,
+                code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+                metadata: { location: 'body' },
               },
               400,
             );
@@ -599,10 +621,13 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               const { status, body } = this.resolveValidationError(route, error, 'path');
               return c.json(body as any, status as any);
             }
+            const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
             return c.json(
               {
                 error: 'Invalid path parameters',
-                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+                issues,
+                code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+                metadata: { location: 'path' },
               },
               400,
             );
@@ -639,6 +664,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
                 {
                   error: permissionError.error,
                   message: permissionError.message,
+                  code: permissionError.code,
+                  metadata: permissionError.metadata,
                 },
                 permissionError.status as any,
               );
@@ -653,7 +680,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           ...(typeof params.body === 'object' ? params.body : {}),
         });
         if (fgaError) {
-          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
+          return c.json(
+            { error: fgaError.error, message: fgaError.message, code: fgaError.code, metadata: fgaError.metadata },
+            fgaError.status as any,
+          );
         }
 
         try {
@@ -675,12 +705,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               method: route.method,
             });
           }
-          const customResponse = getCustomHTTPExceptionResponse(error);
+          const customResponse = await getCustomHTTPExceptionResponseWithCode(error);
           if (customResponse) {
             return customResponse;
           }
 
-          const { status, body } = getHTTPErrorResponse(error);
+          const { status, body } = formatErrorResponse(error);
           return c.json(body, status as any);
         }
       },
@@ -721,7 +751,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             }
           }
           if (authError.error) {
-            return c.json({ error: authError.error }, authError.status as any);
+            return c.json(
+              { error: authError.error, code: authError.code, metadata: authError.metadata },
+              authError.status as any,
+            );
           }
         }
 
@@ -740,7 +773,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             );
             if (permissionError) {
               return c.json(
-                { error: permissionError.error, message: permissionError.message },
+                {
+                  error: permissionError.error,
+                  message: permissionError.message,
+                  code: permissionError.code,
+                  metadata: permissionError.metadata,
+                },
                 permissionError.status as any,
               );
             }
@@ -784,7 +822,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           ...c.req.param(),
         });
         if (fgaError) {
-          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
+          return c.json(
+            { error: fgaError.error, message: fgaError.message, code: fgaError.code, metadata: fgaError.metadata },
+            fgaError.status as any,
+          );
         }
 
         const reqHeaders: Record<string, string | string[] | undefined> = {};
@@ -811,7 +852,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           executionCtx,
         );
         if (!response) {
-          return c.json({ error: 'Not Found' }, 404);
+          return c.json(
+            {
+              error: 'Not Found',
+              code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+              metadata: { method: c.req.method, path: c.req.path },
+            },
+            404,
+          );
         }
         return response;
       };

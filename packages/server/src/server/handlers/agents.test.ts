@@ -1156,7 +1156,12 @@ describe('Agent Routes Authorization', () => {
             resource: 'user-a', // Client tries to use their resource ID
           },
         } as any),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        }),
+      );
     });
 
     it('strips a client-supplied actor before forwarding to agent.generate', async () => {
@@ -1313,7 +1318,12 @@ describe('Agent Routes Authorization', () => {
             resource: 'user-a',
           },
         } as any),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        }),
+      );
     });
 
     it('should override client-provided resource with context value', async () => {
@@ -1615,7 +1625,7 @@ describe('Agent Routes Authorization', () => {
           abortSignal: new AbortController().signal,
           resumeData: { approved: true },
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Run id is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Run id is required', code: 'AGENT_RUN_ID_REQUIRED' }));
     });
 
     it('should return 403 when memory option specifies thread owned by different resource', async () => {
@@ -1640,7 +1650,12 @@ describe('Agent Routes Authorization', () => {
             resource: 'user-a',
           },
         } as any),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        }),
+      );
     });
 
     it('should return 403 when runId belongs to a different resource', async () => {
@@ -1658,7 +1673,10 @@ describe('Agent Routes Authorization', () => {
           resumeData: { step: 'next' },
         } as any),
       ).rejects.toThrow(
-        new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' }),
+        new HTTPException(403, {
+          message: 'Access denied: workflow run belongs to a different resource',
+          code: 'WORKFLOW_RUN_ACCESS_DENIED',
+        }),
       );
     });
 
@@ -1957,7 +1975,10 @@ describe('Agent Routes Authorization', () => {
           toolCallId: 'tool-call-1',
         }),
       ).rejects.toThrow(
-        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+        new HTTPException(403, {
+          message: 'Access denied: durable run belongs to a different resource',
+          code: 'DURABLE_RUN_ACCESS_DENIED',
+        }),
       );
       expect(execution).not.toHaveBeenCalled();
     });
@@ -1980,7 +2001,10 @@ describe('Agent Routes Authorization', () => {
           }),
         ),
       ).rejects.toThrow(
-        new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' }),
+        new HTTPException(403, {
+          message: 'Access denied: tool call is not suspended on this durable run',
+          code: 'DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED',
+        }),
       );
       expect(execution).not.toHaveBeenCalled();
     });
@@ -2070,7 +2094,10 @@ describe('Agent Routes Authorization', () => {
           }),
         ),
       ).rejects.toThrow(
-        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+        new HTTPException(403, {
+          message: 'Access denied: durable run belongs to a different resource',
+          code: 'DURABLE_RUN_ACCESS_DENIED',
+        }),
       );
       expect(execution).not.toHaveBeenCalled();
     });
@@ -2089,7 +2116,10 @@ describe('Agent Routes Authorization', () => {
           toolCallId: 'tool-call-1',
         }),
       ).rejects.toThrow(
-        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+        new HTTPException(403, {
+          message: 'Access denied: durable run belongs to a different resource',
+          code: 'DURABLE_RUN_ACCESS_DENIED',
+        }),
       );
       expect(Date.now() - started).toBeLessThan(1000);
     });
@@ -2117,7 +2147,10 @@ describe('Agent Routes Authorization', () => {
       const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
       await expect(callResume(route, { resourceId: 'user-a' })).rejects.toThrow(
-        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+        new HTTPException(403, {
+          message: 'Access denied: durable run belongs to a different resource',
+          code: 'DURABLE_RUN_ACCESS_DENIED',
+        }),
       );
       expect(execution).not.toHaveBeenCalled();
     });
@@ -2163,7 +2196,10 @@ describe('Agent Routes Authorization', () => {
       const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
       await expect(pastSnapshotWait(() => callResume(route, { resourceId: 'user-a' }))).rejects.toThrow(
-        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+        new HTTPException(403, {
+          message: 'Access denied: durable run belongs to a different resource',
+          code: 'DURABLE_RUN_ACCESS_DENIED',
+        }),
       );
       expect(execution).not.toHaveBeenCalled();
     });
@@ -2173,7 +2209,10 @@ describe('Agent Routes Authorization', () => {
       const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
       await expect(callResume(route, { resourceId: 'user-a', thread: 'thread-b' })).rejects.toThrow(
-        new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+        new HTTPException(403, {
+          message: 'Access denied: durable run belongs to a different thread',
+          code: 'DURABLE_RUN_ACCESS_DENIED',
+        }),
       );
       expect(execution).not.toHaveBeenCalled();
     });
@@ -2183,7 +2222,10 @@ describe('Agent Routes Authorization', () => {
       const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
       await expect(callResume(route, { resourceId: 'user-a', thread: 'thread-b' })).rejects.toThrow(
-        new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+        new HTTPException(403, {
+          message: 'Access denied: durable run belongs to a different thread',
+          code: 'DURABLE_RUN_ACCESS_DENIED',
+        }),
       );
       expect(execution).not.toHaveBeenCalled();
     });
@@ -2250,7 +2292,10 @@ describe('Agent Routes Authorization', () => {
             memory: { thread: 'thread-b', resource: 'user-a' },
           } as any),
         ).rejects.toThrow(
-          new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+          new HTTPException(403, {
+            message: 'Access denied: durable run belongs to a different thread',
+            code: 'DURABLE_RUN_ACCESS_DENIED',
+          }),
         );
         expect(execution).not.toHaveBeenCalled();
       },
@@ -2478,7 +2523,7 @@ describe('Agent Routes Authorization', () => {
           requestContext,
           abortSignal: new AbortController().signal,
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Run id is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Run id is required', code: 'AGENT_RUN_ID_REQUIRED' }));
     });
 
     it('should return 400 when the target agent is not a durable agent', async () => {
@@ -2495,6 +2540,7 @@ describe('Agent Routes Authorization', () => {
       ).rejects.toThrow(
         new HTTPException(400, {
           message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+          code: 'AGENT_RECOVER_UNSUPPORTED',
         }),
       );
     });
@@ -2516,7 +2562,10 @@ describe('Agent Routes Authorization', () => {
           runId: 'recover-run-owned-by-b',
         } as any),
       ).rejects.toThrow(
-        new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' }),
+        new HTTPException(403, {
+          message: 'Access denied: workflow run belongs to a different resource',
+          code: 'WORKFLOW_RUN_ACCESS_DENIED',
+        }),
       );
 
       delete (mockAgent as any).recover;
@@ -3582,7 +3631,12 @@ describe('Agent Routes Authorization', () => {
           toolCallId: 'tool-call-123',
           approved: true,
         } as any),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        }),
+      );
       expect((mockAgent as any).sendToolApproval).not.toHaveBeenCalled();
     });
 
@@ -3605,7 +3659,12 @@ describe('Agent Routes Authorization', () => {
           toolCallId: 'tool-call-123',
           approved: true,
         } as any),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        }),
+      );
       expect((mockAgent as any).sendToolApproval).not.toHaveBeenCalled();
     });
 
@@ -3721,7 +3780,12 @@ describe('Agent Routes Authorization', () => {
           requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
           threadId: 'suspended-thread-owned-by-b',
         } as any),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        }),
+      );
 
       expect((mockAgent as any).listSuspendedRuns).not.toHaveBeenCalled();
     });
@@ -3740,6 +3804,7 @@ describe('Agent Routes Authorization', () => {
       ).rejects.toThrow(
         new HTTPException(403, {
           message: 'Access denied: agent has no memory configured to validate thread ownership',
+          code: 'THREAD_ACCESS_DENIED',
         }),
       );
 
@@ -3757,7 +3822,9 @@ describe('Agent Routes Authorization', () => {
           requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
           threadId: 'nonexistent-thread',
         } as any),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread not found' }));
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: thread not found', code: 'THREAD_ACCESS_DENIED' }),
+      );
 
       expect((mockAgent as any).listSuspendedRuns).not.toHaveBeenCalled();
     });
@@ -3987,7 +4054,12 @@ describe('Agent Routes Authorization', () => {
           resourceId: 'user-a',
           threadId: 'queue-signal-thread-owned-by-b',
         }),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        }),
+      );
       expect((mockAgent as any).queueSignal).not.toHaveBeenCalled();
     });
 
@@ -4082,7 +4154,7 @@ describe('Agent Routes Authorization', () => {
           resourceId: 'user-a',
           threadId: 'signal-thread-reject-user',
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'No model selected' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'No model selected', code: 'AGENT_SIGNAL_SEND_FAILED' }));
     });
 
     it('maps a rejected accepted promise (non-USER error) to a 500', async () => {
@@ -4126,7 +4198,12 @@ describe('Agent Routes Authorization', () => {
           resourceId: 'user-a',
           threadId: 'message-thread-owned-by-b',
         } as any),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        }),
+      );
     });
 
     it('should reject sending a signal to a thread owned by a different resource', async () => {
@@ -4146,7 +4223,12 @@ describe('Agent Routes Authorization', () => {
           resourceId: 'user-a',
           threadId: 'signal-thread-owned-by-b',
         } as any),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        }),
+      );
     });
 
     it('should subscribe to a thread and stream future run chunks', async () => {
@@ -4508,7 +4590,12 @@ describe('Agent Routes Authorization', () => {
           threadId: 'cancel-forbidden',
           signalIds: ['first'],
         }),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        }),
+      );
       expect(cancelQueuedMessages).not.toHaveBeenCalled();
     });
 
@@ -4529,7 +4616,12 @@ describe('Agent Routes Authorization', () => {
           resourceId: 'user-a',
           threadId: 'subscribe-thread-owned-by-b',
         } as any),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        }),
+      );
     });
   });
 });

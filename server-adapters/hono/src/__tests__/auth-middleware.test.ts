@@ -76,7 +76,10 @@ describe('Hono auth middleware helper', () => {
         ...originalGetServer(),
         auth: {
           authenticateToken: async () => {
-            throw new HTTPException(503, { message: 'Authentication service unavailable' });
+            throw new HTTPException(503, {
+              message: 'Authentication service unavailable',
+              code: 'AUTHENTICATION_FAILED',
+            });
           },
         },
       }) as any;
@@ -91,7 +94,10 @@ describe('Hono auth middleware helper', () => {
       headers: { Authorization: 'Bearer any-token' },
     });
     expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toEqual({ error: 'Authentication service unavailable' });
+    await expect(response.json()).resolves.toEqual({
+      error: 'Authentication service unavailable',
+      code: 'AUTHENTICATION_FAILED',
+    });
   });
 
   it('allows opting a raw Hono route out with requiresAuth false', async () => {

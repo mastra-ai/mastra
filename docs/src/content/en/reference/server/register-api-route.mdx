@@ -342,6 +342,22 @@ registerApiRoute('/items/:itemId', {
 })
 ```
 
+The response includes a business `code`. Errors thrown with a status but no code, like the one above, get `UNCATEGORIZED_ERROR`. Errors without a status are sent as a 500 with `UNEXPECTED_ERROR`.
+
+To send a specific code from the catalog, throw `HTTPException` from `@mastra/server/server-adapter` with a `code` and optional `metadata`:
+
+```typescript
+import { HTTPException } from '@mastra/server/server-adapter'
+
+throw new HTTPException(404, {
+  message: `Agent '${agentId}' not found`,
+  code: 'AGENT_NOT_FOUND',
+  metadata: { agentId },
+})
+```
+
+See [createRoute() error codes](/reference/server/create-route#error-codes) for the response format.
+
 ## Related
 
 - [Custom API Routes Guide](/docs/server/custom-api-routes): Usage guide with examples

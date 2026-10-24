@@ -541,7 +541,7 @@ describe('vNext Workflow Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           workflowId: undefined as any,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when workflow is not found', async () => {
@@ -550,7 +550,13 @@ describe('vNext Workflow Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           workflowId: 'non-existent',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should get workflow by ID successfully', async () => {
@@ -570,7 +576,7 @@ describe('vNext Workflow Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when workflow is not found', async () => {
@@ -580,7 +586,13 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'non-existent',
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should start workflow run successfully when runId is not passed', async () => {
@@ -656,7 +668,7 @@ describe('vNext Workflow Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when runId is not provided', async () => {
@@ -665,7 +677,7 @@ describe('vNext Workflow Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           workflowId: 'test-workflow',
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required', code: 'WORKFLOW_RUN_ID_REQUIRED' }));
     });
 
     it('should throw error when workflow is not found', async () => {
@@ -675,7 +687,13 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'non-existent',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should throw error when workflow run is not found', async () => {
@@ -685,7 +703,7 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'test-workflow',
           runId: 'non-existent',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' }));
     });
 
     it('should get workflow run successfully', async () => {
@@ -712,7 +730,7 @@ describe('vNext Workflow Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when runId is not provided', async () => {
@@ -721,7 +739,7 @@ describe('vNext Workflow Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           workflowId: 'test-workflow',
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required', code: 'WORKFLOW_RUN_ID_REQUIRED' }));
     });
 
     it('should throw error when workflow is not found', async () => {
@@ -731,7 +749,13 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'non-existent',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should delete workflow run successfully', async () => {
@@ -763,7 +787,7 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'test-workflow',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' }));
     });
   });
 
@@ -774,7 +798,7 @@ describe('vNext Workflow Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when workflow is not found', async () => {
@@ -784,7 +808,13 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'non-existent',
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should create workflow run successfully', async () => {
@@ -822,7 +852,7 @@ describe('vNext Workflow Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when runId is not provided', async () => {
@@ -831,7 +861,9 @@ describe('vNext Workflow Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           workflowId: 'test-workflow',
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'runId required to start run' }));
+      ).rejects.toThrow(
+        new HTTPException(400, { message: 'runId required to start run', code: 'WORKFLOW_RUN_ID_REQUIRED' }),
+      );
     });
 
     it('should throw error when workflow run is not found', async () => {
@@ -841,7 +873,7 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'test-workflow',
           runId: 'non-existent',
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' }));
     });
 
     it('should start workflow run successfully', async () => {
@@ -949,7 +981,7 @@ describe('vNext Workflow Handlers', () => {
           step: 'test-step',
           resumeData: {},
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when runId is not provided', async () => {
@@ -960,7 +992,9 @@ describe('vNext Workflow Handlers', () => {
           step: 'test-step',
           resumeData: {},
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'runId required to resume workflow' }));
+      ).rejects.toThrow(
+        new HTTPException(400, { message: 'runId required to resume workflow', code: 'WORKFLOW_RUN_ID_REQUIRED' }),
+      );
     });
 
     it('should throw error when workflow run is not found', async () => {
@@ -972,7 +1006,7 @@ describe('vNext Workflow Handlers', () => {
           step: 'test-step',
           resumeData: {},
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' }));
     });
 
     it('should preserve resourceId when resuming async workflow after server restart', async () => {
@@ -1019,7 +1053,7 @@ describe('vNext Workflow Handlers', () => {
           step: 'test-step',
           resumeData: {},
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when runId is not provided', async () => {
@@ -1030,7 +1064,9 @@ describe('vNext Workflow Handlers', () => {
           step: 'test-step',
           resumeData: {},
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'runId required to resume workflow' }));
+      ).rejects.toThrow(
+        new HTTPException(400, { message: 'runId required to resume workflow', code: 'WORKFLOW_RUN_ID_REQUIRED' }),
+      );
     });
 
     it('should throw error when workflow run is not found', async () => {
@@ -1042,7 +1078,7 @@ describe('vNext Workflow Handlers', () => {
           step: 'test-step',
           resumeData: {},
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' }));
     });
 
     it('should resume workflow run successfully', async () => {
@@ -1238,7 +1274,7 @@ describe('vNext Workflow Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           workflowId: undefined,
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should get workflow runs successfully (empty)', async () => {

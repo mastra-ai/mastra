@@ -765,6 +765,8 @@ describe('Agent Handlers', () => {
       ).rejects.toThrow(
         new HTTPException(404, {
           message: 'Agent with id non-existing not found',
+          code: 'AGENT_NOT_FOUND',
+          metadata: { agentId: 'non-existing' },
         }),
       );
     });
@@ -825,7 +827,13 @@ describe('Agent Handlers', () => {
           threadId: 'test-thread',
           experimental_output: undefined,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Agent with id non-existing not found',
+          code: 'AGENT_NOT_FOUND',
+          metadata: { agentId: 'non-existing' },
+        }),
+      );
     });
   });
 
@@ -859,7 +867,13 @@ describe('Agent Handlers', () => {
           threadId: 'test-thread',
           experimental_output: undefined,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Agent with id non-existing not found',
+          code: 'AGENT_NOT_FOUND',
+          metadata: { agentId: 'non-existing' },
+        }),
+      );
     });
   });
 
@@ -896,7 +910,13 @@ describe('Agent Handlers', () => {
           threadId: 'test-thread',
           experimental_output: undefined,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Agent with id non-existing not found',
+          code: 'AGENT_NOT_FOUND',
+          metadata: { agentId: 'non-existing' },
+        }),
+      );
     });
   });
 

@@ -16,7 +16,7 @@ import { HTTPException } from 'hono/http-exception';
 registerApiRoute('/widgets/:id', {
   method: 'GET',
   handler: async c => {
-    throw new HTTPException(404, { message: 'Widget not found' }); // client gets 404 { "error": "Widget not found" }
+    throw new HTTPException(404, { message: 'Widget not found' }); // client gets 404 { "error": "Widget not found", "code": "UNCATEGORIZED_ERROR" }
   },
 });
 ```

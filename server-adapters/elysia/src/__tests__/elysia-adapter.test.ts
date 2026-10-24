@@ -856,6 +856,34 @@ describe('Elysia Server Adapter', () => {
       await cleanup();
     });
 
+    it('returns ROUTE_NOT_FOUND when no custom route handler matches', async () => {
+      const customRoutes = [
+        registerApiRoute('/custom/missing', {
+          method: 'GET',
+          // No handler is produced, so the framework matches the path but no Mastra handler does.
+          createHandler: async () => undefined as any,
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Elysia();
+      const adapter = new MastraServer({ app, mastra, customApiRoutes: customRoutes });
+      await adapter.init();
+
+      const { baseUrl, cleanup } = await startElysiaServer(app);
+
+      const response = await fetch(`${baseUrl}/custom/missing?x=1`);
+
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({
+        error: 'Not Found',
+        code: 'ROUTE_NOT_FOUND',
+        metadata: { method: 'GET', path: '/custom/missing' },
+      });
+
+      await cleanup();
+    });
+
     it('should register custom API routes with POST method', async () => {
       const customRoutes = [
         registerApiRoute('/echo', {

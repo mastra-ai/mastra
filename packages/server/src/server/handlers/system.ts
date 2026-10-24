@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 
+import { SERVER_ERROR_CODES } from '../error-codes';
 import type { MastraPackage } from '../schemas/system';
 import { apiSchemaManifestResponseSchema, systemPackagesResponseSchema } from '../schemas/system';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -150,6 +151,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
   description: 'Returns installed Mastra packages and runtime capabilities used by Studio',
   tags: ['System'],
   requiresAuth: true,
+  errors: ['SYSTEM_PACKAGES_GET_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const packagesFilePath = process.env.MASTRA_PACKAGES_FILE;
@@ -202,7 +204,10 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
         observabilityRuntimeStrategy,
       };
     } catch (error) {
-      return handleError(error, 'Error getting system packages');
+      return handleError(error, {
+        message: 'Error getting system packages',
+        code: SERVER_ERROR_CODES.SYSTEM_PACKAGES_GET_FAILED,
+      });
     }
   },
 });

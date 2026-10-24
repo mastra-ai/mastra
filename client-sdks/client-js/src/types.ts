@@ -42,7 +42,16 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
 
-import type { Body, PathParams, QueryParams, RouteKey, RouteResponse, Simplify } from './route-types.generated.js';
+import type {
+  Body,
+  PathParams,
+  QueryParams,
+  RouteError,
+  RouteKey,
+  RouteResponse,
+  ServerError,
+  Simplify,
+} from './route-types.generated.js';
 import type { JSONValue, ToolInvocationUIPart } from './utils/ai-sdk-v4';
 
 export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
@@ -1996,6 +2005,15 @@ export class MastraClientError extends Error {
   /** Parsed response body if available */
   readonly body?: unknown;
 
+  /**
+   * Business error code from the server's response body, if present.
+   * Use `getServerError` to get `{ error, code, metadata }` typed together.
+   */
+  readonly code?: string;
+
+  /** Details about the business error from the server's response body, if present. */
+  readonly metadata?: Record<string, unknown>;
+
   constructor(status: number, statusText: string, message: string, body?: unknown) {
     // Keep the same message format for backwards compatibility
     super(message);
@@ -2003,7 +2021,50 @@ export class MastraClientError extends Error {
     this.status = status;
     this.statusText = statusText;
     this.body = body;
+    if (isPlainObject(body) && typeof body.code === 'string') {
+      this.code = body.code;
+      if (isPlainObject(body.metadata)) this.metadata = body.metadata;
+    }
   }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Returns the server error carried by `error` as a plain `{ error, code, metadata }` object, typed as
+ * a union over every code, so `switch (serverError.code)` narrows `metadata`. Pass the route of the
+ * call that threw to narrow the union to the codes that route can return.
+ *
+ * Returns `undefined` when `error` didn't come from a Mastra server response (network failures,
+ * aborted requests, bugs). Routes added with `registerApiRoute` can return codes outside the catalog,
+ * so keep a `default` branch.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   await client.getAgent('weather').details();
+ * } catch (error) {
+ *   const serverError = getServerError(error, 'GET /agents/:agentId');
+ *   if (serverError?.code === 'AGENT_NOT_FOUND') {
+ *     toast(`Unknown agent ${serverError.metadata.agentId}`);
+ *   } else {
+ *     toast(serverError?.error ?? 'Something went wrong');
+ *   }
+ * }
+ * ```
+ */
+export function getServerError(error: unknown): ServerError | undefined;
+export function getServerError<K extends RouteKey>(error: unknown, route: K): RouteError<K> | undefined;
+export function getServerError(error: unknown): ServerError | undefined {
+  if (!(error instanceof MastraClientError) || error.code === undefined) return undefined;
+  const body = isPlainObject(error.body) ? error.body : {};
+  const message =
+    typeof body.error === 'string' ? body.error : typeof body.message === 'string' ? body.message : error.message;
+  const serverError = { error: message, code: error.code, ...(error.metadata ? { metadata: error.metadata } : {}) };
+  // The body comes from the server, which types `metadata` by `code`.
+  return serverError as ServerError;
 }
 
 // ============================================

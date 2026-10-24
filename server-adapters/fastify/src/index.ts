@@ -3,13 +3,15 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
+import type { ServerErrorCode } from '@mastra/server/error-codes';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
-  getCustomHTTPExceptionResponse,
-  getHTTPErrorResponse,
+  formatErrorResponse,
+  getCustomHTTPExceptionResponseWithCode,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -275,7 +277,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     // Fastify's request.query can contain string | string[] for repeated params
     const queryParams = normalizeQueryParams((request.query || {}) as Record<string, unknown>);
     let body: unknown;
-    let bodyParseError: { message: string } | undefined;
+    let bodyParseError: { message: string; code: ServerErrorCode } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.headers['content-type'] || '';
@@ -294,6 +296,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           }
           bodyParseError = {
             message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+            code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID,
           };
         }
       } else {
@@ -338,6 +341,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
           });
 
+          // A truncated body errors the file stream; without a listener Node throws it as uncaught.
+          file.on('error', reject);
           file.on('end', () => {
             if (!limitExceeded && isSafeObjectKey(fieldname)) {
               result[fieldname] = Buffer.concat(chunks);
@@ -581,7 +586,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         // If this is an auth error (not just a success-with-headers), return error response
         if (authError.error) {
-          return reply.status(authError.status).send({ error: authError.error });
+          return reply
+            .status(authError.status)
+            .send({ error: authError.error, code: authError.code, metadata: authError.metadata });
         }
       }
 
@@ -589,9 +596,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
       // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
       if (params.bodyParseError) {
+        const issues = [{ field: 'body', message: params.bodyParseError.message }];
         return reply.status(400).send({
           error: 'Invalid request body',
-          issues: [{ field: 'body', message: params.bodyParseError.message }],
+          issues,
+          code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
         });
       }
 
@@ -606,9 +615,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             const { status, body } = this.resolveValidationError(route, error, 'query');
             return reply.status(status).send(body);
           }
+          const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
           return reply.status(400).send({
             error: 'Invalid query parameters',
-            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+            issues,
+            code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+            metadata: { location: 'query' },
           });
         }
       }
@@ -624,9 +636,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             const { status, body } = this.resolveValidationError(route, error, 'body');
             return reply.status(status).send(body);
           }
+          const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
           return reply.status(400).send({
             error: 'Invalid request body',
-            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+            issues,
+            code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+            metadata: { location: 'body' },
           });
         }
       }
@@ -643,9 +658,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             const { status, body } = this.resolveValidationError(route, error, 'path');
             return reply.status(status).send(body);
           }
+          const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
           return reply.status(400).send({
             error: 'Invalid path parameters',
-            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+            issues,
+            code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+            metadata: { location: 'path' },
           });
         }
       }
@@ -679,6 +697,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             return reply.status(permissionError.status).send({
               error: permissionError.error,
               message: permissionError.message,
+              code: permissionError.code,
+              metadata: permissionError.metadata,
             });
           }
         }
@@ -691,7 +711,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         ...(typeof params.body === 'object' ? params.body : {}),
       });
       if (fgaError) {
-        return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });
+        return reply
+          .status(fgaError.status)
+          .send({ error: fgaError.error, message: fgaError.message, code: fgaError.code, metadata: fgaError.metadata });
       }
 
       try {
@@ -710,14 +732,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             method: route.method,
           });
         }
-        const customResponse = getCustomHTTPExceptionResponse(error);
+        const customResponse = await getCustomHTTPExceptionResponseWithCode(error);
         if (customResponse) {
           customResponse.headers.forEach((value, name) => reply.header(name, value));
           await reply.status(customResponse.status).send(Buffer.from(await customResponse.arrayBuffer()));
           return;
         }
 
-        const { status, body } = getHTTPErrorResponse(error);
+        const { status, body } = formatErrorResponse(error);
         await reply.status(status).send(body);
       }
     };
@@ -734,7 +756,10 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       route.maxBodySize !== undefined
         ? (error: Error & { code?: string }, _request: FastifyRequest, reply: FastifyReply) => {
             if (error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
-              return reply.status(413).send({ error: 'Request body too large' });
+              return reply.status(413).send({
+                error: 'Request body too large',
+                code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
+              });
             }
             throw error;
           }
@@ -809,7 +834,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             }
           }
           if (authError.error) {
-            return reply.status(authError.status).send({ error: authError.error });
+            return reply
+              .status(authError.status)
+              .send({ error: authError.error, code: authError.code, metadata: authError.metadata });
           }
         }
 
@@ -838,6 +865,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
               return reply.status(permissionError.status).send({
                 error: permissionError.error,
                 message: permissionError.message,
+                code: permissionError.code,
+                metadata: permissionError.metadata,
               });
             }
           }
@@ -854,7 +883,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           ...(request.params as Record<string, string>),
         });
         if (fgaError) {
-          return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });
+          return reply.status(fgaError.status).send({
+            error: fgaError.error,
+            message: fgaError.message,
+            code: fgaError.code,
+            metadata: fgaError.metadata,
+          });
         }
 
         const response = await this.handleCustomRouteRequest(
@@ -866,7 +900,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           request.abortSignal,
         );
         if (!response) {
-          reply.status(404).send({ error: 'Not Found' });
+          reply.status(404).send({
+            error: 'Not Found',
+            code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+            metadata: { method: request.method, path: request.url.split('?')[0] },
+          });
           return;
         }
         // Merge headers set by Fastify hooks/plugins (e.g. @fastify/cors) into

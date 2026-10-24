@@ -231,16 +231,17 @@ describe('Hono Server Adapter', () => {
         where: { op: 'eq', left: { path: 'input' }, right: { literal: 'sensitive search' } },
       });
 
+      const issues = [
+        {
+          code: 'field_not_allowed',
+          path: ['where', 'left', 'path'],
+          message: 'The predicate field is not allowed here',
+        },
+      ];
       const body = await expectErrorResponse(response, 422, {
         code: 'TRACE_QUERY_INVALID',
         message: 'The trace query is invalid',
-        issues: [
-          {
-            code: 'field_not_allowed',
-            path: ['where', 'left', 'path'],
-            message: 'The predicate field is not allowed here',
-          },
-        ],
+        issues,
       });
       expect(JSON.stringify(body)).not.toContain('sensitive search');
     });
@@ -289,9 +290,11 @@ describe('Hono Server Adapter', () => {
 
     expect(response.status).toBe(400);
     expect(response.headers.get('content-type')).toContain('application/json');
+    const issues = [{ field: 'body', message: expect.any(String) }];
     await expect(response.json()).resolves.toEqual({
       error: 'Invalid request body',
-      issues: [{ field: 'body', message: expect.any(String) }],
+      issues,
+      code: 'REQUEST_BODY_INVALID_JSON',
     });
   });
 
@@ -311,7 +314,10 @@ describe('Hono Server Adapter', () => {
 
     expect(response.status).toBe(413);
     expect(response.headers.get('content-type')).toContain('application/json');
-    await expect(response.json()).resolves.toEqual({ error: 'Request body too large' });
+    await expect(response.json()).resolves.toEqual({
+      error: 'Request body too large',
+      code: 'REQUEST_BODY_TOO_LARGE',
+    });
     expect(getStorage).not.toHaveBeenCalled();
   });
 
@@ -342,7 +348,12 @@ describe('Hono Server Adapter', () => {
         await requestTraceAggregate(new Mastra({ logger: false }), '{"timeRange":'),
         400,
       );
-      expect(body).toEqual({ error: 'Invalid request body', issues: [{ field: 'body', message: expect.any(String) }] });
+      const issues = [{ field: 'body', message: expect.any(String) }];
+      expect(body).toEqual({
+        error: 'Invalid request body',
+        issues,
+        code: 'REQUEST_BODY_INVALID_JSON',
+      });
     });
 
     it('rejects an oversized body before storage access', async () => {
@@ -350,7 +361,10 @@ describe('Hono Server Adapter', () => {
       const getStorage = vi.spyOn(mastra, 'getStorage');
       const response = await requestTraceAggregate(mastra, JSON.stringify({ padding: 'x'.repeat(256 * 1024) }));
 
-      expect(await expectDeclaredError(response, 413)).toEqual({ error: 'Request body too large' });
+      expect(await expectDeclaredError(response, 413)).toEqual({
+        error: 'Request body too large',
+        code: 'REQUEST_BODY_TOO_LARGE',
+      });
       expect(getStorage).not.toHaveBeenCalled();
     });
 
@@ -1332,6 +1346,36 @@ describe('Hono Server Adapter', () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data).toEqual({ message: 'Hello from custom route!' });
+    });
+
+    it('returns ROUTE_NOT_FOUND when no custom route handler matches', async () => {
+      const customRoutes = [
+        registerApiRoute('/custom/missing', {
+          method: 'GET',
+          // No handler is produced, so the framework matches the path but no Mastra handler does.
+          createHandler: async () => undefined as any,
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra, customApiRoutes: customRoutes });
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/custom/missing?x=1`);
+
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({
+        error: 'Not Found',
+        code: 'ROUTE_NOT_FOUND',
+        metadata: { method: 'GET', path: '/custom/missing' },
+      });
     });
 
     it('should register custom API routes with POST method', async () => {

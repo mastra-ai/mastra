@@ -1,5 +1,9 @@
 import type { ZodError } from 'zod';
 
+import { SERVER_ERROR_CODES, isServerErrorCode } from '../error-codes';
+import type { ServerErrorBody, ServerErrorCode } from '../error-codes';
+import { SERVER_ERROR_METADATA_SCHEMAS } from '../error-codes/metadata';
+import type { ServerErrorMetadata, ServerErrorMetadataOption } from '../error-codes/metadata';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import type { ApiError } from '../types';
@@ -12,7 +16,21 @@ export interface ZodErrorLike {
   issues: Array<{
     path: PropertyKey[];
     message: string;
+    params?: Record<string, unknown>;
   }>;
+}
+
+/**
+ * Custom Zod issues can carry a business code through
+ * `ctx.addIssue({ code: 'custom', params: { errorCode } })`; the first one
+ * found replaces `REQUEST_VALIDATION_FAILED`.
+ */
+function getIssueErrorCode(error: ZodErrorLike): ServerErrorCode {
+  for (const issue of error.issues) {
+    const errorCode = issue.params?.errorCode;
+    if (isServerErrorCode(errorCode)) return errorCode;
+  }
+  return SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED;
 }
 
 /**
@@ -27,11 +45,12 @@ export interface ZodErrorLike {
  */
 const MODEL_NOT_ALLOWED_CODE = 'MODEL_NOT_ALLOWED';
 
+/** Structural copy of core's `ModelNotAllowedError`, which lives behind the EE agent-builder entry. */
 interface ModelNotAllowedErrorLike extends Error {
   code: typeof MODEL_NOT_ALLOWED_CODE;
-  allowed?: unknown;
-  attempted?: unknown;
-  offendingLabel?: string;
+  allowed: ServerErrorMetadata<'MODEL_NOT_ALLOWED'>['allowed'];
+  attempted: ServerErrorMetadata<'MODEL_NOT_ALLOWED'>['attempted'];
+  offendingLabel: string;
 }
 
 function isModelNotAllowedError(error: unknown): error is ModelNotAllowedErrorLike {
@@ -116,12 +135,14 @@ export function isZodError(error: unknown): error is ZodError<any> {
 
 /**
  * Formats a ZodError into a structured validation error response.
- * Returns an object with an error message and an array of field-specific issues.
+ * Returns an object with an error message, an array of field-specific issues,
+ * a `REQUEST_VALIDATION_FAILED` code and the request location in `metadata`.
  */
 export function formatZodError(
   error: ZodErrorLike,
   context: string,
-): { error: string; issues: Array<{ field: string; message: string }> } {
+  location?: 'query' | 'body' | 'path',
+): ServerErrorBody & { issues: Array<{ field: string; message: string }> } {
   const issues = error.issues.map(e => ({
     field: e.path.length > 0 ? e.path.map(p => String(p)).join('.') : 'root',
     message: e.message,
@@ -130,20 +151,103 @@ export function formatZodError(
   return {
     error: `Invalid ${context}`,
     issues,
+    code: getIssueErrorCode(error),
+    ...(location ? { metadata: { location } } : {}),
   };
 }
 
+/**
+ * Fallback used by `handleError` when the thrown error doesn't carry a more
+ * specific business code. `code` is the operation code of the endpoint
+ * (e.g. `AGENT_GET_FAILED`); `metadata` follows that code's schema and is only
+ * sent when the response ends up with that code.
+ */
+export type HandleErrorFallback<C extends ServerErrorCode = ServerErrorCode> = {
+  message: string;
+  code: C;
+} & ServerErrorMetadataOption<C>;
+
+type ResolvedFallback = { message: string; code?: ServerErrorCode; metadata?: Record<string, unknown> };
+
+function getErrorId(error: unknown): string | undefined {
+  const id = error && typeof error === 'object' && 'id' in error ? error.id : undefined;
+  return typeof id === 'string' ? id : undefined;
+}
+
+/** Durable-run lease internals (execution holder, lease timing) that core puts in `details` but clients must not see. */
+const PRIVATE_DETAIL_KEYS = new Set(['holder', 'liveBy', 'leaseExpiresAt']);
+
+/** Only plain-object MastraError `details` are forwarded; core fills them with ids such as `runId`. */
+function getErrorDetails(error: unknown): Record<string, unknown> | undefined {
+  const details = error && typeof error === 'object' && 'details' in error ? error.details : undefined;
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return undefined;
+  const entries = Object.entries(details).filter(([key]) => !PRIVATE_DETAIL_KEYS.has(key));
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+/**
+ * Metadata for a `code` taken from a core error id. Core puts the ids the code declares in the
+ * error's `details`; only details matching the code's schema are sent, stripped of other keys.
+ * `fallbackDetails` (ids the handler already knows) is used when core's details don't match,
+ * which is the case for cores released before they carried the ids.
+ */
+export function getForwardedMetadata(
+  code: ServerErrorCode,
+  error: unknown,
+  fallbackDetails?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const schema = SERVER_ERROR_METADATA_SCHEMAS[code as keyof typeof SERVER_ERROR_METADATA_SCHEMAS];
+  if (!schema) return undefined;
+  for (const details of [getErrorDetails(error), fallbackDetails]) {
+    const parsed = schema.safeParse(details);
+    if (parsed.success && parsed.data !== undefined) return parsed.data as Record<string, unknown>;
+  }
+  return undefined;
+}
+
+function mergeMetadata(...parts: Array<Record<string, unknown> | undefined>): Record<string, unknown> | undefined {
+  const merged = Object.assign({}, ...parts.filter(Boolean));
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
 // Helper to handle errors consistently
-export function handleError(error: unknown, defaultMessage: string): never {
+/**
+ * Rethrows `error` as an `HTTPException` carrying a business `code`.
+ * A string fallback is only the message: the code then depends on the error,
+ * `UNCATEGORIZED_ERROR` when it carries an HTTP status and `UNEXPECTED_ERROR` otherwise.
+ */
+export function handleError<C extends ServerErrorCode>(
+  error: unknown,
+  fallbackOrMessage: HandleErrorFallback<C> | string,
+): never {
+  const fallback: ResolvedFallback =
+    typeof fallbackOrMessage === 'string' ? { message: fallbackOrMessage } : fallbackOrMessage;
+  const resolveCode = (hasStatus: boolean): ServerErrorCode => {
+    const errorId = getErrorId(error);
+    if (isServerErrorCode(errorId)) return errorId;
+    if (fallback.code) return fallback.code;
+    return hasStatus ? SERVER_ERROR_CODES.UNCATEGORIZED_ERROR : SERVER_ERROR_CODES.UNEXPECTED_ERROR;
+  };
+
+  // Already carries its own code; rethrow as-is so nested handlers don't overwrite it.
+  if (error instanceof HTTPException) {
+    throw error;
+  }
+
   if (isModelNotAllowedError(error)) {
+    const modelPolicy = {
+      allowed: error.allowed,
+      attempted: error.attempted,
+      offendingLabel: error.offendingLabel,
+    };
     const body = {
       error: {
         code: error.code,
         message: error.message,
-        allowed: error.allowed,
-        attempted: error.attempted,
-        offendingLabel: error.offendingLabel,
+        ...modelPolicy,
       },
+      code: SERVER_ERROR_CODES.MODEL_NOT_ALLOWED,
+      metadata: modelPolicy,
     };
     const res = new Response(JSON.stringify(body), {
       status: 422,
@@ -153,6 +257,8 @@ export function handleError(error: unknown, defaultMessage: string): never {
       res,
       message: error.message,
       cause: error,
+      code: SERVER_ERROR_CODES.MODEL_NOT_ALLOWED,
+      metadata: modelPolicy,
     });
   }
 
@@ -160,17 +266,12 @@ export function handleError(error: unknown, defaultMessage: string): never {
   // a conflict on run state, not a malformed request, so it maps to 409 and clients can
   // distinguish it from a 400/500 and re-read the run.
   if (isRunClaimConflictError(error) || isDurableRunConflictError(error)) {
-    const res = isRunClaimConflictError(error)
-      ? new Response(JSON.stringify({ error: error.message, code: error.id }), {
-          status: 409,
-          headers: { 'content-type': 'application/json' },
-        })
-      : undefined;
     throw new HTTPException(409, {
-      res,
       message: error.message,
       stack: error.stack,
       cause: error,
+      code: resolveCode(true),
+      metadata: mergeMetadata(fallback.metadata, getErrorDetails(error)),
     });
   }
 
@@ -181,6 +282,8 @@ export function handleError(error: unknown, defaultMessage: string): never {
       message: error.message,
       stack: error.stack,
       cause: error,
+      code: SERVER_ERROR_CODES.OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT,
+      metadata: mergeMetadata(fallback.metadata, getErrorDetails(error)),
     });
   }
 
@@ -189,6 +292,8 @@ export function handleError(error: unknown, defaultMessage: string): never {
       message: error.message,
       stack: error.stack,
       cause: error,
+      code: SERVER_ERROR_CODES.WORKFLOW_SCHEMA_VALIDATION_FAILED,
+      metadata: mergeMetadata(fallback.metadata, getErrorDetails(error)),
     });
   }
 
@@ -203,16 +308,23 @@ export function handleError(error: unknown, defaultMessage: string): never {
       message: error.message,
       stack: error.stack,
       cause: error,
+      code: SERVER_ERROR_CODES.OBSERVABILITY_OPERATION_NOT_SUPPORTED,
     });
   }
 
   const apiError = error as ApiError;
 
-  const apiErrorStatus = apiError.status || apiError.details?.status || 500;
+  const explicitStatus = apiError.status || apiError.details?.status;
 
-  throw new HTTPException(apiErrorStatus as StatusCode, {
-    message: apiError.message || defaultMessage,
+  // An error whose id is already a catalog code keeps it; anything else gets the operation code.
+  const code = resolveCode(Boolean(explicitStatus));
+  throw new HTTPException((explicitStatus || 500) as StatusCode, {
+    message: apiError.message || fallback.message,
     stack: apiError.stack,
     cause: apiError.cause,
+    code,
+    // The fallback metadata is shaped for the fallback code, so it only goes out with that code;
+    // a code taken from a core error id carries that error's details instead.
+    metadata: code === fallback.code ? fallback.metadata : getForwardedMetadata(code, error),
   });
 }

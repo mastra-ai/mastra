@@ -265,7 +265,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting trace');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: 'Error getting trace',
+        code: 'TRACE_GET_FAILED',
+      });
     });
   });
 
@@ -411,7 +414,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting lightweight trace');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: 'Error getting lightweight trace',
+        code: 'TRACE_LIGHT_GET_FAILED',
+      });
     });
   });
 
@@ -495,7 +501,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting span');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: 'Error getting span',
+        code: 'SPAN_GET_FAILED',
+      });
     });
   });
 
@@ -714,7 +723,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error listing traces');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: 'Error listing traces',
+        code: 'TRACES_LIST_FAILED',
+      });
     });
 
     it('should allow trace delta mode when the store advertises support', async () => {
@@ -958,7 +970,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error listing branches');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: 'Error listing branches',
+        code: 'TRACE_BRANCHES_LIST_FAILED',
+      });
     });
 
     it('should allow branch delta mode when the store advertises support', async () => {
@@ -1070,7 +1085,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting branch');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: 'Error getting branch',
+        code: 'TRACE_BRANCH_GET_FAILED',
+      });
     });
   });
 
@@ -1124,7 +1142,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow('boom');
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storeError, 'Error deleting traces');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storeError, {
+        message: 'Error deleting traces',
+        code: 'TRACES_DELETE_FAILED',
+      });
     });
   });
 
@@ -1381,7 +1402,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting scores by span');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: 'Error getting scores by span',
+        code: 'SPAN_SCORES_LIST_FAILED',
+      });
     });
   });
 
@@ -1478,7 +1502,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'list logs'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'list logs'",
+        code: 'OBSERVABILITY_LOGS_LIST_FAILED',
+      });
     });
   });
 
@@ -1576,7 +1603,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'list scores'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'list scores'",
+        code: 'SCORES_LIST_FAILED',
+      });
     });
   });
 
@@ -1693,7 +1723,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'create a score'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'create a score'",
+        code: 'SCORE_CREATE_FAILED',
+      });
     });
   });
 
@@ -1927,7 +1960,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'list feedback'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'list feedback'",
+        code: 'FEEDBACK_LIST_FAILED',
+      });
     });
   });
 
@@ -2136,7 +2172,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'create feedback'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'create feedback'",
+        code: 'FEEDBACK_CREATE_FAILED',
+      });
     });
   });
 
@@ -2198,7 +2237,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'delete scores'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'delete scores'",
+        code: 'SCORES_DELETE_FAILED',
+      });
     });
   });
 
@@ -2260,7 +2302,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'delete feedback'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'delete feedback'",
+        code: 'FEEDBACK_DELETE_FAILED',
+      });
     });
   });
 
@@ -2358,7 +2403,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get metric aggregate'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get metric aggregate'",
+        code: 'METRIC_AGGREGATE_GET_FAILED',
+      });
     });
   });
 
@@ -2457,7 +2505,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get score time series'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get score time series'",
+        code: 'SCORE_TIME_SERIES_GET_FAILED',
+      });
     });
   });
 
@@ -2504,7 +2555,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get score percentiles'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get score percentiles'",
+        code: 'SCORE_PERCENTILES_GET_FAILED',
+      });
     });
   });
 
@@ -2603,7 +2657,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get feedback time series'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get feedback time series'",
+        code: 'FEEDBACK_TIME_SERIES_GET_FAILED',
+      });
     });
   });
 
@@ -2650,7 +2707,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get feedback percentiles'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get feedback percentiles'",
+        code: 'FEEDBACK_PERCENTILES_GET_FAILED',
+      });
     });
   });
 
@@ -2720,7 +2780,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get metric breakdown'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get metric breakdown'",
+        code: 'METRIC_BREAKDOWN_GET_FAILED',
+      });
     });
   });
 
@@ -2820,7 +2883,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get metric time series'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get metric time series'",
+        code: 'METRIC_TIME_SERIES_GET_FAILED',
+      });
     });
   });
 
@@ -2902,7 +2968,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get metric percentiles'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get metric percentiles'",
+        code: 'METRIC_PERCENTILES_GET_FAILED',
+      });
     });
   });
 
@@ -2973,7 +3042,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get metric names'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get metric names'",
+        code: 'METRIC_NAMES_LIST_FAILED',
+      });
     });
   });
 
@@ -3030,7 +3102,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get metric label keys'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get metric label keys'",
+        code: 'METRIC_LABEL_KEYS_LIST_FAILED',
+      });
     });
   });
 
@@ -3116,7 +3191,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get label values'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get label values'",
+        code: 'METRIC_LABEL_VALUES_LIST_FAILED',
+      });
     });
   });
 
@@ -3167,7 +3245,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get entity types'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get entity types'",
+        code: 'ENTITY_TYPES_LIST_FAILED',
+      });
     });
   });
 
@@ -3236,7 +3317,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get entity names'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get entity names'",
+        code: 'ENTITY_NAMES_LIST_FAILED',
+      });
     });
   });
 
@@ -3287,7 +3371,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get service names'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get service names'",
+        code: 'SERVICE_NAMES_LIST_FAILED',
+      });
     });
   });
 
@@ -3338,7 +3425,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get environments'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get environments'",
+        code: 'ENVIRONMENTS_LIST_FAILED',
+      });
     });
   });
 
@@ -3407,7 +3497,10 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get tags'");
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, {
+        message: "Error calling: 'get tags'",
+        code: 'TAGS_LIST_FAILED',
+      });
     });
   });
 

@@ -16,10 +16,11 @@ import {
   toTraceSpans,
   traceSpanSchema,
 } from '@mastra/core/storage';
+import { z } from 'zod/v4';
+import { SERVER_ERROR_CODES } from '../error-codes';
 // `branches*`, `listBranches*`, and `getBranch*` schemas are new in
 // @mastra/core@1.32.0; route them through a shim that tolerates older cores
 // (see ./observability-storage-schemas.ts for full rationale).
-import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
@@ -130,6 +131,14 @@ export const LIST_TRACES_ROUTE: ServerRoute = createRoute({
     'Returns a paginated list of traces with optional filtering and sorting. In delta mode, returns only newly listed traces matching the filters.',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACES_LIST_FAILED',
+  ],
   handler: async ({ mastra, mode, after, limit, ...params }) => {
     try {
       // Transform legacy params to new format before processing
@@ -151,7 +160,7 @@ export const LIST_TRACES_ROUTE: ServerRoute = createRoute({
       const orderBy = pickParams(tracesOrderBySchema, transformedParams);
       return await observabilityStore.listTraces({ filters, pagination, orderBy });
     } catch (error) {
-      return handleError(error, 'Error listing traces');
+      return handleError(error, { message: 'Error listing traces', code: SERVER_ERROR_CODES.TRACES_LIST_FAILED });
     }
   },
 });
@@ -168,6 +177,14 @@ export const LIST_TRACES_LIGHT_ROUTE = createRoute({
     'Returns a paginated list of lightweight traces with optional filtering and sorting. In delta mode, returns only newly listed traces matching the filters.',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACES_LIGHT_LIST_FAILED',
+  ],
   handler: async ({ mastra, mode, after, limit, ...params }) => {
     try {
       const transformedParams = transformLegacyParams(params);
@@ -204,7 +221,10 @@ export const LIST_TRACES_LIGHT_ROUTE = createRoute({
       }
       return await observabilityStore.listTracesLight({ filters, pagination, orderBy });
     } catch (error) {
-      return handleError(error, 'Error listing lightweight traces');
+      return handleError(error, {
+        message: 'Error listing lightweight traces',
+        code: SERVER_ERROR_CODES.TRACES_LIGHT_LIST_FAILED,
+      });
     }
   },
 });
@@ -221,6 +241,14 @@ export const LIST_BRANCHES_ROUTE = createRoute({
     'Returns a paginated list of branch-anchor spans (e.g., AGENT_RUN, WORKFLOW_RUN, TOOL_CALL) across all traces. Unlike listTraces (one row per root-rooted trace), each row here is a single anchor span -- including ones nested under a different root entity. In delta mode, returns only newly listed branch rows matching the filters.',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_BRANCHES_LIST_FAILED',
+  ],
   handler: async ({ mastra, mode, after, limit, ...params }) => {
     try {
       const filters = pickParams(branchesFilterSchema, params);
@@ -239,7 +267,10 @@ export const LIST_BRANCHES_ROUTE = createRoute({
       const orderBy = pickParams(branchesOrderBySchema, params);
       return await observabilityStore.listBranches({ filters, pagination, orderBy });
     } catch (error) {
-      return handleError(error, 'Error listing branches');
+      return handleError(error, {
+        message: 'Error listing branches',
+        code: SERVER_ERROR_CODES.TRACE_BRANCHES_LIST_FAILED,
+      });
     }
   },
 });
@@ -257,18 +288,29 @@ export const GET_BRANCH_ROUTE = createRoute({
     'Returns the subtree of spans rooted at the given span. The optional `depth` query param bounds descendant levels below the anchor (0 = anchor only; omitted = full subtree).',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_BRANCH_GET_FAILED',
+    'TRACE_BRANCH_NOT_FOUND',
+  ],
   handler: async ({ mastra, traceId, spanId, depth }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
       const branch = await observabilityStore.getBranch({ traceId, spanId, depth });
 
       if (!branch) {
-        throw new HTTPException(404, { message: `Branch not found for span '${spanId}' in trace '${traceId}'` });
+        throw new HTTPException(404, {
+          message: `Branch not found for span '${spanId}' in trace '${traceId}'`,
+          code: SERVER_ERROR_CODES.TRACE_BRANCH_NOT_FOUND,
+          metadata: { spanId, traceId },
+        });
       }
 
       return branch;
     } catch (error) {
-      return handleError(error, 'Error getting branch');
+      return handleError(error, { message: 'Error getting branch', code: SERVER_ERROR_CODES.TRACE_BRANCH_GET_FAILED });
     }
   },
 });
@@ -283,20 +325,31 @@ export const GET_TRACE_ROUTE: ServerRoute = createRoute({
   description: 'Returns a complete AI trace with all spans by trace ID',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_GET_FAILED',
+    'TRACE_NOT_FOUND',
+  ],
   handler: async ({ mastra, traceId }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
       const trace = await observabilityStore.getTrace({ traceId });
 
       if (!trace) {
-        throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
+        throw new HTTPException(404, {
+          message: `Trace with ID '${traceId}' not found`,
+          code: SERVER_ERROR_CODES.TRACE_NOT_FOUND,
+          metadata: { traceId },
+        });
       }
 
       // Stored SpanRecords carry no status field; derive it from error/endedAt so
       // trace-detail spans match the status shown in trace list rows.
       return { ...trace, spans: toTraceSpans(trace.spans) };
     } catch (error) {
-      return handleError(error, 'Error getting trace');
+      return handleError(error, { message: 'Error getting trace', code: SERVER_ERROR_CODES.TRACE_GET_FAILED });
     }
   },
 });
@@ -313,18 +366,32 @@ export const GET_TRACE_LIGHT_ROUTE: ServerRoute = createRoute({
     'Returns a trace with lightweight span data (timeline fields only, excludes input/output/attributes/metadata/tags/links)',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_LIGHT_GET_FAILED',
+    'TRACE_NOT_FOUND',
+  ],
   handler: async ({ mastra, traceId }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
       const trace = await observabilityStore.getTraceLight({ traceId });
 
       if (!trace) {
-        throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
+        throw new HTTPException(404, {
+          message: `Trace with ID '${traceId}' not found`,
+          code: SERVER_ERROR_CODES.TRACE_NOT_FOUND,
+          metadata: { traceId },
+        });
       }
 
       return trace;
     } catch (error) {
-      return handleError(error, 'Error getting lightweight trace');
+      return handleError(error, {
+        message: 'Error getting lightweight trace',
+        code: SERVER_ERROR_CODES.TRACE_LIGHT_GET_FAILED,
+      });
     }
   },
 });
@@ -340,18 +407,25 @@ export const GET_SPAN_ROUTE: ServerRoute = createRoute({
   description: 'Returns a complete span record with all details by trace ID and span ID',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'SPAN_GET_FAILED',
+    'SPAN_NOT_FOUND',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, traceId, spanId }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
       const span = await observabilityStore.getSpan({ traceId, spanId });
 
       if (!span) {
-        throw new HTTPException(404, { message: `Span not found` });
+        throw new HTTPException(404, { message: `Span not found`, code: SERVER_ERROR_CODES.SPAN_NOT_FOUND });
       }
 
       return span;
     } catch (error) {
-      return handleError(error, 'Error getting span');
+      return handleError(error, { message: 'Error getting span', code: SERVER_ERROR_CODES.SPAN_GET_FAILED });
     }
   },
 });
@@ -372,19 +446,33 @@ export const GET_TRACE_TRAJECTORY_ROUTE = createRoute({
   description: 'Extracts a structured trajectory (ordered steps) from a trace by analyzing its spans',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_NOT_FOUND',
+    'TRACE_TRAJECTORY_GET_FAILED',
+  ],
   handler: async ({ mastra, traceId }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
       const trace = await observabilityStore.getTrace({ traceId });
 
       if (!trace) {
-        throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
+        throw new HTTPException(404, {
+          message: `Trace with ID '${traceId}' not found`,
+          code: SERVER_ERROR_CODES.TRACE_NOT_FOUND,
+          metadata: { traceId },
+        });
       }
 
       const trajectory = extractTrajectoryFromTrace(trace.spans);
       return trajectory;
     } catch (error) {
-      return handleError(error, 'Error extracting trajectory from trace');
+      return handleError(error, {
+        message: 'Error extracting trajectory from trace',
+        code: SERVER_ERROR_CODES.TRACE_TRAJECTORY_GET_FAILED,
+      });
     }
   },
 });
@@ -402,13 +490,19 @@ export const DELETE_TRACES_ROUTE: ServerRoute = createRoute({
     'Deletes traces by ID, cascading to all associated data: spans, trace roots/branches, and signal events (scores, feedback, metrics, logs) that reference the deleted traces. Signals without a trace ID are untouched. Experiment traces are deleted like any other trace. On ClickHouse-backed stores, deletes are lightweight and reads may briefly return deleted rows until the delete is fully applied.',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACES_DELETE_FAILED',
+  ],
   handler: async ({ mastra, traceIds }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
       await observabilityStore.batchDeleteTraces({ traceIds });
       return { success: true as const };
     } catch (error) {
-      return handleError(error, 'Error deleting traces');
+      return handleError(error, { message: 'Error deleting traces', code: SERVER_ERROR_CODES.TRACES_DELETE_FAILED });
     }
   },
 });
@@ -424,6 +518,12 @@ export const SCORE_TRACES_ROUTE = createRoute({
   description: 'Scores one or more traces using a specified scorer (fire-and-forget)',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'SCORER_NOT_FOUND',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACES_SCORE_FAILED',
+  ],
   handler: async ({ mastra, ...params }) => {
     try {
       // Validate storage exists before starting background task
@@ -433,7 +533,11 @@ export const SCORE_TRACES_ROUTE = createRoute({
 
       const scorer = mastra.getScorerById(scorerName);
       if (!scorer) {
-        throw new HTTPException(404, { message: `Scorer '${scorerName}' not found` });
+        throw new HTTPException(404, {
+          message: `Scorer '${scorerName}' not found`,
+          code: SERVER_ERROR_CODES.SCORER_NOT_FOUND,
+          metadata: { scorerName },
+        });
       }
 
       scoreTraces({
@@ -451,7 +555,10 @@ export const SCORE_TRACES_ROUTE = createRoute({
         traceCount: targets.length,
       };
     } catch (error) {
-      return handleError(error, 'Error processing trace scoring');
+      return handleError(error, {
+        message: 'Error processing trace scoring',
+        code: SERVER_ERROR_CODES.TRACES_SCORE_FAILED,
+      });
     }
   },
 });
@@ -468,6 +575,12 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
   description: 'Returns all scores for a specific span within a trace',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'SCORES_STORAGE_UNAVAILABLE',
+    'SPAN_SCORES_LIST_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     try {
       const pagination = pickParams(paginationArgsSchema, params);
@@ -480,7 +593,10 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
         pagination,
       });
     } catch (error) {
-      return handleError(error, 'Error getting scores by span');
+      return handleError(error, {
+        message: 'Error getting scores by span',
+        code: SERVER_ERROR_CODES.SPAN_SCORES_LIST_FAILED,
+      });
     }
   },
 });

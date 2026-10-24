@@ -5,6 +5,10 @@
  * This module provides the `HTTPException` class.
  */
 
+import { SERVER_ERROR_CODES } from './error-codes';
+import type { ServerErrorCode } from './error-codes';
+import type { ServerErrorMetadataOption } from './error-codes/metadata';
+
 type InfoStatusCode = 100 | 101 | 102 | 103;
 type SuccessStatusCode = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207 | 208 | 226;
 type DeprecatedStatusCode = 305 | 306;
@@ -66,17 +70,20 @@ export type StatusCode =
 
 /**
  * Options for creating an `HTTPException`.
+ * @property code - Business error code from `SERVER_ERROR_CODES`, serialized as the body's `code`. Defaults to `UNCATEGORIZED_ERROR`.
+ * @property metadata - JSON-serializable details serialized as the body's `metadata`, shaped by `SERVER_ERROR_METADATA_SCHEMAS` for the `code`. Never put stack traces, raw causes or secrets here.
  * @property res - Optional response object to use.
  * @property message - Optional custom error message.
  * @property cause - Optional cause of the error.
  * @property stack - Optional stack trace for the error.
  */
-type HTTPExceptionOptions = {
+type HTTPExceptionOptions<C extends ServerErrorCode = ServerErrorCode> = {
+  code?: C;
   res?: Response;
   message?: string;
   cause?: unknown;
   stack?: string;
-};
+} & ServerErrorMetadataOption<C>;
 
 /**
  * `HTTPException` must be used when a fatal error such as authentication failure occurs.
@@ -98,31 +105,35 @@ type HTTPExceptionOptions = {
  * app.post('/auth', async (c, next) => {
  *   // authentication
  *   if (authorized === false) {
- *     throw new HTTPException(401, { message: 'Custom error message' })
+ *     throw new HTTPException(401, { message: 'Custom error message', code: 'AUTHENTICATION_REQUIRED' })
  *   }
  *   await next()
  * })
  * ```
  */
-export class HTTPException extends Error {
+export class HTTPException<C extends ServerErrorCode = ServerErrorCode> extends Error {
   readonly res?: Response;
   readonly status: StatusCode;
+  readonly code: C | typeof SERVER_ERROR_CODES.UNCATEGORIZED_ERROR;
+  readonly metadata?: Record<string, unknown>;
 
   /**
    * Creates an instance of `HTTPException`.
    * @param status - HTTP status code for the exception. Defaults to 500.
    * @param options - Additional options for the exception.
    */
-  constructor(status: StatusCode = 500, options?: HTTPExceptionOptions) {
+  constructor(status: StatusCode = 500, options?: HTTPExceptionOptions<C>) {
     super(options?.message, { cause: options?.cause });
     this.res = options?.res;
     this.status = status;
     this.stack = options?.stack || this.stack;
+    this.code = options?.code ?? SERVER_ERROR_CODES.UNCATEGORIZED_ERROR;
+    this.metadata = options?.metadata;
   }
 
   /**
    * Returns the response object associated with the exception.
-   * If a response object is not provided, a new response is created with the error message and status code.
+   * If a response object is not provided, a JSON `{ error, code, metadata? }` response is created with the status code.
    * @returns The response object.
    */
   getResponse(): Response {
@@ -133,8 +144,6 @@ export class HTTPException extends Error {
       });
       return newResponse;
     }
-    return new Response(this.message, {
-      status: this.status,
-    });
+    return Response.json({ error: this.message, code: this.code, metadata: this.metadata }, { status: this.status });
   }
 }

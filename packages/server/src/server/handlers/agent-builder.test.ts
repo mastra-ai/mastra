@@ -157,7 +157,7 @@ describe('Agent Builder Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           actionId: undefined as any,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when actionId is invalid', async () => {
@@ -172,6 +172,8 @@ describe('Agent Builder Handlers', () => {
       ).rejects.toThrow(
         new HTTPException(400, {
           message: 'Invalid agent-builder action: invalid-action. Valid actions are: merge-template, workflow-builder',
+          code: 'AGENT_BUILDER_ACTION_INVALID',
+          metadata: { actionId: 'invalid-action' },
         }),
       );
 
@@ -185,7 +187,13 @@ describe('Agent Builder Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'non-existent',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should get action by ID successfully', async () => {
@@ -220,7 +228,7 @@ describe('Agent Builder Handlers', () => {
           runId: 'test-run',
           actionId: undefined,
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when action is not found', async () => {
@@ -230,7 +238,13 @@ describe('Agent Builder Handlers', () => {
           actionId: 'non-existent',
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should start action run successfully when runId is not passed', async () => {
@@ -285,7 +299,7 @@ describe('Agent Builder Handlers', () => {
           runId: 'test-run',
           actionId: undefined as any,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when runId is not provided', async () => {
@@ -295,7 +309,7 @@ describe('Agent Builder Handlers', () => {
           actionId: 'merge-template',
           runId: undefined as any,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required', code: 'WORKFLOW_RUN_ID_REQUIRED' }));
     });
 
     it('should throw error when action is not found', async () => {
@@ -305,7 +319,13 @@ describe('Agent Builder Handlers', () => {
           actionId: 'non-existent',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should get action run successfully', async () => {
@@ -341,7 +361,7 @@ describe('Agent Builder Handlers', () => {
           runId: 'test-run',
           actionId: undefined as any,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when action is not found', async () => {
@@ -351,7 +371,13 @@ describe('Agent Builder Handlers', () => {
           actionId: 'non-existent',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should create action run successfully', async () => {
@@ -387,7 +413,7 @@ describe('Agent Builder Handlers', () => {
           runId: 'test-run',
           actionId: undefined,
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when runId is not provided', async () => {
@@ -397,7 +423,9 @@ describe('Agent Builder Handlers', () => {
           actionId: 'merge-template',
           runId: undefined,
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'runId required to start run' }));
+      ).rejects.toThrow(
+        new HTTPException(400, { message: 'runId required to start run', code: 'WORKFLOW_RUN_ID_REQUIRED' }),
+      );
     });
 
     it('should start action run successfully', async () => {
@@ -436,7 +464,7 @@ describe('Agent Builder Handlers', () => {
           resumeData: {},
           actionId: undefined,
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when runId is not provided', async () => {
@@ -448,7 +476,9 @@ describe('Agent Builder Handlers', () => {
           resumeData: {},
           runId: undefined,
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'runId required to resume workflow' }));
+      ).rejects.toThrow(
+        new HTTPException(400, { message: 'runId required to resume workflow', code: 'WORKFLOW_RUN_ID_REQUIRED' }),
+      );
     });
 
     it('should handle workflow registry correctly on resume', async () => {
@@ -460,7 +490,7 @@ describe('Agent Builder Handlers', () => {
           step: 'test-step',
           resumeData: {},
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' }));
 
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
         {
@@ -483,7 +513,7 @@ describe('Agent Builder Handlers', () => {
           resumeData: {},
           actionId: undefined,
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should resume action run successfully', async () => {
@@ -522,7 +552,7 @@ describe('Agent Builder Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           actionId: undefined,
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should get action runs successfully (empty)', async () => {
@@ -661,7 +691,7 @@ describe('Agent Builder Handlers', () => {
           actionId: undefined as any,
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when runId is not provided', async () => {
@@ -671,7 +701,12 @@ describe('Agent Builder Handlers', () => {
           actionId: 'merge-template',
           runId: undefined as any,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'runId required to observe workflow stream' }));
+      ).rejects.toThrow(
+        new HTTPException(400, {
+          message: 'runId required to observe workflow stream',
+          code: 'WORKFLOW_RUN_ID_REQUIRED',
+        }),
+      );
     });
 
     it('should handle workflow registry correctly on observeStreamLegacy', async () => {
@@ -708,7 +743,7 @@ describe('Agent Builder Handlers', () => {
           runId: 'test-run',
           actionId: undefined as any,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when runId is not provided', async () => {
@@ -718,7 +753,12 @@ describe('Agent Builder Handlers', () => {
           actionId: 'merge-template',
           runId: undefined as any,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'runId required to observe workflow stream' }));
+      ).rejects.toThrow(
+        new HTTPException(400, {
+          message: 'runId required to observe workflow stream',
+          code: 'WORKFLOW_RUN_ID_REQUIRED',
+        }),
+      );
     });
 
     it('should handle workflow registry correctly on observeStream', async () => {
@@ -757,7 +797,7 @@ describe('Agent Builder Handlers', () => {
           resumeData: {},
           actionId: undefined,
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required', code: 'WORKFLOW_ID_REQUIRED' }));
     });
 
     it('should throw error when runId is not provided', async () => {
@@ -769,7 +809,9 @@ describe('Agent Builder Handlers', () => {
           resumeData: {},
           runId: undefined,
         } as any),
-      ).rejects.toThrow(new HTTPException(400, { message: 'runId required to resume workflow' }));
+      ).rejects.toThrow(
+        new HTTPException(400, { message: 'runId required to resume workflow', code: 'WORKFLOW_RUN_ID_REQUIRED' }),
+      );
     });
 
     it('should handle workflow registry correctly on resumeStream', async () => {

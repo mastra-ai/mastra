@@ -1,5 +1,6 @@
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   processorProviderIdPathParams,
@@ -26,12 +27,16 @@ export const LIST_PROCESSOR_PROVIDERS_ROUTE = createRoute({
   description: 'Returns a list of all registered processor providers with their info and available phases',
   tags: ['Processor Providers'],
   requiresAuth: true,
+  errors: ['EDITOR_NOT_CONFIGURED', 'PROCESSOR_PROVIDERS_LIST_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const editor = mastra.getEditor();
 
       if (!editor) {
-        throw new HTTPException(500, { message: 'Editor is not configured' });
+        throw new HTTPException(500, {
+          message: 'Editor is not configured',
+          code: SERVER_ERROR_CODES.EDITOR_NOT_CONFIGURED,
+        });
       }
 
       const providers = editor.getProcessorProviders();
@@ -43,7 +48,10 @@ export const LIST_PROCESSOR_PROVIDERS_ROUTE = createRoute({
         })),
       };
     } catch (error) {
-      return handleError(error, 'Error listing processor providers');
+      return handleError(error, {
+        message: 'Error listing processor providers',
+        code: SERVER_ERROR_CODES.PROCESSOR_PROVIDERS_LIST_FAILED,
+      });
     }
   },
 });
@@ -61,18 +69,26 @@ export const GET_PROCESSOR_PROVIDER_ROUTE = createRoute({
   description: 'Returns details about a specific processor provider, including its configuration schema',
   tags: ['Processor Providers'],
   requiresAuth: true,
+  errors: ['EDITOR_NOT_CONFIGURED', 'PROCESSOR_PROVIDER_GET_FAILED', 'PROCESSOR_PROVIDER_NOT_FOUND'],
   handler: async ({ mastra, providerId }) => {
     try {
       const editor = mastra.getEditor();
 
       if (!editor) {
-        throw new HTTPException(500, { message: 'Editor is not configured' });
+        throw new HTTPException(500, {
+          message: 'Editor is not configured',
+          code: SERVER_ERROR_CODES.EDITOR_NOT_CONFIGURED,
+        });
       }
 
       const provider = editor.getProcessorProvider(providerId);
 
       if (!provider) {
-        throw new HTTPException(404, { message: `Processor provider with id ${providerId} not found` });
+        throw new HTTPException(404, {
+          message: `Processor provider with id ${providerId} not found`,
+          code: SERVER_ERROR_CODES.PROCESSOR_PROVIDER_NOT_FOUND,
+          metadata: { providerId },
+        });
       }
 
       return {
@@ -81,7 +97,10 @@ export const GET_PROCESSOR_PROVIDER_ROUTE = createRoute({
         configSchema: zodToJsonSchema(provider.configSchema) as Record<string, unknown>,
       };
     } catch (error) {
-      return handleError(error, 'Error getting processor provider');
+      return handleError(error, {
+        message: 'Error getting processor provider',
+        code: SERVER_ERROR_CODES.PROCESSOR_PROVIDER_GET_FAILED,
+      });
     }
   },
 });

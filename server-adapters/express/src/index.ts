@@ -4,13 +4,16 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
+import type { ServerErrorCode } from '@mastra/server/error-codes';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
-  getCustomHTTPExceptionResponse,
-  getHTTPErrorResponse,
+  ensureErrorCode,
+  formatErrorResponse,
+  getCustomHTTPExceptionResponseWithCode,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -28,7 +31,13 @@ class BodyLimitExceededError extends Error {
 }
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
-type AuthErrorWithHeaders = { status: number; error: string; headers?: Record<string, string> };
+type AuthErrorWithHeaders = {
+  status: number;
+  error: string;
+  code?: string;
+  metadata?: Record<string, unknown>;
+  headers?: Record<string, string>;
+};
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
 function loadHasPermission(): Promise<HasPermissionFn | undefined> {
   if (!_hasPermissionPromise) {
@@ -218,7 +227,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     // Express's req.query can contain string | string[] | ParsedQs | ParsedQs[]
     const queryParams = normalizeQueryParams(request.query as Record<string, unknown>);
     let body: unknown;
-    let bodyParseError: { message: string } | undefined;
+    let bodyParseError: { message: string; code: ServerErrorCode } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.headers['content-type'] || '';
@@ -236,6 +245,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           });
           bodyParseError = {
             message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+            code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID,
           };
         }
       } else {
@@ -293,6 +303,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           reject(new BodyLimitExceededError(maxFileSize!));
         });
 
+        // A truncated body errors the file stream; without a listener Node throws it as uncaught.
+        file.on('error', reject);
         file.on('end', () => {
           if (!limitExceeded && isSafeObjectKey(fieldname)) {
             result[fieldname] = Buffer.concat(chunks);
@@ -452,10 +464,16 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     const middlewares: Array<(req: Request, res: Response, next: NextFunction) => void> = [];
 
     const sendBodyTooLarge = (res: Response) => {
-      let errorResponse: unknown = { error: 'Request body too large' };
+      let errorResponse: unknown = {
+        error: 'Request body too large',
+        code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
+      };
       if (route.maxBodySize === undefined && this.bodyLimitOptions) {
         try {
-          errorResponse = this.bodyLimitOptions.onError(errorResponse);
+          errorResponse = ensureErrorCode(
+            this.bodyLimitOptions.onError(errorResponse),
+            SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
+          );
         } catch {
           // Fall back to the default response.
         }
@@ -509,7 +527,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
           // If this is an auth error (not just a success-with-headers), return error response
           if (authResult.error) {
-            return res.status(authResult.status).json({ error: authResult.error });
+            return res
+              .status(authResult.status)
+              .json({ error: authResult.error, code: authResult.code, metadata: authResult.metadata });
           }
         }
 
@@ -525,9 +545,11 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
         // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
         if (params.bodyParseError) {
+          const issues = [{ field: 'body', message: params.bodyParseError.message }];
           return res.status(400).json({
             error: 'Invalid request body',
-            issues: [{ field: 'body', message: params.bodyParseError.message }],
+            issues,
+            code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
           });
         }
 
@@ -542,9 +564,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
               const { status, body } = this.resolveValidationError(route, error, 'query');
               return res.status(status).json(body);
             }
+            const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
             return res.status(400).json({
               error: 'Invalid query parameters',
-              issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+              issues,
+              code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+              metadata: { location: 'query' },
             });
           }
         }
@@ -560,9 +585,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
               const { status, body } = this.resolveValidationError(route, error, 'body');
               return res.status(status).json(body);
             }
+            const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
             return res.status(400).json({
               error: 'Invalid request body',
-              issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+              issues,
+              code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+              metadata: { location: 'body' },
             });
           }
         }
@@ -579,9 +607,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
               const { status, body } = this.resolveValidationError(route, error, 'path');
               return res.status(status).json(body);
             }
+            const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
             return res.status(400).json({
               error: 'Invalid path parameters',
-              issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+              issues,
+              code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+              metadata: { location: 'path' },
             });
           }
         }
@@ -619,6 +650,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
               return res.status(permissionError.status).json({
                 error: permissionError.error,
                 message: permissionError.message,
+                code: permissionError.code,
+                metadata: permissionError.metadata,
               });
             }
           }
@@ -631,7 +664,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           ...(typeof params.body === 'object' ? params.body : {}),
         });
         if (fgaError) {
-          return res.status(fgaError.status).json({ error: fgaError.error, message: fgaError.message });
+          return res.status(fgaError.status).json({
+            error: fgaError.error,
+            message: fgaError.message,
+            code: fgaError.code,
+            metadata: fgaError.metadata,
+          });
         }
 
         try {
@@ -650,14 +688,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
               method: route.method,
             });
           }
-          const customResponse = getCustomHTTPExceptionResponse(error);
+          const customResponse = await getCustomHTTPExceptionResponseWithCode(error);
           if (customResponse) {
             customResponse.headers.forEach((value, name) => res.setHeader(name, value));
             res.status(customResponse.status).end(Buffer.from(await customResponse.arrayBuffer()));
             return;
           }
 
-          const { status, body } = getHTTPErrorResponse(error);
+          const { status, body } = formatErrorResponse(error);
           res.status(status).json(body);
         }
       },
@@ -710,7 +748,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
               }
             }
             if (authResult.error) {
-              return res.status(authResult.status).json({ error: authResult.error });
+              return res
+                .status(authResult.status)
+                .json({ error: authResult.error, code: authResult.code, metadata: authResult.metadata });
             }
           }
 
@@ -730,6 +770,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
                 return res.status(permissionError.status).json({
                   error: permissionError.error,
                   message: permissionError.message,
+                  code: permissionError.code,
+                  metadata: permissionError.metadata,
                 });
               }
             }
@@ -745,7 +787,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           ...(matchedRoute?.params ?? {}),
         });
         if (fgaError) {
-          return res.status(fgaError.status).json({ error: fgaError.error, message: fgaError.message });
+          return res.status(fgaError.status).json({
+            error: fgaError.error,
+            message: fgaError.message,
+            code: fgaError.code,
+            metadata: fgaError.metadata,
+          });
         }
       }
 

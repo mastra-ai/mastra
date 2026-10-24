@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import type { AgentSchedule, AnySchedule, WorkflowSchedule } from '@mastra/core/schedules';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   createScheduleBodySchema,
@@ -15,6 +16,7 @@ import {
   updateScheduleBodySchema,
 } from '../schemas/schedules';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { handleError } from './error';
 import { getPublicWorkflowById } from './utils';
 
 type RunSummary = {
@@ -83,7 +85,7 @@ async function hydrateScheduleResponse(
 async function loadSchedule(mastra: Mastra, scheduleId: string): Promise<AnySchedule> {
   const schedule = await mastra.schedules.get(scheduleId);
   if (!schedule) {
-    throw new HTTPException(404, { message: 'Schedule not found' });
+    throw new HTTPException(404, { message: 'Schedule not found', code: SERVER_ERROR_CODES.SCHEDULE_NOT_FOUND });
   }
   return schedule;
 }
@@ -99,15 +101,20 @@ export const LIST_SCHEDULES_ROUTE = createRoute({
     'Returns all schedules — agent schedules and workflow schedules — optionally filtered by agentId, workflowId, or status. Completed schedules are excluded unless requested with a status filter. Agent schedules can additionally be filtered by threadId, resourceId, or name.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULES_LIST_FAILED'],
   handler: async ({ mastra, agentId, workflowId, status, threadId, resourceId, name }) => {
-    const schedulesStore = await mastra.getStorage()?.getStore('schedules');
-    if (!schedulesStore) {
-      // Schedules domain not configured — there are no schedules to return.
-      return { schedules: [] };
+    try {
+      const schedulesStore = await mastra.getStorage()?.getStore('schedules');
+      if (!schedulesStore) {
+        // Schedules domain not configured — there are no schedules to return.
+        return { schedules: [] };
+      }
+      const schedules = await mastra.schedules.list({ agentId, workflowId, status, threadId, resourceId, name });
+      const hydrated = await Promise.all(schedules.map(schedule => hydrateScheduleResponse(mastra, schedule)));
+      return { schedules: hydrated };
+    } catch (error) {
+      return handleError(error, { message: 'Error listing schedules', code: SERVER_ERROR_CODES.SCHEDULES_LIST_FAILED });
     }
-    const schedules = await mastra.schedules.list({ agentId, workflowId, status, threadId, resourceId, name });
-    const hydrated = await Promise.all(schedules.map(schedule => hydrateScheduleResponse(mastra, schedule)));
-    return { schedules: hydrated };
   },
 });
 
@@ -121,9 +128,14 @@ export const GET_SCHEDULE_ROUTE = createRoute({
   description: 'Returns a single schedule by its id.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_GET_FAILED', 'SCHEDULE_NOT_FOUND'],
   handler: async ({ mastra, scheduleId }) => {
-    const schedule = await loadSchedule(mastra, scheduleId);
-    return hydrateScheduleResponse(mastra, schedule);
+    try {
+      const schedule = await loadSchedule(mastra, scheduleId);
+      return hydrateScheduleResponse(mastra, schedule);
+    } catch (error) {
+      return handleError(error, { message: 'Error getting schedule', code: SERVER_ERROR_CODES.SCHEDULE_GET_FAILED });
+    }
   },
 });
 
@@ -138,59 +150,75 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
     'Creates a new schedule. Pass `agentId` (plus `prompt`) to schedule an agent, or `workflowId` (plus optional `inputData`) to schedule a workflow. Agent schedules get a random `agent_<uuid>` id, workflow schedules a random `schedule_<uuid>` id; pass `id` for a stable slug instead.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['AGENT_NOT_FOUND', 'SCHEDULE_CREATE_FAILED', 'WORKFLOW_NOT_FOUND'],
   handler: async ({ mastra, ...body }) => {
-    // getAgentById throws a MastraError (status 404) when the target is
-    // unknown; translate that into a clean HTTP 404 instead of letting it
-    // surface as 500. Hidden internal workflows are treated as unknown.
-    if ('workflowId' in body && body.workflowId) {
-      // The scheduler later resolves the stored id through core, which also
-      // sees hidden workflows. Reject ids where that lookup would pick a
-      // different workflow than the public one validated here.
-      const workflow = getPublicWorkflowById(mastra, body.workflowId);
-      let resolved: unknown;
-      try {
-        resolved = mastra.getWorkflowById(body.workflowId);
-      } catch {
-        resolved = undefined;
+    try {
+      // getAgentById throws a MastraError (status 404) when the target is
+      // unknown; translate that into a clean HTTP 404 instead of letting it
+      // surface as 500. Hidden internal workflows are treated as unknown.
+      if ('workflowId' in body && body.workflowId) {
+        // The scheduler later resolves the stored id through core, which also
+        // sees hidden workflows. Reject ids where that lookup would pick a
+        // different workflow than the public one validated here.
+        const workflow = getPublicWorkflowById(mastra, body.workflowId);
+        let resolved: unknown;
+        try {
+          resolved = mastra.getWorkflowById(body.workflowId);
+        } catch {
+          resolved = undefined;
+        }
+        if (!workflow || resolved !== workflow) {
+          throw new HTTPException(404, {
+            message: `Workflow "${body.workflowId}" not found`,
+            code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
+            metadata: { workflowId: body.workflowId },
+          });
+        }
+        return await mastra.schedules.create({
+          workflowId: body.workflowId,
+          cron: body.cron,
+          ...(body.id ? { id: body.id } : {}),
+          ...(body.timezone ? { timezone: body.timezone } : {}),
+          ...(body.inputData !== undefined ? { inputData: body.inputData } : {}),
+          ...(body.initialState !== undefined ? { initialState: body.initialState } : {}),
+          ...(body.requestContext ? { requestContext: body.requestContext } : {}),
+          ...(body.resourceId ? { resourceId: body.resourceId } : {}),
+          ...(body.metadata ? { metadata: body.metadata } : {}),
+        });
       }
-      if (!workflow || resolved !== workflow) {
-        throw new HTTPException(404, { message: `Workflow "${body.workflowId}" not found` });
+      const agentBody = body as Extract<typeof body, { agentId: string }>;
+      try {
+        mastra.getAgentById(agentBody.agentId);
+      } catch {
+        throw new HTTPException(404, {
+          message: `Agent "${agentBody.agentId}" not found`,
+          code: SERVER_ERROR_CODES.AGENT_NOT_FOUND,
+          metadata: { agentId: agentBody.agentId },
+        });
       }
       return await mastra.schedules.create({
-        workflowId: body.workflowId,
-        cron: body.cron,
-        ...(body.id ? { id: body.id } : {}),
-        ...(body.timezone ? { timezone: body.timezone } : {}),
-        ...(body.inputData !== undefined ? { inputData: body.inputData } : {}),
-        ...(body.initialState !== undefined ? { initialState: body.initialState } : {}),
-        ...(body.requestContext ? { requestContext: body.requestContext } : {}),
-        ...(body.resourceId ? { resourceId: body.resourceId } : {}),
-        ...(body.metadata ? { metadata: body.metadata } : {}),
+        agentId: agentBody.agentId,
+        cron: agentBody.cron,
+        prompt: agentBody.prompt,
+        ...(agentBody.id ? { id: agentBody.id } : {}),
+        ...(agentBody.name ? { name: agentBody.name } : {}),
+        ...(agentBody.timezone ? { timezone: agentBody.timezone } : {}),
+        ...(agentBody.threadId ? { threadId: agentBody.threadId } : {}),
+        ...(agentBody.resourceId ? { resourceId: agentBody.resourceId } : {}),
+        ...(agentBody.signalType ? { signalType: agentBody.signalType } : {}),
+        ...(agentBody.tagName ? { tagName: agentBody.tagName } : {}),
+        ...(agentBody.attributes ? { attributes: agentBody.attributes } : {}),
+        ...(agentBody.ifActive ? { ifActive: agentBody.ifActive } : {}),
+        ...(agentBody.ifIdle ? { ifIdle: agentBody.ifIdle } : {}),
+        ...(agentBody.providerOptions ? { providerOptions: agentBody.providerOptions } : {}),
+        ...(agentBody.metadata ? { metadata: agentBody.metadata } : {}),
+      });
+    } catch (error) {
+      return handleError(error, {
+        message: 'Error creating schedule',
+        code: SERVER_ERROR_CODES.SCHEDULE_CREATE_FAILED,
       });
     }
-    const agentBody = body as Extract<typeof body, { agentId: string }>;
-    try {
-      mastra.getAgentById(agentBody.agentId);
-    } catch {
-      throw new HTTPException(404, { message: `Agent "${agentBody.agentId}" not found` });
-    }
-    return await mastra.schedules.create({
-      agentId: agentBody.agentId,
-      cron: agentBody.cron,
-      prompt: agentBody.prompt,
-      ...(agentBody.id ? { id: agentBody.id } : {}),
-      ...(agentBody.name ? { name: agentBody.name } : {}),
-      ...(agentBody.timezone ? { timezone: agentBody.timezone } : {}),
-      ...(agentBody.threadId ? { threadId: agentBody.threadId } : {}),
-      ...(agentBody.resourceId ? { resourceId: agentBody.resourceId } : {}),
-      ...(agentBody.signalType ? { signalType: agentBody.signalType } : {}),
-      ...(agentBody.tagName ? { tagName: agentBody.tagName } : {}),
-      ...(agentBody.attributes ? { attributes: agentBody.attributes } : {}),
-      ...(agentBody.ifActive ? { ifActive: agentBody.ifActive } : {}),
-      ...(agentBody.ifIdle ? { ifIdle: agentBody.ifIdle } : {}),
-      ...(agentBody.providerOptions ? { providerOptions: agentBody.providerOptions } : {}),
-      ...(agentBody.metadata ? { metadata: agentBody.metadata } : {}),
-    });
   },
 });
 
@@ -206,26 +234,34 @@ export const UPDATE_SCHEDULE_ROUTE = createRoute({
     "Partial update of a schedule. Fields apply to the matching target type; agent-only fields on a workflow schedule are rejected. An agent schedule's `threadId` and `resourceId` are part of its identity and cannot be changed — to re-target, delete and recreate. A workflow schedule's `resourceId` is run-attribution metadata and may be updated. Editing `cron` (or `timezone`) recomputes `nextFireAt`. A recomputed cadence that can still fire reactivates a `completed` schedule, while a cadence with no future occurrence leaves the schedule `completed`.",
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_NOT_FOUND', 'SCHEDULE_UPDATE_FAILED'],
   handler: async ({ mastra, scheduleId, ...body }) => {
-    await loadSchedule(mastra, scheduleId);
-    return await mastra.schedules.update(scheduleId, {
-      ...(body.cron !== undefined ? { cron: body.cron } : {}),
-      ...(body.timezone !== undefined ? { timezone: body.timezone } : {}),
-      ...(body.status !== undefined ? { status: body.status } : {}),
-      ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
-      ...(body.prompt !== undefined ? { prompt: body.prompt } : {}),
-      ...(body.name !== undefined ? { name: body.name } : {}),
-      ...(body.signalType !== undefined ? { signalType: body.signalType } : {}),
-      ...(body.tagName !== undefined ? { tagName: body.tagName } : {}),
-      ...(body.attributes !== undefined ? { attributes: body.attributes } : {}),
-      ...(body.ifActive !== undefined ? { ifActive: body.ifActive } : {}),
-      ...(body.ifIdle !== undefined ? { ifIdle: body.ifIdle } : {}),
-      ...(body.providerOptions !== undefined ? { providerOptions: body.providerOptions } : {}),
-      ...(body.inputData !== undefined ? { inputData: body.inputData } : {}),
-      ...(body.initialState !== undefined ? { initialState: body.initialState } : {}),
-      ...(body.requestContext !== undefined ? { requestContext: body.requestContext } : {}),
-      ...(body.resourceId !== undefined ? { resourceId: body.resourceId } : {}),
-    });
+    try {
+      await loadSchedule(mastra, scheduleId);
+      return await mastra.schedules.update(scheduleId, {
+        ...(body.cron !== undefined ? { cron: body.cron } : {}),
+        ...(body.timezone !== undefined ? { timezone: body.timezone } : {}),
+        ...(body.status !== undefined ? { status: body.status } : {}),
+        ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
+        ...(body.prompt !== undefined ? { prompt: body.prompt } : {}),
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.signalType !== undefined ? { signalType: body.signalType } : {}),
+        ...(body.tagName !== undefined ? { tagName: body.tagName } : {}),
+        ...(body.attributes !== undefined ? { attributes: body.attributes } : {}),
+        ...(body.ifActive !== undefined ? { ifActive: body.ifActive } : {}),
+        ...(body.ifIdle !== undefined ? { ifIdle: body.ifIdle } : {}),
+        ...(body.providerOptions !== undefined ? { providerOptions: body.providerOptions } : {}),
+        ...(body.inputData !== undefined ? { inputData: body.inputData } : {}),
+        ...(body.initialState !== undefined ? { initialState: body.initialState } : {}),
+        ...(body.requestContext !== undefined ? { requestContext: body.requestContext } : {}),
+        ...(body.resourceId !== undefined ? { resourceId: body.resourceId } : {}),
+      });
+    } catch (error) {
+      return handleError(error, {
+        message: 'Error updating schedule',
+        code: SERVER_ERROR_CODES.SCHEDULE_UPDATE_FAILED,
+      });
+    }
   },
 });
 
@@ -239,10 +275,18 @@ export const DELETE_SCHEDULE_ROUTE = createRoute({
   description: 'Permanently deletes the schedule. 404 when the schedule does not exist.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_DELETE_FAILED', 'SCHEDULE_NOT_FOUND'],
   handler: async ({ mastra, scheduleId }) => {
-    await loadSchedule(mastra, scheduleId);
-    await mastra.schedules.delete(scheduleId);
-    return { message: 'Schedule deleted' };
+    try {
+      await loadSchedule(mastra, scheduleId);
+      await mastra.schedules.delete(scheduleId);
+      return { message: 'Schedule deleted' };
+    } catch (error) {
+      return handleError(error, {
+        message: 'Error deleting schedule',
+        code: SERVER_ERROR_CODES.SCHEDULE_DELETE_FAILED,
+      });
+    }
   },
 });
 
@@ -257,10 +301,15 @@ export const PAUSE_SCHEDULE_ROUTE = createRoute({
     'Marks the schedule as paused. The scheduler tick loop will skip paused schedules. Idempotent — pausing an already-paused schedule returns the current state unchanged. Pause status survives redeploys.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_NOT_FOUND', 'SCHEDULE_PAUSE_FAILED'],
   handler: async ({ mastra, scheduleId }) => {
-    await loadSchedule(mastra, scheduleId);
-    const updated = await mastra.schedules.pause(scheduleId);
-    return hydrateScheduleResponse(mastra, updated);
+    try {
+      await loadSchedule(mastra, scheduleId);
+      const updated = await mastra.schedules.pause(scheduleId);
+      return hydrateScheduleResponse(mastra, updated);
+    } catch (error) {
+      return handleError(error, { message: 'Error pausing schedule', code: SERVER_ERROR_CODES.SCHEDULE_PAUSE_FAILED });
+    }
   },
 });
 
@@ -275,10 +324,18 @@ export const RESUME_SCHEDULE_ROUTE = createRoute({
     'Marks the schedule as active and recomputes nextFireAt from "now" so a long-paused schedule does not fire a backlog. Idempotent — resuming an already-active schedule returns the current state unchanged.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_NOT_FOUND', 'SCHEDULE_RESUME_FAILED'],
   handler: async ({ mastra, scheduleId }) => {
-    await loadSchedule(mastra, scheduleId);
-    const updated = await mastra.schedules.resume(scheduleId);
-    return hydrateScheduleResponse(mastra, updated);
+    try {
+      await loadSchedule(mastra, scheduleId);
+      const updated = await mastra.schedules.resume(scheduleId);
+      return hydrateScheduleResponse(mastra, updated);
+    } catch (error) {
+      return handleError(error, {
+        message: 'Error resuming schedule',
+        code: SERVER_ERROR_CODES.SCHEDULE_RESUME_FAILED,
+      });
+    }
   },
 });
 
@@ -293,9 +350,14 @@ export const RUN_SCHEDULE_ROUTE = createRoute({
     'Manually triggers a single schedule fire out-of-band from the cron schedule. Records a trigger row with `triggerKind: "manual"`. Does not advance `nextFireAt`.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_NOT_FOUND', 'SCHEDULE_RUN_FAILED'],
   handler: async ({ mastra, scheduleId }) => {
-    await loadSchedule(mastra, scheduleId);
-    return await mastra.schedules.run(scheduleId);
+    try {
+      await loadSchedule(mastra, scheduleId);
+      return await mastra.schedules.run(scheduleId);
+    } catch (error) {
+      return handleError(error, { message: 'Error running schedule', code: SERVER_ERROR_CODES.SCHEDULE_RUN_FAILED });
+    }
   },
 });
 
@@ -310,28 +372,36 @@ export const LIST_SCHEDULE_TRIGGERS_ROUTE = createRoute({
   description: 'Returns the audit trail of trigger attempts for a schedule, ordered by actualFireAt descending.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_TRIGGERS_LIST_FAILED'],
   handler: async ({ mastra, scheduleId, limit, fromActualFireAt, toActualFireAt }) => {
-    const schedulesStore = await mastra.getStorage()?.getStore('schedules');
-    if (!schedulesStore) {
-      return { triggers: [] };
+    try {
+      const schedulesStore = await mastra.getStorage()?.getStore('schedules');
+      if (!schedulesStore) {
+        return { triggers: [] };
+      }
+      const schedule = await mastra.schedules.get(scheduleId);
+      const triggers = await schedulesStore.listTriggers(schedule?.id ?? scheduleId, {
+        limit,
+        fromActualFireAt,
+        toActualFireAt,
+      });
+      if (!schedule?.workflowId) {
+        return { triggers };
+      }
+      const workflowName = schedule.workflowId;
+      const hydrated = await Promise.all(
+        triggers.map(async trigger => {
+          if (trigger.outcome !== 'published' || !trigger.runId) return trigger;
+          const run = await fetchRunSummary(mastra, workflowName, trigger.runId);
+          return run ? { ...trigger, run } : trigger;
+        }),
+      );
+      return { triggers: hydrated };
+    } catch (error) {
+      return handleError(error, {
+        message: 'Error listing schedule triggers',
+        code: SERVER_ERROR_CODES.SCHEDULE_TRIGGERS_LIST_FAILED,
+      });
     }
-    const schedule = await mastra.schedules.get(scheduleId);
-    const triggers = await schedulesStore.listTriggers(schedule?.id ?? scheduleId, {
-      limit,
-      fromActualFireAt,
-      toActualFireAt,
-    });
-    if (!schedule?.workflowId) {
-      return { triggers };
-    }
-    const workflowName = schedule.workflowId;
-    const hydrated = await Promise.all(
-      triggers.map(async trigger => {
-        if (trigger.outcome !== 'published' || !trigger.runId) return trigger;
-        const run = await fetchRunSummary(mastra, workflowName, trigger.runId);
-        return run ? { ...trigger, run } : trigger;
-      }),
-    );
-    return { triggers: hydrated };
   },
 });

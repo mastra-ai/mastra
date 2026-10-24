@@ -7,6 +7,8 @@ import {
   TRANSCRIBE_SPEECH_DEPRECATED_ROUTE as INTERNAL_TRANSCRIBE_SPEECH_DEPRECATED_ROUTE,
   TRANSCRIBE_SPEECH_ROUTE as INTERNAL_TRANSCRIBE_SPEECH_ROUTE,
 } from '@internal/voice/routes';
+import type { VoiceErrorCode } from '@internal/voice/routes';
+import type { ServerErrorCode } from '../error-codes';
 import type { ServerRoute } from '../server-adapter/routes';
 
 export const GET_SPEAKERS_ROUTE = INTERNAL_GET_SPEAKERS_ROUTE as unknown as ServerRoute;
@@ -16,3 +18,7 @@ export const GENERATE_SPEECH_DEPRECATED_ROUTE = INTERNAL_GENERATE_SPEECH_DEPRECA
 export const TRANSCRIBE_SPEECH_ROUTE = INTERNAL_TRANSCRIBE_SPEECH_ROUTE as unknown as ServerRoute;
 export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE = INTERNAL_TRANSCRIBE_SPEECH_DEPRECATED_ROUTE as unknown as ServerRoute;
 export const GET_LISTENER_ROUTE = INTERNAL_GET_LISTENER_ROUTE as unknown as ServerRoute;
+
+// Voice cannot import the catalog (circular dependency), so its local code union is checked here.
+const voiceCodesAreServerCodes: VoiceErrorCode extends ServerErrorCode ? true : never = true;
+void voiceCodesAreServerCodes;

@@ -4,13 +4,15 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
+import type { ServerErrorCode } from '@mastra/server/error-codes';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
-  getCustomHTTPExceptionResponse,
-  getHTTPErrorResponse,
+  formatErrorResponse,
+  getCustomHTTPExceptionResponseWithCode,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -126,7 +128,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         const error = err instanceof Error ? err : new Error(String(err));
         const routeErrorResponse = (ctx as any)._mastraRouteErrorResponse;
         const { status, body } =
-          routeErrorResponse?.error === err ? routeErrorResponse.response : getHTTPErrorResponse(err);
+          routeErrorResponse?.error === err ? routeErrorResponse.response : formatErrorResponse(err);
         ctx.status = status;
         ctx.body = { ...body, error: error.message || 'Unknown error' };
 
@@ -373,7 +375,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       // If this is an auth error (not just a success-with-headers), return error response
       if (authError.error) {
         ctx.status = authError.status;
-        ctx.body = { error: authError.error };
+        ctx.body = { error: authError.error, code: authError.code, metadata: authError.metadata };
         return;
       }
     }
@@ -383,9 +385,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
     if (params.bodyParseError) {
       ctx.status = 400;
+      const issues = [{ field: 'body', message: params.bodyParseError.message }];
       ctx.body = {
         error: 'Invalid request body',
-        issues: [{ field: 'body', message: params.bodyParseError.message }],
+        issues,
+        code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
       };
       return;
     }
@@ -404,9 +408,12 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           return;
         }
         ctx.status = 400;
+        const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
         ctx.body = {
           error: 'Invalid query parameters',
-          issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          issues,
+          code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+          metadata: { location: 'query' },
         };
         return;
       }
@@ -426,9 +433,12 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           return;
         }
         ctx.status = 400;
+        const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
         ctx.body = {
           error: 'Invalid request body',
-          issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          issues,
+          code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+          metadata: { location: 'body' },
         };
         return;
       }
@@ -449,9 +459,12 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           return;
         }
         ctx.status = 400;
+        const issues = [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }];
         ctx.body = {
           error: 'Invalid path parameters',
-          issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          issues,
+          code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+          metadata: { location: 'path' },
         };
         return;
       }
@@ -487,6 +500,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           ctx.body = {
             error: permissionError.error,
             message: permissionError.message,
+            code: permissionError.code,
+            metadata: permissionError.metadata,
           };
           return;
         }
@@ -501,7 +516,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     });
     if (fgaError) {
       ctx.status = fgaError.status;
-      ctx.body = { error: fgaError.error, message: fgaError.message };
+      ctx.body = { error: fgaError.error, message: fgaError.message, code: fgaError.code, metadata: fgaError.metadata };
       return;
     }
 
@@ -522,7 +537,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         });
         (ctx as any)._mastraLoggedNotImplementedError = httpStatus === 501 ? error : undefined;
       }
-      const customResponse = getCustomHTTPExceptionResponse(error);
+      const customResponse = await getCustomHTTPExceptionResponseWithCode(error);
       if (customResponse) {
         ctx.status = customResponse.status;
         customResponse.headers.forEach((value, name) => ctx.set(name, value));
@@ -532,7 +547,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
       // Computed before the status is copied onto the error below, so a MastraError's
       // details.status keeps its message-only body when it reaches the error boundary.
-      (ctx as any)._mastraRouteErrorResponse = { error, response: getHTTPErrorResponse(error) };
+      (ctx as any)._mastraRouteErrorResponse = { error, response: formatErrorResponse(error) };
 
       // Attach status code to the error for upstream middleware
       if (error && typeof error === 'object') {
@@ -634,7 +649,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // Koa's ctx.query is ParsedUrlQuery which is Record<string, string | string[]>
     const queryParams = normalizeQueryParams((ctx.query || {}) as Record<string, unknown>);
     let body: unknown;
-    let bodyParseError: { message: string } | undefined;
+    let bodyParseError: { message: string; code: ServerErrorCode } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = ctx.headers['content-type'] || '';
@@ -653,6 +668,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           }
           bodyParseError = {
             message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+            code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID,
           };
         }
       } else {
@@ -694,6 +710,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
         });
 
+        // A truncated body errors the file stream; without a listener Node throws it as uncaught.
+        file.on('error', reject);
         file.on('end', () => {
           if (!limitExceeded && isSafeObjectKey(fieldname)) {
             result[fieldname] = Buffer.concat(chunks);
@@ -961,7 +979,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
               if (authError.error) {
                 ctx.status = authError.status;
-                ctx.body = { error: authError.error };
+                ctx.body = { error: authError.error, code: authError.code, metadata: authError.metadata };
                 return;
               }
             }
@@ -985,6 +1003,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
                 ctx.body = {
                   error: permissionError.error,
                   message: permissionError.message,
+                  code: permissionError.code,
+                  metadata: permissionError.metadata,
                 };
                 return;
               }
@@ -1003,7 +1023,12 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           });
           if (fgaError) {
             ctx.status = fgaError.status;
-            ctx.body = { error: fgaError.error, message: fgaError.message };
+            ctx.body = {
+              error: fgaError.error,
+              message: fgaError.message,
+              code: fgaError.code,
+              metadata: fgaError.metadata,
+            };
             return;
           }
         }

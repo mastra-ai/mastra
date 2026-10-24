@@ -77,7 +77,7 @@ describe('Validation Error Hook', () => {
 
       expect(response.status).toBe(422);
       const data = await response.json();
-      expect(data).toEqual({ ok: false, source: 'custom' });
+      expect(data).toEqual({ ok: false, source: 'custom', code: 'REQUEST_VALIDATION_FAILED' });
       expect(hook).toHaveBeenCalledWith(expect.any(z.ZodError), 'body');
     });
 
@@ -104,7 +104,7 @@ describe('Validation Error Hook', () => {
 
       expect(response.status).toBe(422);
       const data = await response.json();
-      expect(data).toEqual({ ok: false, type: 'query_error' });
+      expect(data).toEqual({ ok: false, type: 'query_error', code: 'REQUEST_VALIDATION_FAILED' });
       expect(hook).toHaveBeenCalledWith(expect.any(z.ZodError), 'query');
     });
 
@@ -131,7 +131,7 @@ describe('Validation Error Hook', () => {
 
       expect(response.status).toBe(422);
       const data = await response.json();
-      expect(data).toEqual({ ok: false, type: 'path_error' });
+      expect(data).toEqual({ ok: false, type: 'path_error', code: 'REQUEST_VALIDATION_FAILED' });
       expect(hook).toHaveBeenCalledWith(expect.any(z.ZodError), 'path');
     });
 
@@ -190,7 +190,7 @@ describe('Validation Error Hook', () => {
 
       expect(response.status).toBe(418);
       const data = await response.json();
-      expect(data).toEqual({ source: 'route' });
+      expect(data).toEqual({ source: 'route', code: 'REQUEST_VALIDATION_FAILED' });
       expect(routeHook).toHaveBeenCalledWith(expect.any(z.ZodError), 'body');
       expect(serverHook).not.toHaveBeenCalled();
     });

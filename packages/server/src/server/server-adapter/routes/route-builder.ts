@@ -2,6 +2,7 @@ import type { FGARouteConfig, MastraFGAPermissionInput } from '@mastra/core/auth
 import type { ValidationErrorHook } from '@mastra/core/server';
 import type { ZodRawShape, ZodTypeAny } from 'zod/v4';
 import { z, ZodObject, ZodOptional, ZodNullable, ZodArray, ZodRecord } from 'zod/v4';
+import type { ServerErrorCode } from '../../error-codes';
 import { generateRouteOpenAPI } from '../openapi-utils';
 import type { InferParams, ResponseType, RouteSchemas, ServerRoute, ServerRouteHandler } from './index';
 
@@ -182,6 +183,8 @@ interface RouteConfig<
    */
   fga?: FGARouteConfig;
   onValidationError?: ValidationErrorHook;
+  /** Business error codes this route can return, on top of the framework-wide codes. */
+  errors?: readonly ServerErrorCode[];
 }
 
 /**

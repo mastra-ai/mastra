@@ -2,7 +2,8 @@ import { Readable } from 'node:stream';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-import { getCustomRouteHTTPExceptionResponse } from '@mastra/server/server-adapter';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
+import { getCustomRouteErrorResponse } from '@mastra/server/server-adapter';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Request, Response as ExpressResponse } from 'express';
 import { Hono } from 'hono';
@@ -135,16 +136,18 @@ export class CustomRouteService {
     });
 
     const serverOnError = mastra.getServer()?.onError;
-    app.onError((err, c) => {
+    app.onError(async (err, c) => {
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
-      const httpExceptionResponse = getCustomRouteHTTPExceptionResponse(err);
-      if (httpExceptionResponse) return httpExceptionResponse;
-      mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
-        error: err instanceof Error ? (err.stack ?? err.message) : String(err),
-      });
-      return c.json({ error: 'Internal Server Error' }, 500);
+      const response = await getCustomRouteErrorResponse(err);
+      // Log everything except 4xx client conditions, matching the shared custom-route handler.
+      if (!response || response.status >= 500) {
+        mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
+          error: err instanceof Error ? (err.stack ?? err.message) : String(err),
+        });
+      }
+      return response ?? c.json({ error: 'Internal Server Error', code: SERVER_ERROR_CODES.UNEXPECTED_ERROR }, 500);
     });
 
     for (const route of this.routes) {

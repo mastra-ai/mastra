@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { runIdSchema } from '../schemas/common';
 import { listLogsQuerySchema, listLogsResponseSchema, listLogTransportsResponseSchema } from '../schemas/logs';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -17,6 +18,7 @@ export const LIST_LOG_TRANSPORTS_ROUTE = createRoute({
   description: 'Returns a list of all available log transports',
   tags: ['Logs'],
   requiresAuth: true,
+  errors: ['LOG_TRANSPORTS_LIST_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const logger = mastra.getLogger();
@@ -26,7 +28,10 @@ export const LIST_LOG_TRANSPORTS_ROUTE = createRoute({
         transports: transports ? [...transports.keys()] : [],
       };
     } catch (error) {
-      return handleError(error, 'Error getting log Transports');
+      return handleError(error, {
+        message: 'Error getting log Transports',
+        code: SERVER_ERROR_CODES.LOG_TRANSPORTS_LIST_FAILED,
+      });
     }
   },
 });
@@ -42,6 +47,7 @@ export const LIST_LOGS_ROUTE = createRoute({
     'Returns logs from a specific transport with optional filtering by date range, log level, and custom filters',
   tags: ['Logs'],
   requiresAuth: true,
+  errors: ['LOGS_LIST_FAILED', 'REQUEST_ARGUMENT_REQUIRED'],
   handler: async ({ mastra, ...params }) => {
     try {
       const { transportId, fromDate, toDate, logLevel, filters: _filters, page, perPage } = params;
@@ -61,7 +67,7 @@ export const LIST_LOGS_ROUTE = createRoute({
       });
       return logs;
     } catch (error) {
-      return handleError(error, 'Error getting logs');
+      return handleError(error, { message: 'Error getting logs', code: SERVER_ERROR_CODES.LOGS_LIST_FAILED });
     }
   },
 });
@@ -77,6 +83,7 @@ export const LIST_LOGS_BY_RUN_ID_ROUTE = createRoute({
   description: 'Returns all logs for a specific execution run from a transport',
   tags: ['Logs'],
   requiresAuth: true,
+  errors: ['LOGS_BY_RUN_LIST_FAILED', 'REQUEST_ARGUMENT_REQUIRED'],
   handler: async ({ mastra, runId, ...params }) => {
     try {
       const { transportId, fromDate, toDate, logLevel, filters: _filters, page, perPage } = params;
@@ -98,7 +105,10 @@ export const LIST_LOGS_BY_RUN_ID_ROUTE = createRoute({
       });
       return logs;
     } catch (error) {
-      return handleError(error, 'Error getting logs by run ID');
+      return handleError(error, {
+        message: 'Error getting logs by run ID',
+        code: SERVER_ERROR_CODES.LOGS_BY_RUN_LIST_FAILED,
+      });
     }
   },
 });

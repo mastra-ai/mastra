@@ -356,6 +356,33 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
       expect(result).toMatchObject({ success: true, message: 'Hello, World!' });
     });
 
+    it('should report a malformed multipart body as REQUEST_MULTIPART_INVALID', async () => {
+      const { adapter, app } = await setupAdapter(context);
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/upload-malformed',
+        responseType: 'json',
+        handler: async () => ({ success: true }),
+      };
+
+      applyMiddleware(app, getContextMiddleware(adapter));
+      await registerRoute(adapter, app, testRoute, { prefix: '' });
+
+      serverInfo = await startServer(app);
+
+      // A part that is never closed by the terminating boundary
+      const response = await fetch(`${serverInfo.baseUrl}/test/upload-malformed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'multipart/form-data; boundary=mastra-boundary' },
+        body: '--mastra-boundary\r\nContent-Disposition: form-data; name="audio"; filename="a.wav"\r\n\r\nabc',
+      });
+
+      expect(response.status).toBe(400);
+      const result: any = await response.json();
+      expect(result.code).toBe('REQUEST_MULTIPART_INVALID');
+    });
+
     it('should ignore form fields named with special object keys', async () => {
       const { adapter, app } = await setupAdapter(context);
 
