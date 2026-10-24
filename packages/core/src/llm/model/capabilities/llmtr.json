@@ -63,32 +63,19 @@
     "upstage/solar-pro4"
   ],
   "reasoning": {
-    "gemma-4": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen3-6-35b": [
       {
         "type": "toggle"
       }
     ],
-    "thinkingmachines/inkling-small": [
+    "gemma-4": [
       {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "type": "toggle"
       }
     ],
-    "thinkingmachines/inkling": [
+    "poolside/laguna-xs-2.1": [
       {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "meta/muse-spark-1.2-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
+        "type": "toggle"
       }
     ],
     "upstage/solar-pro2": [
@@ -109,9 +96,16 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "poolside/laguna-xs-2.1": [
+    "thinkingmachines/inkling": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "thinkingmachines/inkling-small": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
       }
     ],
     "sakana/fugu-ultra": [
@@ -120,31 +114,13 @@
         "values": ["high", "xhigh"]
       }
     ],
-    "qwen/qwen3.7-plus": [
+    "meta/muse-spark-1.2-contributor": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
     "qwen/qwen-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen3-vl-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen3.6-plus": [
       {
         "type": "toggle"
       },
@@ -160,7 +136,15 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.5-397b-a17b": [
+    "qwen/qwen3-vl-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen-flash": [
       {
         "type": "toggle"
       },
@@ -184,7 +168,23 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen-flash": [
+    "qwen/qwen3.7-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.6-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.5-397b-a17b": [
       {
         "type": "toggle"
       },

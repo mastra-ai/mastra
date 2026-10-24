@@ -31222,9 +31222,9 @@
       },
       "tencent/hy3": {
         "cost": {
-          "input": 0.132,
-          "output": 0.528,
-          "cache_read": 0.033
+          "input": 0.0825,
+          "output": 0.33,
+          "cache_read": 0.020625
         }
       },
       "tencent/hy3-preview": {
@@ -31236,9 +31236,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.834,
-          "output": 2.501,
-          "cache_read": 0.042
+          "input": 0.7506,
+          "output": 2.2509,
+          "cache_read": 0.0378
         }
       },
       "thedrummer/cydonia-24b-v4.1": {
@@ -31604,8 +31604,8 @@
       "~deepseek/deepseek-v4-flash-latest": {
         "cost": {
           "input": 0.0422,
-          "output": 0.1694,
-          "cache_read": 0.028
+          "output": 0.1763,
+          "cache_read": 0.027
         }
       },
       "~google/gemini-flash-latest": {
@@ -31688,8 +31688,8 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.0393,
-          "output": 0.1028,
+          "input": 0.0509,
+          "output": 0.0702,
           "cache_read": 0.03
         }
       },
@@ -44332,9 +44332,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.834,
-          "output": 2.501,
-          "cache_read": 0.042
+          "input": 0.7506,
+          "output": 2.2509,
+          "cache_read": 0.0378
         }
       },
       "thinkingmachines/Inkling-Small": {
@@ -50673,6 +50673,14 @@
           "cache_read": 0.003
         }
       },
+      "gemini-4-argon": {
+        "cost": {
+          "input": 2,
+          "output": 10,
+          "cache_read": 0.1,
+          "input_audio": 2
+        }
+      },
       "gemini-4-argon-contributor": {
         "cost": {
           "input": 4,
@@ -51499,9 +51507,9 @@
       },
       "deepseek/deepseek-v4-pro": {
         "cost": {
-          "input": 0.31755,
-          "output": 0.6351,
-          "cache_read": 0.026463
+          "input": 0.2088,
+          "output": 0.4176,
+          "cache_read": 0.0174
         }
       },
       "deepseek/deepseek-v4-pro-0813": {
@@ -53911,9 +53919,9 @@
       },
       "tencent/hy3": {
         "cost": {
-          "input": 0.132,
-          "output": 0.528,
-          "cache_read": 0.033
+          "input": 0.0825,
+          "output": 0.33,
+          "cache_read": 0.020625
         }
       },
       "tencent/hy3-preview": {
@@ -53925,9 +53933,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.834,
-          "output": 2.501,
-          "cache_read": 0.042
+          "input": 0.7506,
+          "output": 2.2509,
+          "cache_read": 0.0378
         }
       },
       "thedrummer/cydonia-24b-v4.1": {
@@ -54397,8 +54405,8 @@
       "~deepseek/deepseek-v4-flash-latest": {
         "cost": {
           "input": 0.0422,
-          "output": 0.1694,
-          "cache_read": 0.028
+          "output": 0.1763,
+          "cache_read": 0.027
         }
       },
       "~google/gemini-flash-latest": {
@@ -54587,8 +54595,8 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.0393,
-          "output": 0.1028,
+          "input": 0.0509,
+          "output": 0.0702,
           "cache_read": 0.03
         }
       },

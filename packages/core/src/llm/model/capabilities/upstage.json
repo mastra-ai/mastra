@@ -8,16 +8,16 @@
         "values": ["minimal", "high"]
       }
     ],
-    "solar-pro3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "solar-mini4": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "solar-pro3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "solar-pro4": [
