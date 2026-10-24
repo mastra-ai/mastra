@@ -683,42 +683,48 @@ const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 let lastUlidTime = -1;
 let lastUlidRandom = 0n;
 
+/**
+ * Most tags one scope may hold. Visible-scope lookup enumerates every subset of the query scope
+ * (8 tags = 255 keys in one `IN (...)`); past ~30 the subset loop hangs and `1 << n` wraps, so this
+ * is a storage-safety limit, not a hierarchy rule.
+ *
+ * @experimental
+ */
+export const MAX_KNOWLEDGE_SCOPE_TAGS = 8;
+
+const KNOWLEDGE_SCOPE_TYPE_PATTERN = /^[a-z][a-z0-9_-]*$/;
+
+/** Orders by UTF-16 code unit, so keys are identical on every machine regardless of locale. */
+function compareCodeUnits(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Validates tag shape (`type:value`), dedupes and sorts by whole entry. Any tag type is accepted;
+ * a value segment may not start with `$`, so a stored scope can never look like a scope pattern.
+ */
 export function canonicalizeKnowledgeScope(scope: KnowledgeScope): KnowledgeScope {
-  const entriesByLevel = new Map<KnowledgeScopeLevel, string>();
-  for (const entry of scope) {
-    const separator = entry.indexOf(':');
-    const level = entry.slice(0, separator) as KnowledgeScopeLevel;
-    const id = entry.slice(separator + 1);
-    const isUncuratedCompanion =
-      (level === 'resource' || level === 'thread') && id.endsWith(':uncurated') && id.length > ':uncurated'.length;
-    if (separator <= 0 || !id || id.includes('\u001f') || SCOPE_ORDER[level] === undefined) {
-      throw new Error(`Invalid knowledge scope entry: ${entry}`);
-    }
-    if (isUncuratedCompanion) continue;
-    const existing = entriesByLevel.get(level);
-    if (existing && existing !== entry) {
-      throw new Error(`Knowledge scope contains multiple ${level} entries`);
-    }
-    entriesByLevel.set(level, entry);
-  }
   if (scope.length === 0) {
     throw new Error('Knowledge scope cannot be empty');
   }
-  if (entriesByLevel.has('thread') && (!entriesByLevel.has('resource') || !entriesByLevel.has('org'))) {
-    throw new Error('Thread knowledge scope requires resource and org ancestors');
+  for (const entry of scope) {
+    const separator = entry.indexOf(':');
+    const type = entry.slice(0, separator);
+    const value = entry.slice(separator + 1);
+    if (
+      separator <= 0 ||
+      !KNOWLEDGE_SCOPE_TYPE_PATTERN.test(type) ||
+      !value ||
+      entry.includes('\u001f') ||
+      value.split(':').some(segment => segment.startsWith('$'))
+    ) {
+      throw new Error(`Invalid knowledge scope entry: ${entry}`);
+    }
   }
-  if (entriesByLevel.has('resource') && !entriesByLevel.has('org')) {
-    throw new Error('Resource knowledge scope requires an org ancestor');
+  const unique = [...new Set(scope)].sort(compareCodeUnits);
+  if (unique.length > MAX_KNOWLEDGE_SCOPE_TAGS) {
+    throw new Error(`Knowledge scope holds at most ${MAX_KNOWLEDGE_SCOPE_TAGS} tags; got ${unique.length}`);
   }
-
-  const unique = [...new Set(scope)];
-  unique.sort((a, b) => {
-    const aLevel = a.slice(0, a.indexOf(':')) as KnowledgeScopeLevel;
-    const bLevel = b.slice(0, b.indexOf(':')) as KnowledgeScopeLevel;
-    const aOrder = SCOPE_ORDER[aLevel] ?? Number.MAX_SAFE_INTEGER;
-    const bOrder = SCOPE_ORDER[bLevel] ?? Number.MAX_SAFE_INTEGER;
-    return aOrder - bOrder || a.localeCompare(b);
-  });
   return unique;
 }
 
