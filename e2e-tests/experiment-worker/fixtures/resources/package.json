@@ -11,7 +11,7 @@
     "typescript-language-server": "^4.3.4",
     "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-protocol": "^3.17.5",
-    "zod": "^3.25.76"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "mastra": "experiment-worker-e2e-test"

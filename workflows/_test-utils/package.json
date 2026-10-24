@@ -24,7 +24,7 @@
     "@internal/ai-sdk-v5": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/libsql": "workspace:*",
-    "zod": "^3.25.76",
+    "zod": "^4.0.0",
     "vitest": "catalog:"
   }
 }

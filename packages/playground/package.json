@@ -93,7 +93,7 @@
     "sonner": "^2.0.7",
     "superjson": "^2.2.6",
     "use-debounce": "^10.1.0",
-    "zod": "^3.25.0",
+    "zod": "^4.0.0",
     "zod-v4": "npm:zod@^4.6.7"
   },
   "devDependencies": {

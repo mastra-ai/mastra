@@ -24,7 +24,7 @@
     "@mastra/observability": "1.0.0-beta.10",
     "inngest": "^4.2.6",
     "mastra": "1.0.0-beta.13",
-    "zod": "^3.25.76"
+    "zod": "^4.6.6"
   },
   "pnpm": {
     "overrides": {
