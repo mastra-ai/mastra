@@ -18,7 +18,7 @@
  */
 
 import type { Knowledge } from '@mastra/core/knowledge';
-import { listPinnedKnowledge, readKnowledgeActivity, readKnowledgeNode } from '@mastra/core/knowledge';
+import { listPinnedKnowledge, readKnowledgeNode } from '@mastra/core/knowledge';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type {
@@ -54,6 +54,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /** Authorized visible events returned per activity page. */
 const ACTIVITY_PAGE_SIZE = 25;
+/** Events fetched per `listActivity` batch while filling a visible page. */
+const ACTIVITY_BATCH = 100;
+/** Hard scan cap so a huge hidden backlog cannot spin the request. */
+const ACTIVITY_SCAN_CAP = 1000;
 /** Maximum visible nodes inspected for non-prefix name matches. */
 const SEARCH_SCAN_CAP = 1000;
 /** Compact result window returned to the search popover. */
@@ -291,6 +295,11 @@ export interface KnowledgeActivityPayload {
   nextCursor?: string;
   /** The scope has more members than the activity filter reads; events for the rest are omitted. */
   truncated?: true;
+}
+
+interface VisibleKnowledgeActivity {
+  event: KnowledgeActivityEvent;
+  node: KnowledgeNode;
 }
 
 export interface KnowledgeNodePayload {
@@ -1528,15 +1537,103 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           }
           const cursor = loose(c).req.query('cursor');
           if (cursor && cursor.length > 128) return c.json({ error: 'invalid_activity_cursor' }, 400);
-          const payload: KnowledgeActivityPayload = await readKnowledgeActivity(view.store, view.scope, {
-            cursor,
-            limit: ACTIVITY_PAGE_SIZE,
+          const { items: activity, scanCursor } = await this.#visibleActivity(
+            view,
             memberIds,
-            truncated: membersTruncated,
-          });
+            cursor,
+            ACTIVITY_PAGE_SIZE + 1,
+          );
+          const visiblePage = activity.slice(0, ACTIVITY_PAGE_SIZE);
+          const lastVisible = visiblePage.at(-1);
+          const payload: KnowledgeActivityPayload = {
+            events: visiblePage.map(({ event, node }) => {
+              const rung = deepestRung(node.scope);
+              const threadId =
+                rung === 'thread' ? node.scope.find(address => address.startsWith('thread:'))?.slice(7) : undefined;
+              return {
+                id: event.id,
+                action: event.action,
+                recordType: event.recordType,
+                ...(event.recordType === 'record' ? { recordId: event.recordId } : {}),
+                scope: event.scope,
+                node: {
+                  id: node.id,
+                  name: node.name,
+                  rung,
+                  ...(threadId ? { threadId } : {}),
+                },
+                createdAt: event.createdAt.toISOString(),
+              };
+            }),
+            ...(activity.length > ACTIVITY_PAGE_SIZE && lastVisible
+              ? { nextCursor: lastVisible.event.id }
+              : scanCursor
+                ? { nextCursor: scanCursor }
+                : {}),
+            ...(membersTruncated ? { truncated: true as const } : {}),
+          };
           return c.json(payload);
         },
       }),
     ];
+  }
+
+  /**
+   * Newest-first activity page where EVERY returned event targets a node
+   * visible in the view. Visibility is decided BEFORE window shaping: hidden
+   * rows are skipped entirely (no action/type/id/time metadata leaks) and a
+   * hidden backlog can never displace visible events from the window.
+   * When the scan cap stops the walk before the stream ends, `scanCursor` is
+   * the last scanned event so the caller can continue past hidden rows.
+   */
+  async #visibleActivity(
+    view: ResolvedView,
+    memberIds: Set<string> | undefined,
+    cursor: string | undefined,
+    limit: number,
+  ): Promise<{ items: VisibleKnowledgeActivity[]; scanCursor?: string }> {
+    const out: VisibleKnowledgeActivity[] = [];
+    // Many events in a scan target the same node; read each node once per request.
+    const nodes = new Map<string, Promise<KnowledgeNode | null>>();
+    const getNode = (id: string) => {
+      let node = nodes.get(id);
+      if (!node) {
+        node = view.store.getNode(id);
+        nodes.set(id, node);
+      }
+      return node;
+    };
+    let after = cursor;
+    let scanned = 0;
+    let exhausted = false;
+    while (out.length < limit && scanned < ACTIVITY_SCAN_CAP) {
+      const batch = await view.store.listActivity({ scope: view.scope, after, limit: ACTIVITY_BATCH });
+      if (batch.length === 0) {
+        exhausted = true;
+        break;
+      }
+      for (const event of batch) {
+        after = event.id;
+        scanned += 1;
+        let targetNode: KnowledgeNode | null;
+        if (event.recordType === 'node') {
+          targetNode = await getNode(event.recordId);
+        } else {
+          const record = await view.store.getKnowledge({ id: event.recordId });
+          targetNode = record ? await getNode(record.node) : null;
+          if (record && !isKnowledgeScopeVisible(record.scope, view.scope)) targetNode = null;
+        }
+        if (
+          targetNode?.scope &&
+          isKnowledgeScopeVisible(targetNode.scope, view.scope) &&
+          (memberIds === undefined || memberIds.has(targetNode.id))
+        ) {
+          out.push({ event, node: targetNode });
+        }
+        if (out.length >= limit || scanned >= ACTIVITY_SCAN_CAP) break;
+      }
+    }
+    const stoppedAtCap = !exhausted && out.length < limit && scanned >= ACTIVITY_SCAN_CAP;
+    return { items: out, ...(stoppedAtCap && after ? { scanCursor: after } : {}) };
   }
 }
