@@ -1814,6 +1814,7 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
       connected: isProviderConnected(id, allProviders) || isClaimedByGateway(id, provider.models, gateways),
       docUrl: provider.docUrl,
       models: [...provider.models],
+      modelReleaseDates: provider.modelReleaseDates,
     };
   });
 }
