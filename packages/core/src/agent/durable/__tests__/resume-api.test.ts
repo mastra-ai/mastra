@@ -1831,3 +1831,78 @@ describe('per-call tool injection survives in-process resume', () => {
     expect(tools?.perCallToolsetTool).toBeDefined();
   });
 });
+
+// #28229: invalid data must not consume the suspension before the caller can correct it.
+describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', AgentClass => {
+  it.each(
+    ['warm', 'cold'].flatMap(registry =>
+      (['resumeStream', 'resumeGenerate', 'resume'] as const).flatMap(method =>
+        ['assigned', 'toolset'].map(source => ({ registry, method, source })),
+      ),
+    ),
+  )(
+    'allows correcting invalid data via $method with a $registry registry and $source tool',
+    async ({ registry, method, source }) => {
+      const resumedValues: boolean[] = [];
+      const ask = createTool({
+        id: 'ask',
+        description: 'Ask for confirmation',
+        inputSchema: z.object({ action: z.string() }),
+        suspendSchema: z.object({}),
+        resumeSchema: z.object({ confirmed: z.boolean() }).transform(data => ({ ...data, validated: true })),
+        execute: async (_input, context) => {
+          if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+          resumedValues.push(context.agent.resumeData.confirmed);
+          return { confirmed: context.agent.resumeData.confirmed };
+        },
+      });
+      const agent = new Agent({
+        id: 'resume-schema-agent',
+        name: 'Resume Schema Agent',
+        instructions: 'Ask for confirmation',
+        model: createSuspendingThenTextModel('ask', ['Confirmed']),
+        tools: source === 'assigned' ? { ask } : {},
+      });
+      const pubsub = new EventEmitterPubSub();
+      const durable = new AgentClass({ agent, pubsub });
+      const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+      try {
+        const toolOptions = source === 'toolset' ? { toolsets: { extra: { ask } } } : {};
+        const initial = await durable.stream('Confirm', { closeOnSuspend: true, ...toolOptions });
+        await drain(initial.output.fullStream);
+        await globalRunRegistry.get(initial.runId)?.workflowExecution;
+        expect((await durable.listSuspendedRuns()).runs).toHaveLength(1);
+        if (registry === 'cold') {
+          durable.runRegistry.clear();
+          globalRunRegistry.delete(initial.runId);
+        }
+        const options = {
+          ...toolOptions,
+          runId: initial.runId,
+          ...(registry === 'warm' ? { toolCallId: 'call-1' } : {}),
+        };
+        const resume = async (data: unknown) => {
+          if (method === 'resumeGenerate') return durable.resumeGenerate(data, options);
+          const output =
+            method === 'resume'
+              ? (await durable.resume(initial.runId, data, options)).output
+              : await durable.resumeStream(data, options);
+          return output.getFullOutput();
+        };
+        await expect(resume({ confirmed: 'yes' })).rejects.toMatchObject({
+          id: 'AGENT_RESUME_INVALID_DATA',
+        });
+        expect((await durable.listSuspendedRuns()).runs).toHaveLength(1);
+        expect(resumedValues).toEqual([]);
+        const resumed = await resume({ confirmed: true });
+        expect(resumed.error).toBeUndefined();
+        expect(resumed.text).toBe('Confirmed');
+        expect(resumedValues).toEqual([true]);
+        expect(resumed.toolResults.map(chunk => chunk.payload.result)).toContainEqual({ confirmed: true });
+      } finally {
+        await host.shutdown({ drainTimeout: 1000 });
+        await pubsub.close();
+      }
+    },
+  );
+});
