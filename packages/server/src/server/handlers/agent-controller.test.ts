@@ -403,6 +403,66 @@ describe('agent-controller routes', () => {
     });
   });
 
+  describe('per-message scopes on SEND_AGENT_CONTROLLER_MESSAGE_ROUTE', () => {
+    // Scope tags are authority, so a remote caller may name only the tag types the
+    // controller allows (none by default).
+    async function routeSession(target: Mastra, resourceId: string) {
+      const controller = target.getAgentController('code')!;
+      await controller.init();
+      return controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
+    }
+
+    it('refuses any scopes with 403 when the controller allows no message scope types', async () => {
+      const session = await routeSession(mastra, 'user-scopes-default');
+      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+
+      await expect(
+        SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          sessionId: 'user-scopes-default',
+          message: 'hello',
+          scopes: ['request:r1'],
+        } as any),
+      ).rejects.toMatchObject({ status: 403, message: expect.stringContaining('"request:r1"') });
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('passes allowed scopes to the session and refuses a tag of another type', async () => {
+      const storage = new InMemoryStore();
+      const controller = new AgentController({
+        id: 'code',
+        storage,
+        workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+        modes: [{ id: 'build', name: 'Build', default: true, agent: makeAgent() }],
+        allowedMessageScopeTypes: ['request'],
+      });
+      const allowing = new Mastra({ agentControllers: { code: controller }, storage });
+      const session = await routeSession(allowing, 'user-scopes-allowed');
+      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+      const send = (scopes: unknown) =>
+        SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+          mastra: allowing,
+          controllerId: 'code',
+          sessionId: 'user-scopes-allowed',
+          message: 'hello',
+          scopes,
+        } as any);
+
+      await expect(send(['request:r1', { tag: 'request:r0', access: 'read' }])).resolves.toEqual({ ok: true });
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({ content: 'hello', scopes: ['request:r1', { tag: 'request:r0', access: 'read' }] }),
+      );
+
+      spy.mockClear();
+      await expect(send(['request:r2', 'org:acme'])).rejects.toMatchObject({
+        status: 403,
+        message: expect.stringContaining('"org:acme"'),
+      });
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
   // The messages/steer/follow-up/tool-suspension routes ack immediately and let
   // the session finish the turn in the background. Session methods can still reject (e.g.
   // `sendMessage` rejects when signal submission fails before a stream starts),

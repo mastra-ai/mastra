@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { AgentControllerEvent as ClientEvent, AgentControllerModeInfo } from '@mastra/client-js';
+import type { AgentScopeEntry } from '@mastra/core/agent';
 import type {
   AgentControllerDisplayState,
   AgentControllerEvent,
@@ -388,8 +389,12 @@ export class RemoteSession {
     return { categories: [], tools: [] };
   }
 
-  async sendMessage({ content, files }: { content: string; files?: Files }) {
-    await this.#remote.sendMessage({ content, files });
+  /**
+   * `scopes` go to the Factory, which refuses tag types it doesn't allow for messages
+   * (none by default); its own `org:`/`project:` tags are added server-side either way.
+   */
+  async sendMessage({ content, files, scopes }: { content: string; files?: Files; scopes?: AgentScopeEntry[] }) {
+    await this.#remote.sendMessage({ content, files, ...(scopes?.length ? { scopes } : {}) });
   }
 
   async queueMessage({ content }: { content: string }) {
