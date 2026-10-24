@@ -9,6 +9,7 @@ import {
 } from '@mastra/core/knowledge';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 import type { KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
+import { MASTRA_KNOWLEDGE_SCOPE_KEY } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
@@ -33,14 +34,13 @@ import { handleError } from './error';
  * (`GET /knowledge/...` -> `knowledge:read`).
  *
  * The viewer chooses the scope unless the app narrows it: server middleware may set the
- * `requestContext` key `knowledgeScope` to the tags a caller may hold, and a request for any tag outside
+ * request-context key `mastra__knowledgeScope` (MASTRA_KNOWLEDGE_SCOPE_KEY) to the tags a caller may hold, and a request for any tag outside
  * that set is a 403. With FGA configured, instances are filtered (and gated) by `knowledge:read`.
  * Without either, any caller who passes `knowledge:read` can view any scope, which suits a developer tool
  * whose operator already controls the instance. Hosts with their own scoping (Factory) do not mount these.
  */
 
-/** The request-context key an app's server middleware sets to the scope tags the caller may view through. */
-export const KNOWLEDGE_SCOPE_CONTEXT_KEY = 'knowledgeScope';
+let warnedUnbound = false;
 
 async function isInstanceAccessible(
   mastra: Mastra,
@@ -68,27 +68,50 @@ async function resolveStore(
   scope: string[],
 ): Promise<{ store: KnowledgeStorage; view: KnowledgeScope }> {
   const instance = knowledgeKey ? mastra.listKnowledge()[knowledgeKey] : undefined;
-  // An instance the caller may not read looks the same as one that does not exist.
-  if (
-    !knowledgeKey ||
-    !instance ||
-    !(await isInstanceAccessible(mastra, requestContext, [{ id: instance.id, key: knowledgeKey }])).has(knowledgeKey)
-  ) {
+  if (!knowledgeKey || !instance)
     throw new HTTPException(404, { message: `Knowledge ${knowledgeKey ?? ''} not found` });
+
+  // An instance the caller may not read looks the same as one that does not exist.
+  const fgaProvider = (mastra as any).getServer?.()?.fga;
+  const user = requestContext?.get('user');
+  if (fgaProvider && user && typeof user === 'object') {
+    const allowed = await fgaProvider.canAccess(
+      user,
+      { type: 'knowledge', id: instance.id },
+      MastraFGAPermissions.KNOWLEDGE_READ,
+    );
+    if (!allowed) throw new HTTPException(404, { message: `Knowledge ${knowledgeKey} not found` });
   }
+
   let view: KnowledgeScope;
   try {
     view = canonicalizeKnowledgeScope(scope);
   } catch (error) {
     throw new HTTPException(400, { message: error instanceof Error ? error.message : 'Invalid scope' });
   }
-  // When the app has set the tags this caller may hold, the requested view must stay inside them.
-  const allowed = requestContext?.get(KNOWLEDGE_SCOPE_CONTEXT_KEY);
-  if (allowed !== undefined) {
-    const held = new Set(Array.isArray(allowed) ? (allowed as unknown[]).map(String) : []);
-    if (!view.every(tag => held.has(tag))) {
-      throw new HTTPException(403, { message: 'Requested scope is outside the scope this caller may view' });
+
+  // `!== undefined`, so an empty set fails closed instead of reading as unbound.
+  const established = requestContext?.get(MASTRA_KNOWLEDGE_SCOPE_KEY);
+  if (established !== undefined) {
+    let held: Set<string>;
+    try {
+      if (!Array.isArray(established)) throw new Error('Established Knowledge scope must be an array of tags');
+      // An empty set is valid and permits nothing; the canonicalizer would reject it.
+      held = new Set(established.length === 0 ? [] : canonicalizeKnowledgeScope(established as string[]));
+    } catch (error) {
+      throw new HTTPException(400, { message: error instanceof Error ? error.message : 'Invalid established scope' });
     }
+    const outside = view.filter(tag => !held.has(tag));
+    if (outside.length > 0) {
+      throw new HTTPException(403, { message: `Requested scope is outside the caller's scope: ${outside.join(', ')}` });
+    }
+  } else if (user && !warnedUnbound) {
+    warnedUnbound = true;
+    mastra
+      .getLogger?.()
+      ?.warn(
+        `Knowledge routes trust the requested scope as sent. Bound it per caller by setting request context key "${MASTRA_KNOWLEDGE_SCOPE_KEY}" in server middleware.`,
+      );
   }
   return { store: await instance.getStorage(), view };
 }
@@ -99,7 +122,8 @@ export const LIST_KNOWLEDGE_ROUTE = createRoute({
   responseType: 'json',
   responseSchema: listKnowledgeResponseSchema,
   summary: 'List Knowledge instances',
-  description: 'Returns the Knowledge instances registered on this Mastra instance, by application key',
+  description:
+    'Returns the Knowledge instances registered on this Mastra instance, by application key. The `scope` param on the other Knowledge routes is trusted as sent; bound it per caller by setting MASTRA_KNOWLEDGE_SCOPE_KEY in server middleware.',
   tags: ['Knowledge'],
   requiresAuth: true,
   handler: async ({ mastra, requestContext }) => {

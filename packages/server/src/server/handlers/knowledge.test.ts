@@ -3,6 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
+import { MASTRA_KNOWLEDGE_SCOPE_KEY, isReservedRequestContextKey } from '../constants';
 import { HTTPException } from '../http-exception';
 import { knowledgeActivityQuerySchema, knowledgeViewQuerySchema } from '../schemas/knowledge';
 import {
@@ -98,16 +99,30 @@ describe('Knowledge read routes', () => {
   it('keeps a request inside the scope the app set for the caller', async () => {
     const { mastra } = await setup();
     const requestContext = new RequestContext();
-    requestContext.set('knowledgeScope', org);
+    requestContext.set(MASTRA_KNOWLEDGE_SCOPE_KEY, org);
     const args = { mastra, requestContext, knowledgeKey: 'main' };
     expect((await call(GET_KNOWLEDGE_GRAPH_ROUTE, { ...args, scope: org })).nodes).toHaveLength(1);
     await expect(call(GET_KNOWLEDGE_GRAPH_ROUTE, { ...args, scope: team })).rejects.toMatchObject({ status: 403 });
     await expect(call(SEARCH_KNOWLEDGE_ROUTE, { ...args, scope: team, q: 'sec' })).rejects.toMatchObject({
       status: 403,
     });
+    await expect(call(GET_KNOWLEDGE_GRAPH_ROUTE, { ...args, scope: ['org:acme', 'org:other'] })).rejects.toMatchObject({
+      status: 403,
+      message: expect.stringContaining('org:other'),
+    });
     // An empty allowed set means no tags: nothing can be requested.
-    requestContext.set('knowledgeScope', []);
+    requestContext.set(MASTRA_KNOWLEDGE_SCOPE_KEY, []);
     await expect(call(GET_KNOWLEDGE_GRAPH_ROUTE, { ...args, scope: org })).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('treats a malformed established scope as a 400 and reserves the key from request bodies', async () => {
+    const { mastra } = await setup();
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_KNOWLEDGE_SCOPE_KEY, 'org:acme');
+    await expect(
+      call(GET_KNOWLEDGE_GRAPH_ROUTE, { mastra, requestContext, knowledgeKey: 'main', scope: org }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(isReservedRequestContextKey(MASTRA_KNOWLEDGE_SCOPE_KEY)).toBe(true);
   });
 
   it('filters instances and gates reads by FGA when configured', async () => {
@@ -115,7 +130,7 @@ describe('Knowledge read routes', () => {
     const filterAccessible = vi.fn(async (_user: unknown, items: Array<{ key: string }>) =>
       items.filter(i => i.key !== 'main'),
     );
-    (mastra as any).getServer = () => ({ fga: { filterAccessible } });
+    (mastra as any).getServer = () => ({ fga: { filterAccessible, canAccess: async () => false } });
     const requestContext = new RequestContext();
     requestContext.set('user', { id: 'u1' });
     expect(await call(LIST_KNOWLEDGE_ROUTE, { mastra, requestContext })).toEqual({ instances: [] });
