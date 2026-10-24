@@ -18,7 +18,7 @@
  */
 
 import type { Knowledge } from '@mastra/core/knowledge';
-import { listPinnedKnowledge, readKnowledgeNode } from '@mastra/core/knowledge';
+import { listPinnedKnowledge } from '@mastra/core/knowledge';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type {
@@ -1487,10 +1487,59 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if (!view) return c.json({ error: 'scope_not_found' }, 404);
           const { store, scope } = view;
 
-          const payload: KnowledgeNodePayload | null = await readKnowledgeNode(store, scope, nodeId, {
-            pins: view.pins,
-          });
-          if (!payload) return c.json({ error: 'node_not_found' }, 404);
+          const node = await store.getNode(nodeId);
+          // getNode is a bare id lookup with no scope predicate. This explicit
+          // visibility check prevents an IDOR.
+          // Structural scope nodes carry no identity scope; they are read through /scopes.
+          if (!node?.scope || !isKnowledgeScopeVisible(node.scope, scope)) {
+            return c.json({ error: 'node_not_found' }, 404);
+          }
+
+          const pinnedNodeIdSet = new Set((await this.#pins(view)).nodeIds);
+
+          const [owned, mentioning] = await Promise.all([
+            store.listKnowledgeAbout({ node: node.id, scope, limit: 200 }),
+            store.listKnowledgeMentioning({ node: node.id, scope, limit: 200 }),
+          ]);
+          const seen = new Set<string>();
+          const records: KnowledgeNodeRecordPayload[] = [];
+          const push = (record: KnowledgeRecord, relation: 'owned' | 'mentions') => {
+            if (seen.has(record.id)) return;
+            seen.add(record.id);
+            records.push({
+              id: record.id,
+              node: record.node,
+              relation,
+              text: record.text,
+              scope: record.scope,
+              rung: deepestRung(record.scope),
+              sourceThreadId: record.sourceThreadId,
+              capturedAt: record.capturedAt.toISOString(),
+              ...(record.when ? { when: record.when.toISOString() } : {}),
+              pinned: pinnedNodeIdSet.has(record.node),
+              ...(record.metadata ? { metadata: record.metadata } : {}),
+            });
+          };
+          // Owned first, newest-first within each group. Record ids are ULIDs.
+          for (const record of [...owned.records].sort((a, b) => b.id.localeCompare(a.id))) push(record, 'owned');
+          for (const record of [...mentioning.records].sort((a, b) => b.id.localeCompare(a.id))) {
+            push(record, 'mentions');
+          }
+
+          const payload: KnowledgeNodePayload = {
+            node: {
+              id: node.id,
+              name: node.name,
+              kind: node.kind,
+              content: node.content ?? '',
+              ...(node.description ? { description: node.description } : {}),
+              scope: node.scope,
+              rung: deepestRung(node.scope),
+              createdAt: node.createdAt.toISOString(),
+              updatedAt: node.updatedAt.toISOString(),
+            },
+            records,
+          };
           return c.json(payload);
         },
       }),
