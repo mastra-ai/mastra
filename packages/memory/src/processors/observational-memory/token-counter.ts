@@ -307,6 +307,45 @@ function serializePartForTokenCounting(part: CacheablePart): string {
   return JSON.stringify(clonedPart);
 }
 
+/**
+ * Provider metadata that makes a reasoning part go back to the provider on later requests: OpenAI
+ * Responses' item id and encrypted content, Anthropic's signature or redacted data, Gemini's thought
+ * signature. Core forwards a reasoning part only when it carries one of these
+ * (`REPLAYABLE_REASONING_KEYS` in core's output converter).
+ */
+const REPLAYED_REASONING_KEYS = [
+  'itemId',
+  'reasoningEncryptedContent',
+  'signature',
+  'redactedData',
+  'thoughtSignature',
+];
+
+/**
+ * What a reasoning part costs in the prompt: its thought text plus the replay metadata sent with it.
+ * The encrypted content alone is often thousands of tokens per step. Returns undefined for reasoning
+ * that carries no replay metadata, which is not sent.
+ */
+function serializeReplayedReasoningForTokenCounting(part: CacheablePart): string | undefined {
+  const replayed: string[] = [];
+  for (const [namespace, metadata] of Object.entries(part.providerMetadata ?? {})) {
+    if (namespace === 'mastra' || !metadata || typeof metadata !== 'object') continue;
+    for (const key of REPLAYED_REASONING_KEYS) {
+      const value = (metadata as Record<string, unknown>)[key];
+      if (typeof value === 'string' && value.length > 0) replayed.push(value);
+    }
+  }
+  if (replayed.length === 0) return undefined;
+
+  const text =
+    typeof part.reasoning === 'string' && part.reasoning.length > 0
+      ? part.reasoning
+      : (part.details ?? [])
+          .map((detail: { type?: string; text?: string }) => (detail?.type === 'text' ? (detail.text ?? '') : ''))
+          .join('');
+  return [text, ...replayed].join('\n');
+}
+
 function getFilenameFromAttachmentData(data: unknown): string | undefined {
   const pathname =
     data instanceof URL
@@ -1869,7 +1908,15 @@ export class TokenCounter {
     }
 
     if (part.type === 'reasoning') {
-      return { tokens: 0, overheadDelta, extraMessageDelta };
+      const replayed = serializeReplayedReasoningForTokenCounting(part);
+      if (replayed === undefined) {
+        return { tokens: 0, overheadDelta, extraMessageDelta };
+      }
+      return {
+        tokens: this.readOrPersistPartEstimate(part, 'reasoning-replayed', replayed),
+        overheadDelta,
+        extraMessageDelta,
+      };
     }
 
     const serialized = serializePartForTokenCounting(part);
