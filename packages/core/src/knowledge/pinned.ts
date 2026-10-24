@@ -1,8 +1,8 @@
+import type { JSONSchema7 } from 'json-schema';
 import type { KnowledgeRecord, KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '../storage';
 import { expandKnowledgeScope, isKnowledgeScopeVisible } from '../storage';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
-import type { JSONSchema7 } from 'json-schema';
 
 import { getKnowledgeStore } from './knowledge-tools';
 import type { KnowledgeStoreMemory } from './knowledge-tools';

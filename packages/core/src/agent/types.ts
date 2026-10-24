@@ -13,6 +13,7 @@ import type { ChannelConfig } from '../channels/types';
 import type { WaitUntilFn } from '../channels/wait-until';
 import type { MastraScorer, MastraScorers, ScoringFilter, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
+import type { Knowledge } from '../knowledge';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -930,6 +931,12 @@ interface AgentConfigBase<
    * When configured, workspace tools are automatically injected into the agent.
    */
   workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
+  /**
+   * Knowledge attached to this agent: a Knowledge instance or the key it is registered under on Mastra.
+   * The agent gets its tools, usage instructions and pins without needing Memory.
+   * @experimental
+   */
+  knowledge?: Knowledge | string;
   /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or
