@@ -147,6 +147,28 @@ function readForeachResult(
   return result;
 }
 
+// Module-level so the Mastra-owned processor and each workflow's own processor share it.
+const runSnapshotWrites = new Map<string, Promise<void>>();
+
+/**
+ * Wait for this run's previous snapshot read-modify-write to finish, then hold the
+ * run until the returned release is called. Release is idempotent. This only
+ * serializes handlers in this process.
+ */
+async function acquireRunSnapshotWrite(runId: string): Promise<() => void> {
+  const previous = runSnapshotWrites.get(runId) ?? Promise.resolve();
+  let release!: () => void;
+  const tail = previous.then(() => new Promise<void>(resolve => (release = resolve)));
+  runSnapshotWrites.set(runId, tail);
+  await previous;
+  return () => {
+    release();
+    if (runSnapshotWrites.get(runId) === tail) {
+      runSnapshotWrites.delete(runId);
+    }
+  };
+}
+
 export class WorkflowEventProcessor extends EventProcessor {
   private stepExecutor: StepExecutor;
   private stepExecutionStrategy?: StepExecutionStrategy;
@@ -885,35 +907,42 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
 
       if (parentWorkflow) {
-        const parentSnap = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: parentWorkflow.workflowId,
-          runId: parentWorkflow.runId,
-        });
-        const existing = parentSnap?.context?.[workflowId] as any;
-        await workflowsStore?.updateWorkflowResults({
-          workflowName: parentWorkflow.workflowId,
-          runId: parentWorkflow.runId,
-          stepId: workflowId,
-          result: {
-            startedAt: existing?.startedAt ?? Date.now(),
-            status: 'running',
-            payload: existing?.payload ?? parentWorkflow.input?.output ?? {},
-            ...(existing ?? {}), // preserve anything else (suspendPayload, etc.)
-            // A child start does not own queued siblings from this potentially stale snapshot.
-            ...(parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!]?.type === 'foreach' &&
-            Array.isArray(existing?.output)
-              ? { output: existing.output.map((value: unknown) => (isQueuedForeachIteration(value) ? null : value)) }
-              : {}),
-            metadata: {
-              ...(existing?.metadata ?? {}),
-              nestedRunId: runId,
-              ...(parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!]?.type === 'foreach'
-                ? { foreachNestedRunIds: { [parentWorkflow.executionPath[1]!]: runId } }
+        // Same parent step record that foreach iteration ends merge into; don't write it back
+        // from a snapshot read before a sibling's result landed.
+        const releaseSnapshotWrite = await acquireRunSnapshotWrite(parentWorkflow.runId);
+        try {
+          const parentSnap = await workflowsStore?.loadWorkflowSnapshot({
+            workflowName: parentWorkflow.workflowId,
+            runId: parentWorkflow.runId,
+          });
+          const existing = parentSnap?.context?.[workflowId] as any;
+          await workflowsStore?.updateWorkflowResults({
+            workflowName: parentWorkflow.workflowId,
+            runId: parentWorkflow.runId,
+            stepId: workflowId,
+            result: {
+              startedAt: existing?.startedAt ?? Date.now(),
+              status: 'running',
+              payload: existing?.payload ?? parentWorkflow.input?.output ?? {},
+              ...(existing ?? {}), // preserve anything else (suspendPayload, etc.)
+              // A child start does not own queued siblings from this potentially stale snapshot.
+              ...(parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!]?.type === 'foreach' &&
+              Array.isArray(existing?.output)
+                ? { output: existing.output.map((value: unknown) => (isQueuedForeachIteration(value) ? null : value)) }
                 : {}),
+              metadata: {
+                ...(existing?.metadata ?? {}),
+                nestedRunId: runId,
+                ...(parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!]?.type === 'foreach'
+                  ? { foreachNestedRunIds: { [parentWorkflow.executionPath[1]!]: runId } }
+                  : {}),
+              },
             },
-          },
-          requestContext: withoutAuthToken(requestContext),
-        });
+            requestContext: withoutAuthToken(requestContext),
+          });
+        } finally {
+          releaseSnapshotWrite();
+        }
       }
     }
 
@@ -3087,150 +3116,161 @@ export class WorkflowEventProcessor extends EventProcessor {
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
 
     if (step.type === 'foreach') {
-      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-        workflowName: workflowId,
-        runId,
-      });
-
       const currentIdx = executionPath[1];
-      const snapshotContext = snapshot?.context as Record<string, ForeachStepResult> | undefined;
-      const existingStepResult = snapshotContext?.[getEntryId(step.step)];
-      const currentResult = existingStepResult?.output;
-      // Preserve the original payload (the input array) from the existing step result
-      const originalPayload = existingStepResult?.payload;
-
       let newResult = prevResult;
       // An earlier iteration of this foreach already failed and failed the run.
       let priorFailure: any;
-      if (currentIdx !== undefined) {
-        // Check for bail - short circuit foreach execution
-        // @ts-expect-error - bailed status not in type
-        if (prevResult.status === 'bailed') {
-          const bailedResult = {
-            status: 'success' as const,
-            output: (prevResult as any).output,
-            startedAt: existingStepResult?.startedAt ?? Date.now(),
-            endedAt: Date.now(),
-            payload: originalPayload,
+      let newStepResults: Awaited<ReturnType<NonNullable<typeof workflowsStore>['updateWorkflowResults']>> | undefined;
+
+      // Iterations ending concurrently each read the foreach step result, merge their own
+      // iteration into it and write the whole step result back. Serialize that per run so a
+      // sibling's write isn't computed from a snapshot that misses this one.
+      const releaseSnapshotWrite = await acquireRunSnapshotWrite(runId);
+      try {
+        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: workflowId,
+          runId,
+        });
+
+        const snapshotContext = snapshot?.context as Record<string, ForeachStepResult> | undefined;
+        const existingStepResult = snapshotContext?.[getEntryId(step.step)];
+        const currentResult = existingStepResult?.output;
+        // Preserve the original payload (the input array) from the existing step result
+        const originalPayload = existingStepResult?.payload;
+
+        if (currentIdx !== undefined) {
+          // Check for bail - short circuit foreach execution
+          // @ts-expect-error - bailed status not in type
+          if (prevResult.status === 'bailed') {
+            const bailedResult = {
+              status: 'success' as const,
+              output: (prevResult as any).output,
+              startedAt: existingStepResult?.startedAt ?? Date.now(),
+              endedAt: Date.now(),
+              payload: originalPayload,
+            };
+
+            // Store final result
+            await workflowsStore?.updateWorkflowResults({
+              workflowName: workflow.id,
+              runId,
+              stepId: getEntryId(step.step),
+              result: bailedResult as any,
+              requestContext: withoutAuthToken(requestContext),
+            });
+            releaseSnapshotWrite();
+
+            // End workflow with bail result
+            return this.endWorkflow({
+              workflow,
+              parentWorkflow,
+              workflowId,
+              runId,
+              executionPath: [executionPath[0]!],
+              resumeSteps,
+              stepResults: { ...stepResults, [getEntryId(step.step)]: bailedResult },
+              prevResult: bailedResult,
+              activeStepsPath,
+              requestContext,
+              actor,
+              perStep,
+              state: currentState,
+              outputOptions,
+            });
+          }
+
+          // For foreach, store the full suspended result so its resume state is preserved.
+          // Completed iterations keep the public output array shape. A failed iteration has no
+          // output; its slot stays null so iterations finishing after the run failed stop at the
+          // pending check below instead of advancing the loop.
+          const iterationResult =
+            prevResult.status === 'suspended'
+              ? prevResult
+              : prevResult.status === 'failed'
+                ? null
+                : (prevResult as any).output;
+          const existingSuspendPayload = existingStepResult?.suspendPayload as any;
+          const iterationSuspendPayload = prevResult.suspendPayload as any;
+          const foreachOutput = [...(existingSuspendPayload?.__workflow_meta?.foreachOutput ?? [])];
+          priorFailure = foreachOutput.find((r: any, i: number) => i !== currentIdx && r?.status === 'failed');
+          // Drop `payload`: it holds the whole foreach input array, which is already stored once on the step.
+          const { payload: _payload, ...iterationRecord } = prevResult as any;
+          foreachOutput[currentIdx] =
+            prevResult.status === 'suspended' ? iterationRecord : { ...iterationRecord, suspendPayload: {} };
+          const suspendPayload = {
+            ...(existingSuspendPayload ?? iterationSuspendPayload),
+            __workflow_meta: {
+              ...(existingSuspendPayload?.__workflow_meta ?? iterationSuspendPayload?.__workflow_meta),
+              foreachOutput,
+            },
           };
 
-          // Store final result
-          await workflowsStore?.updateWorkflowResults({
-            workflowName: workflow.id,
-            runId,
-            stepId: getEntryId(step.step),
-            result: bailedResult as any,
-            requestContext: withoutAuthToken(requestContext),
-          });
-
-          // End workflow with bail result
-          return this.endWorkflow({
-            workflow,
-            parentWorkflow,
-            workflowId,
-            runId,
-            executionPath: [executionPath[0]!],
-            resumeSteps,
-            stepResults: { ...stepResults, [getEntryId(step.step)]: bailedResult },
-            prevResult: bailedResult,
-            activeStepsPath,
-            requestContext,
-            actor,
-            perStep,
-            state: currentState,
-            outputOptions,
-          });
-        }
-
-        // For foreach, store the full suspended result so its resume state is preserved.
-        // Completed iterations keep the public output array shape. A failed iteration has no
-        // output; its slot stays null so iterations finishing after the run failed stop at the
-        // pending check below instead of advancing the loop.
-        const iterationResult =
-          prevResult.status === 'suspended'
-            ? prevResult
-            : prevResult.status === 'failed'
-              ? null
-              : (prevResult as any).output;
-        const existingSuspendPayload = existingStepResult?.suspendPayload as any;
-        const iterationSuspendPayload = prevResult.suspendPayload as any;
-        const foreachOutput = [...(existingSuspendPayload?.__workflow_meta?.foreachOutput ?? [])];
-        priorFailure = foreachOutput.find((r: any, i: number) => i !== currentIdx && r?.status === 'failed');
-        // Drop `payload`: it holds the whole foreach input array, which is already stored once on the step.
-        const { payload: _payload, ...iterationRecord } = prevResult as any;
-        foreachOutput[currentIdx] =
-          prevResult.status === 'suspended' ? iterationRecord : { ...iterationRecord, suspendPayload: {} };
-        const suspendPayload = {
-          ...(existingSuspendPayload ?? iterationSuspendPayload),
-          __workflow_meta: {
-            ...(existingSuspendPayload?.__workflow_meta ?? iterationSuspendPayload?.__workflow_meta),
-            foreachOutput,
-          },
-        };
-
-        if (currentResult) {
-          currentResult[currentIdx] = iterationResult;
-          // Merge foreach step-level properties (suspendPayload, resumePayload, suspendedAt, resumedAt)
-          // New iteration's resume properties take precedence for resumePayload/resumedAt (most recent resume)
-          // Existing step's suspend properties are preserved (first suspend)
-          const stillSettling =
-            (prevResult.status === 'success' || prevResult.status === 'suspended') &&
-            existingStepResult?.status !== 'failed'
-              ? existingStepResult?.status === 'suspended'
-                ? ('suspended' as const)
-                : ('running' as const)
-              : undefined;
-          newResult = {
-            ...existingStepResult, // Preserve step-level properties
-            ...prevResult, // Get iteration timing info
-            // An iteration that finishes after a sibling failed must not mark the foreach successful.
-            ...(existingStepResult?.status === 'failed' ? { status: 'failed' as const } : {}),
-            // One iteration settling doesn't settle the foreach: the coordinator below writes
-            // 'success' or 'suspended' once every iteration has settled. Until then the step stays
-            // 'running' with no suspendedAt/endedAt (as in the default engine); an already-suspended
-            // aggregate (e.g. while one of several suspended iterations is resumed) stays suspended.
-            ...(stillSettling ? { status: stillSettling, endedAt: undefined } : {}),
-            startedAt: existingStepResult?.startedAt ?? prevResult.startedAt,
-            output: currentResult,
-            payload: originalPayload,
-            suspendPayload,
-            suspendedAt:
-              stillSettling === 'running'
-                ? undefined
-                : (existingStepResult?.suspendedAt ?? (prevResult as any).suspendedAt),
-            // Update resume metadata to most recent resume (new iteration takes precedence)
-            resumePayload: (prevResult as any).resumePayload ?? existingStepResult?.resumePayload,
-            resumedAt: (prevResult as any).resumedAt ?? existingStepResult?.resumedAt,
-          } as any;
-          // A sibling finishing after another iteration failed must not flip the foreach back to
-          // success or replace the first failure's error.
-          if (priorFailure) {
-            newResult = { ...newResult, status: 'failed', error: priorFailure.error } as any;
+          if (currentResult) {
+            currentResult[currentIdx] = iterationResult;
+            // Merge foreach step-level properties (suspendPayload, resumePayload, suspendedAt, resumedAt)
+            // New iteration's resume properties take precedence for resumePayload/resumedAt (most recent resume)
+            // Existing step's suspend properties are preserved (first suspend)
+            const stillSettling =
+              (prevResult.status === 'success' || prevResult.status === 'suspended') &&
+              existingStepResult?.status !== 'failed'
+                ? existingStepResult?.status === 'suspended'
+                  ? ('suspended' as const)
+                  : ('running' as const)
+                : undefined;
+            newResult = {
+              ...existingStepResult, // Preserve step-level properties
+              ...prevResult, // Get iteration timing info
+              // An iteration that finishes after a sibling failed must not mark the foreach successful.
+              ...(existingStepResult?.status === 'failed' ? { status: 'failed' as const } : {}),
+              // One iteration settling doesn't settle the foreach: the coordinator below writes
+              // 'success' or 'suspended' once every iteration has settled. Until then the step stays
+              // 'running' with no suspendedAt/endedAt (as in the default engine); an already-suspended
+              // aggregate (e.g. while one of several suspended iterations is resumed) stays suspended.
+              ...(stillSettling ? { status: stillSettling, endedAt: undefined } : {}),
+              startedAt: existingStepResult?.startedAt ?? prevResult.startedAt,
+              output: currentResult,
+              payload: originalPayload,
+              suspendPayload,
+              suspendedAt:
+                stillSettling === 'running'
+                  ? undefined
+                  : (existingStepResult?.suspendedAt ?? (prevResult as any).suspendedAt),
+              // Update resume metadata to most recent resume (new iteration takes precedence)
+              resumePayload: (prevResult as any).resumePayload ?? existingStepResult?.resumePayload,
+              resumedAt: (prevResult as any).resumedAt ?? existingStepResult?.resumedAt,
+            } as any;
+            // A sibling finishing after another iteration failed must not flip the foreach back to
+            // success or replace the first failure's error.
+            if (priorFailure) {
+              newResult = { ...newResult, status: 'failed', error: priorFailure.error } as any;
+            }
+          } else {
+            newResult = { ...prevResult, output: [iterationResult], payload: originalPayload, suspendPayload } as any;
           }
-        } else {
-          newResult = { ...prevResult, output: [iterationResult], payload: originalPayload, suspendPayload } as any;
         }
+        // Persist (and thread forward) any state changes made inside the foreach body,
+        // in the same write as the iteration result. Each iteration is a separate event
+        // in the evented engine, so unless we write the updated state back here, the
+        // next iteration / the step after the foreach would re-read the stale `__state`
+        // from storage instead of `state` (see resolveCurrentState's priority order).
+        // This is what makes setState() inside a foreach body propagate across iterations.
+        newStepResults = await workflowsStore?.updateWorkflowResults({
+          workflowName: workflow.id,
+          runId,
+          stepId: getEntryId(step.step),
+          result: {
+            ...newResult,
+            // Only the coordinator owns queued markers; null leaves persisted siblings unchanged.
+            ...('output' in newResult && Array.isArray(newResult.output)
+              ? { output: newResult.output.map(value => (isQueuedForeachIteration(value) ? null : value)) }
+              : {}),
+          },
+          requestContext: withoutAuthToken(requestContext),
+          state: currentState,
+        });
+      } finally {
+        releaseSnapshotWrite();
       }
-      // Persist (and thread forward) any state changes made inside the foreach body,
-      // in the same write as the iteration result. Each iteration is a separate event
-      // in the evented engine, so unless we write the updated state back here, the
-      // next iteration / the step after the foreach would re-read the stale `__state`
-      // from storage instead of `state` (see resolveCurrentState's priority order).
-      // This is what makes setState() inside a foreach body propagate across iterations.
-      const newStepResults = await workflowsStore?.updateWorkflowResults({
-        workflowName: workflow.id,
-        runId,
-        stepId: getEntryId(step.step),
-        result: {
-          ...newResult,
-          // Only the coordinator owns queued markers; null leaves persisted siblings unchanged.
-          ...('output' in newResult && Array.isArray(newResult.output)
-            ? { output: newResult.output.map(value => (isQueuedForeachIteration(value) ? null : value)) }
-            : {}),
-        },
-        requestContext: withoutAuthToken(requestContext),
-        state: currentState,
-      });
 
       // Same fallback as the regular step path: when no run record was
       // persisted (shouldPersistSnapshot opted out of running) the store
