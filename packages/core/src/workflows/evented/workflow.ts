@@ -1397,13 +1397,13 @@ function createStepFromProcessor<TProcessorId extends string>(
 
               // Preserve messages in return - passThrough doesn't include messages,
               // so we must explicitly include it to avoid losing it for subsequent steps.
-              // Hand on the list as it is now: this processor may have removed or added messages
-              // through the messageList, and a later processor that returns the stale array would
-              // otherwise put removed messages back.
+              // Unless the processor returned its own array, hand on the list as it is now: it may have
+              // removed or added messages through the messageList, and a later processor that returns
+              // the stale array would otherwise put removed messages back.
               return {
                 ...passThrough,
                 ...validatedResult,
-                messages: passThrough.messageList.get.all.db(),
+                messages: validatedResult.messages ?? passThrough.messageList.get.all.db(),
                 runId: agentRunId,
                 systemMessages: passThrough.messageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
