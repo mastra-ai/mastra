@@ -1376,6 +1376,20 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     return persistStepUpdateHandler(this, params);
   }
 
+  /**
+   * Returns true when storage records the run as `canceled`. `Run.cancel()` called from another
+   * process only reaches this run through storage, since it cannot abort this run's controller.
+   */
+  async isRunCanceledInStorage(workflowId: string, runId: string): Promise<boolean> {
+    try {
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+      return snapshot?.status === 'canceled';
+    } catch {
+      return false;
+    }
+  }
+
   async executeEntry(params: ExecuteEntryParams): Promise<EntryExecutionResult> {
     return executeEntryHandler(this, params);
   }

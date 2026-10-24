@@ -834,6 +834,12 @@ export async function executeEntry(
     stepResults[getSingleStepEntryId(entry.step)] = execResults;
   }
 
+  // A cancel from another process only updates storage; honor it before this entry's result
+  // overwrites the stored `canceled` status and later entries run.
+  if (!abortController?.signal?.aborted && (await engine.isRunCanceledInStorage(workflowId, runId))) {
+    abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+  }
+
   if (abortController?.signal?.aborted) {
     execResults = {
       ...execResults,
