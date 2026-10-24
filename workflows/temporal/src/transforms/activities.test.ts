@@ -75,6 +75,25 @@ describe('activity transform', () => {
     expect(bindings).toEqual([{ exportName: 'planActivities', stepId: 'plan-activities' }]);
   });
 
+  it('recognizes aliased workflow and step factories from bundled Temporal helpers', async () => {
+    const { output, activityBindings } = await transformWithBindings(`
+      const { createWorkflow: createWorkflow$1, createStep: createStep$1 } = init({});
+      const readResource = createStep$1({ id: 'read-resource', execute: async () => ({ ok: true }) });
+      export const mappedWorkflow = createWorkflow$1({ id: 'mapped-workflow' })
+        .then(readResource)
+        .map(({ inputData }) => inputData);
+    `);
+
+    expect(output).toContain('const readResource = createStep({');
+    expect(output).toContain('const mappingMappedWorkflow0 = async');
+    expect(output).not.toContain('createWorkflow$1');
+    expect(output).not.toContain('createStep$1');
+    expect(activityBindings).toEqual([
+      { exportName: 'readResource', stepId: 'read-resource' },
+      { exportName: 'mappingMappedWorkflow0', stepId: 'mapping_mapped-workflow_0' },
+    ]);
+  });
+
   it('preserves factory functions when extracting their initialized steps', async () => {
     const output = await transform(`
       import { createStep, createWorkflow } from '@mastra/core/workflows';
