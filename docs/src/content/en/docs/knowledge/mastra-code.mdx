@@ -69,7 +69,7 @@ new AgentController({
 })
 ```
 
-`allowedMessageScopeTypes` allows a whole tag type, not particular values. A host that lists `request` lets any remote caller pick any value for it, such as `request:anything`. List only types where any caller-chosen value is acceptable. If a scope needs a trusted value, such as the org or project, set it from your app instead of accepting it from the caller.
+`allowedMessageScopeTypes` allows a whole tag type, not particular values. A host that lists `request` lets any remote caller pick any value for it, such as `request:anything`. List only types that don't mark a tenant or access boundary, and never `org` or `team`. If a scope needs a trusted value, such as the org or project, set it from your app instead of accepting it from the caller.
 
 The Mastra Code remote Factory session forwards `scopes`, but the Factory doesn't set `allowedMessageScopeTypes`, so a remote Factory message with scopes is refused for now. The Factory still adds its own `org:` and `project:` tags on the server.
 
