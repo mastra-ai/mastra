@@ -216,7 +216,7 @@ export function createDocumentIntakeProcessor(
         if (reviewCommand || !allowControlledModel) {
           const notice =
             reviewNotice ??
-            `${reportSummary ?? summary}\nConversation model dispatch is disabled until an explicit spending budget is configured. Your saved case can be inspected with /status or /evidence.`;
+            `${reportSummary ?? summary}\nUse /clarify and /compare to compare documents within the processing budget. Inspect saved evidence with /status or /evidence.`;
           const incoming = sanitized.find(message => message.id === latest?.id);
           // A tripwire exits before installed agent history persistence. Save the sanitized
           // exchange through Memory's public API so the ordinary first run survives restart.
@@ -233,7 +233,7 @@ export function createDocumentIntakeProcessor(
               },
             ],
           });
-          abort(notice, { metadata: { code: reviewCommand ? 'REVIEW_RECORDED' : 'MODEL_BUDGET_REQUIRED' } });
+          abort(notice, { metadata: { code: reviewCommand ? 'REVIEW_RECORDED' : 'LOCAL_RESPONSE' } });
         }
         return sanitized;
       } catch (error) {

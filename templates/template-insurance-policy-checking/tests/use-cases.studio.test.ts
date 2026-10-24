@@ -61,7 +61,7 @@ for (const property of [true, false]) {
         } catch {}
       });
       try {
-        studio = await startStudio(root, wire.endpoint, reportTestBudget);
+        studio = await startStudio(root, wire.endpoint, property ? reportTestBudget : null);
         await page.goto(studio.url);
         await page.getByText('Policy Checking', { exact: true }).click();
         await expect(page.getByPlaceholder('Enter your message...')).toBeVisible();
@@ -128,6 +128,15 @@ for (const property of [true, false]) {
             }),
         );
         await expect.poll(async () => (await cases!.requireCase(context)).state).toBe('AWAITING_REVIEW');
+        if (!property) {
+          const status = await reconciliation.status(context);
+          expect(status.attempts[0]!.input.budget).toMatchObject({
+            maxAttempts: 1,
+            maxRequests: 5,
+            maxCostMicros: 5000000,
+          });
+          expect(wire.requests.length).toBeLessThanOrEqual(5);
+        }
         const publication = (await reports.get(context))!;
         expect(await reviews.approval(context, publication.snapshot.id)).toBeNull();
         expect(await finals.get(context, publication.snapshot.id)).toBeNull();
@@ -172,7 +181,7 @@ for (const property of [true, false]) {
           const session = new URL(page.url()).pathname + new URL(page.url()).search;
           capturedLogs.push(studio.logs());
           await studio.close();
-          studio = await startStudio(root, wire.endpoint, reportTestBudget);
+          studio = await startStudio(root, wire.endpoint, property ? reportTestBudget : null);
           await page.goto(studio.url + session);
           await expect(page.getByPlaceholder('Enter your message...')).toBeVisible();
           await send(page, '/report');

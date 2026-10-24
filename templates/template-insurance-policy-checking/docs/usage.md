@@ -39,22 +39,24 @@ Keep unknown identity fields as `null`. `document_comparison` compares documents
 
 ## Configure processing
 
-Set `POLICY_PROCESSING_BUDGET=./processing-budget-example.json` in `.env`. Adjust limits and token prices in [processing-budget-example.json](../processing-budget-example.json), or point the variable to your own JSON file, then restart Studio. Relative paths resolve from the project root; absolute paths are also accepted. Leaving the variable unset disables comparison; intake, evidence and report retrieval run locally.
+Set only `OPENAI_API_KEY` in `.env` to use the default model and conservative budget in `src/mastra/config/processing-config.ts`. An absent or blank `POLICY_PROCESSING_BUDGET` uses that policy per analysis: one attempt, five requests, up to 100,000 input and 8,000 output tokens per request, 300,000 reserved tokens in total, an estimated US$5 cost ceiling, 120 seconds per request and a 1 MiB response limit. Cost estimates assume US$10 per million input tokens and US$50 per million output tokens; they do not represent live provider billing.
 
-The budget limits attempts, requests, tokens, estimated cost, response bytes and time. Retries share the allocation; missing usage retains the full reservation. See `processingBudgetSchema` in `src/mastra/domain/reconciliation-contracts.ts` for field definitions.
+To override the policy, set `POLICY_PROCESSING_BUDGET=./processing-budget-example.json` and adjust the file's limits and token prices, or supply your own JSON file. Relative paths resolve from the project root; absolute paths are also accepted. Restart Studio after changes. An explicitly configured file must be readable and valid; errors stop startup rather than falling back to the default budget.
+
+The budget limits attempts, requests, tokens, estimated cost, response bytes and time. Reservations remain charged at their conservative ceiling. The default allows no second attempt; custom policies can permit retries that share the original allocation. See `processingBudgetSchema` in `src/mastra/domain/reconciliation-contracts.ts` for field definitions.
 
 ## Environment variables
 
 Set these in `.env` and restart Studio to apply changes. The application uses local defaults when optional overrides are omitted.
 
-| Variable                   | Default                     | Purpose                                                                                  |
-| -------------------------- | --------------------------- | ---------------------------------------------------------------------------------------- |
-| `OPENAI_API_KEY`           | Unset                       | OpenAI credential for document comparison.                                               |
-| `POLICY_EXTRACTION_MODEL`  | `gpt-6.1-sol`               | Model used for extraction and semantic assessment.                                       |
-| `POLICY_PROCESSING_BUDGET` | Unset (comparison disabled) | Path to a JSON budget file. `.env.example` points to `./processing-budget-example.json`. |
-| `POLICY_OPERATOR_ID`       | `local-broker`              | Local operator identifier.                                                               |
-| `PORT`                     | `4111`                      | Local Studio port.                                                                       |
-| `POLICY_DATA_DIR`          | `.runtime`                  | Private data directory, relative to the project root or absolute.                        |
+| Variable                   | Default                      | Purpose                                                           |
+| -------------------------- | ---------------------------- | ----------------------------------------------------------------- |
+| `OPENAI_API_KEY`           | Unset                        | OpenAI credential for document comparison.                        |
+| `POLICY_EXTRACTION_MODEL`  | `gpt-6.1-sol`                | Model used for extraction and semantic assessment.                |
+| `POLICY_PROCESSING_BUDGET` | Built-in conservative policy | Optional path to a JSON file replacing the default budget.        |
+| `POLICY_OPERATOR_ID`       | `local-broker`               | Local operator identifier.                                        |
+| `PORT`                     | `4111`                       | Local Studio port.                                                |
+| `POLICY_DATA_DIR`          | `.runtime`                   | Private data directory, relative to the project root or absolute. |
 
 ## Compare and read the draft
 
@@ -72,7 +74,7 @@ Read `/status` for the revision after clarification. Send `/compare` followed by
 
 The workflow extracts terms, verifies quotations against saved sources, compares values and publishes a PDF draft. Send `/report` for findings and download links. If Studio shows only a plain-text notice, refresh or reopen the conversation to see the saved links.
 
-For a failed comparison, use its attempt ID as `retryAttemptId` with unchanged inputs and the current revision. For a publication failure, fix the reported problem and send `/report {"caseId":"CASE_ID","retryPublication":true}` to reuse the saved analysis or approval.
+If a custom policy permits another attempt, retry a failed comparison using its ID as `retryAttemptId`, unchanged inputs and the current revision. The default policy permits one attempt. For a publication failure, fix the reported problem and send `/report {"caseId":"CASE_ID","retryPublication":true}` to reuse the saved analysis or approval.
 
 ## Review and approve
 

@@ -16,9 +16,9 @@ async function openAgent(page: Page, url: string) {
   await page.getByText('Policy Checking', { exact: true }).click();
   await expect(page.getByPlaceholder('Enter your message...')).toBeVisible();
 }
-async function send(page: Page, text: string, files?: { name: string; buffer: Buffer }[], budgetDisabled = false) {
-  const acknowledgement = budgetDisabled
-    ? page.getByText(/Conversation model dispatch is disabled until an explicit spending budget/)
+async function send(page: Page, text: string, files?: { name: string; buffer: Buffer }[], localCommandsOnly = false) {
+  const acknowledgement = localCommandsOnly
+    ? page.getByText(/Use \/clarify and \/compare to compare documents/)
     : page.getByText('The PDFs were captured locally. Please identify the document roles and comparison intent.', {
         exact: true,
       });
@@ -37,7 +37,7 @@ async function send(page: Page, text: string, files?: { name: string; buffer: Bu
   );
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await (await finished).finished();
-  if (budgetDisabled) await expect(acknowledgement.last()).toBeVisible();
+  if (localCommandsOnly) await expect(acknowledgement.last()).toBeVisible();
   else await expect(acknowledgement).toHaveCount(before + 1);
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
 }

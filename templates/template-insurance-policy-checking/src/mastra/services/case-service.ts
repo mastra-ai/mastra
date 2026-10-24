@@ -64,7 +64,7 @@ export function createCaseService(
         ...(comparisonStatus ? { reconciliation: await comparisonStatus(context) } : {}),
         ...(reportStatus ? { report: await reportStatus(context) } : {}),
         message:
-          'Documents are captured. Evidence-backed comparison requires explicit clarification and approved processing budgets. Draft reports become available after successful publication. Broker review must identify the exact version. Read /report for pending review, saved decisions and available final downloads.',
+          'Documents are captured. Evidence-backed comparison requires explicit clarification and uses the configured processing limits. Draft reports become available after successful publication. Broker review must identify the exact version. Read /report for pending review, saved decisions and available final downloads.',
       };
     },
     async clarify(context: OperationContext, input: unknown) {

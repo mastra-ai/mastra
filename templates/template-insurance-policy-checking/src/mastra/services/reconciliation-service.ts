@@ -93,8 +93,8 @@ export function createReconciliationService(
       if (!settings.budget)
         throw new IntakeError(
           'MODEL_BUDGET_REQUIRED',
-          'Processing requires explicitly approved request, token, retry and cost budgets.',
-          'Set POLICY_PROCESSING_BUDGET to an approved budget JSON file path and restart before paid execution.',
+          'Processing is disabled because this application configuration has no budget.',
+          'Use the built-in processing budget or configure POLICY_PROCESSING_BUDGET with a valid budget JSON file path, then restart.',
         );
       const input: AnalysisInput = {
         schemaVersion: 'reconciliation-1',

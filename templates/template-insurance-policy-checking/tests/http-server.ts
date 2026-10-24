@@ -100,7 +100,8 @@ export async function startStudio(dataRoot: string, providerUrl?: string, proces
         POLICY_DATA_DIR: dataRoot,
         POLICY_TEST_PROVIDER_URL: providerUrl ?? '',
         POLICY_PROCESSING_BUDGET: processingBudget ? budgetFile : '',
-        POLICY_TEST_PROCESSING_ONLY: processingBudget ? '1' : '',
+        // null selects the built-in budget for processing-only Studio journeys.
+        POLICY_TEST_PROCESSING_ONLY: processingBudget === undefined ? '' : '1',
         PATH: `${resolve(process.execPath, '..')}:${process.env.PATH}`,
       },
       stdio: ['ignore', 'pipe', 'pipe'],

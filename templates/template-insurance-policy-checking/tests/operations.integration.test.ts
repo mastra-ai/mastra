@@ -8,7 +8,7 @@ import { expect, it } from 'vitest';
 import { evaluationCases } from './evaluation-fixtures.js';
 import { reportWire } from './report-provider.js';
 
-async function processingSettings(budgetPath: string, cwd: string, configuredRoot = resolve('.mastra')) {
+async function processingSettings(budgetPath: string | undefined, cwd: string, configuredRoot = resolve('.mastra')) {
   const moduleUrl = pathToFileURL(resolve('src/mastra/config/processing-config.ts')).href;
   const { stdout } = await promisify(execFile)(
     process.execPath,
@@ -53,7 +53,28 @@ it('loads budget files from the project root and absolute paths when Studio chan
       model: 'gpt-6.1-sol',
       budget: custom,
     });
-    expect(await processingSettings('', root)).toEqual({ model: 'gpt-6.1-sol', budget: null });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('uses conservative built-in limits when the budget path is absent, empty or whitespace', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'insurance-default-budget-'));
+  try {
+    for (const path of [undefined, '', '   ']) {
+      const settings = await processingSettings(path, root);
+      expect(settings.model).toBe('gpt-6.1-sol');
+      expect(settings.budget).toMatchObject({
+        maxAttempts: 1,
+        maxRequests: 5,
+        maxInputTokensPerRequest: 100000,
+        maxOutputTokensPerRequest: 8000,
+        maxTotalTokens: 300000,
+        maxCostMicros: 5000000,
+        timeoutMs: 120000,
+        maxResponseBytes: 1048576,
+      });
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }

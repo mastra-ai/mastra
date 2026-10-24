@@ -5,7 +5,20 @@ import { IntakeError } from '../domain/operation-errors.js';
 import { processingBudgetSchema } from '../domain/reconciliation-contracts.js';
 import { projectRoot } from '../runtime/storage-paths.js';
 
-// Processing stays disabled until an operator supplies an explicitly approved budget.
+// Conservative defaults bound each analysis; an optional JSON file replaces the whole policy.
+export const defaultProcessingBudget = processingBudgetSchema.parse({
+  maxAttempts: 1,
+  maxRequests: 5,
+  maxInputTokensPerRequest: 100000,
+  maxOutputTokensPerRequest: 8000,
+  maxTotalTokens: 300000,
+  maxCostMicros: 5000000,
+  inputMicrosPerToken: 10,
+  outputMicrosPerToken: 50,
+  pricingAssumption: 'Conservative USD estimate: $10/M input and $50/M output; not live billing.',
+  timeoutMs: 120000,
+  maxResponseBytes: 1024 * 1024,
+});
 export const processingConfigurationSchema = z
   .object({
     model: z
@@ -14,11 +27,11 @@ export const processingConfigurationSchema = z
       .describe('Approved model identifier used for structured processing.'),
     budget: processingBudgetSchema
       .nullable()
-      .describe('Explicitly approved processing ceilings; null disables paid dispatch.'),
+      .describe('Default or custom processing ceilings; null disables paid dispatch for programmatic callers.'),
   })
   .strict();
 function readProcessingBudget(path: string | undefined): unknown {
-  if (!path) return null;
+  if (!path?.trim()) return defaultProcessingBudget;
   const budgetPath = resolve(projectRoot(), path);
   try {
     return JSON.parse(readFileSync(budgetPath, 'utf8'));

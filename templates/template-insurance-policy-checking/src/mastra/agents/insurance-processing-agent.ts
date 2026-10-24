@@ -42,7 +42,7 @@ export function createInsuranceProcessingModel(
         throw new IntakeError(
           'MODEL_CREDENTIAL_REQUIRED',
           'OpenAI processing credentials are unavailable.',
-          'Configure OPENAI_API_KEY after approving explicit processing budgets.',
+          'Set OPENAI_API_KEY in .env and restart Studio.',
         );
       const startedAt = Date.now();
       const sourceId = z.uuid().safeParse(stage.startsWith('extract:') ? stage.slice(8) : undefined).data;
