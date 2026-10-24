@@ -1,0 +1,98 @@
+import type { KnowledgeScope, KnowledgeStorage } from '../storage';
+import type { ToolAction } from '../tools';
+import { createTool } from '../tools';
+import type { KnowledgeToolContext } from './knowledge-tools';
+import { createKnowledgeTools, resolveKnowledgeToolScope } from './knowledge-tools';
+import { createKnowledgeWriteTools } from './knowledge-write-tools';
+import { createPinnedTools, DEFAULT_PINNED_MAX_CHARACTERS } from './pinned';
+import type { KnowledgeSemanticIndexCoordinator } from './semantic-index';
+
+/** What the moved tool factories need from whoever hosts them. */
+export interface KnowledgeToolHost {
+  getKnowledgeStore(): Promise<KnowledgeStorage>;
+  getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined>;
+  getKnowledgeInstance(): {
+    __getVisibleStructureScopes(
+      scope: KnowledgeScope,
+    ): Promise<Array<{ address: string; name: string; description?: string; heldAncestors?: string[] }>>;
+    materializeScope?(input: {
+      address: string;
+      contextualScopeAddress: string;
+      parentAddresses?: string[];
+    }): Promise<unknown>;
+  };
+}
+
+export interface KnowledgeToolGroups {
+  read: boolean;
+  write: boolean;
+  pins: false | { maxPins: number };
+}
+
+type Tools = Record<string, ToolAction<any, any, any>>;
+
+/** Placeholder options used only to read the static tool definitions (ids, descriptions, schemas). */
+const TEMPLATE_SCOPE: KnowledgeScope = ['org:template', 'resource:template', 'thread:template'];
+
+function sourceThreadId(context: KnowledgeToolContext | undefined): string {
+  const threadId = context?.agent?.threadId;
+  if (!threadId) throw new Error('Knowledge tools require an active threadId.');
+  return threadId;
+}
+
+/**
+ * Write and pin tools take their scope at construction. Attached tools rebuild them per call
+ * from the calling run, keeping the static definition (id, description, schema) from a template.
+ */
+function perCall(template: Tools, build: (context: KnowledgeToolContext | undefined) => Tools): Tools {
+  return Object.fromEntries(
+    Object.entries(template).map(([name, tool]) => [
+      name,
+      createTool({
+        id: tool.id,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        execute: async (input: unknown, context: unknown) => {
+          const inner = build(context as KnowledgeToolContext)[name];
+          return inner!.execute!(input as never, context as never);
+        },
+      }),
+    ]),
+  );
+}
+
+export function buildKnowledgeTools(host: KnowledgeToolHost, groups: KnowledgeToolGroups): Tools {
+  const tools: Tools = {};
+  if (groups.read) Object.assign(tools, createKnowledgeTools(host));
+  if (groups.write) {
+    const options = (context: KnowledgeToolContext | undefined) => ({
+      scope: resolveKnowledgeToolScope(context),
+      sourceThreadId: sourceThreadId(context),
+      defaultScope: 'thread' as const,
+    });
+    Object.assign(
+      tools,
+      perCall(
+        createKnowledgeWriteTools(host, { scope: TEMPLATE_SCOPE, sourceThreadId: 'template', defaultScope: 'thread' }),
+        context => createKnowledgeWriteTools(host, options(context)),
+      ),
+    );
+  }
+  if (groups.pins) {
+    const { maxPins } = groups.pins;
+    const options = (scope: KnowledgeScope, threadId: string) => ({
+      scope,
+      sourceThreadId: threadId,
+      defaultScope: 'resource' as const,
+      maxPins,
+      maxCharacters: DEFAULT_PINNED_MAX_CHARACTERS,
+    });
+    Object.assign(
+      tools,
+      perCall(createPinnedTools(host, options(TEMPLATE_SCOPE, 'template')), context =>
+        createPinnedTools(host, options(resolveKnowledgeToolScope(context), sourceThreadId(context))),
+      ),
+    );
+  }
+  return tools;
+}
