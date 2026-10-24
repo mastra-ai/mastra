@@ -25,10 +25,21 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "glm-5.3-flash": [
+    "nemotron-3-ultra-550b-a55b:free": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "medium", "high"]
+      }
+    ],
+    "gemma-4-31b-it:free": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
       }
     ],
     "deepseek-v4-flash-0731": [
@@ -37,9 +48,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "gemma-4-31b-it:free": [
+    "glm-5.3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "gpt-5.6-luna": [
@@ -48,22 +60,10 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "nemotron-3-ultra-550b-a55b:free": [
-      {
-        "type": "effort",
-        "values": ["none", "medium", "high"]
-      }
-    ],
-    "glm-5.3": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-v4-pro-0813": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
       }
     ]
   }

@@ -15,15 +15,15 @@
         "values": ["high", "xhigh"]
       }
     ],
+    "sakana-namazu": [
+      {
+        "type": "toggle"
+      }
+    ],
     "fugu-ultra": [
       {
         "type": "effort",
         "values": ["high", "xhigh"]
-      }
-    ],
-    "sakana-namazu": [
-      {
-        "type": "toggle"
       }
     ]
   }

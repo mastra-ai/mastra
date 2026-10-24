@@ -40,20 +40,20 @@
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.8-Flash": [
-      {
-        "type": "toggle"
-      }
-    ],
     "Qwen/Qwen3.8-Max": [
       {
         "type": "toggle"
       }
     ],
-    "anthropic/claude-opus-4.8": [
+    "Qwen/Qwen3.8-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-5.5": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "anthropic/claude-opus-4.7": [
@@ -69,6 +69,12 @@
         "max": 127999
       }
     ],
+    "anthropic/claude-opus-4.8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "anthropic/claude-sonnet-4.6": [
       {
         "type": "budget_tokens",
@@ -80,12 +86,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "openai/gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ]
   }

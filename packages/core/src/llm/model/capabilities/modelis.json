@@ -33,12 +33,6 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "claude-fable-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "gemini-2.5-flash": [
       {
         "type": "toggle"
@@ -51,16 +45,7 @@
         "type": "budget_tokens"
       }
     ],
-    "deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "claude-opus-4-8": [
-      {
-        "type": "toggle"
-      },
+    "claude-fable-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -75,7 +60,22 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.7-max": [
+    "claude-opus-4-8": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "qwen/qwen3.7-plus": [
       {
         "type": "toggle"
       },
@@ -83,7 +83,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.7-plus": [
+    "qwen/qwen3.7-max": [
       {
         "type": "toggle"
       },
