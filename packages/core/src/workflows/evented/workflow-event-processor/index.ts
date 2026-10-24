@@ -168,6 +168,8 @@ export class WorkflowEventProcessor extends EventProcessor {
   private static readonly MAX_DELIVERY_ATTEMPTS = 3;
   /** TTL of the lease fencing a running `workflow.step.run`; renewed every ttl/3. */
   static STEP_FENCE_TTL_MS = 30_000;
+  /** Longest a step waits on the fence; an unanswered backend counts as an error, so the step still runs. */
+  static STEP_FENCE_ACQUIRE_TIMEOUT_MS = 5_000;
   // Sentinel value stored in deliveryAttempts to mark an event whose terminal
   // workflow.fail has already been published. Any subsequent redelivery of
   // the same logical event short-circuits as terminal and does NOT re-run
@@ -3925,7 +3927,27 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     let acquired: boolean;
     try {
-      ({ acquired } = await leaseProvider.acquireLease(key, owner, ttl));
+      const pending = leaseProvider.acquireLease(key, owner, ttl);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          // A slow backend can still grant the abandoned acquire. Nobody renews
+          // that fence, and it would drop the retry of a failed step as a
+          // duplicate, so give it back.
+          pending.then(
+            late => {
+              if (late.acquired) void leaseProvider.releaseLease(key, owner).catch(() => {});
+            },
+            () => {},
+          );
+          reject(new Error(`step fence not acquired within ${WorkflowEventProcessor.STEP_FENCE_ACQUIRE_TIMEOUT_MS}ms`));
+        }, WorkflowEventProcessor.STEP_FENCE_ACQUIRE_TIMEOUT_MS);
+      });
+      try {
+        ({ acquired } = await Promise.race([pending, timedOut]));
+      } finally {
+        clearTimeout(timer);
+      }
     } catch (err) {
       // Fencing is best-effort; never block execution on a lease backend error.
       this.mastra.getLogger()?.warn('WorkflowEventProcessor.handle: failed to acquire step fence', { key, error: err });

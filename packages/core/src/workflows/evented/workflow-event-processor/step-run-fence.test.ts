@@ -86,4 +86,34 @@ describe('WorkflowEventProcessor step.run fence (#24589)', () => {
     expect(await processor.handle(stepRunEvent(2))).toEqual({ ok: true });
     expect(processor.executions).toBe(2);
   });
+
+  it('releases a fence the timed-out acquire takes late, so the retry of a failed step still runs', async () => {
+    // The backend is slow, not hung: the first acquire answers after the
+    // acquire timeout, once the unfenced step is already running.
+    class SlowLeasePubSub extends EventEmitterPubSub {
+      delayNextAcquire = 0;
+      override async acquireLease(key: string, owner: string, ttlMs: number) {
+        const delay = this.delayNextAcquire;
+        this.delayNextAcquire = 0;
+        if (delay) await sleep(delay);
+        return super.acquireLease(key, owner, ttlMs);
+      }
+    }
+    const pubsub = new SlowLeasePubSub();
+    const mastra = makeMastra(pubsub);
+    const processor = new SlowStepProcessor({ mastra });
+    const timeout = WorkflowEventProcessor.STEP_FENCE_ACQUIRE_TIMEOUT_MS;
+    WorkflowEventProcessor.STEP_FENCE_ACQUIRE_TIMEOUT_MS = 100;
+    try {
+      pubsub.delayNextAcquire = 300;
+      processor.fail = true;
+      expect(await processor.handle(stepRunEvent(1))).toEqual({ ok: false, retry: true });
+      await sleep(250); // the abandoned acquire lands while the retry is pending
+      processor.fail = false;
+      expect(await processor.handle(stepRunEvent(2))).toEqual({ ok: true });
+      expect(processor.executions).toBe(2);
+    } finally {
+      WorkflowEventProcessor.STEP_FENCE_ACQUIRE_TIMEOUT_MS = timeout;
+    }
+  });
 });

@@ -29,6 +29,7 @@ import type { EngineVariant } from '../../loop/test-utils/aimock/types';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
+import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
 import { Agent } from '../agent';
 import { createDurableAgent, createEventedAgent } from '../durable';
 import { assembleAgentFromFsEntry } from '../fs-routing';
@@ -59,6 +60,8 @@ class SharedLeases {
 class ReplicaPubSub extends EventEmitterPubSub {
   /** How this replica's thread-lease calls fail once its connection to the lease backend is down. */
   partition: 'reject' | 'hang' | undefined;
+  /** Whether the partition covers every lease key, as a real outage does, or only thread leases. */
+  partitionsEveryKey = false;
 
   /** Pass one emitter to several replicas to share thread events between them, as Redis does. */
   constructor(
@@ -68,7 +71,7 @@ class ReplicaPubSub extends EventEmitterPubSub {
     super(events);
   }
   async #reach(key: string) {
-    if (!key.startsWith(`${RESOURCE}\u0000`)) return;
+    if (!this.partitionsEveryKey && !key.startsWith(`${RESOURCE}\u0000`)) return;
     if (this.partition === 'reject') throw new Error('lease backend unreachable');
     if (this.partition === 'hang') await new Promise(() => {});
   }
@@ -303,6 +306,64 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     },
     30_000,
   );
+
+  if (engine === 'evented') {
+    it('finishes an evented run when its step fence and thread lease backend both hang', async () => {
+      const thread = 'lease-outage-thread';
+      for (let i = 0; i < 60; i++) {
+        llm.on(
+          { userMessage: 'outage run', sequenceIndex: i },
+          { toolCalls: [{ id: `call_outage_${i}`, name: 'tick', arguments: {} }] },
+        );
+      }
+      const acquireTimeout = WorkflowEventProcessor.STEP_FENCE_ACQUIRE_TIMEOUT_MS;
+      WorkflowEventProcessor.STEP_FENCE_ACQUIRE_TIMEOUT_MS = 300;
+      try {
+        const shared = new SharedLeases();
+        class OutagePubSub extends ReplicaPubSub {
+          hungStepFences = 0;
+          override async acquireLease(key: string, owner: string, ttlMs: number) {
+            if (this.partition === 'hang' && key.startsWith('workflow-step-run:')) this.hungStepFences++;
+            return super.acquireLease(key, owner, ttlMs);
+          }
+        }
+        let ticks = 0;
+        const tick = createTool({
+          id: 'tick',
+          description: 'Tick once',
+          inputSchema: z.object({}),
+          execute: async () => {
+            ticks++;
+            await new Promise(resolve => setTimeout(resolve, 40));
+            return 'ticked';
+          },
+        });
+        const pubsub = new OutagePubSub(shared);
+        const agent = replica(shared, new MockMemory(), { tick }, pubsub);
+        const { output: run, drain } = await startStream(agent, 'outage run', {
+          maxSteps: 60,
+          memory: { thread, resource: RESOURCE },
+        });
+        let finished = false;
+        const done = drain()
+          .catch(() => undefined)
+          .then(() => (finished = true));
+
+        await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+        // A real outage hangs every lease call, including evented step fences, not just the thread lease.
+        pubsub.partitionsEveryKey = true;
+        pubsub.partition = 'hang';
+
+        await vi.waitFor(() => expect(pubsub.hungStepFences).toBeGreaterThan(0), { timeout: 5_000 });
+        await vi.waitFor(() => expect(finished).toBe(true), { timeout: 10_000 });
+        await done;
+        expect(await run.finishReason).toBe('aborted');
+        expect(ticks).toBeLessThan(60);
+      } finally {
+        WorkflowEventProcessor.STEP_FENCE_ACQUIRE_TIMEOUT_MS = acquireTimeout;
+      }
+    }, 30_000);
+  }
 
   it('stops a run on an abort request from another replica after its lease is gone', async () => {
     const thread = 'lease-gone-abort-thread';
