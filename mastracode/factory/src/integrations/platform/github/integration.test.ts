@@ -1307,6 +1307,93 @@ describe('PlatformGithubIntegration', () => {
     );
   });
 
+  it('reports why no installation is accessible when status is not connected', async () => {
+    const seed = await createPlatformStorageForTests();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/github-app/installations')) return json({ installations: [], pendingRequests: [] });
+      if (url.includes('/github-app/user-connection')) {
+        return json({ connected: false, githubUsername: null, reason: 'no-accessible-installation' });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const context = {
+      auth: fakeAuth(),
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      controller: {},
+      stateSigner: {},
+      baseUrl: 'https://factory.example',
+    } as unknown as IntegrationContext;
+    integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, integration.routes(context));
+
+    const status = await app.request('/web/github/status');
+    await expect(status.json()).resolves.toMatchObject({
+      connected: false,
+      reason: 'not_connected',
+      userConnectionReason: 'no-accessible-installation',
+    });
+  });
+
+
+  it('logs and reports an unavailable user-connection check when Platform errors', async () => {
+    const warningLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const seed = await createPlatformStorageForTests();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/github-app/installations')) return json({ installations: [], pendingRequests: [] });
+      if (url.includes('/github-app/user-connection')) {
+        return json({ error: 'upstream unavailable' }, 503);
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const context = {
+      auth: fakeAuth(),
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      controller: {},
+      stateSigner: {},
+      baseUrl: 'https://factory.example',
+    } as unknown as IntegrationContext;
+    integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, integration.routes(context));
+
+    const status = await app.request('/web/github/status');
+    await expect(status.json()).resolves.toMatchObject({
+      connected: false,
+      reason: 'not_connected',
+      userConnected: false,
+      userConnectionReason: 'verification-unavailable',
+    });
+    const logged = warningLog.mock.calls.map(call => String(call[0])).join('\n');
+    expect(logged).toContain('[Mastra Factory] WARN Platform GitHub user connection verification failed');
+    expect(logged).toContain('"reason":"verification-unavailable"');
+    warningLog.mockRestore();
+  });
+
   it('logs the user-connection verification failure reason', async () => {
     const warningLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const seed = await createPlatformStorageForTests();
