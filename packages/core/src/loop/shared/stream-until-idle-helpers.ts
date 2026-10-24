@@ -1,3 +1,4 @@
+import type { AgentScopeEntry } from '../../agent/scopes';
 /**
  * Shared helpers for the `streamUntilIdle` wrapper pattern used by both
  * the regular `Agent` and `DurableAgent`. Extracted to avoid duplicating
@@ -64,7 +65,7 @@ export interface ResolvedScope {
 export async function resolveScope(
   agent: {
     getMemory: (opts?: any) => Promise<MastraMemory | undefined>;
-    getScopes?: (opts?: any) => Promise<string[] | undefined>;
+    getScopes?: (opts?: any) => Promise<AgentScopeEntry[] | undefined>;
   },
   mergedOptions: Record<string, any>,
 ): Promise<ResolvedScope | null> {

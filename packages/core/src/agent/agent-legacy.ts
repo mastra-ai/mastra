@@ -39,6 +39,7 @@ import type { OutputWriter } from '../workflows';
 import { assertThreadOwnedByResource } from './memory-thread-ownership';
 import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
+import type { AgentScopeEntry } from './scopes';
 import { deriveAgentRunRequestContext, parseAgentScope, resolveAgentScopes } from './scopes';
 import type {
   ZodSchema,
@@ -88,7 +89,7 @@ export interface AgentLegacyCapabilities {
   /** Check if agent has own memory */
   hasOwnMemory(): boolean;
   /** Get the agent's configured scopes */
-  getScopes(options: { requestContext: RequestContext }): Promise<string[] | undefined>;
+  getScopes(options: { requestContext: RequestContext }): Promise<AgentScopeEntry[] | undefined>;
   /** Get instructions */
   getInstructions(options: { requestContext: RequestContext }): Promise<AgentInstructions>;
   /** Get the agent's LLM instance, optionally using a request-scoped model override */
@@ -838,7 +839,11 @@ export class AgentLegacyHandler {
       threadId: args.threadId,
       mastra: this.capabilities.mastra,
     });
-    const requestContext = deriveAgentRunRequestContext(callerRequestContext, resolvedScopes.scopes);
+    const requestContext = deriveAgentRunRequestContext(
+      callerRequestContext,
+      resolvedScopes.scopes,
+      resolvedScopes.readOnly,
+    );
     const hasResourceScope = resolvedScopes.scopes.some(scope => parseAgentScope(scope)?.type === 'resource');
     const hasThreadScope = resolvedScopes.scopes.some(scope => parseAgentScope(scope)?.type === 'thread');
 

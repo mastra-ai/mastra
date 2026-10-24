@@ -33,6 +33,7 @@ export { getGoalActivityDurationMs } from './goal';
 export { DEFAULT_TOOL_DECLINE_REASON, resolveDeclineReason } from './tool-approval';
 export * from './utils';
 export * from './fs-routing';
+export type { AgentScopeEntry, RunAgentScope } from './scopes';
 
 // Note: DurableAgent is NOT re-exported here to avoid circular dependencies.
 // Import from '@mastra/core/agent/durable' instead:

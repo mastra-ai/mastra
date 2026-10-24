@@ -48,6 +48,14 @@ function systemText(prompt: unknown[]): string {
     .join('\n');
 }
 
+function toolErrors(result: Awaited<ReturnType<Agent['generate']>>): string[] {
+  return result.steps.flatMap(step =>
+    step.content.flatMap((part: any) =>
+      part.type === 'tool-result' && part.output?.type === 'error-text' ? [String(part.output.value)] : [],
+    ),
+  );
+}
+
 function toolResults(result: Awaited<ReturnType<Agent['generate']>>) {
   return result.steps.flatMap(step => step.toolResults.map(toolResult => toolResult.payload ?? toolResult));
 }
@@ -181,5 +189,52 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(toolResults(result)).toHaveLength(0);
     expect(JSON.stringify(result.steps.map(step => step.content))).toContain('does not hold scope');
     expect(await (await knowledge.getStorage()).listNodes({ scope: ['team:acme:sales'] })).toEqual([]);
+  });
+
+  it('holds a read-only tag for reads only: visible, left out of default writes, refused when named', async () => {
+    const storage = new InMemoryStore({ id: 'read-only' });
+    const knowledge = new Knowledge({ storage, tools: { write: true } });
+    const store = await knowledge.getStorage();
+    const orgNode = await store.createNode({ name: 'Org policy', kind: 'policy', scope: ['org:self'] });
+    await store.appendKnowledge({
+      node: orgNode,
+      text: 'Ship on Fridays only with sign-off.',
+      scope: ['org:self'],
+      sourceThreadId: 'director',
+      resolutionScope: ['org:self'],
+      defaultScope: ['org:self'],
+    });
+
+    const member = (calls: Call[]) =>
+      new Agent({
+        id: 'member',
+        name: 'member',
+        instructions: 'x',
+        model: scriptedModel(calls, []),
+        knowledge,
+        scopes: [{ tag: 'org:self', access: 'read' }, 'team:self:x'],
+      }).generate('go', { maxSteps: 2, memory: { thread: 'm-1', resource: 'member' } });
+
+    const searched = await member([{ toolName: 'knowledge_search', input: { query: 'Fridays' } }]);
+    expect((toolResults(searched)[0] as any).result.results.map((hit: any) => hit.text)).toContain(
+      'Ship on Fridays only with sign-off.',
+    );
+
+    const created = await member([
+      { toolName: 'knowledge_create', input: { name: 'Team note', kind: 'doc', text: 'x' } },
+    ]);
+    expect((toolResults(created)[0] as any).result.record.scope).toEqual([
+      'resource:member',
+      'team:self:x',
+      'thread:m-1',
+    ]);
+
+    const named = await member([
+      { toolName: 'knowledge_create', input: { name: 'Org note', kind: 'doc', text: 'y', scope: ['org:self'] } },
+    ]);
+    expect(toolErrors(named)).toEqual(['"org:self" is read-only for this run.']);
+
+    const appended = await member([{ toolName: 'knowledge_append', input: { node: orgNode.id, text: 'z' } }]);
+    expect(toolErrors(appended)).toEqual(['"org:self" is read-only for this run.']);
   });
 });

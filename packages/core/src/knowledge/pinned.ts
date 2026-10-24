@@ -5,7 +5,7 @@ import { canonicalizeKnowledgeScope, isKnowledgeScopeVisible } from '../storage'
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 
-import { getKnowledgeStore } from './knowledge-tools';
+import { getKnowledgeStore, requireWritableTags } from './knowledge-tools';
 import type { KnowledgeStoreMemory } from './knowledge-tools';
 
 /** Processor id and state-signal id for the pinned-knowledge lane. */
@@ -33,6 +33,8 @@ type PinnedMemory = KnowledgeStoreMemory;
 export interface PinnedToolsOptions {
   /** The run's full Knowledge scope. */
   scope: KnowledgeScope;
+  /** Tags of `scope` the run holds read-only: pins there are delivered, never changed. */
+  readOnly?: KnowledgeScope;
   sourceThreadId: string;
   maxPins: number;
   /** Estimated-token budget for the whole pin set. */
@@ -115,7 +117,13 @@ export function defaultPinScope(scope: KnowledgeScope): KnowledgeScope {
 }
 
 function resolveWriteScope(options: PinnedToolsOptions, requested?: string[]): KnowledgeScope {
-  if (!requested) return defaultPinScope(options.scope);
+  const readOnly = options.readOnly ?? [];
+  if (!requested) {
+    const writable = defaultPinScope(options.scope.filter(tag => !readOnly.includes(tag)));
+    if (writable.length === 0) throw new Error('This run holds no writable scope tags.');
+    return writable;
+  }
+  requireWritableTags(requested, readOnly);
   const held = new Set(options.scope);
   const missing = requested.filter(tag => !held.has(tag));
   if (missing.length > 0) {
@@ -166,6 +174,7 @@ async function requirePin(
   const nodeId = await resolvePinnedNodeId(store, options.scope);
   if (!nodeId || record.node !== nodeId) throw new Error(`Record is not a pin: ${recordId}`);
   if (!isKnowledgeScopeVisible(record.scope, options.scope)) throw new Error('Pin is outside the visible scope.');
+  requireWritableTags(record.scope, options.readOnly ?? []);
   return record;
 }
 

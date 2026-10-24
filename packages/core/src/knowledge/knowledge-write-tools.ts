@@ -10,6 +10,7 @@ import {
 } from '../storage';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
+import { requireWritableTags } from './knowledge-tools';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
 const scopeTagsSchema: JSONSchema7 = {
@@ -68,6 +69,8 @@ type KnowledgeWriteToolsMemory = {
 export interface KnowledgeWriteToolsOptions {
   /** The run's full Knowledge scope. */
   scope: KnowledgeScope;
+  /** Tags of `scope` the run holds read-only: visible, never written. */
+  readOnly?: KnowledgeScope;
   sourceThreadId: string;
 }
 
@@ -80,7 +83,13 @@ async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeSto
 
 /** The tags a write lands at: the requested subset of the run's tags, or all of them. */
 function resolveWriteScope(options: KnowledgeWriteToolsOptions, requested?: string[]): KnowledgeScope {
-  if (!requested) return options.scope;
+  const readOnly = options.readOnly ?? [];
+  if (!requested) {
+    const writable = options.scope.filter(tag => !readOnly.includes(tag));
+    if (writable.length === 0) throw new Error('This run holds no writable scope tags.');
+    return writable;
+  }
+  requireWritableTags(requested, readOnly);
   const held = new Set(options.scope);
   const missing = requested.filter(tag => !held.has(tag));
   if (missing.length > 0) {
@@ -89,7 +98,9 @@ function resolveWriteScope(options: KnowledgeWriteToolsOptions, requested?: stri
   return canonicalizeKnowledgeScope(requested);
 }
 
+/** Visible to the run, and carrying no tag the run holds read-only. */
 function requireVisible(scope: KnowledgeScope, options: KnowledgeWriteToolsOptions, label: string): void {
+  requireWritableTags(scope, options.readOnly ?? []);
   if (!isKnowledgeScopeVisible(scope, options.scope)) {
     throw new Error(`${label} is outside this run's visible scope.`);
   }
