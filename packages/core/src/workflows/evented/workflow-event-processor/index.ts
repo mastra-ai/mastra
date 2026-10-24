@@ -14,6 +14,7 @@ import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../s
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
 import type {
+  NestedWorkflowParent,
   RestartExecutionParams,
   SingleStepEntry,
   StepFlowEntry,
@@ -84,6 +85,9 @@ export type ProcessorArgs = {
    */
   resourceId?: string;
 };
+
+type StoredParentWorkflow = Omit<ParentWorkflow, 'stepGraph' | 'parentWorkflow'> &
+  NestedWorkflowParent & { parentWorkflow?: StoredParentWorkflow };
 
 export type ParentWorkflow = {
   workflowId: string;
@@ -505,6 +509,31 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
+  private serializeParentWorkflow(parent: ParentWorkflow): StoredParentWorkflow {
+    const { stepGraph, parentWorkflow, ...continuation } = parent;
+    return {
+      ...continuation,
+      parentWorkflow: parentWorkflow ? this.serializeParentWorkflow(parentWorkflow) : undefined,
+    };
+  }
+
+  restoreParentWorkflow(parent: NestedWorkflowParent): ParentWorkflow {
+    if (!('executionPath' in parent) || !('stepResults' in parent)) {
+      throw new Error(`Missing continuation for parent workflow ${parent.workflowId}`);
+    }
+    const continuation = parent as StoredParentWorkflow;
+    const live =
+      this.#resolveLiveWorkflow(continuation as ParentWorkflow) ?? this.#tryResolveWorkflow(parent.workflowId);
+    if (!live) {
+      throw new Error(`Cannot restore parent workflow ${parent.workflowId} for nested resume`);
+    }
+    return {
+      ...continuation,
+      stepGraph: live.stepGraph,
+      parentWorkflow: continuation.parentWorkflow ? this.restoreParentWorkflow(continuation.parentWorkflow) : undefined,
+    };
+  }
+
   __registerMastra(mastra: Mastra) {
     super.__registerMastra(mastra);
     this.stepExecutor.__registerMastra(mastra);
@@ -858,6 +887,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (shouldPersist || requiresGuardedSnapshot) {
       const runningSnapshot: WorkflowRunState = {
         activePaths: restart ? (executionPath ?? restart.activePaths) : [],
+        parentWorkflow: parentWorkflow
+          ? { ...this.serializeParentWorkflow(parentWorkflow), foreachIndex: forEachIndex }
+          : undefined,
         suspendedPaths: {},
         resumeLabels: {},
         waitingPaths: {},

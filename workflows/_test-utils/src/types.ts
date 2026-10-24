@@ -571,6 +571,8 @@ export type SkippableTest =
   // Clone tests
   | 'cloneWorkflows'
   | 'specResultVariables'
+  // Direct nested child resume is not implemented by every workflow engine
+  | 'directNestedChildResume'
   // Advanced variable resolution tests
   | 'mapRequestContextPath'
   | 'mapDynamicFn'
