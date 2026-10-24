@@ -35,6 +35,10 @@ Local sessions run as `org:local` only when you pass no scopes. Factory sessions
 
 If a Factory session has no organization, or a tag in `scopes` has the same type as one of those but a different value, the agent runs with only its `resource:` and `thread:` tags. Its writes are private to the run, and the `/knowledge` inspector reports Knowledge as unavailable.
 
+In a Factory session, Knowledge is stored under `project:<projectId>` together with `org:<orgId>`. Knowledge written earlier under `resource:<projectId>` no longer shows.
+
+By default the agent writes at all of its tags: org, project, its Memory resource, and the thread. Those records show only in that session's drill-down. To share a record with the whole project, have the agent write with `scope: ['org:<org>', 'project:<id>']`.
+
 ## Upgrading
 
 `experimental_subconscious` is removed. Attach Knowledge to the agent instead.
