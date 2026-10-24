@@ -1194,6 +1194,7 @@ export class AgentThreadStreamRuntime {
       // answer after the round settled give back what they took.
       let taken: 'token' | 'run';
       let takenSentAt: number;
+      let handoverRetryDelay = 5;
       for (;;) {
         const asked = token;
         let settled = false;
@@ -1257,7 +1258,12 @@ export class AgentThreadStreamRuntime {
         if (handedOver) break;
         releaseToken(asked);
         // The handoff failed, for instance because the token's lease ran out while it was slow. Nobody else is
-        // known to hold the thread, so a run with a step running takes it again under a new token.
+        // known to hold the thread, so a run with a step running takes it again under a new token. A backend that
+        // rejects every handoff at once would otherwise be asked in a tight loop, so wait a little longer each
+        // round, never more than a quarter of the renewal interval so a retake can still land within one.
+        if (!stepRunning()) return false;
+        handoverRetryDelay = Math.min(handoverRetryDelay * 2, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS / 4);
+        await new Promise(resolve => setTimeout(resolve, handoverRetryDelay));
         if (!stepRunning()) return false;
         token = newToken();
         giveUpAt = Date.now() + AGENT_THREAD_LEASE_RENEW_INTERVAL_MS;
