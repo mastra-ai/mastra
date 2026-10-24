@@ -99,7 +99,7 @@ describe.each(['normal', 'durable', 'evented', 'fs'] as const)('AIMock OM reques
     await rm(dir, { recursive: true, force: true });
   });
 
-  it('preserves the user request through mid-turn observation and persists the answer', async () => {
+  it('sends the request until the model acted on it, keeps the unread result, and persists the answer', async () => {
     script();
     const peer = await spawn('baseline.db', 'normal');
     const done = next(peer, 'done');
@@ -108,7 +108,12 @@ describe.each(['normal', 'durable', 'evented', 'fs'] as const)('AIMock OM reques
     expect(peer.events.filter(event => event.type === 'observer').length).toBeGreaterThan(0);
     const requests = llm.getRequests();
     expect(requests).toHaveLength(3);
-    for (const request of requests) expect(JSON.stringify(request.body?.messages)).toContain(USER_REQUEST);
+    // Observation ran mid-turn: the request the model already acted on is carried by the observations.
+    expect(requests.map(request => JSON.stringify(request.body?.messages).includes(USER_REQUEST))).toEqual([
+      true,
+      true,
+      false,
+    ]);
     expect(requests[2]!.body?.messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -123,7 +128,7 @@ describe.each(['normal', 'durable', 'evented', 'fs'] as const)('AIMock OM reques
   }, 120_000);
 
   if (engine === 'durable' || engine === 'evented') {
-    it('recovers a killed worker on a fresh process without losing the model request or stored output', async () => {
+    it('recovers a killed worker on a fresh process without losing the unread result or stored output', async () => {
       script();
       const solo = await spawn('solo.db', 'normal');
       const done = next(solo, 'done');
@@ -168,7 +173,7 @@ describe.each(['normal', 'durable', 'evented', 'fs'] as const)('AIMock OM reques
       const recoveryRequests = llm.getRequests().slice(3);
       expect(recoveryRequests.length).toBeGreaterThan(0);
       for (const request of recoveryRequests) {
-        expect(JSON.stringify(request.body?.messages)).toContain(USER_REQUEST);
+        expect(JSON.stringify(request.body?.messages)).not.toContain(USER_REQUEST);
         expect(request.body?.messages).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
