@@ -30,6 +30,7 @@ import { drainSignalsToTranscript } from './shared/steps/signal-drain-core';
 import type { LoopRun } from './types';
 import { createBackgroundTaskCheckStep } from './workflows/agentic-execution/background-task-check-step';
 import { EagerToolExecutionCoordinator } from './workflows/agentic-execution/eager-tool-execution';
+import { EarlyToolResultStream } from './workflows/agentic-execution/early-tool-result-stream';
 import { createGoalStep } from './workflows/agentic-execution/goal-step';
 import { createIsTaskCompleteStep } from './workflows/agentic-execution/is-task-complete-step';
 import { createLLMExecutionStep } from './workflows/agentic-execution/llm-execution-step';
@@ -190,8 +191,8 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     return createToolCallStep<Tools, OUTPUT>({ ...this.params });
   }
 
-  protected llmMappingStep(llmExecutionStep: LoopStep): LoopStep {
-    return createLLMMappingStep<Tools, OUTPUT>({ ...this.params }, llmExecutionStep as any);
+  protected llmMappingStep(llmExecutionStep: LoopStep, earlyToolResults?: EarlyToolResultStream): LoopStep {
+    return createLLMMappingStep<Tools, OUTPUT>({ ...this.params }, llmExecutionStep as any, earlyToolResults);
   }
 
   protected backgroundTaskCheckStep(): LoopStep {
@@ -308,7 +309,18 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       toolCallForeachOptions,
       eagerCoordinator ? { coordinator: eagerCoordinator, toolCallStep } : undefined,
     );
-    const llmMappingStep = this.llmMappingStep(llmExecutionStep);
+    // Parallel tool results stream as each call finishes rather than after the slowest one
+    // (#21902). The eager path keeps the plain step: an eager attempt can still be discarded.
+    const earlyToolResults = new EarlyToolResultStream();
+    const foreachToolCallStep: LoopStep = {
+      ...toolCallStep,
+      execute: async params => {
+        const output = await toolCallStep.execute(params);
+        const queued = earlyToolResults.settle(output as any, params.getStepResult(llmExecutionStep as any));
+        return queued ? { ...(output as object), streamedEarly: true } : output;
+      },
+    };
+    const llmMappingStep = this.llmMappingStep(llmExecutionStep, earlyToolResults);
     const backgroundTaskCheckStep = this.backgroundTaskCheckStep();
     const signalDrainStep = this.signalDrainStep();
     const isTaskCompleteStep = this.isTaskCompleteStep();
@@ -382,13 +394,14 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             logger: rest.logger,
           });
           emittedConcurrencyResolved = true;
+          earlyToolResults.begin(toolCallForeachOptions.concurrency > 1 && toolCalls.length > 1);
           writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
           writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
           return toolCalls;
         },
         { id: 'map-tool-calls' },
       )
-      .foreach(toolCallStep, {
+      .foreach(foreachToolCallStep, {
         // On a resume that re-enters the suspended foreach, map-tool-calls already
         // completed in the snapshot and is skipped, so the limit above was never
         // recomputed for this instance. Derive it from the persisted tool-call batch

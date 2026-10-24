@@ -19,10 +19,12 @@ import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-tran
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError, getSubAgentErrorResult } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
+import type { EarlyToolResultStream, ToolResultEmission } from './early-tool-result-stream';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   { models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>,
   llmExecutionStep: any,
+  earlyToolResults?: EarlyToolResultStream,
 ) {
   const scopeCtx: RunScopeContext = { mastra: rest.mastra, runId: rest.runId, _internal };
   /**
@@ -147,6 +149,142 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     } as ChunkType<OUTPUT>);
   }
 
+  /**
+   * Compute toModelOutput for a successful tool call and return providerMetadata
+   * with the result stored at mastra.modelOutput.
+   *
+   * Looks up the tool from dynamically loaded tools (`_internal.stepTools`, e.g. via
+   * ToolSearchProcessor) first, then falls back to the agent's static tool definitions.
+   *
+   * When toModelOutput is defined, the transform runs under a MAPPING child span so
+   * traces can distinguish "never invoked" from "ran no-op" from "ran transforming."
+   */
+  async function getProviderMetadataWithModelOutput(toolCall: {
+    toolName: string;
+    toolCallId?: string;
+    result?: unknown;
+    providerMetadata?: Record<string, unknown>;
+  }) {
+    const tool = ((
+      readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as
+        | Record<string, { toModelOutput?: (output: unknown) => unknown }>
+        | undefined
+    )?.[toolCall.toolName] ?? rest.tools?.[toolCall.toolName]) as
+      | { toModelOutput?: (output: unknown) => unknown }
+      | undefined;
+    return computeModelOutputProviderMetadata({
+      tool,
+      toolName: toolCall.toolName,
+      toolCallId: toolCall.toolCallId,
+      result: toolCall.result,
+      existingProviderMetadata: toolCall.providerMetadata,
+      parentSpan: observabilityContext?.tracingContext?.currentSpan,
+    });
+  }
+
+  async function transformToolChunk(
+    chunk: ChunkType<OUTPUT>,
+    toolCall: {
+      args?: unknown;
+      providerMetadata?: Record<string, unknown>;
+    },
+  ): Promise<ChunkType<OUTPUT>> {
+    const stepTools = readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as ToolSet | undefined;
+    return applyToolPayloadTransformToChunk(chunk as ChunkType<OUTPUT> & { payload?: any }, {
+      policy: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
+      tools: [stepTools, rest.tools],
+      logger: rest.logger,
+      // Transform against the original tool-call args/providerMetadata, not the
+      // emitted payload's (which may carry the merged `mastra.modelOutput`).
+      transformInput: {
+        args: toolCall.args,
+        providerMetadata: toolCall.providerMetadata,
+      },
+    }) as Promise<ChunkType<OUTPUT>>;
+  }
+
+  /**
+   * Stream one successful tool result: compute its modelOutput metadata, apply payload
+   * transforms, run processToolResult, commit it to the message list and enqueue the chunk.
+   * Used by the mapping step and by early streaming of parallel tool results.
+   */
+  async function emitToolResult(
+    toolCall: z.infer<typeof toolCallOutputSchema>,
+    llmExecutionResult: any,
+  ): Promise<ToolResultEmission> {
+    const stepNumber = (llmExecutionResult?.output?.steps?.length ?? 0) as number;
+    const steps = (llmExecutionResult?.output?.steps ?? []) as Array<StepResult<ToolSet>>;
+    // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
+    // can access it on the chunk's providerMetadata.mastra.modelOutput.
+    // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
+    const providerMetadata = !toolCall.providerExecuted
+      ? await getProviderMetadataWithModelOutput(toolCall)
+      : undefined;
+    const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as ProviderMetadata | undefined;
+
+    const chunk = await transformToolChunk(
+      {
+        type: 'tool-result',
+        runId: rest.runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          args: toolCall.args,
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          result: toolCall.result,
+          providerMetadata: chunkProviderMetadata,
+          providerExecuted: toolCall.providerExecuted,
+        },
+      },
+      toolCall,
+    );
+
+    // Run processToolResult BEFORE the raw result is committed to messageList.
+    // This honors the documented "before the result is added to the message list"
+    // guarantee — on tripwire the raw value never reaches history. A processor
+    // that redacts via messageList.updateToolInvocation has its value synced
+    // back into chunk.payload.result, which the commit below uses.
+    const trResult = await runToolResultProcessors({
+      chunk: chunk as ChunkType<OUTPUT> & {
+        payload: {
+          toolCallId: string;
+          toolName: string;
+          args?: unknown;
+          result?: unknown;
+          providerExecuted?: boolean;
+        };
+      },
+      stepNumber,
+      steps,
+    });
+    if (!trResult.ok) {
+      return { ok: false, tripwire: trResult.tripwire };
+    }
+
+    // Provider-executed tools are handled by llm-execution-step; for client-executed
+    // tools we patch state:'call' -> state:'result' here after processors have run.
+    // The approval decision for an approved approval-gated tool is preserved so it
+    // round-trips on recall as `approval: { approved: true }`.
+    if (!toolCall.providerExecuted) {
+      commitToolResult({
+        messageList: rest.messageList,
+        outcome: { kind: 'result', result: (chunk as { payload: { result: unknown } }).payload.result },
+        toolCallId: toolCall.toolCallId,
+        toolName: toolCall.toolName,
+        toolArgs: toolCall.args,
+        approval: toolCall.approval,
+        providerMetadata: withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata) as
+          | ProviderMetadata
+          | undefined,
+      });
+    }
+
+    const processed = await processAndEnqueueChunk(chunk);
+    if (processed) await rest.options?.onChunk?.(processed);
+    return { ok: true };
+  }
+  earlyToolResults?.setEmitter(emitToolResult);
+
   return createStep({
     id: 'llmExecutionMappingStep',
     inputSchema: z.array(toolCallOutputSchema),
@@ -169,58 +307,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         });
       };
 
-      /**
-       * Compute toModelOutput for a successful tool call and return providerMetadata
-       * with the result stored at mastra.modelOutput.
-       *
-       * Looks up the tool from dynamically loaded tools (`_internal.stepTools`, e.g. via
-       * ToolSearchProcessor) first, then falls back to the agent's static tool definitions.
-       *
-       * When toModelOutput is defined, the transform runs under a MAPPING child span so
-       * traces can distinguish "never invoked" from "ran no-op" from "ran transforming."
-       */
-      async function getProviderMetadataWithModelOutput(toolCall: {
-        toolName: string;
-        toolCallId?: string;
-        result?: unknown;
-        providerMetadata?: Record<string, unknown>;
-      }) {
-        const tool = ((
-          readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as
-            | Record<string, { toModelOutput?: (output: unknown) => unknown }>
-            | undefined
-        )?.[toolCall.toolName] ?? rest.tools?.[toolCall.toolName]) as
-          | { toModelOutput?: (output: unknown) => unknown }
-          | undefined;
-        return computeModelOutputProviderMetadata({
-          tool,
-          toolName: toolCall.toolName,
-          toolCallId: toolCall.toolCallId,
-          result: toolCall.result,
-          existingProviderMetadata: toolCall.providerMetadata,
-          parentSpan: observabilityContext?.tracingContext?.currentSpan,
-        });
-      }
-
-      async function transformToolChunk(
-        chunk: ChunkType<OUTPUT>,
-        toolCall: {
-          args?: unknown;
-          providerMetadata?: Record<string, unknown>;
-        },
-      ): Promise<ChunkType<OUTPUT>> {
-        const stepTools = readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as ToolSet | undefined;
-        return applyToolPayloadTransformToChunk(chunk as ChunkType<OUTPUT> & { payload?: any }, {
-          policy: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
-          tools: [stepTools, rest.tools],
-          logger: rest.logger,
-          // Transform against the original tool-call args/providerMetadata, not the
-          // emitted payload's (which may carry the merged `mastra.modelOutput`).
-          transformInput: {
-            args: toolCall.args,
-            providerMetadata: toolCall.providerMetadata,
-          },
-        }) as Promise<ChunkType<OUTPUT>>;
+      // A result streamed early from this batch tripped processToolResult: end the run there.
+      const earlyTripwire = await earlyToolResults?.tripwire();
+      if (earlyTripwire) {
+        return bailOnToolResultTripwire(earlyTripwire);
       }
 
       // A declined approval has no `result` but is fully resolved — it must not be mistaken for a
@@ -306,78 +396,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // so they are excluded by construction and stay unrecorded (issue #17995 / PR #18034).
         const successfulResults = inputData.filter(tc => tc.result !== undefined);
         if (successfulResults.length) {
-          const stepNumber = (initialResult?.output?.steps?.length ?? 0) as number;
-          const steps = (initialResult?.output?.steps ?? []) as Array<StepResult<ToolSet>>;
           for (const toolCall of successfulResults) {
-            // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
-            // can access it on the chunk's providerMetadata.mastra.modelOutput.
-            // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-            const providerMetadata = !toolCall.providerExecuted
-              ? await getProviderMetadataWithModelOutput(toolCall)
-              : undefined;
-            const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as
-              | ProviderMetadata
-              | undefined;
-
-            const chunk = await transformToolChunk(
-              {
-                type: 'tool-result',
-                runId: rest.runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  args: toolCall.args,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  result: toolCall.result,
-                  providerMetadata: chunkProviderMetadata,
-                  providerExecuted: toolCall.providerExecuted,
-                },
-              },
-              toolCall,
-            );
-
-            // Run processToolResult BEFORE the raw result is committed to messageList.
-            // This honors the documented "before the result is added to the message
-            // list" guarantee — on tripwire the raw value never reaches history.
-            // A processor that redacts via messageList.updateToolInvocation has its
-            // value synced back into chunk.payload.result, which the commit below uses.
-            const trResult = await runToolResultProcessors({
-              chunk: chunk as ChunkType<OUTPUT> & {
-                payload: {
-                  toolCallId: string;
-                  toolName: string;
-                  args?: unknown;
-                  result?: unknown;
-                  providerExecuted?: boolean;
-                };
-              },
-              stepNumber,
-              steps,
-            });
-            if (!trResult.ok) {
-              return bailOnToolResultTripwire(trResult.tripwire);
+            // Parallel results may already have streamed as their call finished, possibly
+            // before a suspension this run resumed from.
+            if ((await earlyToolResults?.take(toolCall.toolCallId)) || toolCall.streamedEarly) continue;
+            const emission = await emitToolResult(toolCall, initialResult);
+            if (!emission.ok) {
+              return bailOnToolResultTripwire(emission.tripwire);
             }
-
-            if (!toolCall.providerExecuted) {
-              // Update tool invocations from state:'call' to state:'result' for successful client tools.
-              // Provider-executed tools are handled by llm-execution-step. The approval decision for
-              // an approved approval-gated tool in a mixed turn (one tool errored, another approved)
-              // is preserved so it round-trips on recall too.
-              commitToolResult({
-                messageList: rest.messageList,
-                outcome: { kind: 'result', result: (chunk as { payload: { result: unknown } }).payload.result },
-                toolCallId: toolCall.toolCallId,
-                toolName: toolCall.toolName,
-                toolArgs: toolCall.args,
-                approval: toolCall.approval,
-                providerMetadata: withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata) as
-                  | ProviderMetadata
-                  | undefined,
-              });
-            }
-
-            const processed = await processAndEnqueueChunk(chunk);
-            if (processed) await rest.options?.onChunk?.(processed);
           }
         }
 
@@ -430,8 +456,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       }
 
       if (inputData?.length) {
-        const stepNumberForToolResults = (initialResult?.output?.steps?.length ?? 0) as number;
-        const stepsForToolResults = (initialResult?.output?.steps ?? []) as Array<StepResult<ToolSet>>;
         for (const toolCall of inputData) {
           // A declined approval has no `result`: persist it as `output-denied` with the approval
           // decision (rather than skipping it as a deferred call) and enqueue a terminal
@@ -475,73 +499,13 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // by processOutputStream's 'tool-result' case in llm-execution-step.
           if (toolCall.result === undefined) continue;
 
-          // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
-          // can access it on the chunk's providerMetadata.mastra.modelOutput.
-          // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-          const providerMetadata = !toolCall.providerExecuted
-            ? await getProviderMetadataWithModelOutput(toolCall)
-            : undefined;
-          const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as ProviderMetadata | undefined;
-
-          const chunk = await transformToolChunk(
-            {
-              type: 'tool-result',
-              runId: rest.runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                args: toolCall.args,
-                toolCallId: toolCall.toolCallId,
-                toolName: toolCall.toolName,
-                result: toolCall.result,
-                providerMetadata: chunkProviderMetadata,
-                providerExecuted: toolCall.providerExecuted,
-              },
-            },
-            toolCall,
-          );
-
-          // Run processToolResult BEFORE the raw result is committed to messageList.
-          // This honors the documented "before the result is added to the message list"
-          // guarantee — on tripwire the raw value never reaches history. A processor
-          // that redacts via messageList.updateToolInvocation has its value synced
-          // back into chunk.payload.result, which the commit below uses.
-          const trResult = await runToolResultProcessors({
-            chunk: chunk as ChunkType<OUTPUT> & {
-              payload: {
-                toolCallId: string;
-                toolName: string;
-                args?: unknown;
-                result?: unknown;
-                providerExecuted?: boolean;
-              };
-            },
-            stepNumber: stepNumberForToolResults,
-            steps: stepsForToolResults,
-          });
-          if (!trResult.ok) {
-            return bailOnToolResultTripwire(trResult.tripwire);
+          // Parallel results may already have streamed as their call finished, possibly
+          // before a suspension this run resumed from.
+          if ((await earlyToolResults?.take(toolCall.toolCallId)) || toolCall.streamedEarly) continue;
+          const emission = await emitToolResult(toolCall, initialResult);
+          if (!emission.ok) {
+            return bailOnToolResultTripwire(emission.tripwire);
           }
-
-          // Provider-executed tools are handled by llm-execution-step; for client-executed
-          // tools we patch state:'call' -> state:'result' here after processors have run.
-          // The approval decision for an approved approval-gated tool is preserved so it
-          // round-trips on recall as `approval: { approved: true }`.
-          if (!toolCall.providerExecuted) {
-            commitToolResult({
-              messageList: rest.messageList,
-              outcome: { kind: 'result', result: (chunk as { payload: { result: unknown } }).payload.result },
-              toolCallId: toolCall.toolCallId,
-              toolName: toolCall.toolName,
-              toolArgs: toolCall.args,
-              approval: toolCall.approval,
-              providerMetadata: withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata) as
-                | ProviderMetadata
-                | undefined,
-            });
-          }
-
-          const processed = await processAndEnqueueChunk(chunk);
-          if (processed) await rest.options?.onChunk?.(processed);
         }
 
         // Check if any delegation hook called ctx.bail() — signal the loop to stop.

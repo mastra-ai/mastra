@@ -1330,6 +1330,24 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // chunk.payload.totalUsage = self.totalUsage;
               self.#warnings = chunk.payload.stepResult.warnings || [];
 
+              // Parallel tool results stream as each call finishes, so they can arrive out of
+              // call order. The step and run results keep the order the model called the tools in.
+              const stepToolResults = self.#bufferedByStep.toolResults;
+              if (stepToolResults.length > 1) {
+                const callIndex = new Map(
+                  self.#bufferedByStep.toolCalls.map((call, index) => [call.payload.toolCallId, index]),
+                );
+                const position = (result: (typeof stepToolResults)[number]) =>
+                  callIndex.get(result.payload.toolCallId) ?? Number.MAX_SAFE_INTEGER;
+                const sorted = [...stepToolResults].sort((a, b) => position(a) - position(b));
+                // The step's results are the tail of the run's results; reorder both in place.
+                const runTail = self.#toolResults.length - stepToolResults.length;
+                if (stepToolResults.every((result, index) => self.#toolResults[runTail + index] === result)) {
+                  self.#toolResults.splice(runTail, sorted.length, ...sorted);
+                }
+                stepToolResults.splice(0, stepToolResults.length, ...sorted);
+              }
+
               if (chunk.payload.metadata.request) {
                 self.#request = chunk.payload.metadata.request;
               }
