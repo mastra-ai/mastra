@@ -16,13 +16,8 @@ async function openAgent(page: Page, url: string) {
   await page.getByText('Policy Checking', { exact: true }).click();
   await expect(page.getByPlaceholder('Enter your message...')).toBeVisible();
 }
-async function send(page: Page, text: string, files?: { name: string; buffer: Buffer }[], localCommandsOnly = false) {
-  const acknowledgement = localCommandsOnly
-    ? page.getByText(/Use \/clarify and \/compare to compare documents/)
-    : page.getByText('The PDFs were captured locally. Please identify the document roles and comparison intent.', {
-        exact: true,
-      });
-  const before = await acknowledgement.count();
+async function send(page: Page, text: string, files?: { name: string; buffer: Buffer }[], _localCommandsOnly = false) {
+  const acknowledgement = page.getByText(/Documents saved for/);
   for (const file of files ?? []) {
     await page.getByRole('button', { name: 'Add attachment', exact: true }).click();
     const chooser = page.waitForEvent('filechooser');
@@ -37,8 +32,7 @@ async function send(page: Page, text: string, files?: { name: string; buffer: Bu
   );
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await (await finished).finished();
-  if (localCommandsOnly) await expect(acknowledgement.last()).toBeVisible();
-  else await expect(acknowledgement).toHaveCount(before + 1);
+  await expect(acknowledgement.last()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
 }
 
@@ -73,11 +67,7 @@ test('studio_attachments_persist_page_evidence', async ({ browser, page }) => {
       { name: 'policy.pdf', buffer: policy },
       { name: 'duplicate-policy.pdf', buffer: policy },
     ]);
-    await expect(
-      page.getByText('The PDFs were captured locally. Please identify the document roles and comparison intent.', {
-        exact: true,
-      }),
-    ).toBeVisible();
+    await expect(page.getByText(/Documents saved for/)).toBeVisible();
     expect(threads).toHaveLength(1);
     repository = new CaseRepository(root);
     const context = { operatorId: 'local-broker', threadId: threads[0]! };
@@ -129,7 +119,7 @@ test('studio_attachments_persist_page_evidence', async ({ browser, page }) => {
     const second = await repository.requireCase(secondContext);
     expect(second.id).not.toBe(record.id);
     const secondSession = new URL(secondPage.url()).pathname + new URL(secondPage.url()).search;
-    expect(provider.requests.length).toBeGreaterThanOrEqual(6);
+    expect(provider.requests).toHaveLength(0);
     for (const request of provider.requests) {
       const text = JSON.stringify(request);
       expect(text).not.toContain('data:application/pdf');
@@ -146,22 +136,13 @@ test('studio_attachments_persist_page_evidence', async ({ browser, page }) => {
     await expect(
       page.getByText('Capture these policy documents. Please ask for intent and roles.', { exact: true }),
     ).toBeVisible();
-    await expect(
-      page.getByText('The PDFs were captured locally. Please identify the document roles and comparison intent.', {
-        exact: true,
-      }),
-    ).toHaveCount(2);
+    await expect(page.getByText(/Documents saved for/)).toHaveCount(2);
     await send(page, '/status');
     await secondPage.goto(studio.url + secondSession);
     await expect(
       secondPage.getByText('Capture this liability proposal for a different case.', { exact: true }),
     ).toBeVisible();
-    await expect(
-      secondPage.getByText(
-        'The PDFs were captured locally. Please identify the document roles and comparison intent.',
-        { exact: true },
-      ),
-    ).toHaveCount(1);
+    await expect(secondPage.getByText(/Documents saved for/)).toHaveCount(1);
     await send(secondPage, '/status');
     repository = new CaseRepository(root);
     expect((await repository.requireCase(context)).identity.policyNumber).toBe('SYN-CP-001');
@@ -190,18 +171,7 @@ test('studio_attachments_persist_page_evidence', async ({ browser, page }) => {
     expect(JSON.stringify(history.messages)).toContain('SYN-CP-001');
     expect(JSON.stringify(history.messages)).toContain('Capture these policy');
     expect(JSON.stringify(history.messages)).not.toContain('data:application/pdf');
-    const toolReplies = provider.requests.flatMap(request =>
-      (request.messages as { role: string; content: unknown }[])
-        .filter(message => message.role === 'tool')
-        .map(message => JSON.stringify(message.content)),
-    );
-    expect(toolReplies.some(reply => reply.includes(record.id) && reply.includes(hashBytes(proposal)))).toBe(true);
-    expect(
-      toolReplies.some(reply => reply.includes('SYN-CP-001') && reply.includes('Elm Harbor Fabrication LLC')),
-    ).toBe(true);
-    const latestRequests = provider.requests.slice(-4).map(request => JSON.stringify(request));
-    expect(latestRequests[0]).toContain('SYN-CP-001');
-    expect(latestRequests[2]).not.toContain(record.id);
+    expect(provider.requests).toHaveLength(0);
     await secondPage.close();
     await storage.close();
     repository.close();

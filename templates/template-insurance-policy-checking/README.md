@@ -19,16 +19,16 @@ Checking an issued policy against the agreed terms means more than spotting diff
    - Run `cp .env.example .env` and supply the values described under Prerequisites.
 3. **Start Studio**
    - Run `npm run dev` and open [Mastra Studio](http://127.0.0.1:4111).
-   - Select **Policy Checking**, attach a textual proposal and policy through **Add attachment → Add a local file**, and send a message. The saved response identifies the case and sources needed for clarification.
+   - Select **Policy Checking**, attach a textual proposal and policy through **Add attachment → Add a local file**, and send a message. The saved response lists filenames and guides you through the next step.
 
 ## Try it out
 
 Optionally run `npm run prepare:use-cases` in your terminal to generate sample PDFs in `.runtime/use-cases`. In the **Policy Checking** conversation in **Mastra Studio**:
 
-- Attach a proposal and an issued policy, then send `/status` to see their source IDs and the current case revision.
-- Send `/evidence SOURCE_ID 2` to inspect the saved text from physical page 2.
-- Follow the [usage guide](./docs/usage.md) to declare document roles with `/clarify`, compare them with `/compare` and download the draft with `/report`.
-- Read the draft and send `/review` with the exact report version to record your decision. Confirmed actionable discrepancies in agreed-term checking produce a proposed correction request for manual delivery.
+- Attach a proposal and an issued policy, then say `Show status` to see their filenames and physical page counts.
+- Say `Show page 2 of "property-issued.pdf"` to inspect saved source text.
+- Follow the [usage guide](./docs/usage.md) to identify your accepted baseline and issued policy by filename, then say `Compare the documents` and `Show the report`.
+- Read the draft, record finding decisions and approve its exact version with `Approve report version 1`. Confirmed actionable discrepancies in agreed-term checking produce a proposed correction request for manual delivery.
 
 ## Customization
 

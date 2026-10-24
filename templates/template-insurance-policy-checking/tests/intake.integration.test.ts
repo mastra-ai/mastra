@@ -494,7 +494,7 @@ describe('Durable insurance intake across real boundaries', () => {
         body: JSON.stringify(body),
       });
       const fallbackText = await fallback.text();
-      expect(fallbackText).toContain('Use /clarify and /compare to compare documents');
+      expect(fallbackText).toContain('Compare the documents');
       expect(fallbackText).not.toContain('until an explicit spending budget');
       expect(fallbackText).toContain('No case is selected');
       expect(fallbackText).not.toContain('dispatch-disabled');

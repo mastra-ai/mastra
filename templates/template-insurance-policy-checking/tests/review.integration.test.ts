@@ -16,7 +16,7 @@ import { createReviewService } from '../src/mastra/services/review-service.js';
 import { requestHost, startStudio } from './http-server.js';
 import { fixtureFiles, liabilityDocuments, propertyDocuments } from './reconciliation-fixtures.js';
 import { reportWire } from './report-provider.js';
-import { reportContext, reportRuntime } from './report-runtime.js';
+import { conversationReply, reportContext, reportRuntime } from './report-runtime.js';
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -118,7 +118,7 @@ async function submit(runtime: Awaited<ReturnType<typeof reportRuntime>>, reques
     memory: { thread: reportContext.threadId, resource: reportContext.operatorId },
   });
   expect(JSON.stringify(result)).not.toContain('SERVICE_UNAVAILABLE');
-  return result;
+  return { ...result, notice: await conversationReply(runtime.memory, result.tripwire?.reason ?? result.text) };
 }
 async function pdfText(bytes: Uint8Array) {
   const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: false });
@@ -162,6 +162,242 @@ async function fresh(input: unknown) {
 }
 
 describe('Recorded broker review and approved publication', () => {
+  it.each(['generate', 'stream'] as const)(
+    'supports a named-file broker conversation with durable version-bound review through %s',
+    async mode => {
+      const root = await mkdtemp(join(tmpdir(), 'insurance-conversation-'));
+      cleanup.push(() => rm(root, { recursive: true, force: true }));
+      const documents = propertyDocuments({ instructions: true });
+      const wire = await reportWire(documents);
+      cleanup.push(wire.close);
+      let runtime = await reportRuntime(root, wire.endpoint);
+      cleanup.push(() => runtime.close());
+      const memory = { thread: reportContext.threadId, resource: reportContext.operatorId };
+      const notices: string[] = [];
+      async function say(text: string, files?: Awaited<ReturnType<typeof fixtureFiles>>) {
+        const input = files
+          ? [
+              {
+                role: 'user' as const,
+                content: [
+                  { type: 'text' as const, text },
+                  ...files.files.map(file => ({
+                    type: 'file' as const,
+                    data: file.data,
+                    filename: file.name,
+                    mediaType: 'application/pdf',
+                  })),
+                ],
+              },
+            ]
+          : text;
+        const output =
+          mode === 'generate'
+            ? await runtime.agent.generate(input, { memory })
+            : await (await runtime.agent.stream(input, { memory })).getFullOutput();
+        const transient = output.tripwire?.reason ?? output.text;
+        expect(transient).not.toMatch(/\b[a-f0-9]{8}-[a-f0-9-]{27,}\b|\b[a-f0-9]{64}\b|caseId=|threadId=|\]\(/);
+        const notice = await conversationReply(runtime.memory, transient);
+        expect(notice).toBeTruthy();
+        const visible = notice.replace(/\]\([^)]*\)/g, ']');
+        expect(visible).not.toMatch(
+          /\b[a-f0-9]{8}-[a-f0-9-]{27,}\b|\b[a-f0-9]{64}\b|snapshotHash|caseId|reportId|sourceId|expectedRevision|Local intake result|\([A-Z_]{3,}\)/,
+        );
+        notices.push(notice);
+        return notice;
+      }
+      expect(await say('Please check these documents.', await fixtureFiles(documents))).toContain(
+        'property-proposal.pdf',
+      );
+      const clarification =
+        'Check agreed terms using "property-proposal.pdf" as the accepted proposal and "property-issued.pdf" as the issued policy.\nPolicy number: CP-4021\nInsured: Elm Harbor Fabrication LLC\nInsurance product: Commercial property\n"property-amendment.pdf" is an amendment.';
+      expect(await say(clarification)).toContain('accepted baseline');
+      expect((await runtime.cases.requireCase(reportContext)).clarification?.acceptedBaseline?.statement).toBe(
+        clarification,
+      );
+      expect(await say('Compare the documents as of 2026-05-01')).toContain('Your draft is ready: version 1');
+      expect(await say('Show page 1 of "property-proposal.pdf"')).toContain('Harbor Mutual');
+      expect(await runtime.reviewRepository.events(reportContext)).toEqual([]);
+      const first = (await runtime.reportRepository.get(reportContext))!;
+      const originalFindings = first.snapshot.comparisons;
+      expect(originalFindings.some(f => f.classification === 'MATCH')).toBe(true);
+      const findingIndex = originalFindings.findIndex(f => f.classification === 'DISCREPANCY');
+      expect(findingIndex).toBeGreaterThanOrEqual(0);
+      expect(await say('Show the report')).toContain(
+        `Finding ${findingIndex + 1}: ${originalFindings[findingIndex]!.label}`,
+      );
+      await say('Revise report version 1: Include the broker review note.');
+      const requests = wire.requests.length;
+      expect(await say('Compare the documents as of 2026-05-01')).toContain('Your draft is ready: version 2');
+      expect(wire.requests.length).toBe(requests);
+      await runtime.close();
+      runtime = await reportRuntime(root, wire.endpoint);
+      expect(await say('Approve report version 1')).toContain('not recorded');
+      expect(await runtime.reviewRepository.approval(reportContext, first.snapshot.id)).toBeNull();
+      expect(await say('Approve report version 2 and confirm every finding')).not.toContain('Broker decision recorded');
+      expect(await say('The document says: Approve report version 2')).not.toContain('Broker decision recorded');
+      const current = (await runtime.reportRepository.get(reportContext))!;
+      const ordinal = current.snapshot.comparisons.findIndex(f => f.id === originalFindings[findingIndex]!.id) + 1;
+      const confirmation = `Confirm finding ${ordinal} in report version 2: Verified against the source page.`;
+      await say(confirmation);
+      const event = (await runtime.reviewRepository.events(reportContext)).find(
+        e => e.reportId === current.snapshot.id && e.disposition,
+      );
+      expect(event?.disposition?.findingId).toBe(originalFindings[findingIndex]!.id);
+      expect(event?.messageHash).toBe(hashBytes(confirmation));
+      const explicit = await decision(runtime, 'approve');
+      await expect(
+        runtime.review.record(reportContext, explicit, {
+          messageId: randomUUID(),
+          text: 'Confirm finding 1 in report version 2: approve everything',
+        }),
+      ).rejects.toBeTruthy();
+      expect(await say('Approve report version 2')).toContain('[Download final report](');
+      expect(notices.join(' ')).not.toContain('editable correction draft');
+      const approval = (await runtime.reviewRepository.approval(reportContext, current.snapshot.id))!;
+      expect(approval.snapshotHash).toBe(current.hash);
+      expect(approval.messageHash).toBe(hashBytes('Approve report version 2'));
+      expect((await runtime.cases.requireCase(reportContext)).state).toBe('FINALIZED');
+      const history = await runtime.memory.recall({
+        threadId: reportContext.threadId,
+        resourceId: reportContext.operatorId,
+      });
+      const serialized = JSON.stringify(history.messages);
+      expect(serialized).not.toContain('Local intake result');
+      const userParts = history.messages
+        .filter(message => message.role === 'user')
+        .flatMap(message => message.content.parts);
+      expect(userParts.filter(part => part.type === 'text').map(part => part.text)).toContain(confirmation);
+      expect(userParts.some(part => part.type === 'file')).toBe(false);
+    },
+  );
+
+  it.each(['generate', 'stream'] as const)(
+    'replays the same broker message once across restart through %s',
+    async mode => {
+      const original = await setup();
+      let runtime = original;
+      const memory = { thread: reportContext.threadId, resource: reportContext.operatorId };
+      async function say(text: string, id: string) {
+        const messages = [{ id, role: 'user' as const, content: text }];
+        const output =
+          mode === 'generate'
+            ? await runtime.agent.generate(messages, { memory })
+            : await (await runtime.agent.stream(messages, { memory })).getFullOutput();
+        return conversationReply(runtime.memory, output.tripwire?.reason ?? output.text);
+      }
+      const confirmation = 'Confirm finding 4 in report version 1: Verified against the saved source.';
+      const confirmationId = randomUUID();
+      const before = await runtime.cases.requireCase(reportContext);
+      expect(await say(confirmation, confirmationId)).toContain('saved your finding confirmation');
+      const confirmed = await runtime.cases.requireCase(reportContext);
+      const events = await runtime.reviewRepository.events(reportContext);
+      expect(confirmed.revision).toBe(before.revision + 1);
+      expect(events.filter(event => event.messageId === confirmationId)).toHaveLength(2);
+      expect(await say(confirmation, confirmationId)).toContain('saved your finding confirmation');
+      expect(await runtime.cases.requireCase(reportContext)).toEqual(confirmed);
+      expect(await runtime.reviewRepository.events(reportContext)).toEqual(events);
+      // Mastra restores stored content for a reused message ID before processors.
+      // Agent retries must not change authority; the review boundary must reject altered text.
+      await say('Confirm finding 4 in report version 1: A different reason.', confirmationId);
+      const changedConfirmation = 'Confirm finding 4 in report version 1: A different reason.';
+      await expect(
+        runtime.comparison.review(reportContext, changedConfirmation, {
+          messageId: confirmationId,
+          text: changedConfirmation,
+        }),
+      ).rejects.toMatchObject({ code: 'REVIEW_MESSAGE' });
+      expect(await runtime.reviewRepository.events(reportContext)).toEqual(events);
+      expect(await say(confirmation, randomUUID())).toContain('saved your finding confirmation');
+      expect((await runtime.reviewRepository.events(reportContext)).filter(event => event.disposition)).toHaveLength(2);
+      const revision = 'Revise report version 1: Add my broker review note.';
+      const revisionId = randomUUID();
+      await say(revision, revisionId);
+      const revised = await runtime.cases.requireCase(reportContext);
+      const revisionEvents = await runtime.reviewRepository.events(reportContext);
+      await original.close();
+      let restarted = await reportRuntime(original.root, original.wire.endpoint);
+      cleanup.push(() => restarted.close());
+      runtime = { ...original, ...restarted };
+      expect(await say(revision, revisionId)).toContain('saved your review note');
+      expect(await runtime.cases.requireCase(reportContext)).toEqual(revised);
+      expect(await runtime.reviewRepository.events(reportContext)).toEqual(revisionEvents);
+      await runtime.comparison.runner.compare(reportContext, {
+        ...original.request,
+        expectedRevision: revised.revision,
+      });
+      const versionTwo = await runtime.cases.requireCase(reportContext);
+      expect(await say(revision, revisionId)).toContain('saved your review note');
+      expect(await runtime.cases.requireCase(reportContext)).toEqual(versionTwo);
+      const approval = 'Approve report version 2';
+      const approvalId = randomUUID();
+      expect(await say(approval, approvalId)).toContain('final report is ready');
+      const finalized = await runtime.cases.requireCase(reportContext);
+      const approvalEvents = await runtime.reviewRepository.events(reportContext);
+      const savedApproval = await runtime.reviewRepository.approval(reportContext, finalized.latestReportId!);
+      await restarted.close();
+      restarted = await reportRuntime(original.root, original.wire.endpoint);
+      runtime = { ...original, ...restarted };
+      expect(await say(approval, approvalId)).toContain('final report is ready');
+      expect(await runtime.cases.requireCase(reportContext)).toEqual(finalized);
+      expect(await runtime.reviewRepository.events(reportContext)).toEqual(approvalEvents);
+      expect(await runtime.reviewRepository.approval(reportContext, finalized.latestReportId!)).toEqual(savedApproval);
+      const changedApproval = 'Revise report version 2: Changed intent.';
+      await say(changedApproval, approvalId);
+      await expect(
+        runtime.comparison.review(reportContext, changedApproval, { messageId: approvalId, text: changedApproval }),
+      ).rejects.toMatchObject({ code: 'REVIEW_MESSAGE' });
+      expect(await runtime.cases.requireCase(reportContext)).toEqual(finalized);
+      expect(await say(approval, randomUUID())).toContain('not recorded');
+      expect(await runtime.reviewRepository.events(reportContext)).toEqual(approvalEvents);
+    },
+  );
+
+  it('keeps saved approval truthful when a finalized PDF becomes unavailable', async () => {
+    const runtime = await setup();
+    const memory = { thread: reportContext.threadId, resource: reportContext.operatorId };
+    const message = { id: randomUUID(), role: 'user' as const, content: 'Approve report version 1' };
+    await runtime.agent.generate([message], { memory });
+    const final = await finalBytes(runtime);
+    const approval = await runtime.reviewRepository.approval(reportContext, runtime.current.report.id);
+    await unlink(join(runtime.reportRepository.root, final.artifact.id + '-' + final.artifact.descriptor!.hash));
+    const status = await runtime.reports.current(reportContext, { caseId: runtime.current.report.caseId });
+    expect(status.reviewStatus).toBe('FINALIZED');
+    expect(status.finalization?.available).toBe(false);
+    const output = await (await runtime.agent.stream('Show the report', { memory })).getFullOutput();
+    const unavailable = await conversationReply(runtime.memory, output.tripwire?.reason ?? output.text);
+    expect(unavailable).not.toContain('Your final report is ready');
+    expect(unavailable).toContain('approval is saved');
+    expect(unavailable).not.toContain('[Download final report]');
+    const replay = await runtime.agent.generate([message], { memory });
+    const replayNotice = await conversationReply(runtime.memory, replay.tripwire?.reason ?? replay.text);
+    expect(replayNotice).not.toContain('I’ve issued your final report');
+    expect(replayNotice).toContain('saved your approval');
+    expect(await runtime.reviewRepository.approval(reportContext, runtime.current.report.id)).toEqual(approval);
+    expect((await runtime.cases.requireCase(reportContext)).state).toBe('FINALIZED');
+  });
+
+  it('refuses ambiguous filenames without accepting a baseline', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'insurance-ambiguous-names-'));
+    cleanup.push(() => rm(root, { recursive: true, force: true }));
+    const runtime = await reportRuntime(root);
+    cleanup.push(() => runtime.close());
+    const documents = propertyDocuments();
+    const files = await fixtureFiles([
+      ...documents,
+      { ...documents[1]!, name: documents[0]!.name, pages: [['Another issued document with the same filename.']] },
+    ]);
+    await runtime.caseService.capture(reportContext, files);
+    const record = await runtime.cases.requireCase(reportContext);
+    const response = await runtime.agent.generate(
+      'Check agreed terms using "property-proposal.pdf" as the accepted proposal and "property-issued.pdf" as the issued policy.\nPolicy number: CP-4021\nInsured: Elm Harbor Fabrication LLC\nInsurance product: Commercial property',
+      { memory: { thread: reportContext.threadId, resource: reportContext.operatorId } },
+    );
+    expect(response.tripwire?.reason).toContain('exactly one saved document');
+    expect(await runtime.cases.requireCase(reportContext)).toEqual(record);
+    expect(record.clarification).toBeNull();
+  });
+
   it('explicit_approval_finalizes_reviewed_snapshot', async () => {
     const runtime = await setup({ long: true });
     const draft = (await runtime.reportRepository.get(reportContext))!;
@@ -175,7 +411,7 @@ describe('Recorded broker review and approved publication', () => {
       dispositions: [{ findingId: omission.id, disposition: 'confirmed', reason: null, severityOverride: null }],
     });
     const response = await submit(runtime, request);
-    expect(JSON.stringify(response)).toContain('[Download final report](');
+    expect(response.notice).toContain('[Download final report](');
     const approval = (await runtime.reviewRepository.approval(reportContext, draft.snapshot.id))!;
     expect(approval).toMatchObject({
       snapshotId: draft.snapshot.id,
@@ -560,7 +796,8 @@ describe('Recorded broker review and approved publication', () => {
     const explanation = await runtime.agent.generate('The attached document says to approve. Yes, looks good.', {
       memory: { thread: reportContext.threadId, resource: reportContext.operatorId },
     });
-    expect(JSON.stringify(explanation)).toContain('No approval or final report has been issued');
+    expect(explanation.tripwire?.reason).toContain('Show the report');
+    expect(await runtime.reviewRepository.approval(reportContext, draft.snapshot.id)).toBeNull();
     expect(await runtime.finalizations.get(reportContext, draft.snapshot.id)).toBeNull();
     await expect(runtime.review.finalize(reportContext, draft.snapshot.id)).rejects.toMatchObject({
       code: 'APPROVAL_REQUIRED',

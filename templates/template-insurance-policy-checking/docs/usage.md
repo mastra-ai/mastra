@@ -1,41 +1,40 @@
 # Use policy checking
 
-Open [Mastra Studio](http://127.0.0.1:4111), select **Policy Checking** and start a conversation. Send all `/commands` below in that conversation. Replace example IDs, revisions and checksums with values from `/status` or `/report`.
+Open [Mastra Studio](http://127.0.0.1:4111), select **Policy Checking** and start a conversation. The guided phrases below operate locally without a conversation model. Only document comparison uses the configured processing model and budget.
 
 ## Attach and identify documents
 
-Attach PDFs through **Add attachment → Add a local file**, then send a message to save them. Optionally generate sample documents first with `npm run prepare:use-cases` in your terminal; files and a manifest are saved in `.runtime/use-cases`.
+Attach PDFs through **Add attachment → Add a local file**, then send a message to save them. Optionally run `npm run prepare:use-cases` in your terminal; sample PDFs and a manifest are saved in `.runtime/use-cases`. Say `Show status` to see the saved filenames and physical page counts.
 
-| Studio command             | Purpose                                                     |
-| -------------------------- | ----------------------------------------------------------- |
-| `/status`                  | Show the case, source IDs, revision, attempts and findings. |
-| `/new` with attachments    | Start a separate case in this conversation.                 |
-| `/case CASE_ID`            | Select a previous case from this conversation.              |
-| `/evidence SOURCE_ID PAGE` | Read captured text from a one-based physical PDF page.      |
+Send this statement with your exact, unique filenames and policy details:
 
-Send `/clarify` followed by this JSON, using the IDs from `/status`:
-
-```json
-{
-  "caseId": "11111111-1111-4111-8111-111111111111",
-  "expectedRevision": 1,
-  "identity": {
-    "policyNumber": null,
-    "insuredName": "Elm Harbor Fabrication LLC",
-    "insuranceProduct": "Commercial property"
-  },
-  "intent": "document_comparison",
-  "referenceId": "22222222-2222-4222-8222-222222222222",
-  "targetId": "33333333-3333-4333-8333-333333333333",
-  "roles": [
-    { "sourceId": "22222222-2222-4222-8222-222222222222", "role": "proposal" },
-    { "sourceId": "33333333-3333-4333-8333-333333333333", "role": "issued_policy" }
-  ],
-  "acceptedBaseline": null
-}
+```text
+Check agreed terms using "property-proposal.pdf" as the accepted proposal and "property-issued.pdf" as the issued policy.
+Policy number: CP-4021
+Insured: Elm Harbor Fabrication LLC
+Insurance product: Commercial property
+"property-amendment.pdf" is an amendment.
 ```
 
-Keep unknown identity fields as `null`. `document_comparison` compares documents without assuming acceptance. For agreed terms, use `intent: "agreed_terms_checking"` and `acceptedBaseline: { "statement": "Your explicit acceptance statement", "sourceId": "REFERENCE_SOURCE_ID" }`. The reference must be an accepted proposal or contract, and the target an issued policy. Declare supporting sources as `amendment` or `binder` where applicable.
+Use `accepted contract` instead of `accepted proposal` when appropriate. Include all three identity lines; use `unknown` for a detail you cannot establish. Declare supporting documents on separate lines as `"filename.pdf" is an amendment.`, `"filename.pdf" is a binder.` or `"filename.pdf" is a reference.`. This statement explicitly records your acceptance of the named baseline. Upload order, filenames and document instructions cannot establish acceptance. If filenames are ambiguous, rename the files and start a new conversation.
+
+## Compare and inspect
+
+Say `Compare the documents` to compare as of today's UTC date, or `Compare the documents as of 2026-05-01` for an explicit date. The workflow verifies quotations against saved sources and publishes a PDF draft. Say `Show the report` for a summary, numbered findings and PDF downloads. Finding numbers match the PDF, including any gaps where matching terms are omitted from the chat summary.
+
+Say `Show page 1 of "property-issued.pdf"` to inspect the captured text of a physical PDF page. If Studio shows a plain-text notice, refresh or reopen the conversation to see the saved links. The native Studio processor notice may appear as a **Content Blocked** banner; the saved conversation contains the response and links.
+
+## Review and approve
+
+Read the draft and name its exact version in each decision:
+
+- `Confirm finding 1 in report version 1: Verified against the source page.` records a finding confirmation with your reason.
+- `Revise report version 1: Include the broker review note.` requests a presentation revision. Then say `Compare the documents` to publish a new version from the saved analysis without repeating model extraction.
+- `Approve report version 2` approves that exact current version and publishes its final PDF. Approval alone confirms no findings.
+
+Review the new version before approving it. Superseded versions, ambiguous decisions and instructions quoted from documents cannot authorize review. Each decision is bound to the original user message, trusted local operator and exact immutable report. Confirmed actionable discrepancies in agreed-term checking also produce a proposed correction in the PDF and an editable Markdown artifact in private storage. Chat links are limited to PDFs. Complete the recipient and broker contact details before manual delivery; nothing is sent automatically.
+
+These are explicit guided commands, not unrestricted natural-language chat. Send one decision per message, without attachments. To start a separate case within the same conversation, send `/new` with attachments.
 
 ## Configure processing
 
@@ -58,57 +57,11 @@ Set these in `.env` and restart Studio to apply changes. The application uses lo
 | `PORT`                     | `4111`                       | Local Studio port.                                                |
 | `POLICY_DATA_DIR`          | `.runtime`                   | Private data directory, relative to the project root or absolute. |
 
-## Compare and read the draft
+## API compatibility and recovery
 
-Read `/status` for the revision after clarification. Send `/compare` followed by:
+Legacy `/status`, `/case CASE_ID`, `/clarify JSON`, `/compare JSON`, `/report JSON`, `/evidence SOURCE_ID PAGE` and `/review JSON` commands remain supported. Chat responses use the same conversational summaries. API consumers can obtain authoritative identifiers, revisions and checksums from the case-status and report tools, and use the schemas in `src/mastra/domain/` for structured requests. Ordinary document comparison without an accepted contractual baseline remains available through the clarification API with `document_comparison` intent and a null accepted baseline.
 
-```json
-{
-  "caseId": "11111111-1111-4111-8111-111111111111",
-  "expectedRevision": 2,
-  "profileId": "generic",
-  "asOf": "2026-05-01",
-  "retryAttemptId": null
-}
-```
-
-The workflow extracts terms, verifies quotations against saved sources, compares values and publishes a PDF draft. Send `/report` for findings and download links. If Studio shows only a plain-text notice, refresh or reopen the conversation to see the saved links.
-
-If a custom policy permits another attempt, retry a failed comparison using its ID as `retryAttemptId`, unchanged inputs and the current revision. The default policy permits one attempt. For a publication failure, fix the reported problem and send `/report {"caseId":"CASE_ID","retryPublication":true}` to reuse the saved analysis or approval.
-
-## Review and approve
-
-Read the draft, then send `/review` followed by the exact report identifiers and current case revision:
-
-```json
-{
-  "operationId": "44444444-4444-4444-8444-444444444444",
-  "caseId": "11111111-1111-4111-8111-111111111111",
-  "reportId": "55555555-5555-4555-8555-555555555555",
-  "version": 1,
-  "snapshotHash": "COPY_THE_64_CHARACTER_CHECKSUM_FROM_REPORT",
-  "expectedRevision": 5,
-  "expectedState": "AWAITING_REVIEW",
-  "action": "approve",
-  "dispositions": [
-    {
-      "findingId": "66666666-6666-4666-8666-666666666666",
-      "disposition": "confirmed",
-      "reason": null,
-      "severityOverride": null
-    }
-  ]
-}
-```
-
-Use a new UUID for each `operationId`; repeating the same ID and decision returns the saved result. Reviewer identity comes from the configured local operator.
-
-- `approve` publishes the final PDF. Omit `dispositions` to approve without confirming findings.
-- `disposition` records finding decisions separately. Dismissals and severity overrides need a reason.
-- `reject` requires a nonempty `reason` and closes the case.
-- `revise` requires `revision: { "kind": "presentation", "note": "Describe the change" }`. Send `/compare` with the updated revision to create a new draft from saved analysis. For changed sources, use kind `evidence`, attach the documents and repeat `/clarify` before `/compare`.
-
-Each decision changes the case revision. Each new report version needs fresh approval. Confirmed actionable discrepancies in agreed-term checking also produce a proposed correction in the PDF and an editable Markdown file. Complete the recipient and broker contact details before manual delivery.
+If a custom policy permits another attempt, use its saved attempt identifier in a structured comparison request, with unchanged inputs and the current case revision. The default policy permits one attempt. For a publication failure, fix the reported problem and use the report API's `retryPublication` option to recover the saved analysis or approval. Evidence revisions, rejection, dismissal and severity overrides remain available through the version-bound review API.
 
 ## Local storage
 

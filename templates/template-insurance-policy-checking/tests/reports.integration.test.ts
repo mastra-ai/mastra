@@ -26,7 +26,7 @@ import { createReportTool } from '../src/mastra/tools/report-tool.js';
 import { requestHost, startStudio } from './http-server.js';
 import { fixtureFiles, liabilityDocuments, propertyDocuments } from './reconciliation-fixtures.js';
 import { reportRecordInput, reportWire } from './report-provider.js';
-import { reportContext, reportRuntime } from './report-runtime.js';
+import { conversationReply, reportContext, reportRuntime } from './report-runtime.js';
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -186,15 +186,18 @@ describe('Immutable review drafts across real workflow, database, file and HTTP 
     const memory = { thread: reportContext.threadId, resource: reportContext.operatorId };
     for (const command of ['/report {caseId: "invalid"}', '/report {"caseId":', '/report not-json']) {
       const response = await runtime.agent.generate(command, { memory });
-      expect(response.tripwire?.reason).toContain('REPORT_FORMAT');
-      expect(response.tripwire?.reason).toContain('The report request is not valid JSON.');
-      expect(response.tripwire?.reason).toContain('Use /report alone');
+      expect(response.tripwire?.reason).not.toContain('REPORT_FORMAT');
+      expect(response.tripwire?.reason).toContain('The report request is not valid.');
+      expect(response.tripwire?.reason).toContain('Show the report');
       expect(response.tripwire?.reason).not.toContain('SERVICE_UNAVAILABLE');
     }
     for (const command of ['/report', `/report ${JSON.stringify({ caseId: record.id, retryPublication: true })}`]) {
       const response = await runtime.agent.generate(command, { memory });
-      expect(response.tripwire?.reason).toContain('Download draft report');
-      expect(response.tripwire?.reason).toContain(report.report.id);
+      expect(response.tripwire?.reason).toContain('Reload this conversation');
+      expect(await conversationReply(runtime.memory, response.tripwire?.reason ?? response.text)).toContain(
+        '[Download draft report](',
+      );
+      expect(response.tripwire?.reason?.replace(/\]\([^)]*\)/g, ']')).not.toContain(report.report.id);
     }
     expect(await runtime.cases.requireCase(reportContext)).toEqual(record);
     expect(await runtime.reportRepository.get(reportContext)).toEqual(publication);
@@ -337,9 +340,10 @@ describe('Immutable review drafts across real workflow, database, file and HTTP 
     const explanation = await runtime.agent.generate('/report', {
       memory: { thread: reportContext.threadId, resource: reportContext.operatorId },
     });
-    expect(JSON.stringify(explanation)).toContain('CP-4021');
-    expect(JSON.stringify(explanation)).toContain(result.report.id);
-    expect(JSON.stringify(explanation)).toContain('[Download draft report](');
+    const savedNotice = await conversationReply(runtime.memory, explanation.tripwire?.reason ?? explanation.text);
+    expect(savedNotice).toContain('CP-4021');
+    expect(explanation.tripwire?.reason?.replace(/\]\([^)]*\)/g, ']')).not.toContain(result.report.id);
+    expect(savedNotice).toContain('[Download draft report](');
     const wm = await runtime.memory.getWorkingMemory({ threadId: reportContext.threadId });
     expect(wm).toContain(result.report.id);
     expect(wm).toContain(runId);
@@ -400,9 +404,18 @@ describe('Immutable review drafts across real workflow, database, file and HTTP 
         memory: { thread: reportContext.threadId, resource: reportContext.operatorId },
       }),
     });
-    const text = await read.text();
-    expect(text).toContain(result.report.id);
-    expect(text).toContain('Draft available');
+    const events = (await read.text())
+      .split('\n')
+      .filter(line => line.startsWith('data: {'))
+      .map(line => JSON.parse(line.slice('data: '.length)) as { type: string; payload?: { reason?: string } });
+    const transient = events.find(event => event.type === 'tripwire')?.payload?.reason;
+    expect(transient).toContain('Reload this conversation');
+    expect(transient).not.toMatch(/caseId=|threadId=|\b[a-f0-9]{8}-[a-f0-9-]{27,}\b/);
+    const restarted = await reportRuntime(runtime.root, runtime.wire.endpoint);
+    cleanup.push(() => restarted.close());
+    const text = await conversationReply(restarted.memory, transient ?? '');
+    expect(text.replace(/\]\([^)]*\)/g, ']')).not.toContain(result.report.id);
+    expect(text).toContain('Your draft is ready');
     expect(text).toContain('Deductible');
     expect(text).toContain('physical page 1');
     expect(text).toContain('2500');

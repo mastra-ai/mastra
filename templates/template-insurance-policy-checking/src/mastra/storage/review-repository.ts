@@ -1,6 +1,8 @@
+import type { Transaction } from '@libsql/client';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { canonicalJson, hashBytes, type OperationContext } from '../domain/case-contracts.js';
+import { naturalReviewRequest } from '../domain/conversation-commands.js';
 import { IntakeError, isDatabaseBusy } from '../domain/operation-errors.js';
 import type { ReviewReceipt } from '../domain/review-contracts.js';
 import {
@@ -20,7 +22,9 @@ export class ReviewRepository {
       CREATE TABLE IF NOT EXISTS insurance_review_events (id TEXT PRIMARY KEY, report_id TEXT NOT NULL REFERENCES insurance_reports(id), case_id TEXT NOT NULL REFERENCES insurance_cases(id), data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS insurance_approvals (id TEXT PRIMARY KEY, report_id TEXT NOT NULL UNIQUE REFERENCES insurance_reports(id), case_id TEXT NOT NULL REFERENCES insurance_cases(id), data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS insurance_finalizations (id TEXT PRIMARY KEY, approval_id TEXT NOT NULL UNIQUE REFERENCES insurance_approvals(id), report_id TEXT NOT NULL UNIQUE REFERENCES insurance_reports(id), case_id TEXT NOT NULL REFERENCES insurance_cases(id), data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS insurance_review_messages (operator_id TEXT NOT NULL, thread_id TEXT NOT NULL, message_id TEXT NOT NULL, message_hash TEXT NOT NULL, operation_id TEXT NOT NULL REFERENCES insurance_review_operations(id), request TEXT NOT NULL, PRIMARY KEY(operator_id,thread_id,message_id));
       INSERT OR IGNORE INTO insurance_schema(version) VALUES(3);
+      INSERT OR IGNORE INTO insurance_schema(version) VALUES(4);
     `);
   }
   async events(context: OperationContext) {
@@ -62,42 +66,115 @@ export class ReviewRepository {
       );
     return approval;
   }
+  private async savedMessage(
+    context: OperationContext,
+    origin: { messageId: string; text: string },
+    transaction?: Transaction,
+  ) {
+    const database = transaction ?? this.reports.reconciliation.cases.client;
+    const saved = (
+      await database.execute({
+        sql: 'SELECT message_hash,request FROM insurance_review_messages WHERE operator_id=? AND thread_id=? AND message_id=?',
+        args: [context.operatorId, context.threadId, origin.messageId],
+      })
+    ).rows[0];
+    if (!saved) return null;
+    if (String(saved.message_hash) !== hashBytes(origin.text))
+      throw new IntakeError(
+        'REVIEW_MESSAGE',
+        'This saved message already authorized a different decision.',
+        'Send a new message for a different review decision.',
+        409,
+      );
+    return reviewRequestSchema.parse(JSON.parse(String(saved.request)));
+  }
+  private async resolveNatural(context: OperationContext, origin: { messageId: string; text: string }) {
+    const saved = await this.savedMessage(context, origin);
+    if (saved) return saved;
+    const record = await this.reports.reconciliation.cases.requireCase(context);
+    const publication = await this.reports.get(context);
+    if (!publication || publication.state !== 'PUBLISHED' || record.state !== 'AWAITING_REVIEW')
+      throw new IntakeError('STALE_REVIEW', 'There is no current published report awaiting this review.');
+    return naturalReviewRequest(origin.text, publication.snapshot, publication.hash, record.revision, randomUUID());
+  }
   async record(
     context: OperationContext,
     input: unknown,
     origin: { messageId: string; text: string },
     providers: Approval['providers'],
   ) {
-    const request = reviewRequestSchema.parse(input);
     z.object({
       messageId: z
         .string()
         .min(1)
         .max(300)
         .describe('Identifier of the original user message authorizing this decision.'),
-      text: z.string().startsWith('/review ').describe('Searchable text captured from this physical PDF page.'),
+      text: z.string().min(1).describe('Exact original user text authorizing this version-bound review.'),
     }).parse(origin);
+    const natural = typeof input === 'string';
+    if (natural && input !== origin.text)
+      throw new IntakeError('REVIEW_MESSAGE', 'The decision does not match the originating user command.');
+    const request = natural ? await this.resolveNatural(context, origin) : reviewRequestSchema.parse(input);
     let explicit: unknown;
-    try {
-      explicit = JSON.parse(origin.text.slice('/review '.length));
-    } catch {
-      throw new IntakeError(
-        'REVIEW_MESSAGE',
-        'The explicit review command is invalid.',
-        'Submit /review followed by the documented JSON decision.',
+    if (origin.text.startsWith('/review ')) {
+      try {
+        explicit = JSON.parse(origin.text.slice('/review '.length));
+      } catch {
+        throw new IntakeError(
+          'REVIEW_MESSAGE',
+          'The explicit review command is invalid.',
+          'Submit one explicit decision for the current report version.',
+        );
+      }
+    } else {
+      const publication = await this.reports.get(context, request.reportId);
+      if (!publication)
+        throw new IntakeError(
+          'REVIEW_MESSAGE',
+          'This report is unavailable.',
+          'Show the current report before reviewing it.',
+        );
+      explicit = naturalReviewRequest(
+        origin.text,
+        publication.snapshot,
+        publication.hash,
+        request.expectedRevision,
+        request.operationId,
       );
     }
     if (canonicalJson(reviewRequestSchema.parse(explicit)) !== canonicalJson(request))
       throw new IntakeError(
         'REVIEW_MESSAGE',
         'The decision does not match the originating user command.',
-        'Submit one explicit version-bound /review command.',
+        'Submit one explicit decision for the current report version.',
         409,
       );
     const digest = hashBytes(canonicalJson({ context, request }));
     return this.reports.reconciliation
       .transaction(async transaction => {
         const record = await this.reports.reconciliation.cases.requireCase(context, request.caseId);
+        // Recheck message identity under the writer lock: simultaneous retries may
+        // have resolved before the first decision was committed.
+        const savedMessage = await this.savedMessage(context, origin, transaction);
+        if (savedMessage) {
+          if (!natural && canonicalJson(savedMessage) !== canonicalJson(request))
+            throw new IntakeError('REVIEW_MESSAGE', 'The decision does not match this saved user message.');
+          const savedOperation = (
+            await transaction.execute({
+              sql: 'SELECT digest,data FROM insurance_review_operations WHERE id=? AND case_id=?',
+              args: [savedMessage.operationId, record.id],
+            })
+          ).rows[0];
+          if (
+            !savedOperation ||
+            String(savedOperation.digest) !== hashBytes(canonicalJson({ context, request: savedMessage }))
+          )
+            throw new IntakeError(
+              'REVIEW_MESSAGE',
+              'The saved review request no longer matches its recorded decision.',
+            );
+          return JSON.parse(String(savedOperation.data)) as ReviewReceipt;
+        }
         const replay = (
           await transaction.execute({
             sql: 'SELECT digest,data,case_id FROM insurance_review_operations WHERE id=?',
@@ -269,6 +346,18 @@ export class ReviewRepository {
           sql: 'INSERT INTO insurance_review_operations(id,case_id,digest,data) VALUES(?,?,?,?)',
           args: [request.operationId, record.id, digest, JSON.stringify(receipt)],
         });
+        if (!origin.text.startsWith('/review '))
+          await transaction.execute({
+            sql: 'INSERT INTO insurance_review_messages(operator_id,thread_id,message_id,message_hash,operation_id,request) VALUES(?,?,?,?,?,?)',
+            args: [
+              context.operatorId,
+              context.threadId,
+              origin.messageId,
+              hashBytes(origin.text),
+              request.operationId,
+              JSON.stringify(request),
+            ],
+          });
         return receipt;
       })
       .catch(error => {

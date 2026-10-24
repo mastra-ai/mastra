@@ -145,7 +145,7 @@ for (const property of [true, false]) {
         const callsBeforeReload = wire.requests.length;
         await page.reload();
         await expect(
-          page.getByText(new RegExp('Draft available: version ' + publication.snapshot.version + ' for')),
+          page.getByText(new RegExp('Your draft is ready: version ' + publication.snapshot.version + ' for')),
         ).toBeVisible();
         expect((await reports.get(context))!.hash).toBe(publication.hash);
         expect(wire.requests).toHaveLength(callsBeforeReload);

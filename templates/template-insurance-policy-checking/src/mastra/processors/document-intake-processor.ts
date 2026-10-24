@@ -4,12 +4,15 @@ import type { InputProcessor } from '@mastra/core/processors';
 import type { Memory } from '@mastra/memory';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { failureText, IntakeError } from '../domain/operation-errors.js';
+import { defaultInsuranceProfile } from '../config/insurance-config.js';
+import { parseNamedClarification, parseNaturalReview } from '../domain/conversation-commands.js';
+import { IntakeError } from '../domain/operation-errors.js';
 import type { ComparisonRunner } from '../domain/reconciliation-contracts.js';
 import type { ReviewDecision } from '../domain/review-contracts.js';
 import type { CaseService } from '../services/case-service.js';
 import type { ReportReader } from '../tools/report-tool.js';
-import { reportNotice } from './report-notice-formatter.js';
+import { conversationFailure, statusNotice } from './conversation-notices.js';
+import { finalReportAvailable, markdown, reportNotice } from './report-notice-formatter.js';
 
 export const workingMemorySchema = z.object({
   activeCaseId: z
@@ -46,9 +49,9 @@ export function createDocumentIntakeProcessor(
 ): InputProcessor {
   return {
     id: 'private-document-intake',
-    async processInput({ messages, requestContext, abort }) {
+    async processInput({ messages, messageList, requestContext, abort }) {
       try {
-        const latest = [...messages]
+        const latest = [...messageList.get.input.db()]
           .reverse()
           .find(message => message.role === 'user' || (message.role === 'signal' && message.type === 'user'));
         const memoryContext = parseMemoryRequestContext(requestContext);
@@ -66,111 +69,152 @@ export function createDocumentIntakeProcessor(
           .filter(part => part.type === 'text')
           .map(part => part.text)
           .join('\n');
-        let receipt = '';
-        let reviewNotice: string | undefined;
-        const reviewCommand = /^\/review(?:\s|$)/.test(text);
+        let notice: string | undefined;
+        const naturalReview = parseNaturalReview(text);
+        const reviewCommand = /^\/review(?:\s|$)/.test(text) || Boolean(naturalReview);
+        const normalized = text.trim();
+        if (/^(?:Approve report|Revise report|Confirm finding)\b/i.test(normalized) && !naturalReview)
+          throw new IntakeError('REVIEW_COMMAND', 'The review instruction is ambiguous.');
+        const sourcesByName = async (name: string) => {
+          const matches = (await caseService.repository.sources(context)).filter(source => source.displayName === name);
+          if (matches.length !== 1)
+            throw new IntakeError(
+              'SOURCE_NAME',
+              'That filename does not identify exactly one saved document.',
+              'Show status and use the exact unique filename. Rename ambiguous documents and attach them in a new conversation.',
+            );
+          return matches[0]!;
+        };
         if (reviewCommand) {
           if (!review || !latest?.id || files.length)
-            throw new IntakeError(
-              'REVIEW_COMMAND',
-              'Review needs one explicit user command without attachments.',
-              'Use /review followed by the exact pending report identifiers and decision.',
-            );
+            throw new IntakeError('REVIEW_COMMAND', 'Review needs one explicit user command without attachments.');
           let input: unknown;
-          try {
-            input = JSON.parse(text.slice('/review '.length));
-          } catch {
-            throw new IntakeError(
-              'REVIEW_FORMAT',
-              'The review command is not valid JSON.',
-              'Use /review followed by the documented version-bound decision.',
-            );
+          if (naturalReview) {
+            // The review boundary resolves saved message authority before checking
+            // current report state, so retries retain the exact original request.
+            input = text;
+          } else {
+            try {
+              input = JSON.parse(text.slice('/review '.length));
+            } catch {
+              throw new IntakeError('REVIEW_COMMAND', 'The review command is invalid.');
+            }
           }
           const result = await review(context, input, { messageId: latest.id, text });
-          const value = result as {
-            report: unknown;
-            receipt: { state: string };
-            publicationFailure?: { message: string; nextAction?: string };
-          };
-          reviewNotice = `Broker decision recorded: ${value.receipt.state === 'FINALIZED' ? 'Final report issued' : value.receipt.state === 'APPROVED' ? 'Approved by the broker' : value.receipt.state === 'REJECTED' ? 'Report rejected' : value.receipt.state === 'REVISION_REQUESTED' ? 'Revisions requested' : 'Finding dispositions saved'}.\n\n${reportNotice(value.report, context)}`;
+          const value = result as { report: unknown; receipt: { state: string }; publicationFailure?: unknown };
+          notice = `${['FINALIZED', 'APPROVED'].includes(value.receipt.state) ? (finalReportAvailable(value.report) ? 'I’ve issued your final report' : 'I’ve saved your approval') : value.receipt.state === 'REJECTED' ? 'I’ve saved your rejection' : value.receipt.state === 'REVISION_REQUESTED' ? 'I’ve saved your review note' : 'I’ve saved your finding confirmation'}.\n\n${reportNotice(value.report, context, true)}`;
           if (value.publicationFailure)
-            reviewNotice += `\n${value.publicationFailure.message} ${value.publicationFailure.nextAction ?? ''}`;
+            notice +=
+              '\n\nApproval is saved, but final publication is incomplete. Show the report to check availability before retrying.';
         }
         if (text.startsWith('/case ')) {
           const caseId = z.uuid().parse(text.slice('/case '.length).trim());
           await caseService.repository.select(context, caseId);
         }
         if (files.length) {
-          const record = await caseService.capture(context, { files }, text.trim() === '/new');
-          receipt = `Captured ${record.sourceIds.length} immutable source(s). Case ${record.id}, revision ${record.revision}. `;
+          await caseService.capture(context, { files }, normalized === '/new');
         }
-        if (text.startsWith('/clarify ')) {
+        const namedClarification = parseNamedClarification(text);
+        if (namedClarification) {
+          const record = await caseService.repository.requireCase(context);
+          const reference = await sourcesByName(namedClarification.reference);
+          const target = await sourcesByName(namedClarification.target);
+          const roles = [
+            { sourceId: reference.sourceId, role: namedClarification.referenceRole },
+            { sourceId: target.sourceId, role: 'issued_policy' },
+          ];
+          for (const role of namedClarification.roles)
+            roles.push({ sourceId: (await sourcesByName(role.name)).sourceId, role: role.role });
+          await caseService.clarify(context, {
+            caseId: record.id,
+            expectedRevision: record.revision,
+            identity: namedClarification.identity,
+            intent: 'agreed_terms_checking',
+            referenceId: reference.sourceId,
+            targetId: target.sourceId,
+            roles,
+            acceptedBaseline: { sourceId: reference.sourceId, statement: text },
+          });
+          notice =
+            'Your accepted baseline, issued policy, document roles and policy details are saved. Say “Compare the documents” to prepare the report.';
+        } else if (text.startsWith('/clarify ')) {
           let clarification: unknown;
           try {
             clarification = JSON.parse(text.slice('/clarify '.length));
           } catch {
             throw new IntakeError(
               'CLARIFICATION_FORMAT',
-              'The case clarification is not valid JSON.',
-              'Use /clarify followed by the documented case identity, intent and source-role fields.',
+              'The case clarification is not valid.',
+              'Identify the accepted reference, issued policy and policy details by filename.',
             );
           }
           await caseService.clarify(context, clarification);
         }
-        let evidence = '';
-        let reportSummary: string | undefined;
-        if (text.startsWith('/compare ')) {
-          if (!comparison)
-            throw new IntakeError(
-              'COMPARISON_UNAVAILABLE',
-              'Comparison is not configured.',
-              'Check the application workflow registration.',
-            );
+        const naturalComparison = /^Compare the documents(?: as of (\d{4}-\d{2}-\d{2}))?\.?$/i.exec(normalized);
+        if (text.startsWith('/compare ') || naturalComparison) {
+          if (!comparison) throw new IntakeError('COMPARISON_UNAVAILABLE', 'Comparison is not configured.');
           let input: unknown;
-          try {
-            input = JSON.parse(text.slice('/compare '.length));
-          } catch {
-            throw new IntakeError(
-              'COMPARISON_FORMAT',
-              'The comparison request is not valid JSON.',
-              'Use /compare with the documented case revision, profile, asOf date and retryAttemptId.',
-            );
-          }
-          evidence = JSON.stringify(await comparison.compare(context, input));
-        }
-        if (text.trim() === '/report' || text.startsWith('/report ')) {
-          if (!report)
-            throw new IntakeError(
-              'REPORT_UNAVAILABLE',
-              'Draft report retrieval is not configured.',
-              'Read /status for available analysis.',
-            );
-          const record = await caseService.repository.requireCase(context);
-          let reportInput: unknown = { caseId: record.id };
-          if (text.trim() !== '/report') {
+          if (naturalComparison) {
+            const record = await caseService.repository.requireCase(context);
+            input = {
+              caseId: record.id,
+              expectedRevision: record.revision,
+              profileId: defaultInsuranceProfile,
+              asOf: naturalComparison[1] ?? new Date().toISOString().slice(0, 10),
+              retryAttemptId: null,
+            };
+          } else {
             try {
-              reportInput = JSON.parse(text.slice('/report '.length));
+              input = JSON.parse(text.slice('/compare '.length));
             } catch {
-              throw new IntakeError(
-                'REPORT_FORMAT',
-                'The report request is not valid JSON.',
-                'Use /report alone, or /report followed by the documented caseId and retryPublication fields.',
-              );
+              throw new IntakeError('COMPARISON_FORMAT', 'The comparison request is not valid.');
             }
           }
-          const result = await report(context, reportInput);
-          evidence = JSON.stringify(result);
-          reportSummary = reportNotice(result, context);
-        }
-        if (text.startsWith('/evidence ')) {
-          const match = /^\/evidence ([a-f0-9-]{36}) ([1-9]\d*)$/.exec(text.trim());
-          if (!match)
-            throw new IntakeError(
-              'EVIDENCE_LOCATOR',
-              'Use /evidence followed by a source ID and physical page number.',
-              'Read /status for the captured source IDs.',
+          const result = await comparison.compare(context, input);
+          if (result && typeof result === 'object' && 'report' in result) notice = reportNotice(result, context);
+          else if (result && typeof result === 'object' && 'ok' in result && result.ok === false)
+            notice = conversationFailure(
+              new IntakeError(
+                'COMPARISON_FAILED',
+                'The comparison could not be completed. No new reviewable report was published.',
+              ),
             );
-          evidence = JSON.stringify(await caseService.evidence(context, match[1]!, { physicalPage: Number(match[2]) }));
+          else notice = 'Comparison is saved. Say “Show the report” to check the reviewable draft.';
+        }
+        const naturalReport = /^Show the report\.?$/i.test(normalized);
+        if (normalized === '/report' || text.startsWith('/report ') || naturalReport) {
+          if (!report) throw new IntakeError('REPORT_UNAVAILABLE', 'Report retrieval is not configured.');
+          const record = await caseService.repository.requireCase(context);
+          let input: unknown = { caseId: record.id };
+          if (text.startsWith('/report ')) {
+            try {
+              input = JSON.parse(text.slice('/report '.length));
+            } catch {
+              throw new IntakeError('REPORT_FORMAT', 'The report request is not valid.');
+            }
+          }
+          notice = reportNotice(await report(context, input), context);
+        }
+        const naturalEvidence = /^Show page ([1-9]\d*) of "([^"\n]+)"\.?$/i.exec(normalized);
+        if (text.startsWith('/evidence ') || naturalEvidence) {
+          const legacy = /^\/evidence ([a-f0-9-]{36}) ([1-9]\d*)$/.exec(normalized);
+          if (!naturalEvidence && !legacy)
+            throw new IntakeError('EVIDENCE_LOCATOR', 'The source page request is invalid.');
+          const source = naturalEvidence
+            ? await sourcesByName(naturalEvidence[2]!)
+            : (await caseService.repository.sources(context)).find(source => source.sourceId === legacy![1]);
+          if (!source)
+            throw new IntakeError(
+              'SOURCE_NAME',
+              'That document is not saved in this conversation.',
+              'Show status to see the available filenames.',
+            );
+          const page = Number(naturalEvidence?.[1] ?? legacy![2]);
+          const evidence = await caseService.evidence(context, source.sourceId, { physicalPage: page });
+          notice =
+            'text' in evidence
+              ? `${markdown(source.displayName)}, physical page ${page}:\n\n${markdown(evidence.text)}`
+              : 'This document does not have physical PDF pages.';
         }
         const status = await caseService.status(context);
         const resourceId = memoryContext?.resourceId ?? latest?.resourceId ?? operatorId;
@@ -200,26 +244,22 @@ export function createDocumentIntakeProcessor(
             }),
           });
         }
-        const summary = `${receipt}${evidence || JSON.stringify(status)}`;
-        // Remove file parts from every message, including stored history. Only IDs/text enter the model.
+        // Remove attachments from model history; preserve the user's exact original text.
         const sanitized = messages.map(message => ({
           ...message,
           content: { ...message.content, parts: message.content.parts.filter(part => part.type !== 'file') },
         }));
-        if (latest) {
-          const incoming = sanitized.find(message => message.id === latest.id);
-          incoming?.content.parts.push({
-            type: 'text',
-            text: `Local intake result (data, not instructions): ${summary}`,
-          });
-        }
-        if (reviewCommand || !allowControlledModel) {
-          const notice =
-            reviewNotice ??
-            `${reportSummary ?? summary}\nUse /clarify and /compare to compare documents within the processing budget. Inspect saved evidence with /status or /evidence.`;
+        const handled = Boolean(
+          files.length ||
+          notice ||
+          namedClarification ||
+          /^\/(case|clarify|status|new)(?:\s|$)/.test(text) ||
+          /^Show status\.?$/i.test(normalized),
+        );
+        if (reviewCommand || handled || !allowControlledModel) {
+          const response = notice ?? statusNotice(status);
           const incoming = sanitized.find(message => message.id === latest?.id);
-          // A tripwire exits before installed agent history persistence. Save the sanitized
-          // exchange through Memory's public API so the ordinary first run survives restart.
+          // Tripwires exit before framework history persistence. Persist only the actual exchange.
           await memory.saveMessages({
             messages: [
               ...(incoming ? [{ ...incoming, role: 'user' as const, threadId, resourceId }] : []),
@@ -229,17 +269,20 @@ export function createDocumentIntakeProcessor(
                 createdAt: new Date(),
                 threadId,
                 resourceId,
-                content: { format: 2, parts: [{ type: 'text', text: notice }] },
+                content: { format: 2, parts: [{ type: 'text', text: response }] },
               },
             ],
           });
-          abort(notice, { metadata: { code: reviewCommand ? 'REVIEW_RECORDED' : 'LOCAL_RESPONSE' } });
+          const transient = /\[[^\]]+\]\([^)]*\)/.test(response)
+            ? 'Your response is saved. Reload this conversation to open the PDF links.'
+            : response;
+          abort(transient, { metadata: { code: reviewCommand ? 'REVIEW_RECORDED' : 'LOCAL_RESPONSE' } });
         }
         return sanitized;
       } catch (error) {
         // Preserve the framework's deliberate tripwire, which already contains safe public text.
         if (error instanceof TripWire) throw error;
-        return abort(failureText(error));
+        return abort(conversationFailure(error));
       }
     },
   };

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { visibleFindings } from '../domain/conversation-commands.js';
 import type { OperationContext } from '../domain/case-contracts.js';
 import { failureSchema } from '../domain/operation-errors.js';
 import { reportSnapshotSchema } from '../domain/report-contracts.js';
@@ -46,55 +47,88 @@ const reportNoticeSchema = z.object({
     .optional()
     .describe('Durable approved publication and its artifact availability.'),
 });
-const markdown = (value: string) =>
+export const markdown = (value: string) =>
   value
     .replace(/[\\`*_{}\[\]()#+!|]/g, '\\$&')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-export function reportNotice(value: unknown, context: OperationContext) {
+export function finalReportAvailable(value: unknown) {
+  const result = reportNoticeSchema.parse(value);
+  return (
+    result.reviewStatus === 'FINALIZED' &&
+    result.finalization?.available === true &&
+    result.finalization.artifacts.some(artifact => artifact.stage === 'reportOutput')
+  );
+}
+export function reportNotice(value: unknown, context: OperationContext, compact = false) {
   const result = reportNoticeSchema.parse(value);
   const report = result.report;
   if (!result.available || !result.artifact)
-    return `Draft unavailable. ${markdown(result.failure?.message ?? result.message)}${result.failure?.nextAction ? ' ' + markdown(result.failure.nextAction) : ''}`;
+    return `The draft is unavailable for review. Say “Show the report” after checking the saved documents and local publication.`;
   const url = `/insurance/artifacts/${result.artifact.id}?caseId=${report.caseId}&threadId=${encodeURIComponent(context.threadId)}`;
+  const finalReady = finalReportAvailable(result);
   const pending = result.reviewStatus === undefined || result.reviewStatus === 'AWAITING_REVIEW';
   const lines = [
-    `Draft available: version ${report.version} for ${markdown(report.identity.policyNumber ?? report.identity.insuredName ?? 'this case')}.`,
+    result.reviewStatus === 'FINALIZED' && !finalReady
+      ? `Your approval is saved. The final PDF for report version ${report.version} is unavailable.`
+      : `${finalReady ? 'Your final report is ready' : 'Your draft is ready'}: version ${report.version} for ${markdown(report.identity.policyNumber ?? report.identity.insuredName ?? 'this case')}.`,
     `[Download draft report](${url})`,
-    `Report ${report.id}. ${reportLabels.status[report.status]}.${pending ? ' Awaiting broker review.' : ''}`,
-    `Snapshot checksum: ${result.snapshotHash ?? 'Read /report for the checksum'}. Case revision: ${result.caseRevision ?? 'Read /status'}.`,
-    `${report.counts.checked} checked terms; ${report.counts.matches} matches; ${report.counts.discrepancies} discrepancies; ${report.counts.authorized} authorized changes; ${report.counts.unresolved} unresolved findings.`,
+    pending
+      ? `${reportLabels.status[report.status]}. Awaiting broker review.`
+      : result.reviewStatus === 'FINALIZED'
+        ? 'Broker review completed.'
+        : 'The saved broker decision applies to this report version.',
+    `**Summary**\n${report.counts.checked} checked terms; ${report.counts.matches} matches; ${report.counts.discrepancies} discrepancies; ${report.counts.authorized} authorized changes; ${report.counts.unresolved} unresolved findings.`,
   ];
-  const findings = report.comparisons.filter(f => f.classification !== 'MATCH');
-  for (const finding of findings.slice(0, 5)) {
+  const findings = visibleFindings(report);
+  const notable = [...findings]
+    .sort(
+      (a, b) =>
+        Number(b.classification === 'DISCREPANCY') * 2 +
+        Number(Boolean(b.baseline && b.actual) && termValue(b.baseline?.value) !== termValue(b.actual?.value)) -
+        (Number(a.classification === 'DISCREPANCY') * 2 +
+          Number(Boolean(a.baseline && a.actual) && termValue(a.baseline?.value) !== termValue(a.actual?.value))),
+    )
+    .slice(0, 3);
+  if (!compact && notable.length) lines.push('**Items to review**');
+  for (const finding of compact ? [] : notable) {
+    const number = report.comparisons.findIndex(candidate => candidate.id === finding.id) + 1;
     lines.push(
-      `${markdown(finding.label)} (finding ${finding.id}): ${reportLabels.classification[finding.classification]}. Expected: ${markdown(termValue(finding.baseline?.value))}. Issued or target: ${markdown(termValue(finding.actual?.value))}.`,
+      `Finding ${number}: ${markdown(finding.label)} — ${reportLabels.classification[finding.classification]}. Expected: ${markdown(termValue(finding.baseline?.value))}. Issued or target: ${markdown(termValue(finding.actual?.value))}.`,
     );
     const evidence = finding.appliedChanges[0]?.evidence[0] ?? finding.evidence[0];
     if (evidence) {
       const source = report.sources.find(s => s.sourceId === evidence.sourceId)!;
       const locator =
-        evidence.physicalPage !== null
-          ? `physical page ${evidence.physicalPage}`
-          : `record ${markdown(evidence.recordId!)}, field ${markdown(evidence.field!)}`;
-      lines.push(
-        `Evidence: ${markdown(source.displayName)}, ${locator} (source ${source.sourceId}).${evidence.excerpt.length <= 500 ? ' “' + markdown(evidence.excerpt) + '”' : ''}`,
-      );
+        evidence.physicalPage !== null ? `physical page ${evidence.physicalPage}` : 'captured source record';
+      lines[lines.length - 1] +=
+        ` Evidence: ${markdown(source.displayName)}, ${locator}.${evidence.excerpt.length <= 500 ? ' “' + markdown(evidence.excerpt) + '”' : ''}`;
     }
   }
-  if (findings.length > 5) lines.push('Read the draft for the remaining findings and exact evidence.');
+  if (!compact && findings.length > notable.length)
+    lines.push(`The PDF includes ${findings.length - notable.length} more findings and the complete evidence.`);
   for (const artifact of result.finalization?.artifacts ?? [])
-    lines.push(
-      `[Download ${artifact.stage === 'reportOutput' ? 'final report' : 'editable correction draft'}](${artifact.url})`,
-    );
+    if (finalReady && artifact.stage === 'reportOutput') lines.push(`[Download final report](${artifact.url})`);
   if (result.finalization?.failure)
     lines.push(
-      `${markdown(result.finalization.failure.message)} ${markdown(result.finalization.failure.nextAction ?? '')}`,
+      'Final publication is incomplete. The saved broker decision remains recorded. Show the report to check availability before retrying.',
     );
   lines.push(
     pending
-      ? 'No approval or final report has been issued. Read /evidence for captured source text.'
-      : markdown(result.message),
+      ? `Review this draft before deciding. Say “Confirm finding ${report.comparisons.findIndex(f => f.classification !== 'MATCH') + 1 || 1} in report version ${report.version}: your reason” to confirm a finding, “Revise report version ${report.version}: your note” to request a revision, or “Approve report version ${report.version}” to approve. Approval alone confirms no findings.`
+      : result.reviewStatus === 'FINALIZED'
+        ? finalReady
+          ? 'The reviewed report is finalized. Any correction request remains a draft for manual review; nothing has been sent.'
+          : 'Broker approval remains saved. Restore the matching saved files and database, then show the report again. No new approval is needed.'
+        : result.reviewStatus === 'REVISION_REQUESTED'
+          ? 'This version cannot be approved while its revision is pending.'
+          : result.reviewStatus === 'APPROVED'
+            ? 'Broker approval is saved. Final publication is incomplete.'
+            : result.reviewStatus === 'REJECTED'
+              ? 'The broker rejected this report. Its draft remains available.'
+              : 'This historical draft has been superseded and cannot be approved.',
   );
+  if (result.reviewStatus === 'REVISION_REQUESTED')
+    lines.push('Say “Compare the documents” to prepare the revised report, then review its new version.');
   return lines.join('\n\n');
 }
