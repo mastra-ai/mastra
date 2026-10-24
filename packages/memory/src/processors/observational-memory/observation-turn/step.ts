@@ -367,8 +367,8 @@ export class ObservationStep {
           // Cleanup after observation. The just-observed messages can include input and output the
           // model has not read yet — preserve those by identity (the token-based retention floor
           // resolves to 0 for sync-only, resource-scope, and explicit `bufferActivation: 1` configs,
-          // so it cannot be relied on to keep them). A request the model has already acted on is
-          // carried by the observations from here on.
+          // so it cannot be relied on to keep them). Once the model has answered, the observed request
+          // itself is not kept: the observations stand in for it, even mid-task.
           const observedIds = obsResult.cleanupMessageIds;
           const minRemaining = resolveRetentionFloor(
             om.getObservationConfig().bufferActivation ?? 1,

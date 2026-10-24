@@ -4,7 +4,7 @@
  * process recovers the run from the shared LibSQL file.
  *
  * Recovery finishes the turn without a second observation, leaves a request the
- * model already acted on to the observations, and stores the same messages as a
+ * model has answered to the observations once it is observed, and stores the same messages as a
  * single-process run.
  */
 import { fork } from 'node:child_process';
@@ -128,7 +128,7 @@ describe.each(['durable', 'evented'] as const)('OM in-flight turn recovered by a
     if (dir) await rm(dir, { recursive: true, force: true });
   });
 
-  it('sends the user request until the model has acted on it, then leaves it to the observations (baseline)', () => {
+  it('sends the user request until it is observed after the first answer, then leaves it to the observations (baseline)', () => {
     expect(solo.text).toBe(FINAL_ANSWER);
     expect(solo.actor.map(call => call.hasUserRequest)).toEqual([true, true, false]);
     expect(solo.actor.at(-1)?.toolResults).toContain('call_1');

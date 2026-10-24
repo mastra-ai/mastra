@@ -247,14 +247,14 @@ describe('OM preserves the in-flight turn across mid-turn observation (#25372)',
       expect(requests[step], `step ${step} lost the unread tool result`).toContain(`${RESULT_MARKER}-4471-${step - 1}`);
     }
     // Mid-turn compaction still works: results the model already read are gone once observed,
-    // and so is the request it has acted on; the observations carry it.
+    // and so is the request once it is observed; the observations stand in for it.
     expect(requests[3]).toContain('User asked to look up an order status');
     expect(requests[3]).not.toContain('USER_REQUEST_MARKER');
     expect(requests[3]).not.toContain(`${RESULT_MARKER}-4471-0`);
     expect(requests[3]).not.toContain(`${RESULT_MARKER}-4471-1`);
   });
 
-  it('does not put the request back in the prompt once it is observed and the model has acted on it', async () => {
+  it('does not put the request back in the prompt once it is observed and the model has answered it', async () => {
     // The user says "delete it"; the agent acts on it and keeps working through ten more tool
     // steps while memory observes. The observations already record the request. Sending the
     // raw message again ten steps later would read as a new instruction to delete something.

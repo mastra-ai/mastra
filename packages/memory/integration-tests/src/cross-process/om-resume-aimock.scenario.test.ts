@@ -99,7 +99,7 @@ describe.each(['normal', 'durable', 'evented', 'fs'] as const)('AIMock OM reques
     await rm(dir, { recursive: true, force: true });
   });
 
-  it('sends the request until the model acted on it, keeps the unread result, and persists the answer', async () => {
+  it('sends the request until it is observed, keeps the unread result, and persists the answer', async () => {
     script();
     const peer = await spawn('baseline.db', 'normal');
     const done = next(peer, 'done');
@@ -108,7 +108,7 @@ describe.each(['normal', 'durable', 'evented', 'fs'] as const)('AIMock OM reques
     expect(peer.events.filter(event => event.type === 'observer').length).toBeGreaterThan(0);
     const requests = llm.getRequests();
     expect(requests).toHaveLength(3);
-    // Observation ran mid-turn: the request the model already acted on is carried by the observations.
+    // Observation ran mid-turn: once observed, the request is left to the observations.
     expect(requests.map(request => JSON.stringify(request.body?.messages).includes(USER_REQUEST))).toEqual([
       true,
       true,
