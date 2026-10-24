@@ -127,7 +127,7 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:",
-    "zod-v3": "npm:zod@^3.25.76",
+    "zod-v3": "npm:zod@^4.6.6",
     "zod-to-json-schema": "^3.25.2",
     "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5"
   },

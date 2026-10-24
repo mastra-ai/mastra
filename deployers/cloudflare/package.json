@@ -62,7 +62,7 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "wrangler": "^4.151.2",
-    "zod": "^3.25.76"
+    "zod": "^4.0.0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

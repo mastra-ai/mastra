@@ -114,7 +114,7 @@
     "typescript": "catalog:",
     "vite": "^8.0.0",
     "vitest": "catalog:",
-    "zod": "^3.25.76"
+    "zod": "^4.0.0"
   },
   "engines": {
     "node": ">=22.13.0"

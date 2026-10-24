@@ -5,7 +5,7 @@
   "type": "module",
   "dependencies": {
     "@mastra/core": "experiment-worker-e2e-test",
-    "zod": "^3.25.76"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "mastra": "experiment-worker-e2e-test"
