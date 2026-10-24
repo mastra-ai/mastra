@@ -321,11 +321,15 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
    * another replica may have refreshed already, in which case `refreshFn` is
    * skipped and the fresh credential is returned. Returns `undefined` when no
    * OAuth row exists for the tenant.
+   *
+   * `needsRefresh` replaces the expiry check, e.g. to replace an access token
+   * the provider rejected before its recorded expiry.
    */
   async refreshOAuth(
     tenant: CredentialTenant,
     provider: string,
     refreshFn: (current: OAuthCredential) => Promise<OAuthCredential>,
+    needsRefresh: (current: OAuthCredential) => boolean = current => isOAuthCredentialExpired(current),
   ): Promise<OAuthCredential | undefined> {
     let result: OAuthCredential | undefined;
     await this.#db.updateAtomic<CredentialDbRow>(
@@ -336,7 +340,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
         if (decrypted.value.type !== 'oauth') return null;
         const current = decrypted.value;
         // Re-check under the lock: another replica may have refreshed while we waited.
-        if (!isOAuthCredentialExpired(current)) {
+        if (!needsRefresh(current)) {
           result = current;
           return decrypted.needsReencryption ? { data: await this.encryption.encrypt(current) } : null;
         }
