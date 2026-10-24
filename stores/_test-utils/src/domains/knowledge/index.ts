@@ -280,6 +280,32 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       ]);
     });
 
+    it('stores any tag type and shows a record to every query scope that holds all its tags', async () => {
+      const team = ['org:acme', 'team:acme:support'];
+      const node = await store.createNode({ name: 'Runbook', kind: 'doc', scope: team });
+      const record = await store.appendKnowledge({
+        node,
+        text: 'Page the on-call lead first.',
+        scope: [...team, 'agent:alex'],
+        sourceThreadId: 't1',
+        resolutionScope: [...team, 'agent:alex'],
+        defaultScope: team,
+      });
+
+      const asAlex = await store.listKnowledgeAbout({ node, scope: [...team, 'agent:alex'] });
+      expect(asAlex.records.map(entry => entry.id)).toEqual([record.id]);
+      // Same team without agent:alex sees the node but not alex's record.
+      expect((await store.listNodes({ scope: team })).map(entry => entry.name)).toContain('Runbook');
+      expect((await store.listKnowledgeAbout({ node, scope: team })).records).toEqual([]);
+      // Another team sees neither.
+      expect(await store.listNodes({ scope: ['org:acme', 'team:acme:sales'] })).toEqual([]);
+      // Eight tags is allowed in a query scope.
+      const eight = [...team, 'agent:alex', 'project:p', 'request:r', 'resource:u', 'thread:t1', 'x:y'];
+      expect((await store.listKnowledgeAbout({ node, scope: eight })).records.map(entry => entry.id)).toEqual([
+        record.id,
+      ]);
+    });
+
     it('treats scope identifiers literally when checking visibility', async () => {
       await store.createNode({ name: 'Percent secret', kind: 'secret', scope: ['org:acme%'] });
       await store.createNode({ name: 'Underscore secret', kind: 'secret', scope: ['org:acme_'] });
@@ -545,12 +571,13 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       );
     });
 
-    it('enforces record CAS and scope structure atomically', async () => {
-      await expect(store.createNode({ name: 'Invalid', kind: 'task', scope: ['thread:t1'] })).rejects.toThrow(
-        'requires resource and org',
+    it('enforces record CAS and scope shape atomically', async () => {
+      await expect(store.createNode({ name: 'Invalid', kind: 'task', scope: ['Thread:t1'] })).rejects.toThrow(
+        'Invalid knowledge scope entry',
       );
-      await expect(store.listNodes({ scope: ['thread:t1'] })).rejects.toThrow('requires resource and org');
-      await expect(store.search({ query: 'anything', scope: ['resource:mastra'] })).rejects.toThrow('requires an org');
+      await expect(store.listNodes({ scope: ['team:$org:x'] })).rejects.toThrow('Invalid knowledge scope entry');
+      const nineTags = Array.from({ length: 9 }, (_, index) => `tag${index}:v`);
+      await expect(store.search({ query: 'anything', scope: nineTags })).rejects.toThrow('at most 8 tags');
       const guide = await store.createNode({ kind: 'document', name: 'Guide', content: 'one', scope: resource });
       await store.updateNode({ id: guide.id, version: guide.version, content: 'two' });
       await expect(store.updateNode({ id: guide.id, version: guide.version, content: 'stale' })).rejects.toThrow(
