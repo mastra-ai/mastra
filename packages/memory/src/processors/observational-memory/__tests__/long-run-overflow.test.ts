@@ -78,14 +78,14 @@ async function longRun(opts: {
   });
 
   const prompts: number[] = [];
-  const rejected: number[] = [];
+  const rejected: Array<{ size: number; promptIndex: number }> = [];
   let calls = 0;
   const model = new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
       const size = JSON.stringify(prompt).length;
       prompts.push(size);
       if (size > opts.limitChars) {
-        rejected.push(size);
+        rejected.push({ size, promptIndex: prompts.length - 1 });
         throw tooLong();
       }
       calls++;
@@ -162,8 +162,8 @@ describe('a long single run whose tool results keep overflowing the context', ()
     expect(text).toBe('all files read');
     // The run keeps reading, so it overflows more than once; each recovery must work, not only the first.
     expect(rejected.length).toBeGreaterThan(2);
-    for (const size of rejected) {
-      const retry = prompts[prompts.indexOf(size) + 1]!;
+    for (const { size, promptIndex } of rejected) {
+      const retry = prompts[promptIndex + 1]!;
       expect(retry, `retry after a ${size}-char rejection`).toBeLessThan(size / 2);
     }
   }, 120_000);
