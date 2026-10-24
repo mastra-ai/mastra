@@ -592,6 +592,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         }),
       );
 
+    // The run goes on writing its response after the retry. Under the id just observed, the rest of the
+    // run would count as observed and never be observed or dropped, so the next overflow could not recover.
+    if (observed) args.rotateResponseMessageId?.();
+
     return { retry: activated || observed };
   }
 
