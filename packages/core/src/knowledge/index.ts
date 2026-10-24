@@ -498,6 +498,7 @@ export * from '../storage/domains/knowledge';
 export * from './knowledge-tools';
 export * from './knowledge-write-tools';
 export * from './pinned';
+export * from './explorer';
 export * from './pinned-state-processor';
 export * from './semantic-index';
 export * from './instructions';
