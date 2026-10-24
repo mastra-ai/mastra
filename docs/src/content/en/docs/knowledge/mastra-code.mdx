@@ -33,6 +33,8 @@ Pass `knowledge: false` to turn Knowledge off, even when the environment variabl
 
 Local sessions run as `org:local` only when you pass no scopes. Factory sessions always add `org:<org>` and `project:<project>` tags.
 
+If a Factory session has no organization, or a tag in `scopes` has the same type as one of those but a different value, the agent runs with only its `resource:` and `thread:` tags. Its writes are private to the run, and the `/knowledge` inspector reports Knowledge as unavailable.
+
 ## Upgrading
 
 `experimental_subconscious` is removed. Attach Knowledge to the agent instead.
