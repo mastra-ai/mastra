@@ -4,7 +4,7 @@ import { createTool } from '../tools';
 import type { KnowledgeToolContext } from './knowledge-tools';
 import { createKnowledgeTools, resolveKnowledgeToolScope } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
-import { createPinnedTools, DEFAULT_PINNED_MAX_CHARACTERS } from './pinned';
+import { createPinnedTools } from './pinned';
 import type { KnowledgeSemanticIndexCoordinator } from './semantic-index';
 
 /** What the moved tool factories need from whoever hosts them. */
@@ -26,7 +26,7 @@ export interface KnowledgeToolHost {
 export interface KnowledgeToolGroups {
   read: boolean;
   write: boolean;
-  pins: false | { maxPins: number };
+  pins: false | { maxPins: number; maxTokens: number };
 }
 
 type Tools = Record<string, ToolAction<any, any, any>>;
@@ -79,13 +79,13 @@ export function buildKnowledgeTools(host: KnowledgeToolHost, groups: KnowledgeTo
     );
   }
   if (groups.pins) {
-    const { maxPins } = groups.pins;
+    const { maxPins, maxTokens } = groups.pins;
     const options = (scope: KnowledgeScope, threadId: string) => ({
       scope,
       sourceThreadId: threadId,
       defaultScope: 'resource' as const,
       maxPins,
-      maxCharacters: DEFAULT_PINNED_MAX_CHARACTERS,
+      maxTokens,
     });
     Object.assign(
       tools,

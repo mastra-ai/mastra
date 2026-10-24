@@ -105,7 +105,7 @@ describe('Pinned knowledge live proof', () => {
       sourceThreadId: threadId,
       defaultScope: 'resource',
       maxPins: 20,
-      maxCharacters: 2_000,
+      maxTokens: 500,
     });
 
     // Turn 1: no pins yet — no pinned-knowledge tag in the prompt.

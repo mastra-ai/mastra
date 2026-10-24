@@ -1,3 +1,4 @@
+import { estimateTokenCount } from 'tokenx';
 import { StorageDomain } from '../base';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -159,7 +160,7 @@ export interface KnowledgeNode {
   content?: string;
   /**
    * Bounded synopsis for list/graph surfaces. The bound is part of the storage contract: every
-   * adapter enforces {@link MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} in `createNode` and `updateNode`
+   * adapter enforces {@link MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} in `createNode` and `updateNode`
    * regardless of which writer performs the write; merge adoption only propagates a description
    * storage already accepted. Long-form detail belongs in {@link KnowledgeNode.content}.
    */
@@ -758,14 +759,23 @@ export function expandKnowledgeScope(context: KnowledgeScope, level: KnowledgeSc
 }
 
 /**
- * Maximum length of {@link KnowledgeNode.description}, counted in UTF-16 code units.
+ * Maximum size of {@link KnowledgeNode.description}, in estimated tokens.
  *
  * `description` is a concise synopsis rendered into graph and list payloads, potentially across
  * hundreds of nodes at once, so the bound belongs to the storage contract rather than to any one
  * writer: every adapter enforces it in `createNode` and `updateNode` regardless of which tool
- * performs the write. Long-form detail stays in {@link KnowledgeNode.content}.
+ * performs the write. Long-form detail stays in {@link KnowledgeNode.content}. Tokens are
+ * estimated with tokenx, so the bound is approximate.
  *
  * @experimental
+ */
+export const MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS = 100;
+
+/**
+ * Not enforced: descriptions are bounded in tokens by {@link MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS}.
+ * Kept only so published `@mastra/memory` versions that import it still load.
+ *
+ * @deprecated Use `MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS`.
  */
 export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
 
@@ -777,21 +787,19 @@ export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
  */
 export function assertKnowledgeDescriptionWithinBound(description: string | undefined): void {
   if (description === undefined) return;
-  if (description.length > MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH) {
-    throw new Error(
-      `Knowledge node description exceeds the ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code unit limit`,
-    );
+  if (estimateTokenCount(description) > MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS) {
+    throw new Error(`Knowledge node description exceeds the ${MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} token limit`);
   }
 }
 
 /**
- * Maximum record text length in UTF-16 code units. A record holds one fact or a few closely related
+ * Maximum record text size in estimated tokens. A record holds one fact or a few closely related
  * facts; pasted files, command output, and logs belong summarized, not verbatim. Records are
  * immutable, so every adapter enforces this in `appendKnowledge`.
  *
  * @experimental
  */
-export const MAX_KNOWLEDGE_RECORD_TEXT_LENGTH = 1000;
+export const MAX_KNOWLEDGE_RECORD_TOKENS = 250;
 
 /**
  * Rejects over-long record text before any write occurs.
@@ -799,9 +807,9 @@ export const MAX_KNOWLEDGE_RECORD_TEXT_LENGTH = 1000;
  * @experimental
  */
 export function assertKnowledgeRecordTextWithinBound(text: string): void {
-  if (text.length > MAX_KNOWLEDGE_RECORD_TEXT_LENGTH) {
+  if (estimateTokenCount(text) > MAX_KNOWLEDGE_RECORD_TOKENS) {
     throw new Error(
-      `Knowledge record text exceeds the ${MAX_KNOWLEDGE_RECORD_TEXT_LENGTH} UTF-16 code unit limit; split it into separate facts or summarize it`,
+      `Knowledge record text exceeds the ${MAX_KNOWLEDGE_RECORD_TOKENS} token limit; split it into separate facts or summarize it`,
     );
   }
 }

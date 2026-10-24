@@ -28,7 +28,7 @@ describe('Subconscious pinned facts against LibSQL', () => {
       sourceThreadId: 'alpha',
       defaultScope: 'resource',
       maxPins: 20,
-      maxCharacters: 2_000,
+      maxTokens: 500,
     });
     const store = (await storage.getStore('knowledge'))!;
     return { tools, store, storage };

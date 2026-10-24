@@ -24,10 +24,12 @@ describe('Knowledge structure reconciliation', () => {
 
   it('applies the node description bound to scope descriptions', () => {
     expect(() =>
-      validateKnowledgeStructurePlan({ scopes: [{ address: 'scope:a', name: 'A', description: 'x'.repeat(401) }] }),
-    ).toThrow('Knowledge node description exceeds the 400 UTF-16 code unit limit');
+      validateKnowledgeStructurePlan({ scopes: [{ address: 'scope:a', name: 'A', description: 'word '.repeat(101) }] }),
+    ).toThrow('Knowledge node description exceeds the 100 token limit');
     expect(() =>
-      validateKnowledgeStructurePlan({ scopes: [{ address: 'scope:a', name: 'A', description: 'x'.repeat(400) }] }),
+      validateKnowledgeStructurePlan({
+        scopes: [{ address: 'scope:a', name: 'A', description: 'word '.repeat(100).trimEnd() }],
+      }),
     ).not.toThrow();
   });
 
