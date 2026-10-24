@@ -1,7 +1,8 @@
 import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { knowledgeActivityQuerySchema, knowledgeViewQuerySchema } from '../schemas/knowledge';
 import {
@@ -92,6 +93,37 @@ describe('Knowledge read routes', () => {
         scope: Array.from({ length: 9 }, (_, i) => `t${i}:x`),
       }),
     ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('keeps a request inside the scope the app set for the caller', async () => {
+    const { mastra } = await setup();
+    const requestContext = new RequestContext();
+    requestContext.set('knowledgeScope', org);
+    const args = { mastra, requestContext, knowledgeKey: 'main' };
+    expect((await call(GET_KNOWLEDGE_GRAPH_ROUTE, { ...args, scope: org })).nodes).toHaveLength(1);
+    await expect(call(GET_KNOWLEDGE_GRAPH_ROUTE, { ...args, scope: team })).rejects.toMatchObject({ status: 403 });
+    await expect(call(SEARCH_KNOWLEDGE_ROUTE, { ...args, scope: team, q: 'sec' })).rejects.toMatchObject({
+      status: 403,
+    });
+    // An empty allowed set means no tags: nothing can be requested.
+    requestContext.set('knowledgeScope', []);
+    await expect(call(GET_KNOWLEDGE_GRAPH_ROUTE, { ...args, scope: org })).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('filters instances and gates reads by FGA when configured', async () => {
+    const { mastra } = await setup();
+    const filterAccessible = vi.fn(async (_user: unknown, items: Array<{ key: string }>) =>
+      items.filter(i => i.key !== 'main'),
+    );
+    (mastra as any).getServer = () => ({ fga: { filterAccessible } });
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'u1' });
+    expect(await call(LIST_KNOWLEDGE_ROUTE, { mastra, requestContext })).toEqual({ instances: [] });
+    expect(filterAccessible.mock.calls[0]![2]).toBe('knowledge');
+    expect(filterAccessible.mock.calls[0]![3]).toBe('knowledge:read');
+    await expect(
+      call(GET_KNOWLEDGE_GRAPH_ROUTE, { mastra, requestContext, knowledgeKey: 'main', scope: org }),
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it('parses one or many scope params and bounds them', () => {

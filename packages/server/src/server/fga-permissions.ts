@@ -39,6 +39,7 @@ const FALLBACK_PERMISSIONS = {
   AGENTS_DELETE: 'agents:delete',
   AGENTS_EXECUTE: 'agents:execute',
   AGENTS_READ: 'agents:read',
+  KNOWLEDGE_READ: 'knowledge:read',
   MEMORY_DELETE: 'memory:delete',
   MEMORY_READ: 'memory:read',
   MEMORY_WRITE: 'memory:write',
