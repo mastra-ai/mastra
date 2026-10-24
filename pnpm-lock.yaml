@@ -5153,8 +5153,8 @@ importers:
         specifier: ^2.12.0
         version: 2.12.0
       onnxruntime-node:
-        specifier: 1.26.0
-        version: 1.26.0
+        specifier: 1.30.0
+        version: 1.30.0
     devDependencies:
       '@internal/ai-sdk-v4':
         specifier: workspace:*
@@ -27834,15 +27834,15 @@ packages:
   onnxruntime-common@1.24.3:
     resolution: {integrity: sha512-GeuPZO6U/LBJXvwdaqHbuUmoXiEdeCjWi/EG7Y1HNnDwJYuk6WUbNXpF6luSUY8yASul3cmUlLGrCCL1ZgVXqA==}
 
-  onnxruntime-common@1.26.0:
-    resolution: {integrity: sha512-qVyMR4lcWgbkc4getFV+GQijsTnbg/siteoqcDwa3sI/LxbrMSNw4ePyvCq/ymdQaRomCA7YuWmhzsswxvymdw==}
+  onnxruntime-common@1.30.0:
+    resolution: {integrity: sha512-7fdVWjAID1dVhH/G8qK3APARunV4VkBFoCQAP7qp4Wkab0mrorvmc+sqiT+mKXOzDqdjN5j+/Z9nb4gzNPWcyA==}
 
   onnxruntime-node@1.24.3:
     resolution: {integrity: sha512-JH7+czbc8ALA819vlTgcV+Q214/+VjGeBHDjX81+ZCD0PCVCIFGFNtT0V4sXG/1JXypKPgScQcB3ij/hk3YnTg==}
     os: [win32, darwin, linux]
 
-  onnxruntime-node@1.26.0:
-    resolution: {integrity: sha512-OHl6PiOEOqxaLHL0N9eFrbzS7IGmu3BtJNH3RTEnRAheCIkfc3gjcjl4sGcjp9C22ZC9YTquDOxSdT/stBQ6BQ==}
+  onnxruntime-node@1.30.0:
+    resolution: {integrity: sha512-twhs1C2C/BFkz1yc5OY0KIU2GUq6DURO7hD4bx5Q2Qy3nAMJwRXW8xU3NVczE29VA9lolLOYepoD8fjTGOfIqw==}
     os: [win32, darwin, linux]
 
   onnxruntime-web@1.21.0-dev.20241024-d9ca84ef96:
@@ -38034,7 +38034,7 @@ snapshots:
   '@huggingface/transformers@3.0.2(@types/node@22.19.15)':
     dependencies:
       '@huggingface/jinja': 0.3.4
-      onnxruntime-common: 1.26.0
+      onnxruntime-common: 1.30.0
       onnxruntime-node: 1.24.3
       onnxruntime-web: 1.21.0-dev.20241024-d9ca84ef96
       sharp: 0.35.5(@types/node@22.19.15)
@@ -38046,7 +38046,7 @@ snapshots:
     dependencies:
       '@huggingface/jinja': 0.5.9
       '@huggingface/tokenizers': 0.1.3
-      onnxruntime-common: 1.26.0
+      onnxruntime-common: 1.30.0
       onnxruntime-node: 1.24.3
       onnxruntime-web: 1.26.0-dev.20260416-b7804b056c
       sharp: 0.35.5(@types/node@22.19.15)
@@ -52712,7 +52712,7 @@ snapshots:
 
   onnxruntime-common@1.24.3: {}
 
-  onnxruntime-common@1.26.0: {}
+  onnxruntime-common@1.30.0: {}
 
   onnxruntime-node@1.24.3:
     dependencies:
@@ -52720,11 +52720,11 @@ snapshots:
       global-agent: 3.0.0
       onnxruntime-common: 1.24.3
 
-  onnxruntime-node@1.26.0:
+  onnxruntime-node@1.30.0:
     dependencies:
       adm-zip: 0.6.1
       global-agent: 4.1.3
-      onnxruntime-common: 1.26.0
+      onnxruntime-common: 1.30.0
 
   onnxruntime-web@1.21.0-dev.20241024-d9ca84ef96:
     dependencies:
