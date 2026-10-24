@@ -56,7 +56,7 @@ A run's scopes are fixed when it starts:
 - A message with different scopes waits for the running run to end, then starts its own run in the same conversation.
 - Several scoped messages sent in the meantime start in the order they were sent.
 
-A thread whose owner is in another process refuses scoped messages with "scopes don't cross processes".
+A scoped message to a thread whose run is owned by another process doesn't wait. It rejects with "scopes don't cross processes". Messages without scopes are unaffected.
 
 ### Remote callers
 
