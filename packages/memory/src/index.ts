@@ -3795,7 +3795,12 @@ Notes:
       // Most stores need a query vector even for a metadata-filtered read; any unit vector will do.
       const queryVector = Array.from({ length: dimension }, (_, i) => (i === 0 ? 1 : 0));
       const moved = new Set<string>();
-      for (;;) {
+      // Eventually consistent stores may keep returning an updated page for minutes.
+      // Bound the whole index migration, including retries across multiple pages.
+      const deadline = Date.now() + 120_000;
+      let retryDelayMs = 1_000;
+      let complete = false;
+      while (Date.now() < deadline) {
         const stale = await vector.query({
           indexName,
           queryVector,
@@ -3804,8 +3809,18 @@ Notes:
           includeVector: true,
           filter: { thread_id: threadId, resource_id: { $ne: resourceId } },
         });
+        if (stale.length === 0) {
+          complete = true;
+          break;
+        }
         const pending = stale.filter(result => !moved.has(result.id));
-        if (pending.length === 0) break;
+        if (pending.length === 0) {
+          const delayMs = Math.min(retryDelayMs, Math.max(0, deadline - Date.now()));
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
+          continue;
+        }
+        retryDelayMs = 1_000;
         for (const result of pending) {
           moved.add(result.id);
           // Stores that replace metadata would drop thread_id/group_id if we wrote resource_id alone.
@@ -3826,6 +3841,12 @@ Notes:
             },
           });
         }
+      }
+      if (!complete) {
+        throw new Error(
+          `Observation vector migration in index "${indexName}" did not complete within 120 seconds ` +
+            `(${moved.size} vector IDs processed). The store may still be returning stale results; retry the transfer.`,
+        );
       }
     }
   }
