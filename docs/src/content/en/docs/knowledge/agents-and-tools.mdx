@@ -48,10 +48,10 @@ Set `pins: true` for the default limit of pins, or pass `maxPins` and `maxTokens
 
 ## How scopes limit the tools
 
-Every tool takes an optional `scope` argument: a list of tags. The run's own tags bound what the model can name.
+A run's Knowledge scope is the tags from the agent's `scopes`, plus the Memory `resource:` and `thread:` tags when the run has them. The model can't add tags of its own.
 
-- **Reads** search the run's tags plus any `scope` tags. Each extra tag must be held or owned by the run.
-- **Writes** land at exactly the `scope` tags when given, otherwise at every tag the run holds. Each tag must be held or owned with write access.
+- **Reads** search every tag the run holds.
+- **Writes** land at every tag the run holds. A write tool also takes an optional `scope` argument, a list of tags such as `['team:acme:support']`, to write at only those tags. Each tag must be one the run holds.
 - **Pins** default to every run tag except `thread`.
 
 To wire the tools yourself, for example into an agent's `tools`, call `createTools`. It defaults to the groups configured on the instance:
