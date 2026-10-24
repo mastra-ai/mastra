@@ -52,6 +52,7 @@ const allPatterns: PermissionPatternsResponse = {
     'logs:read',
     'scores:read',
     'datasets:read',
+    'knowledge:read',
     'tools:read',
     'mcp:read',
     'processors:read',
