@@ -1,13 +1,13 @@
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { failureSchema, safeFailure, type Failure } from '../src/mastra/domain/errors.js';
-import { reportHash } from '../src/mastra/domain/reports.js';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
-import { reportRuntime, reportContext } from '../tests/report-runtime.js';
-import { fixtureFiles } from '../tests/reconciliation-fixtures.js';
-import type { EvaluationCase } from '../tests/evaluation-cases.js';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { failureSchema, safeFailure, type Failure } from '../src/mastra/domain/operation-errors.js';
 import type { ProcessingBudget } from '../src/mastra/domain/reconciliation-contracts.js';
-import type { EvaluationObservation } from './evaluation.js';
+import { reportHash } from '../src/mastra/domain/report-contracts.js';
+import type { EvaluationCase } from '../tests/evaluation-fixtures.js';
+import { fixtureFiles } from '../tests/reconciliation-fixtures.js';
+import { reportContext, reportRuntime } from '../tests/report-runtime.js';
+import type { EvaluationObservation } from './evaluation-runner.js';
 
 export async function runEvaluationCase(
   test: EvaluationCase,

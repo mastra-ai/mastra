@@ -1,10 +1,11 @@
-import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
 import { z } from 'zod';
-import { canonicalJson, hashBytes, type InputProvider } from '../src/mastra/domain/contracts.js';
+import type { SavedSource } from '../src/mastra/domain/case-contracts.js';
+import { canonicalJson, hashBytes, type InputProvider } from '../src/mastra/domain/case-contracts.js';
 import type { Extraction, SemanticAssessment } from '../src/mastra/domain/reconciliation-contracts.js';
-import type { SavedSource } from '../src/mastra/storage/cases.js';
-import type { EvaluationCase } from './evaluation-cases.js';
+
+import type { EvaluationCase } from './evaluation-fixtures.js';
 import { fixtureExtraction, type DocumentFixture } from './reconciliation-fixtures.js';
 export async function reportWire(
   documents: DocumentFixture[],

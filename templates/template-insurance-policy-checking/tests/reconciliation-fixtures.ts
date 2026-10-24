@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts } from 'pdf-lib';
+import type { SavedSource } from '../src/mastra/domain/case-contracts.js';
 import type { Evidence, Extraction, Term, TermValue } from '../src/mastra/domain/reconciliation-contracts.js';
-import type { SavedSource } from '../src/mastra/storage/cases.js';
 
 export const propertyApproval =
   'Maya Chen approved Deductible for All premises on CP-4021 effective 2026-04-01:\nUSD 5000 each occurrence, fixed.';

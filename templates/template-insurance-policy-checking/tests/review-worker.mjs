@@ -1,6 +1,6 @@
 import { reportRuntime, reportContext } from './report-runtime.js';
-import { createApprovedOutputProvider } from '../src/mastra/providers/approved-output.js';
-import { safeFailure } from '../src/mastra/domain/errors.js';
+import { createApprovedOutputProvider } from '../src/mastra/providers/approved-output-provider.js';
+import { safeFailure } from '../src/mastra/domain/operation-errors.js';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 const input = JSON.parse(process.argv[2]);

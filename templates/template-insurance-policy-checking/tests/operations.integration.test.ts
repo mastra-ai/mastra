@@ -1,11 +1,11 @@
-import { expect, it } from 'vitest';
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { expect, it } from 'vitest';
+import { evaluationCases } from './evaluation-fixtures.js';
 import { reportWire } from './report-provider.js';
-import { evaluationCases } from './evaluation-cases.js';
 
 it('operational_traces_correlate_without_exposing_documents', async () => {
   const root = await mkdtemp(join(tmpdir(), 'insurance-operations-'));

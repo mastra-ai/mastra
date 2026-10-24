@@ -1,18 +1,19 @@
-import { operation } from '../runtime/operations.js';
 import { z } from 'zod';
-import { insuranceConfigurationSchema } from '../config/insurance.js';
-import { processingConfigurationSchema } from '../config/processing.js';
+import { insuranceConfigurationSchema } from '../config/insurance-config.js';
+import { processingConfigurationSchema } from '../config/processing-config.js';
+import { canonicalJson, contextSchema, type OperationContext } from '../domain/case-contracts.js';
+import { EvidenceValidationError, IntakeError, safeFailure } from '../domain/operation-errors.js';
+import type { Analysis, AnalysisInput, StructuredProcessingModel } from '../domain/reconciliation-contracts.js';
 import {
   compareRequestSchema,
   extractionSchema,
   semanticSchema,
   type CompareRequest,
 } from '../domain/reconciliation-contracts.js';
-import { contextSchema, canonicalJson, type OperationContext } from '../domain/contracts.js';
-import { EvidenceValidationError, IntakeError, safeFailure } from '../domain/errors.js';
-import { equalValues, normalizeText, reconcile, verifyEvidence, verifyExtraction } from '../domain/reconciliation.js';
-import type { StructuredProcessingModel } from '../domain/reconciliation-contracts.js';
-import type { Analysis, AnalysisInput, ReconciliationRepository } from '../storage/reconciliation.js';
+import { equalValues, reconcile, verifyEvidence, verifyExtraction } from '../domain/reconciliation-engine.js';
+import { normalizeText, sameTerm } from '../domain/term-utils.js';
+import { operation } from '../runtime/operation-logger.js';
+import type { ReconciliationRepository } from '../storage/reconciliation-repository.js';
 
 export function createReconciliationService(
   repository: ReconciliationRepository,
@@ -93,7 +94,7 @@ export function createReconciliationService(
         throw new IntakeError(
           'MODEL_BUDGET_REQUIRED',
           'Processing requires explicitly approved request, token, retry and cost budgets.',
-          'Configure an explicitly approved processing budget in src/mastra/config/processing.ts or POLICY_PROCESSING_BUDGET before paid execution.',
+          'Configure an explicitly approved processing budget in src/mastra/config/processing-config.ts or POLICY_PROCESSING_BUDGET before paid execution.',
         );
       const input: AnalysisInput = {
         schemaVersion: 'reconciliation-1',
@@ -160,13 +161,7 @@ export function createReconciliationService(
         const clauses = reference.terms
           .filter(term => term.value.type === 'clause')
           .flatMap(left => {
-            const right = target.terms.find(
-              term =>
-                term.category === left.category &&
-                term.key === left.key &&
-                term.scope === left.scope &&
-                term.value.type === 'clause',
-            );
+            const right = target.terms.find(term => sameTerm(term, left) && term.value.type === 'clause');
             if (
               !right ||
               left.value.type !== 'clause' ||
@@ -189,18 +184,10 @@ export function createReconciliationService(
         const semantic = clauses.length
           ? await model.generate(context, attempt, 'semantic', semanticSchema, { clauses })
           : { assessments: [] };
-        const assessmentKeys = new Set<string>();
         for (const [assessmentIndex, assessment] of semantic.assessments.entries()) {
-          const pair = clauses.find(
-            pair =>
-              pair.reference.key === assessment.key &&
-              pair.reference.category === assessment.category &&
-              pair.reference.scope === assessment.scope,
-          );
-          const key = `${assessment.category}\0${assessment.key}\0${assessment.scope}`;
+          const pair = clauses.find(pair => sameTerm(pair.reference, assessment));
           if (
             !pair ||
-            assessmentKeys.has(key) ||
             ![pair.reference, pair.target].every(term =>
               assessment.evidence.some(item =>
                 term.evidence.some(saved => JSON.stringify(saved) === JSON.stringify(item)),
@@ -212,7 +199,6 @@ export function createReconciliationService(
               'A clause assessment is duplicated, unaligned or lacks both original evidence references.',
               'Review clause evidence before retrying.',
             );
-          assessmentKeys.add(key);
           for (const [evidenceIndex, evidence] of assessment.evidence.entries())
             verifyEvidence(evidence, attempt.input.sources, [
               'assessments',

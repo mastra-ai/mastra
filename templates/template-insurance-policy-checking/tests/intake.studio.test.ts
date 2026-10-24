@@ -1,15 +1,15 @@
-import { test, expect, type Page } from '@playwright/test';
+import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
+import { expect, test, type Page } from '@playwright/test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LibSQLStore } from '@mastra/libsql';
-import { Memory } from '@mastra/memory';
-import { CaseRepository } from '../src/mastra/storage/cases.js';
-import { hashBytes } from '../src/mastra/domain/contracts.js';
-import { controlledProvider, startStudio } from './http.js';
-import { policyPdf } from './fixtures.js';
+import { inputLimits } from '../src/mastra/config/input-limits-config.js';
+import { hashBytes } from '../src/mastra/domain/case-contracts.js';
 import { workingMemorySchema } from '../src/mastra/processors/document-intake-processor.js';
-import { inputLimits } from '../src/mastra/config/limits.js';
+import { CaseRepository } from '../src/mastra/storage/case-repository.js';
+import { controlledProvider, startStudio } from './http-server.js';
+import { policyPdf } from './input-fixtures.js';
 
 async function openAgent(page: Page, url: string) {
   await page.goto(url);

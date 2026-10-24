@@ -2,8 +2,8 @@ import { reportRuntime, reportContext } from './report-runtime.js';
 import { readFile, writeFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { safeFailure } from '../src/mastra/domain/errors.js';
-import { hashBytes } from '../src/mastra/domain/contracts.js';
+import { safeFailure } from '../src/mastra/domain/operation-errors.js';
+import { hashBytes } from '../src/mastra/domain/case-contracts.js';
 const input = JSON.parse(process.argv[2]);
 const provider =
   input.mode === 'publishDeterministic'

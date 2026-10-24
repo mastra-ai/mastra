@@ -1,18 +1,18 @@
-import { test, expect, type Page } from '@playwright/test';
-import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
+import { expect, test, type Page } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { CaseRepository } from '../src/mastra/storage/cases.js';
-import { ReconciliationRepository } from '../src/mastra/storage/reconciliation.js';
-import { ReportRepository } from '../src/mastra/storage/reports.js';
-import { ReviewRepository } from '../src/mastra/storage/reviews.js';
-import { FinalizationRepository } from '../src/mastra/storage/finalizations.js';
-import { fixtureFiles, propertyDocuments, liabilityDocuments } from './reconciliation-fixtures.js';
+import { CaseRepository } from '../src/mastra/storage/case-repository.js';
+import { FinalizationRepository } from '../src/mastra/storage/finalization-repository.js';
+import { ReconciliationRepository } from '../src/mastra/storage/reconciliation-repository.js';
+import { ReportRepository } from '../src/mastra/storage/report-repository.js';
+import { ReviewRepository } from '../src/mastra/storage/review-repository.js';
+import { startStudio } from './http-server.js';
+import { fixtureFiles, liabilityDocuments, propertyDocuments } from './reconciliation-fixtures.js';
 import { reportWire } from './report-provider.js';
 import { reportTestBudget } from './report-runtime.js';
-import { startStudio } from './http.js';
 
 async function send(page: Page, text: string) {
   await page.getByPlaceholder('Enter your message...').fill(text);

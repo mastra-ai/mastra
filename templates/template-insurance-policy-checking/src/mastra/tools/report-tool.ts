@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
-import { reportRequestSchema } from '../domain/reports.js';
-import { safely } from '../domain/errors.js';
-import type { OperationContext } from '../domain/contracts.js';
+import type { OperationContext } from '../domain/case-contracts.js';
+import { safely } from '../domain/operation-errors.js';
+import { reportRequestSchema } from '../domain/report-contracts.js';
 import type { CaseService } from '../services/case-service.js';
 import { operationContext } from './tool-context.js';
 export type ReportReader = (context: OperationContext, input: unknown) => Promise<unknown>;

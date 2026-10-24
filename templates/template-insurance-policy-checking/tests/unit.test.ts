@@ -1,24 +1,26 @@
-import { describe, it, expect } from 'vitest';
-import { inputLimits, inputLimitsSchema } from '../src/mastra/config/limits.js';
-import { applicationConfigurationSchema, clarifySchema } from '../src/mastra/domain/contracts.js';
-import { insuranceConfiguration, insuranceConfigurationSchema } from '../src/mastra/config/insurance.js';
-import {
-  compareDecimals,
-  equalValues,
-  normalizeDecimal,
-  valueSupported,
-  verifyEvidence,
-} from '../src/mastra/domain/reconciliation.js';
-import { termValueSchema, processingBudgetSchema } from '../src/mastra/domain/reconciliation-contracts.js';
-import { propertyMoney } from './reconciliation-fixtures.js';
-import { resolveControlledProviderEndpoint } from '../src/mastra/runtime/server.js';
-import { failureText } from '../src/mastra/domain/errors.js';
-import { sourceBundleSchema } from '../src/mastra/domain/contracts.js';
-import { recordProvider } from './fixtures.js';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { randomUUID } from 'node:crypto';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { processingDiagnostics } from '../src/mastra/runtime/operations.js';
+import { inputLimits, inputLimitsSchema } from '../src/mastra/config/input-limits-config.js';
+import { insuranceConfiguration, insuranceConfigurationSchema } from '../src/mastra/config/insurance-config.js';
+import {
+  applicationConfigurationSchema,
+  clarifySchema,
+  sourceBundleSchema,
+} from '../src/mastra/domain/case-contracts.js';
+import { compareDecimals, normalizeDecimal } from '../src/mastra/domain/decimal-utils.js';
+import { failureText } from '../src/mastra/domain/operation-errors.js';
+import {
+  extractionSchema,
+  processingBudgetSchema,
+  termValueSchema,
+} from '../src/mastra/domain/reconciliation-contracts.js';
+import { equalValues, valueSupported, verifyEvidence } from '../src/mastra/domain/reconciliation-engine.js';
+import { resolveControlledProviderEndpoint } from '../src/mastra/runtime/local-server.js';
+import { processingDiagnostics } from '../src/mastra/runtime/operation-logger.js';
+import { recordProvider } from './input-fixtures.js';
+import { propertyMoney } from './reconciliation-fixtures.js';
 
 it('native_diagnostics_survive_serialization_without_copying_error_content', () => {
   const validationError = new z.ZodError([
@@ -127,6 +129,10 @@ describe('Intake contract invariants', () => {
     };
     expect(clarifySchema.safeParse(request).success).toBe(true);
     expect(clarifySchema.safeParse({ ...request, targetId: reference }).success).toBe(false);
+    expect(
+      clarifySchema.safeParse({ ...request, roles: [request.roles[0], { sourceId: randomUUID(), role: 'reference' }] })
+        .success,
+    ).toBe(false);
     expect(clarifySchema.safeParse({ ...request, intent: 'agreed_terms_checking' }).success).toBe(false);
     expect(
       clarifySchema.safeParse({
@@ -166,6 +172,50 @@ describe('Intake contract invariants', () => {
 });
 
 describe('Typed insurance comparison boundaries', () => {
+  it('rejects repeated record review locators and terms that differ only in scope formatting', () => {
+    const extraction = {
+      sourceId: randomUUID(),
+      terms: [],
+      reviewedPages: [],
+      reviewedRecords: [{ recordId: 'policy', field: 'limit' }],
+      complete: true,
+      limitations: [],
+      changes: [],
+    };
+    expect(extractionSchema.safeParse(extraction).success).toBe(true);
+    expect(
+      extractionSchema.safeParse({
+        ...extraction,
+        reviewedRecords: [...extraction.reviewedRecords, ...extraction.reviewedRecords],
+      }).success,
+    ).toBe(false);
+    const term = {
+      category: 'limit',
+      key: 'building',
+      label: 'Building limit',
+      scope: 'All premises',
+      value: propertyMoney('2500'),
+      original: 'USD 2500 each occurrence, fixed.',
+      uncertainty: [],
+      evidence: [
+        {
+          sourceId: extraction.sourceId,
+          version: '1',
+          hash: 'a'.repeat(64),
+          physicalPage: null,
+          recordId: 'policy',
+          field: 'limit',
+          excerpt: 'USD 2500 each occurrence, fixed.',
+        },
+      ],
+    };
+    expect(
+      extractionSchema.safeParse({ ...extraction, terms: [term, { ...term, scope: ' ALL   PREMISES ' }] }).success,
+    ).toBe(false);
+    expect(
+      extractionSchema.safeParse({ ...extraction, terms: [term, { ...term, scope: 'Warehouse B' }] }).success,
+    ).toBe(true);
+  });
   it('compares exact decimal amounts without rounding away money or comparison dimensions', () => {
     expect(equalValues(propertyMoney('9007199254740993.0100'), propertyMoney('9007199254740993.01'))).toBe(true);
     expect(equalValues(propertyMoney('9007199254740993.01'), propertyMoney('9007199254740993.02'))).toBe(false);

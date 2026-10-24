@@ -1,26 +1,38 @@
-import type { ReviewDecision } from '../domain/reviews.js';
-import { reportNotice } from './report-notice.js';
-import type { ReportReader } from '../tools/report-tool.js';
-import type { InputProcessor } from '@mastra/core/processors';
 import { TripWire } from '@mastra/core/agent';
-import type { Memory } from '@mastra/memory';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
-import { z } from 'zod';
+import type { InputProcessor } from '@mastra/core/processors';
+import type { Memory } from '@mastra/memory';
 import { randomUUID } from 'node:crypto';
-import type { CaseService } from '../services/case-service.js';
-import { failureText, IntakeError } from '../domain/errors.js';
+import { z } from 'zod';
+import { failureText, IntakeError } from '../domain/operation-errors.js';
 import type { ComparisonRunner } from '../domain/reconciliation-contracts.js';
+import type { ReviewDecision } from '../domain/review-contracts.js';
+import type { CaseService } from '../services/case-service.js';
+import type { ReportReader } from '../tools/report-tool.js';
+import { reportNotice } from './report-notice-formatter.js';
 
 export const workingMemorySchema = z.object({
-  activeCaseId: z.string().nullable(),
-  activePolicyNumber: z.string().nullable(),
-  insuredName: z.string().nullable(),
-  insuranceProduct: z.string().nullable(),
-  documentIds: z.array(z.string()),
-  workflowRunId: z.string().nullable(),
-  draftReportId: z.string().nullable(),
-  draftVersion: z.number().nullable(),
-  reviewStatus: z.string().nullable(),
+  activeCaseId: z
+    .string()
+    .nullable()
+    .describe('Convenience identifier of the active case; persisted case records remain authoritative.'),
+  activePolicyNumber: z
+    .string()
+    .nullable()
+    .describe('Policy number copied from the active case, or null when unknown.'),
+  insuredName: z.string().nullable().describe('Insured person or organization as documented; null when unknown.'),
+  insuranceProduct: z.string().nullable().describe('Insurance product or line of business; null when unknown.'),
+  documentIds: z.array(z.string()).describe('Captured source identifiers belonging to the active case.'),
+  workflowRunId: z.string().nullable().describe('Native Mastra workflow run bound to this analysis or report.'),
+  draftReportId: z
+    .string()
+    .nullable()
+    .describe('Identifier of the currently available draft; null before verified publication.'),
+  draftVersion: z.number().nullable().describe('Currently available draft version; null before verified publication.'),
+  reviewStatus: z
+    .string()
+    .nullable()
+    .describe('Persisted broker review state, separate from the analytical conclusion.'),
 });
 
 export function createDocumentIntakeProcessor(

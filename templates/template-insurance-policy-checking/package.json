@@ -9,22 +9,23 @@
     "node": "^22.19.0 || >=24.11.0"
   },
   "scripts": {
-    "dev": "node scripts/mastra.mjs dev",
-    "build": "node scripts/mastra.mjs build",
-    "start": "node scripts/mastra.mjs start",
+    "dev": "node scripts/mastra-cli.mjs dev",
+    "build": "node scripts/mastra-cli.mjs build",
+    "start": "node scripts/mastra-cli.mjs start",
     "typecheck": "tsc --noEmit",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "test:unit": "vitest run tests/unit.test.ts",
-    "test:integration": "vitest run tests/intake.integration.test.ts",
+    "test:integration": "vitest run tests/*.integration.test.ts",
     "test:reconciliation": "vitest run tests/reconciliation.integration.test.ts",
     "test:reports": "vitest run tests/reports.integration.test.ts",
     "test:studio": "playwright test",
     "test:review": "vitest run tests/review.integration.test.ts",
     "test:evaluation": "vitest run tests/evaluation.integration.test.ts tests/operations.integration.test.ts tests/live-authorization.test.ts",
-    "evaluate:live": "node --env-file-if-exists=.env --import ./tests/source-loader.mjs scripts/evaluate-live.ts",
+    "evaluate:live": "node --env-file-if-exists=.env --import ./tests/source-loader.mjs scripts/live-evaluation-runner.ts",
     "test:use-cases": "playwright test tests/use-cases.studio.test.ts",
-    "prepare:use-cases": "node --import ./tests/source-loader.mjs scripts/prepare-use-cases.ts"
+    "prepare:use-cases": "node --import ./tests/source-loader.mjs scripts/use-cases-generator.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@ai-sdk/openai": "3.0.130",

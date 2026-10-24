@@ -1,21 +1,26 @@
-import { operation } from '../runtime/operations.js';
 import type { InputProcessor } from '@mastra/core/processors';
 import { z } from 'zod';
-import { IntakeError } from '../domain/errors.js';
+import { IntakeError } from '../domain/operation-errors.js';
 import type { ProcessingBudget } from '../domain/reconciliation-contracts.js';
 import type { ProcessingReservation } from '../providers/bounded-model-transport.js';
-import type { ReconciliationRepository } from '../storage/reconciliation.js';
+import { operation } from '../runtime/operation-logger.js';
+import type { ReconciliationRepository } from '../storage/reconciliation-repository.js';
 
 const reportedUsageSchema = z.object({
-  input_tokens: z.number().int().nonnegative().safe(),
-  output_tokens: z.number().int().nonnegative().safe(),
-  total_tokens: z.number().int().nonnegative().safe(),
+  input_tokens: z.number().int().nonnegative().safe().describe('Raw input-token usage reported by the provider.'),
+  output_tokens: z.number().int().nonnegative().safe().describe('Raw output-token usage reported by the provider.'),
+  total_tokens: z
+    .number()
+    .int()
+    .nonnegative()
+    .safe()
+    .describe('Raw total usage; must equal the sum of input and output tokens.'),
 });
 const consistentUsageSchema = reportedUsageSchema.refine(
   usage => usage.total_tokens === usage.input_tokens + usage.output_tokens,
 );
 const responseMetadataSchema = z.object({
-  status: z.literal('completed'),
+  status: z.literal('completed').describe('Raw provider completion status; only completed responses are accepted.'),
 });
 
 /** Validate raw counters: the SDK's normalized usage recomputes provider totals. */

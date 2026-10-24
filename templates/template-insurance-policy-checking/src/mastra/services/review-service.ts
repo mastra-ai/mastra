@@ -1,10 +1,15 @@
-import { operation } from '../runtime/operations.js';
-import { hashBytes, outputArtifactSchema, type OperationContext, type OutputProvider } from '../domain/contracts.js';
-import { reportOutputRequestSchema, correctionOutputRequestSchema } from '../domain/output-contracts.js';
-import { IntakeError, safeFailure } from '../domain/errors.js';
-import type { ReviewRepository } from '../storage/reviews.js';
-import type { FinalizationRepository } from '../storage/finalizations.js';
-import { artifactBytes } from '../storage/artifact-files.js';
+import {
+  hashBytes,
+  outputArtifactSchema,
+  type OperationContext,
+  type OutputProvider,
+} from '../domain/case-contracts.js';
+import { IntakeError, safeFailure } from '../domain/operation-errors.js';
+import { correctionOutputRequestSchema, reportOutputRequestSchema } from '../domain/output-contracts.js';
+import { operation } from '../runtime/operation-logger.js';
+import { artifactBytes } from '../storage/artifact-storage.js';
+import type { FinalizationRepository } from '../storage/finalization-repository.js';
+import type { ReviewRepository } from '../storage/review-repository.js';
 
 export function createReviewService(
   repository: ReviewRepository,

@@ -1,32 +1,32 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, rm, readFile, writeFile, mkdir, rename, symlink, unlink, access } from 'node:fs/promises';
+import { createClient } from '@libsql/client';
+import { RequestContext } from '@mastra/core/request-context';
+import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { noopObserve } from '@mastra/core/tools';
+import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { access, mkdir, mkdtemp, readFile, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { PDFDocument } from 'pdf-lib';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { reportRuntime, reportContext } from './report-runtime.js';
-import { reportWire, reportRecordInput } from './report-provider.js';
-import { fixtureFiles, propertyDocuments, liabilityDocuments } from './reconciliation-fixtures.js';
-import { startStudio, requestHost } from './http.js';
-import { hashBytes, type InputProvider, type OutputProvider } from '../src/mastra/domain/contracts.js';
-import { reportSnapshotSchema, reportHash } from '../src/mastra/domain/reports.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import { hashBytes, type InputProvider, type OutputProvider } from '../src/mastra/domain/case-contracts.js';
 import {
+  correctionOutputRequestSchema,
   draftOutputRequestSchema,
   reportOutputRequestSchema,
-  correctionOutputRequestSchema,
 } from '../src/mastra/domain/output-contracts.js';
+import { reportHash, reportSnapshotSchema } from '../src/mastra/domain/report-contracts.js';
+import { createDraftPdfProvider } from '../src/mastra/providers/draft-pdf-provider.js';
 import { createRegistry } from '../src/mastra/providers/provider-registry.js';
-import { createDraftPdfProvider } from '../src/mastra/providers/draft-pdf.js';
 import { createReportService } from '../src/mastra/services/report-service.js';
-import { createClient } from '@libsql/client';
-import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import { RequestContext } from '@mastra/core/request-context';
-import { noopObserve } from '@mastra/core/tools';
 import { createReportTool } from '../src/mastra/tools/report-tool.js';
+import { requestHost, startStudio } from './http-server.js';
+import { fixtureFiles, liabilityDocuments, propertyDocuments } from './reconciliation-fixtures.js';
+import { reportRecordInput, reportWire } from './report-provider.js';
+import { reportContext, reportRuntime } from './report-runtime.js';
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -245,6 +245,13 @@ describe('Immutable review drafts across real workflow, database, file and HTTP 
     for (const change of [
       () => ({ ...result.report, status: 'APPROVED' }),
       () => ({ ...result.report, counts: { ...result.report.counts, checked: 999 } }),
+      () => ({
+        ...result.report,
+        comparisons: result.report.comparisons.map(f => ({
+          ...f,
+          searched: f.searched.map(scope => ({ ...scope, pages: scope.pages.map(() => 1) })),
+        })),
+      }),
       () => ({
         ...result.report,
         sources: result.report.sources.map((s, i) => (i ? s : { ...s, kind: 'records', pageCount: 2 })),

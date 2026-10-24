@@ -1,15 +1,15 @@
 import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
-import { CaseRepository } from '../src/mastra/storage/cases.js';
-import { ReconciliationRepository } from '../src/mastra/storage/reconciliation.js';
+import { CaseRepository } from '../src/mastra/storage/case-repository.js';
+import { ReconciliationRepository } from '../src/mastra/storage/reconciliation-repository.js';
 import { createCaseService } from '../src/mastra/services/case-service.js';
 import { createReconciliationService } from '../src/mastra/services/reconciliation-service.js';
-import { createInsuranceProcessingModel } from '../src/mastra/agents/insurance-processing.js';
-import { createPolicyCheckingWorkflow } from '../src/mastra/workflows/policy-checking.js';
-import { createPdfProvider } from '../src/mastra/providers/pdf.js';
-import { inputLimits } from '../src/mastra/config/limits.js';
-import { insuranceConfiguration } from '../src/mastra/config/insurance.js';
+import { createInsuranceProcessingModel } from '../src/mastra/agents/insurance-processing-agent.js';
+import { createPolicyCheckingWorkflow } from '../src/mastra/workflows/policy-checking-workflow.js';
+import { createPdfProvider } from '../src/mastra/providers/pdf-input-provider.js';
+import { inputLimits } from '../src/mastra/config/input-limits-config.js';
+import { insuranceConfiguration } from '../src/mastra/config/insurance-config.js';
 
 const input = JSON.parse(process.argv[2]);
 const cases = new CaseRepository(input.root);

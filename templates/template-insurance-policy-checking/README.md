@@ -1,40 +1,39 @@
 # Insurance Policy Checking
 
-A starting point for a production insurance policy-checking application. Capture proposals, contracts and issued policies in Mastra Studio, then compare typed terms and clauses with verified source evidence. Persisted comparisons preserve uncertainty, documented amendments and the distinction between a selected reference and accepted terms. Review an immutable PDF draft, record version-specific broker decisions, and retrieve the approved final report with a correction request draft when confirmed discrepancies require one.
+Compare insurance proposals, contracts and issued policies in Mastra Studio. Findings retain exact source evidence, documented changes and unresolved questions. A broker reviews an immutable PDF draft before approving a final report and, when applicable, an editable correction request.
 
 ## Why we built this
 
-Policy checking needs a traceable account of what differs and why. Immutable originals, explicit reference choices and scoped amendment evidence keep document observations separate from contractual assumptions.
+A selected reference does not prove that its terms were accepted. Policy checking needs explicit document roles, verified evidence and a record of the broker's decisions.
 
 ## Prerequisites
 
-- **[OpenAI API key](https://platform.openai.com/api-keys)**: add your key as `OPENAI_API_KEY` in `.env`.
+- **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` for document comparison. Local intake, evidence retrieval and report review do not require model calls.
+- An explicitly approved processing budget: set `POLICY_PROCESSING_BUDGET` as described in the [operating guide](./docs/usage.md#configure-processing). Paid processing is disabled by default.
+- Textual PDF documents. Encrypted PDFs, remote URLs and OCR are unsupported.
 
 ## Quickstart 🚀
 
 1. **Create the project**
    - Run `npx create-mastra@latest insurance-policy-checking --template insurance-policy-checking`.
    - Run `cd insurance-policy-checking`, then `npm install`.
-2. **Add your API key**
-   - Run `cp .env.example .env` and fill in the key.
+2. **Configure the environment**
+   - Run `cp .env.example .env` and supply the values described under Prerequisites.
 3. **Start Studio**
    - Run `npm run dev` and open [Mastra Studio](http://127.0.0.1:4111).
-   - Select **Policy Checking**, attach a textual proposal and issued policy via **Add attachment → Add a local file**, and send a message. The processor notice identifies the saved case and sources and requests clarification.
-
-Paid model dispatch remains disabled until explicit processing budgets are approved and configured. An API key alone does not enable it. Intake, review and report retrieval work without model calls.
+   - Select **Policy Checking**, attach a textual proposal and policy through **Add attachment → Add a local file**, and send a message. The saved response identifies the case and sources needed for clarification.
 
 ## Try it out
 
-- Run `npm run prepare:use-cases` for realistic property and professional-liability PDFs in `.runtime/use-cases`. Read the manifest, upload one set in Studio, then send `/status` for its case and source IDs.
-- Send `/evidence SOURCE_ID 2` to read physical PDF page 2, using a saved source ID.
-- Attach documents with `/new` to start another case in the same conversation. Use [`/clarify` and the operating guide](./docs/usage.md) to declare document roles and reference choices.
-- After clarification and budget configuration, send [`/compare`](./docs/usage.md#compare-documents) to run **policyCheckingWorkflow**. Send `/report` for the immutable PDF draft and its evidence.
-- Use [`/review`](./docs/usage.md#review-an-exact-report-version) to confirm or dismiss named findings, request a revision, reject, or approve an exact published version. Approval alone confirms no finding; finalization preserves unresolved evidence and never sends corrections.
+- Run `npm run prepare:use-cases` to generate sample PDFs and a manifest in `.runtime/use-cases`.
+- Send `/status`, then `/evidence SOURCE_ID 2` to inspect physical page 2 of a saved source.
+- Follow the [operating guide](./docs/usage.md) to clarify document roles, run `/compare` and retrieve the PDF with `/report`.
+- Review an exact report version with `/review`. Only explicitly confirmed actionable discrepancies in agreed-term checking produce a correction request. Delivery is a separate manual action.
 
 ## Customization
 
-- Ask your coding agent to explore the provider contracts and propose a plan for adding a structured-record input provider in `src/mastra/providers.ts`.
-- Adjust input capacities in `src/mastra/config/limits.ts`, or register company terminology and review rules in `src/mastra/config/insurance.ts`. See the [operating and evaluation guide](./docs/usage.md).
+- Ask your coding agent: “Explore the provider contracts and propose a plan for adding a structured-record input provider.” Registrations live in `src/mastra/provider-config.ts`.
+- Change upload capacities or insurance profiles in `src/mastra/config/`. See [development and validation](./docs/development.md) for file conventions, provider contracts and checks.
 
 ## About Mastra templates
 

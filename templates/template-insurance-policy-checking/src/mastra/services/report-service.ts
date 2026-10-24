@@ -1,10 +1,16 @@
-import { operation } from '../runtime/operations.js';
-import type { ReviewService } from './review-service.js';
-import { outputArtifactSchema, hashBytes, type OperationContext, type OutputProvider } from '../domain/contracts.js';
+import {
+  hashBytes,
+  outputArtifactSchema,
+  type OperationContext,
+  type OutputProvider,
+} from '../domain/case-contracts.js';
+import { IntakeError, safeFailure } from '../domain/operation-errors.js';
 import { draftOutputRequestSchema } from '../domain/output-contracts.js';
-import { reportRequestSchema } from '../domain/reports.js';
-import { IntakeError, safeFailure } from '../domain/errors.js';
-import type { ReportRepository, Publication } from '../storage/reports.js';
+import type { Publication } from '../domain/report-contracts.js';
+import { reportRequestSchema } from '../domain/report-contracts.js';
+import { operation } from '../runtime/operation-logger.js';
+import type { ReportRepository } from '../storage/report-repository.js';
+import type { ReviewService } from './review-service.js';
 
 export function createReportService(
   repository: ReportRepository,

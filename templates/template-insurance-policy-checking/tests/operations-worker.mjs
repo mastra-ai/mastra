@@ -1,10 +1,10 @@
 import { mkdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { reportRuntime, reportContext, reportTestBudget } from './report-runtime.js';
-import { evaluationCases } from './evaluation-cases.js';
+import { evaluationCases } from './evaluation-fixtures.js';
 import { fixtureFiles } from './reconciliation-fixtures.js';
 import { runEvaluationCase } from '../scripts/evaluation-runtime.js';
-import { operation } from '../src/mastra/runtime/operations.js';
+import { operation } from '../src/mastra/runtime/operation-logger.js';
 const input = JSON.parse(process.argv[2]);
 await mkdir(input.root, { recursive: true, mode: 0o700 });
 if (['failure', 'invalid-output', 'incomplete', 'interrupted', 'grounding'].includes(input.mode)) {

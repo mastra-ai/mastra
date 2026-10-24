@@ -1,11 +1,15 @@
-import type { OperationContext } from '../domain/contracts.js';
-import { IntakeError } from '../domain/errors.js';
-import { operation } from '../runtime/operations.js';
 import { z } from 'zod';
-import type { ProcessingAttempt, ReconciliationRepository } from '../storage/reconciliation.js';
+import type { OperationContext } from '../domain/case-contracts.js';
+import { IntakeError } from '../domain/operation-errors.js';
+import type { ProcessingAttempt } from '../domain/reconciliation-contracts.js';
+import { operation } from '../runtime/operation-logger.js';
+import type { ReconciliationRepository } from '../storage/reconciliation-repository.js';
 
 export interface ProcessingReservation {
+  /** Stable identifier of this persisted entity. */
   id: string;
+
+  /** Input-token usage or conservative reservation, as indicated by its enclosing contract. */
   inputTokens: number;
 }
 

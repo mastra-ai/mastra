@@ -1,22 +1,22 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { RequestContext } from '@mastra/core/request-context';
+import { noopObserve } from '@mastra/core/tools';
+import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { access, chmod, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { RequestContext } from '@mastra/core/request-context';
-import { noopObserve } from '@mastra/core/tools';
-import { inputLimits, inputLimitsSchema, type InputLimits } from '../src/mastra/config/limits.js';
-import { createPdfProvider, extractPdf } from '../src/mastra/providers/pdf.js';
-import { CaseRepository } from '../src/mastra/storage/cases.js';
-import { createCaseService } from '../src/mastra/services/case-service.js';
-import type { InputProvider } from '../src/mastra/domain/contracts.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import { inputLimits, inputLimitsSchema, type InputLimits } from '../src/mastra/config/input-limits-config.js';
+import type { InputProvider } from '../src/mastra/domain/case-contracts.js';
+import { safeFailure } from '../src/mastra/domain/operation-errors.js';
+import { createPdfProvider, extractPdf } from '../src/mastra/providers/pdf-input-provider.js';
 import { createRegistry } from '../src/mastra/providers/provider-registry.js';
-import { safeFailure } from '../src/mastra/domain/errors.js';
+import { createCaseService } from '../src/mastra/services/case-service.js';
+import { CaseRepository } from '../src/mastra/storage/case-repository.js';
 import { createCaseStatusTool } from '../src/mastra/tools/case-status-tool.js';
-import { fileInput, policyPdf, recordProvider } from './fixtures.js';
-import { controlledProvider, startStudio, requestHost } from './http.js';
+import { controlledProvider, requestHost, startStudio } from './http-server.js';
+import { fileInput, policyPdf, recordProvider } from './input-fixtures.js';
 
 const executeFile = promisify(execFile);
 const roots: string[] = [];
@@ -160,7 +160,7 @@ describe('Durable insurance intake across real boundaries', () => {
       { cwd: process.cwd() },
     );
     await symlink(resolve('node_modules'), join(compiled, 'node_modules'));
-    const runner = `import{CaseRepository}from './compiled/src/mastra/storage/cases.js';const r=new CaseRepository(${JSON.stringify(root)});await r.initialize();const first=await r.requireCase(${JSON.stringify(context)});const second=await r.requireCase(${JSON.stringify(second)});const evidence=await r.evidence(${JSON.stringify(context)},first.sourceIds[0],{physicalPage:2});let denied=false;try{await r.evidence(${JSON.stringify(second)},first.sourceIds[0],{physicalPage:1})}catch{denied=true}console.log(JSON.stringify({first,second,evidence,denied}));r.close();`;
+    const runner = `import{CaseRepository}from './compiled/src/mastra/storage/case-repository.js';const r=new CaseRepository(${JSON.stringify(root)});await r.initialize();const first=await r.requireCase(${JSON.stringify(context)});const second=await r.requireCase(${JSON.stringify(second)});const evidence=await r.evidence(${JSON.stringify(context)},first.sourceIds[0],{physicalPage:2});let denied=false;try{await r.evidence(${JSON.stringify(second)},first.sourceIds[0],{physicalPage:1})}catch{denied=true}console.log(JSON.stringify({first,second,evidence,denied}));r.close();`;
     await writeFile(join(root, 'restart.mjs'), runner);
     const result = JSON.parse(
       (await executeFile(process.execPath, [join(root, 'restart.mjs')], { cwd: process.cwd() })).stdout,
@@ -280,6 +280,30 @@ describe('Durable insurance intake across real boundaries', () => {
       await expect(service.capture(context, {})).rejects.toBeTruthy();
       expect(await repository.active(context)).toBeNull();
     }
+  });
+  it('retains a saved source role when an unknown duplicate precedes a conflicting declaration', async () => {
+    const base = recordProvider();
+    let conflicting = false;
+    const provider: InputProvider = {
+      ...base,
+      async capture(...args) {
+        const bundle = await base.capture(...args);
+        if (!conflicting) return bundle;
+        const source = bundle.sources[0]!;
+        return {
+          sources: [
+            { ...source, role: 'unknown' },
+            { ...source, sourceId: randomUUID(), role: 'proposal' },
+          ],
+        };
+      },
+    };
+    const { service, repository } = await setup(inputLimits, provider);
+    const original = await service.capture(context, {});
+    conflicting = true;
+    await expect(service.capture(context, {})).rejects.toMatchObject({ code: 'ROLE_CONFLICT' });
+    expect(await repository.requireCase(context)).toEqual(original);
+    expect((await repository.sources(context)).map(source => source.role)).toEqual(['contract']);
   });
   it('configured_input_limits_enforce_defaults_overrides_and_invalid_config', async () => {
     for (const limits of [

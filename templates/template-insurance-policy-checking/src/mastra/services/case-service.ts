@@ -1,7 +1,7 @@
-import { inputLimitsSchema, type InputLimits } from '../config/limits.js';
-import { contextSchema, validateBundle, type InputProvider, type OperationContext } from '../domain/contracts.js';
-import { IntakeError } from '../domain/errors.js';
-import type { CaseRepository } from '../storage/cases.js';
+import { inputLimitsSchema, type InputLimits } from '../config/input-limits-config.js';
+import { contextSchema, validateBundle, type InputProvider, type OperationContext } from '../domain/case-contracts.js';
+import { IntakeError } from '../domain/operation-errors.js';
+import type { CaseRepository } from '../storage/case-repository.js';
 
 export function createCaseService(
   repository: CaseRepository,

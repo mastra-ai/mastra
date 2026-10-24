@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
+import { clarifySchema } from '../domain/case-contracts.js';
+import { safely } from '../domain/operation-errors.js';
 import type { CaseService } from '../services/case-service.js';
-import { clarifySchema } from '../domain/contracts.js';
-import { safely } from '../domain/errors.js';
 import { operationContext } from './tool-context.js';
 
 export function createClarifyCaseTool(caseService: CaseService, operatorId: string) {

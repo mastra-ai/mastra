@@ -1,39 +1,40 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { createServer } from 'node:http';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { createOpenAI } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema';
 import { noopObserve } from '@mastra/core/tools';
-import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/core/schema';
-import { Agent } from '@mastra/core/agent';
-import { createOpenAI } from '@ai-sdk/openai';
-import { extractionSchema, semanticSchema } from '../src/mastra/domain/reconciliation-contracts.js';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
+import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { CaseRepository, type SavedSource } from '../src/mastra/storage/cases.js';
-import { ReconciliationRepository } from '../src/mastra/storage/reconciliation.js';
-import { createCaseService } from '../src/mastra/services/case-service.js';
-import { createReconciliationService } from '../src/mastra/services/reconciliation-service.js';
-import { createInsuranceProcessingModel } from '../src/mastra/agents/insurance-processing.js';
-import { createPolicyCheckingWorkflow } from '../src/mastra/workflows/policy-checking.js';
-import { createPolicyCheckingAgent } from '../src/mastra/agents/policy-checking.js';
-import { createCaseStatusTool } from '../src/mastra/tools/case-status-tool.js';
-import { workingMemorySchema } from '../src/mastra/processors/document-intake-processor.js';
-import { inputLimits } from '../src/mastra/config/limits.js';
-import { createPdfProvider } from '../src/mastra/providers/pdf.js';
-import { insuranceConfiguration, type insuranceConfigurationSchema } from '../src/mastra/config/insurance.js';
-import { canonicalJson, hashBytes, type InputProvider } from '../src/mastra/domain/contracts.js';
+import { createInsuranceProcessingModel } from '../src/mastra/agents/insurance-processing-agent.js';
+import { createPolicyCheckingAgent } from '../src/mastra/agents/policy-checking-agent.js';
+import { inputLimits } from '../src/mastra/config/input-limits-config.js';
+import { insuranceConfiguration, type insuranceConfigurationSchema } from '../src/mastra/config/insurance-config.js';
+import type { SavedSource } from '../src/mastra/domain/case-contracts.js';
+import { canonicalJson, hashBytes, type InputProvider } from '../src/mastra/domain/case-contracts.js';
 import type {
   CompareRequest,
   Extraction,
   ProcessingBudget,
   SemanticAssessment,
 } from '../src/mastra/domain/reconciliation-contracts.js';
+import { extractionSchema, semanticSchema } from '../src/mastra/domain/reconciliation-contracts.js';
+import { workingMemorySchema } from '../src/mastra/processors/document-intake-processor.js';
+import { createPdfProvider } from '../src/mastra/providers/pdf-input-provider.js';
+import { createCaseService } from '../src/mastra/services/case-service.js';
+import { createReconciliationService } from '../src/mastra/services/reconciliation-service.js';
+import { CaseRepository } from '../src/mastra/storage/case-repository.js';
+import { ReconciliationRepository } from '../src/mastra/storage/reconciliation-repository.js';
+import { createCaseStatusTool } from '../src/mastra/tools/case-status-tool.js';
+import { createPolicyCheckingWorkflow } from '../src/mastra/workflows/policy-checking-workflow.js';
 import {
   fixtureExtraction,
   fixtureFiles,
@@ -99,6 +100,7 @@ async function controlledResponses(documents: DocumentFixture[]) {
       | 'exclusionChange'
       | 'exclusionUncertain'
       | 'wordingDifference'
+      | 'scopeFormatting'
       | 'crossField'
       | 'unsupportedUnit'
       | 'unsupportedAmount'
@@ -195,6 +197,8 @@ async function controlledResponses(documents: DocumentFixture[]) {
       } else {
         const fixture = documents.find(fixture => fixture.name === source.displayName)!;
         result = fixtureExtraction(source, fixture);
+        if (state.mode === 'scopeFormatting' && fixture.kind === 'target')
+          for (const term of result.terms) term.scope = `  ${term.scope.toUpperCase().replace(/ /g, '   ')}  `;
         if (['exclusionChange', 'exclusionUncertain'].includes(state.mode) && fixture.kind === 'target') {
           const clause = result.terms.find(term => term.key === 'water')!;
           if (clause.value.type !== 'clause') throw new Error('Expected the use-case water clause.');
@@ -246,18 +250,18 @@ async function controlledResponses(documents: DocumentFixture[]) {
         assessments: data.data.clauses!.map(pair => ({
           category: pair.reference.category,
           key: pair.reference.key,
-          scope: pair.reference.scope,
+          scope: state.mode === 'scopeFormatting' ? pair.target.scope : pair.reference.scope,
           conclusion:
             state.mode === 'equivalent'
               ? 'equivalent'
-              : ['exclusionChange', 'wordingDifference'].includes(state.mode)
+              : ['exclusionChange', 'wordingDifference', 'scopeFormatting'].includes(state.mode)
                 ? 'different'
                 : 'uncertain',
           observation: ['exclusionChange', 'exclusionUncertain'].includes(state.mode)
             ? 'The reference covers escape of water; the target expressly excludes it, including sudden discharge.'
             : 'The water exclusions use different seepage wording.',
           interpretation: 'The practical effect of recurring versus gradual seepage requires broker interpretation.',
-          uncertainty: ['equivalent', 'exclusionChange', 'wordingDifference'].includes(state.mode)
+          uncertainty: ['equivalent', 'exclusionChange', 'wordingDifference', 'scopeFormatting'].includes(state.mode)
             ? []
             : ['Equivalent coverage has not been established.'],
           evidence: [...pair.reference.evidence, ...pair.target.evidence],
@@ -460,6 +464,18 @@ function assertStrictSchema(schema: unknown) {
 }
 
 describe('Evidence-backed insurance reconciliation through agent tools, workflows, files, LibSQL and Responses HTTP', () => {
+  it('assesses changed clauses even when extracted scopes use different spacing or capitalization', async () => {
+    const app = await setup(propertyDocuments());
+    app.wire.state.mode = 'scopeFormatting';
+    await app.submit();
+    const analysis = (await app.repository.status(context)).analyses[0]!;
+    expect(analysis.comparisons.find(finding => finding.key === 'water')).toMatchObject({
+      classification: 'DISCREPANCY',
+      uncertainty: [],
+    });
+    expect(analysis.comparisons.filter(finding => finding.key === 'water')).toHaveLength(1);
+    expect(analysis.semantic.assessments).toHaveLength(1);
+  });
   it('reconciles_omitted_location_and_authorized_deductible', async () => {
     const originalExtractionSchema = standardSchemaToJSONSchema(toStandardSchema(extractionSchema));
     const originalSemanticSchema = standardSchemaToJSONSchema(toStandardSchema(semanticSchema));

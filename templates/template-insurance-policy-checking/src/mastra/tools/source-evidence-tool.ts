@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { safely } from '../domain/operation-errors.js';
 import type { CaseService } from '../services/case-service.js';
-import { safely } from '../domain/errors.js';
 import { operationContext } from './tool-context.js';
 
 export function createSourceEvidenceTool(caseService: CaseService, operatorId: string) {
@@ -11,10 +11,19 @@ export function createSourceEvidenceTool(caseService: CaseService, operatorId: s
       'Read exact captured evidence from a physical PDF page or structured record and field in this conversation. Never invent locators.',
     inputSchema: z
       .object({
-        sourceId: z.uuid(),
-        physicalPage: z.number().int().positive().optional(),
-        recordId: z.string().min(1).optional(),
-        field: z.string().min(1).optional(),
+        sourceId: z.uuid().describe('Immutable captured source identifier; copy it exactly from the source.'),
+        physicalPage: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('One-based physical PDF page; null or absent for a record/field locator.'),
+        recordId: z.string().min(1).optional().describe('Captured record identifier; null or absent for a PDF page.'),
+        field: z
+          .string()
+          .min(1)
+          .optional()
+          .describe('Captured field name within the identified record; null or absent for a PDF page.'),
       })
       .strict()
       .refine(

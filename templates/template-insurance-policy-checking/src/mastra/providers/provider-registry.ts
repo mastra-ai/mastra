@@ -1,11 +1,16 @@
-import type { ProviderCategories } from '../domain/contracts.js';
-import { IntakeError } from '../domain/errors.js';
 import { z } from 'zod';
+import type { ProviderCategories } from '../domain/case-contracts.js';
+import { IntakeError } from '../domain/operation-errors.js';
 
 const registrationSchema = z.object({
-  id: z.string().min(1),
-  category: z.enum(['input', 'draftOutput', 'reportOutput', 'correctionOutput']),
-  capabilities: z.array(z.string().min(1)).min(1),
+  id: z.string().min(1).describe('Stable identifier of this persisted entity.'),
+  category: z
+    .enum(['input', 'draftOutput', 'reportOutput', 'correctionOutput'])
+    .describe('Provider category selecting input capture, draft output, approved report or correction output.'),
+  capabilities: z
+    .array(z.string().min(1))
+    .min(1)
+    .describe('Supported capabilities required when resolving this provider registration.'),
 });
 
 export type Registrations = { [C in keyof ProviderCategories]: readonly ProviderCategories[C][] };
@@ -37,7 +42,7 @@ export function createRegistry(registrations: Registrations, defaults: Selection
       throw new IntakeError(
         'PROVIDER_CONFIGURATION',
         `The default ${category} provider is not registered.`,
-        'Correct the default selection in src/mastra/providers.ts.',
+        'Correct the default selection in src/mastra/provider-config.ts.',
       );
   }
   return {
@@ -52,7 +57,7 @@ export function createRegistry(registrations: Registrations, defaults: Selection
         throw new IntakeError(
           'PROVIDER_CONFIGURATION',
           `No compatible ${category} provider is selected.`,
-          'Register the selected provider and its required capability in src/mastra/providers.ts.',
+          'Register the selected provider and its required capability in src/mastra/provider-config.ts.',
         );
       return provider as ProviderCategories[C];
     },

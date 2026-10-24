@@ -1,22 +1,22 @@
 import { createClient } from '@libsql/client';
-import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, rm, mkdir, writeFile, readFile, cp, unlink } from 'node:fs/promises';
+import { RequestContext } from '@mastra/core/request-context';
+import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { cp, mkdir, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { RequestContext } from '@mastra/core/request-context';
-import { reportRuntime, reportContext } from './report-runtime.js';
-import { reportWire } from './report-provider.js';
-import { fixtureFiles, propertyDocuments, liabilityDocuments } from './reconciliation-fixtures.js';
-import { startStudio, requestHost } from './http.js';
-import { canonicalJson, hashBytes, type OutputProvider } from '../src/mastra/domain/contracts.js';
-import { reviewRequestSchema, type ReviewRequest } from '../src/mastra/domain/reviews.js';
-import { createApprovedOutputProvider } from '../src/mastra/providers/approved-output.js';
-import { createReviewService } from '../src/mastra/services/review-service.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import { canonicalJson, hashBytes, type OutputProvider } from '../src/mastra/domain/case-contracts.js';
+import { reviewRequestSchema, type ReviewRequest } from '../src/mastra/domain/review-contracts.js';
+import { createApprovedOutputProvider } from '../src/mastra/providers/approved-output-provider.js';
 import { createRegistry } from '../src/mastra/providers/provider-registry.js';
+import { createReviewService } from '../src/mastra/services/review-service.js';
+import { requestHost, startStudio } from './http-server.js';
+import { fixtureFiles, liabilityDocuments, propertyDocuments } from './reconciliation-fixtures.js';
+import { reportWire } from './report-provider.js';
+import { reportContext, reportRuntime } from './report-runtime.js';
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {

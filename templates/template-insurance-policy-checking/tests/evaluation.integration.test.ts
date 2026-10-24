@@ -1,11 +1,11 @@
-import { expect, it } from 'vitest';
-import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { evaluationCases, datasetIdentity } from './evaluation-cases.js';
-import { reportWire } from './report-provider.js';
+import { expect, it } from 'vitest';
+import { aggregateEvaluation, evaluateCase, metricNames } from '../scripts/evaluation-runner.js';
 import { runEvaluationCase } from '../scripts/evaluation-runtime.js';
-import { evaluateCase, aggregateEvaluation, metricNames } from '../scripts/evaluation.js';
+import { datasetIdentity, evaluationCases } from './evaluation-fixtures.js';
+import { reportWire } from './report-provider.js';
 import { reportContext, reportRuntime } from './report-runtime.js';
 
 it('failed_evaluation_retains_safe_workflow_failure_and_saved_partial_extraction', async () => {

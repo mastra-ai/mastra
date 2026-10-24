@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { safely } from '../domain/operation-errors.js';
 import type { CaseService } from '../services/case-service.js';
-import { safely } from '../domain/errors.js';
 import { operationContext } from './tool-context.js';
 
 export function createCaseStatusTool(caseService: CaseService, operatorId: string) {

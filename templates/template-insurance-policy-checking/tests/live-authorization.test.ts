@@ -1,15 +1,19 @@
-import { evaluatedSourceIdentity } from '../scripts/evaluation-identity.js';
-import { expect, it } from 'vitest';
+import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { configurationSchema, evaluationAllocation, validateLiveConfiguration } from '../scripts/evaluate-live.js';
-import { datasetIdentity } from './evaluation-cases.js';
-import { metricNames } from '../scripts/evaluation.js';
+import { expect, it } from 'vitest';
+import { evaluatedSourceIdentity } from '../scripts/evaluation-identity-utils.js';
+import { metricNames } from '../scripts/evaluation-runner.js';
+import {
+  configurationSchema,
+  evaluationAllocation,
+  validateLiveConfiguration,
+} from '../scripts/live-evaluation-runner.js';
+import { canonicalJson, hashBytes } from '../src/mastra/domain/case-contracts.js';
+import { datasetIdentity } from './evaluation-fixtures.js';
 import { reportTestBudget } from './report-runtime.js';
-import { canonicalJson, hashBytes } from '../src/mastra/domain/contracts.js';
 
 it('paid_evaluation_requires_explicit_frozen_authority_and_durable_aggregate_reservations', async () => {
   const root = await mkdtemp(join(tmpdir(), 'insurance-live-authorization-'));
@@ -64,9 +68,13 @@ it('paid_evaluation_requires_explicit_frozen_authority_and_durable_aggregate_res
       }),
     ).rejects.toThrow(/another configuration/);
     await expect(
-      promisify(execFile)(process.execPath, ['--import', './tests/source-loader.mjs', 'scripts/evaluate-live.ts'], {
-        env: { ...process.env, OPENAI_API_KEY: '', POLICY_TEST_PROVIDER_URL: '' },
-      }),
+      promisify(execFile)(
+        process.execPath,
+        ['--import', './tests/source-loader.mjs', 'scripts/live-evaluation-runner.ts'],
+        {
+          env: { ...process.env, OPENAI_API_KEY: '', POLICY_TEST_PROVIDER_URL: '' },
+        },
+      ),
     ).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('requires --config and --output') });
   } finally {
     await rm(root, { recursive: true, force: true });

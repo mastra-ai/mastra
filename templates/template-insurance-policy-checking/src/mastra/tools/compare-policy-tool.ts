@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
-import type { CaseService } from '../services/case-service.js';
+import { safely } from '../domain/operation-errors.js';
 import { compareRequestSchema, type ComparisonRunner } from '../domain/reconciliation-contracts.js';
-import { safely } from '../domain/errors.js';
+import type { CaseService } from '../services/case-service.js';
 import { operationContext } from './tool-context.js';
 
 export function createComparePolicyTool(cases: CaseService, runner: ComparisonRunner, operatorId: string) {
