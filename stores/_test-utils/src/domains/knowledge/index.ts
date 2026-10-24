@@ -578,6 +578,32 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await expect(store.listNodes({ scope: ['team:$org:x'] })).rejects.toThrow('Invalid knowledge scope entry');
       const nineTags = Array.from({ length: 9 }, (_, index) => `tag${index}:v`);
       await expect(store.search({ query: 'anything', scope: nineTags })).rejects.toThrow('at most 8 tags');
+      // Writes refuse nine tags too, so no record or node is ever stored where no query scope can reach it.
+      await expect(store.createNode({ name: 'Too wide', kind: 'task', scope: nineTags })).rejects.toThrow(
+        'at most 8 tags',
+      );
+      const eight = nineTags.slice(0, 8);
+      const holder = await store.createNode({ name: 'Eight tags', kind: 'task', scope: eight });
+      await expect(
+        store.appendKnowledge({
+          node: holder,
+          text: 'too wide',
+          scope: nineTags,
+          sourceThreadId: 't-nine',
+          resolutionScope: nineTags,
+          defaultScope: nineTags,
+        }),
+      ).rejects.toThrow('at most 8 tags');
+      const fits = await store.appendKnowledge({
+        node: holder,
+        text: 'fits',
+        scope: eight,
+        sourceThreadId: 't-nine',
+        resolutionScope: eight,
+        defaultScope: eight,
+      });
+      await expect(store.rescopeKnowledge({ id: fits.id, scope: nineTags })).rejects.toThrow('at most 8 tags');
+      expect((await store.getKnowledge({ id: fits.id }))?.scope).toEqual(eight);
       const guide = await store.createNode({ kind: 'document', name: 'Guide', content: 'one', scope: resource });
       await store.updateNode({ id: guide.id, version: guide.version, content: 'two' });
       await expect(store.updateNode({ id: guide.id, version: guide.version, content: 'stale' })).rejects.toThrow(
