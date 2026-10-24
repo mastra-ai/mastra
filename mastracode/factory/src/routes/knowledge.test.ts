@@ -1042,6 +1042,55 @@ describe('KnowledgeRoutes', () => {
     expect((await graph(h, '?threadId=t-other')).status).toBe(404);
   });
 
+  it('refuses a session drill-down unless the session wrote a record with the viewed org and project tags', async () => {
+    const resources: Record<string, string> = { TU: 'RU', TP: 'RP' };
+    const h = await createHarness({ threadResourceId: async threadId => resources[threadId] });
+    // An unresolved session's agent holds only its Memory resource and thread, and writes there.
+    const unresolved = ['resource:RU', 'thread:TU'];
+    const secret = await node(h.knowledge, 'ResourceOnlySecret', unresolved, 'doc');
+    await record(h.knowledge, secret, 'secret fact', unresolved, 'TU');
+    // A session of this project wrote with the project tags, plus a session-private record.
+    const sessionScope = [...h.projectScope, 'resource:RP', 'thread:TP'];
+    const fact = await node(h.knowledge, 'ProjectSessionFact', sessionScope, 'doc');
+    await record(h.knowledge, fact, 'session fact', sessionScope, 'TP');
+    const privateOnly = ['resource:RP', 'thread:TP'];
+    const privateNode = await node(h.knowledge, 'SessionPrivate', privateOnly, 'doc');
+    await record(h.knowledge, privateNode, 'private fact', privateOnly, 'TP');
+
+    const leaked = await graph(h, '?threadId=TU');
+    expect(leaked.status).toBe(404);
+    expect(leaked.body.nodes?.map(n => n.name) ?? []).not.toContain('ResourceOnlySecret');
+    expect((await activity(h, '?threadId=TU')).status).toBe(404);
+    expect((await nodeDetail(h, secret.id, '?threadId=TU')).status).toBe(404);
+
+    const session = await graph(h, '?threadId=TP');
+    expect(session.status).toBe(200);
+    expect(session.body.nodes.map(n => n.name).sort()).toEqual(['ProjectSessionFact', 'SessionPrivate']);
+  });
+
+  it('logs a failed session resource lookup and still serves the session by its project records', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const h = await createHarness({
+        threadResourceId: async () => {
+          throw new Error('memory store down');
+        },
+      });
+      const fact = await node(h.knowledge, 'Session fact', h.threadScope('TL'), 'doc');
+      await record(h.knowledge, fact, 'fact', h.threadScope('TL'), 'TL');
+      const { status, body } = await graph(h, '?threadId=TL');
+      expect(status).toBe(200);
+      expect(body.nodes.map(n => n.name)).toEqual(['Session fact']);
+      expect(warn).toHaveBeenCalledWith(
+        '[factory] could not read the Memory resource of knowledge session',
+        'TL',
+        expect.objectContaining({ message: 'memory store down' }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   // 7b (A11): knowledge records are first-class payload elements with per-record node sets
   it('emits every windowed record with its in-window nodes, owner first; pins omit the reserved owner', async () => {
     const h = await createHarness();

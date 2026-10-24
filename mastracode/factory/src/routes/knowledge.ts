@@ -11,9 +11,10 @@
  * the tags a Factory session's agent always holds. Session records are
  * reachable ONLY via an explicit, server-validated `threadId` query parameter
  * (the drill-down view), which adds the session's Memory resource and thread
- * tags to the query scope, as the agent's own run scope has them. A thread is drillable iff it produced knowledge
- * visible under the caller's org/project prefix; unknown or cross-org threads
- * 404 — never a silent fallback to the default view.
+ * tags to the query scope, as the agent's own run scope has them. A thread is
+ * drillable iff it wrote a record carrying the viewed org AND project tags;
+ * unknown, cross-org, and unresolved (resource/thread-only) threads 404 —
+ * never a silent fallback to the default view.
  */
 
 import type { Knowledge } from '@mastra/core/knowledge';
@@ -65,6 +66,9 @@ const SEARCH_RESULT_LIMIT = 20;
 const SEARCH_QUERY_LIMIT = 128;
 /** Scope nodes returned per parent while lazily expanding the tree. */
 const SCOPE_PAGE_SIZE = 25;
+/** Records of a session read while looking for one that belongs to the viewed project. */
+const SESSION_PROBE_PAGE = 100;
+const SESSION_PROBE_SCAN_CAP = 1000;
 /** Bound storage pressure while calculating direct-member counts. */
 const SCOPE_COUNT_CONCURRENCY = 8;
 
@@ -621,8 +625,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     }
 
     const candidateScope = await this.#sessionScope(tenant.orgId, projectId, threadId);
-    const probe = await store.knowledgeBySource({ sourceThreadId: threadId, scope: candidateScope, limit: 1 });
-    if (probe.records.length === 0) {
+    if (!(await this.#sessionInProject(store, tenant.orgId, projectId, threadId, candidateScope))) {
       return { response: c.json({ error: 'thread_not_found' }, 404) };
     }
     return {
@@ -638,13 +641,38 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     };
   }
 
+  /**
+   * True when the session wrote at least one record carrying the viewed org and project tags. A
+   * session's view adds its resource and thread tags, and subset visibility would otherwise show
+   * any thread's records that carry only those tags (an unresolved session, or another org's)
+   * under any project. Reads at most SESSION_PROBE_SCAN_CAP records.
+   */
+  async #sessionInProject(
+    store: KnowledgeStorage,
+    orgId: string,
+    projectId: string,
+    threadId: string,
+    scope: KnowledgeScope,
+  ): Promise<boolean> {
+    const required = projectViewScope(orgId, projectId);
+    let after: string | undefined;
+    for (let scanned = 0; scanned < SESSION_PROBE_SCAN_CAP; scanned += SESSION_PROBE_PAGE) {
+      const page = await store.knowledgeBySource({ sourceThreadId: threadId, scope, after, limit: SESSION_PROBE_PAGE });
+      if (page.records.some(record => required.every(tag => record.scope.includes(tag)))) return true;
+      if (!page.nextCursor) return false;
+      after = page.nextCursor;
+    }
+    return false;
+  }
+
   /** A session's view scope: the project tags plus the session's Memory resource and thread tags. */
   async #sessionScope(orgId: string, projectId: string, threadId: string): Promise<KnowledgeScope> {
     let resourceId: string | undefined;
     try {
       resourceId = (await this.deps.threadResourceId?.(threadId))?.trim() || undefined;
-    } catch {
+    } catch (error) {
       // Without the resource the session view still shows its thread's org and project records.
+      console.warn('[factory] could not read the Memory resource of knowledge session', threadId, error);
     }
     return canonicalizeKnowledgeScope([
       ...projectViewScope(orgId, projectId),
@@ -743,12 +771,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     for (let index = 0; index < sessions.length; index += SCOPE_COUNT_CONCURRENCY) {
       await Promise.all(
         sessions.slice(index, index + SCOPE_COUNT_CONCURRENCY).map(async ({ id, threadId }) => {
-          const { records } = await view.store.knowledgeBySource({
-            sourceThreadId: threadId,
-            scope: await this.#sessionScope(view.orgId, view.factoryProjectId, threadId),
-            limit: 1,
-          });
-          if (records.length === 0) hidden.add(id);
+          const scope = await this.#sessionScope(view.orgId, view.factoryProjectId, threadId);
+          if (!(await this.#sessionInProject(view.store, view.orgId, view.factoryProjectId, threadId, scope))) {
+            hidden.add(id);
+          }
         }),
       );
     }
