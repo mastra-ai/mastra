@@ -115,7 +115,14 @@ export interface OMSession {
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
 export interface ModelCatalog {
   listAvailableModels: () => Promise<
-    Array<{ id?: string; modelName: string; provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>
+    Array<{
+      id?: string;
+      modelName: string;
+      provider: string;
+      hasApiKey: boolean;
+      apiKeyEnvVar?: string;
+      releaseDate?: string;
+    }>
   >;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
   getSession?: (sessionId: string) => Promise<OMSession | undefined>;
@@ -412,6 +419,7 @@ export interface ModelCatalogEntry {
   id: string;
   provider: string;
   modelName: string;
+  releaseDate?: string;
   hasApiKey: true;
   reasoningOptions?: ModelReasoningOption[];
   credentialLabel?: string;
@@ -446,13 +454,14 @@ export async function buildModelCatalog({
       deploymentProviders,
     }),
   ]);
-  const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName }) =>
+  const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName, releaseDate }) =>
     typeof id === 'string' && canUseModelProvider(access, provider)
       ? [
           {
             id,
             provider,
             modelName,
+            releaseDate,
             hasApiKey: true as const,
             reasoningOptions: getModelReasoningOptions(id),
             ...tenantModelCredential(tenantCredentials, provider),
