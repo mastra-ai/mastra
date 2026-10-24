@@ -1,0 +1,19 @@
+{
+  "name": "pr-risk-classifier",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "license": "Apache-2.0",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "octokit": "^5.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
+  }
+}
