@@ -2,8 +2,8 @@ import type { KnowledgeStorage, KnowledgeStructurePlan } from '@mastra/core/stor
 import {
   KnowledgeConflictError,
   KnowledgeSchemaResetRequiredError,
-  MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
-  MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
+  MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS,
+  MAX_KNOWLEDGE_RECORD_TOKENS,
 } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -280,6 +280,32 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       ]);
     });
 
+    it('stores any tag type and shows a record to every query scope that holds all its tags', async () => {
+      const team = ['org:acme', 'team:acme:support'];
+      const node = await store.createNode({ name: 'Runbook', kind: 'doc', scope: team });
+      const record = await store.appendKnowledge({
+        node,
+        text: 'Page the on-call lead first.',
+        scope: [...team, 'agent:alex'],
+        sourceThreadId: 't1',
+        resolutionScope: [...team, 'agent:alex'],
+        defaultScope: team,
+      });
+
+      const asAlex = await store.listKnowledgeAbout({ node, scope: [...team, 'agent:alex'] });
+      expect(asAlex.records.map(entry => entry.id)).toEqual([record.id]);
+      // Same team without agent:alex sees the node but not alex's record.
+      expect((await store.listNodes({ scope: team })).map(entry => entry.name)).toContain('Runbook');
+      expect((await store.listKnowledgeAbout({ node, scope: team })).records).toEqual([]);
+      // Another team sees neither.
+      expect(await store.listNodes({ scope: ['org:acme', 'team:acme:sales'] })).toEqual([]);
+      // Eight tags is allowed in a query scope.
+      const eight = [...team, 'agent:alex', 'project:p', 'request:r', 'resource:u', 'thread:t1', 'x:y'];
+      expect((await store.listKnowledgeAbout({ node, scope: eight })).records.map(entry => entry.id)).toEqual([
+        record.id,
+      ]);
+    });
+
     it('treats scope identifiers literally when checking visibility', async () => {
       await store.createNode({ name: 'Percent secret', kind: 'secret', scope: ['org:acme%'] });
       await store.createNode({ name: 'Underscore secret', kind: 'secret', scope: ['org:acme_'] });
@@ -545,12 +571,39 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       );
     });
 
-    it('enforces record CAS and scope structure atomically', async () => {
-      await expect(store.createNode({ name: 'Invalid', kind: 'task', scope: ['thread:t1'] })).rejects.toThrow(
-        'requires resource and org',
+    it('enforces record CAS and scope shape atomically', async () => {
+      await expect(store.createNode({ name: 'Invalid', kind: 'task', scope: ['Thread:t1'] })).rejects.toThrow(
+        'Invalid knowledge scope entry',
       );
-      await expect(store.listNodes({ scope: ['thread:t1'] })).rejects.toThrow('requires resource and org');
-      await expect(store.search({ query: 'anything', scope: ['resource:mastra'] })).rejects.toThrow('requires an org');
+      await expect(store.listNodes({ scope: ['team:$org:x'] })).rejects.toThrow('Invalid knowledge scope entry');
+      const nineTags = Array.from({ length: 9 }, (_, index) => `tag${index}:v`);
+      await expect(store.search({ query: 'anything', scope: nineTags })).rejects.toThrow('at most 8 tags');
+      // Writes refuse nine tags too, so no record or node is ever stored where no query scope can reach it.
+      await expect(store.createNode({ name: 'Too wide', kind: 'task', scope: nineTags })).rejects.toThrow(
+        'at most 8 tags',
+      );
+      const eight = nineTags.slice(0, 8);
+      const holder = await store.createNode({ name: 'Eight tags', kind: 'task', scope: eight });
+      await expect(
+        store.appendKnowledge({
+          node: holder,
+          text: 'too wide',
+          scope: nineTags,
+          sourceThreadId: 't-nine',
+          resolutionScope: nineTags,
+          defaultScope: nineTags,
+        }),
+      ).rejects.toThrow('at most 8 tags');
+      const fits = await store.appendKnowledge({
+        node: holder,
+        text: 'fits',
+        scope: eight,
+        sourceThreadId: 't-nine',
+        resolutionScope: eight,
+        defaultScope: eight,
+      });
+      await expect(store.rescopeKnowledge({ id: fits.id, scope: nineTags })).rejects.toThrow('at most 8 tags');
+      expect((await store.getKnowledge({ id: fits.id }))?.scope).toEqual(eight);
       const guide = await store.createNode({ kind: 'document', name: 'Guide', content: 'one', scope: resource });
       await store.updateNode({ id: guide.id, version: guide.version, content: 'two' });
       await expect(store.updateNode({ id: guide.id, version: guide.version, content: 'stale' })).rejects.toThrow(
@@ -639,20 +692,23 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(cleared.description).toBe('');
     });
 
-    it('enforces the description length bound on create and update alike', async () => {
-      const atLimit = 'x'.repeat(MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH);
-      const overLimit = 'x'.repeat(MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH + 1);
+    // tokenx estimates one token per short English word, so `words(n)` sits exactly at n tokens.
+    const words = (count: number) => 'word '.repeat(count).trimEnd();
+
+    it('enforces the description token bound on create and update alike', async () => {
+      const atLimit = words(MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS);
+      const overLimit = words(MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS + 1);
 
       const node = await store.createNode({ name: 'At limit', kind: 'task', description: atLimit, scope: resource });
       expect((await store.getNode(node.id))?.description).toBe(atLimit);
 
       await expect(
         store.createNode({ name: 'Over limit', kind: 'task', description: overLimit, scope: resource }),
-      ).rejects.toThrow(`${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code unit limit`);
+      ).rejects.toThrow(`${MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} token limit`);
       expect(await store.getNodeByName({ name: 'Over limit', scope: resource })).toBeNull();
 
       await expect(store.updateNode({ id: node.id, version: node.version, description: overLimit })).rejects.toThrow(
-        `${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code unit limit`,
+        `${MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} token limit`,
       );
 
       // A rejected update leaves the node exactly as it was — no partial write, no version bump.
@@ -661,7 +717,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(untouched?.version).toBe(node.version);
     });
 
-    it('rejects record text over the length bound before writing anything', async () => {
+    it('rejects record text over the token bound before writing anything', async () => {
       const node = await store.createNode({ name: 'Bounded records', kind: 'service', scope: resource });
       const append = (text: string) =>
         store.appendKnowledge({
@@ -673,34 +729,21 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
           defaultScope: resource,
         });
 
-      const atLimit = '😀'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH / 2);
+      const atLimit = words(MAX_KNOWLEDGE_RECORD_TOKENS);
       expect((await append(atLimit)).text).toBe(atLimit);
-      await expect(append(`${atLimit}x`)).rejects.toThrow(`${MAX_KNOWLEDGE_RECORD_TEXT_LENGTH} UTF-16 code unit limit`);
+      await expect(append(words(MAX_KNOWLEDGE_RECORD_TOKENS + 1))).rejects.toThrow(
+        `${MAX_KNOWLEDGE_RECORD_TOKENS} token limit`,
+      );
 
       const records = (await store.listKnowledgeAbout({ node, scope: resource })).records;
       expect(records.map(record => record.text)).toEqual([atLimit]);
     });
 
-    it('counts the description bound in UTF-16 code units', async () => {
-      // 200 astral characters are 400 UTF-16 code units: at the limit, not over it.
-      const astralAtLimit = '😀'.repeat(MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH / 2);
-      expect(astralAtLimit.length).toBe(MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH);
-      const node = await store.createNode({
-        name: 'Astral',
-        kind: 'task',
-        description: astralAtLimit,
-        scope: resource,
-      });
-      expect((await store.getNode(node.id))?.description).toBe(astralAtLimit);
-
-      await expect(
-        store.createNode({
-          name: 'Astral over',
-          kind: 'task',
-          description: `${astralAtLimit}😀`,
-          scope: resource,
-        }),
-      ).rejects.toThrow(`${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code unit limit`);
+    it('counts the description bound in tokens, not characters', async () => {
+      // 400 characters that estimate well under the token bound: the old 400-character limit would refuse 401.
+      const longButFew = 'x'.repeat(401);
+      const node = await store.createNode({ name: 'Long', kind: 'task', description: longButFew, scope: resource });
+      expect((await store.getNode(node.id))?.description).toBe(longButFew);
     });
 
     it('round-trips a node without description as undefined', async () => {

@@ -230,6 +230,55 @@ export function createStateSignalInput(
   return { stateId, signal, mode, cacheKey };
 }
 
+/**
+ * Adds a state signal to the run's message list without Memory: nothing is persisted, so the
+ * lane lives only for this run. Skips when the latest active copy already has the same cache key
+ * and mode; the version counts the copies in the window.
+ */
+export async function applyStateSignalInRun({
+  input,
+  threadId,
+  messageList,
+  defaultId,
+  beforeAddSignal,
+  writeSignal,
+}: {
+  input: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string });
+  threadId: string;
+  messageList: MessageList;
+  defaultId?: string;
+  beforeAddSignal?: () => void;
+  writeSignal?: (signal: CreatedAgentSignal) => Promise<void> | void;
+}): Promise<
+  | { skipped: true; reason: 'unchanged'; stateId: string }
+  | { skipped: false; signal: CreatedAgentSignal; stateId: string }
+> {
+  const { stateId, signal, cacheKey, mode } = createStateSignalInput(input, { defaultId });
+  const active = getActiveStateSignals(messageList, stateId, threadId);
+  const latest = active.at(-1)?.metadata?.state;
+  if (latest?.cacheKey === cacheKey && latest?.mode === mode) {
+    return { skipped: true, reason: 'unchanged', stateId };
+  }
+  const updatedSignal = createSignal({
+    ...signal,
+    metadata: {
+      ...signal.metadata,
+      state: {
+        ...(isPlainObject(signal.metadata?.state) ? signal.metadata.state : {}),
+        id: stateId,
+        threadId,
+        cacheKey,
+        version: active.length + 1,
+        mode,
+      },
+    },
+  });
+  beforeAddSignal?.();
+  messageList.addSignal(updatedSignal);
+  await writeSignal?.(updatedSignal);
+  return { skipped: false, signal: updatedSignal, stateId };
+}
+
 export async function applyStateSignal({
   input,
   memory,

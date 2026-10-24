@@ -22,7 +22,7 @@ import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
 import { isEventRoutedToCurrentThread } from './thread-routing.js';
-import { isSubconsciousEnabled } from './utils/experimental-features.js';
+import { isKnowledgeEnabled } from './utils/experimental-features.js';
 
 // =============================================================================
 // Keyboard Shortcuts
@@ -430,7 +430,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'memory', description: 'Configure Observational Memory' },
     { name: 'om', description: 'Alias for /memory' },
-    ...(isSubconsciousEnabled() ? [{ name: 'knowledge', description: 'Browse scoped Subconscious knowledge' }] : []),
+    ...(isKnowledgeEnabled() ? [{ name: 'knowledge', description: 'Browse scoped knowledge' }] : []),
     THINK_COMMAND_DESCRIPTOR,
     { name: 'connect', description: 'Connect a provider account or API key' },
     { name: 'login', description: 'Sign in with a provider account' },

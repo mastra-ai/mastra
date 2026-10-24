@@ -51,6 +51,7 @@ async function createHarness(
     knowledgeResolver?: (key: string) => Promise<Knowledge | undefined>;
     defaultKnowledgeKey?: string;
     threadTitle?: (threadId: string) => Promise<string | undefined>;
+    threadResourceId?: (threadId: string) => Promise<string | undefined>;
   } = {},
 ): Promise<Harness> {
   const orgId = options.orgId ?? ORG;
@@ -66,6 +67,7 @@ async function createHarness(
     ...(options.defaultKnowledgeKey ? { defaultKnowledgeKey: options.defaultKnowledgeKey } : {}),
     ...(options.limits ? { limits: options.limits } : {}),
     ...(options.threadTitle ? { threadTitle: options.threadTitle } : {}),
+    ...(options.threadResourceId ? { threadResourceId: options.threadResourceId } : {}),
   }).routes();
   const app = new Hono();
   const user = options.user ?? { workosId: 'user-1', organizationId: orgId };
@@ -74,7 +76,7 @@ async function createHarness(
     await next();
   });
   mountApiRoutes(app as never, routes);
-  const projectScope: KnowledgeScope = [`org:${orgId}`, `resource:${project.id}`];
+  const projectScope: KnowledgeScope = [`org:${orgId}`, `project:${project.id}`];
   return {
     app,
     knowledge,
@@ -213,7 +215,7 @@ describe('KnowledgeRoutes', () => {
     // The host-vouched identity chain exists as membership-linked scope nodes —
     // the tree is built from scopes that exist, not from the rung config.
     const orgNode = body.scopeNodes?.find(node => node.address === `org:${ORG}`);
-    const resourceNode = body.scopeNodes?.find(node => node.address === `resource:${h.projectId}`);
+    const resourceNode = body.scopeNodes?.find(node => node.address === `project:${h.projectId}`);
     expect(body.scopeNodes).toHaveLength(2);
     expect(orgNode).toMatchObject({
       name: ORG,
@@ -273,7 +275,7 @@ describe('KnowledgeRoutes', () => {
   it('searches authorized nodes and structural scopes beyond the active graph window', async () => {
     const h = await createHarness();
     const atlas = await node(h.knowledge, 'Project Atlas', h.projectScope, 'service');
-    await node(h.knowledge, 'Other Atlas', [`org:${OTHER_ORG}`, 'resource:elsewhere'], 'service');
+    await node(h.knowledge, 'Other Atlas', [`org:${OTHER_ORG}`, 'project:elsewhere'], 'service');
     const { scopes } = await h.knowledge.reconcileStructure({
       scopes: [
         { address: `org:${ORG}`, name: ORG },
@@ -336,7 +338,7 @@ describe('KnowledgeRoutes', () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as KnowledgeScopeTreePayload;
     const orgNode = body.scopeNodes?.find(node => node.address === `org:${ORG}`);
-    const resourceNode = body.scopeNodes?.find(node => node.address === `resource:${h.projectId}`);
+    const resourceNode = body.scopeNodes?.find(node => node.address === `project:${h.projectId}`);
     const threadNode = body.scopeNodes?.find(node => node.address === 'thread:thread-1');
     expect(threadNode).toMatchObject({ name: 'session thread-1', kind: 'session', parentIds: [resourceNode!.id] });
     expect(resourceNode).toMatchObject({ name: 'Graph project', parentIds: [orgNode!.id] });
@@ -362,12 +364,12 @@ describe('KnowledgeRoutes', () => {
     const body = (await response.json()) as KnowledgeScopeTreePayload;
     const kindOf = (address: string) => body.scopeNodes?.find(node => node.address === address)?.kind;
     expect(kindOf(`org:${ORG}`)).toBe('org');
-    expect(kindOf(`resource:${h.projectId}`)).toBe('project');
+    expect(kindOf(`project:${h.projectId}`)).toBe('project');
     expect(kindOf('thread:thread-1')).toBe('session');
     expect(kindOf('features')).toBe('feature');
     expect(kindOf('notes')).toBe('topic');
 
-    const projectId = body.scopeNodes!.find(node => node.address === `resource:${h.projectId}`)!.id;
+    const projectId = body.scopeNodes!.find(node => node.address === `project:${h.projectId}`)!.id;
     const lens = await graph(h, `?threadId=thread-1&scopeNodeId=${projectId}`);
     expect(lens.status).toBe(200);
     expect(lens.body.nodes.find(node => node.id === projectId)?.kind).toBe('project');
@@ -386,9 +388,9 @@ describe('KnowledgeRoutes', () => {
     const vouch = async (address: string, parent: string) =>
       h.instance.materializeScope({ address, contextualScopeAddress: parent, parentAddresses: [parent] });
     await h.instance.materializeScope({ address: `org:${ORG}`, contextualScopeAddress: `org:${ORG}` });
-    await vouch(`resource:${h.projectId}`, `org:${ORG}`);
+    await vouch(`project:${h.projectId}`, `org:${ORG}`);
     for (const threadId of ['thread-titled', '125898df-2cbb-49d6-9f54-23bc8783d68c']) {
-      await vouch(`thread:${threadId}`, `resource:${h.projectId}`);
+      await vouch(`thread:${threadId}`, `project:${h.projectId}`);
       const anchor = await node(h.knowledge, `Anchor ${threadId}`, h.threadScope(threadId));
       await record(h.knowledge, anchor, `Evidence ${threadId}`, h.threadScope(threadId), threadId);
     }
@@ -415,14 +417,14 @@ describe('KnowledgeRoutes', () => {
     // The capture path's write-time vouch: org → project → session, then the thread-level write.
     await h.instance.materializeScope({ address: `org:${ORG}`, contextualScopeAddress: `org:${ORG}` });
     await h.instance.materializeScope({
-      address: `resource:${h.projectId}`,
+      address: `project:${h.projectId}`,
       contextualScopeAddress: `org:${ORG}`,
       parentAddresses: [`org:${ORG}`],
     });
     await h.instance.materializeScope({
       address: 'thread:thread-1',
-      contextualScopeAddress: `resource:${h.projectId}`,
-      parentAddresses: [`resource:${h.projectId}`],
+      contextualScopeAddress: `project:${h.projectId}`,
+      parentAddresses: [`project:${h.projectId}`],
     });
     const anchor = await node(h.knowledge, 'Session anchor', h.threadScope('thread-1'));
     await record(h.knowledge, anchor, 'Session evidence', h.threadScope('thread-1'), 'thread-1');
@@ -430,7 +432,7 @@ describe('KnowledgeRoutes', () => {
     const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
     expect(response.status).toBe(200);
     const body = (await response.json()) as KnowledgeScopeTreePayload;
-    const resourceNode = body.scopeNodes?.find(node => node.address === `resource:${h.projectId}`);
+    const resourceNode = body.scopeNodes?.find(node => node.address === `project:${h.projectId}`);
     expect(body.scopeNodes?.find(node => node.address === 'thread:thread-1')).toMatchObject({
       parentIds: [resourceNode!.id],
     });
@@ -443,17 +445,17 @@ describe('KnowledgeRoutes', () => {
     const vouch = async (address: string, parent: string) =>
       h.instance.materializeScope({ address, contextualScopeAddress: parent, parentAddresses: [parent] });
     await h.instance.materializeScope({ address: `org:${ORG}`, contextualScopeAddress: `org:${ORG}` });
-    await vouch(`resource:${h.projectId}`, `org:${ORG}`);
-    await vouch(`resource:${otherProjectId}`, `org:${ORG}`);
+    await vouch(`project:${h.projectId}`, `org:${ORG}`);
+    await vouch(`project:${otherProjectId}`, `org:${ORG}`);
     // Readable: a visible record captured in the session.
-    await vouch('thread:readable', `resource:${h.projectId}`);
+    await vouch('thread:readable', `project:${h.projectId}`);
     const anchor = await node(h.knowledge, 'Readable anchor', h.threadScope('readable'));
     await record(h.knowledge, anchor, 'Readable evidence', h.threadScope('readable'), 'readable');
     // No record captured in the session: the drill-down 404s it.
-    await vouch('thread:empty', `resource:${h.projectId}`);
+    await vouch('thread:empty', `project:${h.projectId}`);
     // Another project's session, with its own evidence.
-    await vouch('thread:foreign', `resource:${otherProjectId}`);
-    const foreignScope = [`org:${ORG}`, `resource:${otherProjectId}`, 'thread:foreign'];
+    await vouch('thread:foreign', `project:${otherProjectId}`);
+    const foreignScope = [`org:${ORG}`, `project:${otherProjectId}`, 'thread:foreign'];
     const foreign = await node(h.knowledge, 'Foreign anchor', foreignScope);
     await record(h.knowledge, foreign, 'Foreign evidence', foreignScope, 'foreign');
 
@@ -462,7 +464,7 @@ describe('KnowledgeRoutes', () => {
     ).json()) as KnowledgeScopeTreePayload;
     const sessions = tree.scopeNodes?.filter(node => node.address.startsWith('thread:')).map(node => node.address);
     expect(sessions).toEqual(['thread:readable']);
-    const otherNode = tree.scopeNodes?.find(node => node.address === `resource:${otherProjectId}`);
+    const otherNode = tree.scopeNodes?.find(node => node.address === `project:${otherProjectId}`);
     const otherChildren = (await (
       await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=${otherNode!.id}`)
     ).json()) as KnowledgeScopeTreePayload;
@@ -478,7 +480,7 @@ describe('KnowledgeRoutes', () => {
     for (const session of scopes) {
       expect((await graph(h, `?scopeNodeId=${session.id}`)).status).toBe(404);
     }
-    const projectNode = tree.scopeNodes?.find(node => node.address === `resource:${h.projectId}`);
+    const projectNode = tree.scopeNodes?.find(node => node.address === `project:${h.projectId}`);
     const projectLens = await graph(h, `?scopeNodeId=${projectNode!.id}`);
     expect(projectLens.status).toBe(200);
     expect(projectLens.body.nodes.some(node => ['readable', 'empty'].includes(node.name))).toBe(false);
@@ -508,7 +510,7 @@ describe('KnowledgeRoutes', () => {
     expect(first.status).toBe(200);
     const tree = (await first.json()) as KnowledgeScopeTreePayload;
     expect(tree.scopeNodes?.map(scope => scope.address)).toEqual(
-      expect.arrayContaining([`org:${ORG}`, `resource:${h.projectId}`, 'features:memory']),
+      expect.arrayContaining([`org:${ORG}`, `project:${h.projectId}`, 'features:memory']),
     );
     expect(tree.scopeNodes?.some(scope => scope.address.startsWith('thread:noise-'))).toBe(false);
     // Only the missing project rung is materialized, and only on the first read.
@@ -574,7 +576,7 @@ describe('KnowledgeRoutes', () => {
       scopes: [
         { address: `org:${ORG}`, name: 'mastra' },
         {
-          address: `resource:${h.projectId}`,
+          address: `project:${h.projectId}`,
           name: h.projectId,
           parentAddresses: [`org:${ORG}`],
         },
@@ -612,7 +614,7 @@ describe('KnowledgeRoutes', () => {
     // declared org node, keeping the declared name ('mastra') untouched.
     const resourceNode = byName.get('Graph project');
     expect(resourceNode).toMatchObject({
-      address: `resource:${h.projectId}`,
+      address: `project:${h.projectId}`,
       parentIds: [ids[`org:${ORG}`]],
       memberCount: 0,
     });
@@ -632,11 +634,11 @@ describe('KnowledgeRoutes', () => {
     expect(byName.get('issues')?.parentIds).toEqual([ids['repo:mastra']]);
 
     const projectLens = await h.app.request(
-      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${ids[`resource:${h.projectId}`]}`,
+      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${ids[`project:${h.projectId}`]}`,
     );
     expect(projectLens.status).toBe(200);
     expect(((await projectLens.json()) as KnowledgeGraphPayload).nodes[0]).toMatchObject({
-      id: ids[`resource:${h.projectId}`],
+      id: ids[`project:${h.projectId}`],
       name: 'Graph project',
       isScope: true,
     });
@@ -722,7 +724,7 @@ describe('KnowledgeRoutes', () => {
     const sibling = await h.knowledge.createNode({
       name: 'Other project',
       kind: 'concept',
-      scope: [...h.orgScope, 'resource:someone-else'],
+      scope: [...h.orgScope, 'project:someone-else'],
       scopeAddresses: ['features'],
     });
 
@@ -1012,6 +1014,81 @@ describe('KnowledgeRoutes', () => {
     expect(threadView.nodes.find(node => node.id === threadAccented.id)?.pinned).toBe(true);
     expect(threadView.nodes.find(node => node.id === accented.id)?.pinned).toBe(true);
     expect(threadView.pinCensus).toEqual({ resource: 2, thread: 1 });
+  });
+
+  it("shows a session's agent writes, which carry its Memory resource tag, only in that session's view", async () => {
+    const h = await createHarness({
+      threadResourceId: async threadId => (threadId === 't-agent' ? 'session-res' : undefined),
+    });
+    // A Factory session's agent holds org, project, its Memory resource and thread; with no `scope`
+    // it writes at all of them, and pins at all but the thread.
+    const agentScope = [...h.projectScope, 'resource:session-res', 'thread:t-agent'];
+    const pinScope = [...h.projectScope, 'resource:session-res'];
+    // The node sits at the pin's tags so the pin's wikilink resolves to it.
+    const fact = await node(h.knowledge, 'Session fact', pinScope);
+    await record(h.knowledge, fact, 'The agent noted [[Session fact]].', agentScope, 't-agent');
+    const pinned = await node(h.knowledge, 'pinned', pinScope, 'system');
+    await record(h.knowledge, pinned, 'Keep [[Session fact]] in mind.', pinScope, 't-agent');
+
+    const projectView = (await graph(h)).body;
+    expect(projectView.nodes.some(node => node.id === fact.id)).toBe(false);
+    expect(projectView.pinCensus).toEqual({ resource: 0, thread: null });
+
+    const { status, body: sessionView } = await graph(h, '?threadId=t-agent');
+    expect(status).toBe(200);
+    expect(sessionView.nodes.find(node => node.id === fact.id)?.pinned).toBe(true);
+    expect(sessionView.pinCensus).toEqual({ resource: 0, thread: 1 });
+    // Another session cannot borrow this one's resource tag.
+    expect((await graph(h, '?threadId=t-other')).status).toBe(404);
+  });
+
+  it('refuses a session drill-down unless the session wrote a record with the viewed org and project tags', async () => {
+    const resources: Record<string, string> = { TU: 'RU', TP: 'RP' };
+    const h = await createHarness({ threadResourceId: async threadId => resources[threadId] });
+    // An unresolved session's agent holds only its Memory resource and thread, and writes there.
+    const unresolved = ['resource:RU', 'thread:TU'];
+    const secret = await node(h.knowledge, 'ResourceOnlySecret', unresolved, 'doc');
+    await record(h.knowledge, secret, 'secret fact', unresolved, 'TU');
+    // A session of this project wrote with the project tags, plus a session-private record.
+    const sessionScope = [...h.projectScope, 'resource:RP', 'thread:TP'];
+    const fact = await node(h.knowledge, 'ProjectSessionFact', sessionScope, 'doc');
+    await record(h.knowledge, fact, 'session fact', sessionScope, 'TP');
+    const privateOnly = ['resource:RP', 'thread:TP'];
+    const privateNode = await node(h.knowledge, 'SessionPrivate', privateOnly, 'doc');
+    await record(h.knowledge, privateNode, 'private fact', privateOnly, 'TP');
+
+    const leaked = await graph(h, '?threadId=TU');
+    expect(leaked.status).toBe(404);
+    expect(leaked.body.nodes?.map(n => n.name) ?? []).not.toContain('ResourceOnlySecret');
+    expect((await activity(h, '?threadId=TU')).status).toBe(404);
+    expect((await nodeDetail(h, secret.id, '?threadId=TU')).status).toBe(404);
+
+    const session = await graph(h, '?threadId=TP');
+    expect(session.status).toBe(200);
+    expect(session.body.nodes.map(n => n.name).sort()).toEqual(['ProjectSessionFact', 'SessionPrivate']);
+  });
+
+  it('logs a failed session resource lookup and still serves the session by its project records', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const h = await createHarness({
+        threadResourceId: async () => {
+          throw new Error('memory store down');
+        },
+      });
+      const fact = await node(h.knowledge, 'Session fact', h.threadScope('TL'), 'doc');
+      await record(h.knowledge, fact, 'fact', h.threadScope('TL'), 'TL');
+      const { status, body } = await graph(h, '?threadId=TL');
+      expect(status).toBe(200);
+      expect(body.nodes.map(n => n.name)).toEqual(['Session fact']);
+      expect(warn).toHaveBeenCalledWith(
+        '[factory] could not read the Memory resource of knowledge session',
+        'TL',
+        expect.objectContaining({ message: 'memory store down' }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   // 7b (A11): knowledge records are first-class payload elements with per-record node sets

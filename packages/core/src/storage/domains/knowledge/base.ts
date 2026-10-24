@@ -1,3 +1,4 @@
+import { estimateTokenCount } from 'tokenx';
 import { StorageDomain } from '../base';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -159,7 +160,7 @@ export interface KnowledgeNode {
   content?: string;
   /**
    * Bounded synopsis for list/graph surfaces. The bound is part of the storage contract: every
-   * adapter enforces {@link MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} in `createNode` and `updateNode`
+   * adapter enforces {@link MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} in `createNode` and `updateNode`
    * regardless of which writer performs the write; merge adoption only propagates a description
    * storage already accepted. Long-form detail belongs in {@link KnowledgeNode.content}.
    */
@@ -682,42 +683,48 @@ const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 let lastUlidTime = -1;
 let lastUlidRandom = 0n;
 
+/**
+ * Most tags one scope may hold. Visible-scope lookup enumerates every subset of the query scope
+ * (8 tags = 255 keys in one `IN (...)`); past ~30 the subset loop hangs and `1 << n` wraps, so this
+ * is a storage-safety limit, not a hierarchy rule.
+ *
+ * @experimental
+ */
+export const MAX_KNOWLEDGE_SCOPE_TAGS = 8;
+
+const KNOWLEDGE_SCOPE_TYPE_PATTERN = /^[a-z][a-z0-9_-]*$/;
+
+/** Orders by UTF-16 code unit, so keys are identical on every machine regardless of locale. */
+function compareCodeUnits(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Validates tag shape (`type:value`), dedupes and sorts by whole entry. Any tag type is accepted;
+ * a value segment may not start with `$`, so a stored scope can never look like a scope pattern.
+ */
 export function canonicalizeKnowledgeScope(scope: KnowledgeScope): KnowledgeScope {
-  const entriesByLevel = new Map<KnowledgeScopeLevel, string>();
-  for (const entry of scope) {
-    const separator = entry.indexOf(':');
-    const level = entry.slice(0, separator) as KnowledgeScopeLevel;
-    const id = entry.slice(separator + 1);
-    const isUncuratedCompanion =
-      (level === 'resource' || level === 'thread') && id.endsWith(':uncurated') && id.length > ':uncurated'.length;
-    if (separator <= 0 || !id || id.includes('\u001f') || SCOPE_ORDER[level] === undefined) {
-      throw new Error(`Invalid knowledge scope entry: ${entry}`);
-    }
-    if (isUncuratedCompanion) continue;
-    const existing = entriesByLevel.get(level);
-    if (existing && existing !== entry) {
-      throw new Error(`Knowledge scope contains multiple ${level} entries`);
-    }
-    entriesByLevel.set(level, entry);
-  }
   if (scope.length === 0) {
     throw new Error('Knowledge scope cannot be empty');
   }
-  if (entriesByLevel.has('thread') && (!entriesByLevel.has('resource') || !entriesByLevel.has('org'))) {
-    throw new Error('Thread knowledge scope requires resource and org ancestors');
+  for (const entry of scope) {
+    const separator = entry.indexOf(':');
+    const type = entry.slice(0, separator);
+    const value = entry.slice(separator + 1);
+    if (
+      separator <= 0 ||
+      !KNOWLEDGE_SCOPE_TYPE_PATTERN.test(type) ||
+      !value ||
+      entry.includes('\u001f') ||
+      value.split(':').some(segment => segment.startsWith('$'))
+    ) {
+      throw new Error(`Invalid knowledge scope entry: ${entry}`);
+    }
   }
-  if (entriesByLevel.has('resource') && !entriesByLevel.has('org')) {
-    throw new Error('Resource knowledge scope requires an org ancestor');
+  const unique = [...new Set(scope)].sort(compareCodeUnits);
+  if (unique.length > MAX_KNOWLEDGE_SCOPE_TAGS) {
+    throw new Error(`Knowledge scope holds at most ${MAX_KNOWLEDGE_SCOPE_TAGS} tags; got ${unique.length}`);
   }
-
-  const unique = [...new Set(scope)];
-  unique.sort((a, b) => {
-    const aLevel = a.slice(0, a.indexOf(':')) as KnowledgeScopeLevel;
-    const bLevel = b.slice(0, b.indexOf(':')) as KnowledgeScopeLevel;
-    const aOrder = SCOPE_ORDER[aLevel] ?? Number.MAX_SAFE_INTEGER;
-    const bOrder = SCOPE_ORDER[bLevel] ?? Number.MAX_SAFE_INTEGER;
-    return aOrder - bOrder || a.localeCompare(b);
-  });
   return unique;
 }
 
@@ -758,14 +765,23 @@ export function expandKnowledgeScope(context: KnowledgeScope, level: KnowledgeSc
 }
 
 /**
- * Maximum length of {@link KnowledgeNode.description}, counted in UTF-16 code units.
+ * Maximum size of {@link KnowledgeNode.description}, in estimated tokens.
  *
  * `description` is a concise synopsis rendered into graph and list payloads, potentially across
  * hundreds of nodes at once, so the bound belongs to the storage contract rather than to any one
  * writer: every adapter enforces it in `createNode` and `updateNode` regardless of which tool
- * performs the write. Long-form detail stays in {@link KnowledgeNode.content}.
+ * performs the write. Long-form detail stays in {@link KnowledgeNode.content}. Tokens are
+ * estimated with tokenx, so the bound is approximate.
  *
  * @experimental
+ */
+export const MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS = 100;
+
+/**
+ * Not enforced: descriptions are bounded in tokens by {@link MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS}.
+ * Kept only so published `@mastra/memory` versions that import it still load.
+ *
+ * @deprecated Use `MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS`.
  */
 export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
 
@@ -777,21 +793,19 @@ export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
  */
 export function assertKnowledgeDescriptionWithinBound(description: string | undefined): void {
   if (description === undefined) return;
-  if (description.length > MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH) {
-    throw new Error(
-      `Knowledge node description exceeds the ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code unit limit`,
-    );
+  if (estimateTokenCount(description) > MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS) {
+    throw new Error(`Knowledge node description exceeds the ${MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} token limit`);
   }
 }
 
 /**
- * Maximum record text length in UTF-16 code units. A record holds one fact or a few closely related
+ * Maximum record text size in estimated tokens. A record holds one fact or a few closely related
  * facts; pasted files, command output, and logs belong summarized, not verbatim. Records are
  * immutable, so every adapter enforces this in `appendKnowledge`.
  *
  * @experimental
  */
-export const MAX_KNOWLEDGE_RECORD_TEXT_LENGTH = 1000;
+export const MAX_KNOWLEDGE_RECORD_TOKENS = 250;
 
 /**
  * Rejects over-long record text before any write occurs.
@@ -799,9 +813,9 @@ export const MAX_KNOWLEDGE_RECORD_TEXT_LENGTH = 1000;
  * @experimental
  */
 export function assertKnowledgeRecordTextWithinBound(text: string): void {
-  if (text.length > MAX_KNOWLEDGE_RECORD_TEXT_LENGTH) {
+  if (estimateTokenCount(text) > MAX_KNOWLEDGE_RECORD_TOKENS) {
     throw new Error(
-      `Knowledge record text exceeds the ${MAX_KNOWLEDGE_RECORD_TEXT_LENGTH} UTF-16 code unit limit; split it into separate facts or summarize it`,
+      `Knowledge record text exceeds the ${MAX_KNOWLEDGE_RECORD_TOKENS} token limit; split it into separate facts or summarize it`,
     );
   }
 }

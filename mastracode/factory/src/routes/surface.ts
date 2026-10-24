@@ -816,6 +816,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
             const memory = await deps.controller.getMastra()?.getStorage()?.getStore('memory');
             return (await memory?.getThreadById({ threadId }))?.title;
           },
+          threadResourceId: async threadId => {
+            const memory = await deps.controller.getMastra()?.getStorage()?.getStore('memory');
+            return (await memory?.getThreadById({ threadId }))?.resourceId;
+          },
         }).routes()
       : []),
     ...(deps.factoryReady

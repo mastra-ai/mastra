@@ -27,6 +27,10 @@ import type { ScoringFilter } from '../evals/predicate';
 
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
+import type { Knowledge } from '../knowledge';
+import { KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID, KnowledgeInstructionsProcessor } from '../knowledge/instructions';
+import { PINNED_KNOWLEDGE_STATE_ID } from '../knowledge/pinned';
+import { PinnedStateProcessor } from '../knowledge/pinned-state-processor';
 import { resolveModelConfig } from '../llm';
 import type { CoreMessage } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
@@ -48,16 +52,16 @@ import type {
   WidenedMastraModelConfig,
 } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
-import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
-import { networkLoop } from '../loop/network';
-import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
-import type { AgentLoopResumeClaim } from '../loop/types';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
 // from `mastraCtorHolder` (populated by `mastra/index.ts` at load), with an
 // `await import('../mastra')` fallback for the standalone-agent case where the
 // Mastra module was never loaded. See `#getOrCreateEphemeralMastra`.
+import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
+import { networkLoop } from '../loop/network';
+import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
+import type { AgentLoopResumeClaim } from '../loop/types';
 import type { Mastra } from '../mastra';
 import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
@@ -214,10 +218,13 @@ import {
   applyResolvedAgentScopes,
   parseAgentScope,
   resolveAgentScopes,
+  getRunAgentScopes,
+  MASTRA_SCOPE_ACCESS_KEY,
+  readOnlyTags,
   setRunAgentScopes,
   withoutIdentityAgentScopes,
 } from './scopes';
-import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
+import type { AgentScopeEntry, AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { AgentSignalInput, CreatedAgentSignal } from './signals';
 import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
@@ -863,11 +870,12 @@ export class Agent<
   #tools: DynamicArgument<TTools, TRequestContext>;
   #hooks?: ToolHooks;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
-  #scopes?: DynamicArgument<string[], TRequestContext>;
+  #scopes?: DynamicArgument<AgentScopeEntry[], TRequestContext>;
   #agents: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
   #voice: DynamicArgument<MastraVoice, TRequestContext>;
   #agentChannels: AgentChannels | null = null;
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
+  #knowledge?: Knowledge | string;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   #maxProcessorRetries?: number;
@@ -1099,6 +1107,7 @@ export class Agent<
       this.#hasExplicitBrowser = true;
     }
 
+    this.#knowledge = config.knowledge;
     if (config.workspace) {
       this.#workspace = config.workspace;
     }
@@ -1856,6 +1865,23 @@ export class Agent<
     return [new WorkspaceInstructionsProcessor({ workspace })];
   }
 
+  #getKnowledgeProcessors(configuredProcessors: InputProcessorOrWorkflow[]): InputProcessorOrWorkflow[] {
+    const knowledge = this.getKnowledge();
+    if (!knowledge) return [];
+    const configuredIds = new Set(
+      configuredProcessors.flatMap(p => (!isProcessorWorkflow(p) && 'id' in p ? [p.id] : [])),
+    );
+    const processors: InputProcessorOrWorkflow[] = [];
+    const instructions = knowledge.getInstructions();
+    if (instructions && !configuredIds.has(KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID)) {
+      processors.push(new KnowledgeInstructionsProcessor(instructions));
+    }
+    if (knowledge.pinsEnabled && !configuredIds.has(PINNED_KNOWLEDGE_STATE_ID)) {
+      processors.push(new PinnedStateProcessor({ getKnowledgeStore: () => knowledge.getStorage() }));
+    }
+    return processors;
+  }
+
   /**
    * Validates the request context against the agent's requestContextSchema.
    * Throws an error if validation fails.
@@ -2449,6 +2475,9 @@ export class Agent<
     // Get workspace instructions processors (with deduplication)
     const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, requestContext);
 
+    // Knowledge usage instructions, and pins when there is a Memory thread to carry their state signal
+    const knowledgeProcessors = this.#getKnowledgeProcessors(configuredProcessors);
+
     // Get skills processors if skills are configured (with deduplication)
     const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
 
@@ -2469,6 +2498,7 @@ export class Agent<
     return [
       ...effectiveMemoryProcessors,
       ...workspaceProcessors,
+      ...knowledgeProcessors,
       ...skillsProcessors,
       ...channelProcessors,
       ...browserProcessors,
@@ -2858,6 +2888,23 @@ export class Agent<
   }
 
   /**
+   * The Knowledge attached to this agent, resolving a registered key through Mastra.
+   * @experimental
+   */
+  public getKnowledge(): Knowledge | undefined {
+    if (typeof this.#knowledge !== 'string') return this.#knowledge;
+    if (!this.#mastra) {
+      throw new MastraError({
+        id: 'AGENT_KNOWLEDGE_NOT_REGISTERED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" references Knowledge "${this.#knowledge}" by key, but the agent is not registered with Mastra.`,
+      });
+    }
+    return this.#mastra.getKnowledge(this.#knowledge);
+  }
+
+  /**
    * Gets the workspace instance for this agent, resolving function-based workspace if necessary.
    * The workspace provides filesystem and sandbox capabilities for file operations and code execution.
    *
@@ -3062,7 +3109,7 @@ export class Agent<
    * Per-call `scopes` and the reserved `mastra__scopes` request-context key are not included.
    */
   async getScopes({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}): Promise<
-    string[] | undefined
+    AgentScopeEntry[] | undefined
   > {
     if (typeof this.#scopes !== 'function') {
       return this.#scopes;
@@ -4593,6 +4640,59 @@ export class Agent<
   }
 
   /**
+   * Lists the tools of the attached Knowledge, if any.
+   * @internal
+   */
+  private async listKnowledgeTools({
+    runId,
+    resourceId,
+    threadId,
+    requestContext,
+    mastraProxy,
+    autoResumeSuspendedTools,
+    backgroundTaskEnabled,
+    getModel,
+    ...rest
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    requestContext: RequestContext;
+    mastraProxy?: MastraUnion;
+    autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+  } & Partial<ObservabilityContext>) {
+    const converted: Record<string, CoreTool> = {};
+    if (this._agentNetworkAppend) return converted;
+    const knowledge = this.getKnowledge();
+    if (!knowledge) return converted;
+
+    const observabilityContext = resolveObservabilityContext(rest);
+    for (const [toolName, tool] of Object.entries(knowledge.createTools())) {
+      const options: ToolOptions = {
+        name: toolName,
+        runId,
+        threadId,
+        resourceId,
+        logger: this.logger,
+        mastra: mastraProxy as MastraUnion | undefined,
+        agentName: this.name,
+        agentId: this.id,
+        requestContext,
+        ...observabilityContext,
+        model: await getModel(),
+        tracingPolicy: this.#options?.tracingPolicy,
+        requireApproval: (tool as any).requireApproval,
+        backgroundConfig: (tool as any).background,
+        agentBackgroundConfig: this.#backgroundTasks,
+      };
+      converted[toolName] = makeCoreTool(tool, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled);
+    }
+    return converted;
+  }
+
+  /**
    * Lists workspace tools if a workspace is configured.
    * @internal
    */
@@ -5742,8 +5842,15 @@ export class Agent<
             const parentScopes = subAgentRequestContext.get(MASTRA_SCOPES_KEY);
             if (Array.isArray(parentScopes)) {
               const inheritedScopes = withoutIdentityAgentScopes(parentScopes);
-              if (inheritedScopes.length > 0) setRunAgentScopes(subAgentRequestContext, inheritedScopes);
-              else subAgentRequestContext.delete(MASTRA_SCOPES_KEY);
+              if (inheritedScopes.length > 0) {
+                setRunAgentScopes(
+                  subAgentRequestContext,
+                  inheritedScopes,
+                  getRunAgentScopes(subAgentRequestContext)
+                    .filter(scope => scope.access === 'read')
+                    .map(scope => scope.tag),
+                );
+              } else subAgentRequestContext.delete(MASTRA_SCOPES_KEY);
             }
 
             // Expand `contextFromRefs` into the prompt before any hook runs so
@@ -7338,6 +7445,18 @@ export class Agent<
       getModel: getResolvedModel,
     });
 
+    const knowledgeTools = await this.listKnowledgeTools({
+      runId,
+      resourceId,
+      threadId,
+      requestContext,
+      ...observabilityContext,
+      mastraProxy,
+      autoResumeSuspendedTools,
+      backgroundTaskEnabled,
+      getModel: getResolvedModel,
+    });
+
     const configuredInputProcessors = inputProcessors ?? (await this.listConfiguredInputProcessors(requestContext));
     const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredInputProcessors);
     const hasSkillsProcessor = hasEagerSkillsProcessor(configuredInputProcessors);
@@ -7374,6 +7493,7 @@ export class Agent<
       ...agentTools,
       ...workflowTools,
       ...workspaceTools,
+      ...knowledgeTools,
       ...skillTools,
       ...browserTools,
     };
@@ -8392,6 +8512,7 @@ export class Agent<
       // suspended before the scopes upgrade — it adopts the supplied scopes, the same trust
       // posture as a fresh run (identity stays pinned by the snapshot's resource/thread above).
       scopes: Array.isArray(scopes) ? scopes : undefined,
+      readOnly: readOnlyTags(snapshot.requestContext?.[MASTRA_SCOPE_ACCESS_KEY]),
     };
   }
 
@@ -8415,6 +8536,16 @@ export class Agent<
         });
       }
       return persisted;
+    }
+    return undefined;
+  }
+
+  /** Tags the suspended run held read-only, persisted beside its scopes. */
+  #getSnapshotReadOnly(existingSnapshot: WorkflowRunState | null | undefined): string[] | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      const persisted = step?.status === 'suspended' ? step.suspendPayload?.__resolvedReadOnly : undefined;
+      if (Array.isArray(persisted) && persisted.every(tag => typeof tag === 'string')) return persisted;
     }
     return undefined;
   }
@@ -8444,8 +8575,8 @@ export class Agent<
       existingSnapshot,
       snapshot,
     }: {
-      callScopes?: string[];
-      defaultScopes?: string[];
+      callScopes?: AgentScopeEntry[];
+      defaultScopes?: AgentScopeEntry[];
       existingSnapshot?: WorkflowRunState | null;
       snapshot?: AgentScopesSnapshot;
     },
@@ -8464,6 +8595,7 @@ export class Agent<
             // same trust posture as a fresh run (identity is still pinned by the snapshot's
             // resource/thread above).
             scopes: this.#getSnapshotScopes(existingSnapshot),
+            readOnly: this.#getSnapshotReadOnly(existingSnapshot),
           }
         : undefined);
     // A resumed run keeps its suspended scopes, so the Agent's configuration is not consulted.
@@ -8757,7 +8889,13 @@ export class Agent<
     // Only warn for ids the caller passed in `memory` args. Reserved request-context ids are set
     // per request (auth middleware, AgentController) and inherited by every agent in that request,
     // including internal memory-less agents such as the OM Observer and Reflector.
-    if (options.memory?.resource && options.memory?.thread && !this.hasOwnMemory() && !isGatewayModel) {
+    if (
+      options.memory?.resource &&
+      options.memory?.thread &&
+      !this.hasOwnMemory() &&
+      !this.#knowledge &&
+      !isGatewayModel
+    ) {
       this.logger.warn('No memory is configured but resourceId and threadId were passed in args', { agent: this.name });
     }
 
@@ -8980,6 +9118,7 @@ export class Agent<
       actor: options.actor,
       agentVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
       resolvedScopes: options.resolvedScopes,
+      resolvedReadOnly: options.resolvedReadOnly,
       agentName: this.name,
       toolCallId: options.toolCallId,
       workspace,
@@ -9679,6 +9818,7 @@ export class Agent<
         : undefined,
       messages,
       resolvedScopes: resolvedScopes.scopes,
+      resolvedReadOnly: resolvedScopes.readOnly,
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
@@ -10522,6 +10662,7 @@ export class Agent<
         : undefined,
       messages,
       resolvedScopes: resolvedScopes.scopes,
+      resolvedReadOnly: resolvedScopes.readOnly,
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
@@ -10917,6 +11058,7 @@ export class Agent<
           : undefined,
         messages: [],
         resolvedScopes: resolvedScopes.scopes,
+        resolvedReadOnly: resolvedScopes.readOnly,
         resumeContext: {
           resumeData,
           snapshot: resumeSnapshot,
@@ -11123,6 +11265,7 @@ export class Agent<
           : undefined,
         messages: [],
         resolvedScopes: resolvedScopes.scopes,
+        resolvedReadOnly: resolvedScopes.readOnly,
         resumeContext: {
           resumeData,
           snapshot: resumeSnapshot,

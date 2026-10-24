@@ -5,17 +5,20 @@
  * selected-subgraph, node-detail, and activity reads. Every endpoint is a GET;
  * this module never writes knowledge.
  *
- * Scoping is fail-closed: the org and resource rungs are derived server-side
+ * Scoping is fail-closed: the org and project tags are derived server-side
  * from the authenticated caller and the validated `:id` project. The DEFAULT
- * view queries `[org:<orgId>, resource:<projectId>]` (org + project records).
- * Thread-scoped records are reachable ONLY via an explicit, server-validated
- * `threadId` query parameter (the drill-down view), which appends the thread
- * rung to the query scope. A thread is drillable iff it produced knowledge
- * visible under the caller's org/project prefix; unknown or cross-org threads
- * 404 — never a silent fallback to the default view.
+ * view queries `[org:<orgId>, project:<projectId>]` (org + project records),
+ * the tags a Factory session's agent always holds. Session records are
+ * reachable ONLY via an explicit, server-validated `threadId` query parameter
+ * (the drill-down view), which adds the session's Memory resource and thread
+ * tags to the query scope, as the agent's own run scope has them. A thread is
+ * drillable iff it wrote a record carrying the viewed org AND project tags;
+ * unknown, cross-org, and unresolved (resource/thread-only) threads 404 —
+ * never a silent fallback to the default view.
  */
 
 import type { Knowledge } from '@mastra/core/knowledge';
+import { listPinnedKnowledge } from '@mastra/core/knowledge';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type {
@@ -40,9 +43,6 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
-/** Reserved node that anchors pinned records (see subconscious/pinned.ts). */
-const PINNED_NODE_NAME = 'pinned';
-
 /** Hover-card budget for record text shipped in the graph payload. */
 const RECORD_TEXT_LIMIT = 240;
 
@@ -66,6 +66,9 @@ const SEARCH_RESULT_LIMIT = 20;
 const SEARCH_QUERY_LIMIT = 128;
 /** Scope nodes returned per parent while lazily expanding the tree. */
 const SCOPE_PAGE_SIZE = 25;
+/** Records of a session read while looking for one that belongs to the viewed project. */
+const SESSION_PROBE_PAGE = 100;
+const SESSION_PROBE_SCAN_CAP = 1000;
 /** Bound storage pressure while calculating direct-member counts. */
 const SCOPE_COUNT_CONCURRENCY = 8;
 
@@ -159,6 +162,12 @@ export interface KnowledgeRoutesDeps extends RouteDependencies {
    * Sessions fall back to `session <first 8 of id>` when absent or untitled.
    */
   threadTitle?: (threadId: string) => Promise<string | undefined>;
+  /**
+   * The Memory resource of a session's thread. A session's agent writes with `resource:<id>` among
+   * its tags, so the session view needs it to see those records. Without it the view holds only
+   * the org, project and thread tags.
+   */
+  threadResourceId?: (threadId: string) => Promise<string | undefined>;
 }
 
 /** A graph node. `recordCount` is window-derived (records inside the snapshot window only). */
@@ -312,23 +321,37 @@ function loose(c: unknown): Context {
   return c as Context;
 }
 
+/**
+ * Which view level a scope belongs to, for labels: a session (`thread:` or a session's
+ * `resource:` tag), the project (`project:`), or the org.
+ */
 function deepestRung(scope: KnowledgeScope): 'org' | 'resource' | 'thread' {
   let rung: 'org' | 'resource' | 'thread' = 'org';
   for (const entry of scope) {
     const ns = entry.slice(0, entry.indexOf(':'));
-    if (ns === 'thread') return 'thread';
-    if (ns === 'resource') rung = 'resource';
+    if (ns === 'thread' || ns === 'resource') return 'thread';
+    if (ns === 'project') rung = 'resource';
   }
   return rung;
 }
 
+/** The address of a view level's identity scope node; the project level is the `project:` tag. */
+function rungAddress(level: KnowledgeScopeLevel, id: string): string {
+  return level === 'resource' ? `project:${id}` : `${level}:${id}`;
+}
+
+/** The project view's scope: the org and project tags a Factory session always holds. */
+function projectViewScope(orgId: string, projectId: string): KnowledgeScope {
+  return canonicalizeKnowledgeScope([`org:${orgId}`, `project:${projectId}`]);
+}
+
 /**
- * True when `scope` is a prefix of the active view scope — the content lives
+ * True when every tag of `scope` is in the active view scope — the content lives
  * inside the current org + project boundary. Structural member lenses use
  * this to keep sibling-project knowledge out of a project-scoped view.
  */
 function withinViewBoundary(scope: KnowledgeScope, viewScope: KnowledgeScope): boolean {
-  return scope.length <= viewScope.length && scope.every((entry, index) => entry === viewScope[index]);
+  return isKnowledgeScopeVisible(scope, viewScope);
 }
 
 function directScopeMemberCounts(
@@ -396,7 +419,7 @@ function knowledgeSearchRank(name: string, query: string): number {
  */
 function scopeKindLabel(address: string, kind: string | null | undefined): string {
   if (address.startsWith('org:')) return 'org';
-  if (address.startsWith('resource:')) return 'project';
+  if (address.startsWith('project:')) return 'project';
   if (address.startsWith('thread:')) return 'session';
   return kind || 'topic';
 }
@@ -424,8 +447,8 @@ interface ResolvedView {
   threadId?: string;
   /** The query scope for the active view. */
   scope: KnowledgeScope;
-  /** Exact scopes where a reserved `pinned` node may live for this view. */
-  pinRungs: Array<{ rung: 'resource' | 'thread'; scope: KnowledgeScope }>;
+  /** Whether this view shows pins (the org view does not). */
+  pins: boolean;
 }
 
 /**
@@ -582,8 +605,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       };
     }
 
-    const defaultScope: KnowledgeScope = [`org:${tenant.orgId}`, `resource:${projectId}`];
-    const resourceRungScope = defaultScope;
+    const defaultScope = projectViewScope(tenant.orgId, projectId);
 
     const threadId = boundedThreadId(c.req.query('threadId'));
     if (c.req.query('threadId') !== undefined && !threadId) {
@@ -598,13 +620,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         store,
         view: 'project',
         scope: defaultScope,
-        pinRungs: [{ rung: 'resource', scope: resourceRungScope }],
+        pins: true,
       };
     }
 
-    const candidateScope: KnowledgeScope = [...defaultScope, `thread:${threadId}`];
-    const probe = await store.knowledgeBySource({ sourceThreadId: threadId, scope: candidateScope, limit: 1 });
-    if (probe.records.length === 0) {
+    const candidateScope = await this.#sessionScope(tenant.orgId, projectId, threadId);
+    if (!(await this.#sessionInProject(store, tenant.orgId, projectId, threadId, candidateScope))) {
       return { response: c.json({ error: 'thread_not_found' }, 404) };
     }
     return {
@@ -616,11 +637,48 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       view: 'thread',
       threadId,
       scope: candidateScope,
-      pinRungs: [
-        { rung: 'resource', scope: resourceRungScope },
-        { rung: 'thread', scope: candidateScope },
-      ],
+      pins: true,
     };
+  }
+
+  /**
+   * True when the session wrote at least one record carrying the viewed org and project tags. A
+   * session's view adds its resource and thread tags, and subset visibility would otherwise show
+   * any thread's records that carry only those tags (an unresolved session, or another org's)
+   * under any project. Reads at most SESSION_PROBE_SCAN_CAP records.
+   */
+  async #sessionInProject(
+    store: KnowledgeStorage,
+    orgId: string,
+    projectId: string,
+    threadId: string,
+    scope: KnowledgeScope,
+  ): Promise<boolean> {
+    const required = projectViewScope(orgId, projectId);
+    let after: string | undefined;
+    for (let scanned = 0; scanned < SESSION_PROBE_SCAN_CAP; scanned += SESSION_PROBE_PAGE) {
+      const page = await store.knowledgeBySource({ sourceThreadId: threadId, scope, after, limit: SESSION_PROBE_PAGE });
+      if (page.records.some(record => required.every(tag => record.scope.includes(tag)))) return true;
+      if (!page.nextCursor) return false;
+      after = page.nextCursor;
+    }
+    return false;
+  }
+
+  /** A session's view scope: the project tags plus the session's Memory resource and thread tags. */
+  async #sessionScope(orgId: string, projectId: string, threadId: string): Promise<KnowledgeScope> {
+    let resourceId: string | undefined;
+    try {
+      resourceId = (await this.deps.threadResourceId?.(threadId))?.trim() || undefined;
+    } catch (error) {
+      // Without the resource the session view still shows its thread's org and project records.
+      console.warn('[factory] could not read the Memory resource of knowledge session', threadId, error);
+    }
+    return canonicalizeKnowledgeScope([
+      ...projectViewScope(orgId, projectId),
+      ...(resourceId ? [`resource:${resourceId}`] : []),
+      `thread:${threadId}`,
+    ]);
   }
 
   #selectedView(view: ResolvedView, level: string | undefined): ResolvedView | undefined {
@@ -633,13 +691,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       store: view.store,
       view: 'project' as const,
     };
-    if (level === 'org') return { ...projectView, scope: view.scope.slice(0, 1), pinRungs: [] };
+    if (level === 'org') return { ...projectView, scope: [`org:${view.orgId}`], pins: false };
     if (level === 'resource') {
-      return {
-        ...projectView,
-        scope: view.scope.slice(0, 2),
-        pinRungs: view.pinRungs.filter(rung => rung.rung === 'resource'),
-      };
+      return { ...projectView, scope: projectViewScope(view.orgId, view.factoryProjectId), pins: true };
     }
     if (level === 'thread' && view.threadId) return view;
     return undefined;
@@ -657,7 +711,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
    */
   async #vouchIdentityScopes(view: ResolvedView): Promise<void> {
     const orgAddress = `org:${view.orgId}`;
-    const resourceAddress = `resource:${view.factoryProjectId}`;
+    const resourceAddress = `project:${view.factoryProjectId}`;
     const chain = [
       { address: orgAddress, contextualScopeAddress: orgAddress },
       {
@@ -704,7 +758,6 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     { probe }: { probe: boolean },
   ): Promise<Set<string>> {
     const hidden = new Set<string>();
-    const projectScope: KnowledgeScope = [`org:${view.orgId}`, `resource:${view.factoryProjectId}`];
     const sessions: Array<{ id: string; threadId: string }> = [];
     for (const node of nodes) {
       if (!node.address.startsWith('thread:')) continue;
@@ -718,12 +771,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     for (let index = 0; index < sessions.length; index += SCOPE_COUNT_CONCURRENCY) {
       await Promise.all(
         sessions.slice(index, index + SCOPE_COUNT_CONCURRENCY).map(async ({ id, threadId }) => {
-          const { records } = await view.store.knowledgeBySource({
-            sourceThreadId: threadId,
-            scope: [...projectScope, `thread:${threadId}`],
-            limit: 1,
-          });
-          if (records.length === 0) hidden.add(id);
+          const scope = await this.#sessionScope(view.orgId, view.factoryProjectId, threadId);
+          if (!(await this.#sessionInProject(view.store, view.orgId, view.factoryProjectId, threadId, scope))) {
+            hidden.add(id);
+          }
         }),
       );
     }
@@ -756,27 +807,24 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return names;
   }
 
-  /** Reserved `pinned` node ids at the active view's rungs (one exact-scope lookup per rung). */
-  async #pinnedNodeIds(view: ResolvedView): Promise<Array<{ rung: 'resource' | 'thread'; id: string }>> {
-    const out: Array<{ rung: 'resource' | 'thread'; id: string }> = [];
-    for (const { rung, scope } of view.pinRungs) {
-      const node = await view.store.getNodeByName({ name: PINNED_NODE_NAME, scope });
-      if (node && !node.mergedInto) out.push({ rung, id: node.id });
-    }
-    return out;
-  }
-
-  /** Non-deleted pinned records for the given pinned-node ids, visible in the view. */
-  async #pinnedRecords(
-    view: ResolvedView,
-    pinnedNodeIds: Array<{ rung: 'resource' | 'thread'; id: string }>,
-  ): Promise<Array<{ rung: 'resource' | 'thread'; record: KnowledgeRecord }>> {
-    const out: Array<{ rung: 'resource' | 'thread'; record: KnowledgeRecord }> = [];
-    for (const { rung, id } of pinnedNodeIds) {
-      const { records } = await view.store.listKnowledgeAbout({ node: id, scope: view.scope, limit: 200 });
-      for (const record of records) out.push({ rung, record });
-    }
-    return out;
+  /**
+   * The pin set the view's scope sees, read the way core Knowledge delivers it: every visible
+   * reserved `pinned` node, since pins written at different tags live on different nodes. Each pin
+   * is labeled session when it carries a session tag, otherwise project.
+   */
+  async #pins(view: ResolvedView): Promise<{
+    nodeIds: string[];
+    records: Array<{ rung: 'resource' | 'thread'; record: KnowledgeRecord }>;
+  }> {
+    if (!view.pins) return { nodeIds: [], records: [] };
+    const { nodeIds, pins } = await listPinnedKnowledge({ store: view.store, scope: view.scope });
+    return {
+      nodeIds,
+      records: pins.map(record => ({
+        rung: deepestRung(record.scope) === 'thread' ? ('thread' as const) : ('resource' as const),
+        record,
+      })),
+    };
   }
 
   routes(): ApiRoute[] {
@@ -805,7 +853,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               this.#limits.maxOrgScopePages,
             ));
             const projectNodeId = storedScopeNodes.find(
-              node => node.address === `resource:${view.factoryProjectId}`,
+              node => node.address === `project:${view.factoryProjectId}`,
             )?.id;
             const foreignSessions = await this.#hiddenSessionIds(view, storedScopeNodes, projectNodeId, {
               probe: false,
@@ -870,7 +918,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               // thread view. Include only those matched nodes and ancestors.
               const identityAddresses = new Set([
                 `org:${view.orgId}`,
-                `resource:${view.factoryProjectId}`,
+                `project:${view.factoryProjectId}`,
                 ...(view.threadId ? [`thread:${view.threadId}`] : []),
               ]);
               const includeWithParents = (node: KnowledgeScopeNodeSummary): void => {
@@ -908,9 +956,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                     });
                     return {
                       ...node,
-                      ...(node.address === `resource:${view.factoryProjectId}`
-                        ? { name: view.factoryProjectName }
-                        : {}),
+                      ...(node.address === `project:${view.factoryProjectId}` ? { name: view.factoryProjectName } : {}),
                       ...directScopeMemberCounts(
                         members,
                         childScopeCountByParent.get(node.id) ?? 0,
@@ -945,9 +991,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           ];
           return c.json({
             roots: rungs.map(rung => {
-              const match = scopeNodeByAddress.get(`${rung.level}:${rung.id}`);
+              const match = scopeNodeByAddress.get(rungAddress(rung.level, rung.id));
               const name =
-                match?.address === `resource:${view.factoryProjectId}`
+                match?.address === `project:${view.factoryProjectId}`
                   ? view.factoryProjectName
                   : match && rung.level === 'thread'
                     ? threadRootName
@@ -1013,7 +1059,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               const rung =
                 scopeNode.address === `org:${view.orgId}`
                   ? ('org' as const)
-                  : scopeNode.address === `resource:${view.factoryProjectId}`
+                  : scopeNode.address === `project:${view.factoryProjectId}`
                     ? ('resource' as const)
                     : view.threadId && scopeNode.address === `thread:${view.threadId}`
                       ? ('thread' as const)
@@ -1021,7 +1067,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               return {
                 id: scopeNode.id,
                 name:
-                  scopeNode.address === `resource:${view.factoryProjectId}`
+                  scopeNode.address === `project:${view.factoryProjectId}`
                     ? view.factoryProjectName
                     : (scopeSessionNames.get(scopeNode.id) ?? scopeNode.name),
                 kind: scopeKindLabel(scopeNode.address, scopeNode.kind),
@@ -1102,7 +1148,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             );
             const rootSessionName = (await this.#sessionNames([storedRoot])).get(storedRoot.id);
             const root =
-              storedRoot.address === `resource:${resolved.factoryProjectId}`
+              storedRoot.address === `project:${resolved.factoryProjectId}`
                 ? { ...storedRoot, name: resolved.factoryProjectName }
                 : rootSessionName
                   ? { ...storedRoot, name: rootSessionName }
@@ -1111,7 +1157,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             // which are reached from the tree instead.
             if (storedRoot.address.startsWith('thread:')) {
               const projectNodeId = scopeNodes.find(
-                node => node.address === `resource:${resolved.factoryProjectId}`,
+                node => node.address === `project:${resolved.factoryProjectId}`,
               )?.id;
               const hidden = await this.#hiddenSessionIds(resolved, [storedRoot], projectNodeId, { probe: true });
               if (hidden.has(storedRoot.id)) return c.json({ error: 'scope_not_found' }, 404);
@@ -1305,8 +1351,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             Array.isArray(node.scope),
           );
           let truncated = fetched.length > limits.maxNodes;
-          const pinnedNodeIds = await this.#pinnedNodeIds(view);
-          const pinnedNodeIdSet = new Set(pinnedNodeIds.map(p => p.id));
+          const pins = await this.#pins(view);
+          const pinnedNodeIdSet = new Set(pins.nodeIds);
           const nodes = fetched.slice(0, limits.maxNodes).filter(node => !pinnedNodeIdSet.has(node.id));
 
           // Record window: per-node owned records, then newest-first overall.
@@ -1361,7 +1407,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
 
           // Pins mark relationships. The reserved owner node is omitted, so
           // arity comes purely from wikilink targets.
-          const pinnedRecords = await this.#pinnedRecords(view, pinnedNodeIds);
+          const pinnedRecords = pins.records;
           const accented = new Set<string>();
           for (const { record } of pinnedRecords) {
             const targets: string[] = [];
@@ -1449,8 +1495,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             return c.json({ error: 'node_not_found' }, 404);
           }
 
-          const pinnedNodeIds = await this.#pinnedNodeIds(view);
-          const pinnedNodeIdSet = new Set(pinnedNodeIds.map(p => p.id));
+          const pinnedNodeIdSet = new Set((await this.#pins(view)).nodeIds);
 
           const [owned, mentioning] = await Promise.all([
             store.listKnowledgeAbout({ node: node.id, scope, limit: 200 }),

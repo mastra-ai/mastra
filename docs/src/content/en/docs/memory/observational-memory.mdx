@@ -717,7 +717,7 @@ In resource scope, observations are shared across all threads for a resource (ty
 - **Agent understanding:** Each thread sees a mix of observations from every thread for the resource. Every new thread starts with context from earlier threads, and the agent may continue work that another thread started but didn't finish.
 - **Performance:** Unobserved messages across _all_ threads are processed together, which is slow for users with many existing threads.
 
-A new knowledge and subconscious memory primitive for cross-thread memory is coming soon and will replace resource scope. Until then, use the alternatives below.
+A new Knowledge primitive for cross-thread memory is coming soon and will replace resource scope. Until then, use the alternatives below.
 
 #### Cross-thread continuity without resource scope
 

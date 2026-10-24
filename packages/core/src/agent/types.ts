@@ -13,6 +13,7 @@ import type { ChannelConfig } from '../channels/types';
 import type { WaitUntilFn } from '../channels/wait-until';
 import type { MastraScorer, MastraScorers, ScoringFilter, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
+import type { Knowledge } from '../knowledge';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -75,6 +76,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
+import type { AgentScopeEntry } from './scopes';
 import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
 export type {
@@ -215,7 +217,7 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
        * Validated, but does not change the scopes of the run receiving the signal:
        * a run's scopes are fixed when it starts.
        */
-      scopes?: string[];
+      scopes?: AgentScopeEntry[];
     }
   | {
       runId?: string;
@@ -227,7 +229,7 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
        * Scopes for a run this signal starts, unioned with `ifIdle.streamOptions.scopes`.
        * `resource:`/`thread:` scopes must equal `resourceId`/`threadId`.
        */
-      scopes?: string[];
+      scopes?: AgentScopeEntry[];
     };
 
 /**
@@ -261,7 +263,14 @@ export type SendAgentSignalAccepted<OUTPUT = unknown> =
   | { action: 'deliver'; runId: string }
   | { action: 'persist' }
   | { action: 'discard' }
-  | { action: 'blocked'; reason: 'thread-blocked'; runId: string };
+  | { action: 'blocked'; reason: 'thread-blocked'; runId: string }
+  /**
+   * The signal named `scopes` that differ from those of the run active on the thread
+   * (or of a run whose scopes this process can't see). A run's scopes are fixed when it
+   * starts, so the signal did not join it: wait for `runId` to end and send it again to
+   * start its own run.
+   */
+  | { action: 'blocked'; reason: 'scope-mismatch'; runId: string };
 
 export interface SendAgentSignalResult<OUTPUT = unknown> {
   /**
@@ -834,11 +843,12 @@ interface AgentConfigBase<
    */
   memory?: DynamicArgument<MastraMemory, TRequestContext>;
   /**
-   * Scopes every run of this agent acts with, as `<type>:<value>` addresses such as `org:acme`.
+   * Scopes every run of this agent acts with, as `<type>:<value>` addresses such as `org:acme`,
+   * or `{ tag, access: 'read' }` to hold a tag read-only.
    * Unioned with per-call `scopes` and the reserved `mastra__scopes` request-context key.
    * A resolver function runs once per call with the request context.
    */
-  scopes?: DynamicArgument<string[], TRequestContext>;
+  scopes?: DynamicArgument<AgentScopeEntry[], TRequestContext>;
   /**
    * Skills that guide agent behavior — reusable instructions the model loads on demand.
    *
@@ -930,6 +940,12 @@ interface AgentConfigBase<
    * When configured, workspace tools are automatically injected into the agent.
    */
   workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
+  /**
+   * Knowledge attached to this agent: a Knowledge instance or the key it is registered under on Mastra.
+   * The agent gets its tools, usage instructions and pins without needing Memory.
+   * @experimental
+   */
+  knowledge?: Knowledge | string;
   /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or

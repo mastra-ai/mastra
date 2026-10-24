@@ -1,4 +1,5 @@
 import type {
+  KnowledgeConcreteRole,
   KnowledgeGrantRole,
   KnowledgeStructureGrant,
   KnowledgeStructurePlan,
@@ -81,6 +82,43 @@ export function validateKnowledgeScopeTypes(
     }
   }
   return types;
+}
+
+const PARAMETER_REFERENCE = /\$([A-Za-z][A-Za-z0-9_]*)/g;
+const ROLE_RANK: Record<KnowledgeConcreteRole, number> = { readonly: 0, append: 1, edit: 2, owner: 3 };
+
+/** Whether `role` grants at least `needed`. */
+export function knowledgeRoleAllows(role: KnowledgeConcreteRole, needed: KnowledgeConcreteRole): boolean {
+  return ROLE_RANK[role] >= ROLE_RANK[needed];
+}
+
+/**
+ * The role a run holding `heldTags` writable has on scope `tag` through ownership: the scope type
+ * matching `tag` lists an `access` principal pattern that, with `$params` bound from `tag`, equals a
+ * held tag exactly. `self`/`parent` principals, principals using a `$param` the tag doesn't bind
+ * (`$self`, host-vouched materialization parameters) and `mirror` grants are materialization-only
+ * and ignored. Undeclared types (the `custom` fallback) are never owned. The strongest role wins.
+ */
+export function ownedKnowledgeScopeRole(
+  types: KnowledgeScopeTypesConfig,
+  tag: string,
+  heldTags: readonly string[],
+): KnowledgeConcreteRole | undefined {
+  let best: KnowledgeConcreteRole | undefined;
+  for (const [pattern, config] of Object.entries(types)) {
+    if (pattern === 'custom') continue;
+    const parameters = matchPattern(pattern, tag);
+    if (!parameters) continue;
+    for (const access of config?.access ?? []) {
+      if (access.role === 'mirror' || access.principal === 'self' || access.principal === 'parent') continue;
+      const unbound = [...access.principal.matchAll(PARAMETER_REFERENCE)].some(([, name]) => !parameters[name!]);
+      if (unbound) continue;
+      const principal = substituteParameters(access.principal, parameters);
+      if (!heldTags.includes(principal)) continue;
+      if (!best || ROLE_RANK[access.role] > ROLE_RANK[best]) best = access.role;
+    }
+  }
+  return best;
 }
 
 export function validateKnowledgeStructurePlan(plan: KnowledgeStructurePlan): KnowledgeStructurePlan {

@@ -70,11 +70,11 @@ function createSessionHarness(initialState: Partial<MastraCodeState> = {}) {
   };
 }
 
-async function createHarness(state: Partial<MastraCodeState> = {}) {
+async function createHarness(state: Partial<MastraCodeState> = {}, hostScopes?: string[]) {
   const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
   const storage = new MastraCompositeStore({ id: 'knowledge-inspector-test', domains: { knowledge } });
   const session = createSessionHarness(state);
-  const inspector = await createKnowledgeInspector({ storage, session: session.session });
+  const inspector = await createKnowledgeInspector({ storage, session: session.session, hostScopes });
   if (!inspector) throw new Error('Expected knowledge inspector');
   return { knowledge, storage, inspector, session };
 }
@@ -105,7 +105,7 @@ describe('KnowledgeInspector', () => {
     expect(tree).toMatchObject({
       defaultLevel: 'resource',
       roots: [
-        { level: 'org', id: LOCAL_ORG, available: true },
+        { level: 'org', id: `org:${LOCAL_ORG}`, available: true },
         { level: 'resource', id: 'project-1', available: true },
         { level: 'thread', id: 'thread-1', available: true },
       ],
@@ -400,7 +400,7 @@ describe('KnowledgeInspector', () => {
     await expect(pending).rejects.toMatchObject({ code: 'stale-handle' });
   });
 
-  it('reads the same org rung the subconscious writes instead of the session owner id', async () => {
+  it('reads the same org rung Knowledge writes instead of the session owner id', async () => {
     // Regression: the inspector keyed the org rung on the session owner id
     // (`mastracode-<hash>`), a scope nothing ever writes to, so /knowledge showed
     // nothing even though curation had populated `org:local`.
@@ -415,37 +415,36 @@ describe('KnowledgeInspector', () => {
     });
   });
 
-  it('anchors Factory sessions on the seeded org and project ids', async () => {
+  it('reads Factory sessions under their org and project tags, isolated from other projects', async () => {
     const factory = await createHarness({ factoryOrgId: 'org-42', factoryProjectId: 'proj-7' });
     await factory.knowledge.createNode({ name: 'Org node', kind: 'concept', scope: ['org:org-42'] });
     await factory.knowledge.createNode({
       name: 'Project node',
       kind: 'project',
-      scope: ['org:org-42', 'resource:proj-7'],
+      scope: ['org:org-42', 'project:proj-7'],
+    });
+    await factory.knowledge.createNode({
+      name: 'Other project node',
+      kind: 'project',
+      scope: ['org:org-42', 'project:proj-8'],
     });
     await factory.knowledge.createNode({ name: 'Local node', kind: 'concept', scope: orgScope });
 
     await expect(factory.inspector.getScopeTree()).resolves.toMatchObject({
       roots: expect.arrayContaining([
-        { level: 'org', id: 'org-42', available: true },
-        { level: 'resource', id: 'proj-7', available: true },
-      ]),
-    });
-    await expect(factory.inspector.listNodes({ level: 'resource' })).resolves.toMatchObject({
-      nodes: expect.arrayContaining([
-        expect.objectContaining({ name: 'Org node' }),
-        expect.objectContaining({ name: 'Project node' }),
+        { level: 'org', id: 'org:org-42 + project:proj-7', available: true },
+        { level: 'resource', id: 'project-1', available: true },
       ]),
     });
     const names = (await factory.inspector.listNodes({ level: 'resource' })).nodes.map(node => node.name);
+    expect(names).toEqual(expect.arrayContaining(['Org node', 'Project node']));
+    expect(names).not.toContain('Other project node');
     expect(names).not.toContain('Local node');
 
-    // The thread rung stays the raw thread id even though the resource rung is
-    // the project id, matching how the memory package composes thread scopes.
     await factory.knowledge.createNode({
       name: 'Thread node',
       kind: 'note',
-      scope: ['org:org-42', 'resource:proj-7', 'thread:thread-1'],
+      scope: ['org:org-42', 'project:proj-7', 'resource:project-1', 'thread:thread-1'],
     });
     await expect(factory.inspector.listNodes({ level: 'thread' })).resolves.toMatchObject({
       nodes: expect.arrayContaining([expect.objectContaining({ name: 'Thread node' })]),
@@ -480,33 +479,17 @@ describe('KnowledgeInspector', () => {
     expect(second.nodes).toEqual([]);
   });
 
-  it('validates thread ownership against the session resource while reading under the Factory project', async () => {
-    const factory = await createHarness({ factoryOrgId: 'org-42', factoryProjectId: 'proj-7' });
-    // The session's own resource id (`project-1`) differs from the Factory
-    // project id; the active thread belongs to the session resource, not to
-    // `proj-7`, and must still be accepted as this session's thread rung.
-    expect(factory.session.session.identity.getResourceId()).not.toBe('proj-7');
-    await factory.knowledge.createNode({
-      name: 'Thread node',
-      kind: 'note',
-      scope: ['org:org-42', 'resource:proj-7', 'thread:thread-1'],
-    });
-
-    await expect(factory.inspector.getScopeTree()).resolves.toMatchObject({
-      roots: expect.arrayContaining([
-        { level: 'resource', id: 'proj-7', available: true },
-        { level: 'thread', id: 'thread-1', available: true },
-      ]),
-    });
-    await expect(factory.inspector.listNodes({ level: 'thread' })).resolves.toMatchObject({
-      nodes: [expect.objectContaining({ name: 'Thread node' })],
-    });
-  });
-
   it('fails closed when a Factory-owned session has no resolved org', async () => {
     const factory = await createHarness({ factoryProjectId: 'proj-7', factoryOrgUnresolved: true });
     await expect(factory.inspector.getScopeTree()).rejects.toMatchObject({ code: 'unavailable' });
     await expect(factory.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('fails closed when a host tag conflicts with the Factory org, or stands in for a missing one', async () => {
+    const conflict = await createHarness({ factoryOrgId: 'o', factoryProjectId: 'p' }, ['org:other']);
+    await expect(conflict.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
+    const noOrg = await createHarness({ factoryProjectId: 'p', factoryOrgUnresolved: true }, ['org:acme']);
+    await expect(noOrg.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
   });
 
   it('uses the selected keyed Knowledge runtime instead of the legacy composite domain', async () => {

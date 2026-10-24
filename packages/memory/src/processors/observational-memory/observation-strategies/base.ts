@@ -18,7 +18,6 @@ import type { ObserverRunner } from '../observer-runner';
 import { getLineageHead } from '../record-lineage';
 import type { ReflectorRunner } from '../reflector-runner';
 import { withRetry } from '../retry';
-import { stripSubconsciousSignals } from '../subconscious/origin';
 import { getMaxThreshold } from '../thresholds';
 import type { TokenCounter } from '../token-counter';
 import type {
@@ -35,6 +34,52 @@ import type {
   ObserverOutput,
   ProcessedObservation,
 } from './types';
+
+// Threads written before Subconscious was removed still hold its signal messages and parts.
+// Keep them out of the observer's input so it never observes its own old curation traffic.
+const LEGACY_SUBCONSCIOUS_ORIGIN = 'subconscious';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isLegacySubconsciousSignalMessage(message: MastraDBMessage): boolean {
+  if (message.role !== 'signal' || !isRecord(message.content)) return false;
+  const contentMetadata = message.content.metadata;
+  if (!isRecord(contentMetadata) || !isRecord(contentMetadata.signal)) return false;
+  const signal = contentMetadata.signal;
+  const metadata = signal.metadata;
+  const attributes = signal.attributes;
+  return (
+    signal.origin === LEGACY_SUBCONSCIOUS_ORIGIN ||
+    (isRecord(metadata) && metadata.origin === LEGACY_SUBCONSCIOUS_ORIGIN) ||
+    (isRecord(attributes) && attributes.source === LEGACY_SUBCONSCIOUS_ORIGIN)
+  );
+}
+
+function isLegacySubconsciousSignalPart(part: unknown): boolean {
+  if (!part || typeof part !== 'object') return false;
+  const candidate = part as {
+    type?: string;
+    data?: { metadata?: { origin?: string }; attributes?: { source?: string } };
+  };
+  return (
+    candidate.type === 'data-signal' &&
+    (candidate.data?.metadata?.origin === LEGACY_SUBCONSCIOUS_ORIGIN ||
+      candidate.data?.attributes?.source === LEGACY_SUBCONSCIOUS_ORIGIN)
+  );
+}
+
+export function stripLegacySubconsciousSignals(messages: MastraDBMessage[]): MastraDBMessage[] {
+  return messages.flatMap(message => {
+    if (isLegacySubconsciousSignalMessage(message)) return [];
+    if (typeof message.content === 'string') return [message];
+    const parts = message.content.parts.filter(part => !isLegacySubconsciousSignalPart(part));
+    if (parts.length === message.content.parts.length) return [message];
+    if (parts.length === 0) return [];
+    return [{ ...message, content: { ...message.content, parts } }];
+  });
+}
 
 /** Module-level xxhash singleton — loaded once, shared across all strategy instances. */
 const hasherPromise = xxhash();
@@ -176,7 +221,7 @@ export abstract class ObservationStrategy {
         // timestamped earlier but not yet observed.
         return { observed: false };
       }
-      const observationMessages = stripSubconsciousSignals(messages);
+      const observationMessages = stripLegacySubconsciousSignals(messages);
       await this.emitStartMarkers(cycleId);
       // The Observer sees the budgeted context; composition below still builds on the full text.
       const observerContext = this.deps.prepareObserverContext(existingObservations, contextRecord ?? record);
