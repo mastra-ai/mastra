@@ -18,13 +18,21 @@ import type {
   UpdateKnowledgeNodeInput,
 } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
+import type { ToolAction } from '../tools';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
+import { buildKnowledgeTools } from './attach';
+import type { KnowledgeToolGroups, KnowledgeToolHost } from './attach';
 import type { KnowledgeConfig } from './config';
+import { buildKnowledgeInstructions } from './instructions';
+import type { KnowledgeInstructionsOption } from './instructions';
+import { DEFAULT_MAX_PINS } from './pinned';
 import {
   materializeKnowledgeScopePlan,
   validateKnowledgeScopeTypes,
   validateKnowledgeStructurePlan,
 } from './reconcile';
 import type { KnowledgeScopeTypesConfig, MaterializeKnowledgeScopeInput } from './reconcile';
+import { KnowledgeSemanticIndexCoordinator } from './semantic-index';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export class Knowledge extends MastraBase {
@@ -43,11 +51,26 @@ export class Knowledge extends MastraBase {
     string,
     { plan: KnowledgeStructurePlan; promise: Promise<KnowledgeStructureReconcileResult> }
   >();
+  #vector?: MastraVector;
+  #embedder?: MastraEmbeddingModel<string>;
+  #embedderOptions?: MastraEmbeddingOptions;
+  #semanticIndex?: Promise<KnowledgeSemanticIndexCoordinator>;
+  #tools: { read: boolean; write: boolean };
+  #pins: false | { maxPins: number };
+  #instructions?: KnowledgeInstructionsOption;
 
   constructor(config: KnowledgeConfig = {}) {
     super({ component: 'STORAGE', name: config.name ?? config.id ?? 'Knowledge' });
     this.id = config.id ?? randomUUID();
     this.description = config.description;
+    this.#vector = config.vector;
+    this.#embedder = config.embedder;
+    this.#embedderOptions = config.embedderOptions;
+    this.#tools = { read: config.tools?.read ?? true, write: config.tools?.write ?? false };
+    this.#pins = config.pins
+      ? { maxPins: (config.pins === true ? undefined : config.pins.maxPins) ?? DEFAULT_MAX_PINS }
+      : false;
+    this.#instructions = config.instructions;
     this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
     this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
     this.hasOwnStorage = config.storage !== undefined;
@@ -55,6 +78,67 @@ export class Knowledge extends MastraBase {
       this.#storageSource = getStorageSource(config.storage);
       this.#storage = augmentWithInit(config.storage);
     }
+  }
+
+  /** Semantic index on this Knowledge's own vector store and embedder; undefined when either is missing (keyword-only search). */
+  getSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined> {
+    if (!this.#vector || !this.#embedder) return Promise.resolve(undefined);
+    if (!this.#semanticIndex) {
+      const vector = this.#vector;
+      const embedder = this.#embedder;
+      const promise = this.getStorage()
+        .then(
+          knowledge =>
+            new KnowledgeSemanticIndexCoordinator({
+              knowledge,
+              vector,
+              embedder,
+              embedderOptions: this.#embedderOptions,
+            }),
+        )
+        .catch(error => {
+          if (this.#semanticIndex === promise) this.#semanticIndex = undefined;
+          throw error;
+        });
+      this.#semanticIndex = promise;
+    }
+    return this.#semanticIndex;
+  }
+
+  #toolHost(): KnowledgeToolHost {
+    return {
+      getKnowledgeStore: () => this.getStorage(),
+      getKnowledgeSemanticIndex: () => this.getSemanticIndex(),
+      getKnowledgeInstance: () => this,
+    };
+  }
+
+  #groups(override?: { read?: boolean; write?: boolean; pins?: boolean }): KnowledgeToolGroups {
+    return {
+      read: override?.read ?? this.#tools.read,
+      write: override?.write ?? this.#tools.write,
+      pins: override?.pins === false ? false : this.#pins || (override?.pins ? { maxPins: DEFAULT_MAX_PINS } : false),
+    };
+  }
+
+  /** Tools for explicit wiring; defaults to the groups configured on this Knowledge. */
+  createTools(options?: {
+    read?: boolean;
+    write?: boolean;
+    pins?: boolean;
+  }): Record<string, ToolAction<any, any, any>> {
+    return buildKnowledgeTools(this.#toolHost(), this.#groups(options));
+  }
+
+  /** The usage block that goes with `createTools(options)`. */
+  getInstructions(options?: { read?: boolean; write?: boolean; pins?: boolean }): string {
+    const groups = this.#groups(options);
+    return buildKnowledgeInstructions({ ...groups, pins: Boolean(groups.pins) }, this.#instructions);
+  }
+
+  /** Whether attached agents get pins delivered every turn. */
+  get pinsEnabled(): boolean {
+    return this.#pins !== false;
   }
 
   /** @internal */
@@ -392,6 +476,14 @@ export class Knowledge extends MastraBase {
 }
 
 export * from '../storage/domains/knowledge';
+export * from './knowledge-tools';
+export * from './knowledge-write-tools';
+export * from './pinned';
+export * from './pinned-state-processor';
+export * from './semantic-index';
+export * from './scope';
+export * from './instructions';
+export type { KnowledgeToolGroups, KnowledgeToolHost } from './attach';
 export type { KnowledgeConfig } from './config';
 export type {
   KnowledgeScopeAccessConfig,

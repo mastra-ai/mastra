@@ -2,7 +2,7 @@ import type { Memory } from '../../..';
 import { Extractor } from '../extractor';
 import type { ObservationalMemoryModel } from '../types';
 import { SubconsciousCurateExtractor } from './curate';
-import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_CHARACTERS, MAX_PINNED_MAX_CHARACTERS } from './pinned';
+import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_CHARACTERS, MAX_PINNED_MAX_CHARACTERS } from '@mastra/core/knowledge';
 import { SubconsciousRemindExtractor } from './remind';
 import type {
   ResolvedSubconsciousAgent,
@@ -233,20 +233,20 @@ export {
   PINNED_SNAPSHOT_TAG,
   PINNED_DELTA_TAG,
   SUBCONSCIOUS_PINS_STATE_ID,
-} from './pinned';
-export type { PinnedKnowledgeSet, PinnedToolsOptions } from './pinned';
+} from '@mastra/core/knowledge';
+export type { PinnedKnowledgeSet, PinnedToolsOptions } from '@mastra/core/knowledge';
 export {
   PinnedStateProcessor,
   applyPinOps,
   diffPins,
   effectivePriorPins,
   stablePinsCacheKey,
-} from './pinned-state-processor';
-export type { PinDeltaOp, PinEntry, PinnedStateProcessorDeps } from './pinned-state-processor';
-export { createKnowledgeWriteTools } from './knowledge-write-tools';
-export type { KnowledgeWriteToolsOptions } from './knowledge-write-tools';
-export { KnowledgeSemanticIndexCoordinator, StaleKnowledgeSemanticIndexError } from './semantic-index';
-export type { KnowledgeSemanticIndexCoordinatorConfig } from './semantic-index';
+} from '@mastra/core/knowledge';
+export type { PinDeltaOp, PinEntry, PinnedStateProcessorDeps } from '@mastra/core/knowledge';
+export { createKnowledgeWriteTools } from '@mastra/core/knowledge';
+export type { KnowledgeWriteToolsOptions } from '@mastra/core/knowledge';
+export { KnowledgeSemanticIndexCoordinator, StaleKnowledgeSemanticIndexError } from '@mastra/core/knowledge';
+export type { KnowledgeSemanticIndexCoordinatorConfig } from '@mastra/core/knowledge';
 export type {
   ResolvedSubconsciousAgent,
   ResolvedSubconsciousConfig,

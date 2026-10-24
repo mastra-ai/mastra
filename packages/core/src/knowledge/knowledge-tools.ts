@@ -1,14 +1,14 @@
+import type { JSONSchema7 } from 'json-schema';
 import type {
   KnowledgeRecord,
   KnowledgeNode,
   KnowledgeScope,
   KnowledgeStorage,
   SearchKnowledgeResult,
-} from '@mastra/core/storage';
-import { createKnowledgeNodeCursor, isKnowledgeScopeVisible } from '@mastra/core/storage';
-import type { ToolAction } from '@mastra/core/tools';
-import { createTool } from '@mastra/core/tools';
-import type { JSONSchema7 } from 'json-schema';
+} from '../storage';
+import { createKnowledgeNodeCursor, isKnowledgeScopeVisible } from '../storage';
+import type { ToolAction } from '../tools';
+import { createTool } from '../tools';
 
 import { resolveKnowledgeResourceId } from './scope';
 import type { KnowledgeSemanticIndexCoordinator } from './semantic-index';

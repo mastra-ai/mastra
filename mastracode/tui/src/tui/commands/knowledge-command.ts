@@ -1,11 +1,11 @@
 import { KnowledgeBrowserComponent } from '../components/knowledge-browser.js';
 import { showModalOverlay } from '../overlay.js';
-import { isSubconsciousEnabled } from '../utils/experimental-features.js';
+import { isKnowledgeEnabled } from '../utils/experimental-features.js';
 import type { SlashCommandContext } from './types.js';
 
 // TODO: Add public documentation before this experimental browser is announced.
 export async function handleKnowledgeCommand(ctx: SlashCommandContext): Promise<void> {
-  if (!isSubconsciousEnabled()) {
+  if (!isKnowledgeEnabled()) {
     ctx.showError('Unknown command: /knowledge');
     return;
   }
@@ -13,7 +13,7 @@ export async function handleKnowledgeCommand(ctx: SlashCommandContext): Promise<
   if (!inspector) {
     ctx.showError(
       ctx.knowledgeInspectorUnavailableReason ??
-        'Knowledge inspection is unavailable. Restart Mastra Code with MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1.',
+        'Knowledge inspection is unavailable. Restart Mastra Code with MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1.',
     );
     return;
   }

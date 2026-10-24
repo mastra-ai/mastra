@@ -1,8 +1,8 @@
-import type { KnowledgeRecord, KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '@mastra/core/storage';
-import { expandKnowledgeScope, isKnowledgeScopeVisible } from '@mastra/core/storage';
-import type { ToolAction } from '@mastra/core/tools';
-import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
+import type { KnowledgeRecord, KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '../storage';
+import { expandKnowledgeScope, isKnowledgeScopeVisible } from '../storage';
+import type { ToolAction } from '../tools';
+import { createTool } from '../tools';
 
 import { getKnowledgeStore } from './knowledge-tools';
 import type { KnowledgeStoreMemory } from './knowledge-tools';
