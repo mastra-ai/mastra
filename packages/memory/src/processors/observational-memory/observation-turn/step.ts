@@ -411,6 +411,8 @@ export class ObservationStep {
       });
     }
 
+    await this.sealObservedTail();
+
     // ── Refresh cross-thread context (resource scope) ──────────
     const otherThreadsContext = await this.turn.refreshOtherThreadsContext();
 
@@ -464,6 +466,36 @@ export class ObservationStep {
     };
     this._prepared = true;
     return this._context;
+  }
+
+  /**
+   * Once observed, the newest assistant message must be sealed so this step's output starts a new
+   * message instead of growing observed content. Observation seals it and rotates the response id,
+   * but a run recovered by another worker replays the step from a checkpoint taken before that: the
+   * record already lists the message as observed, so nothing observes again, and the replayed copy
+   * is unsealed. Re-apply the seal and rotation the observation made.
+   */
+  private async sealObservedTail() {
+    const { threadId, resourceId, messageList } = this.turn;
+    const observedIds = this.turn.record.observedMessageIds;
+    if (!observedIds?.length) return;
+
+    const last = getObservableMessages(messageList).at(-1);
+    if (last?.role !== 'assistant' || !observedIds.includes(last.id)) return;
+    if ((last.content.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed) return;
+
+    const om = this.turn.om;
+    om.sealMessagesForBuffering([last]);
+    if (!this.seededResponseMessage) {
+      try {
+        await this.turn.hooks?.onSyncObservationComplete?.();
+      } catch (error) {
+        omDebug(
+          `[OM:observe] onSyncObservationComplete hook failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    await om.persistMessages([last], threadId, resourceId);
   }
 
   /** Ids of already-drained messages that now hold parts the model has not been sent. */
