@@ -33,7 +33,7 @@
   "dependencies": {
     "@e2b/desktop": "^2.3.1",
     "@mastra/e2b": "workspace:^",
-    "e2b": "^2.36.0"
+    "e2b": "^2.58.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
