@@ -20,7 +20,7 @@ services:
   # Create test bucket on MinIO startup (distroless Chainguard images have no
   # shell, so bucket creation uses aws-cli instead of minio/mc)
   minio-setup:
-    image: amazon/aws-cli:2.36.44
+    image: amazon/aws-cli:2.38.5
     depends_on:
       minio:
         condition: service_healthy

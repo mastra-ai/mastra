@@ -1,6 +1,6 @@
 services:
   weaviate:
-    image: cr.weaviate.io/semitechnologies/weaviate:1.39.13
+    image: cr.weaviate.io/semitechnologies/weaviate:1.40.2
     ports:
       - '8080:8080' # REST API port
       - '50051:50051' # gRPC port
