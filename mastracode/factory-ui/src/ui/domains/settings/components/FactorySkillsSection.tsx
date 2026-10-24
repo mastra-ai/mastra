@@ -6,7 +6,7 @@ import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureCh
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Code as CodeIcon, FileText } from 'lucide-react';
+import { Code as CodeIcon, FileText, Pencil } from 'lucide-react';
 import { useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -14,6 +14,7 @@ import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { FactorySkillEditorDialog } from './FactorySkillEditorDialog';
 import { SettingsSubsection } from './SettingsSubsection';
 
 interface DisplayedSkill {
@@ -65,36 +66,44 @@ function SkillContent({ content }: { content: string }) {
 }
 
 function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo }) {
+  const [editing, setEditing] = useState(false);
+
   return (
     <SettingsContainer>
       <Collapsible>
-        <CollapsibleTrigger className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left">
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="flex items-center gap-2">
-              <Txt tone="ink" as="span" variant="body">
-                {title}
-                <Txt font="mono" tone="muted" as="span" variant="caption" className="ml-2">
-                  {skill.name}
+        <div className="flex items-center gap-2 pr-4">
+          <CollapsibleTrigger className="flex min-w-0 flex-1 items-center justify-between gap-4 py-3 pl-4 text-left">
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className="flex items-center gap-2">
+                <Txt tone="ink" as="span" variant="body">
+                  {title}
+                  <Txt font="mono" tone="muted" as="span" variant="caption" className="ml-2">
+                    {skill.name}
+                  </Txt>
                 </Txt>
-              </Txt>
-              {skill.error && <Badge variant="destructive">Failed to load</Badge>}
-            </span>
-            {skill.error ? (
-              <Txt as="span" variant="caption" className="text-destructive-foreground whitespace-pre-wrap">
-                Agents cannot load this skill: {skill.error}
-              </Txt>
-            ) : (
-              <Txt tone="muted" as="span" variant="caption">
-                {skill.description}
-              </Txt>
-            )}
-          </div>
-          <DisclosureChevron direction="right" className="text-muted-foreground size-4" />
-        </CollapsibleTrigger>
+                {skill.error && <Badge variant="destructive">Failed to load</Badge>}
+              </span>
+              {skill.error ? (
+                <Txt as="span" variant="caption" className="text-destructive-foreground whitespace-pre-wrap">
+                  Agents cannot load this skill: {skill.error}
+                </Txt>
+              ) : (
+                <Txt tone="muted" as="span" variant="caption">
+                  {skill.description}
+                </Txt>
+              )}
+            </div>
+            <DisclosureChevron direction="right" className="text-muted-foreground size-4" />
+          </CollapsibleTrigger>
+          <Button size="sm" icon={<Pencil />} aria-label={`Edit ${skill.name}`} onClick={() => setEditing(true)}>
+            Edit
+          </Button>
+        </div>
         <CollapsibleContent>
           <SkillContent content={skill.content} />
         </CollapsibleContent>
       </Collapsible>
+      {editing && <FactorySkillEditorDialog skill={skill} onClose={() => setEditing(false)} />}
     </SettingsContainer>
   );
 }
@@ -164,7 +173,7 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
     <SettingsSubsection
       scope="deployment"
       title="Factory skills"
-      description="The built-in playbooks Factory agents follow when working your items, shipped with the server and read-only. Expand a skill to read the exact instructions the agent receives."
+      description="The built-in playbooks Factory agents follow when working your items, shipped with the server. Expand a skill to read the exact instructions the agent receives, or open it in the editor. Saving changes is not available yet."
     >
       {skillsQuery.isPending && (
         <Txt tone="muted" as="p" variant="caption" role="status">
