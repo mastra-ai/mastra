@@ -21,7 +21,7 @@ Records and node descriptions have size limits, counted in tokens. See [limits](
 
 ## Scopes and tags
 
-A **scope** decides who sees a record. A scope is identified by a **tag** in the form `<type>:<value>`, for example `org:acme` or `team:acme:director`. The value can contain `:`.
+A **scope** decides who sees a record. A scope is identified by a **tag** in the form `<type>:<value>`, for example `org:acme` or `team:acme:director`. The value can contain `:`. The type is lowercase letters, digits, `_` and `-`, starting with a letter. No part of the value may start with `$`. A scope holds at most 8 tags, and their order doesn't matter.
 
 A run gets its tags from the agent: the `scopes` set on the agent, the `scopes` passed to a call, or the request context. Knowledge also adds `resource:<id>` and `thread:<id>` when the run has a resource or thread ID. A run reads records at every tag it holds.
 
