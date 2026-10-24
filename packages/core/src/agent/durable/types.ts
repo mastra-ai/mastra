@@ -629,7 +629,7 @@ export interface AgentStreamEvent<T = unknown> {
    */
   index?: number;
   /**
-   * The `chunk` event's chunk already ran through the run's output processors
+   * The `chunk` or `step-start` event's chunk already ran through the run's output processors
    * before it was published, so the stream consumer must not run them again.
    */
   outputProcessed?: boolean;

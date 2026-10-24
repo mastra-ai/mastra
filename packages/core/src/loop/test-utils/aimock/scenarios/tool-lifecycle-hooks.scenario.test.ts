@@ -173,9 +173,9 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
     ]);
   });
 
-  // Durable and evented drop per-execution hooks: Agent.getToolsForExecution never forwards
+  // Durable, evented and inngest drop per-execution hooks: Agent.getToolsForExecution never forwards
   // `hooks` to convertTools (#27430).
-  const itPerExecutionHooks = engine === 'durable' || engine === 'evented' ? it.fails : it;
+  const itPerExecutionHooks = engine === 'durable' || engine === 'evented' || engine === 'inngest' ? it.fails : it;
 
   itPerExecutionHooks(
     'lets per-execution beforeToolCall override the agent hook and short-circuit execute',

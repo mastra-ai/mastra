@@ -11,6 +11,7 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
+import { CachingPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import type { ApiRoute } from '@mastra/core/server';
 import { createHonoServer } from '@mastra/deployer/server';
@@ -19,6 +20,7 @@ import { Inngest } from 'inngest';
 
 import { serve as inngestServe } from '../index';
 import type { InngestFlowControlConfig } from '../types';
+import type { InngestWorkflow } from '../workflow';
 import { ensureInngestCliBinary } from './inngest-cli';
 
 // Set INNGEST_TEST_PORT_OFFSET to run several dev servers side by side (one per test worker).
@@ -239,6 +241,17 @@ export async function setupSharedTestInfrastructure({
   // Create the shared workflow
   const { createInngestDurableAgenticWorkflow } = await import('../durable-agent/create-inngest-agentic-workflow');
   const workflow = createInngestDurableAgenticWorkflow({ inngest, retries });
+  // Mastra serves the first workflow registered under this id, so this one
+  // shadows each agent's own copy. Wire it the way `createInngestAgent` wires
+  // that copy: agent stream events go through a CachingPubSub over the shared
+  // server cache, so `observe()` and resume offsets can replay run history.
+  // The chained `.commit()` builder loses the InngestWorkflow subtype, so cast back.
+  (workflow as unknown as InngestWorkflow).__setPubsubFactory(
+    defaultPubsub =>
+      new CachingPubSub(defaultPubsub, getSharedMastra().serverCache, {
+        shouldCache: topic => topic.startsWith('agent.stream.'),
+      }),
+  );
 
   // Create shared Mastra instance with the workflow pre-registered
   // This is required because Inngest reads workflows at serve() time
@@ -262,6 +275,10 @@ export async function setupSharedTestInfrastructure({
       ],
     },
   });
+
+  // Scenarios that pass `backgroundTasks` (untilIdle wrapping, background tools)
+  // register on this Mastra, so it needs the background task manager running.
+  await sharedMastra.startWorkers();
 
   // Create and start shared server
   const app = await createHonoServer(sharedMastra);
@@ -334,6 +351,7 @@ export async function teardownSharedTestInfrastructure({ forceClose = false } = 
   await stopInngestDevServer(inngestDevServer);
   inngestDevServer = null;
 
+  await sharedMastra?.stopWorkers();
   sharedMastra = null;
   sharedInngest = null;
 }
