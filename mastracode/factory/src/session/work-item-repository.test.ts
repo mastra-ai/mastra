@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { resolveWorkItemRepository } from './work-item-repository.js';
@@ -162,59 +162,6 @@ describe('resolveWorkItemRepository', () => {
         item: { metadata: null },
       }),
     ).resolves.toEqual({ status: 'unlinked', hint: 'This Factory has no linked source-control repositories.' });
-  });
-
-  it('picks the environment link when a reinstall left a second link for the same repository', async () => {
-    const { sourceControl, project, repositories } = await seedRepositories(['acme/one']);
-    const environmentLink = repositories[0]!.projectRepository;
-    // A provider-app reinstall: a new installation and connection whose link
-    // for the same repository is created ahead of the original one in storage
-    // order, and is kept out of the environment because the slug is taken.
-    const installation = await sourceControl.installations.upsert({
-      orgId: 'org-1',
-      connectedByUserId: 'user-1',
-      externalId: 'installation-2',
-    });
-    const connection = await sourceControl.connections.create({
-      orgId: 'org-1',
-      factoryProjectId: project.id,
-      installationId: installation.id,
-      createdByUserId: 'user-1',
-    });
-    const reinstalled = await sourceControl.repositories.upsert({
-      orgId: 'org-1',
-      input: { installationId: installation.id, externalId: '1', slug: 'acme/one', defaultBranch: 'main' },
-    });
-    const duplicate = await sourceControl.projectRepositories.link({
-      orgId: 'org-1',
-      connectionId: connection.id,
-      repositoryId: reinstalled.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/acme/one',
-    });
-    expect(duplicate.inEnvironment).toBe(false);
-    const listConnections = sourceControl.connections.list.bind(sourceControl.connections);
-    vi.spyOn(sourceControl.connections, 'list').mockImplementation(async args =>
-      (await listConnections(args)).reverse(),
-    );
-    const args = { sourceControl, orgId: 'org-1', factoryProjectId: project.id };
-    const expected = { status: 'resolved', projectRepositoryId: environmentLink.id, slug: 'acme/one' };
-
-    await expect(resolveWorkItemRepository({ ...args, item: { metadata: null } })).resolves.toEqual(expected);
-    await expect(
-      resolveWorkItemRepository({ ...args, item: { metadata: { repository: 'acme/one' } } }),
-    ).resolves.toEqual(expected);
-    await expect(
-      resolveWorkItemRepository({ ...args, item: { metadata: { githubRepositoryId: 1 } } }),
-    ).resolves.toEqual(expected);
-    await expect(
-      resolveWorkItemRepository({
-        ...args,
-        item: { metadata: { linearProjectId: 'linear-project' } },
-        linearRepositoryMap: { 'linear-project': 'acme/one' },
-      }),
-    ).resolves.toEqual(expected);
   });
 
   it('does not pick a provider id shared by multiple linked installations', async () => {

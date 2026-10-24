@@ -11,7 +11,6 @@ interface LinkedRepository {
   projectRepositoryId: string;
   externalId: string;
   slug: string;
-  inEnvironment: boolean;
 }
 
 async function listLinkedRepositories(args: {
@@ -38,7 +37,6 @@ async function listLinkedRepositories(args: {
             projectRepositoryId: projectRepository.id,
             externalId: repository.externalId,
             slug: repository.slug,
-            inEnvironment: projectRepository.inEnvironment,
           });
         }
       }
@@ -66,21 +64,10 @@ function getExternalRepositoryId(integrationId: string, metadata: Record<string,
   return id == null ? undefined : String(id);
 }
 
-/**
- * The one link among `matches` a run can use. A repository can be linked more
- * than once (a provider-app reinstall adds a second link for the same slug),
- * but only one of those links is in the environment, and only an environment
- * link can start a session, so it wins over its out-of-environment duplicates.
- */
-function pickLink(matches: LinkedRepository[]): LinkedRepository | undefined {
-  if (matches.length === 1) return matches[0];
-  const inEnvironment = matches.filter(repository => repository.inEnvironment);
-  return inEnvironment.length === 1 ? inEnvironment[0] : undefined;
-}
-
-function findRepositoryBySlug(repositories: LinkedRepository[], slug: string) {
-  const matches = repositories.filter(repository => repository.slug === slug);
-  return pickLink(matches) ?? matches[0];
+function findUniqueRepositoryByExternalId(repositories: LinkedRepository[], externalId: string) {
+  const matches = repositories.filter(repository => repository.externalId === externalId);
+  const [match] = matches;
+  return matches.length === 1 ? match : undefined;
 }
 
 function resolvedRepository(repository: LinkedRepository): WorkItemRepositoryResolution {
@@ -104,12 +91,12 @@ export async function resolveWorkItemRepository(args: {
 
   // The provider id survives repository renames, so it outranks a possibly stale slug.
   if (externalRepositorySignal !== undefined) {
-    const match = pickLink(linked.filter(repository => repository.externalId === externalRepositorySignal));
+    const match = findUniqueRepositoryByExternalId(linked, externalRepositorySignal);
     if (match) return resolvedRepository(match);
   }
 
   if (repositorySignal) {
-    const match = findRepositoryBySlug(linked, repositorySignal);
+    const match = linked.find(repository => repository.slug === repositorySignal);
     return match
       ? resolvedRepository(match)
       : { status: 'unlinked', hint: `Repository ${repositorySignal} is not linked to this Factory.` };
@@ -123,7 +110,7 @@ export async function resolveWorkItemRepository(args: {
   }
 
   if (mappedRepository) {
-    const match = findRepositoryBySlug(linked, mappedRepository);
+    const match = linked.find(repository => repository.slug === mappedRepository);
     return match
       ? resolvedRepository(match)
       : { status: 'unlinked', hint: `Mapped repository ${mappedRepository} is not linked to this Factory.` };
@@ -133,8 +120,7 @@ export async function resolveWorkItemRepository(args: {
   if (candidates.length === 0) {
     return { status: 'unlinked', hint: 'This Factory has no linked source-control repositories.' };
   }
-  // Every link shares the one slug here, so prefer the environment link among them.
-  const onlyRepository = candidates.length === 1 ? (pickLink(linked) ?? linked[0]) : undefined;
-  if (onlyRepository) return resolvedRepository(onlyRepository);
+  const [firstRepository] = linked;
+  if (candidates.length === 1 && firstRepository) return resolvedRepository(firstRepository);
   return { status: 'ambiguous', candidates };
 }
