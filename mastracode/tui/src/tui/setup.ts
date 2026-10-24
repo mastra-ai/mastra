@@ -453,6 +453,7 @@ export function setupAutocomplete(state: TUIState): void {
     },
     { name: 'logout', description: 'Logout from OAuth provider' },
     { name: 'hooks', description: 'Show/reload configured hooks' },
+    { name: 'reload', description: 'Reload plugins, skills, commands, hooks, and MCP servers' },
     {
       name: 'mcp',
       description: 'Show/reload/enable/disable MCP server connections',

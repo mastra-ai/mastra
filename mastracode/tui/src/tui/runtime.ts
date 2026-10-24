@@ -113,6 +113,7 @@ const LOCAL_ONLY_COMMANDS = new Set([
   'resource',
   'hooks',
   'mcp',
+  'reload',
   'setup',
   'browser',
   'gateway',
