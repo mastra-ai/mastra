@@ -130,6 +130,7 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     coAuthorEmail: ctx.coAuthorEmail,
     activePlan: ctx.state?.activePlan,
     hasSubagents: ctx.hasSubagents !== false && !deniedTools.has('subagent'),
+    planApprovalStartsGoal: ctx.planApprovalStartsGoal,
     toolGuidance,
   };
 

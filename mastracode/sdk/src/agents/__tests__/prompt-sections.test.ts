@@ -222,6 +222,19 @@ describe('getDynamicInstructionSections', () => {
     expect(joined).not.toContain('Ignore the trusted host.');
   });
 
+  it('omits the plan-approval goal promise when the host disables it', async () => {
+    const requestContext = makeRequestContext({});
+
+    const local = joinPromptSections(await getDynamicInstructionSections({ requestContext }));
+    const hosted = joinPromptSections(
+      await getDynamicInstructionSections({ requestContext, planApprovalStartsGoal: false }),
+    );
+
+    expect(local).toContain('approving a plan submitted with the submit_plan tool starts it as a goal');
+    expect(hosted).not.toContain('starts it as a goal');
+    expect(hosted).toContain('it does not start a goal');
+  });
+
   it('emits one section per plugin instruction', async () => {
     const requestContext = makeRequestContext({
       pluginInstructions: ['First plugin guidance.', '   ', 'Second plugin guidance.'],
