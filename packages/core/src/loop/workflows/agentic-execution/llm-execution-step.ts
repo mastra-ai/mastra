@@ -1259,7 +1259,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   workspace,
   outputWriter,
   mastra,
-  rotateResponseMessageId: rotateLoopResponseMessageId,
+  rotateResponseMessageId: rotateRunResponseMessageId,
   eagerCoordinator,
   eagerToolCallStep,
   runAbortSignal,
@@ -1281,6 +1281,26 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   // would read the wrong parts.
   const transcriptSteps: (TranscriptStep | undefined)[] = [];
   const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
+  // Each sealed response id mapped to the id that replaced it. A step can rotate after
+  // it has returned: a processor that kept its sendSignal fires it while a tool runs.
+  // The next step then receives the sealed id as inputData.messageId and must follow
+  // it to the replacement, or its reply lands in the sealed message ahead of the signal.
+  const replacedResponseMessageIds = new Map<string, string>();
+  const rotateLoopResponseMessageId = (sealMessageId?: string) => {
+    const nextMessageId = rotateRunResponseMessageId(sealMessageId);
+    if (sealMessageId) replacedResponseMessageIds.set(sealMessageId, nextMessageId);
+    return nextMessageId;
+  };
+  const latestResponseMessageId = (messageId: string) => {
+    // A caller id generator may repeat ids, so stop at any id already visited.
+    const visited = new Set<string>();
+    let latest = messageId;
+    while (!visited.has(latest) && replacedResponseMessageIds.has(latest)) {
+      visited.add(latest);
+      latest = replacedResponseMessageIds.get(latest)!;
+    }
+    return latest;
+  };
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
     if (!terminal) {
@@ -1471,7 +1491,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       let currentMessageId = inputData.isTaskCompleteCheckFailed
         ? `${messageIdPassed}-${currentIteration}`
-        : inputData.messageId || messageIdPassed;
+        : latestResponseMessageId(inputData.messageId || messageIdPassed);
 
       // The abort reason from a processor-requested retry goes at the end of the conversation,
       // verbatim, as a reminder signal, so the retry reuses the cached prompt prefix. A system message would
