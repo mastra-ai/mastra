@@ -314,6 +314,62 @@ describe('suspended run in-memory TTL', () => {
       }
     });
 
+    it('reports blocked to a sender on another instance when the claimed owner loses the lease', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      await registerSuspendedRun('run-1', 'thread-1', watcher);
+      await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+      const owner = createWakeableAgent('run-2');
+      const claim = await runtime.claimThreadOwnership(
+        owner.agent,
+        { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+        pubsub,
+      );
+      expect(claim.claimed).toBe(true);
+
+      // The sender is a separate runtime instance, so the claimed owner's verdict
+      // reaches it only through the PubSub acceptance reply.
+      const senderRuntime = new AgentThreadStreamRuntime();
+      try {
+        await expect(
+          senderRuntime.sendSignal(
+            createWakeableAgent('run-3').agent,
+            { type: 'user-message', contents: 'hello from another instance' },
+            { resourceId: RESOURCE_ID, threadId: 'thread-1', ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+            pubsub,
+          ).accepted,
+        ).resolves.toEqual({ action: 'blocked', reason: 'thread-blocked', runId: 'run-1' });
+        await flushPublishes();
+        expect(watcher.has('signal-enqueued', 'run-1')).toBe(false);
+        expect(owner.stream).not.toHaveBeenCalled();
+      } finally {
+        claim.unsubscribe();
+      }
+    });
+
+    it('still delivers through a claimed owner on another instance when no swept run holds the lease', async () => {
+      const owner = createWakeableAgent('run-2');
+      const claim = await runtime.claimThreadOwnership(
+        owner.agent,
+        { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+        pubsub,
+      );
+      expect(claim.claimed).toBe(true);
+      const senderRuntime = new AgentThreadStreamRuntime();
+      try {
+        await expect(
+          senderRuntime.sendSignal(
+            createWakeableAgent('run-3').agent,
+            { type: 'user-message', contents: 'hello from another instance' },
+            { resourceId: RESOURCE_ID, threadId: 'thread-1', ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+            pubsub,
+          ).accepted,
+        ).resolves.toMatchObject({ action: 'deliver' });
+        expect(owner.stream).toHaveBeenCalledTimes(1);
+      } finally {
+        claim.unsubscribe();
+      }
+    });
+
     it('wakes a new run once the abandoned lease is gone', async () => {
       const watcher = await watchThread(pubsub, 'thread-1');
       await registerSuspendedRun('run-1', 'thread-1', watcher);
