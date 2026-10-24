@@ -67,10 +67,14 @@ const deferredSemanticTokens = [
   'ring',
 ] as const;
 
+// The themes stack surfaces in opposite orders: in dark the page sits below a
+// shared sidebar/card surface, in light the rail sits below the page and cards.
+const themeSurfaceAliases = {
+  dark: { background: 'background-1', sidebar: 'background-2', card: 'background-2' },
+  light: { background: 'background-2', sidebar: 'background-1', card: 'background-3' },
+} as const;
+
 const semanticAliases = {
-  background: 'background-2',
-  sidebar: 'background-1',
-  card: 'background-3',
   popover: 'background-3',
   muted: 'gray-1',
   foreground: 'gray-10',
@@ -235,8 +239,8 @@ describe('theme.css export', () => {
 
   it('exposes the background and gray foundation scales', () => {
     const darkColors = [
-      ['background-1', 'oklch(0.1382 0 0)'],
-      ['background-2', 'oklch(0.1591 0 0)'],
+      ['background-1', 'oklch(0.14 0 0)'],
+      ['background-2', 'oklch(0.161 0 0)'],
       ['background-3', 'oklch(0.1913 0 0)'],
       ['gray-1', 'oklch(0.2178 0 0)'],
       ['gray-2', 'oklch(0.2435 0 0)'],
@@ -299,6 +303,13 @@ describe('theme.css export', () => {
 
     for (const [token, reference] of Object.entries(semanticAliases)) {
       expect(darkVariables.get(token)).toBe(`var(--${reference})`);
+      expect(lightVariables.get(token)).toBe(`var(--${reference})`);
+    }
+
+    for (const [token, reference] of Object.entries(themeSurfaceAliases.dark)) {
+      expect(darkVariables.get(token)).toBe(`var(--${reference})`);
+    }
+    for (const [token, reference] of Object.entries(themeSurfaceAliases.light)) {
       expect(lightVariables.get(token)).toBe(`var(--${reference})`);
     }
 

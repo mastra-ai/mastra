@@ -9,8 +9,8 @@
 :root {
   /* Dark theme (default) */
 
-  --background-1: oklch(0.1382 0 0);
-  --background-2: oklch(0.1591 0 0);
+  --background-1: oklch(0.14 0 0);
+  --background-2: oklch(0.161 0 0);
   --background-3: oklch(0.1913 0 0);
   --gray-1: oklch(0.2178 0 0);
   --gray-2: oklch(0.2435 0 0);

@@ -30,10 +30,15 @@
 @import './theme/scale.css';
 @import './theme/motion.css';
 
+/* The two themes stack their surfaces in opposite orders. In dark the page is
+   the darkest surface, sitting behind everything, and the sidebar and cards
+   share one lighter surface on top: lighter reads as nearer on a dark canvas.
+   Light keeps the usual order, a grey rail beside a near-white page with white
+   cards. In dark, popovers sit one rung above the cards. */
 :root {
-  --background: var(--background-2);
-  --sidebar: var(--background-1);
-  --card: var(--background-3);
+  --background: var(--background-1);
+  --sidebar: var(--background-2);
+  --card: var(--background-2);
   --popover: var(--background-3);
   --field: var(--card);
   --field-disabled: var(--fill-subtle);
@@ -47,6 +52,12 @@
      text read as a second ink instead of stepping back. */
   --muted-foreground: var(--gray-8);
   --placeholder: var(--gray-7);
+}
+
+html.light {
+  --background: var(--background-2);
+  --sidebar: var(--background-1);
+  --card: var(--background-3);
 }
 
 /* Semantic aliases stay inline so utilities resolve var(--token) on the styled
