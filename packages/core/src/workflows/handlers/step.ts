@@ -32,7 +32,6 @@ import {
   validateStepInput,
   createDeprecationProxy,
   defineLazyWriter,
-  omitForeachProgress,
   omitPriorCompletionFields,
   runCountDeprecationMessage,
   validateStepResumeData,
@@ -40,6 +39,7 @@ import {
   validateStepStateData,
   validateStepRequestContext,
 } from '../utils';
+import { omitForeachProgress } from './foreach-progress';
 
 export interface ExecuteStepParams extends ObservabilityContext {
   workflowId: string;

@@ -34,12 +34,11 @@ import {
   runCountDeprecationMessage,
   getResumeLabelsByStepId,
   getSingleStepEntryId,
-  getForeachProgress,
-  omitForeachProgress,
   omitPriorCompletionFields,
   resolveForeachConcurrency,
 } from '../utils';
-import type { ForeachProgress } from '../utils';
+import { getForeachProgress, omitForeachProgress } from './foreach-progress';
+import type { ForeachProgress } from './foreach-progress';
 import type { ExecuteStepParams } from './step';
 
 /**
