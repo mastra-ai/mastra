@@ -19,6 +19,7 @@ import { InMemoryPromptBlocksStorage } from './domains/prompt-blocks/inmemory';
 import { InMemorySchedulesStorage } from './domains/schedules/inmemory';
 import { InMemoryScorerDefinitionsStorage } from './domains/scorer-definitions/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
+import { InMemorySignalSubscriptionsStorage } from './domains/signal-subscriptions/inmemory';
 import { InMemorySkillsStorage } from './domains/skills/inmemory';
 import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 import { InMemoryToolProviderConnectionsStorage } from './domains/tool-provider-connections/inmemory';
@@ -91,6 +92,7 @@ export class InMemoryStore extends MastraCompositeStore {
       harness: new InMemoryHarness(),
       toolProviderConnections: new InMemoryToolProviderConnectionsStorage({ db: this.#db }),
       threadState: new InMemoryThreadStateStorage(),
+      signalSubscriptions: new InMemorySignalSubscriptionsStorage(),
     };
   }
 

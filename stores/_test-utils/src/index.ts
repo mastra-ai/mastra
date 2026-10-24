@@ -5,6 +5,7 @@ export * from './domains/memory/messages-list-include-resource-scope';
 export * from './domains/memory/observational-memory-concurrency';
 export * from './domains/memory/child-process-memory-storage';
 export * from './domains/knowledge';
+export * from './domains/signal-subscriptions';
 export * from './domains/datasets/fidelity';
 export * from './domains/run-fencing';
 export * from './domains/workflow-step-guards';

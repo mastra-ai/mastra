@@ -92,4 +92,54 @@ describeForAllEngines('AIMock scenario: ifIdle persist behavior', engine => {
     const text = await output.text;
     expect(text).toContain('noted response');
   });
+
+  it('recovers an idle signal after the agent instance is replaced', async () => {
+    const threadId = 'restarted-signal-thread';
+    const resourceId = 'restarted-signal-user';
+    const memory = new MockMemory();
+    const first = await createSharedAgent(getMock(), { memory, engine });
+
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Start the conversation',
+      sharedAgent: first,
+      memory,
+      threadId,
+      resourceId,
+      stopWhen: stepCountIs(2),
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', predicate: req => !JSON.stringify(req).includes(PERSISTED) },
+          { content: 'initial response' },
+        );
+        llm.on(
+          { endpoint: 'chat', predicate: req => JSON.stringify(req).includes(PERSISTED) },
+          { content: 'recovered response' },
+        );
+      },
+    });
+
+    const signal = first.agent.sendMessage(
+      { contents: PERSISTED },
+      { resourceId, threadId, ifIdle: { behavior: 'persist' } },
+    );
+    await expect(signal.accepted).resolves.toMatchObject({ action: 'persist' });
+
+    const replacement = await createSharedAgent(getMock(), { memory, engine });
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'What did I note?',
+      sharedAgent: replacement,
+      memory,
+      threadId,
+      resourceId,
+      stopWhen: stepCountIs(2),
+      fixtures: () => {},
+    });
+
+    expect(requestText(requests[requests.length - 1])).toContain(PERSISTED);
+    expect(await output.text).toContain('recovered response');
+  });
 });
