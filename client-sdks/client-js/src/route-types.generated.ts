@@ -4794,6 +4794,22 @@ type Shared_Type_103 = {
 };
 
 type Shared_Type_104 = {
+  id: string;
+  page: string;
+  name: string;
+  /** Who created the view. `null` when the server runs without auth. */
+  authorId: string | null;
+  /** Who last changed the view, starting as `authorId`. `null` when the server runs without auth. */
+  updatedById: string | null;
+  state: {
+    version: number;
+    [x: string]: unknown;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type Shared_Type_105 = {
   /** Installation identifier */
   id: string;
   /** Platform identifier */
@@ -22882,6 +22898,167 @@ export interface PostSchedulesScheduleIdRun_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /saved-views
+// ============================================================================
+export type GetSavedViews_QueryParams = {
+  /** Only return views for this Studio page, for example `traces` */
+  page?: string | undefined;
+  /** Views per page of results, 1 to 100 */
+  perPage?: number | undefined;
+  /** Zero-based page of results */
+  pageIndex?: number | undefined;
+};
+
+export type GetSavedViews_Response = {
+  views: Shared_Type_104[];
+  pagination: {
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  };
+};
+
+export type GetSavedViews_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetSavedViews_QueryParams extends never
+      ? {}
+      : {} extends GetSavedViews_QueryParams
+        ? { query?: GetSavedViews_QueryParams }
+        : { query: GetSavedViews_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetSavedViews_RouteContract {
+  pathParams: never;
+  queryParams: GetSavedViews_QueryParams;
+  body: never;
+  request: GetSavedViews_Request;
+  response: GetSavedViews_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /saved-views/:savedViewId
+// ============================================================================
+export type GetSavedViewsSavedViewId_PathParams = {
+  /** Unique identifier for the saved view */
+  savedViewId: string;
+};
+
+export type GetSavedViewsSavedViewId_Response = Shared_Type_104;
+
+export type GetSavedViewsSavedViewId_Request = Simplify<
+  (GetSavedViewsSavedViewId_PathParams extends never ? {} : { params: GetSavedViewsSavedViewId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetSavedViewsSavedViewId_RouteContract {
+  pathParams: GetSavedViewsSavedViewId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetSavedViewsSavedViewId_Request;
+  response: GetSavedViewsSavedViewId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /saved-views
+// ============================================================================
+export type PostSavedViews_Body = {
+  /** Studio page the view belongs to, for example `traces` */
+  page: string;
+  name: string;
+  /** What the view restores, such as filters, time range, sort and columns. Must include an integer `version`. */
+  state: {
+    version: number;
+    [x: string]: unknown;
+  };
+};
+
+export type PostSavedViews_Response = GetSavedViewsSavedViewId_Response;
+
+export type PostSavedViews_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostSavedViews_Body extends never
+      ? {}
+      : {} extends PostSavedViews_Body
+        ? { body?: PostSavedViews_Body }
+        : { body: PostSavedViews_Body })
+>;
+
+export interface PostSavedViews_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostSavedViews_Body;
+  request: PostSavedViews_Request;
+  response: PostSavedViews_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PATCH /saved-views/:savedViewId
+// ============================================================================
+export type PatchSavedViewsSavedViewId_PathParams = GetSavedViewsSavedViewId_PathParams;
+
+export type PatchSavedViewsSavedViewId_Body = {
+  name?: string | undefined;
+  state?:
+    | {
+        version: number;
+        [x: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PatchSavedViewsSavedViewId_Response = GetSavedViewsSavedViewId_Response;
+
+export type PatchSavedViewsSavedViewId_Request = Simplify<
+  (PatchSavedViewsSavedViewId_PathParams extends never ? {} : { params: PatchSavedViewsSavedViewId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchSavedViewsSavedViewId_Body extends never
+      ? {}
+      : {} extends PatchSavedViewsSavedViewId_Body
+        ? { body?: PatchSavedViewsSavedViewId_Body }
+        : { body: PatchSavedViewsSavedViewId_Body })
+>;
+
+export interface PatchSavedViewsSavedViewId_RouteContract {
+  pathParams: PatchSavedViewsSavedViewId_PathParams;
+  queryParams: never;
+  body: PatchSavedViewsSavedViewId_Body;
+  request: PatchSavedViewsSavedViewId_Request;
+  response: PatchSavedViewsSavedViewId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /saved-views/:savedViewId
+// ============================================================================
+export type DeleteSavedViewsSavedViewId_PathParams = GetSavedViewsSavedViewId_PathParams;
+
+export type DeleteSavedViewsSavedViewId_Response = {
+  deleted: true;
+};
+
+export type DeleteSavedViewsSavedViewId_Request = Simplify<
+  (DeleteSavedViewsSavedViewId_PathParams extends never ? {} : { params: DeleteSavedViewsSavedViewId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteSavedViewsSavedViewId_RouteContract {
+  pathParams: DeleteSavedViewsSavedViewId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteSavedViewsSavedViewId_Request;
+  response: DeleteSavedViewsSavedViewId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /channels/platforms
 // ============================================================================
 export type GetChannelsPlatforms_Response = {
@@ -22922,7 +23099,7 @@ export type GetChannelsPlatformInstallations_PathParams = {
   platform: string;
 };
 
-export type GetChannelsPlatformInstallations_Response = Shared_Type_104[];
+export type GetChannelsPlatformInstallations_Response = Shared_Type_105[];
 
 export type GetChannelsPlatformInstallations_Request = Simplify<
   (GetChannelsPlatformInstallations_PathParams extends never
@@ -23010,7 +23187,7 @@ export type PostChannelsPlatformAgentIdReconcile_PathParams = {
   agentId: string;
 };
 
-export type PostChannelsPlatformAgentIdReconcile_Response = Shared_Type_104 | null;
+export type PostChannelsPlatformAgentIdReconcile_Response = Shared_Type_105 | null;
 
 export type PostChannelsPlatformAgentIdReconcile_Request = Simplify<
   (PostChannelsPlatformAgentIdReconcile_PathParams extends never
@@ -24984,6 +25161,11 @@ export interface RouteTypes {
   'POST /schedules/:scheduleId/pause': PostSchedulesScheduleIdPause_RouteContract;
   'POST /schedules/:scheduleId/resume': PostSchedulesScheduleIdResume_RouteContract;
   'POST /schedules/:scheduleId/run': PostSchedulesScheduleIdRun_RouteContract;
+  'GET /saved-views': GetSavedViews_RouteContract;
+  'GET /saved-views/:savedViewId': GetSavedViewsSavedViewId_RouteContract;
+  'POST /saved-views': PostSavedViews_RouteContract;
+  'PATCH /saved-views/:savedViewId': PatchSavedViewsSavedViewId_RouteContract;
+  'DELETE /saved-views/:savedViewId': DeleteSavedViewsSavedViewId_RouteContract;
   'GET /channels/platforms': GetChannelsPlatforms_RouteContract;
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
   'POST /channels/:platform/connect': PostChannelsPlatformConnect_RouteContract;
@@ -25774,6 +25956,15 @@ export interface Client {
   };
   '/processors/:processorId/execute': {
     POST: PostProcessorsProcessorIdExecute_RouteContract;
+  };
+  '/saved-views': {
+    GET: GetSavedViews_RouteContract;
+    POST: PostSavedViews_RouteContract;
+  };
+  '/saved-views/:savedViewId': {
+    DELETE: DeleteSavedViewsSavedViewId_RouteContract;
+    GET: GetSavedViewsSavedViewId_RouteContract;
+    PATCH: PatchSavedViewsSavedViewId_RouteContract;
   };
   '/schedules': {
     GET: GetSchedules_RouteContract;

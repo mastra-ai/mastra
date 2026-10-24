@@ -85,6 +85,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   mastra_channel_config: `ReplacingMergeTree()`,
   [TABLE_THREAD_STATE]: `ReplacingMergeTree()`,
   [TABLE_WORKFLOW_DEFINITIONS]: `ReplacingMergeTree()`,
+  mastra_saved_views: `ReplacingMergeTree()`,
   [TABLE_KNOWLEDGE_NODES]: `ReplacingMergeTree()`,
   [TABLE_KNOWLEDGE_RECORDS]: `ReplacingMergeTree()`,
   [TABLE_KNOWLEDGE_MENTIONS]: `ReplacingMergeTree()`,

@@ -897,6 +897,110 @@ describe('MastraClient', () => {
     });
   });
 
+  describe('Saved Views', () => {
+    let client: MastraClient;
+    const view = {
+      id: 'view-1',
+      page: 'traces',
+      name: 'Errors',
+      authorId: null,
+      updatedById: null,
+      state: { version: 1, filters: [], settings: { datePreset: 'last-24h' } },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const respondWith = (body: unknown) =>
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => body,
+      });
+    const lastCall = () => (global.fetch as any).mock.calls.at(-1) as [string, RequestInit];
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('lists views for a page', async () => {
+      const response = { views: [view], pagination: { total: 1, page: 0, perPage: 100, hasMore: false } };
+      respondWith(response);
+
+      const result = await client.listSavedViews({ page: 'traces' });
+
+      expect(lastCall()[0]).toBe('http://localhost:4111/api/saved-views?page=traces');
+      expect(result).toEqual(response);
+    });
+
+    it('lists every view when no page is given', async () => {
+      respondWith({ views: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } });
+
+      await client.listSavedViews();
+
+      expect(lastCall()[0]).toBe('http://localhost:4111/api/saved-views');
+    });
+
+    it('sends an empty page so the server rejects it', async () => {
+      respondWith({ views: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } });
+
+      await client.listSavedViews({ page: '' });
+
+      expect(lastCall()[0]).toBe('http://localhost:4111/api/saved-views?page=');
+    });
+
+    it('sends perPage and pageIndex', async () => {
+      respondWith({ views: [], pagination: { total: 0, page: 2, perPage: 25, hasMore: false } });
+
+      await client.listSavedViews({ page: 'traces', perPage: 25, pageIndex: 2 });
+
+      expect(lastCall()[0]).toBe('http://localhost:4111/api/saved-views?page=traces&perPage=25&pageIndex=2');
+    });
+
+    it('gets a view by id', async () => {
+      respondWith(view);
+
+      const result = await client.getSavedView('view/1');
+
+      expect(lastCall()[0]).toBe('http://localhost:4111/api/saved-views/view%2F1');
+      expect(result).toEqual(view);
+    });
+
+    it('creates a view', async () => {
+      respondWith(view);
+      const body = { page: 'traces', name: 'Errors', state: view.state };
+
+      const result = await client.createSavedView(body);
+
+      const [url, init] = lastCall();
+      expect(url).toBe('http://localhost:4111/api/saved-views');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body as string)).toEqual(body);
+      expect(result).toEqual(view);
+    });
+
+    it('updates a view', async () => {
+      respondWith({ ...view, name: 'Renamed' });
+
+      await client.updateSavedView('view-1', { name: 'Renamed' });
+
+      const [url, init] = lastCall();
+      expect(url).toBe('http://localhost:4111/api/saved-views/view-1');
+      expect(init.method).toBe('PATCH');
+      expect(JSON.parse(init.body as string)).toEqual({ name: 'Renamed' });
+    });
+
+    it('deletes a view', async () => {
+      respondWith({ deleted: true });
+
+      const result = await client.deleteSavedView('view-1');
+
+      const [url, init] = lastCall();
+      expect(url).toBe('http://localhost:4111/api/saved-views/view-1');
+      expect(init.method).toBe('DELETE');
+      expect(result).toEqual({ deleted: true });
+    });
+  });
+
   describe('Agent Builder Actions', () => {
     let client: MastraClient;
 

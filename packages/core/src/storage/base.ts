@@ -25,6 +25,7 @@ import type {
   ThreadStateStorage,
   WorkflowDefinitionsStorage,
   KnowledgeStorage,
+  SavedViewsStorage,
 } from './domains';
 import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy } from './retention';
@@ -57,6 +58,7 @@ export type StorageDomains = {
   toolProviderConnections?: ToolProviderConnectionsStorage;
   threadState?: ThreadStateStorage;
   knowledge?: KnowledgeStorage;
+  savedViews?: SavedViewsStorage;
 };
 
 /**
@@ -107,6 +109,7 @@ export const DOMAIN_KEYS = [
   'notifications',
   'threadState',
   'knowledge',
+  'savedViews',
 ] as const satisfies ReadonlyArray<keyof StorageDomains>;
 
 /**

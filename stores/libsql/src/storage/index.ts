@@ -23,6 +23,7 @@ import { MemoryLibSQL } from './domains/memory';
 import { NotificationsLibSQL } from './domains/notifications';
 import { ObservabilityLibSQL } from './domains/observability';
 import { PromptBlocksLibSQL } from './domains/prompt-blocks';
+import { SavedViewsLibSQL } from './domains/saved-views';
 import { SchedulesLibSQL } from './domains/schedules';
 import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
@@ -52,6 +53,7 @@ export {
   NotificationsLibSQL,
   ObservabilityLibSQL,
   PromptBlocksLibSQL,
+  SavedViewsLibSQL,
   SchedulesLibSQL,
   ScorerDefinitionsLibSQL,
   ScoresLibSQL,
@@ -293,6 +295,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const toolProviderConnections = new ToolProviderConnectionsLibSQL(domainConfig);
     const notifications = new NotificationsLibSQL(domainConfig);
     const threadState = new ThreadStateLibSQL(domainConfig);
+    const savedViews = new SavedViewsLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -319,6 +322,7 @@ export class LibSQLStore extends MastraCompositeStore {
       toolProviderConnections,
       notifications,
       threadState,
+      savedViews,
     };
   }
 

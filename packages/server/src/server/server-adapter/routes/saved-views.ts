@@ -1,0 +1,16 @@
+import {
+  CREATE_SAVED_VIEW_ROUTE,
+  DELETE_SAVED_VIEW_ROUTE,
+  GET_SAVED_VIEW_ROUTE,
+  LIST_SAVED_VIEWS_ROUTE,
+  UPDATE_SAVED_VIEW_ROUTE,
+} from '../../handlers/saved-views';
+import type { ServerRoute } from '.';
+
+export const SAVED_VIEWS_ROUTES: ServerRoute<any, any, any>[] = [
+  LIST_SAVED_VIEWS_ROUTE,
+  GET_SAVED_VIEW_ROUTE,
+  CREATE_SAVED_VIEW_ROUTE,
+  UPDATE_SAVED_VIEW_ROUTE,
+  DELETE_SAVED_VIEW_ROUTE,
+];
