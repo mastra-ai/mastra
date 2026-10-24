@@ -47,6 +47,11 @@ class SharedLeases {
   leases = new Map<string, { owner: string; expiresAt: number }>();
   /** Confirmed thread-lease renewals, so a test can act right after one. */
   renewals = 0;
+  /**
+   * When the newest granted thread-lease acquire or run renewal was sent, which is when the run counts its lease
+   * from. A process can stall before a test cuts the backend off, so time the cut-off from here, not from the cut.
+   */
+  confirmedSentAt = 0;
 
   /** The backend forgets the lease, so the owner's next renewal fails. */
   drop(key: string) {
@@ -76,10 +81,13 @@ class ReplicaPubSub extends EventEmitterPubSub {
     if (this.partition === 'hang') await new Promise(() => {});
   }
   override async acquireLease(key: string, owner: string, ttlMs: number) {
+    const sentAt = Date.now();
     await this.#reach(key);
     const current = this.shared.owner(key);
     if (current && current !== owner) return { acquired: false, owner: current };
     this.shared.leases.set(key, { owner, expiresAt: Date.now() + ttlMs });
+    if (key.startsWith(`${RESOURCE}\u0000`))
+      this.shared.confirmedSentAt = Math.max(this.shared.confirmedSentAt, sentAt);
     return { acquired: true, owner };
   }
   override async getLeaseOwner(key: string) {
@@ -91,10 +99,17 @@ class ReplicaPubSub extends EventEmitterPubSub {
     if (this.shared.leases.get(key)?.owner === owner) this.shared.leases.delete(key);
   }
   override async renewLease(key: string, owner: string, ttlMs: number) {
+    const sentAt = Date.now();
     await this.#reach(key);
     if (this.shared.owner(key) !== owner) return false;
     this.shared.leases.set(key, { owner, expiresAt: Date.now() + ttlMs });
-    if (key.startsWith(`${RESOURCE}\u0000`)) this.shared.renewals++;
+    if (key.startsWith(`${RESOURCE}\u0000`)) {
+      this.shared.renewals++;
+      // A retake renews its temporary token while handing it over; only the run's own renewals move its deadline.
+      if (!owner.includes('\u0000retake\u0000')) {
+        this.shared.confirmedSentAt = Math.max(this.shared.confirmedSentAt, sentAt);
+      }
+    }
     return true;
   }
   override async transferLease(key: string, fromOwner: string, toOwner: string) {
@@ -1475,13 +1490,21 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     }
     const shared = new SharedLeases();
     let ticks = 0;
+    let toolRunning = false;
+    // Set at the cut: the tool that is running then keeps running until the backend answers, so it alone decides
+    // that the run has a step running, whatever the gaps between steps on a slow machine.
+    let held: Promise<void> | undefined;
+    let release = () => {};
     const tick = createTool({
       id: 'tick',
       description: 'Tick once',
       inputSchema: z.object({}),
       execute: async () => {
         ticks++;
+        toolRunning = true;
         await new Promise(resolve => setTimeout(resolve, 40));
+        if (held) await held;
+        toolRunning = false;
         return 'ticked';
       },
     });
@@ -1498,17 +1521,31 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     // Every lease call now hangs, as when the connection to Redis is cut without an error.
     let settled = false;
     void output.finishReason.then(() => (settled = true));
+    // Cut right after a renewal and while a tool runs, so the run starts the silence with a fresh lease and a step.
+    const renewalsBefore = shared.renewals;
+    await vi.waitFor(
+      () => {
+        expect(shared.renewals).toBeGreaterThan(renewalsBefore);
+        expect(toolRunning).toBe(true);
+      },
+      { interval: 5, timeout: 5_000 },
+    );
+    held = new Promise(resolve => (release = resolve));
     pubsub.partition = 'hang';
     const ticksAtCut = ticks;
-    // Long enough for the 300ms lease to run out, and well short of the 1.5s grace that follows it,
-    // so a slow machine can't push the run past the grace before the check.
-    await new Promise(resolve => setTimeout(resolve, 500));
-    // The tool that was running finishes; no other starts without the lease, and the run isn't stopped.
-    expect(ticks - ticksAtCut).toBeLessThanOrEqual(1);
+    // Check once the 300ms lease has run out, counted from the last renewal the backend granted (a process that
+    // stalled before the cut has a lease that ran out earlier). That leaves 1.3s before the 1.5s grace that follows.
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const untilChecked = shared.confirmedSentAt + 300 + 200 - Date.now();
+    if (untilChecked > 0) await new Promise(resolve => setTimeout(resolve, untilChecked));
+    // No other tool starts without the lease, and the run isn't stopped.
+    expect(ticks - ticksAtCut).toBe(0);
     expect(settled).toBe(false);
 
     // The backend answers again and nobody else took the thread: the run takes its lease back and goes on.
     pubsub.partition = undefined;
+    held = undefined;
+    release();
     const ticksBack = ticks;
     await vi.waitFor(() => expect(ticks).toBeGreaterThan(ticksBack + 2), { timeout: 5_000 });
     expect(settled).toBe(false);
@@ -1527,13 +1564,20 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     }
     const shared = new SharedLeases();
     let ticks = 0;
+    let toolRunning = false;
+    // Set at the cut: the tool running then keeps running (for at most 4s), so it alone decides that the run has a
+    // step running, whatever the gaps between steps on a slow machine. Only the grace period can stop the wait.
+    let held = false;
     const tick = createTool({
       id: 'tick',
       description: 'Tick once',
       inputSchema: z.object({}),
       execute: async () => {
         ticks++;
+        toolRunning = true;
         await new Promise(resolve => setTimeout(resolve, 40));
+        if (held) await new Promise(resolve => setTimeout(resolve, 4_000));
+        toolRunning = false;
         return 'ticked';
       },
     });
@@ -1546,19 +1590,32 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     const done = drain().catch(() => undefined);
     await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
 
-    // Every lease call now hangs and never answers again.
+    // Every lease call now hangs and never answers again, from right after a renewal and while a tool runs.
+    const renewalsBefore = shared.renewals;
+    await vi.waitFor(
+      () => {
+        expect(shared.renewals).toBeGreaterThan(renewalsBefore);
+        expect(toolRunning).toBe(true);
+      },
+      { interval: 5, timeout: 5_000 },
+    );
+    held = true;
     pubsub.partition = 'hang';
     const cutAt = Date.now();
     const ticksAtCut = ticks;
     await done;
 
-    // The run waited, running no tool, and stopped once the grace period (1.5s here) had passed since its lease
-    // ran out, instead of waiting for as long as the backend stays silent.
+    // The run waited, starting no tool, and stopped once the grace period (1.5s here) had passed since its lease
+    // ran out, instead of waiting for as long as the backend stays silent. The tool still running then gets the
+    // stop's own grace to finish, so the run ends 1.5-3s after the lease ran out.
     expect(await output.finishReason).toBe('aborted');
-    expect(ticks - ticksAtCut).toBeLessThanOrEqual(1);
-    const waited = Date.now() - cutAt;
-    expect(waited).toBeGreaterThanOrEqual(1_500);
-    expect(waited).toBeLessThan(6_000);
+    expect(ticks - ticksAtCut).toBe(0);
+    // Counted from when the lease ran out, not from the cut: a process that stalled just before the cut had a lease
+    // that ran out earlier. A millisecond of slack covers the backend reading the clock a tick after the run.
+    const waited = Date.now() - (shared.confirmedSentAt + 300);
+    expect(waited).toBeGreaterThanOrEqual(1_499);
+    expect(waited).toBeLessThan(8_000);
+    expect(Date.now() - cutAt).toBeLessThan(8_000);
   }, 20_000);
 
   // Durable runs share process-global registries by run id, so two live runs with one id is not a supported setup there.
