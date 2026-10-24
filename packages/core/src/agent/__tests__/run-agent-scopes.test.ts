@@ -68,6 +68,34 @@ describe('read-only scope entries', () => {
     expect(getRunAgentScopes(context)).toEqual([]);
   });
 
+  it('treats a run as holding nothing when its access map is deleted, so read-only never widens', () => {
+    const context = new RequestContext();
+    setRunAgentScopes(context, ['org:self', 'team:self:x'], ['org:self']);
+    context.delete(MASTRA_SCOPE_ACCESS_KEY);
+    expect(getRunAgentScopes(context)).toEqual([]);
+
+    const plain = new RequestContext();
+    setRunAgentScopes(plain, ['team:self:x']);
+    plain.delete(MASTRA_SCOPE_ACCESS_KEY);
+    expect(getRunAgentScopes(plain)).toEqual([]);
+  });
+
+  it("refuses another run's marked access map", () => {
+    const member = new RequestContext();
+    setRunAgentScopes(member, ['org:self'], ['org:self']);
+    const director = new RequestContext();
+    setRunAgentScopes(director, ['org:self']);
+    member.set(MASTRA_SCOPE_ACCESS_KEY, director.get(MASTRA_SCOPE_ACCESS_KEY));
+    expect(getRunAgentScopes(member)).toEqual([]);
+  });
+
+  it('keeps a run with no read-only tags readable after copying its context', () => {
+    const context = new RequestContext();
+    setRunAgentScopes(context, ['team:self:x']);
+    const copy = new RequestContext([...context.entries()]);
+    expect(getRunAgentScopes(copy)).toEqual([{ tag: 'team:self:x', access: 'readwrite' }]);
+  });
+
   it('lets a resumed run narrow a tag to read but not widen a read-only one', () => {
     const snapshot = { scopes: ['org:self', 'team:self:x'], readOnly: ['org:self'] };
     expect(

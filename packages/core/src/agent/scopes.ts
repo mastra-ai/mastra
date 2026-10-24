@@ -75,23 +75,27 @@ function markRunScopes(scopes: string[]): string[] {
 }
 
 /**
- * Sets `mastra__scopes` to scopes a run derived, and `mastra__scopeAccess` to its read-only tags,
- * marking both as written by Core.
+ * The `mastra__scopeAccess` record Core wrote together with each marked `mastra__scopes` array.
+ * A run's access is trusted only when the context holds exactly this record next to that array.
+ */
+const runScopeAccess = new WeakMap<object, Readonly<Record<string, 'read'>>>();
+
+/**
+ * Sets `mastra__scopes` to scopes a run derived, and `mastra__scopeAccess` to its read-only tags
+ * (an empty record when there are none), marking both as written by Core and binding them together.
  */
 export function setRunAgentScopes(
   requestContext: RequestContext<any>,
   scopes: readonly string[],
   readOnly: readonly string[] = [],
 ): void {
-  requestContext.set(MASTRA_SCOPES_KEY, markRunScopes([...scopes]));
+  const marked = markRunScopes([...scopes]);
   const held = new Set(scopes);
-  const access = readOnly.filter(tag => held.has(tag));
-  if (access.length === 0) {
-    requestContext.delete(MASTRA_SCOPE_ACCESS_KEY);
-    return;
-  }
-  const record = Object.freeze(Object.fromEntries(access.map(tag => [tag, 'read' as const])));
-  runScopeValues.add(record);
+  const record = Object.freeze(
+    Object.fromEntries(readOnly.filter(tag => held.has(tag)).map(tag => [tag, 'read' as const])),
+  );
+  runScopeAccess.set(marked, record);
+  requestContext.set(MASTRA_SCOPES_KEY, marked);
   requestContext.set(MASTRA_SCOPE_ACCESS_KEY, record);
 }
 
@@ -111,17 +115,21 @@ function accessMapTags(value: unknown): string[] | undefined {
 }
 
 /**
- * The run's non-identity scopes, as Core wrote them onto its request context. Returns `[]` unless
- * the value is the exact array Core marked, so a caller that writes `mastra__scopes` itself (or sends
- * it as JSON) gets nothing.
+ * The run's non-identity scopes with their access, as Core wrote them onto the run's request
+ * context. Scopes a host or server supplies (agent config, call `scopes`, a `mastra__scopes` key on
+ * the caller's request context) are honored when the run starts, by `resolveAgentScopes`. This
+ * reader is for code running inside the run (tools, processors): it returns `[]` unless
+ * `mastra__scopes` is the exact array Core marked and `mastra__scopeAccess` is the exact record Core
+ * wrote with it, so an array or access map written, replaced or deleted after resolution gives the
+ * run nothing.
  */
 export function getRunAgentScopes(requestContext: { get(key: string): unknown } | undefined): RunAgentScope[] {
   const scopes = requestContext?.get(MASTRA_SCOPES_KEY);
   if (!Array.isArray(scopes) || !runScopeValues.has(scopes)) return [];
   const access = requestContext?.get(MASTRA_SCOPE_ACCESS_KEY);
-  // An access map Core did not write could hide a read-only tag, so the run is treated as holding nothing.
-  if (access !== undefined && (typeof access !== 'object' || access === null || !runScopeValues.has(access))) return [];
-  const readOnly = new Set(accessMapTags(access) ?? []);
+  // A missing, replaced or unmarked access map could hide a read-only tag, so the run holds nothing.
+  if (access === undefined || access !== runScopeAccess.get(scopes)) return [];
+  const readOnly = new Set(Object.keys(access as object));
   return (scopes as string[]).map(tag => ({ tag, access: readOnly.has(tag) ? 'read' : 'readwrite' }));
 }
 
