@@ -358,52 +358,31 @@ export async function readKnowledgeNode(
   };
 }
 
-export const DEFAULT_KNOWLEDGE_SEARCH_LIMIT = 20;
-const DEFAULT_KNOWLEDGE_SEARCH_SCAN = 1000;
-
-/** 0 for an exact name match, 1 for a prefix match, 2 for anything else. `query` must already be lower-cased. */
-export function knowledgeSearchRank(name: string, query: string): number {
-  const normalized = name.toLocaleLowerCase();
-  if (normalized === query) return 0;
-  if (normalized.startsWith(query)) return 1;
-  return 2;
-}
-
-/** A content node as a search hit; session-level nodes carry their `threadId`. */
-export function knowledgeSearchHit(node: KnowledgeNode): KnowledgeExplorerSearchResult & { threadId?: string } {
-  const rung = knowledgeExplorerRung(node.scope);
-  const threadId = rung === 'thread' ? node.scope.find(tag => tag.startsWith('thread:'))?.slice(7) : undefined;
-  return { id: node.id, name: node.name, kind: node.kind, type: 'node', rung, ...(threadId ? { threadId } : {}) };
-}
-
-/**
- * Content nodes visible from `view` whose name contains `query` (case-insensitive), ranked exact, prefix, other.
- * `truncated` is true when more could match than the limits let this read look at.
- */
+/** Nodes visible from `view` whose record text matches `query`. */
 export async function searchKnowledgeNodes(
   store: KnowledgeStorage,
   view: KnowledgeScope,
   query: string,
-  options: { limit?: number; scanLimit?: number } = {},
-): Promise<{ nodes: KnowledgeNode[]; truncated: boolean }> {
-  const needle = query.trim().toLocaleLowerCase();
-  const limit = options.limit ?? DEFAULT_KNOWLEDGE_SEARCH_LIMIT;
-  const scanLimit = options.scanLimit ?? DEFAULT_KNOWLEDGE_SEARCH_SCAN;
-  if (needle.length < 2) return { nodes: [], truncated: false };
-  const [prefixNodes, scannedNodes] = await Promise.all([
-    store.listNodes({ scope: view, namePrefix: needle, limit: limit + 1 }),
-    store.listNodes({ scope: view, limit: scanLimit }),
-  ]);
-  const byId = new Map<string, KnowledgeNode>();
-  for (const node of [...prefixNodes, ...scannedNodes]) {
-    if (node.isScope || !Array.isArray(node.scope) || !isKnowledgeScopeVisible(node.scope, view)) continue;
-    if (!node.name.toLocaleLowerCase().includes(needle)) continue;
-    byId.set(node.id, node);
+  limit = 20,
+): Promise<{ results: KnowledgeExplorerSearchResult[]; truncated: boolean }> {
+  const hits = await store.search({ query, scope: view, limit: limit + 1 });
+  const results: KnowledgeExplorerSearchResult[] = [];
+  const seen = new Set<string>();
+  for (const hit of hits) {
+    const nodeId = hit.type === 'node' ? hit.id : (await store.getKnowledge({ id: hit.recordId }))?.node;
+    if (!nodeId || seen.has(nodeId)) continue;
+    const node = await store.getNode(nodeId);
+    if (!node || node.mergedInto || node.isScope || node.name === PINNED_NODE_NAME) continue;
+    seen.add(nodeId);
+    results.push({
+      id: node.id,
+      name: node.name,
+      kind: node.kind,
+      type: 'node',
+      rung: knowledgeExplorerRung(node.scope),
+    });
   }
-  return {
-    nodes: [...byId.values()],
-    truncated: prefixNodes.length > limit || scannedNodes.length >= scanLimit,
-  };
+  return { results: results.slice(0, limit), truncated: results.length > limit || hits.length > limit };
 }
 
 const ACTIVITY_BATCH = 100;
