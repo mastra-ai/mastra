@@ -252,6 +252,39 @@ describe('OM preserves the in-flight turn across mid-turn observation (#25372)',
     expect(requests[3]).not.toContain(`${RESULT_MARKER}-4471-1`);
   });
 
+  it('does not put the request back in the prompt once it is observed and the model has acted on it', async () => {
+    // The user says "delete it"; the agent acts on it and keeps working through ten more tool
+    // steps while memory observes. The observations already record the request. Sending the
+    // raw message again ten steps later would read as a new instruction to delete something.
+    const deleteRequest = 'USER_REQUEST_MARKER: delete it.';
+    scriptLookupTurn(11);
+    const { memory, openai } = createMemory();
+    const agent = new Agent({
+      id: 'observed-request-agent',
+      name: 'observed-request-agent',
+      instructions: 'Use the lookup tool.',
+      model: openai.chat(ACTOR),
+      tools: { lookup },
+      memory,
+    });
+
+    const stream = await agent.stream(deleteRequest, {
+      memory: { thread: 'observed-request', resource: 'r' },
+      maxSteps: 15,
+    });
+
+    expect(await stream.text).toBe(FINAL_ANSWER);
+    expect(observerRequestCount()).toBeGreaterThan(0);
+    const requests = actorRequests();
+    expect(requests).toHaveLength(12);
+    const last = requests.at(-1)!;
+    // The request is carried by the observations alone …
+    expect(last).toContain('User asked to look up an order status');
+    expect(last, 'the observed request came back as a fresh message').not.toContain('delete it');
+    // … while the tool result the model has not read yet is still sent.
+    expect(last).toContain(`${RESULT_MARKER}-4471-10`);
+  });
+
   it('keeps a background task result merged over its placeholder until the model reads it', async () => {
     // Step 0 dispatches `research` in the background: its tool part is written as `result`
     // holding a placeholder. Step 1 calls `lookup`, which lets the task finish and waits until
