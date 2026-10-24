@@ -39,6 +39,25 @@ In a Factory session, Knowledge is stored under `project:<projectId>` together w
 
 By default the agent writes at all of its tags: org, project, its Memory resource, and the thread. Those records show only in that session's drill-down. To share a record with the whole project, have the agent write with `scope: ['org:<org>', 'project:<id>']`.
 
+## Scopes per message
+
+A long-lived session can change what a run is allowed to see for each task. Pass `scopes` to `session.sendMessage`. Entries can be plain tags or `{ tag, access: 'read' }`:
+
+```typescript
+await session.sendMessage({
+  content: 'Fix the login bug',
+  scopes: ['request:r25'],
+})
+```
+
+A run's scopes are fixed when it starts:
+
+- A message with the same scopes, or none, joins the running run.
+- A message with different scopes waits for the running run to end, then starts its own run in the same conversation.
+- Several scoped messages sent in the meantime start in the order they were sent.
+
+A thread whose owner is in another process refuses scoped messages with "scopes don't cross processes".
+
 ## Upgrading
 
 `experimental_subconscious` is removed. Attach Knowledge to the agent instead.
