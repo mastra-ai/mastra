@@ -17,7 +17,7 @@ import { createSlackAdapter, type SlackAdapter } from '@chat-adapter/slack';
 
 import { SlackManifestClient } from './client';
 import { verifySlackRequest, parseSlackFormBody, encrypt, decrypt } from './crypto';
-import { buildManifest } from './manifest';
+import { applyManagedManifestFields, buildManifest } from './manifest';
 import {
   SlackInstallationDataSchema,
   SlackPendingDataSchema,
@@ -799,7 +799,7 @@ export class SlackProvider implements ChannelProvider {
     console.log(`[Slack] Config drift detected for "${installation.agentId}" — updating manifest...`);
 
     try {
-      const manifest = buildManifest({
+      const generated = buildManifest({
         name: resolvedAppName,
         description: resolvedDescription,
         webhookUrl: `${baseUrl}/slack/events/${installation.webhookId}`,
@@ -812,7 +812,11 @@ export class SlackProvider implements ChannelProvider {
         })),
       });
 
-      await this.#requireManifestClient().updateApp(installation.appId, manifest);
+      // Start from the app's live manifest so a `manifest` transform applied at
+      // connect() time is not wiped by the update.
+      const client = this.#requireManifestClient();
+      const current = await client.exportManifest(installation.appId);
+      await client.updateApp(installation.appId, applyManagedManifestFields(current, generated));
 
       // Persist the new hash (keep stored overrides unchanged)
       const updated: SlackInstallation = { ...installation, configHash: currentHash };

@@ -81,8 +81,35 @@ describe('agent_view migration', () => {
     .digest('hex')
     .slice(0, 16);
 
+  /** Manifest of an app created with assistant_view and customized via connect({ manifest }). */
+  const customizedLegacyManifest = {
+    display_information: { name: 'Helper', description: 'Helps', background_color: '#123456' },
+    features: {
+      app_home: { home_tab_enabled: true, messages_tab_enabled: true, messages_tab_read_only_enabled: false },
+      bot_user: { display_name: 'Helper', always_online: true },
+      assistant_view: { assistant_description: 'Helps' },
+    },
+    oauth_config: {
+      redirect_urls: ['https://old.example.com/slack/oauth/callback'],
+      scopes: { bot: ['chat:write', 'channels:join'] },
+    },
+    settings: {
+      event_subscriptions: {
+        request_url: 'https://old.example.com/slack/events/hook-1',
+        bot_events: ['app_mention', 'reaction_added'],
+      },
+      interactivity: { is_enabled: true, request_url: 'https://old.example.com/slack/events/hook-1' },
+      org_deploy_enabled: false,
+      socket_mode_enabled: false,
+      token_rotation_enabled: false,
+    },
+  };
+
   async function restart(configHash: string) {
     const updateApp = vi.spyOn(SlackManifestClient.prototype, 'updateApp').mockResolvedValue(undefined as never);
+    vi.spyOn(SlackManifestClient.prototype, 'exportManifest').mockResolvedValue(
+      structuredClone(customizedLegacyManifest) as never,
+    );
     const store = new InMemoryStore();
     const channels = (await store.getStore('channels'))!;
     const provider = new SlackProvider({
@@ -133,6 +160,20 @@ describe('agent_view migration', () => {
     expect(manifest.features).not.toHaveProperty('assistant_view');
     const [record] = (await channels.listInstallations('slack')) as Array<{ configHash?: string }>;
     expect(record?.configHash).toBe(hashConfig({}, 'https://example.com', 'Helper', 'Helps'));
+  });
+
+  it('keeps connect-time manifest customizations when migrating', async () => {
+    const { updateApp } = await restart(legacyHash);
+
+    const [, manifest] = updateApp.mock.calls[0]!;
+    expect(manifest.display_information.background_color).toBe('#123456');
+    expect(manifest.features?.app_home?.home_tab_enabled).toBe(true);
+    expect(manifest.oauth_config?.scopes?.bot).toEqual(expect.arrayContaining(['channels:join', 'assistant:write']));
+    expect(manifest.settings?.event_subscriptions?.bot_events).toEqual(
+      expect.arrayContaining(['reaction_added', 'message.im']),
+    );
+    expect(manifest.settings?.event_subscriptions?.request_url).toBe('https://example.com/slack/events/hook-1');
+    expect(manifest.oauth_config?.redirect_urls).toEqual(['https://example.com/slack/oauth/callback']);
   });
 
   it('leaves apps already on agent_view alone', async () => {

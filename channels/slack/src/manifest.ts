@@ -149,3 +149,52 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
 
   return manifest;
 }
+
+/**
+ * Overlay the provider-managed fields of `generated` onto the app's current
+ * manifest, so customizations made at connect time (extra scopes, events,
+ * App Home settings, suggested prompts) survive a drift update. Scopes and
+ * events are merged, never dropped.
+ */
+export function applyManagedManifestFields(current: SlackAppManifest, generated: SlackAppManifest): SlackAppManifest {
+  const union = (a: string[] = [], b: string[] = []) => [...new Set([...a, ...b])];
+  // Slack rejects a manifest that declares both views.
+  const { assistant_view: _legacy, ...features } = (current.features ?? {}) as NonNullable<
+    SlackAppManifest['features']
+  > & { assistant_view?: unknown };
+
+  return {
+    ...current,
+    display_information: { ...current.display_information, ...generated.display_information },
+    features: {
+      ...features,
+      bot_user: { ...features.bot_user, ...generated.features?.bot_user } as NonNullable<
+        SlackAppManifest['features']
+      >['bot_user'],
+      agent_view: { ...features.agent_view, ...generated.features?.agent_view } as NonNullable<
+        SlackAppManifest['features']
+      >['agent_view'],
+      slash_commands: generated.features?.slash_commands,
+    },
+    oauth_config: {
+      ...current.oauth_config,
+      redirect_urls: generated.oauth_config?.redirect_urls,
+      scopes: {
+        ...current.oauth_config?.scopes,
+        bot: union(current.oauth_config?.scopes?.bot, generated.oauth_config?.scopes?.bot),
+      },
+    },
+    settings: {
+      ...current.settings,
+      event_subscriptions: {
+        ...current.settings?.event_subscriptions,
+        request_url: generated.settings?.event_subscriptions?.request_url,
+        bot_events: union(
+          current.settings?.event_subscriptions?.bot_events,
+          generated.settings?.event_subscriptions?.bot_events,
+        ),
+      },
+      interactivity: { ...current.settings?.interactivity, ...generated.settings?.interactivity },
+    },
+  };
+}
