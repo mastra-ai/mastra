@@ -7,11 +7,37 @@ vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(),
   stat: vi.fn(),
 }));
+vi.mock('node:module', () => ({
+  createRequire: vi.fn(),
+}));
 
 // Import after mocks are set up.
 const { createSpaStaticMiddleware, resolveUiDistDir } = await import('./spa-static.js');
 const { existsSync } = await import('node:fs');
 const { readFile, stat } = await import('node:fs/promises');
+const { createRequire } = await import('node:module');
+
+/** Default: `mastra/dist/factory/index.html` is not resolvable. */
+function stubMastraCliMissing() {
+  vi.mocked(createRequire).mockReturnValue({
+    resolve: vi.fn(() => {
+      throw new Error("Cannot find module 'mastra/dist/factory/index.html'");
+    }),
+  } as any);
+}
+
+/** `mastra/dist/factory/index.html` resolves to the given absolute path. */
+function stubMastraCliResolvesTo(indexHtmlPath: string) {
+  vi.mocked(createRequire).mockReturnValue({
+    resolve: vi.fn((id: string) =>
+      id === 'mastra/dist/factory/index.html'
+        ? indexHtmlPath
+        : (() => {
+            throw new Error(`Cannot find module '${id}'`);
+          })(),
+    ),
+  } as any);
+}
 
 const originalUiDist = process.env.MASTRACODE_UI_DIST;
 const originalProjectRoot = process.env.MASTRA_PROJECT_ROOT;
@@ -29,6 +55,7 @@ describe('resolveUiDistDir', () => {
     delete process.env.MASTRACODE_UI_DIST;
     delete process.env.MASTRA_PROJECT_ROOT;
     vi.mocked(existsSync).mockReturnValue(false);
+    stubMastraCliMissing();
   });
 
   it('resolves factory assets under the server cwd', () => {
@@ -54,6 +81,28 @@ describe('resolveUiDistDir', () => {
     vi.mocked(existsSync).mockImplementation(path => path === '/project/src/mastra/public/factory/index.html');
 
     expect(resolveUiDistDir()).toBe('/project/src/mastra/public/factory');
+  });
+
+  it('resolves the SPA from node_modules/mastra/dist/factory when no other candidate exists', () => {
+    // Simulates a production deploy artifact: the middleware runs from a
+    // bundled server module and finds the SPA in the npm `mastra` package
+    // instead of a `public/factory/` copy in the artifact.
+    vi.spyOn(process, 'cwd').mockReturnValue('/app');
+    stubMastraCliResolvesTo('/app/node_modules/mastra/dist/factory/index.html');
+    vi.mocked(existsSync).mockImplementation(path => path === '/app/node_modules/mastra/dist/factory/index.html');
+
+    expect(resolveUiDistDir()).toBe('/app/node_modules/mastra/dist/factory');
+  });
+
+  it('prefers MASTRACODE_UI_DIST over the CLI-shipped SPA', () => {
+    process.env.MASTRACODE_UI_DIST = '/custom/factory-ui';
+    vi.spyOn(process, 'cwd').mockReturnValue('/app');
+    stubMastraCliResolvesTo('/app/node_modules/mastra/dist/factory/index.html');
+    vi.mocked(existsSync).mockImplementation(
+      path => path === '/custom/factory-ui/index.html' || path === '/app/node_modules/mastra/dist/factory/index.html',
+    );
+
+    expect(resolveUiDistDir()).toBe('/custom/factory-ui');
   });
 
   it('returns undefined when no Factory UI build exists', () => {

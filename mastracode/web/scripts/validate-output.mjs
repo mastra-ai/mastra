@@ -11,6 +11,12 @@
  *      `npm install` at deploy time)
  *   3. SPA `index.html` — present in `factory/` under the output dir
  *   4. Factory `SKILL.md` files — packaged alongside the Web server bundle
+ *
+ * Note: `@mastra/deployer-cloud` strips `factory/` from the artifact
+ * before it ships (edge-router serves the Factory SPA from R2 upstream
+ * of the container). This local validate step runs against the raw
+ * `mastra build` output, before that strip, so the SPA must still be
+ * present here.
  */
 import fs from 'node:fs';
 import path from 'node:path';
