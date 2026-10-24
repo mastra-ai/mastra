@@ -179,6 +179,8 @@ export interface RunLoopScenarioOptions {
    * pass `false` to test tool-level `requireApproval`, or a function to decide per tool call.
    */
   requireToolApproval?: boolean | ((context: { toolName: string; args?: unknown }) => boolean);
+  /** Close a durable stream on approval suspension so its output promises settle. */
+  closeOnSuspend?: boolean;
   /**
    * Stop condition for the loop. Forwarded to `agent.stream({ stopWhen })`.
    * Use this to bound long/looping tool scenarios.

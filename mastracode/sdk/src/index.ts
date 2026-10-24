@@ -855,6 +855,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
+  // The old flag turned Subconscious on only at '1'; anything else never did anything.
+  if (process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1') {
+    console.warn(
+      'MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS no longer does anything: Subconscious was removed. Set MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1 to turn on Knowledge.',
+    );
+  }
   const knowledgeConfig = config?.knowledge || undefined;
   const configuredKnowledgeKey = knowledgeConfig?.key?.trim();
   if (knowledgeConfig?.key !== undefined && !configuredKnowledgeKey) {

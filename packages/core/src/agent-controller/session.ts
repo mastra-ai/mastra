@@ -1,5 +1,6 @@
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
+import type { AgentScopeEntry } from '../agent/scopes';
 import { createSignal, resolveDeliveryAttributes } from '../agent/signals';
 import type {
   AgentSignalAttributes,
@@ -4157,6 +4158,8 @@ export class Session<TState = unknown> {
   #tokenUsage: TokenUsage = createEmptyTokenUsage();
   /** Whether the in-flight abort teardown must stay local to this process. */
   #localOnlyAbort = false;
+  /** Settles once the previous `sendMessage` carrying scopes is admitted, so scoped messages start in send order. */
+  #scopedSendTail: Promise<void> = Promise.resolve();
   #deferredAbortOrigin: { bindingGeneration: number; localOnly: boolean } | undefined;
   /** Thread-settings persistence handle, injected by the AgentController via {@link setStore}. */
   #store: ThreadSettingsStore | undefined;
@@ -5026,6 +5029,11 @@ export class Session<TState = unknown> {
           untilIdle?: boolean | { maxIdleMs?: number };
           author?: MessageAuthor;
           /**
+           * Scopes for this message. A run's scopes are fixed when it starts, so a message
+           * whose scopes differ from the active run's does not join it (`scope-mismatch`).
+           */
+          scopes?: AgentScopeEntry[];
+          /**
            * Provider options attached to the resulting prompt turn. Surfaces as
            * `providerOptions` on the `UserModelMessage` sent to the model and as
            * `content.providerMetadata` on the persisted DB message (see
@@ -5053,7 +5061,13 @@ export class Session<TState = unknown> {
   ): {
     id: string;
     type: AgentSignalInput['type'];
-    accepted: Promise<{ accepted: true; runId?: string; action?: SendAgentSignalAccepted['action'] }>;
+    accepted: Promise<{
+      accepted: true;
+      runId?: string;
+      action?: SendAgentSignalAccepted['action'];
+      /** Why the thread refused it, when `action` is `blocked`. */
+      reason?: 'thread-blocked' | 'scope-mismatch';
+    }>;
   } {
     const settleRunId = async <T>(result: {
       accepted: Promise<SendAgentSignalAccepted<T>>;
@@ -5077,6 +5091,7 @@ export class Session<TState = unknown> {
     const tracingOptions = options?.tracingOptions ?? contentOptions?.tracingOptions;
     const requestContextInput = options?.requestContext ?? contentOptions?.requestContext;
     const untilIdle = options?.untilIdle ?? contentOptions?.untilIdle;
+    const scopes = contentOptions?.scopes;
     const requireDelivery = options?.requireDelivery ?? false;
     const ifActive = options?.ifActive ?? ('content' in input ? input.ifActive : undefined);
     const ifIdle = options?.ifIdle ?? ('content' in input ? input.ifIdle : undefined);
@@ -5138,6 +5153,7 @@ export class Session<TState = unknown> {
           threadId,
           ifActive,
           ifIdle,
+          ...(scopes ? { scopes } : {}),
         });
         const shouldObservePersistence = ifActive?.behavior === 'persist' || ifIdle?.behavior === 'persist';
         const settled = shouldObservePersistence || requireDelivery ? await result.accepted : undefined;
@@ -5156,6 +5172,7 @@ export class Session<TState = unknown> {
             accepted: true as const,
             runId: 'runId' in acceptedResult ? acceptedResult.runId : undefined,
             action: acceptedResult.action,
+            ...('reason' in acceptedResult ? { reason: acceptedResult.reason } : {}),
           };
         }
         return { accepted: true as const, runId: await settleRunId(result) };
@@ -5255,6 +5272,7 @@ export class Session<TState = unknown> {
         threadId,
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
+        ...(scopes ? { scopes } : {}),
       });
       void result.accepted.then(
         settled => {
@@ -5286,6 +5304,7 @@ export class Session<TState = unknown> {
           accepted: true as const,
           runId: 'runId' in settled ? settled.runId : undefined,
           action: settled.action,
+          ...('reason' in settled ? { reason: settled.reason } : {}),
         };
       }
       await Promise.race([result.accepted.then(() => undefined), new Promise<void>(resolve => setTimeout(resolve, 0))]);
@@ -5376,6 +5395,11 @@ export class Session<TState = unknown> {
   /**
    * Send a message to this session's current agent and await the run. Streams
    * the response and emits events.
+   *
+   * `scopes` are the scopes the message's run holds. A run's scopes are fixed when it
+   * starts: a message whose scopes match the active run's joins it, and one whose scopes
+   * differ waits for that run to end and then starts its own run on the same thread.
+   * Messages carrying scopes start in the order they were sent.
    */
   async sendMessage({
     content,
@@ -5385,6 +5409,7 @@ export class Session<TState = unknown> {
     requestContext: requestContextInput,
     untilIdle,
     author,
+    scopes,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
@@ -5393,28 +5418,75 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
     untilIdle?: boolean | { maxIdleMs?: number };
     author?: MessageAuthor;
+    scopes?: AgentScopeEntry[];
   }): Promise<void> {
+    let admitted = () => {};
+    if (scopes) {
+      const previous = this.#scopedSendTail;
+      this.#scopedSendTail = new Promise(resolve => {
+        admitted = resolve;
+      });
+      await previous;
+    }
+    try {
+      await this.#sendMessageUntilAdmitted(
+        {
+          content,
+          files,
+          tracingContext,
+          tracingOptions,
+          requestContext: requestContextInput,
+          untilIdle,
+          author,
+          scopes,
+        },
+        () => admitted(),
+      );
+    } finally {
+      admitted();
+    }
+  }
+
+  async #sendMessageUntilAdmitted(
+    input: {
+      content: string;
+      files?: Array<{ data: string; mediaType: string; filename?: string }>;
+      tracingContext?: TracingContext;
+      tracingOptions?: TracingOptions;
+      requestContext?: RequestContext;
+      untilIdle?: boolean | { maxIdleMs?: number };
+      author?: MessageAuthor;
+      scopes?: AgentScopeEntry[];
+    },
+    onAdmitted: () => void,
+  ): Promise<void> {
+    const { content, files, scopes } = input;
     let lastBlockingRunId: string | undefined;
     while (true) {
       const wasActive = this.stream.isActive();
       const signal = this.sendSignal(
         {
           content: this.createMessageInput({ content, files }),
-          tracingContext,
-          tracingOptions,
-          requestContext: requestContextInput,
-          untilIdle,
-          author,
+          tracingContext: input.tracingContext,
+          tracingOptions: input.tracingOptions,
+          requestContext: input.requestContext,
+          untilIdle: input.untilIdle,
+          author: input.author,
+          ...(scopes ? { scopes } : {}),
         },
         { requireDelivery: true },
       );
-      // Another agent's run on the thread can't take this message, so the
-      // thread reports itself blocked. Wait for that run to end and send again,
-      // as a message sent just before that run started would have waited.
-      let blockingRunId: string | undefined;
+      // The thread reports itself blocked when the run holding it can't take this
+      // message: another agent's run (`thread-blocked`), or a run started with other
+      // scopes (`scope-mismatch`). Either way, wait for that run to end and send again,
+      // so the message starts its own run.
+      let blocked: { reason: 'thread-blocked' | 'scope-mismatch'; runId: string } | undefined;
       const accepted = signal.accepted.then(settled => {
-        if (settled.action !== 'blocked') return settled;
-        blockingRunId = settled.runId;
+        if (settled.action !== 'blocked') {
+          onAdmitted();
+          return settled;
+        }
+        blocked = { reason: settled.reason ?? 'thread-blocked', runId: settled.runId! };
         return { action: settled.action };
       });
 
@@ -5423,17 +5495,17 @@ export class Session<TState = unknown> {
       } else {
         await this.waitForAcceptedRunCompletion(accepted);
       }
-      if (blockingRunId === undefined) return;
+      if (blocked === undefined) return;
       // Blocked again by the run already waited out: the wait saw nothing it
       // could wait for, so don't spin on resending.
-      if (blockingRunId === lastBlockingRunId) {
+      if (blocked.runId === lastBlockingRunId) {
         this.emit({
           type: 'error',
           error: new Error("Your message wasn't sent: another run still holds this thread. Try again shortly."),
         });
         return;
       }
-      lastBlockingRunId = blockingRunId;
+      lastBlockingRunId = blocked.runId;
       const waited = await this.#waitForOtherAgentRun();
       if (waited === 'stopped') return;
       // A parked run waits on its own prompt, so waiting can't free the thread.
@@ -5441,7 +5513,9 @@ export class Session<TState = unknown> {
         this.emit({
           type: 'error',
           error: new Error(
-            "Your message wasn't sent: another agent's run on this thread is waiting for an answer to its own prompt.",
+            blocked.reason === 'scope-mismatch'
+              ? "Your message wasn't sent: the run on this thread, started with other scopes, is waiting for an answer to its own prompt."
+              : "Your message wasn't sent: another agent's run on this thread is waiting for an answer to its own prompt.",
           ),
         });
         return;
