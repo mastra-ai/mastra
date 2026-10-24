@@ -19,6 +19,7 @@ import type {
 } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
+import { deferAgentLifecycleEvent } from './agent-lifecycle-events';
 import { InngestExecutionEngine } from './execution-engine';
 import {
   compactNestedWorkflowResult,
@@ -99,6 +100,7 @@ class WorkflowEventPolicyPubSub extends PubSub {
   }
 
   publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }): Promise<void> {
+    if (deferAgentLifecycleEvent(topic, event, options)) return Promise.resolve();
     if (!this.emitWorkflowEvents && topic.startsWith('workflow.events.v2.')) return Promise.resolve();
     return this.pubsub.publish(topic, event, options);
   }
@@ -250,6 +252,18 @@ export class InngestWorkflow<
    * graph. Nested workflows resolve their own default pubsub at runtime and pass
    * it through the same factory.
    */
+  #deferAgentLifecycleEvents = false;
+
+  __setDeferAgentLifecycleEvents() {
+    this.#deferAgentLifecycleEvents = true;
+    const updateNested = (step: StepFlowEntry) => {
+      const nested = getNestedInngestWorkflow(step);
+      if (nested) nested.__setDeferAgentLifecycleEvents();
+      else if (step.type === 'parallel' || step.type === 'conditional') step.steps.forEach(updateNested);
+    };
+    this.executionGraph.steps.forEach(updateNested);
+  }
+
   __setPubsubFactory(factory: (defaultPubsub: PubSub) => PubSub) {
     this.#pubsubFactory = factory;
     const updateNested = (step: StepFlowEntry) => {
@@ -558,7 +572,14 @@ export class InngestWorkflow<
           return span?.snapshot?.() ?? span?.exportSpan();
         });
 
-        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
+        const engine = new InngestExecutionEngine(
+          this.#mastra,
+          step,
+          attempt,
+          this.options,
+          parentStream,
+          this.#deferAgentLifecycleEvents ? runId : undefined,
+        );
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
         try {
@@ -740,6 +761,17 @@ export class InngestWorkflow<
               }
             }
 
+            // Nested invocations return held agent events to their parent. Only the
+            // outer workflow can expose approval/finish after its discoverable row
+            // has been saved. Events travel in memoized outputs, not process memory.
+            if (this.#deferAgentLifecycleEvents && !parentStream) {
+              for (const pending of engine.pendingAgentEvents) {
+                const isSuspension = pending.event.type !== 'finish';
+                if (isSuspension ? result.status !== 'suspended' : result.status !== 'success') continue;
+                await pubsub.publish(pending.topic, pending.event, pending.options);
+              }
+            }
+
             // Publish workflow-finish event for realtime subscribers (best-effort)
             try {
               await pubsub.publish(`workflow.events.v2.${runId}`, {
@@ -787,7 +819,13 @@ export class InngestWorkflow<
           throw finalizeError;
         }
 
-        return { result: returnedResult, runId };
+        return {
+          result: returnedResult,
+          runId,
+          ...(this.#deferAgentLifecycleEvents && parentStream && engine.pendingAgentEvents.length
+            ? { agentLifecycleEvents: engine.pendingAgentEvents }
+            : {}),
+        };
       },
     );
     return this.function;

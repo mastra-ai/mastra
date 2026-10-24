@@ -32,6 +32,7 @@ describeForAllEngines('A resumed run is no longer listed as suspended once it fi
       }
     }
     expect(approvalSeen).toBe(true);
+    if (engine === 'inngest') expect(await isListed(output.runId)).toBe(true);
     if (abortFirst) {
       expect(agent.abortRunStream(output.runId)).toBe(true);
     }
@@ -61,16 +62,10 @@ describeForAllEngines('A resumed run is no longer listed as suspended once it fi
     expect(await isListed(output.runId)).toBe(false);
   }
 
-  // Inngest resumes by sending an event without claiming the stored run, so the row stays
-  // 'suspended' until the Inngest function writes it. Marked as a known failure until the
-  // Inngest resume path claims the run like DurableAgent does.
-  (engine === 'inngest' ? it.fails : it)(
-    'drops an approved run from listSuspendedRuns() by the time its finish is delivered',
-    async () => {
-      await approveAndCheckListing(getMock(), { abortFirst: false });
-    },
-    30_000,
-  );
+  // Approval must be discoverable before resume and gone when finish is visible (#27898).
+  it('drops an approved run from listSuspendedRuns() by the time its finish is delivered', async () => {
+    await approveAndCheckListing(getMock(), { abortFirst: false });
+  }, 30_000);
 
   it('drops an aborted-then-approved run from listSuspendedRuns() by the time its finish is delivered', async () => {
     await approveAndCheckListing(getMock(), { abortFirst: true });

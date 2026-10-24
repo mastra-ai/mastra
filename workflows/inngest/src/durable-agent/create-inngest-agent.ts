@@ -1281,6 +1281,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
     async resume(runId, resumeData, resumeOptions): Promise<InngestAgentStreamResult<TOutput>> {
       if (agentThreadStreamRuntime.isResumeFenced(runId, agent.getPubSub())) {
+        // abortRunStream() starts snapshot cleanup asynchronously. A rejected
+        // approval must not return while that aborted run is still discoverable.
+        const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+          runId,
+        });
+        if (snapshot?.status === 'suspended' && snapshot.context?.input?.agentId === agentId) {
+          await workflowsStore?.deleteWorkflowRunById({
+            workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+            runId,
+          });
+        }
         throw new MastraError({
           id: 'AGENT_RESUME_ABORTED_RUN',
           domain: ErrorDomain.AGENT,
