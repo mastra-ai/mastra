@@ -34,7 +34,7 @@ const knowledge = new Knowledge({
   id: 'company',
   storage,
   tools: { read: true, write: true },
-  pins: { maxPins: 20 },
+  pins: { maxPins: 20, maxTokens: 500 },
 })
 ```
 
@@ -44,7 +44,7 @@ const knowledge = new Knowledge({
 | `tools.write` | `knowledge_create`, `knowledge_append`, `knowledge_remove`, plus node tools such as `knowledge_update_node`, `knowledge_rename_node`, `knowledge_merge_nodes`, and `knowledge_rescope` | off |
 | `pins` | `knowledge_pin`, `knowledge_edit_pin`, `knowledge_unpin`, and the pin set in context every turn | off |
 
-Set `pins: true` for the default limit of pins, or pass `maxPins`.
+Set `pins: true` for the default limit of pins, or pass `maxPins` and `maxTokens`.
 
 ## How scopes limit the tools
 

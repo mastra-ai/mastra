@@ -22,4 +22,4 @@ Limits are counted in tokens, not characters. Counts are estimates, so treat the
 | Pin set (all pins together) | 500 tokens by default, up to 2000 |
 | Number of pins | 20 by default |
 
-A write over a limit fails with an error. Tool schemas don't show the limit, because a schema can't count tokens. Change the pin limits with `pins: { maxPins, maxTokens }` on `Knowledge`.
+A write over a limit fails with an error. Tool schemas don't show the limit, because a schema can't count tokens. Change the pin limits with `pins: { maxPins, maxTokens }` on `Knowledge`. A `maxTokens` above 2000 throws when you construct it.
