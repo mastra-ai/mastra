@@ -3,6 +3,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ProcessInputArgs } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import type { MastraVector } from '@mastra/core/vector';
 import { describe, expect, it, vi } from 'vitest';
 import { TokenCounter } from './processors/observational-memory/token-counter';
 import { Memory } from './index';
@@ -116,6 +117,114 @@ describe('messageHistory history', () => {
       (await memory.getContext({ threadId: 'thread', memoryConfig: { messageHistory: { maxTokens: 10000 } } }))
         .messages,
     ).toHaveLength(15);
+  });
+
+  it('applies a thread boundary only to semantic results from that thread', async () => {
+    const storage = new InMemoryStore();
+    const currentThreadId = 'current-thread';
+    const otherThreadId = 'other-thread';
+    const resourceId = 'shared-resource';
+    const currentOld: MastraDBMessage = {
+      id: 'current-old',
+      role: 'user',
+      threadId: currentThreadId,
+      resourceId,
+      createdAt: new Date('2024-01-01T00:00:30Z'),
+      content: { format: 2, parts: [{ type: 'text', text: 'old current-thread message' }] },
+    };
+    const otherHit: MastraDBMessage = {
+      id: 'other-hit',
+      role: 'user',
+      threadId: otherThreadId,
+      resourceId,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      content: { format: 2, parts: [{ type: 'text', text: 'old cross-thread semantic hit' }] },
+    };
+    const otherNeighbor: MastraDBMessage = {
+      id: 'other-neighbor',
+      role: 'assistant',
+      threadId: otherThreadId,
+      resourceId,
+      createdAt: new Date('2024-01-01T00:01:00Z'),
+      content: { format: 2, parts: [{ type: 'text', text: 'requested cross-thread neighbor' }] },
+    };
+    const currentNew: MastraDBMessage = {
+      id: 'current-new',
+      role: 'assistant',
+      threadId: currentThreadId,
+      resourceId,
+      createdAt: new Date('2024-01-03T00:00:00Z'),
+      content: { format: 2, parts: [{ type: 'text', text: 'new current-thread message' }] },
+    };
+    const resourceResults = [
+      { id: 'current-vector', score: 0.9, metadata: { message_id: currentOld.id, thread_id: currentThreadId } },
+      { id: 'other-vector', score: 0.9, metadata: { message_id: otherHit.id, thread_id: otherThreadId } },
+    ];
+    const vector: MastraVector = {
+      createIndex: vi.fn().mockResolvedValue(undefined),
+      upsert: vi.fn().mockResolvedValue(undefined),
+      query: vi
+        .fn()
+        .mockImplementation(({ filter }: { filter: Record<string, string> }) =>
+          Promise.resolve(filter.thread_id ? resourceResults.slice(0, 1) : resourceResults),
+        ),
+      listIndexes: vi.fn().mockResolvedValue([]),
+      deleteVectors: vi.fn().mockResolvedValue(undefined),
+      describeIndex: vi.fn().mockResolvedValue({ dimension: 3 }),
+      id: 'boundary-vector',
+    } as any;
+    const embedder = {
+      doEmbed: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2, 0.3]], usage: { tokens: 3 } }),
+      modelId: 'boundary-embedder',
+      specificationVersion: 'v1',
+      provider: 'mock',
+    } as any;
+    const memory = new Memory({
+      storage,
+      vector,
+      embedder,
+      options: {
+        messageHistory: { maxTokens: 10_000, atMaxRemoveTokens: 0 },
+        semanticRecall: { scope: 'resource', topK: 2, messageRange: { before: 0, after: 1 } },
+        generateTitle: false,
+      },
+    });
+
+    await memory.saveThread({
+      thread: {
+        id: currentThreadId,
+        resourceId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          memoryTokenLimiter: {
+            createdAt: '2024-01-02T00:00:00.000Z',
+            messageIds: [],
+            maxTokens: 10_000,
+            atMaxRemoveTokens: 0,
+          },
+        },
+      },
+    });
+    await memory.saveThread({
+      thread: { id: otherThreadId, resourceId, createdAt: new Date(), updatedAt: new Date() },
+    });
+    await memory.saveMessages({ messages: [currentOld, otherHit, otherNeighbor, currentNew] });
+
+    const resourceRecall = await memory.recall({
+      threadId: currentThreadId,
+      resourceId,
+      vectorSearchString: 'remember',
+    });
+    expect(resourceRecall.messages.map(message => message.id)).toEqual(['other-hit', 'other-neighbor', 'current-new']);
+
+    const threadRecall = await memory.recall({
+      threadId: currentThreadId,
+      resourceId,
+      vectorSearchString: 'remember',
+      threadConfig: { semanticRecall: { scope: 'thread', topK: 2, messageRange: 1 } },
+    });
+    expect(threadRecall.messages.map(message => message.id)).toEqual(['current-new']);
   });
 
   it('uses the observational-memory counter in the automatically injected limiter', async () => {
