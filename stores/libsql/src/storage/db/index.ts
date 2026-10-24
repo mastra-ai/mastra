@@ -1,4 +1,3 @@
-import { createClient } from '@libsql/client';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -16,6 +15,7 @@ import type {
   StorageColumn,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import { createClient } from '../../shared/create-client';
 import type { SqliteClient as Client, SqliteInValue as InValue } from './client';
 import { withRunFence } from './run-fencing';
 import type { RunFenceCheck } from './run-fencing';
