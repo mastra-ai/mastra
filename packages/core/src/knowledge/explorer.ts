@@ -6,7 +6,7 @@ import type {
   KnowledgeStorage,
 } from '../storage';
 import { canonicalizeKnowledgeScope, isKnowledgeScopeVisible } from '../storage';
-import { listPinnedKnowledge, PINNED_NODE_NAME } from './pinned';
+import { listPinnedKnowledge } from './pinned';
 
 /**
  * Read-only views over one Knowledge instance for browsing UIs (Mastra Studio).
