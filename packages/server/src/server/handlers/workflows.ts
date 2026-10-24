@@ -672,7 +672,7 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
-      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const _run = await workflow.createRunForExistingRun({ runId, resourceId: run.resourceId });
       const serverCache = mastra.getServerCache();
 
       const resumeResult = _run.resumeStream({ ...params, requestContext });
@@ -766,7 +766,7 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
-      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const _run = await workflow.createRunForExistingRun({ runId, resourceId: run.resourceId });
       // Fire-and-forget: attach .catch so a rejected start (e.g. invalid input
       // schema) cannot become an unhandledRejection and tear down the process.
       void _run
@@ -823,7 +823,7 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
-      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const _run = await workflow.createRunForExistingRun({ runId, resourceId: run.resourceId });
       const serverCache = mastra.getServerCache();
       if (!serverCache) {
         throw new HTTPException(500, { message: 'Server cache not found' });
@@ -882,7 +882,7 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
-      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const _run = await workflow.createRunForExistingRun({ runId, resourceId: run.resourceId });
       const result = await _run.resume({ ...params, requestContext });
 
       return result;
@@ -941,7 +941,7 @@ export const RESUME_NO_WAIT_WORKFLOW_ROUTE = createRoute({
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
-      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const _run = await workflow.createRunForExistingRun({ runId, resourceId: run.resourceId });
       const result = await _run.resumeAsync({ ...params, requestContext });
 
       return result;
@@ -989,7 +989,7 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
-      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const _run = await workflow.createRunForExistingRun({ runId, resourceId: run.resourceId });
 
       // Fire-and-forget: attach .catch so a rejected resume cannot become an
       // unhandledRejection and tear down the process.
@@ -1042,7 +1042,7 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
-      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const _run = await workflow.createRunForExistingRun({ runId, resourceId: run.resourceId });
       const result = await _run.restart({ ...params, requestContext });
 
       return result;
@@ -1090,7 +1090,7 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
-      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const _run = await workflow.createRunForExistingRun({ runId, resourceId: run.resourceId });
 
       void _run.restart({ ...params, requestContext }).catch(error => {
         mastra.getLogger().error('Failed to restart workflow run in background', { error, workflowId, runId });
@@ -1211,7 +1211,7 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
-      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const _run = await workflow.createRunForExistingRun({ runId, resourceId: run.resourceId });
       const result = await _run.timeTravel({ ...params, requestContext });
 
       return result;
@@ -1259,7 +1259,7 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
-      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const _run = await workflow.createRunForExistingRun({ runId, resourceId: run.resourceId });
 
       // Fire-and-forget: attach .catch so a rejected time travel cannot become
       // an unhandledRejection and tear down the process.
@@ -1312,7 +1312,7 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
 
       const serverCache = mastra.getServerCache();
 
-      const run = await workflow.createRun({ runId, resourceId: existingRun.resourceId });
+      const run = await workflow.createRunForExistingRun({ runId, resourceId: existingRun.resourceId });
       const result = run.timeTravelStream({ ...params, requestContext });
 
       if (serverCache) {
@@ -1362,7 +1362,7 @@ export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
-      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const _run = await workflow.createRunForExistingRun({ runId, resourceId: run.resourceId });
 
       await _run.cancel();
 
@@ -1466,7 +1466,7 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
 
       await validateRunOwnership(run, effectiveResourceId, mastra);
 
-      const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
+      const _run = await workflow.createRunForExistingRun({ runId, resourceId: run.resourceId });
       const serverCache = mastra.getServerCache();
       if (!serverCache) {
         throw new HTTPException(500, { message: 'Server cache not found' });

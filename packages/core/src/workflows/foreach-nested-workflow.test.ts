@@ -236,7 +236,9 @@ describe('foreach nested workflow runs', () => {
     ) as string[];
     expect(nestedRunIds).toEqual([expect.any(String), expect.any(String)]);
 
-    const childRuns = await Promise.all(nestedRunIds.map((runId: string) => childWorkflow.createRun({ runId })));
+    const childRuns = await Promise.all(
+      nestedRunIds.map((runId: string) => childWorkflow.createRunForExistingRun({ runId })),
+    );
     const alphaResume = childRuns[0]!.resume({ resumeData: { approved: true } });
     await alphaResumeHasStarted;
 
@@ -327,7 +329,7 @@ describe('foreach nested workflow runs', () => {
       return updateWorkflowState(args);
     });
 
-    const childRun = await childWorkflow.createRun({ runId: nestedRunId });
+    const childRun = await childWorkflow.createRunForExistingRun({ runId: nestedRunId });
     await expect(childRun.resume({ resumeData: { approved: true } })).resolves.toMatchObject({ status: 'suspended' });
   });
 
@@ -384,7 +386,7 @@ describe('foreach nested workflow runs', () => {
     const nestedRunId =
       parentSnapshot?.context?.[childWorkflow.id]?.suspendPayload?.__workflow_meta?.foreachOutput?.[0]?.metadata
         ?.nestedRunId;
-    const childRun = await childWorkflow.createRun({ runId: nestedRunId });
+    const childRun = await childWorkflow.createRunForExistingRun({ runId: nestedRunId });
 
     await expect(
       childRun.resume({ resumeData: { approved: true }, requestContext: startContext }),
@@ -464,7 +466,7 @@ describe('foreach nested workflow runs', () => {
       }),
     ).toMatchObject({ status: 'suspended' });
 
-    const childRun = await childWorkflow.createRun({ runId: nestedRunId });
+    const childRun = await childWorkflow.createRunForExistingRun({ runId: nestedRunId });
     expect(await childRun.resume({ resumeData: { stage: 2 } })).toMatchObject({ status: 'success' });
 
     await expect
@@ -540,7 +542,7 @@ describe('foreach nested workflow runs', () => {
     expect(nestedRunId).toEqual(expect.any(String));
 
     const eventsBeforeChildResume = parentEvents.length;
-    const childRun = await childWorkflow.createRun({ runId: nestedRunId });
+    const childRun = await childWorkflow.createRunForExistingRun({ runId: nestedRunId });
     const childResult = await childRun.resume({ resumeData: { approved: true }, requestContext });
     expect(childResult.status).toBe('success');
 

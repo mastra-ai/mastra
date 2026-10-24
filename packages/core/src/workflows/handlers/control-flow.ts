@@ -763,7 +763,7 @@ export async function executeLoop(
       runId,
       resourceId,
       stepResults,
-      executionContext,
+      executionContext: { ...executionContext, loopIteration: iteration + 1 },
       restart: currentRestart,
       resume: currentResume,
       timeTravel: currentTimeTravel,
