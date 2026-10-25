@@ -27532,7 +27532,7 @@
       "zai-org/GLM-5.3": {
         "cost": {
           "input": 0.6,
-          "output": 2.8,
+          "output": 3.22,
           "cache_read": 0.12,
           "cache_write": 0
         }
@@ -29672,6 +29672,13 @@
           "cache_read": 0.005
         }
       },
+      "liquid/lfm-2.5-2.6b": {
+        "cost": {
+          "input": 0.35,
+          "output": 0.5,
+          "cache_read": 0.04
+        }
+      },
       "liquid/lfm-2.5-2.6b:free": {
         "cost": {
           "input": 0,
@@ -30191,12 +30198,6 @@
           "output": 0
         }
       },
-      "openai/gpt-3.5-turbo": {
-        "cost": {
-          "input": 0.5,
-          "output": 1.5
-        }
-      },
       "openai/gpt-3.5-turbo-0613": {
         "cost": {
           "input": 1,
@@ -30207,12 +30208,6 @@
         "cost": {
           "input": 3,
           "output": 4
-        }
-      },
-      "openai/gpt-3.5-turbo-instruct": {
-        "cost": {
-          "input": 1.5,
-          "output": 2
         }
       },
       "openai/gpt-4": {
@@ -31629,7 +31624,7 @@
       "~moonshotai/kimi-latest": {
         "cost": {
           "input": 0.19,
-          "output": 8.94,
+          "output": 8.5258,
           "cache_read": 0.19
         }
       },
@@ -31688,8 +31683,8 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.0509,
-          "output": 0.0702,
+          "input": 0.0502,
+          "output": 0.0819,
           "cache_read": 0.03
         }
       },
@@ -37828,20 +37823,20 @@
       },
       "bytedance/dola-seed-2.0-lite": {
         "cost": {
-          "input": 0.25,
-          "output": 2
+          "input": 0.31,
+          "output": 2.5
         }
       },
       "bytedance/dola-seed-2.0-mini": {
         "cost": {
-          "input": 0.1,
-          "output": 0.4
+          "input": 0.12,
+          "output": 0.5
         }
       },
       "bytedance/dola-seed-2.0-pro": {
         "cost": {
-          "input": 0.5,
-          "output": 3
+          "input": 0.63,
+          "output": 3.79
         }
       },
       "cohere/command-a-03-2025": {
@@ -40334,6 +40329,77 @@
         "cost": {
           "input": 0.9,
           "output": 1.9
+        }
+      }
+    }
+  },
+  "munito": {
+    "models": {
+      "aleph-alpha/kolibri-1": {
+        "cost": {
+          "input": 0.13,
+          "output": 0.51,
+          "cache_read": 0.078
+        }
+      },
+      "deepseek-ai/deepseek-v4-flash": {
+        "cost": {
+          "input": 0.099,
+          "output": 0.25,
+          "cache_read": 0.019
+        }
+      },
+      "deepseek-ai/deepseek-v4.1-flash-1017": {
+        "cost": {
+          "input": 0.27,
+          "output": 1,
+          "cache_read": 0.0054
+        }
+      },
+      "qwen/qwen3.8-27b": {
+        "cost": {
+          "input": 0.18,
+          "output": 2.4,
+          "cache_read": 0.05
+        }
+      },
+      "zai-org/glm-5.3-flash": {
+        "cost": {
+          "input": 0.13,
+          "output": 0.45,
+          "cache_read": 0.027
+        }
+      }
+    }
+  },
+  "munito-eu": {
+    "models": {
+      "aleph-alpha/kolibri-1": {
+        "cost": {
+          "input": 0.16,
+          "output": 0.56,
+          "cache_read": 0.094
+        }
+      },
+      "deepseek-ai/deepseek-v4-flash": {
+        "cost": {
+          "input": 0.11,
+          "output": 0.28,
+          "cache_read": 0.022
+        }
+      },
+      "qwen/qwen3.8-27b": {
+        "cost": {
+          "input": 0.2,
+          "output": 2.7,
+          "cache_read": 0.11
+        }
+      },
+      "zai-org/glm-5.3-flash": {
+        "cost": {
+          "input": 0.15,
+          "output": 0.5,
+          "cache_read": 0.03
         }
       }
     }
@@ -50799,6 +50865,13 @@
           "cache_read": 0.042
         }
       },
+      "iceman-contributor-free": {
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0
+        }
+      },
       "kimi-k2.7-code": {
         "cost": {
           "input": 0.95,
@@ -51958,6 +52031,13 @@
           "cache_read": 0.03
         }
       },
+      "liquid/lfm-2.5-2.6b": {
+        "cost": {
+          "input": 0.35,
+          "output": 0.5,
+          "cache_read": 0.04
+        }
+      },
       "liquid/lfm-2.5-2.6b:free": {
         "cost": {
           "input": 0,
@@ -52477,12 +52557,6 @@
           "output": 0
         }
       },
-      "openai/gpt-3.5-turbo": {
-        "cost": {
-          "input": 0.5,
-          "output": 1.5
-        }
-      },
       "openai/gpt-3.5-turbo-0613": {
         "cost": {
           "input": 1,
@@ -52493,12 +52567,6 @@
         "cost": {
           "input": 3,
           "output": 4
-        }
-      },
-      "openai/gpt-3.5-turbo-instruct": {
-        "cost": {
-          "input": 1.5,
-          "output": 2
         }
       },
       "openai/gpt-4": {
@@ -54311,9 +54379,9 @@
       },
       "z-ai/glm-5.3": {
         "cost": {
-          "input": 0.079,
-          "output": 1.4,
-          "cache_read": 0.078
+          "input": 0.0908,
+          "output": 1.61,
+          "cache_read": 0.0897
         }
       },
       "z-ai/glm-5.3-flash": {
@@ -54448,7 +54516,7 @@
       "~moonshotai/kimi-latest": {
         "cost": {
           "input": 0.19,
-          "output": 8.94,
+          "output": 8.5258,
           "cache_read": 0.19
         }
       },
@@ -54595,8 +54663,8 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.0509,
-          "output": 0.0702,
+          "input": 0.0502,
+          "output": 0.0819,
           "cache_read": 0.03
         }
       },

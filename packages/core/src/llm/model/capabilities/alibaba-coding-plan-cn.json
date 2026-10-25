@@ -19,12 +19,12 @@
         "type": "toggle"
       }
     ],
-    "qwen3.5-plus": [
+    "glm-4.7": [
       {
         "type": "toggle"
       }
     ],
-    "glm-4.7": [
+    "qwen3.5-plus": [
       {
         "type": "toggle"
       }

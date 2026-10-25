@@ -7,7 +7,7 @@ description: "Browse Kilo Gateway model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/kilo.svg" alt="Kilo Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kilo Gateway
 
-Access 398 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
+Access 397 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
 
 Learn more in the [Kilo Gateway documentation](https://kilo.ai).
 
@@ -163,7 +163,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 1048576,
     "maxOutput": 943718,
     "inputCost": 0.19,
-    "outputCost": 8.94
+    "outputCost": 8.5258
   },
   {
     "model": "kilo/~openai/gpt-astra-latest",
@@ -258,8 +258,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.0509,
-    "outputCost": 0.0702
+    "inputCost": 0.0502,
+    "outputCost": 0.0819
   },
   {
     "model": "kilo/~z-ai/glm-latest",
@@ -1450,6 +1450,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
+    "model": "kilo/liquid/lfm-2.5-2.6b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.35,
+    "outputCost": 0.5
+  },
+  {
     "model": "kilo/liquid/lfm-2.5-2.6b:free",
     "imageInput": false,
     "audioInput": false,
@@ -2374,18 +2386,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "kilo/openai/gpt-3.5-turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 16385,
-    "maxOutput": 4096,
-    "inputCost": 0.5,
-    "outputCost": 1.5
-  },
-  {
     "model": "kilo/openai/gpt-3.5-turbo-0613",
     "imageInput": false,
     "audioInput": false,
@@ -2408,18 +2408,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 4096,
     "inputCost": 3,
     "outputCost": 4
-  },
-  {
-    "model": "kilo/openai/gpt-3.5-turbo-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 4095,
-    "maxOutput": 3685,
-    "inputCost": 1.5,
-    "outputCost": 2
   },
   {
     "model": "kilo/openai/gpt-4",

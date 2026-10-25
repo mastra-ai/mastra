@@ -29,19 +29,7 @@
     "text-standard"
   ],
   "reasoning": {
-    "code-standard": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini-pro-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "agent-max": [
+    "text-max": [
       {
         "type": "toggle"
       },
@@ -50,31 +38,13 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "text-standard": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "agent-prime": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "glm-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "code-prime": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "text-max": [
+    "agent-max": [
       {
         "type": "toggle"
       },
@@ -92,7 +62,19 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "bytedance-pro-latest": [
+    "text-standard": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "text-prime": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -104,22 +86,16 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-sol-latest": [
+    "code-standard": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "kimi-latest": [
+    "glm-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-pro-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "code-max": [
@@ -131,13 +107,37 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "deepseek-pro-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "kimi-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "minimax-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "text-prime": [
+    "gpt-sol-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "code-prime": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "bytedance-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

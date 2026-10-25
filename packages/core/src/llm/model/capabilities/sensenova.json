@@ -10,13 +10,19 @@
     "sensenova-6.8-flash-lite"
   ],
   "reasoning": {
-    "deepseek-v4-flash": [
+    "sensenova-6.8-flash-lite": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "medium", "high"]
       }
     ],
-    "glm-5.2": [
+    "deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-v4-flash": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -31,22 +37,16 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "sensenova-6.8-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
     "kimi-k3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ]
   }
