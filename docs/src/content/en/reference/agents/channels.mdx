@@ -449,7 +449,7 @@ const handlers: ChannelHandlers = {
 }
 ```
 
-`defaultHandler` runs the agent, posts the response, and subscribes the thread. Later messages in that thread go to `onSubscribedMessage`. Runs started through `onMessage` report `channel.eventType` as `message`. When a queued batch mixes mentioned and unmentioned senders, unmentioned senders go to `onMessage` if it is set, and to `onMention` otherwise.
+`defaultHandler` runs the agent, posts the response, and subscribes the thread. Later messages in that thread go to `onSubscribedMessage`. Runs started through `onMessage` report `channel.eventType` as `message`. When a queued batch mixes mentioned and unmentioned senders, unmentioned senders go to `onMessage` when it's set and to `onMention` otherwise.
 
 The `ChannelHandler` function signature:
 
