@@ -1,6 +1,7 @@
 import type { JournalEntry, LLMock } from '@copilotkit/aimock';
 import type { AgentConfig, ToolsInput } from '../../../agent';
 import type { MessageListInput } from '../../../agent/message-list';
+import type { MastraServerCache } from '../../../cache';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
@@ -179,6 +180,8 @@ export interface RunLoopScenarioOptions {
    * pass `false` to test tool-level `requireApproval`, or a function to decide per tool call.
    */
   requireToolApproval?: boolean | ((context: { toolName: string; args?: unknown }) => boolean);
+  /** Close a durable stream on approval suspension so its output promises settle. */
+  closeOnSuspend?: boolean;
   /**
    * Stop condition for the loop. Forwarded to `agent.stream({ stopWhen })`.
    * Use this to bound long/looping tool scenarios.
@@ -394,6 +397,8 @@ export interface RunLoopScenarioOptions {
    * Use for testing the signal integration (subscribe → sendMessage → receive response).
    */
   pubsub?: PubSub;
+  /** Shared cache for durable/evented pubsub scenarios. */
+  cache?: MastraServerCache;
   /**
    * When set, {@link runLoopScenario} iterates `output.fullStream` itself
    * (instead of the default `consumeStream` drain) and returns every emitted
