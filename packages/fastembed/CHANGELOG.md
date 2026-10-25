@@ -1,5 +1,13 @@
 # @mastra/fastembed
 
+## 1.3.5-alpha.1
+
+### Patch Changes
+
+- Fixed sparse model initialization when the cache directory has missing parent directories ([#28237](https://github.com/mastra-ai/mastra/issues/28237)). ([#28277](https://github.com/mastra-ai/mastra/pull/28277))
+
+- Fixed empty dense and sparse embeddings when custom tokenizer metadata omits model_max_length or sets it to null ([#28236](https://github.com/mastra-ai/mastra/issues/28236)). The requested limit or default 512-token limit is preserved. ([#28279](https://github.com/mastra-ai/mastra/pull/28279))
+
 ## 1.3.5-alpha.0
 
 ### Patch Changes

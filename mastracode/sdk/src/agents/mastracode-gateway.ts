@@ -43,8 +43,10 @@ import {
 import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
+  createPromptCacheKeyMiddleware,
   createReasoningEffortMiddleware,
   getEffectiveThinkingLevel,
+  getRequestThreadId,
   openaiCodexProvider,
   THINKING_LEVEL_TO_REASONING_EFFORT,
 } from '../providers/openai-codex.js';
@@ -175,9 +177,10 @@ function openaiApiKeyProvider(
           THINKING_LEVEL_TO_REASONING_EFFORT[getEffectiveThinkingLevel(modelId, thinkingLevel)],
         )
       : undefined;
+  const promptCacheKeyMiddleware = createPromptCacheKeyMiddleware(getRequestThreadId(headers));
   return wrapLanguageModel({
     model: openai.responses(modelId),
-    middleware: middleware ? [middleware] : [],
+    middleware: [...(middleware ? [middleware] : []), ...(promptCacheKeyMiddleware ? [promptCacheKeyMiddleware] : [])],
   });
 }
 
@@ -661,6 +664,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         const effectiveLevel = getEffectiveThinkingLevel(args.modelId, this.#thinkingLevel ?? 'medium');
         const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
         const middleware = createCodexMiddleware(reasoningEffort);
+        const promptCacheKeyMiddleware = createPromptCacheKeyMiddleware(getRequestThreadId(args.headers));
         const openai = createOpenAI({
           apiKey: 'oauth-gateway-placeholder',
           baseURL: `${this.#mastraGatewayBaseUrl}/v1`,
@@ -673,7 +677,7 @@ export class MastraCodeGateway extends MastraModelGateway {
 
         return wrapLanguageModel({
           model: openai.responses(resolvedBareModelId),
-          middleware: [middleware],
+          middleware: [middleware, ...(promptCacheKeyMiddleware ? [promptCacheKeyMiddleware] : [])],
         });
       }
 
