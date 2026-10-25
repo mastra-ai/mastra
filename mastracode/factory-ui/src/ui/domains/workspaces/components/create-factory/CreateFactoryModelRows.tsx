@@ -2,6 +2,7 @@ import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { compareModelReleaseDates } from '@mastra/playground-ui/utils/model';
 import { RefreshCw } from 'lucide-react';
 
 import type { ProviderInfo } from '../../../../../api/types';
@@ -39,10 +40,12 @@ export function CreateFactoryModelRows({
     return <CreateFactoryPaletteAlert>{catalog.catalogError.message}</CreateFactoryPaletteAlert>;
 
   const normalizedQuery = query.trim().toLowerCase();
-  const models = catalog.models.filter(
-    model =>
-      model.id.toLowerCase().includes(normalizedQuery) || model.modelName.toLowerCase().includes(normalizedQuery),
-  );
+  const models = catalog.models
+    .filter(
+      model =>
+        model.id.toLowerCase().includes(normalizedQuery) || model.modelName.toLowerCase().includes(normalizedQuery),
+    )
+    .sort((a, b) => compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.modelName.localeCompare(b.modelName));
   const saving = savingModelId !== undefined;
 
   return (

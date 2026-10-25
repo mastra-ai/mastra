@@ -73,6 +73,7 @@ import { parsePartialJson, processDataStream } from '../utils/ai-sdk-v4';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
+import { createSseEventSplitter } from '../utils/sse-event-splitter';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
@@ -2433,12 +2434,10 @@ export class Agent extends BaseResource {
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
       const decoder = new TextDecoder();
-      let pendingText = '';
+      const splitEvents = createSseEventSplitter();
 
       const enqueueReadableText = (text: string, isFinal = false) => {
-        pendingText += text;
-        const lines = pendingText.split('\n\n');
-        pendingText = isFinal ? '' : (lines.pop() ?? '');
+        const lines = splitEvents(text, isFinal);
         for (const line of lines) {
           if (!line.startsWith('data: ') || !line.includes('"type":"finish"')) continue;
           try {

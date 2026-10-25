@@ -252,11 +252,17 @@ export function getScopeStreamSlot(
   return undefined;
 }
 
+/**
+ * Why a wrapper is closed by a newer one: `replaced` when another stream takes its memory
+ * scope, `sameRun` when another wrapper (e.g. a resume) takes over the same run.
+ */
+type StreamSlotCloseReason = 'replaced' | 'sameRun';
+
 /** Register the active wrapper for a memory scope, aborting the prior wrapper for that scope. */
 export function acquireStreamSlot(
-  activeStreams: Map<string, (reason?: 'replaced') => void>,
+  activeStreams: Map<string, (reason?: StreamSlotCloseReason) => void>,
   scopeKey: string | null,
-  closer: (reason?: 'replaced') => void,
+  closer: (reason?: StreamSlotCloseReason) => void,
 ): void {
   if (!scopeKey) return;
   const priorClose = activeStreams.get(scopeKey);
@@ -266,14 +272,14 @@ export function acquireStreamSlot(
 
 /** Register the active wrapper under its caller-visible run ID, replacing an older wrapper for that ID. */
 export function acquireRunStreamSlot(
-  activeStreams: Map<string, (reason?: 'replaced') => void>,
+  activeStreams: Map<string, (reason?: StreamSlotCloseReason) => void>,
   runId: string | undefined,
-  closer: (reason?: 'replaced') => void,
+  closer: (reason?: StreamSlotCloseReason) => void,
 ): void {
   if (!runId) return;
   const key = runStreamSlotKey(runId);
   const priorClose = activeStreams.get(key);
-  priorClose?.('replaced');
+  priorClose?.('sameRun');
   activeStreams.set(key, closer);
 }
 
@@ -468,9 +474,10 @@ export async function runIdleLoop<
     }
   };
 
-  const abortWrapper = (reason?: 'replaced') => {
+  const abortWrapper = (reason?: StreamSlotCloseReason) => {
     if ((closed && !detached) || aborting) return;
-    if (reason === 'replaced' && hooks?.detachOnCancel && parked) {
+    // A wrapper taking over this run resumes it, so a parked run must stay resumable.
+    if (parked && (reason === 'sameRun' || (reason === 'replaced' && hooks?.detachOnCancel))) {
       forceClose({ keepInnerRuns: true });
       return;
     }
@@ -616,8 +623,9 @@ export async function runIdleLoop<
   };
 
   // --- Setup ---
-  acquireStreamSlot(deps.activeStreams, scopeKey, abortWrapper);
+  // Take the run slot first: a resume detaches its parked predecessor, which frees the scope slot too.
   acquireRunStreamSlot(deps.activeStreams, wrapperRunId, abortWrapper);
+  acquireStreamSlot(deps.activeStreams, scopeKey, abortWrapper);
 
   streamOptions?.abortSignal?.addEventListener('abort', detachOrAbort, { once: true });
 
