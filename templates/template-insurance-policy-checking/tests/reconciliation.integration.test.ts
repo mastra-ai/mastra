@@ -90,6 +90,8 @@ type WireData = {
     clauses?: { reference: Extraction['terms'][number]; target: Extraction['terms'][number] }[];
   };
 };
+const sourceScopeNote =
+  'Review is complete for the supplied one-page amendment only. The separately listed proposal and issued policy were not reviewed in this extraction; consistency with those documents and the content of unchanged proposal terms are not established here.';
 async function controlledResponses(documents: DocumentFixture[]) {
   const requests: { path: string; body: WireRequest; raw: string; canceled: Promise<boolean> }[] = [];
   const state: {
@@ -239,6 +241,14 @@ async function controlledResponses(documents: DocumentFixture[]) {
           const note = 'Fictional example profile; signatory identity has not been independently authenticated.';
           if (hasContext) (result as Extraction & { notes: string[] }).notes = [note];
           else result.limitations = [note, 'Other case documents were not provided.'];
+          if (fixture.kind === 'amendment') {
+            // Model the observed scope disclaimer at the paid HTTP boundary; real guards still consume the output.
+            const sourceSpecificScope = JSON.stringify(
+              body.input.filter(item => ['system', 'developer'].includes(item.role)),
+            ).includes('Source-specific extraction does not perform cross-document comparison');
+            if (sourceSpecificScope) result.notes!.push(sourceScopeNote);
+            else result.limitations.push(sourceScopeNote);
+          }
           if (state.mode === 'documentContextWithGap' && fixture.kind === 'target')
             result.limitations = ['The operative coverage interpretation remains unresolved.'];
           if (fixture.kind !== 'reference') {
@@ -513,6 +523,8 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
     expect(analysis.limitations).toContain(
       'Fictional example profile; signatory identity has not been independently authenticated.',
     );
+    expect(analysis.limitations).toContain(sourceScopeNote);
+    expect(analysis.extractions.find(extraction => extraction.changes.length)?.limitations).toEqual([]);
     expect(analysis.limitations).not.toContain(
       'The captured or reviewed scope is incomplete; no overall assurance is available.',
     );
@@ -526,7 +538,7 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
     expect(extractionRequests).toHaveLength(3);
     expect(extractionRequests[0]!.data.source!.sourceId).toBe(analysis.input.clarification.referenceId);
     for (const request of extractionRequests) {
-      expect(request.promptVersion).toBe('insurance-3');
+      expect(request.promptVersion).toBe('insurance-4');
       expect(request.data.clarification).toEqual(analysis.input.clarification);
       expect(request.data.profile).toEqual(analysis.input.profile);
       expect(request.data.sources).toHaveLength(3);

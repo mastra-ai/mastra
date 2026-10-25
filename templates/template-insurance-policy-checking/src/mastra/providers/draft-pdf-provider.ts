@@ -6,7 +6,7 @@ import { hashBytes, type OutputProvider } from '../domain/case-contracts.js';
 import { IntakeError } from '../domain/operation-errors.js';
 import { draftOutputRequestSchema } from '../domain/output-contracts.js';
 import { reportSnapshotSchema, type ReportSnapshot } from '../domain/report-contracts.js';
-import { reportLabels, termValue } from '../domain/report-presentation.js';
+import { categoryLabel, issuedPolicyDates, reportLabels, termValue } from '../domain/report-presentation.js';
 import {
   actionableFindings,
   approvalSchema,
@@ -188,13 +188,7 @@ export async function renderDraftPdf(report: ReportSnapshot, approved?: Approval
         ),
       ].join('; ');
       const values = [
-        findingName(f.id) +
-          '\n' +
-          (reportLabels.category[f.category as keyof typeof reportLabels.category] ?? 'Other comparison terms') +
-          '\n' +
-          f.label +
-          '\n' +
-          refs,
+        findingName(f.id) + '\n' + categoryLabel(f.category) + '\n' + f.label + '\n' + refs,
         termValue(f.baseline?.value),
         termValue(f.actual?.value),
         reportLabels.classification[f.classification] +
@@ -253,7 +247,7 @@ export async function renderDraftPdf(report: ReportSnapshot, approved?: Approval
     ['Policy number', r.identity.policyNumber],
     ['Insurance product', r.identity.insuranceProduct],
     ['Insurer', 'Not available'],
-    ['Policy dates', 'Not available'],
+    ['Policy dates (issued policy)', issuedPolicyDates(r)],
     ['Generated at', r.createdAt],
     ['Case identifier', r.caseId],
     ['Workflow run', r.workflowRunId],
@@ -331,10 +325,7 @@ export async function renderDraftPdf(report: ReportSnapshot, approved?: Approval
     const title = findingName(f.id) + ' • ' + f.label;
     text(title, 12, true, accent(f));
     repeated = title;
-    field(
-      'Category',
-      reportLabels.category[f.category as keyof typeof reportLabels.category] ?? 'Other comparison terms',
-    );
+    field('Category', categoryLabel(f.category));
     field('Assessment', reportLabels.classification[f.classification]);
     field('Severity', f.severity ? reportLabels.severity[f.severity.level] : 'Not available');
     field('Review status', approval || dispositions.has(f.id) ? reviewed(f.id) : 'Awaiting broker review');

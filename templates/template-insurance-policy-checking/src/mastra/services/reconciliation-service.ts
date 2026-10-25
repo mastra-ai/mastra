@@ -106,7 +106,7 @@ export function createReconciliationService(
         profile: structuredClone(profile),
         asOf: request.asOf,
         model: settings.model,
-        promptVersion: 'insurance-3',
+        promptVersion: 'insurance-4',
         budget: structuredClone(settings.budget),
       };
       const attempt = await repository.claim(context, request, input, runId);

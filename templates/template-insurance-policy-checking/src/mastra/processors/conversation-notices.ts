@@ -3,7 +3,7 @@ import type { CaseService } from '../services/case-service.js';
 import { markdown } from './report-notice-formatter.js';
 
 export const conversationHelp =
-  'Attach textual PDFs, then identify the accepted reference, issued policy and policy details. Say “Show status”, “Compare the documents”, “Show the report”, or “Show page 1 of "filename.pdf"”.';
+  'Attach PDFs with selectable text, then tell me which file is the proposal or contract you accepted and which is the issued policy. Say “Show status”, “Compare the documents”, “Show the report”, or “Show page 1 of "filename.pdf"”.';
 export function statusNotice(status: Awaited<ReturnType<CaseService['status']>>) {
   if (!status.case) return `No case is selected. Attach textual PDFs to begin.\n\n${conversationHelp}`;
   const record = status.case;
@@ -16,11 +16,11 @@ export function statusNotice(status: Awaited<ReturnType<CaseService['status']>>)
   ];
   if (!record.clarification)
     lines.push(
-      'Before comparison, confirm the accepted reference and issued policy by filename, and provide the policy number, insured and insurance product. Use “unknown” for a detail you cannot establish.',
+      'Tell me which file is the proposal or contract you accepted and which is the issued policy. Include the policy number, insured name, and type of insurance. Say “unknown” for any detail you cannot confirm.',
     );
   else
     lines.push(
-      `Your document roles and policy details are saved.${record.clarification.acceptedBaseline ? ' Your accepted baseline is recorded.' : ''} Say “Compare the documents” when ready.`,
+      `I've saved your policy details and the files you selected for comparison.${record.clarification.acceptedBaseline ? ' The proposal or contract you accepted is also recorded.' : ''} Say “Compare the documents” when ready.`,
     );
   if (record.latestReportId)
     lines.push('A report is saved. Say “Show the report” for findings, review guidance and available PDF downloads.');

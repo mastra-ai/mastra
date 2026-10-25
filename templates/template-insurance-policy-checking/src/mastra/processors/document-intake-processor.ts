@@ -136,7 +136,7 @@ export function createDocumentIntakeProcessor(
             acceptedBaseline: { sourceId: reference.sourceId, statement: text },
           });
           notice =
-            'Your accepted baseline, issued policy, document roles and policy details are saved. Say “Compare the documents” to prepare the report.';
+            "I've saved the proposal or contract you accepted, the issued policy, and your policy details. Say “Compare the documents” to prepare the report.";
         } else if (text.startsWith('/clarify ')) {
           let clarification: unknown;
           try {

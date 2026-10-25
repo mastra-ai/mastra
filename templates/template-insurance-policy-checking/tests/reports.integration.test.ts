@@ -18,8 +18,8 @@ import {
   draftOutputRequestSchema,
   reportOutputRequestSchema,
 } from '../src/mastra/domain/output-contracts.js';
-import { reportHash, reportSnapshotSchema } from '../src/mastra/domain/report-contracts.js';
-import { createDraftPdfProvider } from '../src/mastra/providers/draft-pdf-provider.js';
+import { reportCounts, reportHash, reportSnapshotSchema, reportStatus } from '../src/mastra/domain/report-contracts.js';
+import { createDraftPdfProvider, renderDraftPdf } from '../src/mastra/providers/draft-pdf-provider.js';
 import { createRegistry } from '../src/mastra/providers/provider-registry.js';
 import { createReportService } from '../src/mastra/services/report-service.js';
 import { createReportTool } from '../src/mastra/tools/report-tool.js';
@@ -321,6 +321,120 @@ describe('Immutable review drafts across real workflow, database, file and HTTP 
     expect((await inspectPdf((await savedPdf(matching, 'matching-terms')).bytes)).text).toContain(
       'No discrepancies were detected',
     );
+  });
+  it('identifies only supported issued policy dates on the report cover', async () => {
+    const documents = propertyDocuments();
+    const quotation = 'Policy period: 2026-04-01 through 2027-04-01';
+    for (const document of documents.slice(0, 2))
+      document.pages[0]!.push(
+        quotation,
+        'Alternative declaration inception: 2026-05-01',
+        'Alternative declaration inception: 2028-04-01',
+        'Policy inception year: 2026',
+        'Policy inception year: 2028',
+        'Policy inception month: 2026-04',
+        'Policy inception month: 2028-04',
+        'Policy inception month: 2028-05',
+        'Policy expiry: 2028-04-01',
+      );
+    const runtime = await setup(documents);
+    const { report } = await runtime.compare();
+    const original = report.comparisons.find(finding => finding.key === 'inception')!;
+    const dated = (key: string, value: string, scope = 'Policy', uncertain = false) => {
+      const finding = structuredClone(original);
+      finding.id = randomUUID();
+      finding.category = 'policy_period';
+      finding.key = key;
+      finding.scope = scope;
+      finding.label = key === 'inception' ? 'Policy period start' : 'Policy period end';
+      for (const term of [finding.baseline!, finding.actual!]) {
+        term.category = finding.category;
+        term.key = key;
+        term.scope = scope;
+        term.label = finding.label;
+        term.value = {
+          type: 'date',
+          value,
+          granularity: value.length === 4 ? 'year' : value.length === 7 ? 'month' : 'day',
+        };
+        term.original =
+          value.length === 4
+            ? 'Policy inception year: ' + value
+            : value.length === 7
+              ? 'Policy inception month: ' + value
+              : key === 'expiry' && value === '2028-04-01'
+                ? 'Policy expiry: ' + value
+                : quotation.includes(value)
+                  ? quotation
+                  : 'Alternative declaration inception: ' + value;
+        term.evidence = term.evidence.map(evidence => ({ ...evidence, excerpt: term.original }));
+        term.uncertainty = uncertain ? ['The declaration date is ambiguous.'] : [];
+      }
+      finding.evidence = [...finding.baseline!.evidence, ...finding.actual!.evidence];
+      return finding;
+    };
+    const inception = dated('inception', '2026-04-01');
+    const expiry = dated('expiry', '2027-04-01');
+    const cover = async (dates: typeof report.comparisons, issued = true) => {
+      const comparisons = [...report.comparisons.filter(finding => finding.key !== 'inception'), ...dates];
+      const snapshot = reportSnapshotSchema.parse({
+        ...report,
+        comparisons,
+        counts: reportCounts(comparisons),
+        status: reportStatus(comparisons, false, report.rules.length),
+        sources: report.sources.map(source =>
+          !issued && source.sourceId === report.targetId ? { ...source, role: 'contract' } : source,
+        ),
+      });
+      return normalize((await inspectPdf(await renderDraftPdf(snapshot))).pages[0]!.text);
+    };
+    expect(await cover([inception, expiry])).toContain('2026-04-01 to 2027-04-01');
+    expect(await cover([])).toContain('Policy dates (issued policy): Not available');
+    expect(await cover([inception])).toContain('Starts 2026-04-01; expiry not available');
+    expect(await cover([expiry])).toContain('Inception not available; expires 2027-04-01');
+    expect(
+      await cover([
+        { ...inception, actual: null },
+        { ...expiry, actual: null },
+      ]),
+    ).toContain('Policy dates (issued policy): Not available');
+    expect(await cover([inception, expiry], false)).toContain('Policy dates (issued policy): Not available');
+    expect(
+      await cover([dated('inception', '2026-04-01', 'Endorsement'), dated('expiry', '2027-04-01', 'Endorsement')]),
+    ).toContain('Policy dates (issued policy): Not available');
+    expect(await cover([dated('inception', '2026-04-01', 'Policy', true), expiry])).toContain(
+      'Inception requires review; expires 2027-04-01',
+    );
+    expect(await cover([inception, dated('inception', '2026-05-01', 'Entire policy'), expiry])).toContain(
+      'Inception requires review; expires 2027-04-01',
+    );
+    expect(await cover([dated('inception', '2028-04-01'), expiry])).toContain(
+      'Conflicting policy dates; review the issued policy',
+    );
+    for (const scope of ['Policy endorsement', 'Policy cancellation', 'Policy coverage section'])
+      expect(
+        await cover([dated('effective_date', '2026-04-01', scope), dated('expiry', '2027-04-01', scope)]),
+      ).toContain('Policy dates (issued policy): Not available');
+    expect(await cover([dated('inception', '2028'), expiry])).toContain(
+      'Conflicting policy dates; review the issued policy',
+    );
+    expect(await cover([dated('inception', '2026'), expiry])).toContain('2026 to 2027-04-01');
+    expect(await cover([dated('inception', '2028'), dated('expiry', '2028-04-01')])).toContain(
+      'Policy date order requires review (2028 to 2028-04-01)',
+    );
+    expect(await cover([dated('inception', '2026-04'), expiry])).toContain('2026-04 to 2027-04-01');
+    expect(await cover([dated('inception', '2028-05'), dated('expiry', '2028-04-01')])).toContain(
+      'Conflicting policy dates; review the issued policy',
+    );
+    expect(await cover([dated('inception', '2028-04'), dated('expiry', '2028-04-01')])).toContain(
+      'Policy date order requires review (2028-04 to 2028-04-01)',
+    );
+    expect(
+      await cover([
+        dated('inception', '2026-04-01', 'Policy CP-4021'),
+        dated('expiry', '2027-04-01', 'Policy CP-4021'),
+      ]),
+    ).toContain('2026-04-01 to 2027-04-01');
   });
   it('pending_review_and_download_survive_restart', async () => {
     const runtime = await setup();

@@ -64,21 +64,24 @@ export function reportNotice(value: unknown, context: OperationContext, compact 
   const result = reportNoticeSchema.parse(value);
   const report = result.report;
   if (!result.available || !result.artifact)
-    return `The draft is unavailable for review. Say “Show the report” after checking the saved documents and local publication.`;
+    return 'I could not open the saved draft. Check that the case database and report files are available, then say “Show the report” to try again.';
   const url = `/insurance/artifacts/${result.artifact.id}?caseId=${report.caseId}&threadId=${encodeURIComponent(context.threadId)}`;
   const finalReady = finalReportAvailable(result);
   const pending = result.reviewStatus === undefined || result.reviewStatus === 'AWAITING_REVIEW';
+  const counted = (count: number, singular: string, plural = singular + 's') =>
+    `${count === 0 ? 'no' : count} ${count === 1 ? singular : plural}`;
+  const counts = report.counts;
   const lines = [
     result.reviewStatus === 'FINALIZED' && !finalReady
-      ? `Your approval is saved. The final PDF for report version ${report.version} is unavailable.`
-      : `${finalReady ? 'Your final report is ready' : 'Your draft is ready'}: version ${report.version} for ${markdown(report.identity.policyNumber ?? report.identity.insuredName ?? 'this case')}.`,
+      ? `Your approval is saved, but I could not open the final PDF for report version ${report.version}.`
+      : `${finalReady ? 'Your final report is ready' : 'Your draft is ready'} for ${markdown(report.identity.policyNumber ?? report.identity.insuredName ?? 'this case')} (version ${report.version}).`,
     `[Download draft report](${url})`,
     pending
-      ? `${reportLabels.status[report.status]}. Awaiting broker review.`
+      ? `${reportLabels.status[report.status]}. Please review the draft before making a decision.`
       : result.reviewStatus === 'FINALIZED'
         ? 'Broker review completed.'
-        : 'The saved broker decision applies to this report version.',
-    `**Summary**\n${report.counts.checked} checked terms; ${report.counts.matches} matches; ${report.counts.discrepancies} discrepancies; ${report.counts.authorized} authorized changes; ${report.counts.unresolved} unresolved findings.`,
+        : 'Your broker decision is saved for this report version.',
+    `**Summary**\nI checked ${counts.checked} ${counts.checked === 1 ? 'term' : 'terms'}. The report has ${counted(counts.matches, 'match', 'matches')}, ${counted(counts.discrepancies, 'discrepancy', 'discrepancies')}, ${counted(counts.authorized, 'authorized change')}, and ${counted(counts.unresolved, 'unresolved finding')}.`,
   ];
   const findings = visibleFindings(report);
   const notable = [...findings]
@@ -93,8 +96,20 @@ export function reportNotice(value: unknown, context: OperationContext, compact 
   if (!compact && notable.length) lines.push('**Items to review**');
   for (const finding of compact ? [] : notable) {
     const number = report.comparisons.findIndex(candidate => candidate.id === finding.id) + 1;
+    const baselineLabel = report.intent === 'agreed_terms_checking' ? 'Agreed terms' : 'Reference terms';
+    const targetLabel =
+      report.sources.find(source => source.sourceId === report.targetId)?.role === 'issued_policy'
+        ? 'Issued policy'
+        : 'Compared document';
+    const terms = [
+      `${finding.classification === 'AUTHORIZED_CHANGE' ? 'Original terms' : baselineLabel}: ${markdown(termValue(finding.baseline?.value))}.`,
+      ...(finding.classification === 'AUTHORIZED_CHANGE'
+        ? [`Approved terms: ${markdown(termValue(finding.effectiveValue))}.`]
+        : []),
+      `${targetLabel}: ${markdown(termValue(finding.actual?.value))}.`,
+    ];
     lines.push(
-      `Finding ${number}: ${markdown(finding.label)} — ${reportLabels.classification[finding.classification]}. Expected: ${markdown(termValue(finding.baseline?.value))}. Issued or target: ${markdown(termValue(finding.actual?.value))}.`,
+      `**Finding ${number}: ${markdown(finding.label)}**\n${reportLabels.classification[finding.classification]}.\n\n${terms.map(term => '- ' + term).join('\n')}`,
     );
     const evidence = finding.appliedChanges[0]?.evidence[0] ?? finding.evidence[0];
     if (evidence) {
@@ -102,28 +117,31 @@ export function reportNotice(value: unknown, context: OperationContext, compact 
       const locator =
         evidence.physicalPage !== null ? `physical page ${evidence.physicalPage}` : 'captured source record';
       lines[lines.length - 1] +=
-        ` Evidence: ${markdown(source.displayName)}, ${locator}.${evidence.excerpt.length <= 500 ? ' “' + markdown(evidence.excerpt) + '”' : ''}`;
+        `\n\nSource: ${markdown(source.displayName)}, ${locator}.${evidence.excerpt.length <= 500 ? ' “' + markdown(evidence.excerpt) + '”' : ''}`;
     }
   }
   if (!compact && findings.length > notable.length)
-    lines.push(`The PDF includes ${findings.length - notable.length} more findings and the complete evidence.`);
+    lines.push(
+      `The PDF includes ${counted(findings.length - notable.length, 'additional finding')} and the full supporting evidence.`,
+    );
   for (const artifact of result.finalization?.artifacts ?? [])
     if (finalReady && artifact.stage === 'reportOutput') lines.push(`[Download final report](${artifact.url})`);
   if (result.finalization?.failure)
     lines.push(
-      'Final publication is incomplete. The saved broker decision remains recorded. Show the report to check availability before retrying.',
+      'The final files could not all be published. Your broker decision is saved. Say “Show the report” to check availability before trying again.',
     );
+  const firstReviewFinding = report.comparisons.findIndex(finding => finding.classification !== 'MATCH') + 1;
   lines.push(
     pending
-      ? `Review this draft before deciding. Say “Confirm finding ${report.comparisons.findIndex(f => f.classification !== 'MATCH') + 1 || 1} in report version ${report.version}: your reason” to confirm a finding, “Revise report version ${report.version}: your note” to request a revision, or “Approve report version ${report.version}” to approve. Approval alone confirms no findings.`
+      ? `After reviewing the PDF, you can:\n\n${firstReviewFinding ? '- Confirm a finding: “Confirm finding ' + firstReviewFinding + ' in report version ' + report.version + ': your reason”.\n' : ''}- Request a revision: “Revise report version ${report.version}: your note”.\n- Approve this version: “Approve report version ${report.version}”.\n\nApproval does not confirm individual findings.`
       : result.reviewStatus === 'FINALIZED'
         ? finalReady
           ? 'The reviewed report is finalized. Any correction request remains a draft for manual review; nothing has been sent.'
-          : 'Broker approval remains saved. Restore the matching saved files and database, then show the report again. No new approval is needed.'
+          : 'Your approval is saved. Restore the matching case database and report files, then say “Show the report”. You do not need to approve again.'
         : result.reviewStatus === 'REVISION_REQUESTED'
-          ? 'This version cannot be approved while its revision is pending.'
+          ? 'You requested a revision. This version cannot be approved until the revised report is ready.'
           : result.reviewStatus === 'APPROVED'
-            ? 'Broker approval is saved. Final publication is incomplete.'
+            ? 'Your approval is saved. The final files are not all available yet.'
             : result.reviewStatus === 'REJECTED'
               ? 'The broker rejected this report. Its draft remains available.'
               : 'This historical draft has been superseded and cannot be approved.',

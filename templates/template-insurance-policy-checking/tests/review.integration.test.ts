@@ -211,11 +211,13 @@ describe('Recorded broker review and approved publication', () => {
       );
       const clarification =
         'Check agreed terms using "property-proposal.pdf" as the accepted proposal and "property-issued.pdf" as the issued policy.\nPolicy number: CP-4021\nInsured: Elm Harbor Fabrication LLC\nInsurance product: Commercial property\n"property-amendment.pdf" is an amendment.';
-      expect(await say(clarification)).toContain('accepted baseline');
+      expect(await say(clarification)).toContain('proposal or contract you accepted');
       expect((await runtime.cases.requireCase(reportContext)).clarification?.acceptedBaseline?.statement).toBe(
         clarification,
       );
-      expect(await say('Compare the documents as of 2026-05-01')).toContain('Your draft is ready: version 1');
+      expect(await say('Compare the documents as of 2026-05-01')).toContain(
+        'Your draft is ready for CP-4021 (version 1)',
+      );
       expect(await say('Show page 1 of "property-proposal.pdf"')).toContain('Harbor Mutual');
       expect(await runtime.reviewRepository.events(reportContext)).toEqual([]);
       const first = (await runtime.reportRepository.get(reportContext))!;
@@ -228,7 +230,9 @@ describe('Recorded broker review and approved publication', () => {
       );
       await say('Revise report version 1: Include the broker review note.');
       const requests = wire.requests.length;
-      expect(await say('Compare the documents as of 2026-05-01')).toContain('Your draft is ready: version 2');
+      expect(await say('Compare the documents as of 2026-05-01')).toContain(
+        'Your draft is ready for CP-4021 (version 2)',
+      );
       expect(wire.requests.length).toBe(requests);
       await runtime.close();
       runtime = await reportRuntime(root, wire.endpoint);

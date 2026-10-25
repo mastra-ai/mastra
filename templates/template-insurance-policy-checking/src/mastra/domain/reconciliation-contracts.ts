@@ -496,7 +496,7 @@ export type AnalysisInput = {
   model: string;
 
   /** Version of the structured extraction instructions. */
-  promptVersion: 'insurance-2' | 'insurance-3';
+  promptVersion: 'insurance-2' | 'insurance-3' | 'insurance-4';
 
   /** Approved processing ceilings frozen with this authorized analysis. */
   budget: ProcessingBudget;
