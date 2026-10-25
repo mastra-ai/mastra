@@ -109,7 +109,11 @@ export function createCodexMiddleware(reasoningEffort?: string): LanguageModelMi
  * model resolution adds for requests made inside a thread.
  */
 export function getRequestThreadId(headers?: Record<string, string>): string | undefined {
-  return headers?.['x-thread-id'] || undefined;
+  if (!headers) return undefined;
+  for (const name in headers) {
+    if (name.toLowerCase() === 'x-thread-id') return headers[name] || undefined;
+  }
+  return undefined;
 }
 
 /**

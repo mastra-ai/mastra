@@ -116,6 +116,53 @@ describe.each(Object.entries(routes))('OpenAI prompt cache key sent by the %s', 
     return sent[0]!;
   }
 
+  it("keeps a caller's own prompt cache key", async () => {
+    const sent: Array<{ body: any }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(input, init);
+        sent.push({ body: JSON.parse(await request.text()) });
+        return new Response(JSON.stringify(responsesBody()), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }),
+    );
+    if (route.production) {
+      vi.stubEnv('VITEST', '');
+      vi.stubEnv('NODE_ENV', 'production');
+    }
+
+    const gateway = new MastraCodeGateway({
+      mastraGatewayBaseUrl: 'https://gateway.example.com',
+      routeThroughMastraGateway: route.routeThroughMastraGateway,
+      credentialStore: fakeStore({ 'openai-codex': route.credential }),
+    });
+    const model = gateway.resolveLanguageModel({
+      providerId: 'openai',
+      modelId: 'gpt-5.4',
+      apiKey: 'test',
+      headers: { 'x-thread-id': 'thread-a' },
+    });
+
+    await (model as any).doGenerate({
+      prompt: [
+        { role: 'system', content: 'Instructions' },
+        { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
+      ],
+      providerOptions: { openai: { promptCacheKey: 'caller-key' } },
+    });
+
+    expect(sent[0]!.body.prompt_cache_key).toBe('caller-key');
+  });
+
+  it('reads the thread header in any letter case', async () => {
+    const { getRequestThreadId } = await import('../openai-codex.js');
+    expect(getRequestThreadId({ 'X-Thread-Id': 'thread-a' })).toBe('thread-a');
+    expect(getRequestThreadId({ 'x-THREAD-id': 'thread-a' })).toBe('thread-a');
+  });
+
   it('keys the prompt cache by the thread', async () => {
     const first = await send('thread-a');
     const again = await send('thread-a');
