@@ -1,5 +1,8 @@
 import { format } from 'node:util';
+import { createOpenAI } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import { LLMock } from '@copilotkit/aimock';
+import type { ChatMessage } from '@copilotkit/aimock';
 import type { Author, FetchOptions, Message, Thread } from 'chat';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -2700,14 +2703,7 @@ describe('AgentChannels', () => {
         return true;
       });
 
-      const first = {
-        ...message,
-        id: 'm1',
-        text: 'first part',
-        isMention: true,
-        formatted: undefined,
-        attachments: [],
-      };
+      const first = { ...message, id: 'm1', text: 'first part', formatted: undefined, attachments: [] };
       const second = { ...message, id: 'm2', text: 'second part', formatted: undefined, attachments: [] };
       const older = { ...message, id: 'm0', text: 'older chatter', formatted: undefined, attachments: [] };
       const chatThread = makeChatThread({
@@ -2851,7 +2847,7 @@ describe('AgentChannels', () => {
         vi.spyOn(channels as any, 'processChatMessage').mockImplementation(async (...args: any[]) => {
           processed.push(args);
         });
-        const thread = makeChatThread({ adapter: channels.adapters.discord, isDM: method === 'onDirectMessage' });
+        const thread = makeChatThread({ adapter: channels.adapters.discord });
         const batch = (current: any, skipped: any[]) =>
           method === 'onDirectMessage'
             ? wrapper!(thread, current, {}, { skipped, totalSinceLastHandler: skipped.length + 1 })
@@ -2988,12 +2984,15 @@ describe('AgentChannels', () => {
       h.restore();
     });
 
-    it('runs the custom onMention handler only for mentioned sender runs in a mention batch', async () => {
+    it('runs the custom onMention handler once per sender in a mention batch', async () => {
       const onMention = vi.fn((thread: any, msg: any, defaultHandler: any) => defaultHandler(thread, msg));
       const h = await registerDM({ onMention }, 'onNewMention');
       await h.batch(from('A1', 'user-a', { isMention: true }), [from('B1', 'user-b', { isMention: false })]);
-      expect(onMention.mock.calls.map(c => [c[1].id, c[1].isMention])).toEqual([['A1', true]]);
-      expect(h.processed.map(a => a[1].id)).toEqual(['A1']);
+      expect(onMention.mock.calls.map(c => [c[1].id, c[1].isMention])).toEqual([
+        ['B1', false],
+        ['A1', true],
+      ]);
+      expect(h.processed.map(a => a[1].id)).toEqual(['B1', 'A1']);
       h.restore();
     });
 
@@ -3306,7 +3305,6 @@ describe('thread history', () => {
   const trigger = makeMessage({
     id: 'trigger',
     text: '@TestBot hi there',
-    isMention: true,
     author: alice,
     metadata: { dateSent: new Date(BASE_TIME + 100_000), edited: false },
   });
@@ -3971,6 +3969,11 @@ describe('per-sender handler runs end to end', () => {
   const userA: Author = { userId: 'user-a', userName: 'ann', fullName: 'Ann', isBot: false, isMe: false };
   const userB: Author = { userId: 'user-b', userName: 'ben', fullName: 'Ben', isBot: false, isMe: false };
 
+  const llms: LLMock[] = [];
+  afterEach(async () => {
+    await Promise.all(llms.splice(0).map(llm => llm.stop()));
+  });
+
   function deferred() {
     let resolve!: () => void;
     const promise = new Promise<void>(r => (resolve = r));
@@ -3987,29 +3990,17 @@ describe('per-sender handler runs end to end', () => {
       disableMention?: boolean;
     } = {},
   ) {
-    const { MockLanguageModelV2, convertArrayToReadableStream } = await import('@internal/ai-sdk-v5/test');
     const { Mastra } = await import('../../mastra');
     const { InMemoryStore } = await import('../../storage/mock');
     const { MockMemory } = await import('../../memory/mock');
 
-    const prompts: LanguageModelV2Prompt[] = [];
-    const model = new MockLanguageModelV2({
-      doStream: async ({ prompt }) => {
-        prompts.push(prompt);
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
-            { type: 'text-start', id: 't-1' },
-            { type: 'text-delta', id: 't-1', delta: 'Hello' },
-            { type: 'text-end', id: 't-1' },
-            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
-          ]),
-        };
-      },
-    });
+    const llm = new LLMock({ port: 0 });
+    await llm.start();
+    llms.push(llm);
+    llm.onMessage(/[\s\S]*/, { content: 'Hello' });
+    const model = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` }).chat(
+      'gpt-4o-mini',
+    );
     const storage = new InMemoryStore();
     const adapter = createMockAdapter('slack');
     adapter.isDM = () => options.isDM ?? false;
@@ -4074,7 +4065,10 @@ describe('per-sender handler runs end to end', () => {
       contexts,
       sdk,
       adapter,
-      prompts,
+      // Chat-completion messages of each request the agent sent to the model.
+      get prompts() {
+        return llm.getRequests().map(request => request.body?.messages ?? []);
+      },
       invocations,
       held,
       entered,
@@ -4099,7 +4093,7 @@ describe('per-sender handler runs end to end', () => {
       ['message', 'question'],
       ['subscribed', 'follow-up'],
     ]);
-    expect(JSON.stringify(h.prompts.at(-1))).toContain('event=subscribed');
+    expect(JSON.stringify(h.prompts.at(-1))).toContain('event=mention');
   });
 
   it.each([undefined, false] as const)('ignores unmentioned messages when onMessage is %s', async onMessage => {
@@ -4169,24 +4163,20 @@ describe('per-sender handler runs end to end', () => {
         h.held.resolve();
         await first;
       }
+      // Without onMessage, unmentioned runs keep reaching onMention as on main.
+      const unmentioned = onMessage === 'handle' ? 'message' : 'mention';
       expect(h.invocations).toEqual([
         ['mention', 'A1'],
         ['mention', 'A3'],
-        ...(onMessage === 'handle'
-          ? [
-              ['message', 'B1'],
-              ['message', 'A4'],
-            ]
-          : []),
+        [unmentioned, 'B1'],
+        [unmentioned, 'A4'],
       ]);
-      expect(h.prompts).toHaveLength(onMessage === 'handle' ? 2 : 1);
+      expect(h.prompts).toHaveLength(2);
       expect(JSON.stringify(h.prompts[0])).toContain('help with support');
       expect(JSON.stringify(h.prompts[0])).toContain('More detail for my mention');
       expect(JSON.stringify(h.prompts[0])).toContain('event=mention');
-      if (onMessage === 'handle') {
-        expect(JSON.stringify(h.prompts[1])).toContain('A separate unmentioned question');
-        expect(JSON.stringify(h.prompts[1])).toContain('event=message');
-      }
+      expect(JSON.stringify(h.prompts[1])).toContain('A separate unmentioned question');
+      expect(JSON.stringify(h.prompts[1])).toContain(`event=${unmentioned}`);
       expect(JSON.stringify(h.prompts)).not.toContain('An unmentioned message to filter');
     },
     20_000,
@@ -4232,15 +4222,13 @@ describe('per-sender handler runs end to end', () => {
       ['subscribed', 'B1'],
       ['subscribed', 'A2'],
     ]);
-    const lastUserText = (p: LanguageModelV2Prompt) => {
-      const user = p.filter(m => m.role === 'user').at(-1);
-      return user?.content.map(part => (part.type === 'text' ? part.text : '')).join('') ?? '';
-    };
-    const systemText = (p: LanguageModelV2Prompt) =>
+    const textOf = (p: ChatMessage[], role: ChatMessage['role']) =>
       p
-        .filter(m => m.role === 'system')
-        .map(m => m.content)
+        .filter(m => m.role === role)
+        .map(m => JSON.stringify(m.content))
         .join('\n');
+    const lastUserText = (p: ChatMessage[]) => textOf(p.filter(m => m.role === 'user').slice(-1), 'user');
+    const systemText = (p: ChatMessage[]) => textOf(p, 'system');
     expect(h.prompts.some(p => lastUserText(p).includes('b text'))).toBe(false);
     const followUp = h.prompts.find(p => lastUserText(p).includes('a follow-up'));
     expect(followUp).toBeDefined();

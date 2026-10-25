@@ -530,7 +530,7 @@ export class AgentChannels {
         message: Message,
         skipped: readonly Message[] | undefined,
         handler: ChannelHandlerConfig,
-        eventType: ChannelContext['eventType'],
+        route: 'direct' | 'mention' | 'subscribed' | 'message',
       ) => {
         const all = [...(skipped ?? []), message];
         const batchIds = new Set(all.map(m => m.id));
@@ -545,18 +545,18 @@ export class AgentChannels {
         for (const run of runs) {
           const runMessage = run[run.length - 1]!;
           let runHandler = handler;
-          let runEventType: ChannelContext['eventType'] = thread.isDM ? 'message' : eventType;
+          let runEventType: ChannelContext['eventType'] = thread.isDM || route === 'message' ? 'message' : 'mention';
           // The SDK selects one handler for the whole batch if any message is
-          // a mention. Preserve DM/subscription precedence, but route each new
-          // sender run independently so unmentioned messages cannot bypass the
-          // opt-in handler's filter (or its disabled default).
-          if (!thread.isDM && eventType !== 'subscribed') {
+          // a mention. Preserve DM/subscription precedence, but when onMessage
+          // is opted in, route each new sender run independently so unmentioned
+          // messages go through its filter. Without onMessage, unmentioned runs
+          // keep reaching the batch's handler as before.
+          if (!thread.isDM && (route === 'mention' || route === 'message')) {
             if (run.some(m => m.isMention)) {
               if (onMention === false) continue;
               runHandler = onMention;
               runEventType = 'mention';
-            } else {
-              if (typeof onMessage !== 'function') continue;
+            } else if (typeof onMessage === 'function') {
               runHandler = onMessage;
               runEventType = 'message';
             }
@@ -592,7 +592,7 @@ export class AgentChannels {
 
       if (onDirectMessage !== false) {
         chat.onDirectMessage((thread, message, _channel, context) =>
-          dispatchBatch(thread, message, context?.skipped, onDirectMessage, 'message'),
+          dispatchBatch(thread, message, context?.skipped, onDirectMessage, 'direct'),
         );
       }
 

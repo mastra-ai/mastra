@@ -15,6 +15,6 @@ const handlers: ChannelHandlers = {
 };
 ```
 
-Channel event context now reports `message` for these messages and DMs, `mention` for new mentions, and `subscribed` for subscribed-thread messages.
+Runs started through `onMessage` report `channel.eventType` as `message`. Existing event types are unchanged. When a queued batch mixes mentioned and unmentioned senders, unmentioned senders go to `onMessage` only if it is set. Otherwise they still reach `onMention`, as before.
 
 Fixes https://github.com/mastra-ai/mastra/issues/27060.
