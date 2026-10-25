@@ -10,7 +10,7 @@ describe('OpenInTracesButton', () => {
       const onClick = vi.fn();
       render(<OpenInTracesButton onClick={onClick} />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'View in Traces' }));
+      fireEvent.click(screen.getByRole('button', { name: 'View in traces' }));
 
       expect(onClick).toHaveBeenCalledTimes(1);
     });
@@ -23,7 +23,7 @@ describe('OpenErrorsInLogsButton', () => {
       const onClick = vi.fn();
       render(<OpenErrorsInLogsButton onClick={onClick} />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'View errors in Logs' }));
+      fireEvent.click(screen.getByRole('button', { name: 'View errors in logs' }));
 
       expect(onClick).toHaveBeenCalledTimes(1);
     });

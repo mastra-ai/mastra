@@ -130,7 +130,7 @@ describe('handleChatStream v6 client observability', () => {
                 toolCallType: 'function',
                 toolCallId: 'call-clipboard-1',
                 toolName: 'get_clipboard',
-                args: '{}',
+                input: '{}',
               },
               {
                 type: 'finish',

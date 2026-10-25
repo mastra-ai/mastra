@@ -157,6 +157,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   messageId: string;
   /** Tool calls emitted before a resumed stream segment started. */
   initialToolCalls?: ToolCallChunk[];
+  /** Text the run streamed before the suspension a resumed stream segment continues. */
+  resumedText?: { priorText: string; stepText: string };
   /** Model information for the output */
   model: {
     modelId: string | undefined;
@@ -305,6 +307,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     runId,
     messageId,
     initialToolCalls,
+    resumedText,
     model,
     threadId,
     resourceId,
@@ -486,11 +489,15 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
   const keepGeneration = createRunGenerationFilter({ minGeneration, rereadMinGeneration });
 
+  let pendingRejection: Error | undefined;
   // Ends this reader's stream with an error, then fires onError once.
   const deliverError = async (error: Error, delivery?: AgentErrorEventData['delivery']) => {
     if (!controller || terminated) return;
     if (delivery === 'reject') {
-      safeError(controller, error);
+      // Erroring a ReadableStream discards chunks still queued for the reader, so with
+      // chunks queued, hold the rejection until `pull` finds the queue drained.
+      if ((controller.desiredSize ?? 0) > 0) safeError(controller, error);
+      else pendingRejection = error;
     } else {
       // Ordinary durable failures remain deferred error chunks so the stream
       // closes normally even when no finish event follows.
@@ -857,10 +864,17 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         })
         .catch(error => {
           logError(`[DurableAgentStream] Failed to subscribe to ${topic}:`, error);
-          markTerminated();
           rejectReady(error);
-          ctrl.error(error);
+          // Replay may already have ended the stream; keep its terminal outcome.
+          if (terminated) return;
+          markTerminated();
+          // Replay may have queued chunks before the subscription failed; keep them.
+          if ((ctrl.desiredSize ?? 0) > 0) safeError(ctrl, error);
+          else pendingRejection = error;
         });
+    },
+    pull(ctrl) {
+      if (pendingRejection && (ctrl.desiredSize ?? 0) > 0) safeError(ctrl, pendingRejection);
     },
     cancel() {
       detach();
@@ -906,6 +920,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     messageList,
     messageId,
     initialToolCalls,
+    resumedText,
     finishUsageIsTotal: true,
     options: {
       runId,

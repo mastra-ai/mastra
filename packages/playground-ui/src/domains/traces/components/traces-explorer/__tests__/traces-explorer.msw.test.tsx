@@ -35,6 +35,7 @@ import {
   noDeltaPollingCapabilities,
   noRootDurationCapabilities,
   noSpanQueryCapabilities,
+  noThreadRowsCapabilities,
   traceQueryCapabilities,
   twoTracesPage,
   weatherRootSpan,
@@ -149,10 +150,15 @@ type HarnessProps = {
   panelProps?: Partial<TracesExplorerPanelProps>;
 };
 
-// Stands in for the host's Traces/Spans switch, which offers the spans view only when span queries are on.
-function SpansViewLink() {
-  const { withSpanQuery } = useTracesConfig();
-  return withSpanQuery ? <a href="/spans">Spans view</a> : null;
+// Stands in for the host's view switch, which offers each view only when its query API is on.
+function ViewLinks() {
+  const { withSpanQuery, withThreadQuery } = useTracesConfig();
+  return (
+    <>
+      {withSpanQuery ? <a href="/spans">Spans view</a> : null}
+      {withThreadQuery ? <a href="/threads">Threads view</a> : null}
+    </>
+  );
 }
 
 // Plain React state stands in for the host: no router, no search params.
@@ -191,7 +197,7 @@ function Harness({
     >
       <TracesExplorer.Layout
         renderError={renderError}
-        tabs={<SpansViewLink />}
+        tabs={<ViewLinks />}
         actionRow={
           <div>
             {filterBar}
@@ -766,6 +772,39 @@ describe('TracesExplorer', () => {
       await settle(queryClient);
 
       expect(screen.queryByRole('link', { name: 'Spans view' })).toBeNull();
+    });
+  });
+
+  describe('when the server supports thread rows and the host turns thread queries on', () => {
+    it('lets the host offer the threads view', async () => {
+      setExplorerHandlers();
+
+      const { queryClient } = renderExplorer({ features: { threadQuery: true } });
+      await settle(queryClient);
+
+      expect(screen.getByRole('link', { name: 'Threads view' })).toBeTruthy();
+    });
+  });
+
+  describe('when the server does not support thread rows', () => {
+    it('keeps the threads view hidden', async () => {
+      setExplorerHandlers(noThreadRowsCapabilities);
+
+      const { queryClient } = renderExplorer({ features: { threadQuery: true } });
+      await settle(queryClient);
+
+      expect(screen.queryByRole('link', { name: 'Threads view' })).toBeNull();
+    });
+  });
+
+  describe('when the host does not turn thread queries on', () => {
+    it('keeps the threads view hidden', async () => {
+      setExplorerHandlers();
+
+      const { queryClient } = renderExplorer({ features: { spanQuery: true } });
+      await settle(queryClient);
+
+      expect(screen.queryByRole('link', { name: 'Threads view' })).toBeNull();
     });
   });
 

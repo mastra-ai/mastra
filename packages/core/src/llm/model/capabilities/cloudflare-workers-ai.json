@@ -57,9 +57,13 @@
     "@cf/zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "@cf/google/gemma-4-26b-a4b-it": [
+    "@cf/qwen/qwen3.8-27b": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "@cf/zai-org/glm-5.2": [
@@ -109,6 +113,15 @@
         "values": ["none", "high"]
       }
     ],
+    "@cf/nvidia/nemotron-3-120b-a12b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
     "@cf/openai/gpt-oss-120b": [
       {
         "type": "effort",
@@ -121,22 +134,9 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "@cf/nvidia/nemotron-3-120b-a12b": [
+    "@cf/google/gemma-4-26b-a4b-it": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
-    "@cf/qwen/qwen3.8-27b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
       }
     ]
   }

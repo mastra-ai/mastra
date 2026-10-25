@@ -11,7 +11,9 @@ export interface ExperimentTriggerInitialValues {
   initialDescription?: string;
 }
 
-export type TargetOption = { value: string; label: string; type: TargetType; id: string };
+export type AgentModel = { provider: string; modelId: string };
+/** `defaultModel` is the model an agent target runs on unless the experiment picks another. */
+export type TargetOption = { value: string; label: string; type: TargetType; id: string; defaultModel?: AgentModel };
 export type ScorerOption = { value: string; label: string; description?: string };
 export type DatasetOption = { value: string; label: string };
 

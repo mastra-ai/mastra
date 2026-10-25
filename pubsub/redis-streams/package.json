@@ -1,6 +1,6 @@
 {
   "name": "@mastra/redis-streams",
-  "version": "0.6.4",
+  "version": "0.6.5-alpha.0",
   "description": "Mastra Redis Streams PubSub integration",
   "license": "Apache-2.0",
   "type": "module",
@@ -43,6 +43,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
+    "@mastra/pg": "workspace:*",
     "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

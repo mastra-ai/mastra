@@ -33,10 +33,16 @@
     "hf:zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+    "hf:Qwen/Qwen3.6-27B": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "hf:deepseek-ai/DeepSeek-V4.1-Flash": [
@@ -45,16 +51,16 @@
         "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
-    "hf:openai/gpt-oss-120b": [
+    "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
-    "hf:MiniMaxAI/MiniMax-M3": [
+    "hf:zai-org/GLM-5.2": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "high", "xhigh"]
       }
     ],
     "hf:zai-org/GLM-5.3-Flash": [
@@ -75,25 +81,13 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "hf:zai-org/GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh"]
-      }
-    ],
-    "hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4": [
+    "hf:openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "hf:Qwen/Qwen3.6-27B": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "hf:moonshotai/Kimi-K2.7-Code": [
+    "hf:MiniMaxAI/MiniMax-M3": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -103,6 +97,12 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "hf:moonshotai/Kimi-K2.7-Code": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

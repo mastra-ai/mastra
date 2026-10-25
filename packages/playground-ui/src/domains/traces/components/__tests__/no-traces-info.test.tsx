@@ -35,6 +35,20 @@ describe('NoTracesInfo', () => {
     expect(screen.getByText('Pick a wider time range — older spans may fall outside the current window.')).toBeTruthy();
   });
 
+  it('names threads when it stands for a thread list', () => {
+    const { rerender } = render(<NoTracesInfo resource="threads" datePreset="all" />);
+
+    expect(screen.getByRole('heading', { name: 'No threads yet' })).toBeTruthy();
+    expect(screen.getByText('Threads will appear here once agents, workflows, or tools are executed.')).toBeTruthy();
+
+    rerender(<NoTracesInfo resource="threads" datePreset="last-7d" />);
+
+    expect(screen.getByRole('heading', { name: 'No threads for the last 7 days' })).toBeTruthy();
+    expect(
+      screen.getByText('Pick a wider time range — older threads may fall outside the current window.'),
+    ).toBeTruthy();
+  });
+
   it('preserves explicit dates in the custom-range empty state', () => {
     render(
       <NoTracesInfo datePreset="custom" dateFrom={new Date(2026, 8, 1, 9, 0)} dateTo={new Date(2026, 8, 7, 18, 0)} />,

@@ -19,7 +19,7 @@ const SCORER_COLORS = [
 ];
 
 const formatScore = (score: number) => score.toFixed(2);
-const axisScore = (score: number) => score.toFixed(1);
+const axisScore = (score: number) => String(+score.toFixed(2));
 
 /** One line per scorer; the legend carries its mean over the range. */
 function scorerSeries(scorers: ScorerAverage[]): MetricsLineChartSeries[] {

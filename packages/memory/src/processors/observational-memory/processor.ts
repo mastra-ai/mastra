@@ -20,6 +20,7 @@ import { omDebug } from './debug';
 import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
+import { getPartKeys } from './observation-turn/step';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { insertTemporalGapMarkers } from './temporal-markers';
@@ -52,6 +53,7 @@ export interface MemoryContextProvider {
   }>;
   /** Raw message upsert — persist sealed messages to storage without embedding or working memory processing. */
   persistMessages(messages: MastraDBMessage[]): Promise<void>;
+  getPersistedMessages?(threadId: string, ids: string[]): Promise<MastraDBMessage[]>;
 }
 
 /**
@@ -320,6 +322,40 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.agent = args.agent;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory, runState);
+        if (stepNumber > 0) {
+          // A background result may have landed in storage after the durable snapshot was saved.
+          // Reconcile those response messages before the unread-part scan; the snapshot's part
+          // keys represent what was seen.
+          if (this.memory?.getPersistedMessages) {
+            const responseIds = messageList.getPersisted.response.db().map(message => message.id);
+            const snapshotMessages = new Map(messageList.get.all.db().map(message => [message.id, message]));
+            const storedMessages = await this.memory.getPersistedMessages(threadId, responseIds);
+            for (const stored of storedMessages) {
+              const snapshot = snapshotMessages.get(stored.id);
+              if (!snapshot) continue;
+              const snapshotTools = snapshot.content.parts.filter(part => part.type === 'tool-invocation');
+              const storedHasNewResult = stored.content.parts.some(part => {
+                if (part.type !== 'tool-invocation' || part.toolInvocation.state !== 'result') return false;
+                const previous = snapshotTools.find(
+                  candidate => candidate.toolInvocation.toolCallId === part.toolInvocation.toolCallId,
+                );
+                if (!previous || previous.toolInvocation.state !== 'result') return true;
+                const previousTask = previous.providerMetadata?.mastra?.backgroundTask as
+                  | { status?: string }
+                  | undefined;
+                const storedTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
+                return (
+                  previousTask?.status === 'running' &&
+                  (storedTask?.status === 'completed' || storedTask?.status === 'failed')
+                );
+              });
+              if (storedHasNewResult) {
+                this.turn.drainedPartKeys.set(stored.id, new Set(getPartKeys(snapshot)));
+                messageList.add(stored, 'memory');
+              }
+            }
+          }
+        }
         // A run recovered by another worker can continue a response message that the dead
         // worker already observed. That worker rotated the id in memory, but the rotation was
         // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
@@ -554,6 +590,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           observabilityContext: getOmObservabilityContext(args),
         }),
       );
+
+    // The run goes on writing its response after the retry. Under the id just observed, the rest of the
+    // run would count as observed and never be observed or dropped, so the next overflow could not recover.
+    if (observed) args.rotateResponseMessageId?.();
 
     return { retry: activated || observed };
   }

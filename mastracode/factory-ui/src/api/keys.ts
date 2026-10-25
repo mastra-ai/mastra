@@ -1,3 +1,5 @@
+import type { WorkspaceChangesScope } from './types';
+
 /**
  * Stable, scoped React Query keys for the settings API.
  *
@@ -51,8 +53,6 @@ export const queryKeys = {
     ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
   repositorySettings: (projectRepositoryId: string | undefined) =>
     ['source-control', 'repository-settings', projectRepositoryId ?? null] as const,
-  githubCommits: (projectRepositoryId: string | undefined, limit: number) =>
-    ['github', 'commits', projectRepositoryId ?? null, limit] as const,
   gitlabStatus: (baseUrl: string) => ['gitlab', 'status', baseUrl] as const,
   gitlabProjects: (baseUrl: string) => ['gitlab', 'projects', baseUrl] as const,
   gitlabIssuesAll: (baseUrl: string) => ['gitlab', 'issues', baseUrl] as const,
@@ -127,13 +127,8 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
-  factoryAttentionRoot: (factoryProjectId: string | undefined) =>
-    ['factory', 'attention', factoryProjectId ?? null] as const,
-  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number) =>
-    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
-  factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   providers: () => ['providers'] as const,
@@ -158,11 +153,8 @@ export const queryKeys = {
   planFile: (workspacePath: string | undefined, filePath: string | undefined, toolCallId: string | undefined) =>
     ['plan-file', workspacePath ?? null, filePath ?? null, toolCallId ?? null] as const,
   workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
-  workspaceDiff: (
-    workspacePath: string | undefined,
-    filePath: string | undefined,
-    previousFilePath: string | undefined,
-  ) => ['workspace-changes', workspacePath ?? null, 'diff', filePath ?? null, previousFilePath ?? null] as const,
+  workspacePatches: (workspacePath: string | undefined, scope: WorkspaceChangesScope) =>
+    ['workspace-changes', workspacePath ?? null, 'patches', scope] as const,
   // Session-derived keys are addressed by the session id: sessions that share a
   // memory resource (a Factory's runs, a user's sessions) keep independent state.
   agentControllerSession: (agentControllerId: string | undefined, sessionId: string | undefined) =>

@@ -239,6 +239,55 @@ describe('Datasets Handlers', () => {
         expect.objectContaining({ requestContext: { tenantId: 'tenant-1' } }),
       );
     });
+
+    it('forwards agentModel to the dataset as a provider/modelId router string', async () => {
+      const startExperimentAsync = vi.fn().mockResolvedValue({
+        experimentId: 'experiment-1',
+        status: 'pending',
+        totalItems: 1,
+      });
+      vi.spyOn(mastra.datasets, 'get').mockResolvedValue({ startExperimentAsync } as any);
+
+      const parsedBody = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
+        targetType: 'agent',
+        targetId: 'my-agent',
+        agentModel: { provider: 'openai', modelId: 'gpt-5-mini' },
+      });
+      await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: 'dataset-1',
+        ...parsedBody,
+      } as any);
+
+      expect(startExperimentAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ targetType: 'agent', targetId: 'my-agent', agentModel: 'openai/gpt-5-mini' }),
+      );
+    });
+
+    describe('agentModel validation', () => {
+      const agentModel = { provider: 'openai', modelId: 'gpt-5-mini' };
+      const parse = (body: Record<string, unknown>) => TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse(body);
+
+      it('accepts agentModel for agent targets', () => {
+        const result = parse({ targetType: 'agent', targetId: 'a', agentModel });
+        expect(result.success && result.data.agentModel).toEqual(agentModel);
+      });
+
+      it('rejects agentModel for non-agent targets', () => {
+        expect(parse({ targetType: 'workflow', targetId: 'w', agentModel }).success).toBe(false);
+      });
+
+      it('rejects agentModel on create-only experiments', () => {
+        expect(parse({ start: false, targetType: 'agent', targetId: 'a', agentModel }).success).toBe(false);
+      });
+
+      it.each([{ provider: 'openai' }, { modelId: 'gpt-5-mini' }, { provider: '', modelId: 'gpt-5-mini' }])(
+        'rejects incomplete agentModel %o',
+        partial => {
+          expect(parse({ targetType: 'agent', targetId: 'a', agentModel: partial }).success).toBe(false);
+        },
+      );
+    });
   });
 
   describe('COMPARE_EXPERIMENTS_ROUTE', () => {
