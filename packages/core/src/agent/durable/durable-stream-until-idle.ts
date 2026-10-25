@@ -128,7 +128,8 @@ export async function runResumeDurableStreamUntilIdle<OUTPUT = undefined>(
 
   return runIdleLoop<typeof agent, DurableAgentStreamResult<OUTPUT>, DurableAgentStreamResult<OUTPUT>>(
     agent,
-    streamOptions,
+    // The wrapper takes the resumed run's slot up front so it supersedes the run's parked wrapper.
+    { ...streamOptions, runId },
     deps,
     opts => (agent as any).resume(runId, resumeData, opts) as Promise<DurableAgentStreamResult<OUTPUT>>,
     opts => (agent as any).stream([], opts) as Promise<{ fullStream: ReadableStream<any> }>,
