@@ -105,6 +105,41 @@ export function createCodexMiddleware(reasoningEffort?: string): LanguageModelMi
 }
 
 /**
+ * The thread a model request belongs to, from the `x-thread-id` header that
+ * model resolution adds for requests made inside a thread.
+ */
+export function getRequestThreadId(headers?: Record<string, string>): string | undefined {
+  return headers?.['x-thread-id'] || undefined;
+}
+
+/**
+ * Create middleware that sends `prompt_cache_key` on OpenAI Responses requests.
+ *
+ * OpenAI routes a cached prompt by a hash of its start plus this key. Every
+ * Mastra Code prompt starts with the same system prompt, so without a key all
+ * threads compete for the same cache slot and consecutive steps of one run often
+ * land on a machine that doesn't hold their prefix. Keying by thread keeps each
+ * thread's requests together. A key the caller already set wins.
+ */
+export function createPromptCacheKeyMiddleware(promptCacheKey?: string): LanguageModelMiddleware | undefined {
+  if (!promptCacheKey) return undefined;
+  return {
+    specificationVersion: 'v3',
+    transformParams: async ({ params }) => {
+      params.providerOptions = {
+        ...params.providerOptions,
+        openai: {
+          promptCacheKey,
+          ...(params.providerOptions?.openai ?? {}),
+        },
+      } as typeof params.providerOptions;
+
+      return params;
+    },
+  };
+}
+
+/**
  * Create middleware that forwards a resolved reasoning effort to an
  * OpenAI-compatible provider as `providerOptions[providerKey].reasoningEffort`.
  *
@@ -205,6 +240,12 @@ export function buildOpenAICodexOAuthFetch(
     }
     if (accountId) {
       headers.set('ChatGPT-Account-ID', accountId);
+    }
+    // Codex CLI sends its session on every request; send the thread the same way.
+    const threadId = headers.get('x-thread-id');
+    if (threadId) {
+      if (!headers.has('session-id')) headers.set('session-id', threadId);
+      if (!headers.has('thread-id')) headers.set('thread-id', threadId);
     }
 
     // URL rewriting — only when rewriteUrl !== false
@@ -447,8 +488,12 @@ export function openaiCodexProvider(
   const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
   const effectiveLevel = getEffectiveThinkingLevel(modelId, requestedLevel);
   const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
-  const middleware = createCodexMiddleware(reasoningEffort);
   const headers = options?.headers;
+  const promptCacheKeyMiddleware = createPromptCacheKeyMiddleware(getRequestThreadId(headers));
+  const middleware = [
+    createCodexMiddleware(reasoningEffort),
+    ...(promptCacheKeyMiddleware ? [promptCacheKeyMiddleware] : []),
+  ];
 
   const baseURL = process.env.OPENAI_BASE_URL;
 
@@ -461,7 +506,7 @@ export function openaiCodexProvider(
     });
     return wrapLanguageModel({
       model: openai.responses(modelId),
-      middleware: [middleware],
+      middleware,
     });
   }
 
@@ -476,6 +521,6 @@ export function openaiCodexProvider(
   // Wrap with middleware
   return wrapLanguageModel({
     model: openai.responses(modelId),
-    middleware: [middleware],
+    middleware,
   });
 }
