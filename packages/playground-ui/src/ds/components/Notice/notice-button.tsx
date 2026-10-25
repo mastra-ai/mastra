@@ -21,7 +21,11 @@ export function NoticeButton({ render, icon, className, children, ...props }: No
     props: mergeProps<'button'>(
       nativeButtonProps(render),
       {
-        className: cn(buttonVariants({ variant: 'link' }), 'min-w-0 [&>svg]:size-icon-sm [&>svg]:shrink-0', className),
+        className: cn(
+          buttonVariants({ variant: 'link' }),
+          'min-w-0 text-foreground [&>svg]:size-icon-sm [&>svg]:shrink-0',
+          className,
+        ),
         children: (
           <>
             {icon}
