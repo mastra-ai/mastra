@@ -1,5 +1,88 @@
 # @mastra/core
 
+## 1.80.0-alpha.3
+
+### Patch Changes
+
+- Added a `ProviderHistoryCompat` safeguard that sends an assistant tool call whose stored input is missing or `null` as `{}` on every provider, so a stored row without input can't make providers reject the replayed history. The stored message is unchanged, the call keeps its error result, and an empty-string input is left as it is. ([#28332](https://github.com/mastra-ai/mastra/pull/28332))
+
+- Restore text streamed before tool approval in resumed durable and evented agent output. Streams configured to close on suspension settle their partial results; streams kept open continue through approval. Earlier completed iterations are not added to the resumed stream's `steps`. ([#27582](https://github.com/mastra-ai/mastra/pull/27582))
+
+- Added optional model release dates to provider catalogs for newest-first model selection. ([#27661](https://github.com/mastra-ai/mastra/pull/27661))
+
+- **Fixed** removed messages coming back into the request when several input processors run in one step. ([#28369](https://github.com/mastra-ai/mastra/pull/28369))
+
+  When an input processor removed messages in `processInputStep`, as observational memory does when it compacts a long run, the processors after it were still handed the old `messages` array. A processor that returned that array put the removed messages back, so the prompt kept growing even while memory compacted it. Each processor is now handed the messages as they are after the processors before it ran.
+
+- Fixed messages sent from another process to a busy agent thread waiting until the current run ended. ([#28298](https://github.com/mastra-ai/mastra/pull/28298))
+
+  - **Messages join the running run:** a message delivered to a thread's claimed owner while it is running now reaches the run's next model request, the same as a message sent from the owner's own process.
+  - **Queued messages still wait:** messages queued with `queueSignal` or `queueMessage` still wait for the run to finish.
+  - **Both processes need this release:** a message joins the running run only when the sending process and the process that owns the thread both run this version. With an older sender or an older owner, it waits for the run to finish as before.
+
+- Fixed `observe()` sending duplicate frames, and made a run's cached frames exactly what it replays. ([#27352](https://github.com/mastra-ai/mastra/pull/27352))
+
+  A durable run's frames are now appended to one log (`MastraServerCache.listPushIndexed`), which allocates the frame's position and stores it before the frame is published to the transport. The cached list is the run's history; the transport is only the live tail. A subscriber tracks one cursor: frames below it are dropped as already seen, the frame at it is delivered, and a gap is filled from the log before carrying on. This replaces the id deduplication and the follower machinery that re-stored frames the log already held, which is where the duplicate frames came from. `CachingPubSubOptions.source` and `CachingPubSub.__setSource()` are still accepted but deprecated and have no effect: evented steps now cache their frames when they publish.
+
+  On the evented engine, a run's frames, abort requests and execution leases now use the Mastra-level pubsub and cache, because each step publishes from whichever worker claims it; every worker then appends to the same run log. An evented agent constructed with its own `pubsub` on a different transport logs a warning. To observe evented runs from another process, configure the shared transport on Mastra (`new Mastra({ pubsub, cache })`). The default engine is unchanged and keeps using an agent-level `pubsub` when one is set.
+
+  Because every frame is in the log before it reaches the transport, a frame the transport delivers late is filled in from the log at its original position instead of being dropped. This includes reasoning from an attempt a signal preempted, which clients already see when it arrives on time; it is still kept out of memory and the replacement request.
+
+  When no shared cache is configured, `observe({ offset })` is live-only: observers see the live tail but cannot resume from an offset. With the default in-memory cache and a transport that reaches other processes, evented steps publish their frames uncached, as before, because each process would otherwise number frames from its own counter.
+
+  On the evented engine, a tool suspension or approval request is saved to memory before its chunk is published, as on the durable engine, so a client that reads memory as soon as it sees the suspension finds it.
+
+- Fixed a run being stopped as if another run had taken its thread when its process stalled past the thread lease duration while a lease renewal was in flight. The renewal's late answer now counts as a lapse this process can recover from: the run takes its lease back when nobody else holds it, and stops if it can't. ([#28316](https://github.com/mastra-ai/mastra/pull/28316))
+
+- Fixed `getFullOutput().text` dropping text from the step in progress when a run suspends for tool approval or a tool suspension after an earlier step has completed. It now matches `output.text` on every engine, including resumed runs that suspend again. ([#28351](https://github.com/mastra-ai/mastra/pull/28351))
+
+- Fixed durable and evented agents running tools with empty arguments when the model returned malformed JSON. Unparseable tool calls now return an error to the model without executing the tool or requesting approval, while valid empty arguments and replayed calls keep working. ([#28332](https://github.com/mastra-ai/mastra/pull/28332))
+
+- Fixed agent thread streams that misreported a run's state when pubsub events were missing. A run parked on approval no longer fails with `AgentThreadLeaseLostError` after its lease lapses, even if this subscriber never saw the approval prompt. A replayed `run-suspended` event for a run that has since finished no longer leaves the thread stuck as active. In both cases the runtime now reads the run's stored status before it decides. ([#27928](https://github.com/mastra-ai/mastra/pull/27928))
+
+## 1.80.0-alpha.2
+
+### Patch Changes
+
+- Fixed `mapUserToResourceId` being ignored when defined as a method on a `MastraAuthProvider` subclass. Subclass methods now work the same as passing `mapUserToResourceId` as a constructor option. ([#28297](https://github.com/mastra-ai/mastra/pull/28297))
+
+## 1.80.0-alpha.1
+
+### Minor Changes
+
+- Added `agentModel` to `dataset.startExperiment()` and `dataset.startExperimentAsync()` so you can run an agent experiment against a different model without editing or versioning the agent. The model is passed with each call the experiment makes: the registered agent, its sub-agents and other experiments running at the same time keep their own models, and the agent version is picked the same way as without `agentModel`. ([#28165](https://github.com/mastra-ai/mastra/pull/28165))
+
+  ```ts
+  await dataset.startExperiment({
+    targetType: 'agent',
+    targetId: 'support-agent',
+    agentModel: 'anthropic/claude-haiku-5-5',
+    scorers: ['accuracy'],
+  });
+  ```
+
+  The experiment's `metadata.agentModel` and each run's trace metadata record the model (for example `anthropic/claude-haiku-5-5`), so runs on different models can be told apart. `agentModel` works only with agent targets and is rejected before an experiment record is created otherwise.
+
+### Patch Changes
+
+- Allow server-owned HTTP observers of durable and evented `untilIdle` runs to detach without aborting execution, including resumed streams. Detached loops continue processing background tasks and saving the final answer, while explicit run and thread cancellation remain effective. ([#28162](https://github.com/mastra-ai/mastra/pull/28162))
+
+  Direct in-process reader cancellation still aborts active execution by default. The server opts into observer-only cancellation internally; ordinary agents retain their existing cancellation behavior.
+
+- Fixed durable and evented agents recording raw provider usage on model_step spans. Cache reads now appear under inputDetails.cacheRead like the regular agent, so prompt-cache dashboards no longer show 0% for these agents. ([#28239](https://github.com/mastra-ai/mastra/pull/28239))
+
+- Fixed evented agent runs with Postgres storage that hung when a worker process stopped. Another worker can now finish the run, and the original caller gets the result. Completed loop iterations keep their saved results and state without running again. Recovery-only snapshots are removed when a workflow suspends without snapshot persistence. Snapshot pruning still applies at terminal and control-flow boundaries without discarding inputs needed for recovery. ([#28054](https://github.com/mastra-ai/mastra/pull/28054))
+
+  Runs started on older versions can finish after upgrading, but do not have guaranteed crash recovery. On stores that support workflow step guards, internal workflow events go through the shared broker instead of staying in the starting process. Runs with `shouldPersistSnapshot` disabled keep a recovery snapshot until they end or suspend.
+
+  Storage adapters can opt in by returning `true` from `supportsWorkflowStepGuards()`. Their `updateWorkflowResults` implementation must check the optional `startGuard` or `completionGuard` against the stored result in the same atomic operation that writes the updated result. `@mastra/core/storage` exports `assertWorkflowStepGuard`, `WorkflowStepConflictError`, and `isWorkflowStepConflictError` for implementing these checks.
+
+- Fixed missing provider details on failed model calls. When a model call fails with an HTTP error, the error part saved to the thread keeps the `statusCode`, the provider's `responseBody` (capped at 2,000 characters) and the provider `requestId`, alongside `name` and `message`. Chat channels (Slack, Discord, …) now post the provider's explanation instead of just the HTTP status text, for example `❌ Error: Bad Request (HTTP 400): prompt is too long (request id req_123)`. Server logs get the same message plus `statusCode` and `requestId`, but not the raw response body. ([#27906](https://github.com/mastra-ai/mastra/pull/27906))
+
+- You can now filter and group spans by their parent or root entity, for example to count tool calls per agent or per workflow. The root is the top span recorded in the current process, so for a trace continued from another service it is the local root, not the distributed trace's root. Durable agents keep this lineage on spans that end in a later step. Spans stored before this change have no parent or root entity. ([#28047](https://github.com/mastra-ai/mastra/pull/28047))
+
+- Fixed resuming a suspended durable or evented agent with `resumeStreamUntilIdle()` (or `resumeStream(..., { untilIdle: true })`). The resume no longer stops the parked run it is taking over, so the resumed tool result is delivered instead of failing with "already finished". ([#28301](https://github.com/mastra-ai/mastra/pull/28301))
+
 ## 1.80.0-alpha.0
 
 ### Minor Changes

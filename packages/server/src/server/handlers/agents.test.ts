@@ -124,6 +124,23 @@ describe('getProvidersHandler', () => {
     delete (global as any).__MOCK_PROVIDER_REGISTRY__;
   });
 
+  it('includes catalog release dates for model pickers', async () => {
+    Object.assign(globalThis, {
+      __MOCK_PROVIDER_REGISTRY__: {
+        acme: {
+          name: 'ACME',
+          models: ['acme-classic', 'acme-next'],
+          modelReleaseDates: { 'acme-next': '2025-08-07' },
+          apiKeyEnvVar: 'ACME_API_KEY',
+          gateway: 'models.dev',
+        },
+      },
+    });
+    const result = await GET_PROVIDERS_ROUTE.handler({});
+    const acme = result.providers.find(provider => provider.id === 'acme');
+    expect(acme?.modelReleaseDates).toEqual({ 'acme-next': '2025-08-07' });
+  });
+
   it('should return all providers from the registry', async () => {
     const result = await GET_PROVIDERS_ROUTE.handler({});
 
@@ -2332,6 +2349,17 @@ describe('Agent Routes Authorization', () => {
         },
       });
     }
+
+    it('returns 501 when run-scoped abort targets a non-durable agent', async () => {
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          runId: 'non-durable-run',
+          requestContext: createContextWithReservedKeys({}),
+        }),
+      ).rejects.toMatchObject({ status: 501 });
+    });
 
     it('resolves request-scoped memory before authorizing run cancellation', async () => {
       const scopedAgent = createDurableAgent({

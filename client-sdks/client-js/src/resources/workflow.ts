@@ -168,7 +168,7 @@ export class Workflow extends BaseResource {
   ) {
     const searchParams = new URLSearchParams();
 
-    if (!!params?.runId) {
+    if (params?.runId) {
       searchParams.set('runId', params.runId);
     }
 
