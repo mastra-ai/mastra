@@ -184,7 +184,7 @@ function loadTokenizerFromDir(modelDir: PathLike, maxLength: number): Tokenizer 
     throw new Error(`Tokenizer config file not found at ${tokenizerFilePath}`);
   }
   const tokenizerConfig = JSON.parse(fs.readFileSync(tokenizerFilePath, 'utf-8'));
-  maxLength = Math.min(maxLength, tokenizerConfig['model_max_length']);
+  maxLength = Math.min(maxLength, tokenizerConfig['model_max_length'] ?? maxLength);
 
   const tokensMapPath = path.join(modelDir.toString(), 'special_tokens_map.json');
   if (!fs.existsSync(tokensMapPath)) {
@@ -490,7 +490,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
     _showDownloadProgress: boolean = true,
   ): Promise<PathLike> {
     if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { mode: 0o755 });
+      fs.mkdirSync(cacheDir, { recursive: true, mode: 0o755 });
     }
 
     const modelDir = path.join(cacheDir.toString(), model.replace('/', '_'));

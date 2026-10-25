@@ -50,13 +50,6 @@ export class ObservationTurn {
   private _generationCountAtStart = -1;
 
   /**
-   * Ids of the messages this turn was started with (the user's request). Mid-turn
-   * observation may record them, but they stay in the live prompt until the turn ends.
-   * @internal Set by step 0.
-   */
-  inputMessageIds: string[] = [];
-
-  /**
    * Fingerprints of the non-marker parts each message had when a step last drained it. A message
    * is unread step output only if it gained a part the model has not seen — including a tool result
    * merged in place into an existing tool-invocation part — not when it only gained OM markers.
