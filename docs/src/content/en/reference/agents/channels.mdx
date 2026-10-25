@@ -425,7 +425,7 @@ const agent = new Agent({
     type: 'ChannelHandler | false',
     isOptional: true,
     description:
-      'Opt-in handler for messages that neither mention the bot nor belong to a subscribed thread. Registered only when a function is supplied. Omitted or false leaves these messages ignored.',
+      'Opt-in handler for messages that neither mention the bot nor belong to a subscribed thread. Registered only when a function is supplied. Omitted or false leaves these messages ignored, except that unmentioned senders in a queued batch with a mention still go to `onMention`.',
   },
   {
     name: 'onSubscribedMessage',
