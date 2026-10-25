@@ -7,7 +7,7 @@ description: "Browse Novita AI model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/novita-ai.svg" alt="Novita AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Novita AI
 
-Access 87 Novita AI models through Mastra's model router. Authentication is handled automatically using the `NOVITA_API_KEY` environment variable.
+Access 89 Novita AI models through Mastra's model router. Authentication is handled automatically using the `NOVITA_API_KEY` environment variable.
 
 Learn more in the [Novita AI documentation](https://novita.ai/docs/guides/introduction).
 
@@ -608,6 +608,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 3,
     "outputCost": 15
+  },
+  {
+    "model": "novita-ai/moonshotai/kimi-k3.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "novita-ai/moonshotai/kimi-k3.1-pro-highspeed",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "novita-ai/nousresearch/hermes-2-pro-llama-3-8b",

@@ -7,7 +7,7 @@ description: "Browse DigitalOcean model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/digitalocean.svg" alt="DigitalOcean logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DigitalOcean
 
-Access 82 DigitalOcean models through Mastra's model router. Authentication is handled automatically using the `DIGITALOCEAN_ACCESS_TOKEN` environment variable.
+Access 83 DigitalOcean models through Mastra's model router. Authentication is handled automatically using the `DIGITALOCEAN_ACCESS_TOKEN` environment variable.
 
 Learn more in the [DigitalOcean documentation](https://docs.digitalocean.com/products/gradient-ai-platform/details/models/).
 
@@ -524,6 +524,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "digitalocean/minimax-m3.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "digitalocean/mistral-3-14B",

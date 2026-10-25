@@ -317,6 +317,7 @@ export const providerSchema = z.object({
   connected: z.boolean(),
   docUrl: z.string().optional(),
   models: z.array(z.string()),
+  modelReleaseDates: z.record(z.string(), z.string()).optional(),
 });
 
 /**
