@@ -7,7 +7,7 @@ description: "Browse Chutes model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/chutes.svg" alt="Chutes logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Chutes
 
-Access 14 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
+Access 16 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
 
 Learn more in the [Chutes documentation](https://llm.chutes.ai).
 
@@ -68,6 +68,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.44,
     "outputCost": 1.32
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-V4-Pro-0813",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "chutes/google/gemma-4-31B-turbo-TEE",
@@ -176,6 +188,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.039,
     "outputCost": 1.25
+  },
+  {
+    "model": "chutes/Qwen/Qwen3.8-Max-0902",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "chutes/unsloth/Mistral-Nemo-Instruct-2407-TEE",
