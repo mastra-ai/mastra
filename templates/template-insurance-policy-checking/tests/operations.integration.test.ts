@@ -202,7 +202,7 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
     const groundingEvents = (groundingLogs.match(/insurance\.operation \{[\s\S]*?\n\}/g) ?? []).filter(event =>
       event.includes("failurePhase: 'evidence_validation'"),
     );
-    expect(groundingEvents).toHaveLength(2);
+    expect(groundingEvents).toHaveLength(1);
     const groundingSources = grounding.requests.map(request => {
       const input = (request as { input: { role: string; content: { text: string }[] }[] }).input;
       return JSON.parse(
@@ -214,7 +214,6 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
     });
     for (const [document, reason, path] of [
       [documents[0]!, 'excerpt_not_exact', "'terms', 0, 'evidence', 0, 'excerpt'"],
-      [documents[1]!, 'original_not_in_excerpt', "'terms', 0, 'original'"],
     ] as const) {
       const source = groundingSources.find(source => source.displayName === document.name)!;
       const event = groundingEvents.find(event => event.includes(`sourceId: '${source.sourceId}'`))!;

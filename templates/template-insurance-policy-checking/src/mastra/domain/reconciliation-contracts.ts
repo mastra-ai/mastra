@@ -138,7 +138,9 @@ export const extractionObjectSchema = z
     terms: z
       .array(termSchema)
       .max(300)
-      .describe('Typed terms established in the captured source, unique by category, key and normalized scope.'),
+      .describe(
+        'Comparable operative insurance terms and policy identity facts, unique by category, key and normalized scope; exclude administrative provenance and general disclaimers.',
+      ),
     reviewedPages: z
       .array(z.number().int().positive())
       .max(1000)
@@ -160,7 +162,16 @@ export const extractionObjectSchema = z
     limitations: z
       .array(text)
       .max(30)
-      .describe('Known limits on extraction, review scope or interpretation; an empty array means none recorded.'),
+      .describe(
+        'Unresolved extraction, review or interpretation gaps that prevent reliable comparison, including missing relevant evidence. General disclaimers and administrative context belong in notes.',
+      ),
+    notes: z
+      .array(text)
+      .max(30)
+      .default([])
+      .describe(
+        'Nonblocking document context preserved for broker review, such as preparation provenance, example labels and general authentication or legal disclaimers. Never move a genuine review gap, operative condition or conflicting term here.',
+      ),
     changes: z
       .array(
         z
@@ -485,7 +496,7 @@ export type AnalysisInput = {
   model: string;
 
   /** Version of the structured extraction instructions. */
-  promptVersion: 'insurance-2';
+  promptVersion: 'insurance-2' | 'insurance-3';
 
   /** Approved processing ceilings frozen with this authorized analysis. */
   budget: ProcessingBudget;

@@ -485,7 +485,7 @@ export function reconcile(
   const limitations = [
     ...new Set([
       ...input.sources.flatMap(source => source.limitations),
-      ...extractions.flatMap(value => value.limitations),
+      ...extractions.flatMap(value => [...value.limitations, ...(value.notes ?? [])]),
       ...(!sufficient ? ['The captured or reviewed scope is incomplete; no overall assurance is available.'] : []),
       ...(input.clarification.intent === 'document_comparison'
         ? ['The selected reference does not establish contractual acceptance. Observations describe documents only.']

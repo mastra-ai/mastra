@@ -73,6 +73,7 @@ export async function reportWire(
           reviewedRecords: source.evidence.map(({ recordId, field }) => ({ recordId, field })),
           complete: true,
           limitations: [],
+          notes: [],
           changes: [],
         };
       } else {

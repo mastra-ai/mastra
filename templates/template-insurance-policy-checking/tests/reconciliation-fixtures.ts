@@ -388,5 +388,6 @@ export function fixtureExtraction(source: SavedSource, fixture: DocumentFixture)
     reviewedRecords: [],
     complete: true,
     limitations: [],
+    notes: [],
   };
 }

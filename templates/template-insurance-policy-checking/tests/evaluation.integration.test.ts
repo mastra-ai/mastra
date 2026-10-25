@@ -51,8 +51,8 @@ it('failed_evaluation_retains_safe_workflow_failure_and_saved_partial_extraction
       expect(failed.failure!.nextAction).toContain('excerpt_not_exact');
       expect(failed.failure!.nextAction).toContain('terms.0.evidence.0.excerpt');
       expect(failed.failure!.nextAction).toContain(failed.sources[0]!.sourceId);
-      expect(failed.extractions.map(e => e.sourceId)).toEqual([failed.sources[2]!.sourceId]);
-      expect(grounding.requests).toHaveLength(3);
+      expect(failed.extractions).toEqual([]);
+      expect(grounding.requests).toHaveLength(1);
       const saved = await reportRuntime(join(root, 'grounding'), grounding.endpoint);
       try {
         const status = await saved.reconciliationRepository.status(reportContext);

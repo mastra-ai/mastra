@@ -106,7 +106,7 @@ export function createReconciliationService(
         profile: structuredClone(profile),
         asOf: request.asOf,
         model: settings.model,
-        promptVersion: 'insurance-2',
+        promptVersion: 'insurance-3',
         budget: structuredClone(settings.budget),
       };
       const attempt = await repository.claim(context, request, input, runId);
@@ -120,43 +120,74 @@ export function createReconciliationService(
         costMicros: null,
       });
       try {
+        const referenceSource = attempt.input.sources.find(
+          source => source.sourceId === attempt.input.clarification.referenceId,
+        )!;
+        const sources = attempt.input.sources.map(source => ({
+          sourceId: source.sourceId,
+          displayName: source.displayName,
+          role: attempt.input.clarification.roles.find(role => role.sourceId === source.sourceId)?.role ?? source.role,
+          kind: source.kind,
+        }));
+        const extract = async (
+          source: (typeof attempt.input.sources)[number],
+          referenceTerms: { category: string; key: string; label: string; scope: string; valueType: string }[],
+        ) => {
+          const extraction = await model.generate(context, attempt, `extract:${source.sourceId}`, extractionSchema, {
+            source,
+            role: sources.find(item => item.sourceId === source.sourceId)!.role,
+            identity: attempt.input.identity,
+            clarification: attempt.input.clarification,
+            sources,
+            profile: attempt.input.profile,
+            referenceTerms,
+          });
+          try {
+            verifyExtraction(extraction, source);
+          } catch (error) {
+            if (error instanceof EvidenceValidationError)
+              operation({
+                stage: 'processing',
+                outcome: 'failed',
+                caseId: record.id,
+                runId,
+                attemptId: attempt.id,
+                sourceId: source.sourceId,
+                failurePhase: 'evidence_validation',
+                grounding: error.grounding,
+                errorCode: error.code,
+                costMicros: null,
+              });
+            throw error;
+          }
+          await repository.saveExtraction(context, attempt.id, extraction);
+          return extraction;
+        };
+        // Validate the selected reference before using its vocabulary for other documents.
+        // The schema bounds this catalog to 300 terms and omits values and quotations:
+        // matching a concept must never copy the reference's result into another source.
+        const reference = await extract(referenceSource, []);
+        const referenceTerms = reference.terms.map(({ category, key, label, scope, value }) => ({
+          category,
+          key,
+          label,
+          scope,
+          valueType: value.type,
+        }));
         const results = await Promise.allSettled(
-          attempt.input.sources.map(async source => {
-            const extraction = await model.generate(context, attempt, `extract:${source.sourceId}`, extractionSchema, {
-              source,
-              role:
-                attempt.input.clarification.roles.find(role => role.sourceId === source.sourceId)?.role ?? source.role,
-              identity: attempt.input.identity,
-            });
-            try {
-              verifyExtraction(extraction, source);
-            } catch (error) {
-              if (error instanceof EvidenceValidationError)
-                operation({
-                  stage: 'processing',
-                  outcome: 'failed',
-                  caseId: record.id,
-                  runId,
-                  attemptId: attempt.id,
-                  sourceId: source.sourceId,
-                  failurePhase: 'evidence_validation',
-                  grounding: error.grounding,
-                  errorCode: error.code,
-                  costMicros: null,
-                });
-              throw error;
-            }
-            await repository.saveExtraction(context, attempt.id, extraction);
-            return extraction;
-          }),
+          attempt.input.sources
+            .filter(source => source.sourceId !== referenceSource.sourceId)
+            .map(source => extract(source, referenceTerms)),
         );
         const failure = results.find(result => result.status === 'rejected');
         if (failure?.status === 'rejected') throw failure.reason;
-        const extractions = results.map(result => {
-          if (result.status === 'rejected') throw result.reason;
-          return result.value;
-        });
-        const reference = extractions.find(value => value.sourceId === attempt.input.clarification.referenceId)!;
+        const extractions = [
+          reference,
+          ...results.map(result => {
+            if (result.status === 'rejected') throw result.reason;
+            return result.value;
+          }),
+        ];
         const target = extractions.find(value => value.sourceId === attempt.input.clarification.targetId)!;
         const clauses = reference.terms
           .filter(term => term.value.type === 'clause')

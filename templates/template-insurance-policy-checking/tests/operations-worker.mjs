@@ -28,7 +28,7 @@ if (['failure', 'invalid-output', 'incomplete', 'interrupted', 'grounding'].incl
     result.unauthorizedFinal ||
     (input.mode === 'invalid-output' && result.extractions.length !== 2) ||
     (input.mode === 'grounding' &&
-      (result.extractions.length !== 1 || !result.failure.nextAction.includes('excerpt_not_exact')))
+      (result.extractions.length !== 0 || !result.failure.nextAction.includes('excerpt_not_exact')))
   )
     process.exitCode = 1;
 } else if (input.mode === 'create') {

@@ -207,7 +207,7 @@ describe('Typed insurance comparison boundaries', () => {
       limitations: [],
       changes: [],
     };
-    expect(extractionSchema.safeParse(extraction).success).toBe(true);
+    expect(extractionSchema.parse(extraction).notes).toEqual([]);
     expect(
       extractionSchema.safeParse({
         ...extraction,

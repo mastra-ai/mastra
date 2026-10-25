@@ -75,7 +75,17 @@ type WireRequest = {
 };
 type WireData = {
   stage: string;
+  promptVersion: string;
   data: {
+    clarification?: {
+      referenceId: string;
+      targetId: string;
+      roles: { sourceId: string; role: string }[];
+      acceptedBaseline: unknown;
+    };
+    sources?: { sourceId: string; displayName: string; role: string }[];
+    profile?: { id: string; version: string };
+    referenceTerms?: Pick<Extraction['terms'][number], 'category' | 'key' | 'label' | 'scope'>[];
     source?: SavedSource;
     clauses?: { reference: Extraction['terms'][number]; target: Extraction['terms'][number] }[];
   };
@@ -85,8 +95,11 @@ async function controlledResponses(documents: DocumentFixture[]) {
   const state: {
     mode:
       | 'normal'
+      | 'documentContext'
+      | 'documentContextWithGap'
       | 'http'
       | 'citation'
+      | 'original'
       | 'invalid'
       | 'refused'
       | 'incomplete'
@@ -162,6 +175,7 @@ async function controlledResponses(documents: DocumentFixture[]) {
           reviewedRecords: [{ recordId: 'policy', field: 'limit' }],
           complete: true,
           limitations: [],
+          notes: [],
           changes: [],
           terms: [
             {
@@ -206,13 +220,32 @@ async function controlledResponses(documents: DocumentFixture[]) {
           clause.original = excludedWaterClause;
           clause.evidence[0]!.excerpt = excludedWaterClause;
         }
-        if (state.mode === 'reducedLimit' && fixture.kind === 'target') {
+        if (
+          ['reducedLimit', 'documentContext', 'documentContextWithGap'].includes(state.mode) &&
+          fixture.kind === 'target'
+        ) {
           const limit = result.terms.find(term => term.category === 'limit')!;
           const amount = fixture.line === 'property' ? '1500000' : '1200000';
           if (limit.value.type !== 'money') throw new Error('Expected the use-case limit to be money.');
           limit.value.amount = amount;
           limit.original = `${fixture.line === 'property' ? 'Building limit' : 'Limit'}: USD ${amount} each occurrence, fixed.`;
           limit.evidence[0]!.excerpt = limit.original;
+        }
+        if (['documentContext', 'documentContextWithGap'].includes(state.mode)) {
+          // The paid boundary models the observed failure: isolated documents lose case context
+          // and choose a different key for the same operative deductible.
+          const hasContext =
+            data.data.sources?.length === documents.length && data.data.clarification && data.data.profile;
+          const note = 'Fictional example profile; signatory identity has not been independently authenticated.';
+          if (hasContext) (result as Extraction & { notes: string[] }).notes = [note];
+          else result.limitations = [note, 'Other case documents were not provided.'];
+          if (state.mode === 'documentContextWithGap' && fixture.kind === 'target')
+            result.limitations = ['The operative coverage interpretation remains unresolved.'];
+          if (fixture.kind !== 'reference') {
+            const catalog = data.data.referenceTerms?.find(term => term.category === 'deductible');
+            for (const term of [...result.terms, ...result.changes])
+              if (term.category === 'deductible') term.key = catalog?.key ?? 'deductible';
+          }
         }
         if (state.mode === 'positiveApprovalOnly' && fixture.kind === 'amendment') {
           result.changes[0]!.approvalStatement = propertyApproval;
@@ -230,6 +263,8 @@ async function controlledResponses(documents: DocumentFixture[]) {
           if (state.mode === 'unsupportedUnit') value.unit = 'SENTINEL_PRIVATE_UNSUPPORTED_UNIT';
           else value.amount = '999999999';
         }
+        if (state.mode === 'original' && fixture.kind === 'target')
+          result.terms[0]!.original = 'SENTINEL_PRIVATE_UNGROUNDED_ORIGINAL';
         if (state.mode === 'citation' && fixture.kind === 'target')
           result.terms[0]!.evidence[0]!.excerpt = 'INVENTED: broker approved every finding';
         if (state.mode === 'partial' && fixture.kind === 'target') {
@@ -464,6 +499,72 @@ function assertStrictSchema(schema: unknown) {
 }
 
 describe('Evidence-backed insurance reconciliation through agent tools, workflows, files, LibSQL and Responses HTTP', () => {
+  it('compares operative terms with case context while retaining document notes for broker review', async () => {
+    const documents = propertyDocuments();
+    documents[1]!.pages[1] = documents[1]!.pages[1]!.map(line => line.replace('USD 2500000', 'USD 1500000'));
+    const app = await setup(documents);
+    app.wire.state.mode = 'documentContext';
+    await app.submit();
+    const analysis = (await app.repository.status(context)).analyses[0]!;
+    expect(analysis.comparisons.find(item => item.key === 'building')).toMatchObject({ classification: 'DISCREPANCY' });
+    expect(analysis.comparisons.filter(item => item.category === 'deductible')).toEqual([
+      expect.objectContaining({ classification: 'AUTHORIZED_CHANGE', key: 'property' }),
+    ]);
+    expect(analysis.limitations).toContain(
+      'Fictional example profile; signatory identity has not been independently authenticated.',
+    );
+    expect(analysis.limitations).not.toContain(
+      'The captured or reviewed scope is incomplete; no overall assurance is available.',
+    );
+    expect(analysis.comparisons.every(item => item.searched.every(scope => scope.complete))).toBe(true);
+    const extractionRequests = app.wire.requests
+      .map(request => {
+        const content = request.body.input.find(item => item.role === 'user')!.content;
+        return JSON.parse(typeof content === 'string' ? content : content.map(item => item.text).join('')) as WireData;
+      })
+      .filter(request => request.data.source);
+    expect(extractionRequests).toHaveLength(3);
+    expect(extractionRequests[0]!.data.source!.sourceId).toBe(analysis.input.clarification.referenceId);
+    for (const request of extractionRequests) {
+      expect(request.promptVersion).toBe('insurance-3');
+      expect(request.data.clarification).toEqual(analysis.input.clarification);
+      expect(request.data.profile).toEqual(analysis.input.profile);
+      expect(request.data.sources).toHaveLength(3);
+      expect(request.data.sources).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ sourceId: analysis.input.clarification.referenceId, role: 'proposal' }),
+          expect.objectContaining({ sourceId: analysis.input.clarification.targetId, role: 'issued_policy' }),
+        ]),
+      );
+    }
+    expect(extractionRequests[0]!.data.referenceTerms).toEqual([]);
+    for (const request of extractionRequests.slice(1)) {
+      expect(request.data.referenceTerms).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            category: 'deductible',
+            key: 'property',
+            label: 'Deductible',
+            scope: 'All premises',
+          }),
+        ]),
+      );
+      expect(request.data.referenceTerms).toHaveLength(analysis.extractions[0]!.terms.length);
+    }
+    const uncertain = await setup(documents);
+    uncertain.wire.state.mode = 'documentContextWithGap';
+    await uncertain.submit();
+    const incomplete = (await uncertain.repository.status(context)).analyses[0]!;
+    expect(incomplete.extractions.every(item => item.complete)).toBe(true);
+    expect(incomplete.comparisons.find(item => item.key === 'building')).toMatchObject({
+      classification: 'REQUIRES_REVIEW',
+    });
+    expect(incomplete.comparisons.find(item => item.category === 'deductible')).toMatchObject({
+      classification: 'REQUIRES_REVIEW',
+    });
+    expect(incomplete.limitations).toContain('The operative coverage interpretation remains unresolved.');
+  });
+
   it('assesses changed clauses even when extracted scopes use different spacing or capitalization', async () => {
     const app = await setup(propertyDocuments());
     app.wire.state.mode = 'scopeFormatting';
@@ -858,7 +959,7 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       .generate(`/compare ${JSON.stringify(guarded.request)}`, {
         memory: { thread: context.threadId, resource: context.operatorId },
       });
-    expect(slash.tripwire?.reason).toContain('MODEL_BUDGET_REQUIRED');
+    expect(slash.tripwire?.reason).toContain('No new reviewable report was published.');
     expect(guarded.wire.requests).toEqual([]);
     for (const mode of [
       'http',
@@ -868,6 +969,7 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       'crossField',
       'unsupportedUnit',
       'unsupportedAmount',
+      'original',
       'overInput',
       'overReservation',
       'invalidTotal',
@@ -885,7 +987,9 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
         message: expect.any(String),
         nextAction: expect.any(String),
       });
-      expect(app.wire.requests).toHaveLength(3);
+      expect(app.wire.requests).toHaveLength(
+        ['crossField', 'unsupportedUnit', 'unsupportedAmount', 'original'].includes(mode) ? 3 : 1,
+      );
       const before = await app.repository.status(context);
       expect(before.analyses).toEqual([]);
       expect(before.attempts[0]!.state).toBe('FAILED');
@@ -896,9 +1000,16 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
         });
         expect(JSON.stringify(rejected)).not.toContain('SENTINEL_PRIVATE_UNSUPPORTED_UNIT');
       }
+      if (mode === 'original') {
+        expect(rejected).toMatchObject({
+          code: 'INVALID_COMPARISON_EVIDENCE',
+          nextAction: expect.stringContaining('terms.0.original'),
+        });
+        expect(JSON.stringify(rejected)).not.toContain('SENTINEL_PRIVATE_UNGROUNDED_ORIGINAL');
+      }
       if (['incomplete', 'contentFilter'].includes(mode)) {
         const charged = await app.cases.client.execute('SELECT tokens,cost_micros,data FROM insurance_reservations');
-        expect(charged.rows).toHaveLength(3);
+        expect(charged.rows).toHaveLength(1);
         for (const row of charged.rows) {
           const saved = JSON.parse(String(row.data));
           expect(saved.usage).toEqual({ input_tokens: 400, output_tokens: 200, total_tokens: 600 });
@@ -910,7 +1021,7 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       if (['overInput', 'overReservation', 'invalidTotal'].includes(mode)) {
         expect(rejected).toMatchObject({ code: 'MODEL_USAGE_LIMIT' });
         const charged = await app.cases.client.execute('SELECT tokens,cost_micros,data FROM insurance_reservations');
-        expect(charged.rows).toHaveLength(3);
+        expect(charged.rows).toHaveLength(1);
         for (const row of charged.rows) {
           const saved = JSON.parse(String(row.data));
           expect(saved.usage).toMatchObject({ output_tokens: 200 });
@@ -959,7 +1070,7 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
     const chunked = await setup(propertyDocuments(), { ...testBudget, maxResponseBytes: 100 });
     chunked.wire.state.mode = 'chunked';
     expect(await chunked.submit()).toMatchObject({ ok: false, code: 'MODEL_OUTPUT_LIMIT' });
-    expect(chunked.wire.requests).toHaveLength(3);
+    expect(chunked.wire.requests).toHaveLength(1);
     expect((await chunked.repository.status(context)).analyses).toEqual([]);
     // Native timeouts must cancel both pending headers and a stalled response body.
     for (const mode of ['normal', 'bodyStall'] as const) {
@@ -967,12 +1078,12 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       timedOut.wire.state.mode = mode;
       timedOut.wire.state.delay = 1000;
       expect(await timedOut.submit()).toMatchObject({ ok: false, code: 'MODEL_REQUEST_INTERRUPTED' });
-      expect(timedOut.wire.requests).toHaveLength(3);
-      expect(await Promise.all(timedOut.wire.requests.map(request => request.canceled))).toEqual([true, true, true]);
+      expect(timedOut.wire.requests).toHaveLength(1);
+      expect(await Promise.all(timedOut.wire.requests.map(request => request.canceled))).toEqual([true]);
       const timeoutReservations = await timedOut.cases.client.execute(
         'SELECT tokens,cost_micros,data FROM insurance_reservations',
       );
-      expect(timeoutReservations.rows).toHaveLength(3);
+      expect(timeoutReservations.rows).toHaveLength(1);
       for (const row of timeoutReservations.rows) {
         const saved = JSON.parse(String(row.data));
         expect(saved.usage).toBeNull();
@@ -997,7 +1108,7 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
         retryAttemptId: failedAttempt.id,
       }),
     ).toMatchObject({ ok: false, code: 'ATTEMPT_LIMIT' });
-    expect(oneAttempt.wire.requests).toHaveLength(3);
+    expect(oneAttempt.wire.requests).toHaveLength(1);
     const absentUsage = await setup();
     absentUsage.wire.state.mode = 'missingUsage';
     expect(await absentUsage.submit()).toMatchObject({ analysisId: expect.any(String) });
@@ -1066,9 +1177,9 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     });
     const deadline = Date.now() + 10000;
-    while (recovery.wire.requests.length < 3 && Date.now() < deadline && child.exitCode === null)
+    while (recovery.wire.requests.length < 1 && Date.now() < deadline && child.exitCode === null)
       await new Promise(resolve => setTimeout(resolve, 10));
-    expect(recovery.wire.requests.length, childErrors).toBe(3);
+    expect(recovery.wire.requests.length, childErrors).toBe(1);
     const childClosed = new Promise<void>(resolve => child.once('exit', () => resolve()));
     child.kill('SIGKILL');
     await childClosed;

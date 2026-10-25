@@ -22,6 +22,8 @@ Use `accepted contract` instead of `accepted proposal` when appropriate. Include
 
 Say `Compare the documents` to compare as of today's UTC date, or `Compare the documents as of 2026-05-01` for an explicit date. The workflow verifies quotations against saved sources and publishes a PDF draft. Say `Show the report` for a summary, numbered findings and PDF downloads. Finding numbers match the PDF, including any gaps where matching terms are omitted from the chat summary.
 
+The comparison uses the selected reference to align matching insurance concepts across documents. Administrative details and general document disclaimers remain visible in report limitations without making a fully reviewed term unresolved. Missing pages, relevant missing evidence, conflicting operative terms and uncertain interpretations still require review. Documented amendment approval is assessed from its exact policy, term, scope and effective-date evidence.
+
 Say `Show page 1 of "property-issued.pdf"` to inspect the captured text of a physical PDF page. If Studio shows a plain-text notice, refresh or reopen the conversation to see the saved links. The native Studio processor notice may appear as a **Content Blocked** banner; the saved conversation contains the response and links.
 
 ## Review and approve
