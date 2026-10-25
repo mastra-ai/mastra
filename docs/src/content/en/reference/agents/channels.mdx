@@ -425,7 +425,7 @@ const agent = new Agent({
     type: 'ChannelHandler | false',
     isOptional: true,
     description:
-      'Opt-in handler for messages that neither mention the bot nor belong to a subscribed thread. Registered only when a function is supplied. Omitted or false leaves these messages ignored, except that unmentioned senders in a queued batch with a mention still go to `onMention`.',
+      'Opt-in handler for messages that neither mention the bot nor belong to a subscribed thread. Registered only when a function is supplied. Omitted or false leaves these messages ignored, except that unmentioned senders in a queued batch with a mention still go to `onMention` unless it is also false.',
   },
   {
     name: 'onSubscribedMessage',
@@ -449,7 +449,7 @@ const handlers: ChannelHandlers = {
 }
 ```
 
-`defaultHandler` runs the agent, posts the response, and subscribes the thread. Later messages in that thread go to `onSubscribedMessage`. Runs started through `onMessage` report `channel.eventType` as `message`. When a queued batch mixes mentioned and unmentioned senders, unmentioned senders go to `onMessage` when it's set and to `onMention` otherwise.
+`defaultHandler` runs the agent, posts the response, and subscribes the thread. Later messages in that thread go to `onSubscribedMessage`. Runs started through `onMessage` report `channel.eventType` as `message`. When a queued batch mixes mentioned and unmentioned senders, unmentioned senders go to `onMessage` when it's set. Otherwise they go to `onMention`, or are skipped if `onMention` is `false`.
 
 The `ChannelHandler` function signature:
 
