@@ -21,6 +21,7 @@ import {
   isMaybeRequiringUserFirstTurn,
   ProviderHistoryCompat,
   stripForeignProviderExecutedTools,
+  toolCallEmptyInput,
 } from './provider-history-compat';
 import type { CompatRule } from './provider-history-compat';
 import { ProcessorRunner } from './runner';
@@ -513,6 +514,72 @@ describe('chatCompletionsSingleSystemMessage', () => {
     expect(
       chatCompletionsSingleSystemMessage.applyToPrompt!({ prompt: cached, model: { provider: 'vllm.chat' } }),
     ).toBeUndefined();
+  });
+});
+
+describe('toolCallEmptyInput', () => {
+  const call = (input: unknown, toolCallId = 'c1') => ({
+    type: 'tool-call',
+    toolCallId,
+    toolName: 'team_status',
+    input,
+  });
+  const result = {
+    role: 'tool',
+    content: [
+      {
+        type: 'tool-result',
+        toolCallId: 'c1',
+        toolName: 'team_status',
+        output: { type: 'error-text', value: 'received invalid arguments' },
+      },
+    ],
+  };
+  const promptWith = (input: unknown) =>
+    [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'assistant', content: [call(input)] },
+      result,
+    ] as unknown as LanguageModelV2Prompt;
+
+  it.each([undefined, null])('sends a call with input %j as {}, keeping its paired result', input => {
+    const next = toolCallEmptyInput.applyToPrompt!({ prompt: promptWith(input), model: { provider: 'vllm.chat' } });
+    expect(next).toEqual(promptWith({}));
+  });
+
+  it('applies to every provider', () => {
+    for (const provider of ['anthropic.messages', 'openai.responses', 'google.generative-ai', 'amazon-bedrock']) {
+      expect(toolCallEmptyInput.applyToPrompt!({ prompt: promptWith(undefined), model: { provider } })).toEqual(
+        promptWith({}),
+      );
+    }
+  });
+
+  it('leaves real input, including an empty object and an empty string, unchanged', () => {
+    for (const input of [{}, { note: 'hi' }, '']) {
+      expect(toolCallEmptyInput.applyToPrompt!({ prompt: promptWith(input), model: {} })).toBeUndefined();
+    }
+  });
+
+  it('skips an assistant message whose content is not an array', () => {
+    const prompt = [{ role: 'assistant', content: 'plain text' }, ...promptWith(undefined)] as any;
+    const result = toolCallEmptyInput.applyToPrompt!({ prompt, model: {} } as any) as any[];
+    expect(result[0]).toEqual({ role: 'assistant', content: 'plain text' });
+    expect(toolCallEmptyInput.applyToPrompt!({ prompt: [prompt[0]], model: {} } as any)).toBeUndefined();
+  });
+
+  it('does not mutate the original prompt', () => {
+    const prompt = promptWith(undefined);
+    toolCallEmptyInput.applyToPrompt!({ prompt, model: {} });
+    expect((prompt[1] as any).content[0].input).toBeUndefined();
+  });
+
+  it('is part of the default ProviderHistoryCompat rule set', () => {
+    const out = new ProviderHistoryCompat().processLLMRequest({
+      prompt: promptWith(undefined),
+      model: { provider: 'anthropic.messages' },
+    } as any);
+    expect(out).toEqual({ prompt: promptWith({}) });
   });
 });
 

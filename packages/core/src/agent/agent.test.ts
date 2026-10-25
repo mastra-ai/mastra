@@ -2232,7 +2232,7 @@ describe('Agent Tests', () => {
                   type: 'tool-call' as const,
                   toolCallId: 'call-1',
                   toolName: 'analyzeSentiment',
-                  args: { text: 'Hello world' },
+                  input: JSON.stringify({ text: 'Hello world' }),
                 },
               ],
               warnings: [],
