@@ -27520,9 +27520,9 @@
       },
       "moonshotai/Kimi-K2.6": {
         "cost": {
-          "input": 0.6026,
+          "input": 0.603,
           "output": 3.2,
-          "cache_read": 0.169,
+          "cache_read": 0.126,
           "cache_write": 0
         }
       },
@@ -31636,9 +31636,9 @@
       },
       "~moonshotai/kimi-latest": {
         "cost": {
-          "input": 0.19,
-          "output": 8.94,
-          "cache_read": 0.19
+          "input": 0.18,
+          "output": 16,
+          "cache_read": 0.17
         }
       },
       "~openai/gpt-astra-latest": {
@@ -31696,9 +31696,9 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.044,
-          "output": 0.2,
-          "cache_read": 0.043
+          "input": 0.0513,
+          "output": 0.0701,
+          "cache_read": 0.03
         }
       },
       "~z-ai/glm-latest": {
@@ -51720,9 +51720,9 @@
       },
       "deepseek/deepseek-v4-flash-0731": {
         "cost": {
-          "input": 0.0422,
-          "output": 0.1694,
-          "cache_read": 0.028
+          "input": 0.04444,
+          "output": 0.13332,
+          "cache_read": 0.001414
         }
       },
       "deepseek/deepseek-v4-flash-vision-exp": {
@@ -54540,9 +54540,9 @@
       },
       "z-ai/glm-5.3-flash": {
         "cost": {
-          "input": 0.044,
-          "output": 0.2,
-          "cache_read": 0.043
+          "input": 0.15,
+          "output": 0.5,
+          "cache_read": 0.03
         }
       },
       "z-ai/glm-5.3-flashx": {
@@ -54669,9 +54669,9 @@
       },
       "~moonshotai/kimi-latest": {
         "cost": {
-          "input": 0.19,
-          "output": 8.94,
-          "cache_read": 0.19
+          "input": 0.18,
+          "output": 16,
+          "cache_read": 0.17
         }
       },
       "~openai/gpt-astra-latest": {
@@ -54817,9 +54817,9 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.044,
-          "output": 0.2,
-          "cache_read": 0.043
+          "input": 0.0513,
+          "output": 0.0701,
+          "cache_read": 0.03
         }
       },
       "~z-ai/glm-latest": {

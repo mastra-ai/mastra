@@ -26,12 +26,12 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gemma-4-31B-it": [
+    "MiniMax-M3": [
       {
         "type": "toggle"
       }
     ],
-    "MiniMax-M3": [
+    "gemma-4-31B-it": [
       {
         "type": "toggle"
       }
