@@ -16,6 +16,7 @@ import type { ChatSessionContextApi } from '../../../context/ChatSessionContext'
 import { ChatThinkingProvider } from '../../../context/ChatThinkingProvider';
 import { AGENT_CONTROLLER_ID } from '../../../services/constants';
 import { ModelPicker } from '../ModelPicker';
+import { datedModels } from '../../../../settings/components/__tests__/fixtures/models';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
@@ -69,7 +70,9 @@ function renderPicker({
   emptyCatalog = false,
   catalogFails = false,
   sessionPolicy,
+  catalog = models,
 }: {
+  catalog?: AvailableModelOption[];
   kind?: ChatSessionContextApi['kind'];
   modelId?: string;
   defaultModelId?: string | null;
@@ -101,7 +104,7 @@ function renderPicker({
     ),
     http.get(`${TEST_BASE_URL}/web/config/models`, async ({ request }) => {
       await catalogLoaded;
-      if (!modelScope) return HttpResponse.json({ models });
+      if (!modelScope) return HttpResponse.json({ models: catalog });
       const params = new URL(request.url).searchParams;
       if (params.has('resourceId')) {
         if (catalogFails) {
@@ -229,6 +232,19 @@ afterEach(() => {
 });
 
 describe('ModelPicker', () => {
+  describe('when the catalog contains release dates', () => {
+    it('offers newer models first within each provider', async () => {
+      const user = userEvent.setup();
+      renderPicker({ catalog: datedModels, defaultModelId: 'openai/gpt-5' });
+      await user.click(await screen.findByLabelText('Session model'));
+      const options = await screen.findAllByRole('option');
+      expect(options.map(option => option.getAttribute('data-value'))).toEqual([
+        'openai/gpt-5',
+        'openai/gpt-4.1',
+        'openai/gpt-4o',
+      ]);
+    });
+  });
   it.each(['user', 'hybrid'] as const)(
     'shows the thread owner catalog and default to a collaborator in %s scope',
     async modelScope => {

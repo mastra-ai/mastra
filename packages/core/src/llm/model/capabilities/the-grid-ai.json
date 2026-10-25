@@ -29,7 +29,7 @@
     "text-standard"
   ],
   "reasoning": {
-    "claude-opus-latest": [
+    "agent-max": [
       {
         "type": "toggle"
       },
@@ -38,13 +38,16 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "code-max": [
-      {
-        "type": "toggle"
-      },
+    "deepseek-pro-latest": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "text-standard": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "agent-standard": [
@@ -53,7 +56,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "text-standard": [
+    "text-prime": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -71,25 +74,34 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "claude-opus-latest": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "glm-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "minimax-latest": [
+    "bytedance-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "agent-prime": [
+    "gemini-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "text-prime": [
+    "gpt-sol-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -104,31 +116,19 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gemini-pro-latest": [
+    "minimax-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "bytedance-pro-latest": [
+    "agent-prime": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "deepseek-pro-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "kimi-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "agent-max": [
+    "code-max": [
       {
         "type": "toggle"
       },
@@ -137,10 +137,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-sol-latest": [
+    "kimi-latest": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ]
   }
