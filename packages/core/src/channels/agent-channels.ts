@@ -561,6 +561,7 @@ export class AgentChannels {
               runEventType = 'message';
             }
           }
+          if (runHandler === false) continue;
           const { defaultHandler, handlerContext } = beginMessage(run.slice(0, -1), batchIds, runEventType);
           try {
             if (typeof runHandler === 'function') await runHandler(thread, runMessage, defaultHandler, handlerContext);
@@ -596,7 +597,11 @@ export class AgentChannels {
         );
       }
 
-      if (onMention !== false) {
+      // With onMention disabled, still register the mention route when onMessage
+      // is opted in: the SDK sends a batch ending in a mention there and skips
+      // the catch-all, so its unmentioned sender runs would otherwise be lost.
+      // Per-run routing above drops the disabled runs.
+      if (onMention !== false || typeof onMessage === 'function') {
         chat.onNewMention((thread, message, context) =>
           dispatchBatch(thread, message, context?.skipped, onMention, 'mention'),
         );

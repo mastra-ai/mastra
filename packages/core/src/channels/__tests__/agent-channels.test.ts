@@ -4122,6 +4122,19 @@ describe('per-sender handler runs end to end', () => {
     expect(JSON.stringify(h.prompts[0])).toContain('event=message');
   });
 
+  it('ignores DMs when direct and mention handling are disabled, even with onMessage', async () => {
+    const h = await createHarness({
+      onMessage: 'handle',
+      hold: false,
+      isDM: true,
+      disableDirect: true,
+      disableMention: true,
+    });
+    await h.deliver(h.msg('dm', 'A private question', userA, 0));
+    expect(h.invocations).toEqual([]);
+    expect(h.prompts).toEqual([]);
+  });
+
   it('separates senders and preserves skipped text in unmentioned message batches', async () => {
     const h = await createHarness({ onMessage: 'handle', skipFirstReply: true });
     const first = h.deliver(h.msg('A1', 'Hold without subscribing', userA, 0));
@@ -4182,26 +4195,33 @@ describe('per-sender handler runs end to end', () => {
     20_000,
   );
 
-  it('keeps disabled mention runs out of the unmentioned handler in a mixed queue', async () => {
-    const h = await createHarness({ onMessage: 'handle', disableMention: true, skipFirstReply: true });
-    const first = h.deliver(h.msg('A1', 'Hold without subscribing', userA, 0));
-    try {
-      await h.entered.promise;
-      await h.deliver(h.msg('B1', '@TestBot this mention is disabled', userB, 1000));
-      await h.deliver(h.msg('A2', 'An unmentioned question', userA, 2000));
-    } finally {
-      h.held.resolve();
-      await first;
-    }
-    expect(h.invocations).toEqual([
-      ['message', 'A1'],
-      ['message', 'A2'],
-    ]);
-    expect(h.prompts).toHaveLength(1);
-    expect(JSON.stringify(h.prompts[0])).toContain('An unmentioned question');
-    expect(JSON.stringify(h.prompts[0])).toContain('event=message');
-    expect(JSON.stringify(h.prompts[0])).not.toContain('this mention is disabled');
-  }, 20_000);
+  it.each(['mention first', 'mention last'] as const)(
+    'keeps disabled mention runs out of the unmentioned handler in a mixed queue (%s)',
+    async order => {
+      const h = await createHarness({ onMessage: 'handle', disableMention: true, skipFirstReply: true });
+      const first = h.deliver(h.msg('A1', 'Hold without subscribing', userA, 0));
+      try {
+        await h.entered.promise;
+        const mention = h.msg('B1', '@TestBot this mention is disabled', userB, 1000);
+        const unmentioned = h.msg('A2', 'An unmentioned question', userA, 2000);
+        // The SDK routes a batch by its last message, so a trailing mention
+        // takes the mention route even though onMention is disabled.
+        for (const m of order === 'mention first' ? [mention, unmentioned] : [unmentioned, mention]) await h.deliver(m);
+      } finally {
+        h.held.resolve();
+        await first;
+      }
+      expect(h.invocations).toEqual([
+        ['message', 'A1'],
+        ['message', 'A2'],
+      ]);
+      expect(h.prompts).toHaveLength(1);
+      expect(JSON.stringify(h.prompts[0])).toContain('An unmentioned question');
+      expect(JSON.stringify(h.prompts[0])).toContain('event=message');
+      expect(JSON.stringify(h.prompts[0])).not.toContain('this mention is disabled');
+    },
+    20_000,
+  );
 
   it("calls the custom handler once per sender turn with that turn's context", async () => {
     const h = await createHarness();
