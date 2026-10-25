@@ -890,7 +890,9 @@ describe('model switches after hosted tool results', () => {
       expect(second.text).toBe('Follow-up accepted.');
       expect(prompts).toHaveLength(1);
       for (const prompt of prompts) {
-        const parts = prompt.flatMap(message => (typeof message.content === 'string' ? [] : message.content));
+        // Hosted pairs must stay embedded in the assistant message, not move to standalone tool messages.
+        expect(prompt.filter(message => message.role === 'tool')).toEqual([]);
+        const parts = prompt.flatMap(message => (message.role === 'assistant' ? message.content : []));
         const calls = parts.filter(part => part.type === 'tool-call');
         const results = parts.filter(part => part.type === 'tool-result');
         // Every result crossing the provider boundary must still have its call.
