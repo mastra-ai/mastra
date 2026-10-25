@@ -64,7 +64,7 @@ export class ObservationStep {
    * For step > 0: checks thresholds, triggers buffer/observe, saves previous messages,
    * builds system message, filters observed.
    */
-  async prepare(): Promise<StepContext> {
+  async prepare(contextPressure?: number): Promise<StepContext> {
     if (this._prepared) throw new Error(`Step ${this.stepNumber} already prepared`);
 
     const { threadId, resourceId, messageList } = this.turn;
@@ -265,8 +265,11 @@ export class ObservationStep {
     // In the threshold→blockAfter band nothing may block: run the threshold pipeline only to
     // activate an already-buffered chunk (activate() doesn't wait on an in-flight buffer op in
     // the band). Without a ready chunk, defer to a later step.
-    const bandDefersObservation = statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate;
-    const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls && !bandDefersObservation;
+    const measuredPressure = contextPressure !== undefined && contextPressure >= statusSnapshot.threshold;
+    const bandDefersObservation =
+      !measuredPressure && statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate;
+    const willObserveNow =
+      (statusSnapshot.shouldObserve || measuredPressure) && !hasIncompleteToolCalls && !bandDefersObservation;
     /**
      * In-flight message ids cleanup must never remove from live context: the turn's own
      * request, plus whatever the model has not read yet (the pending messages at step 0, the
@@ -358,7 +361,10 @@ export class ObservationStep {
       // Threshold observation (skip if tool calls pending)
       if (willObserveNow) {
         const preObsGeneration = this.turn.record.generationCount;
-        const obsResult = await this.runThresholdObservation(statusSnapshot.inAsyncObservationBand);
+        const obsResult = await this.runThresholdObservation(
+          statusSnapshot.inAsyncObservationBand && !measuredPressure,
+          measuredPressure,
+        );
         observerExchange = obsResult.observerExchange;
         if (obsResult.succeeded) {
           observed = true;
@@ -370,10 +376,11 @@ export class ObservationStep {
           // so it cannot be relied on to keep them). Once the model has answered, the observed request
           // itself is not kept: the observations stand in for it, even mid-task.
           const observedIds = obsResult.cleanupMessageIds;
-          const minRemaining = resolveRetentionFloor(
-            om.getObservationConfig().bufferActivation ?? 1,
-            statusSnapshot.threshold,
-          );
+          // A token-estimated retention floor can retain the very reasoning that
+          // exceeded the measured budget. Unread messages remain protected by identity.
+          const minRemaining = measuredPressure
+            ? 0
+            : resolveRetentionFloor(om.getObservationConfig().bufferActivation ?? 1, statusSnapshot.threshold);
 
           await om.cleanupMessages({
             threadId,
@@ -482,7 +489,10 @@ export class ObservationStep {
    * waitForBuffering → re-check → activate buffered chunks → reflect → observe
    * (sync fallback at blockAfter when async buffering is enabled)
    */
-  private async runThresholdObservation(inAsyncObservationBand?: boolean): Promise<{
+  private async runThresholdObservation(
+    inAsyncObservationBand?: boolean,
+    force = false,
+  ): Promise<{
     succeeded: boolean;
     record: any;
     activatedMessageIds?: string[];
@@ -519,7 +529,7 @@ export class ObservationStep {
       messages: observableMessages,
     });
 
-    if (!status.shouldObserve) {
+    if (!status.shouldObserve && !force) {
       return { succeeded: false, record: status.record, cleanupMessageIds: [] };
     }
 
@@ -528,7 +538,7 @@ export class ObservationStep {
     let pendingMessages = observableMessages;
     const activatedMessageIds: string[] = [];
     let activated = false;
-    while (status.shouldObserve && status.canActivate) {
+    while ((status.shouldObserve || force) && status.canActivate) {
       const activation = await om.activate({
         threadId,
         resourceId,
@@ -552,6 +562,9 @@ export class ObservationStep {
       }
 
       activated = true;
+      // This measurement described the old prompt; after activation only a fresh
+      // provider response can justify another pressure-driven observation.
+      force = false;
       const ids = new Set(activation.activatedMessageIds ?? []);
       activatedMessageIds.push(...ids);
       pendingMessages = pendingMessages.filter(msg => !ids.has(msg.id));
@@ -611,7 +624,7 @@ export class ObservationStep {
       }
     }
 
-    if (status.inAsyncObservationBand || status.canActivate) {
+    if ((!force && status.inAsyncObservationBand) || status.canActivate) {
       return {
         succeeded: activated,
         record: this.turn.record,
@@ -630,6 +643,7 @@ export class ObservationStep {
         messages: pendingMessages,
         messageList,
         trigger: 'turn-sync',
+        force,
         agent: this.turn.agent,
         sendSignal: this.turn.sendSignal,
         sendStateSignal: this.turn.sendStateSignal,

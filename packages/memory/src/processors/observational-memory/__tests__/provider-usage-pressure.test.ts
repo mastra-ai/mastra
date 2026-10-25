@@ -6,10 +6,30 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Memory } from '../../../index';
 
-async function run(steps: number, reportsUsage: boolean) {
+async function run(steps: number, reportsUsage: boolean, buffered = false) {
   let observations = 0;
   const observerText = '<observations>Read the preceding files; continue the task.</observations>';
   const observer = new MockLanguageModelV2({
+    doStream: async () => {
+      observations++;
+      return {
+        warnings: [],
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 'observation' });
+            controller.enqueue({ type: 'text-delta', id: 'observation', delta: observerText });
+            controller.enqueue({ type: 'text-end', id: 'observation' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            });
+            controller.close();
+          },
+        }),
+      };
+    },
     doGenerate: async () => {
       observations++;
       return {
@@ -27,7 +47,7 @@ async function run(steps: number, reportsUsage: boolean) {
       observationalMemory: {
         enabled: true,
         scope: 'thread',
-        observation: { model: observer, messageTokens: 6_000, bufferTokens: false },
+        observation: { model: observer, messageTokens: 6_000, bufferTokens: buffered ? 1_200 : false },
         reflection: { model: observer, observationTokens: 50_000 },
       },
     },
@@ -107,14 +127,25 @@ async function run(steps: number, reportsUsage: boolean) {
 }
 
 describe('provider-reported context pressure', () => {
-  it('bounds a 200-step reasoning run using actual input usage, including cached input', async () => {
-    const { inputs, observationCounts, observations } = await run(200, true);
-    expect(observationCounts[0], 'the first request has no usage anchor').toBe(0);
-    expect(Math.max(...inputs.slice(-50)), 'provider input on the last 50 requests').toBeLessThan(20_000);
-    expect(observations).toBeGreaterThan(0);
-    // A stale pre-compaction usage anchor must not force observation on every subsequent step.
-    expect(observations).toBeLessThan(100);
-  }, 120_000);
+  it.each([false, true])(
+    'bounds a 200-step reasoning run including cached input (buffered: %s)',
+    async buffered => {
+      const { inputs, observationCounts, observations } = await run(200, true, buffered);
+      console.log('Usage-pressure proof:', {
+        requests: inputs.length,
+        maxInputTokens: Math.max(...inputs),
+        observations,
+      });
+      expect(observationCounts[0], 'the first request has no usage anchor').toBe(0);
+      expect(Math.max(...inputs.slice(-50)), 'provider input on the last 50 requests').toBeLessThan(20_000);
+      expect(observations).toBeGreaterThan(0);
+      // Unread output survives one observation. Once it is read and removed,
+      // fresh usage must drop rather than force observation on every later step.
+      expect(observations).toBeLessThanOrEqual(100);
+      expect(inputs.slice(-50).some(tokens => tokens === 2_500)).toBe(true);
+    },
+    120_000,
+  );
 
   it('keeps the estimate fallback when the provider reports no usage', async () => {
     const { inputs, observations } = await run(8, false);
