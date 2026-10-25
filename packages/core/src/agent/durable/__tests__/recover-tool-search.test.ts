@@ -84,16 +84,21 @@ function snapshot(runId: string, value: Record<string, unknown> = {}): WorkflowR
 }
 
 describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
-  it.each(['durable', 'evented'] as const)(
-    'replays an interrupted search-loaded tool with its original call id on %s (#28171)',
-    async kind => {
+  it.each([
+    ['durable', 'in-memory'],
+    ['durable', 'context'],
+    ['evented', 'in-memory'],
+    ['evented', 'context'],
+  ] as const)(
+    'replays an interrupted search-loaded tool with its original call id on %s with %s storage (#28171)',
+    async (kind, storage) => {
       const gate = createGate();
       const calls: { generation: number; toolCallId: string | undefined }[] = [];
       const resultsSeen: unknown[] = [];
       const scenario = createRestartScenario({
         kind,
         storageMode: 'serializing',
-        runId: `search-recovery-${kind}`,
+        runId: `search-recovery-${kind}-${storage}`,
         build: ({ core, generation }) => {
           let modelCalls = 0;
           const stamp = core.createTool({
@@ -110,7 +115,7 @@ describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
             id: 'searched',
             name: 'searched',
             instructions: 'Search for stamp, stamp m1, then answer done.',
-            inputProcessors: [new ToolSearchProcessor({ tools: { stamp }, search: { autoLoad: true } })],
+            inputProcessors: [new ToolSearchProcessor({ tools: { stamp }, storage, search: { autoLoad: true } })],
             model: new MockLanguageModelV2({
               doStream: async ({ prompt }) => {
                 // Re-running the model after recovery must not disguise a new call as the interrupted one.
@@ -177,7 +182,7 @@ describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
     },
   );
 
-  it.each(['value', 'evented-state'] as const)('restores tools from the latest %s transcript', async source => {
+  it('restores tools the processor loaded during the run', async () => {
     const store = new InMemoryStore();
     const agent = createDurableAgent({
       agent: new Agent({
@@ -202,16 +207,11 @@ describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
       resourceId: 'r',
       snapshot: snapshot('run-1'),
     });
-    const executionSnapshot = snapshot('run-1', { messageListState: transcript() });
-    if (source === 'evented-state') {
-      executionSnapshot.context.__state = { messageListState: transcript() };
-      executionSnapshot.value = { messageListState: new MessageList({ threadId: 't', resourceId: 'r' }).serialize() };
-    }
     await workflows.persistWorkflowSnapshot({
       workflowName: DurableStepIds.AGENTIC_EXECUTION,
       runId: 'run-1',
       resourceId: 'r',
-      snapshot: executionSnapshot,
+      snapshot: snapshot('run-1', { messageListState: transcript() }),
     });
 
     const restart = vi.fn(async () => ({ status: 'success' }));
