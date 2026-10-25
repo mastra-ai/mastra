@@ -550,7 +550,13 @@ describe('GET /web/config/models', () => {
   it('returns only credentialed models with their ids', async () => {
     const controller = {
       listAvailableModels: async () => [
-        { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: true },
+        {
+          id: 'anthropic/claude-fable-5',
+          modelName: 'claude-fable-5',
+          provider: 'anthropic',
+          hasApiKey: true,
+          releaseDate: '2026-09-29',
+        },
         { id: 'openai/gpt-5.6', modelName: 'gpt-5.6', provider: 'openai', hasApiKey: false },
         { modelName: 'gemini', provider: 'google', hasApiKey: true }, // no id — dropped
       ],
@@ -566,6 +572,7 @@ describe('GET /web/config/models', () => {
           id: 'anthropic/claude-fable-5',
           provider: 'anthropic',
           modelName: 'claude-fable-5',
+          releaseDate: '2026-09-29',
           hasApiKey: true,
           reasoningOptions: fableReasoning,
         },

@@ -67,7 +67,12 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "Qwen/Qwen3.6-Plus": [
+    "nvidia/nemotron-3-ultra-550b-a55b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
       {
         "type": "toggle"
       }
@@ -77,9 +82,25 @@
         "type": "toggle"
       }
     ],
+    "Qwen/Qwen3.6-Plus": [
+      {
+        "type": "toggle"
+      }
+    ],
     "Qwen/Qwen3.5-397B-A17B": [
       {
         "type": "toggle"
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "reflection/Beam-1.0-501B-A23B": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai/gpt-oss-120b": [
@@ -94,29 +115,7 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "nvidia/nemotron-3-ultra-550b-a55b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "thinkingmachines/Inkling": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "reflection/Beam-1.0-501B-A23B": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "moonshotai/Kimi-K3": [
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -131,6 +130,11 @@
         "values": ["high", "max"]
       }
     ],
+    "deepseek-ai/DeepSeek-V3-1": [
+      {
+        "type": "toggle"
+      }
+    ],
     "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "toggle"
@@ -140,25 +144,10 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V3-1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
+    "thinkingmachines/Inkling": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "MiniMaxAI/MiniMax-M3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.1": [
-      {
-        "type": "toggle"
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "zai-org/GLM-5.2": [
@@ -168,6 +157,17 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.1": [
+      {
+        "type": "toggle"
       }
     ],
     "zai-org/GLM-5": [
@@ -181,10 +181,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "moonshotai/Kimi-K3": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }
