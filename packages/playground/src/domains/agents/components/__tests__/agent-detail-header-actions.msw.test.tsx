@@ -23,6 +23,7 @@ function installHandlers(agent: GetAgentResponse = v2Agent) {
     http.get(`${TEST_BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })),
     http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json({ packages: [] })),
     http.get(`${TEST_BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
   );
 }
 
@@ -148,5 +149,27 @@ describe('when the screen is narrow', () => {
 
     const drawer = await screen.findByRole('dialog', { name: 'Config' });
     expect(drawer.contains(screen.getByTestId('agent-overview-panel'))).toBe(true);
+  });
+
+  it('renders Versions header actions without a Config drawer trigger', async () => {
+    stubNarrowScreen();
+    installHandlers();
+    renderWithProviders(
+      <TestLinkProvider>
+        <TooltipProvider>
+          <RouteSidePanelProvider>
+            <AgentConfigPanel agentId={AGENT_ID} disabled>
+              <div data-testid="header-actions">
+                <AgentDetailHeaderActions agentId={AGENT_ID} showConfig={false} />
+              </div>
+            </AgentConfigPanel>
+          </RouteSidePanelProvider>
+        </TooltipProvider>
+      </TestLinkProvider>,
+      { router: true },
+    );
+
+    expect(await screen.findByTestId('agent-entity-header-share')).not.toBeNull();
+    expect(screen.queryByTestId('agent-overview-panel-toggle')).toBeNull();
   });
 });

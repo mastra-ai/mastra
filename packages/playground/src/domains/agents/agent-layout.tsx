@@ -94,7 +94,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           <PageLayout
             variant="fit"
             breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-            headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
+            headerActions={<AgentDetailHeaderActions agentId={agentId!} showConfig={activeTab !== 'versions'} />}
           >
             <h1 className="sr-only">{agentId}</h1>
             <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]">
