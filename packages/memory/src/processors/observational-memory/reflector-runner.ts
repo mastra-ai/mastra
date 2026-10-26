@@ -12,6 +12,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Memory } from '../..';
 import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
+import { publishBufferedReflectionValues, stageBufferedReflectionValues } from './buffered-reflection-values';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { runOMCommit } from './commit-queue';
 import { omDebug, omError } from './debug';
@@ -912,13 +913,6 @@ export class ReflectorRunner {
       hookContext,
     );
 
-    await persistThreadExtractedValues(
-      this.storage,
-      this.reflectionConfig.extractors,
-      currentRecord.threadId ?? undefined,
-      reflectResult.extractedValues,
-    );
-
     const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: reflector returned ${reflectionTokenCount} tokens (${reflectResult.observations?.length} chars), saving to recordId=${currentRecord.id}`,
@@ -938,6 +932,12 @@ export class ReflectorRunner {
           inputTokenCount: sliceTokenEstimate,
           reflectedObservationLineCount,
         });
+        // Only associate this result with the exact persisted buffer. A different
+        // buffer may have been written by another process while the model ran.
+        const buffered = await this.storage.getObservationalMemory(currentRecord.threadId, currentRecord.resourceId);
+        if (buffered?.id === currentRecord.id && buffered.bufferedReflection === reflectResult.observations) {
+          await stageBufferedReflectionValues(this.storage, buffered, reflectResult.extractedValues);
+        }
         return true;
       },
     );
@@ -1018,7 +1018,9 @@ export class ReflectorRunner {
       }
     }
 
-    const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+    const storedRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+    // Some adapters return live references which the swap clears in place.
+    const freshRecord = storedRecord ? { ...storedRecord } : undefined;
 
     omDebug(
       `[OM:reflect] tryActivateBufferedReflection: recordId=${record.id}, hasBufferedReflection=${!!freshRecord?.bufferedReflection}, bufferedReflectionLen=${freshRecord?.bufferedReflection?.length ?? 0}`,
@@ -1095,12 +1097,33 @@ export class ReflectorRunner {
     const newRecordId = crypto.randomUUID();
     const swapped = await runOMCommit(
       lockKey,
-      () =>
-        this.storage.swapBufferedReflectionToActive({
+      async () => {
+        const head = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+        if (
+          head &&
+          (head.id !== freshRecord.id ||
+            head.bufferedReflection !== freshRecord.bufferedReflection ||
+            head.reflectedObservationLineCount !== freshRecord.reflectedObservationLineCount)
+        )
+          return head;
+        const result = await this.storage.swapBufferedReflectionToActive({
           currentRecord: freshRecord,
           tokenCount: combinedTokenCount,
           newRecordId,
-        }),
+        });
+        if (
+          isReflectionApplied(result, newRecordId, freshRecord.id) &&
+          (result.activeObservations === combinedObservations ||
+            result.activeObservations.startsWith(`${combinedObservations}\n`))
+        ) {
+          try {
+            await publishBufferedReflectionValues(this.storage, this.reflectionConfig.extractors, freshRecord);
+          } catch (error) {
+            omError('[OM] Failed to publish buffered reflection values after activation', error);
+          }
+        }
+        return result;
+      },
       { priority: 'reflection' },
     );
     if (!isReflectionApplied(swapped, newRecordId, freshRecord.id)) {
