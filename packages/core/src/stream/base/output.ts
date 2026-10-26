@@ -847,7 +847,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               isChunkOutputProcessed(chunk)
             ) {
               controller.enqueue(chunk);
-              return;
             } else {
               /**
                * Add/update base stream controller to structured output processor state

@@ -39,38 +39,18 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "glm-5.2": [
+    "qwen3.8-flash-next": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["low", "medium", "xhigh"]
       }
     ],
-    "muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "deepseek-v4.1-flash": [
+    "nemotron-3.5-content-safety": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "mimo-v2.6-pro-rl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "laguna-s-2.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.x-menthol": [
       {
         "type": "toggle"
       }
@@ -89,10 +69,10 @@
         "type": "toggle"
       }
     ],
-    "qwen3.8-flash-next": [
+    "glm-5.3": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ],
     "mimo-v2.6-flash-rl": [
@@ -106,20 +86,40 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "nemotron-3-nano-omni-30b-a3b-reasoning": [
       {
         "type": "toggle"
       }
     ],
-    "nemotron-3.5-content-safety": [
+    "glm-5.x-menthol": [
       {
         "type": "toggle"
+      }
+    ],
+    "laguna-s-2.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "qwen3.8-27b": [
