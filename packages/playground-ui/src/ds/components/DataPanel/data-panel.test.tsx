@@ -98,7 +98,7 @@ describe('DataPanel', () => {
       </TooltipProvider>,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close Panel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close panel' }));
     expect(onClose).toHaveBeenCalledTimes(1);
 
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
@@ -284,7 +284,7 @@ describe('DataPanel', () => {
     it('renders the close button before the heading', () => {
       renderHeader();
       const heading = screen.getByRole('heading', { name: 'Trace' });
-      const close = screen.getByRole('button', { name: 'Close Panel' });
+      const close = screen.getByRole('button', { name: 'Close panel' });
       expect(heading.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     });
 
@@ -398,7 +398,7 @@ describe('DataPanel', () => {
         </TooltipProvider>,
       );
 
-      fireEvent.click(screen.getByRole('button', { name: 'Close Panel' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Close panel' }));
       expect(onClose).toHaveBeenCalledTimes(1);
     });
 

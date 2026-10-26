@@ -131,6 +131,8 @@ import type { AgentSkillsInput, AgentSkillsResolver, SkillInput } from '../skill
 
 import { getSnapshotMemoryInfo, InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
+import { matchesRunFence } from '../storage/run-fencing';
+import type { RunFence } from '../storage/run-fencing';
 import { ChunkFrom } from '../stream';
 import type { ChunkType, MastraAgentNetworkStream, MastraOnFinishCallback } from '../stream';
 import { usesOpenAIStrictJsonSchema } from '../stream/aisdk/v5/execute';
@@ -216,7 +218,7 @@ import {
   withoutIdentityAgentScopes,
 } from './scopes';
 import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
-import type { CreatedAgentSignal } from './signals';
+import type { AgentSignalInput, CreatedAgentSignal } from './signals';
 import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
@@ -320,10 +322,15 @@ const RESUME_SUSPEND_DURABILITY_MAX_POLL_INTERVAL_MS = 500;
 const inFlightUnclaimedResumes = new Set<string>();
 
 /**
- * How long a resume claim may stay `pending` (claimed but not started) before a later resume
- * treats it as abandoned by a process that died, and takes the suspension over.
+ * How long a resume claim may go without a sign of life before a later resume treats it as
+ * abandoned by a process that died, and takes the suspension over: a `pending` claim (claimed but
+ * not started) since it was claimed, a `running` claim (on stores with run fencing) since its
+ * lease was last renewed.
  */
 export const AGENT_RESUME_CLAIM_STALE_MS = 60_000;
+
+/** How often a running resume renews its claim lease. Several renewals fit in one stale window. */
+const AGENT_RESUME_CLAIM_RENEW_MS = AGENT_RESUME_CLAIM_STALE_MS / 4;
 
 const createSubAgentInputSchema = ({ withResultRefs = false }: { withResultRefs?: boolean } = {}) =>
   z.object({
@@ -750,6 +757,22 @@ function alreadyClaimedResumeError({
     text: `Agent "${agentName}" ${method}() cannot resume run "${runId}" because another resume of it already claimed it.`,
     details: { agentName, method, runId, ...(toolCallId !== undefined ? { toolCallId } : {}) },
   });
+}
+
+/**
+ * Run-level tool hooks with every non-function entry dropped. A request body can
+ * carry `hooks: { beforeToolCall: null }`; that must not unset configured hooks.
+ */
+function definedToolHooks(hooks: ToolHooks | null | undefined): ToolHooks | undefined {
+  if (!hooks || typeof hooks !== 'object') return undefined;
+  const entries = Object.entries(hooks).filter(([, hook]) => typeof hook === 'function');
+  return entries.length > 0 ? (Object.fromEntries(entries) as ToolHooks) : undefined;
+}
+
+/** Call options whose `hooks` hold only functions, ready to merge over defaults. */
+function withDefinedToolHooks<T extends { hooks?: ToolHooks | null }>(options: T | undefined): T | undefined {
+  if (options?.hooks === undefined) return options;
+  return { ...options, hooks: definedToolHooks(options.hooks) };
 }
 
 /**
@@ -1304,6 +1327,30 @@ export class Agent<
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[] {
     const pubsub = this.getPubSub();
     return (runId, scope) => agentThreadStreamRuntime.drainPendingSignals(runId, pubsub, scope);
+  }
+
+  /**
+   * Returns a closure that queues a signal on a durable run through
+   * `sendSignal`, so the run's drain delivers it to the next model request.
+   * @internal
+   */
+  __getEnqueuePendingSignal(): (
+    target: { runId: string; resourceId?: string; threadId?: string },
+    signalInput: AgentSignalInput,
+  ) => Promise<CreatedAgentSignal> {
+    return async (target, signalInput) => {
+      // A held processor callback belongs to its original run. Never wake a
+      // new run or follow a newer owner of the same thread after it finishes.
+      if (!agentThreadStreamRuntime.listActiveThreadRuns(this.getPubSub()).some(run => run.runId === target.runId)) {
+        throw new Error(`Cannot send processor signal: run ${target.runId} is no longer active`);
+      }
+      const result = this.sendSignal(signalInput, { runId: target.runId });
+      const accepted = await result.accepted;
+      if (accepted.action !== 'deliver' || accepted.runId !== target.runId) {
+        throw new Error(`Processor signal was not delivered to run ${target.runId}`);
+      }
+      return result.signal;
+    };
   }
 
   /** @internal */
@@ -3429,6 +3476,12 @@ export class Agent<
     });
   }
 
+  /** @internal Validate context-independent timeout settings without invoking dynamic defaults. */
+  public __validateStaticModelTimeoutSettings(modelSettings?: AgentExecutionOptions<TOutput>['modelSettings']): void {
+    const defaults = typeof this.#defaultOptions === 'function' ? undefined : this.#defaultOptions.modelSettings;
+    validateModelTimeoutSettings(deepMerge(defaults ?? {}, modelSettings ?? {}).timeout);
+  }
+
   /**
    * Gets the default options for this agent, resolving function-based options if necessary.
    * These options are used as defaults when calling `stream()` or `generate()` without explicit options.
@@ -5509,7 +5562,10 @@ export class Agent<
           toolToConvert = tool;
         } else {
           const { execute, ...toolRest } = tool;
-          toolToConvert = toolRest;
+          toolToConvert =
+            'renderOnly' in tool && tool.renderOnly
+              ? { ...toolRest, execute: async () => ({ acknowledged: true }) }
+              : toolRest;
         }
         const options: ToolOptions = {
           name: toolName,
@@ -7089,7 +7145,7 @@ export class Agent<
     const defaultOptions = await this.getDefaultOptions({ requestContext });
     const mergedOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
-      { ...options, requestContext } as Record<string, unknown>,
+      { ...withDefinedToolHooks(options), requestContext } as Record<string, unknown>,
     ) as AgentExecutionOptions & typeof options;
     const optionMemory = (options as { memory?: AgentExecutionOptionsBase<any>['memory'] }).memory;
     const mergedMemory = mergedOptions.memory;
@@ -7118,6 +7174,7 @@ export class Agent<
       // Use the deep-merged delegation so default callbacks (e.g. messageFilter)
       // survive when callers pass a partial per-call delegation override.
       delegation: mergedOptions.delegation,
+      hooks: mergedOptions.hooks,
       methodType: options.methodType ?? 'stream',
       backgroundTaskEnabled: options.backgroundTaskEnabled,
       backgroundTaskPolicy: mergedOptions.backgroundTaskPolicy,
@@ -7376,7 +7433,8 @@ export class Agent<
     return this.#hooks;
   }
 
-  private resolveToolHooks(runHooks?: ToolHooks): ToolHooks | undefined {
+  private resolveToolHooks(hooks?: ToolHooks): ToolHooks | undefined {
+    const runHooks = definedToolHooks(hooks);
     if (!this.#hooks) return runHooks;
     if (!runHooks) return this.#hooks;
 
@@ -7712,7 +7770,20 @@ export class Agent<
    * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
    * @internal
    */
+  #throwIfRunAborted(runId: string) {
+    if (agentThreadStreamRuntime.isResumeFenced(runId, this.getPubSub())) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_ABORTED_RUN',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" cannot resume aborted run "${runId}".`,
+        details: { agentName: this.name, runId },
+      });
+    }
+  }
+
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
+    this.#throwIfRunAborted(runId);
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
     let claimedThenFinished = false;
@@ -8040,9 +8111,17 @@ export class Agent<
    *   caller can make this move, so only one resume executes the tool.
    * - back to `suspended` in `claim.release()` when the resume fails before the run executes.
    *
-   * A claim left `pending` by a process that died before starting or releasing it is abandoned.
-   * Once it is older than `AGENT_RESUME_CLAIM_STALE_MS`, a later resume hands the suspension back
-   * and claims it again. A live claimant that loses the suspension this way fails in `start()`.
+   * A `pending` claim (claimed, never started or released) is abandoned once it was claimed
+   * `AGENT_RESUME_CLAIM_STALE_MS` ago. A later resume takes it over and claims the suspension
+   * again; a live claimant that loses it this way fails in `start()`.
+   *
+   * On stores with run fencing, the claim is also held as a run-ownership lease, renewed every
+   * `AGENT_RESUME_CLAIM_RENEW_MS` while the resumed run executes. A `running` claim whose lease
+   * lapsed (its process died mid-run) is abandoned too, and a later resume takes it over and
+   * resumes from the suspended snapshot, so the tool that was in flight runs again. A takeover is
+   * one ownership claim on the generation the taker read, so only one taker wins, and the row never
+   * goes back to `suspended` while someone may still run it. Without run fencing a `running` claim
+   * is never taken over: nothing can tell a dead claimant from a slow one.
    *
    * `claim.release()` is idempotent. The loop calls it when the resumed run ends; resume methods
    * also call it on any failure before or after handing the claim to the loop. It hands the
@@ -8065,6 +8144,8 @@ export class Agent<
 
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+    // The run may have been aborted while the snapshot was loading or validating; recheck with no await before claiming.
+    this.#throwIfRunAborted(runId);
 
     if (!workflowsStore?.supportsConcurrentUpdates()) {
       if (workflowsStore) {
@@ -8088,8 +8169,72 @@ export class Agent<
         opts: { status: 'pending', expectedStatus: 'suspended', resumeClaimedAt: Date.now() },
       });
 
+    // A probe that fails leaves the claim unleased, which is how a store without fencing behaves.
+    const leased = await Promise.resolve()
+      .then(() => workflowsStore.supportsRunFencing())
+      .catch(() => false);
+    // Keyed apart from the run's own id, which workflow and durable-agent executions may fence.
+    const ownershipRunId = `${AGENTIC_LOOP_WORKFLOW_ID}:resume-claim:${runId}`;
+    let fence: RunFence | undefined;
+    const acquireLease = async (opts: { force?: boolean; expectedGeneration?: number }) => {
+      const ownerId = globalThis.crypto.randomUUID();
+      const result = await workflowsStore.claimRunOwnership({
+        runId: ownershipRunId,
+        ownerId,
+        leaseMs: AGENT_RESUME_CLAIM_STALE_MS,
+        ...opts,
+      });
+      if (result.acquired) fence = { runId: ownershipRunId, generation: result.record.generation, ownerId };
+      return result.acquired;
+    };
+    const renewLease = async () =>
+      !!fence && (await workflowsStore.renewRunOwnership({ ...fence, leaseMs: AGENT_RESUME_CLAIM_STALE_MS })).renewed;
+    let leaseReleased = false;
+    const releaseLease = async () => {
+      if (!fence || leaseReleased) return;
+      leaseReleased = true;
+      try {
+        await workflowsStore.releaseRunOwnership(fence);
+      } catch (error) {
+        this.logger.warn(`[Agent ${this.name}] Failed to release resume claim lease for run ${runId}`, { error });
+      }
+    };
+
     let claimed = await claim();
-    if (!claimed) {
+    if (claimed && leased) {
+      // Only this caller moved the row out of `suspended`, so the claim is ours: replace whatever
+      // lease an earlier resume of this run left behind.
+      await acquireLease({ force: true });
+    } else if (!claimed && leased) {
+      const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
+      const claimStatus = current?.status;
+      const abandoned =
+        current?.timestamp === snapshot.timestamp &&
+        typeof current.resumeClaimedAt === 'number' &&
+        (claimStatus === 'running'
+          ? current.resumeLeasedClaimAt === current.resumeClaimedAt
+          : claimStatus === 'pending' && Date.now() - current.resumeClaimedAt >= AGENT_RESUME_CLAIM_STALE_MS);
+      if (!abandoned) throwAlreadyClaimed();
+      const owner = await workflowsStore.getRunOwnership({ runId: ownershipRunId });
+      if (owner?.live) throwAlreadyClaimed();
+      // Racing takers read the same generation, so only one of them gets the lease.
+      if (!(await acquireLease({ expectedGeneration: owner?.generation ?? 0 }))) throwAlreadyClaimed();
+
+      this.logger.warn(
+        claimStatus === 'running'
+          ? `[Agent:${this.name}] - Taking over resume claim for run ${runId} whose lease lapsed; the suspended tool call runs again.`
+          : `[Agent:${this.name}] - Taking over resume claim for run ${runId} that was not started within ${AGENT_RESUME_CLAIM_STALE_MS}ms.`,
+      );
+      claimed = await workflowsStore.updateWorkflowState({
+        workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+        runId,
+        opts: { status: 'pending', expectedStatus: claimStatus, resumeClaimedAt: Date.now() },
+      });
+      if (!claimed) {
+        await releaseLease();
+        throwAlreadyClaimed();
+      }
+    } else if (!claimed) {
       const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
       const abandoned =
         current?.status === 'pending' &&
@@ -8117,13 +8262,39 @@ export class Agent<
     let claimStatus: 'pending' | 'running' = 'pending';
     let started = false;
     let released = false;
+
+    // Renew the lease while the resumed run executes, so later resumes can tell this live claimant
+    // from one whose process died. Stops once the lease is no longer this claim's.
+    let renewTimer: ReturnType<typeof setInterval> | undefined;
+    let renewing = false;
+    const stopRenewing = () => {
+      if (renewTimer) clearInterval(renewTimer);
+      renewTimer = undefined;
+    };
+    const renew = async () => {
+      if (renewing) return;
+      renewing = true;
+      try {
+        if (!(await renewLease())) stopRenewing();
+      } catch (error) {
+        this.logger.warn(`[Agent ${this.name}] Failed to renew resume claim lease for run ${runId}`, { error });
+      } finally {
+        renewing = false;
+      }
+    };
+
     const release = async () => {
-      if (started || released) return;
+      stopRenewing();
+      if (started || released) {
+        await releaseLease();
+        return;
+      }
       released = true;
       try {
         // Skip when a later resume took this claim over: the suspension is no longer ours.
         const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
         if (current?.resumeClaimedAt !== claimedAt) return;
+        if (fence && !matchesRunFence(await workflowsStore.getRunOwnership({ runId: ownershipRunId }), fence)) return;
         await workflowsStore.updateWorkflowState({
           workflowName: AGENTIC_LOOP_WORKFLOW_ID,
           runId,
@@ -8131,6 +8302,8 @@ export class Agent<
         });
       } catch (error) {
         this.logger.warn(`[Agent ${this.name}] Failed to release resume claim for run ${runId}`, { error });
+      } finally {
+        await releaseLease();
       }
     };
 
@@ -8145,17 +8318,29 @@ export class Agent<
     return {
       snapshot,
       start: async () => {
+        // A claim whose lease lapsed before it started may have been taken over already.
+        if (fence && !(await renewLease())) {
+          released = true;
+          throwAlreadyClaimed();
+        }
         const running = await workflowsStore.updateWorkflowState({
           workflowName: AGENTIC_LOOP_WORKFLOW_ID,
           runId,
-          opts: { status: 'running', expectedStatus: 'pending' },
+          opts: fence
+            ? { status: 'running', expectedStatus: 'pending', resumeLeasedClaimAt: claimedAt }
+            : { status: 'running', expectedStatus: 'pending' },
         });
         if (!running) {
           // A later resume took this claim over as abandoned; it owns the suspension now.
           released = true;
+          await releaseLease();
           throwAlreadyClaimed();
         }
         claimStatus = 'running';
+        if (fence && !released) {
+          renewTimer = setInterval(() => void renew(), AGENT_RESUME_CLAIM_RENEW_MS);
+          renewTimer.unref?.();
+        }
       },
       onExecutionStarted: () => {
         started = true;
@@ -9452,12 +9637,13 @@ export class Agent<
     const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
       deepMerge(
         defaultOptions as Record<string, unknown>,
-        (options ?? {}) as Record<string, unknown>,
+        (withDefinedToolHooks(options) ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<any> & {
         model?: DynamicArgument<MastraModelConfig>;
       },
       { callScopes: options?.scopes, defaultScopes: defaultOptions?.scopes },
     );
+    validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
@@ -9784,7 +9970,7 @@ export class Agent<
     const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
     const parked = !!runId && agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
     const aborted = agentThreadStreamRuntime.abortThread(options, this.getPubSub());
-    if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
+    if (aborted && parked && !options.localOnly) void this.#deleteAbortedSuspendedRun(runId);
     return aborted;
   }
 
@@ -9802,9 +9988,9 @@ export class Agent<
    * An aborted suspended run can never be resumed, so drop its workflow
    * registration and snapshot rows; otherwise it stays listed as suspended.
    */
-  async #deleteAbortedSuspendedRun(runId: string): Promise<void> {
-    const mastra = this.#mastra;
-    if (!mastra) return;
+  async #deleteAbortedSuspendedRun(runId: string): Promise<boolean> {
+    const mastra = this.#mastra ?? this.#ephemeralMastra;
+    if (!mastra) return true;
     const runtimeLoopWorkflowName = (
       this.#threadRuntimeAgent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>> | undefined
     )?.durableLoopWorkflowName;
@@ -9821,8 +10007,10 @@ export class Agent<
       await Promise.all(
         [...workflowNames].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
       );
+      return true;
     } catch (error) {
       this.logger.warn(`Failed to delete snapshot of aborted suspended run ${runId}`, { runId, error });
+      return false;
     }
   }
 
@@ -10251,7 +10439,7 @@ export class Agent<
     const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
       deepMerge(
         defaultOptions as Record<string, unknown>,
-        (streamOptions ?? {}) as Record<string, unknown>,
+        (withDefinedToolHooks(streamOptions) ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT> & {
         model?: DynamicArgument<MastraModelConfig>;
       },
@@ -10336,6 +10524,7 @@ export class Agent<
     const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
       { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
+      () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
     );
 
     const executeOptions = {
@@ -10614,8 +10803,9 @@ export class Agent<
 
     const mergedStreamOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
-      (streamOptions ?? {}) as Record<string, unknown>,
+      (withDefinedToolHooks(streamOptions) ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    validateModelTimeoutSettings(mergedStreamOptions.modelSettings?.timeout);
     const loopStreamOptions = { ...mergedStreamOptions };
     const actor = mergedStreamOptions.actor;
     delete loopStreamOptions.actor;
@@ -10731,6 +10921,7 @@ export class Agent<
       preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
         { ...loopStreamOptions, actor } as unknown as AgentExecutionOptions<OUTPUT>,
         threadStreamPubSub,
+        () => this.#deleteAbortedSuspendedRun(runId),
       );
 
       const result = await this.#execute({
@@ -10857,8 +11048,9 @@ export class Agent<
 
     const mergedOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
-      (options ?? {}) as Record<string, unknown>,
+      (withDefinedToolHooks(options) ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
     delete loopOptions.actor;

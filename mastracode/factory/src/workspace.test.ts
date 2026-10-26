@@ -103,6 +103,9 @@ const mocks = vi.hoisted(() => ({
   runBindingRole: null as string | null,
   runBindingStatus: 'active' as 'active' | 'revoked',
   runBindingThreadId: null as string | null,
+  /** Whether the session has any binding row, even one the active lookup cannot resolve. */
+  everBound: false,
+  hasRunBindingForSession: vi.fn(async () => mocks.everBound || mocks.runBindingRole !== null),
   findActiveRunBindingForSession: vi.fn(async ({ sessionId }: { sessionId: string }) =>
     mocks.runBindingRole
       ? {
@@ -142,6 +145,7 @@ import {
 } from './sandbox/session-sandbox.js';
 import {
   __clearSessionEnvironmentsForTests,
+  FactoryEnvironmentStateProcessor,
   peekSessionEnvironment,
   peekSessionEnvironmentTeardown,
 } from './session/environment-state-processor.js';
@@ -201,7 +205,9 @@ afterEach(async () => {
   mocks.runBindingRole = null;
   mocks.runBindingStatus = 'active';
   mocks.runBindingThreadId = null;
+  mocks.everBound = false;
   mocks.findActiveRunBindingForSession.mockClear();
+  mocks.hasRunBindingForSession.mockClear();
 });
 
 function createRequestContext(projectPath: string) {
@@ -1019,7 +1025,10 @@ describe('GitHub session workspace preparation', () => {
     const resolver = createWorkspaceFactory({
       sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
       github: github as any,
-      workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
+      workItems: {
+        findActiveRunBindingForSession: mocks.findActiveRunBindingForSession,
+        hasRunBindingForSession: mocks.hasRunBindingForSession,
+      } as any,
       ...(workspaceRegistry ? { workspaceRegistry } : {}),
     });
     return {
@@ -1277,6 +1286,54 @@ describe('GitHub session workspace preparation', () => {
     expect(await workspace.skills?.get('factory-review')).toBeFalsy();
     expect(await workspace.skills?.get('factory-rereview')).toBeFalsy();
     expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
+  it('exposes review skills to an unbound side session a user session started', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', originSessionId: 'user-session', originThreadId: 'user-thread' });
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect((await workspace.skills?.get('factory-review'))?.instructions).toBeTruthy();
+    expect((await workspace.skills?.get('factory-rereview'))?.instructions).toBeTruthy();
+  });
+
+  it('keeps review skills hidden from a side session bound to a work role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', originSessionId: 'user-session', originThreadId: 'user-thread' });
+    mocks.runBindingRole = 'work';
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('keeps review skills hidden from a side session whose active binding is ambiguous', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', originSessionId: 'user-session', originThreadId: 'user-thread' });
+    // Several active bindings: the active lookup returns null, but the session is bound.
+    mocks.everBound = true;
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('keeps review skills hidden from an unbound user session', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
   });
 
   it('exposes review skills to a review session before it has a live thread', async () => {
@@ -3653,7 +3710,6 @@ describe('factory environment sandbox context', () => {
             dir: '/home/user/hello',
             branch: 'factory/issue-7',
             defaultBranch: 'main',
-            position: 1,
             setupStatus: 'ok',
           },
           {
@@ -3661,11 +3717,37 @@ describe('factory environment sandbox context', () => {
             dir: '/home/user/docs',
             branch: 'factory/issue-7',
             defaultBranch: 'main',
-            position: 2,
             setupStatus: 'skipped',
           },
         ],
       });
+    });
+
+    it('numbers the environment signal from 1 even when stored link positions have gaps', async () => {
+      // Positions are a sort key over every project link, so a link left out of
+      // the environment still holds position 1 and the booted ones start at 2.
+      const { resolver } = environmentFixture({
+        links: [
+          { id: 'link-0', repositoryId: 'repository-0', slug: 'octocat/legacy', position: 1, inEnvironment: false },
+          { ...twoLinks[0]!, position: 2 },
+          { ...twoLinks[1]!, position: 4 },
+        ],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+      mocks.syncEnvironmentRepository.mockResolvedValueOnce({ outcome: 'resumed', branch: 'factory/issue-7' });
+
+      await boot(resolver);
+
+      const signal = await new FactoryEnvironmentStateProcessor().computeStateSignal({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        contextWindow: { hasSnapshot: false },
+      } as never);
+      const lines = (signal as { contents: string }).contents.split('\n');
+      expect(lines.slice(1, 3)).toEqual([
+        '1. octocat/hello at /home/user/hello on factory/issue-7 (default main, setup ok)',
+        '2. octocat/docs at /home/user/docs on factory/issue-7 (default main, setup skipped)',
+      ]);
     });
 
     it('roots the agent at the workspace root with its skill roots under its own checkout when the environment holds several repositories', async () => {

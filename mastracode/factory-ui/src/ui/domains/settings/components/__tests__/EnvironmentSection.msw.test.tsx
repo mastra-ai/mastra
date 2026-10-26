@@ -71,7 +71,7 @@ describe('Environment settings', () => {
     renderEnvironmentSettings();
 
     expect(await screen.findByText(/Link a repository first/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Go to Repositories' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Go to repositories' })).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/settings/repositories`,
     );

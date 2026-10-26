@@ -82,11 +82,11 @@ Working roles identify bindings on the shared Code Agent, not separately configu
 
 Verify the actual journey: initial entry, lifecycle kickoff, the declared role's phase signal and binding, a bound transition tool, role handoff, completed tool-result ingestion, deferred transition, and terminal cleanup. Polling and persisted-message ingestion resolve the single current phase through the installed board. Live binding, reassignment, revision, topology, approval, and external-author checks still apply. Custom roles named `triage` do not inherit Work classification requirements. A tool-result handler receives normalized `result.status` and `result.value`; it does not receive raw tool arguments. Check the result payload needed by the board's policy rather than treating every completed tool call as business success.
 
-Keep the remaining limits explicit: `factory-ui` still uses built-in stages and roles, completion metrics still use Work's `done` phase, `held-waiting` is Work-specific, and built-in board replacement/customization is unsupported. Existing integration defaults do not automatically route events to a custom board.
+Keep the remaining limits explicit: `factory-ui` still uses built-in stages and roles, completion metrics still use Work's `done` phase, and `held-waiting` is Work-specific. Existing integration defaults do not automatically route events to a custom board.
 
 ## Change a built-in handler
 
-Integration overrides (`rules[event]` on the GitHub/Linear constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. There is no override mechanism for board-owned handlers, including Work's `submit_plan` tool-result rule: change the installed definition itself (`src/boards/work.ts`, handler in `src/boards/work-tool-rules.ts`) or install a custom board that declares its own `tools`.
+Integration overrides (`rules[event]` on the GitHub/Linear constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. To replace a board-owned handler, set `includeDefaultBoards: false` and install a same-ID board with the desired handler. For Work's `submit_plan` tool-result rule, declare `tools.submit_plan.onResult` on the replacement `work` board. The stock handler lives in `src/boards/work-tool-rules.ts`.
 
 Before changing a built-in handler:
 

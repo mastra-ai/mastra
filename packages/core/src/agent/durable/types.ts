@@ -4,7 +4,7 @@ import type {
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
-import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
+import type { LanguageModelUsage, ModelMessage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
 
@@ -40,10 +40,10 @@ import type {
 } from '../../tools/types';
 import type { Workspace } from '../../workspace';
 import type { AgentExecutionOptions } from '../agent.types';
-import type { MessageList } from '../message-list';
+import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
-import type { CreatedAgentSignal } from '../signals';
+import type { AgentSignalInput, CreatedAgentSignal } from '../signals';
 import type { TripwireData } from '../trip-wire';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
 import type { ExecutionFence } from './execution-fence';
@@ -431,10 +431,10 @@ export interface DurableToolCallInput {
   toolCallId: string;
   /** Name of the tool to execute */
   toolName: string;
-  /** Arguments for the tool */
-  args: Record<string, unknown>;
+  /** Arguments for the tool; absent when the model's JSON could not be parsed. */
+  args?: Record<string, unknown>;
   /** Provider-specific metadata */
-  providerMetadata?: Record<string, unknown>;
+  providerMetadata?: SharedV2ProviderMetadata;
   /** Whether the tool was already executed by the provider */
   providerExecuted?: boolean;
   /** Output if provider-executed */
@@ -623,6 +623,12 @@ export interface AgentStreamEvent<T = unknown> {
   /** Claim generation of the execution that published the event. See {@link Event.generation}. */
   generation?: number;
   /**
+   * Position of this event in its run topic's log. Only present on events read
+   * back from the topic; it is stripped before an event reaches an `observe()`
+   * consumer.
+   */
+  index?: number;
+  /**
    * The `chunk` event's chunk already ran through the run's output processors
    * before it was published, so the stream consumer must not run them again.
    */
@@ -653,6 +659,12 @@ export type DurableAgentStepFinishResult = AgentStepFinishEventData & { runId: s
 export interface AgentFinishEventData {
   output: DurableAgenticLoopOutput['output'];
   stepResult: DurableLLMStepOutput['stepResult'];
+  /** The run's conversation, as on the default loop's finish chunk. */
+  messages?: {
+    all: ModelMessage[];
+    user: ModelMessage[];
+    nonUser: AIV5ResponseMessage[];
+  };
 }
 
 /**
@@ -888,6 +900,12 @@ export interface RunRegistryEntry {
    */
   requireToolApproval?: RequireToolApproval;
   /**
+   * Per-call delegation config (`onDelegationStart`, `onDelegationComplete`,
+   * `messageFilter`, ...). Closures, so in-process only. A warm resume that
+   * rebuilds tools reuses it when the resume call supplies no `delegation`.
+   */
+  delegation?: AgentExecutionOptions['delegation'];
+  /**
    * Signal drain closure. When the durable agent inherits `sendSignal()` from
    * its wrapped `Agent`, signals are queued in `AgentThreadStreamRuntime`. This
    * closure retrieves and clears those queues, keyed by scope:
@@ -898,6 +916,15 @@ export interface RunRegistryEntry {
    * signals sent to a restarted worker will not be drained.
    */
   drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  /**
+   * Queues a signal on `AgentThreadStreamRuntime` for this run, where the
+   * drain closure picks it up. Processors that keep a step's `sendSignal`
+   * and call it after that step returned are routed here, because the step's
+   * MessageList has already been serialized. In-process only like the drain.
+   */
+  enqueuePendingSignal?: (signalInput: AgentSignalInput) => Promise<CreatedAgentSignal>;
+  /** Process-local reminders for runs without a memory thread. Drained by the next LLM step. */
+  pendingProcessorSignals?: CreatedAgentSignal[];
   /** Owner-queue notifications, in-process only like the drain closure. */
   subscribePendingSignals?: (listener: () => void) => () => void;
   /** Releases the latest LLM step's pending-signal listener, whichever way that step exited. */
@@ -969,6 +996,8 @@ export interface RunRegistryEntry {
    * `createTimeoutAbortSignal` at install time.
    */
   timeoutTotalMs?: number;
+  /** A late subscriber re-publishes the winning deadline error at most once per segment. */
+  deadlineErrorRedelivered?: boolean;
   /**
    * Whether this process has already subscribed to cross-process abort
    * requests for the run. Set by `ensureRemoteAbortListener`, which every

@@ -4,6 +4,7 @@ import type {
   GetTraceQueryFieldsResponse,
   MastraClient,
   TraceQueryKeysetTraceResponse,
+  TraceQueryResponse,
 } from '@mastra/client-js';
 import type { ListScoresResponse } from '@mastra/core/evals';
 import { SpanType } from '@mastra/core/observability';
@@ -33,14 +34,30 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
     threadQuery: true,
+    threadQueryRows: true,
     spanQuery: true,
     feedback: true,
   },
 };
 
+export const noThreadRowsCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, threadQueryRows: false },
+};
+
 export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = {
   ...traceQueryCapabilities,
   capabilities: { ...traceQueryCapabilities.capabilities, traceQueryRootDuration: false },
+};
+
+export const noSpanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, spanQuery: false },
+};
+
+export const noDeltaPollingCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, deltaPolling: false },
 };
 
 export const emptyTraceQueryFields: GetTraceQueryFieldsResponse = {
@@ -84,6 +101,18 @@ export const twoTracesPage: TraceQueryKeysetTraceResponse = {
 };
 
 export const emptyTracesPage: TraceQueryKeysetTraceResponse = { traces: [], page: { next: null } };
+
+export const workflowTracesPage: TraceQueryKeysetTraceResponse = {
+  traces: [{ ...weatherTrace, name: 'weather-workflow', entityId: 'weather-workflow', entityType: 'workflow_run' }],
+  page: { next: null },
+};
+
+/** A delta poll with nothing new since the cursor. */
+export const idleDeltaBatch: Extract<TraceQueryResponse, { delta: unknown }> = {
+  traces: [],
+  delta: { limit: 100, hasMore: false },
+  deltaCursor: 'delta-cursor-idle',
+};
 
 export const emptyLightTraces: Awaited<ReturnType<MastraClient['listTracesLight']>> = {
   spans: [],

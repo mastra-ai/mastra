@@ -331,6 +331,12 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
         },
+        // MCP clients follow the Factory MCP endpoint's `WWW-Authenticate` challenge
+        // to this RFC 9728 metadata to find where to sign in.
+        '/.well-known/oauth-protected-resource': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
         // Optional WorkOS auth routes live on the API server too; proxy them so
         // the configured dev UI server can reach login/callback/logout/me on the
         // configured API server.

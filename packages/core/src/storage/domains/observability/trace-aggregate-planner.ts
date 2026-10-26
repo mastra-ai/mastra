@@ -145,17 +145,18 @@ export type TrustedTraceAggregateOrderBy<
  *   `tokens.<x>.sum` sums over the group's usage-bearing traces, `tokens.<x>.avg` divides by
  *   their count, and both are null when the group has none.
  * - **Cost.** Only `TRACE_AGGREGATE_COST_METRIC_NAMES` rows carry cost. Such a row is priced when
- *   it has an `estimatedCost`, a `costUnit`, and no `costMetadata.error`. It failed to price when
- *   `costMetadata.error` is set (including `partial_cost`, even though it carries a partial cost)
- *   or it has a cost without a unit. A row with neither a cost nor an error is neither: when the
- *   provider reports cost, only one of the call's total rows carries it. A trace's cost is the sum
- *   of its priced rows' `estimatedCost`; rows that are not priced contribute nothing to cost or
- *   cost unit. `cost.sum` sums over traces with at least one priced row, `cost.avg` divides by
- *   their count.
+ *   it has an `estimatedCost`, a `costUnit`, and either no `costMetadata.error` or
+ *   `costMetadata.error = 'partial_cost'` (the SDK priced some token types of the call and the cost
+ *   covers those). It failed to price when `costMetadata.error` is set (including `partial_cost`)
+ *   or it has a cost without a unit, so a `partial_cost` row is both priced and failed. A row with
+ *   neither a cost nor an error is neither: when the provider reports cost, only one of the call's
+ *   total rows carries it. A trace's cost is the sum of its priced rows' `estimatedCost`; rows
+ *   that are not priced contribute nothing to cost or cost unit. `cost.sum` sums over traces with
+ *   at least one priced row, `cost.avg` divides by their count.
  * - **Row cost.** Whenever any `cost.*` measure is requested, every row also carries
  *   `cost.coverage` and `cost.unit`. A trace is covered when it has at least one priced row and
  *   no row that failed to price; `cost.coverage` is covered traces ÷ usage-bearing traces, null
- *   when the group has no usage-bearing traces. A trace with partial cost still adds that cost to
+ *   when the group has no usage-bearing traces. A trace with a `partial_cost` row adds that cost to
  *   `cost.sum` but is not covered. `cost.unit` is the priced rows' single `costUnit`, `'mixed'`
  *   when they use more than one, and null exactly when there are no priced rows. `cost.sum` and
  *   `cost.avg` are null when the group has no priced rows or `cost.unit` is `'mixed'`. Row cost

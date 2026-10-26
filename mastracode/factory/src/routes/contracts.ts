@@ -7,7 +7,7 @@ import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/valid
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
-const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
+export const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE';

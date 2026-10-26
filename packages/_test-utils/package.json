@@ -1,6 +1,6 @@
 {
   "name": "@internal/test-utils",
-  "version": "0.0.80",
+  "version": "0.0.81",
   "description": "Mastra-specific test helpers - version-agnostic agent wrappers, dummy API keys",
   "type": "module",
   "private": true,
@@ -46,10 +46,10 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

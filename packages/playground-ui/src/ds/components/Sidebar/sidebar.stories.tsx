@@ -130,9 +130,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
                 title={
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">Mastra</span>
-                    <span className="inline-flex h-5 items-center rounded bg-muted px-1.5 text-meta text-muted-foreground">
-                      Beta
-                    </span>
+                    <Sidebar.Badge>Beta</Sidebar.Badge>
                   </span>
                 }
               />
@@ -144,9 +142,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
             <a href="/projects" aria-label="Project list" className={cn('flex min-w-0 flex-1 rounded-md', focusRing)}>
               <Sidebar.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
             </a>
-            <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-meta text-muted-foreground">
-              Staging
-            </span>
+            <Sidebar.Badge>Staging</Sidebar.Badge>
             <Sidebar.Trigger />
           </Sidebar.Header>
         )}

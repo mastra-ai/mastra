@@ -1,5 +1,6 @@
-import { SpanType } from '@mastra/core/observability';
-import { planSpanQuery, PREVIEW_MAX_LENGTH, TraceQueryCursorError } from '@mastra/core/storage';
+import { EntityType, SpanType } from '@mastra/core/observability';
+import type { AnyExportedSpan } from '@mastra/core/observability';
+import { buildCreateSpanRecord, planSpanQuery, PREVIEW_MAX_LENGTH, TraceQueryCursorError } from '@mastra/core/storage';
 import type { ObservabilityStorage, SpanQueryRequest, SpanQueryRow } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { makeSpan } from './data';
@@ -325,12 +326,53 @@ export function createSpanQueryTests(
       await getStorage().batchCreateSpans({
         records: [span('context', { ...scope, ...context, ...lineage }), span('other')],
       });
-      const expected = options.eventSourced ? context : { ...context, ...lineage };
+      const expected = { ...context, ...lineage };
       for (const [field, value] of Object.entries(expected)) {
         const result = await query({ where: { op: 'eq', left: { path: field }, right: { literal: value } } });
         expect(result.spans.map(row => row.spanId)).toEqual(['context']);
         expect(result.spans[0]).toMatchObject(expected);
       }
+    });
+
+    it('persists parent and root entity carried on an exported span through buildCreateSpanRecord', async () => {
+      const exported: AnyExportedSpan = {
+        id: 'exported-tool',
+        traceId: 'trace-exported',
+        parentSpanId: 'exported-workflow',
+        name: 'tool: lookup',
+        type: SpanType.TOOL_CALL,
+        entityType: EntityType.TOOL,
+        entityId: 'lookup',
+        entityName: 'lookup',
+        startTime: start,
+        endTime: end,
+        isEvent: false,
+        isRootSpan: false,
+        parentEntityType: EntityType.WORKFLOW_RUN,
+        parentEntityId: 'triage',
+        parentEntityName: 'Triage',
+        parentEntityVersionId: 'triage-v1',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'support',
+        rootEntityName: 'Support',
+        rootEntityVersionId: 'support-v1',
+      };
+      await getStorage().batchCreateSpans({ records: [buildCreateSpanRecord(exported)] });
+
+      const result = await query({
+        where: { op: 'eq', left: { path: 'rootEntityName' }, right: { literal: 'Support' } },
+      });
+      expect(result.spans.map(row => row.spanId)).toEqual(['exported-tool']);
+      expect(result.spans[0]).toMatchObject({
+        parentEntityType: EntityType.WORKFLOW_RUN,
+        parentEntityId: 'triage',
+        parentEntityName: 'Triage',
+        parentEntityVersionId: 'triage-v1',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'support',
+        rootEntityName: 'Support',
+        rootEntityVersionId: 'support-v1',
+      });
     });
 
     it('filters trace and parent span identities independently', async () => {
@@ -350,19 +392,17 @@ export function createSpanQueryTests(
       ]);
     });
 
-    it('maps span source to executionSource or applies documented null semantics', async () => {
+    it('maps span source to executionSource', async () => {
       await getStorage().batchCreateSpans({
         records: [span('agent', { source: 'agent' }), span('workflow', { source: 'workflow' }), span('absent')],
       });
       const result = await query({
         where: { op: 'eq', left: { path: 'executionSource' }, right: { literal: 'agent' } },
       });
-      expect(result.spans.map(row => row.spanId)).toEqual(options.eventSourced ? [] : ['agent']);
-      if (!options.eventSourced) expect(result.spans[0]).toMatchObject({ executionSource: 'agent' });
+      expect(result.spans.map(row => row.spanId)).toEqual(['agent']);
+      expect(result.spans[0]).toMatchObject({ executionSource: 'agent' });
       const absent = await query({ where: { op: 'notExists', path: 'executionSource' } });
-      expect(absent.spans.map(row => row.spanId).sort()).toEqual(
-        options.eventSourced ? ['absent', 'agent', 'workflow'] : ['absent'],
-      );
+      expect(absent.spans.map(row => row.spanId)).toEqual(['absent']);
       for (const row of absent.spans) expect(row.executionSource).toBeNull();
     });
 

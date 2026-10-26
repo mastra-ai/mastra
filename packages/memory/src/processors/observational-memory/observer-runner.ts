@@ -27,7 +27,7 @@ import {
   parseMultiThreadObserverOutput,
   describeDegenerateOutput,
 } from './observer-agent';
-import { assertCompleteModelResponse, RETRY_CONFIG, withRetry } from './retry';
+import { assertCompleteModelResponse, OmEmptyResponseError, RETRY_CONFIG, withRetry } from './retry';
 import { createTemporaryOmMemoryContext } from './temporary-memory';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
@@ -387,7 +387,10 @@ export class ObserverRunner {
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
-                  return assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM observer');
+                  return assertNonEmptyObserverOutput(
+                    assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM observer'),
+                    'OM observer',
+                  );
                 } catch (error) {
                   this.mastra?.getLogger?.().error('OM observer provider call failed', {
                     diagnostic: formatOmError(error),
@@ -719,7 +722,10 @@ export class ObserverRunner {
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
-                  return assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM multi-thread observer');
+                  return assertNonEmptyObserverOutput(
+                    assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM multi-thread observer'),
+                    'OM multi-thread observer',
+                  );
                 } catch (error) {
                   this.mastra?.getLogger?.().error('OM multi-thread observer provider call failed', {
                     diagnostic: formatOmError(error),
@@ -859,4 +865,17 @@ export class ObserverRunner {
       providerMetadata: result.providerMetadata,
     };
   }
+}
+
+/**
+ * An empty Observer response must not be committed: that would advance
+ * `lastObservedAt` past messages that were never observed. Throwing a retryable
+ * error lets `withRetry` retry it like a transport error; once retries run out
+ * it surfaces as `OmModelExecutionError`, so `failurePolicy` decides the turn.
+ */
+function assertNonEmptyObserverOutput<T extends { text?: string }>(output: T, label: string): T {
+  if (!output.text?.trim()) {
+    throw new OmEmptyResponseError(label);
+  }
+  return output;
 }

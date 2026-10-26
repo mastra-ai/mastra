@@ -65,6 +65,12 @@ export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controlle
 export const SOURCE_APPROVAL_CALLS_KEY = createRunScopeKey<Set<string>>('agent-controller.sourceApprovalCalls');
 export const THREAD_OWNER_ID_RUN_SCOPE_KEY = createRunScopeKey<string>('agent-controller.threadOwnerId');
 export const THREAD_OWNER_ID_CONTEXT_KEY = 'mastra__agentControllerThreadOwnerId';
+/**
+ * The mode a run was started (or explicitly transitioned) in. Stored as a raw
+ * request-context value so the suspend snapshot persists it, and a resume can
+ * apply that mode's tool allowlist even after the session switched modes.
+ */
+export const RUN_MODE_ID_CONTEXT_KEY = 'mastra__agentControllerRunModeId';
 
 /**
  * Bucket key for grants that apply to every thread. Grant calls that name no
@@ -454,6 +460,13 @@ export interface SessionMachinery {
   }): Promise<Record<string, unknown>>;
   /** The run budget every initial stream and resume must carry (maxSteps, provider fallbacks, …). */
   buildSharedRunOptions(requestContext?: RequestContext): SharedRunOptions;
+  /**
+   * The `activeTools` allowlist of `modeId` (the session's current mode when
+   * omitted or unknown), or `undefined` when the mode does not restrict tools.
+   * Resumes pass the suspended run's mode so the continuation sees the same
+   * tools as the initial stream.
+   */
+  resolveModeActiveTools(modeId?: string): string[] | undefined;
   onSessionDeleted?(listener: () => void): () => void;
   /** Resolve the toolset (built-in controller  tools + user/subagent tools) for a run. */
   buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput>;
@@ -4349,8 +4362,9 @@ export class Session<TState = unknown> {
   /** Await terminal hooks, then emit the terminal event to subscribers. */
   async finishAgentRun(
     reason: NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>,
+    { abortReason }: { abortReason?: string } = {},
   ): Promise<void> {
-    const event = { type: 'agent_end', reason } as const;
+    const event = { type: 'agent_end', reason, ...(abortReason ? { abortReason } : {}) } as const;
     const runId = this.run.getRunId();
     for (const listener of this.#beforeAgentEndListeners) {
       try {
@@ -5246,7 +5260,17 @@ export class Session<TState = unknown> {
         settled => {
           if (settled.action !== 'wake') return;
           const runId = settled.runId;
-          const abort = () => agent.abortRunStream(runId);
+          // A local teardown (detach, thread switch) must leave a parked suspension
+          // answerable, so it aborts locally instead of cancelling the run.
+          const abort = () =>
+            this.#localOnlyAbort
+              ? agent.abortThreadStream({
+                  resourceId: this.identity.getResourceId(),
+                  threadId,
+                  expectedRunId: runId,
+                  localOnly: true,
+                })
+              : agent.abortRunStream(runId);
           // Navigation can precede the first observed chunk. Release the accepted
           // action as well as its model IO, never a run this signal merely joined.
           if (startupSignal.aborted) abort();
@@ -5264,14 +5288,7 @@ export class Session<TState = unknown> {
           action: settled.action,
         };
       }
-      try {
-        await Promise.race([
-          result.accepted.then(() => undefined),
-          new Promise<void>(resolve => setTimeout(resolve, 0)),
-        ]);
-      } catch (error) {
-        throw error;
-      }
+      await Promise.race([result.accepted.then(() => undefined), new Promise<void>(resolve => setTimeout(resolve, 0))]);
       void result.accepted.catch(() => {});
       if (ifIdle?.behavior === 'persist') {
         await result.persisted;
@@ -5698,6 +5715,37 @@ export class Session<TState = unknown> {
     }
   }
 
+  /**
+   * The mode the suspended run executed in, read from its persisted request
+   * context, so a mode switch during the suspension does not change the tools
+   * the continuation sees. Runs suspended before the mode was recorded fall back
+   * to the mode of the run's source thread as `requestContext` resolves it.
+   */
+  private isConfiguredMode(modeId: string): boolean {
+    try {
+      this.mode.resolveId(modeId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async resolveSuspendedRunModeId(
+    agent: Agent,
+    runId: string,
+    requestContext: RequestContext,
+  ): Promise<string | undefined> {
+    const persisted = await agent.__getSuspendedRunRequestContextValue({ runId, key: RUN_MODE_ID_CONTEXT_KEY });
+    // A mode removed from config after the run paused falls back to the source thread's mode, like pre-fix snapshots.
+    const modeId =
+      typeof persisted === 'string' && this.isConfiguredMode(persisted)
+        ? persisted
+        : (requestContext.get('controller') as AgentControllerRequestContext<TState> | undefined)?.session.modeId;
+    // Carry the mode into the continuation so a second suspension keeps it.
+    if (modeId) requestContext.setRaw(RUN_MODE_ID_CONTEXT_KEY, modeId);
+    return modeId;
+  }
+
   private async resolveSuspendedThreadOwnerId(
     agent: Agent,
     { runId, threadId, resourceId }: Pick<SuspensionAddress, 'runId' | 'threadId' | 'resourceId'>,
@@ -5880,7 +5928,10 @@ export class Session<TState = unknown> {
       execution: true,
     });
     const context = sourceRequestContext.get('controller') as AgentControllerRequestContext<TState>;
-    const sourceModeId = context.session.modeId;
+    // Transition from the mode the plan was submitted in, not a mode switched to while it waited.
+    const sourceModeId =
+      (await this.resolveSuspendedRunModeId(agent, address.runId, sourceRequestContext)) ?? context.session.modeId;
+    let runModeId = sourceModeId;
     const transitionModeId = this.machinery.resolveTransitionModeId(sourceModeId);
     if (transitionModeId && transitionModeId !== sourceModeId) {
       if (context.isThreadActive?.()) {
@@ -5893,9 +5944,15 @@ export class Session<TState = unknown> {
         modeId: transitionModeId,
         execution: true,
       });
+      runModeId = transitionModeId;
     }
 
-    await this.resumeToolCall({ resumeData: response, address, requestContext: sourceRequestContext });
+    await this.resumeToolCall({
+      resumeData: response,
+      address,
+      requestContext: sourceRequestContext,
+      modeId: runModeId,
+    });
   }
 
   /**
@@ -5979,7 +6036,9 @@ export class Session<TState = unknown> {
       execution: true,
     });
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
+    const runModeId = await this.resolveSuspendedRunModeId(agent, runId, requestContext);
     const toolsets = await this.machinery.buildToolsets(requestContext);
+    const activeTools = this.machinery.resolveModeActiveTools(runModeId);
     onDispatch?.();
     await agent.sendToolApproval({
       threadId,
@@ -5997,6 +6056,8 @@ export class Session<TState = unknown> {
       streamOptions: {
         ...this.machinery.buildSharedRunOptions(requestContext),
         onStepFinish: this.#resumeUsageRecorder(agent, runId, requestContext),
+        // Without it the continuation sees every agent tool, not the mode's subset.
+        ...(activeTools !== undefined && { activeTools }),
       },
     });
   }
@@ -6065,7 +6126,9 @@ export class Session<TState = unknown> {
       execution: true,
     });
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
+    const runModeId = await this.resolveSuspendedRunModeId(agent, runId, requestContext);
     const toolsets = await this.machinery.buildToolsets(requestContext);
+    const activeTools = this.machinery.resolveModeActiveTools(runModeId);
     onDispatch?.();
     await agent.sendToolApproval({
       threadId,
@@ -6084,6 +6147,8 @@ export class Session<TState = unknown> {
       streamOptions: {
         ...this.machinery.buildSharedRunOptions(requestContext),
         onStepFinish: this.#resumeUsageRecorder(agent, runId, requestContext),
+        // Without it the continuation sees every agent tool, not the mode's subset.
+        ...(activeTools !== undefined && { activeTools }),
       },
     });
   }
@@ -6334,11 +6399,14 @@ export class Session<TState = unknown> {
     address,
     requestContext: requestContextInput,
     resolveOnToolEnd = false,
+    modeId: inputModeId,
   }: {
     resumeData: any;
     address: SuspensionAddress;
     requestContext?: RequestContext;
     resolveOnToolEnd?: boolean;
+    /** The mode the continuation runs in; defaults to the suspended run's mode. */
+    modeId?: string;
   }): Promise<void> {
     const suspension = this.suspensions.get(address);
     if (!suspension) {
@@ -6358,6 +6426,8 @@ export class Session<TState = unknown> {
       abortSignal,
       execution: true,
     });
+    if (inputModeId) requestContext.setRaw(RUN_MODE_ID_CONTEXT_KEY, inputModeId);
+    const modeId = inputModeId ?? (await this.resolveSuspendedRunModeId(agent, address.runId, requestContext));
     const toolsets = await this.machinery.buildToolsets(requestContext);
     let resumedSubscriptionBoundary: { promise: Promise<void>; cancel: () => void } | undefined;
     let restoreAbortedRun: (() => void) | undefined;
@@ -6391,6 +6461,7 @@ export class Session<TState = unknown> {
         sharedOptions.requireToolApproval = false;
       }
       sharedOptions.onStepFinish = this.#resumeUsageRecorder(agent, suspension.runId, requestContext);
+      const activeTools = this.machinery.resolveModeActiveTools(modeId);
       await agent.sendStreamResume({
         threadId,
         resourceId,
@@ -6403,6 +6474,8 @@ export class Session<TState = unknown> {
           abortSignal,
           requestContext,
           toolsets,
+          // Without it the continuation sees every agent tool, not the mode's subset.
+          ...(activeTools !== undefined && { activeTools }),
         },
       });
       restoreAbortedRun = undefined;

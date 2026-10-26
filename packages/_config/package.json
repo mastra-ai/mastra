@@ -1,6 +1,6 @@
 {
   "name": "@internal/lint",
-  "version": "0.0.144",
+  "version": "0.0.145",
   "description": "",
   "type": "module",
   "main": "src/index.js",
@@ -14,7 +14,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@e18e/eslint-plugin": "^0.8.0"
+    "@e18e/eslint-plugin": "^0.8.1"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",

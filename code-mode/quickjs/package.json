@@ -1,6 +1,6 @@
 {
   "name": "@mastra/quickjs",
-  "version": "0.1.4-alpha.0",
+  "version": "0.1.4",
   "description": "In-process WebAssembly Code Mode transport for Mastra, backed by QuickJS — no native binaries and no Node flags required",
   "type": "module",
   "main": "dist/index.js",
@@ -31,15 +31,15 @@
   "license": "Apache-2.0",
   "dependencies": {
     "quickjs-emscripten": "^0.31.0",
-    "ts-blank-space": "^0.6.1"
+    "ts-blank-space": "^0.6.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

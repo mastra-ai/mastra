@@ -6,6 +6,7 @@ import { getCustomProviderId, MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/o
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { getModelReasoningOptions } from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
@@ -14,7 +15,7 @@ import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { resolveFactoryModelPolicy } from '../session/credential-policy.js';
+import { resolveFactoryModelPolicy, routedPersonalDefaults } from '../session/credential-policy.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {
   CredentialRecord,
@@ -33,6 +34,7 @@ import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { THINKING_LEVELS } from './contracts.js';
 import {
   credentialLabel,
   getAuthProviderId,
@@ -97,8 +99,12 @@ export interface ProviderInfo {
    * when one shadows the other.
    */
   userCredential?: 'oauth' | 'api_key';
+  /** Tenant mode: the caller's personal sign-in could not be renewed and must be redone. */
+  userCredentialExpired?: true;
   /** Tenant mode: the shared org credential for this provider, if any. */
   orgCredential?: 'oauth' | 'api_key';
+  /** Tenant mode: the shared org sign-in could not be renewed and must be redone. */
+  orgCredentialExpired?: true;
   /** Web OAuth sign-in capability, when the provider supports it. */
   oauth?: { supported: true; modes: LoginSessionKind[] };
 }
@@ -113,7 +119,14 @@ export interface OMSession {
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
 export interface ModelCatalog {
   listAvailableModels: () => Promise<
-    Array<{ id?: string; modelName: string; provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>
+    Array<{
+      id?: string;
+      modelName: string;
+      provider: string;
+      hasApiKey: boolean;
+      apiKeyEnvVar?: string;
+      releaseDate?: string;
+    }>
   >;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
   getSession?: (sessionId: string) => Promise<OMSession | undefined>;
@@ -159,14 +172,18 @@ export async function listProviders({
     let source: ProviderInfo['source'] = 'none';
     let orgKey: boolean | undefined;
     let userCredential: ProviderInfo['userCredential'];
+    let userCredentialExpired = false;
     let orgCredential: ProviderInfo['orgCredential'];
+    let orgCredentialExpired = false;
     if (tenantCredentials) {
       const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
       const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
       // Any shared org credential (API key or org-wide OAuth) counts.
       orgKey = orgRec !== undefined;
       userCredential = userRec?.credential.type;
+      userCredentialExpired = userRec?.refreshFailedAt !== undefined;
       orgCredential = orgRec?.credential.type;
+      orgCredentialExpired = orgRec?.refreshFailedAt !== undefined;
       if (userRec?.credential.type === 'oauth') {
         source = 'oauth-user';
       } else if (userRec?.credential.type === 'api_key') {
@@ -193,7 +210,9 @@ export async function listProviders({
       source,
       ...(orgKey !== undefined ? { orgKey } : {}),
       ...(userCredential ? { userCredential } : {}),
+      ...(userCredentialExpired ? { userCredentialExpired: true as const } : {}),
       ...(orgCredential ? { orgCredential } : {}),
+      ...(orgCredentialExpired ? { orgCredentialExpired: true as const } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
     });
   }
@@ -410,6 +429,7 @@ export interface ModelCatalogEntry {
   id: string;
   provider: string;
   modelName: string;
+  releaseDate?: string;
   hasApiKey: true;
   reasoningOptions?: ModelReasoningOption[];
   credentialLabel?: string;
@@ -444,13 +464,14 @@ export async function buildModelCatalog({
       deploymentProviders,
     }),
   ]);
-  const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName }) =>
+  const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName, releaseDate }) =>
     typeof id === 'string' && canUseModelProvider(access, provider)
       ? [
           {
             id,
             provider,
             modelName,
+            releaseDate,
             hasApiKey: true as const,
             reasoningOptions: getModelReasoningOptions(id),
             ...tenantModelCredential(tenantCredentials, provider),
@@ -639,8 +660,8 @@ interface MemorySettingsContext {
  * Resolve the memory-settings context for a request, or a ready-to-return
  * error response. When `factoryProjectId` is provided the row addressed is the
  * factory project's shared settings (a sentinel user id in the caller's org)
- * instead of the caller's personal row — this is what factory board runs and
- * channel sessions hydrate from.
+ * instead of the caller's personal row — the row requests paid with the
+ * Factory's credentials read.
  */
 async function resolveMemorySettingsContext({
   c,
@@ -700,7 +721,8 @@ async function persistMemorySettings(context: MemorySettingsContext, patch: Memo
 /** Dependencies injected into {@link ConfigRoutes}. */
 export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
-  features?: { knowledge: boolean };
+  /** `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server). */
+  features?: { knowledge: boolean; mcp?: boolean };
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
@@ -801,7 +823,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       registerApiRoute('/web/config/features', {
         method: 'GET',
         requiresAuth: false,
-        handler: async c => c.json({ knowledge: options.features?.knowledge ?? false }),
+        handler: async c =>
+          c.json({ knowledge: options.features?.knowledge ?? false, mcp: options.features?.mcp ?? false }),
       }),
 
       registerApiRoute('/web/config/providers', {
@@ -1025,7 +1048,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const factoryProjectId = c.req.query('factoryId') || undefined;
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
-            let sessionPolicy: { modelScope: 'factory' | 'user'; defaultModelId: string | null } | undefined;
+            let sessionPolicy:
+              | {
+                  modelScope: 'factory' | 'user';
+                  defaultModelId: string | null;
+                  personalThinkingLevel: ThinkingLevelSetting | null;
+                }
+              | undefined;
             const resourceId = c.req.query('resourceId');
             const threadId = c.req.query('threadId');
             const sessionId = c.req.query('sessionId');
@@ -1073,13 +1102,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                   modelScope,
                 });
                 let defaultModelId = policy.factoryDefaultModelId ?? null;
+                let personalThinkingLevel: ThinkingLevelSetting | null = null;
                 if (modelScope === 'user') {
                   if (!options.modelDefaults) return c.json({ error: 'model_defaults_unavailable' }, 503);
-                  await options.modelDefaults.ensureReady();
-                  defaultModelId =
-                    (await options.modelDefaults.get({ orgId, userId: policy.tenant.userId }))?.modelId ?? null;
+                  const ownerDefaults = await routedPersonalDefaults(policy.tenant, options.modelDefaults);
+                  defaultModelId = ownerDefaults?.modelId ?? null;
+                  personalThinkingLevel = ownerDefaults?.thinkingLevel ?? null;
                 }
-                sessionPolicy = { modelScope, defaultModelId };
+                sessionPolicy = { modelScope, defaultModelId, personalThinkingLevel };
               }
             } else if (c.req.query('scope') !== undefined) {
               // Explicit settings scopes never override a live thread's owner and policy above.
@@ -1127,7 +1157,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if ('response' in context) return context.response;
           try {
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            return c.json({ modelId: record?.modelId ?? null });
+            return c.json({ modelId: record?.modelId ?? null, thinkingLevel: record?.thinkingLevel ?? null });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1237,6 +1267,39 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           try {
             await context.storage.set({ orgId: context.orgId, userId: context.userId, modelId });
             return c.json({ ok: true, modelId });
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      registerApiRoute('/web/config/default-model/thinking', {
+        method: 'PUT',
+        requiresAuth: false,
+        handler: async c => {
+          const context = await resolveModelDefaultsContext({
+            c: loose(c),
+            auth,
+            modelDefaults: options.modelDefaults,
+          });
+          if ('response' in context) return context.response;
+          let body: unknown;
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const parsed = z.object({ thinkingLevel: z.enum(THINKING_LEVELS).nullable() }).safeParse(body);
+          if (!parsed.success) return c.json({ error: 'Invalid thinkingLevel' }, 400);
+          const { thinkingLevel } = parsed.data;
+          try {
+            const record = await context.storage.setThinkingLevel({
+              orgId: context.orgId,
+              userId: context.userId,
+              thinkingLevel,
+            });
+            if (!record) return c.json({ error: 'default_model_not_set' }, 400);
+            return c.json({ ok: true, thinkingLevel });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

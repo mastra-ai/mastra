@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-v6",
-  "version": "0.0.91",
+  "version": "0.0.92",
   "description": "",
   "type": "module",
   "private": true,
@@ -38,9 +38,9 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ai-sdk/gateway": "^3.0.217",
+    "@ai-sdk/gateway": "^3.0.221",
     "@ai-sdk/provider": "^3.0.19",
-    "@ai-sdk/provider-utils": "^4.0.61",
+    "@ai-sdk/provider-utils": "^4.0.62",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "catalog:",
@@ -48,12 +48,12 @@
     "@types/json-schema": "^7.0.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^6.0.309",
+    "ai": "^6.0.315",
     "json-schema": "^0.4.0",
-    "msw": "^2.12.11",
-    "resolve.exports": "^2.0.3",
+    "msw": "^2.15.0",
+    "resolve.exports": "^2.0.4",
     "ts-morph": "^27.0.2",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:"
   },
   "peerDependencies": {

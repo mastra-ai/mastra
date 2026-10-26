@@ -160,6 +160,58 @@ describe('Observer event order', () => {
   });
 });
 
+describe('formatMessagesForObserver with persisted object-valued errorText', () => {
+  const structuredError = { code: 'TOOL_FAILED', details: 'example detail '.repeat(100) };
+
+  // Persisted rows come back from storage as plain JSON, so an object errorText survives the round trip.
+  function persistedFailedToolMessage(state: 'result' | 'output-error', errorText: unknown) {
+    return JSON.parse(
+      JSON.stringify({
+        id: 'message-1',
+        role: 'assistant',
+        createdAt: '2026-10-01T00:00:00.000Z',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state,
+                toolCallId: 'call-1',
+                toolName: 'example',
+                args: {},
+                isError: true,
+                ...(state === 'result' ? { result: '' } : {}),
+                errorText,
+              },
+            },
+          ],
+        },
+      }),
+    );
+  }
+
+  it.each(['result', 'output-error'] as const)(
+    'formats an object errorText in state %s like its serialized string',
+    state => {
+      const control = formatMessagesForObserver(
+        [persistedFailedToolMessage(state, JSON.stringify(structuredError, null, 2))],
+        { timeZone: 'UTC' },
+      );
+
+      const message = persistedFailedToolMessage(state, structuredError);
+      const input = formatMessagesForObserver([message], { timeZone: 'UTC' });
+
+      expect(input).toBe(control);
+      expect(input).toContain('Tool Error example');
+      expect(input).toContain('"code": "TOOL_FAILED"');
+      expect(message.content.parts[0].toolInvocation.errorText).toEqual(structuredError);
+    },
+  );
+});
+
 describe('sortObservationsByTime', () => {
   it('moves an observation listed out of order back to when it happened, keeping its sub-items', () => {
     const observations = [

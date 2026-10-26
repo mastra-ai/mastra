@@ -7,7 +7,7 @@ description: "Browse Google model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/google.svg" alt="Google logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Google
 
-Access 41 Google models through Mastra's model router. Authentication is handled automatically using one of the following environment variables: `GOOGLE_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`.
+Access 38 Google models through Mastra's model router. Authentication is handled automatically using one of the following environment variables: `GOOGLE_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`.
 
 Learn more in the [Google documentation](https://ai.google.dev/gemini-api/docs/models).
 
@@ -94,7 +94,7 @@ for await (const chunk of stream) {
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 32768,
     "inputCost": 0.3,
@@ -483,42 +483,6 @@ for await (const chunk of stream) {
     "maxOutput": 65536,
     "inputCost": null,
     "outputCost": null
-  },
-  {
-    "model": "google/veo-3.1-fast-generate-preview",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 480,
-    "maxOutput": 8192,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "google/veo-3.1-generate-preview",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 480,
-    "maxOutput": 8192,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "google/veo-3.1-lite-generate-preview",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 480,
-    "maxOutput": 8192,
-    "inputCost": null,
-    "outputCost": null
   }
 ]}
 />
@@ -530,6 +494,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -546,13 +512,15 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "google/veo-3.1-lite-generate-preview"
+      ? "google/lyria-3-pro-preview"
       : "google/deep-research-max-preview-04-2026";
   }
 });

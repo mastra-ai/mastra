@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-supabase",
-  "version": "1.1.5-alpha.0",
+  "version": "1.1.5",
   "description": "Mastra Supabase Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -27,16 +27,16 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@supabase/supabase-js": "^2.110.9"
+    "@supabase/supabase-js": "^2.118.0"
   },
   "devDependencies": {
     "@internal/auth": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

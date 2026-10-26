@@ -9,6 +9,12 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "GLM-5.2": [
       {
         "type": "effort",
@@ -16,12 +22,6 @@
       }
     ],
     "MiniMax-M2.7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

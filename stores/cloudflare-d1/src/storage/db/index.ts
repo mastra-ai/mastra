@@ -159,16 +159,14 @@ export class D1DB extends MastraBase {
           const results = result.results || [];
           return results;
         }
+      } else if (first) {
+        result = await statement.first();
+        if (!result) return null;
+        return result;
       } else {
-        if (first) {
-          result = await statement.first();
-          if (!result) return null;
-          return result;
-        } else {
-          result = await statement.all();
-          const results = result.results || [];
-          return results;
-        }
+        result = await statement.all();
+        const results = result.results || [];
+        return results;
       }
     } catch (error) {
       throw new MastraError(
@@ -628,13 +626,10 @@ export class D1DB extends MastraBase {
               return this.serializeValue(value);
             });
 
-            const recordToUpsert = columns.reduce(
-              (acc, col) => {
-                if (col !== 'createdAt') acc[col] = `excluded.${col}`;
-                return acc;
-              },
-              {} as Record<string, any>,
-            );
+            const recordToUpsert = columns.reduce<Record<string, any>>((acc, col) => {
+              if (col !== 'createdAt') acc[col] = `excluded.${col}`;
+              return acc;
+            }, {});
 
             const query = createSqlBuilder().insert(fullTableName, columns, values, ['id'], recordToUpsert, guard);
 

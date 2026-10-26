@@ -108,7 +108,7 @@ type T19Contract = { calls: number; waiting: number; final: number };
 const COR_1390_BACKGROUND = {
   reason:
     'COR-1390: wrapped engines stream background-task-progress and flush the completed result after step-finish where plain keeps the placeholder; taskId is a per-engine stubbed UUID.',
-  ignore: ['chunks', 'chunkTypes', 'chunkPayloads', 'toolResults', 'requests'],
+  ignore: ['chunks', 'chunkTypes', 'chunkPayloads', 'finishChunk', 'toolResults', 'requests'],
 } satisfies EngineDifference;
 
 /** Every check from the harness's `evaluate()`, plus the vacuity guards it cannot express. */

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-builder",
-  "version": "1.1.30-alpha.8",
+  "version": "1.1.31-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -41,18 +41,18 @@
     "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.99",
     "@mastra/memory": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
-    "ignore": "^7.0.5"
+    "ignore": "^7.0.14"
   },
   "devDependencies": {
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai-v5": "npm:ai@5.0.277",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:ts6",
     "vitest": "catalog:",
     "zod": "catalog:"

@@ -77,7 +77,7 @@ function EnvironmentBlocks({
       <Notice variant="info">
         Link a repository first.{' '}
         <Link to={settingsSectionPath(factoryId, 'repositories')} className="underline">
-          Go to Repositories
+          Go to repositories
         </Link>
       </Notice>
     );

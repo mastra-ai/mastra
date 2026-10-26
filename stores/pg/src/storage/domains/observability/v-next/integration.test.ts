@@ -745,6 +745,57 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       }
     });
 
+    it('init() succeeds for a role that can create tables in an existing schema but cannot create schemas', async () => {
+      // Postgres checks the database-level CREATE privilege before the
+      // IF NOT EXISTS clause of CREATE SCHEMA. A least-privilege app role
+      // (USAGE + CREATE on the schema only) must not be asked to run it when
+      // the schema already exists, or init() fails with 42501.
+      const schema = schemaName('obs_vnext_restricted_role');
+      const role = `${schema}_app`;
+      const adminPool = new Pool({ connectionString, max: 2 });
+      const admin = new PoolAdapter(adminPool);
+
+      await admin.none(`CREATE SCHEMA IF NOT EXISTS ${quotedIdentifier(schema)}`);
+      await admin.none(`CREATE ROLE ${quotedIdentifier(role)} LOGIN PASSWORD 'app'`);
+      await admin.none(`GRANT USAGE, CREATE ON SCHEMA ${quotedIdentifier(schema)} TO ${quotedIdentifier(role)}`);
+
+      const restrictedPool = new Pool({
+        host: defaultConnection.host,
+        port: defaultConnection.port,
+        database: defaultConnection.database,
+        user: role,
+        password: 'app',
+        max: 2,
+      });
+      const restricted = new PoolAdapter(restrictedPool);
+      const domain = new ObservabilityStoragePostgresVNext({ client: restricted, schemaName: schema });
+
+      try {
+        const privileges = await admin.one<{ db_create: boolean; schema_create: boolean }>(
+          `SELECT has_database_privilege($1, current_database(), 'CREATE') AS db_create,
+                  has_schema_privilege($1, $2, 'CREATE') AS schema_create`,
+          [role, schema],
+        );
+        expect(privileges).toEqual({ db_create: false, schema_create: true });
+
+        await expect(domain.init()).resolves.toBeUndefined();
+
+        const tables = await admin.many<{ table_name: string }>(
+          `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_type = 'BASE TABLE'`,
+          [schema],
+        );
+        for (const table of ALL_SIGNAL_TABLES) {
+          expect(tables.map(row => row.table_name)).toContain(table);
+        }
+      } finally {
+        await restrictedPool.end();
+        await admin.none(`DROP SCHEMA IF EXISTS ${quotedIdentifier(schema)} CASCADE`);
+        await admin.none(`DROP OWNED BY ${quotedIdentifier(role)}`);
+        await admin.none(`DROP ROLE IF EXISTS ${quotedIdentifier(role)}`);
+        await adminPool.end();
+      }
+    });
+
     it('a second init() after data is written leaves rows intact', async () => {
       const harness = await createHarness({
         schemaPrefix: 'obs_vnext_native_reinit_data',

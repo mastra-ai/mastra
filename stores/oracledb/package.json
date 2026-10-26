@@ -1,6 +1,6 @@
 {
   "name": "@mastra/oracledb",
-  "version": "0.5.4-alpha.0",
+  "version": "0.5.4",
   "description": "Oracle Database provider for Mastra storage and vector retrieval",
   "type": "module",
   "main": "dist/index.js",
@@ -45,7 +45,7 @@
     "@types/oracledb": "6.5.2",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

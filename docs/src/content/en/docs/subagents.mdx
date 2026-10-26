@@ -41,14 +41,14 @@ const researchAgent = new Agent({
   id: 'research-agent',
   // highlight-next-line
   description: 'Gathers factual information and returns bullet-point summaries.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
 })
 
 const writingAgent = new Agent({
   id: 'writing-agent',
   // highlight-next-line
   description: 'Transforms research into well-structured articles.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
 })
 
 // highlight-start
@@ -84,8 +84,12 @@ Called before the parent agent delegates to a subagent. Return an object to cont
 - `proceed: true`: Allow the delegation (default behavior)
 - `proceed: false`: Reject the delegation with a `rejectionReason`
 - `modifiedPrompt`: Rewrite the prompt sent to the subagent
-- `modifiedMaxSteps`: Limit the subagent's iteration count
+- `modifiedMaxSteps`: Set the subagent's iteration budget. This overrides the cap on the model-supplied `maxSteps`, so it can raise the budget as well as lower it
 - `threadMetadata`: Attach metadata (for example a `tenantId`) to the subagent's thread when it's created, so you can filter threads with `memory.listThreads({ filter: { metadata } })`
+
+:::note
+When the supervisor model passes `maxSteps` to a delegation, Mastra caps it at the subagent's `defaultOptions.maxSteps`. The model can lower the subagent's budget that way, but not raise it. `modifiedMaxSteps` is applied after that cap and replaces the capped value, so it can raise the budget above the subagent's default. Use it to stop a supervisor model from cutting a subagent short.
+:::
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
 const stream = await parentAgent.stream('Research AI trends', {
@@ -233,6 +237,8 @@ const stream = await parentAgent.stream('Research AI trends', {
 Either way, every hook failure is recorded on the run's request context under `__mastra_delegationHookErrors` as a list of `{ hook, primitiveId, toolCallId, runId, name, message }` entries, so you can detect a hook failure programmatically:
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
+import { RequestContext } from '@mastra/core/request-context'
+
 const requestContext = new RequestContext()
 
 await parentAgent.generate('Research AI trends', { maxSteps: 10, requestContext })
@@ -451,7 +457,7 @@ const parentAgent = new Agent({
 })
 
 const rubricScorer = createRubricScorer({
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   criteria: [
     { description: 'The response includes an analysis section' },
     { description: 'The response includes concrete recommendations' },
@@ -507,6 +513,8 @@ Subagent invocations are dispatched as tool calls, so they can run as [backgroun
 Enable the [backgroundTasks manager](/reference/configuration#backgroundtasks) on the Mastra instance, then opt subagents in on the parent agent:
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
 const parentAgent = new Agent({
   id: 'parent-agent',
   instructions: 'Coordinate research and writing using the available agents.',

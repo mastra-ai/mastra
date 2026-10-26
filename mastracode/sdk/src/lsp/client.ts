@@ -264,11 +264,10 @@ export class LSPClient {
         if (currentDiagnostics !== undefined && currentCount !== initialCount) {
           return currentDiagnostics;
         }
-      } else {
+      } else if (currentDiagnostics !== undefined) {
         // Return if we have diagnostics (even if empty array)
-        if (currentDiagnostics !== undefined) {
-          return currentDiagnostics;
-        }
+
+        return currentDiagnostics;
       }
 
       await new Promise(resolve => setTimeout(resolve, 100));

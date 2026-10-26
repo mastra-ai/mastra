@@ -5,12 +5,14 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { FactoryRunBindingRecord, WorkItemSubscription } from '../storage/domains/work-items/base.js';
 import type { FactoryDeliveryController } from './deliver.js';
-import { SIGNAL_RATE_LIMIT, createFactoryMessagingTools } from './messaging-tools.js';
+import { SIGNAL_RATE_LIMIT, SIGNAL_RATE_WINDOW_MS, createFactoryMessagingTools } from './messaging-tools.js';
 import type { FactoryMessagingToolDependencies } from './messaging-tools.js';
 import { FACTORY_TOOLS_WITHOUT_APPROVAL } from './permissions.js';
 import type { FactoryToolScope } from './scope.js';
 import type { FactoryToolDependencies } from './index.js';
 import { createFactoryTools } from './index.js';
+
+const QUEUE_WAIT_MS = 1100;
 
 const USER: FactoryToolScope = {
   orgId: 'org-1',
@@ -75,12 +77,17 @@ function setup({
 } = {}) {
   const notifications = new InMemoryNotificationsStorage();
   const sent: Array<{ input: SendNotificationSignalInput; target: { resourceId: string; threadId: string } }> = [];
+  let createdAtOverride: Date | undefined;
   const agent = {
     sendNotificationSignal: vi.fn(
       async (input: SendNotificationSignalInput, target: { resourceId: string; threadId: string }) => {
         sent.push({ input, target });
-        const record = await notifications.createNotification({ ...input, ...target });
-        return { record, decision: { action: 'deliver' }, persisted: Promise.resolve() };
+        const record = await notifications.createNotification({
+          ...input,
+          ...target,
+          ...(createdAtOverride ? { createdAt: createdAtOverride } : {}),
+        });
+        return { record, decision: { action: 'deliver' as const }, persisted: Promise.resolve() };
       },
     ),
   };
@@ -89,9 +96,10 @@ function setup({
     stream: { isActive: () => busy.includes(resourceId) },
     model: { get: () => '' },
   });
+  let threadsGone = threads === 'gone';
   const controller = {
     queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) =>
-      threads === 'gone' ? undefined : { id: threadId, resourceId: threadId.replace(/^thread-/, '') },
+      threadsGone ? undefined : { id: threadId, resourceId: threadId.replace(/^thread-/, '') },
     ),
     queryThreads: vi.fn(async () => []),
     getSession: vi.fn(async (resourceId: string) => liveSession(resourceId)),
@@ -140,7 +148,20 @@ function setup({
     if (!tool?.execute) throw new Error(`tool ${name} not registered for this scope`);
     return tool.execute(input as never, {} as never);
   };
-  return { notifications, sent, agent, auditRecorder, deps, run };
+  return {
+    notifications,
+    sent,
+    agent,
+    auditRecorder,
+    deps,
+    run,
+    dropThreads: () => {
+      threadsGone = true;
+    },
+    ageDeliveredRecords: (createdAt: Date) => {
+      createdAtOverride = createdAt;
+    },
+  };
 }
 
 function binding(workItemId: string, sessionId: string, status: 'active' | 'revoked' = 'active') {
@@ -247,16 +268,20 @@ describe('factory_signal_session', () => {
     });
   });
 
-  it('refuses the 11th message in 10 minutes from the same sender and allows another sender', async () => {
-    const { run } = setup();
+  it('queues the 11th message in 10 minutes from the same sender and allows another sender', async () => {
+    const { run, sent } = setup();
     for (let i = 0; i < SIGNAL_RATE_LIMIT; i += 1) {
       await expect(
         run(USER, 'factory_signal_session', { sessionId: 'session-b', message: `ping ${i}` }),
       ).resolves.toMatchObject({ delivered: 'woken' });
     }
-    await expect(run(USER, 'factory_signal_session', { sessionId: 'session-b', message: 'again' })).rejects.toThrow(
-      'Too many messages to that session in the last 10 minutes; wait before sending more.',
-    );
+    const queued = await run(USER, 'factory_signal_session', { sessionId: 'session-b', message: 'again' });
+    expect(queued).toEqual({
+      delivered: 'queued',
+      deliverAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      note: expect.stringMatching(/^Queued; it will be delivered at about .+ Do not send it again\.$/),
+    });
+    expect(sent).toHaveLength(SIGNAL_RATE_LIMIT);
     const other = { ...USER, sessionId: 'session-mine-private', threadId: 'thread-session-mine-private' };
     await expect(
       run(other, 'factory_signal_session', { sessionId: 'session-b', message: 'hi' }),
@@ -276,6 +301,70 @@ describe('factory_signal_session', () => {
       await expect(
         run(USER, 'factory_signal_session', { sessionId: 'session-b', message: 'later' }),
       ).resolves.toMatchObject({ delivered: 'woken' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('delivers queued messages in the order they were sent once the window allows', async () => {
+    const started = new Date('2026-10-14T10:00:00Z');
+    vi.useFakeTimers({ toFake: ['Date'], now: started });
+    const { run, sent, ageDeliveredRecords } = setup();
+    try {
+      for (let i = 0; i < SIGNAL_RATE_LIMIT; i += 1) {
+        await run(USER, 'factory_signal_session', { sessionId: 'session-b', message: `ping ${i}` });
+      }
+      ageDeliveredRecords(new Date(started.getTime() - SIGNAL_RATE_WINDOW_MS - 1));
+      const first = await run(USER, 'factory_signal_session', { sessionId: 'session-b', message: 'first queued' });
+      const second = await run(USER, 'factory_signal_session', { sessionId: 'session-b', message: 'second queued' });
+      expect(first).toMatchObject({
+        delivered: 'queued',
+        deliverAt: '2026-10-14T10:10:00.000Z',
+        note: 'Queued; it will be delivered at about 2026-10-14T10:10:00.000Z. Do not send it again.',
+      });
+      expect(second).toMatchObject({
+        delivered: 'queued',
+        deliverAt: '2026-10-14T10:10:00.000Z',
+      });
+      vi.useRealTimers();
+      await new Promise(resolve => setTimeout(resolve, QUEUE_WAIT_MS));
+      await new Promise(resolve => setTimeout(resolve, QUEUE_WAIT_MS));
+      expect(sent.slice(SIGNAL_RATE_LIMIT).map(entry => entry.input.summary)).toEqual([
+        'first queued',
+        'second queued',
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops a queued message whose target thread is gone and records why', async () => {
+    const started = new Date('2026-10-14T10:00:00Z');
+    vi.useFakeTimers({ toFake: ['Date'], now: started });
+    const { run, sent, auditRecorder, dropThreads, ageDeliveredRecords } = setup();
+    try {
+      for (let i = 0; i < SIGNAL_RATE_LIMIT; i += 1) {
+        await run(USER, 'factory_signal_session', { sessionId: 'session-b', message: `ping ${i}` });
+      }
+      ageDeliveredRecords(new Date(started.getTime() - SIGNAL_RATE_WINDOW_MS - 1));
+      await expect(
+        run(USER, 'factory_signal_session', { sessionId: 'session-b', message: 'will be gone' }),
+      ).resolves.toMatchObject({ delivered: 'queued' });
+
+      dropThreads();
+      vi.useRealTimers();
+      await new Promise(resolve => setTimeout(resolve, QUEUE_WAIT_MS));
+      expect(sent.filter(entry => entry.input.summary === 'will be gone')).toHaveLength(0);
+      expect(auditRecorder.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'factory.agent.signaled',
+          metadata: expect.objectContaining({
+            targetSessionId: 'session-b',
+            delivery: 'dropped',
+            reason: 'thread-not-found',
+          }),
+        }),
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -487,16 +576,16 @@ describe('factory_message_origin', () => {
       expect(env.sent).toHaveLength(0);
     });
 
-    it('counts replies toward the per-sender cap on the target thread', async () => {
+    it('queues replies past the per-sender cap on the target thread', async () => {
       const env = setup();
       for (let i = 0; i < SIGNAL_RATE_LIMIT; i += 1) {
         const id = await forged(env, 'session-1');
         await env.run(WORKER, 'factory_message_origin', { message: `answer ${i}`, inReplyTo: id });
       }
       const id = await forged(env, 'session-1');
-      await expect(env.run(WORKER, 'factory_message_origin', { message: 'more', inReplyTo: id })).rejects.toThrow(
-        'Too many messages to that session in the last 10 minutes; wait before sending more.',
-      );
+      await expect(
+        env.run(WORKER, 'factory_message_origin', { message: 'more', inReplyTo: id }),
+      ).resolves.toMatchObject({ delivered: 'queued' });
       expect(env.sent).toHaveLength(SIGNAL_RATE_LIMIT);
     });
 
@@ -585,14 +674,18 @@ describe('factory_message_origin reports', () => {
     expect(env.sent.at(-1)!.target).toEqual({ resourceId: 'session-1', threadId: 'thread-session-1' });
   });
 
-  it('caps reports per follower thread, except progress updates', async () => {
+  it('queues reports past the per-follower cap, except progress updates', async () => {
     const env = setup();
     for (let i = 0; i < SIGNAL_RATE_LIMIT; i += 1) {
       await env.run(SIDE, 'factory_message_origin', { message: `note ${i}` });
     }
-    await expect(env.run(SIDE, 'factory_message_origin', { message: 'one more', status: 'blocked' })).rejects.toThrow(
-      'Too many messages to that session in the last 10 minutes; wait before sending more.',
-    );
+    await expect(
+      env.run(SIDE, 'factory_message_origin', { message: 'one more', status: 'blocked' }),
+    ).resolves.toMatchObject({
+      delivered: 0,
+      queued: 1,
+      recipients: [{ sessionId: 'session-1', delivered: 'queued' }],
+    });
     await expect(
       env.run(SIDE, 'factory_message_origin', { message: 'still going', status: 'progress' }),
     ).resolves.toMatchObject({ delivered: 1 });

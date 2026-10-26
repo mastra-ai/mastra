@@ -9,13 +9,16 @@ import { getModelReasoningOptions } from '@mastra/core/llm';
 import type * as CoreLlm from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.js';
+import { TenantCredentialStore } from './tenant-credentials.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 vi.mock('@mastra/core/llm', async importOriginal => ({
@@ -39,9 +42,10 @@ function makeAgentController(models: { provider: string; hasApiKey: boolean; api
 
 describe('GET /web/config/features', () => {
   it.each([
-    { features: undefined, expected: false },
-    { features: { knowledge: true }, expected: true },
-  ])('reports the server-side knowledge gate as $expected', async ({ features, expected }) => {
+    { features: undefined, expected: { knowledge: false, mcp: false } },
+    { features: { knowledge: true }, expected: { knowledge: true, mcp: false } },
+    { features: { knowledge: false, mcp: true }, expected: { knowledge: false, mcp: true } },
+  ])('reports the server-side feature gates as $expected', async ({ features, expected }) => {
     const app = new Hono();
     mountApiRoutes(
       app as never,
@@ -55,7 +59,7 @@ describe('GET /web/config/features', () => {
     const response = await app.request('/web/config/features');
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ knowledge: expected });
+    expect(await response.json()).toEqual(expected);
   });
 });
 
@@ -529,6 +533,62 @@ describe('provider key routes with a tenant', () => {
     expect(providersB.find((p: { provider: string }) => p.provider === 'anthropic')?.source).toBe('none');
   });
 
+  describe('a personal sign-in whose token can no longer be renewed', () => {
+    const tenant = { orgId: 'org1', userId: 'user-a' };
+    const anthropic = setupServer();
+
+    const tokenUrl = 'https://console.anthropic.com/v1/oauth/token';
+
+    const listedAnthropic = async () => {
+      const listed = await buildApp(userA).request('/web/config/providers');
+      return (await listed.json()).providers.find((p: { provider: string }) => p.provider === 'anthropic');
+    };
+
+    beforeAll(() => anthropic.listen({ onUnhandledRequest: 'error' }));
+    afterEach(() => anthropic.resetHandlers());
+    afterAll(() => anthropic.close());
+
+    beforeEach(async () => {
+      await seed.credentials.setCredential(tenant, 'anthropic', {
+        type: 'oauth',
+        access: 'a-old',
+        refresh: 'r-old',
+        expires: Date.now() - 1000,
+      });
+      anthropic.use(http.post(tokenUrl, () => HttpResponse.json({ error: 'invalid_grant' }, { status: 400 })));
+      await new TenantCredentialStore('org1', 'user-a', seed.credentials, 'user').getApiKey('anthropic');
+    });
+
+    it('shows as expired instead of signed in', async () => {
+      expect(await listedAnthropic()).toMatchObject({ userCredential: 'oauth', userCredentialExpired: true });
+    });
+
+    it('stops showing as expired once the user signs in again', async () => {
+      await seed.credentials.setCredential(tenant, 'anthropic', {
+        type: 'oauth',
+        access: 'a-new',
+        refresh: 'r-new',
+        expires: Date.now() + 3_600_000,
+      });
+
+      expect(await listedAnthropic()).not.toHaveProperty('userCredentialExpired');
+    });
+
+    it('stops showing as expired once a later renewal succeeds', async () => {
+      anthropic.use(
+        http.post(tokenUrl, () =>
+          HttpResponse.json({ access_token: 'a-renewed', refresh_token: 'r-renewed', expires_in: 3600 }),
+        ),
+      );
+      const renewed = await new TenantCredentialStore('org1', 'user-a', seed.credentials, 'user').getApiKey(
+        'anthropic',
+      );
+
+      expect(renewed).toBe('a-renewed');
+      expect(await listedAnthropic()).not.toHaveProperty('userCredentialExpired');
+    });
+  });
+
   it('never touches the file-backed AuthStorage in tenant mode', async () => {
     const setStoredApiKey = vi.fn();
     const authStorage = { setStoredApiKey } as unknown as AuthStorage;
@@ -549,7 +609,13 @@ describe('GET /web/config/models', () => {
   it('returns only credentialed models with their ids', async () => {
     const controller = {
       listAvailableModels: async () => [
-        { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: true },
+        {
+          id: 'anthropic/claude-fable-5',
+          modelName: 'claude-fable-5',
+          provider: 'anthropic',
+          hasApiKey: true,
+          releaseDate: '2026-09-29',
+        },
         { id: 'openai/gpt-5.6', modelName: 'gpt-5.6', provider: 'openai', hasApiKey: false },
         { modelName: 'gemini', provider: 'google', hasApiKey: true }, // no id — dropped
       ],
@@ -565,6 +631,7 @@ describe('GET /web/config/models', () => {
           id: 'anthropic/claude-fable-5',
           provider: 'anthropic',
           modelName: 'claude-fable-5',
+          releaseDate: '2026-09-29',
           hasApiKey: true,
           reasoningOptions: fableReasoning,
         },
@@ -879,7 +946,7 @@ describe('default model routes with a tenant', () => {
   it('returns null when the user has no default model', async () => {
     const res = await buildApp(userA).request('/web/config/default-model');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ modelId: null });
+    expect(await res.json()).toEqual({ modelId: null, thinkingLevel: null });
   });
 
   it('validates and persists a default model per user', async () => {
@@ -903,8 +970,40 @@ describe('default model routes with a tenant', () => {
 
     const userAResponse = await buildApp(userA).request('/web/config/default-model');
     const userBResponse = await buildApp(userB).request('/web/config/default-model');
-    expect(await userAResponse.json()).toEqual({ modelId: 'openai/gpt-5.6' });
-    expect(await userBResponse.json()).toEqual({ modelId: null });
+    expect(await userAResponse.json()).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: null });
+    expect(await userBResponse.json()).toEqual({ modelId: null, thinkingLevel: null });
+  });
+
+  it('saves a personal thinking level only next to a personal default model', async () => {
+    const putThinking = (body: unknown) =>
+      buildApp(userA).request('/web/config/default-model/thinking', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const getDefaults = async (user: typeof userA) =>
+      (await buildApp(user).request('/web/config/default-model')).json();
+
+    const withoutModel = await putThinking({ thinkingLevel: 'high' });
+    expect(withoutModel.status).toBe(400);
+    expect(await withoutModel.json()).toEqual({ error: 'default_model_not_set' });
+
+    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
+    const saved = await putThinking({ thinkingLevel: 'high' });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toEqual({ ok: true, thinkingLevel: 'high' });
+    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: 'high' });
+    expect(await getDefaults(userB)).toEqual({ modelId: null, thinkingLevel: null });
+
+    const invalid = await putThinking({ thinkingLevel: 'enormous' });
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({ error: 'Invalid thinkingLevel' });
+    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: 'high' });
+
+    const reset = await putThinking({ thinkingLevel: null });
+    expect(reset.status).toBe(200);
+    expect(await reset.json()).toEqual({ ok: true, thinkingLevel: null });
+    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: null });
   });
 
   it('clears a personal default model', async () => {

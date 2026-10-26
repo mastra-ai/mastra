@@ -249,7 +249,7 @@ Where:
 
 - `llm_score` = Direct robustness score from LLM analysis
 - `calculated_score` = Average of impact weights across dimensions
-- `issues_penalty` = min(major\_issues × penalty\_rate, max\_penalty)
+- `issues_penalty` = min(major_issues × penalty_rate, max_penalty)
 
 ### Impact Level Weights
 
@@ -674,7 +674,7 @@ import { createNoiseSensitivityScorerLLM } from '@mastra/evals/scorers/prebuilt'
 async function compareModelRobustness() {
   const models = [
     { name: 'GPT-5.4', model: '__GATEWAY_OPENAI_MODEL__' },
-    { name: 'GPT-5.4-mini', model: '__GATEWAY_OPENAI_MODEL_MINI__' },
+    { name: 'GPT-6 Luna', model: '__GATEWAY_OPENAI_MODEL_LUNA__' },
     { name: 'Claude', model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__' },
   ]
 
