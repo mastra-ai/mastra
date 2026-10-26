@@ -1467,7 +1467,7 @@ With `tasks` set, the client tells the server it accepts tasks. The server decid
 When a tool call returns a task, the tool keeps its usual shape:
 
 - The client polls the task at the interval the server suggests until it finishes, then returns the tool result.
-- A task that needs input is answered through `inputRequests`, once per request key. The remote tool continues where it stopped; it doesn't run again. Without a handler the call fails with `MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED`, and the task stays open on the server until its TTL ends.
+- A task that needs input is answered through `inputRequests`, once per request key. The client sends the answers with `tasks/update` and keeps polling the same task; it never sends `tools/call` again. Without a handler the call fails with `MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED`, and the task stays open on the server until its TTL ends.
 - Aborting the tool call sends `tasks/cancel`. So does reaching `maxWaitMs`, which fails the call with `MCP_CLIENT_TOOL_TASK_TIMEOUT`.
 - A tool error inside a finished task is handled like a direct tool error, following `onToolError`. A task the server cancelled fails with `MCP_CLIENT_TOOL_TASK_CANCELLED`, and a task the server marked `failed` fails with `MCP_CLIENT_TOOL_TASK_FAILED`.
 - A call that returned a task is never retried, because a retry would start a second task.

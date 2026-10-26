@@ -18,7 +18,7 @@ const mcp = new MCPClient({
 });
 ```
 
-- A task that needs input is answered through your `inputRequests` handler, and the remote tool continues without starting over.
+- A task that needs input is answered through your `inputRequests` handler and sent back with `tasks/update`, without calling the tool again.
 - Aborting the tool call cancels the remote task. A cancelled or failed task becomes a tool error.
 - On an agent with background tasks enabled, these tools run as background tasks, so the agent keeps working while the remote task runs.
 - `mcp.tasks.get`, `mcp.tasks.update` and `mcp.tasks.cancel` read, answer and cancel a task directly.
