@@ -45,9 +45,9 @@ export default function PlatformCta({ placement }: { placement: 'header' | 'card
           className="h-10 w-full shrink-0 justify-between rounded-xl border border-(--border) bg-(--mastra-surface-2) text-(--mastra-text-primary)! no-underline! hover:bg-(--mastra-surface-3) dark:bg-(--mastra-surface-4)"
         >
           <a href={signupUrl}>
-            <span className="hidden @max-[15rem]:inline">Sign up</span>
-            <span className="@max-[15rem]:hidden">Deploy your agents</span>
-            <ArrowUpRight aria-hidden="true" />
+            <span className="hidden @max-[13rem]:inline">Sign up</span>
+            <span className="@max-[13rem]:hidden">Deploy your agents</span>
+            <ArrowUpRight aria-hidden="true" className="@max-[13rem]:hidden" />
           </a>
         </Button>
       </Card>
