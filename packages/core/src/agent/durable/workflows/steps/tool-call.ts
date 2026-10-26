@@ -259,6 +259,7 @@ async function processChunkThroughOutputProcessors(
           outputProcessors: registryEntry.outputProcessors,
           logger,
           agentName,
+          agent: registryEntry.agent,
           processorStates: registryEntry.processorStates,
         })
       : undefined;
@@ -1997,6 +1998,7 @@ export function createDurableToolCallStep() {
             outputProcessors: registryEntry.outputProcessors,
             logger,
             agentName: initData.agentId,
+            agent: registryEntry.agent,
             processorStates: registryEntry.processorStates,
           });
           try {
