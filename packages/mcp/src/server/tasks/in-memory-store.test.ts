@@ -309,5 +309,29 @@ describe('InMemoryMCPTaskStore', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(work).toHaveBeenCalledTimes(1);
     });
+
+    it('aborts an initial attempt when the TTL elapses, and ignores its late outcome', async () => {
+      vi.useFakeTimers({ now: 0 });
+      store = new InMemoryMCPTaskStore();
+      const { taskId } = await store.create({ ttlMs: 1_000, principal: 'alice' });
+      const work = vi.fn();
+      const abort = vi.fn();
+      let finishInitial!: (outcome: MCPTaskAttemptOutcome) => void;
+      store.run(taskId, work, {
+        initialAttempt: { outcome: new Promise(resolve => (finishInitial = resolve)), abort },
+      });
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(abort).toHaveBeenCalledTimes(1);
+      expect(await store.get(taskId, alice)).toMatchObject({
+        status: 'failed',
+        error: { code: TASKS_ERROR_CODES.InternalError, message: expect.stringMatching(/expired/) },
+      });
+
+      finishInitial({ status: 'completed', result: text('late') });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await store.get(taskId, alice)).toMatchObject({ status: 'failed' });
+      expect(work).not.toHaveBeenCalled();
+    });
   });
 });
