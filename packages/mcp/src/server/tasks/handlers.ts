@@ -1,4 +1,4 @@
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { ProtocolError } from '@modelcontextprotocol/server';
 import type { Server, ServerContext } from '@modelcontextprotocol/server';
 import {
@@ -15,8 +15,8 @@ import type { MCPTaskStore } from './store';
 
 export interface TaskHandlerDeps {
   store: MCPTaskStore;
-  /** Resolves the request's context and runs `fn` under the request's span. */
-  trace: <T>(
+  /** Resolves the request's context and runs `fn` under the request's span. Defaults to an empty context, untraced. */
+  trace?: <T>(
     server: Server,
     method: string,
     params: Record<string, unknown>,
@@ -24,7 +24,7 @@ export interface TaskHandlerDeps {
     fn: (requestContext: RequestContext) => Promise<T>,
   ) => Promise<T>;
   /** The authenticated caller of a request, as tasks are bound to it at creation. */
-  principal: (ctx: ServerContext, requestContext: RequestContext) => string;
+  principal: (ctx: ServerContext, requestContext: RequestContext) => string | Promise<string>;
   /** Further narrows which callers may read, answer or cancel a task they created. */
   authorize?: (context: {
     principal: string;
@@ -45,6 +45,7 @@ function notFound(): ProtocolError {
  */
 export function registerTaskHandlers(server: Server, deps: TaskHandlerDeps): void {
   const { store, authorize } = deps;
+  const trace = deps.trace ?? ((_server, _method, _params, _ctx, fn) => fn(new RequestContext()));
 
   /** `tasks/update` and `tasks/cancel` check `authorize` against the task before acting on it. */
   const serve = <T>(
@@ -53,8 +54,8 @@ export function registerTaskHandlers(server: Server, deps: TaskHandlerDeps): voi
     ctx: ServerContext,
     fn: (access: { principal: string }) => Promise<T>,
   ) =>
-    deps.trace(server, method, params, ctx, async requestContext => {
-      const principal = deps.principal(ctx, requestContext);
+    trace(server, method, params, ctx, async requestContext => {
+      const principal = await deps.principal(ctx, requestContext);
       if (authorize) {
         const task = await store.get(params.taskId, { principal });
         if (!task || !(await authorize({ principal, task, requestContext }))) throw notFound();
@@ -66,8 +67,8 @@ export function registerTaskHandlers(server: Server, deps: TaskHandlerDeps): voi
     TASKS_METHODS.get,
     { params: GetTaskRequestParamsSchema, result: GetTaskResultSchema },
     (params, ctx) =>
-      deps.trace(server, TASKS_METHODS.get, params, ctx, async requestContext => {
-        const principal = deps.principal(ctx, requestContext);
+      trace(server, TASKS_METHODS.get, params, ctx, async requestContext => {
+        const principal = await deps.principal(ctx, requestContext);
         const task = await store.get(params.taskId, { principal });
         if (!task || (authorize && !(await authorize({ principal, task, requestContext })))) throw notFound();
         return task;

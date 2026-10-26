@@ -1,7 +1,6 @@
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { RequestContext } from '@mastra/core/request-context';
 import { Client, ProtocolError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
@@ -33,11 +32,7 @@ async function start(): Promise<Harness> {
       { capabilities: { tools: {}, extensions: tasksCapabilityEntry() } },
     );
     mcpServer.registerTool('noop', { description: 'noop' }, async () => ({ content: [] }));
-    registerTaskHandlers(mcpServer.server, {
-      store,
-      trace: (_server, _method, _params, _ctx, fn) => fn(new RequestContext()),
-      principal: () => principal,
-    });
+    registerTaskHandlers(mcpServer.server, { store, principal: async () => principal });
     return mcpServer.server;
   };
   const handler = toNodeHandler(createMcpHandler(createServerForRequest, { legacy: 'reject' }));
