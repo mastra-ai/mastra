@@ -1,8 +1,8 @@
-import type { InvoiceRuntime } from "../../accounting/providers.ts";
-import { ProviderUnavailableError } from "../../accounting/types.ts";
-import type { AssessmentState, PurchaseOrder } from "../schema.ts";
-import { hasLowConfidence } from "../validation.ts";
-import { decide } from "./decision.ts";
+import type { InvoiceRuntime } from '../../accounting/providers.ts';
+import { ProviderUnavailableError } from '../../accounting/types.ts';
+import type { AssessmentState, PurchaseOrder } from '../schema.ts';
+import { hasLowConfidence } from '../validation.ts';
+import { decide } from './decision.ts';
 
 const compareLines = (state: AssessmentState, order: PurchaseOrder, tolerance: number) => {
   const unusedOrderLines = new Set(order.lines.map((_, index) => index));
@@ -11,8 +11,9 @@ const compareLines = (state: AssessmentState, order: PurchaseOrder, tolerance: n
   state.invoice.lines.forEach((line, invoiceIndex) => {
     const orderIndex = line.sku
       ? order.lines.findIndex(
-          (candidate, index) => unusedOrderLines.has(index) &&
-            [candidate.sku, candidate.description].some((id) => id === line.sku || id === line.description),
+          (candidate, index) =>
+            unusedOrderLines.has(index) &&
+            [candidate.sku, candidate.description].some(id => id === line.sku || id === line.description),
         )
       : unusedOrderLines.has(invoiceIndex)
         ? invoiceIndex
@@ -24,14 +25,11 @@ const compareLines = (state: AssessmentState, order: PurchaseOrder, tolerance: n
     if (line.qty !== expected.qty) mismatches.push(`lines.${invoiceIndex}.qty`);
     if (Math.abs(line.unitPriceMinor - expected.unitPriceMinor) > tolerance)
       mismatches.push(`lines.${invoiceIndex}.unitPrice`);
-    if (
-      line.lineTotalMinor !== null &&
-      Math.abs(line.lineTotalMinor - expected.lineTotalMinor) > tolerance
-    )
+    if (line.lineTotalMinor !== null && Math.abs(line.lineTotalMinor - expected.lineTotalMinor) > tolerance)
       mismatches.push(`lines.${invoiceIndex}.lineTotal`);
   });
 
-  if (unusedOrderLines.size) mismatches.push("lines.uninvoicedPoLines");
+  if (unusedOrderLines.size) mismatches.push('lines.uninvoicedPoLines');
   return mismatches;
 };
 
@@ -39,28 +37,26 @@ export function makeInvoiceMatch(runtime: InvoiceRuntime) {
   const provider = runtime.provider;
 
   return async (state: AssessmentState) => {
-    if (!state.vendor || state.decisions.some(({ outcome }) => outcome !== "pass")) return state;
+    if (!state.vendor || state.decisions.some(({ outcome }) => outcome !== 'pass')) return state;
 
     try {
       if (!state.invoice.poNumber)
         return decide(state, {
-          step: "match",
-          outcome: "review",
-          reasons: [{ code: "PO_NUMBER_MISSING", message: "Invoice has no printed PO number" }],
+          step: 'match',
+          outcome: 'review',
+          reasons: [{ code: 'PO_NUMBER_MISSING', message: 'Invoice has no printed PO number' }],
         });
 
       const orders = await provider.findPurchaseOrders(state.invoice.poNumber);
       if (orders.length !== 1) {
         const ambiguous = orders.length > 1;
         return decide(state, {
-          step: "match",
-          outcome: "review",
+          step: 'match',
+          outcome: 'review',
           reasons: [
             {
-              code: ambiguous ? "PO_AMBIGUOUS" : "PO_NOT_FOUND",
-              message: ambiguous
-                ? "Multiple purchase orders match"
-                : "Purchase order was not found",
+              code: ambiguous ? 'PO_AMBIGUOUS' : 'PO_NOT_FOUND',
+              message: ambiguous ? 'Multiple purchase orders match' : 'Purchase order was not found',
             },
           ],
         });
@@ -69,27 +65,26 @@ export function makeInvoiceMatch(runtime: InvoiceRuntime) {
       const order = orders[0]!;
       state.purchaseOrder = order;
       const mismatches = [
-        ...(order.vendorId === state.vendor.id ? [] : ["vendor"]),
-        ...(order.currency === state.invoice.currency ? [] : ["currency"]),
-        ...(Math.abs(order.totalMinor - state.invoice.totalMinor) <=
-        runtime.policy.amountToleranceMinor
+        ...(order.vendorId === state.vendor.id ? [] : ['vendor']),
+        ...(order.currency === state.invoice.currency ? [] : ['currency']),
+        ...(Math.abs(order.totalMinor - state.invoice.totalMinor) <= runtime.policy.amountToleranceMinor
           ? []
-          : ["total"]),
+          : ['total']),
         ...compareLines(state, order, runtime.policy.amountToleranceMinor),
       ];
       if (mismatches.length) {
         const verify = hasLowConfidence(
           state.invoice,
-          ["vendorName", "poNumber", "currency", "total", "lines"],
+          ['vendorName', 'poNumber', 'currency', 'total', 'lines'],
           runtime.policy.lowConfidenceThreshold,
         );
         return decide(state, {
-          step: "match",
-          outcome: verify ? "verify_extraction" : "review",
+          step: 'match',
+          outcome: verify ? 'verify_extraction' : 'review',
           reasons: [
             {
-              code: "PO_MISMATCH",
-              message: "Invoice does not match the purchase order",
+              code: 'PO_MISMATCH',
+              message: 'Invoice does not match the purchase order',
               evidence: { mismatches },
             },
           ],
@@ -98,29 +93,27 @@ export function makeInvoiceMatch(runtime: InvoiceRuntime) {
 
       if (!provider.findReceipts)
         return decide(state, {
-          step: "match",
-          outcome: "pass",
+          step: 'match',
+          outcome: 'pass',
           reasons: [
             {
-              code: "TWO_WAY_MATCH",
-              message: "Invoice and purchase order match; receipts are unavailable",
+              code: 'TWO_WAY_MATCH',
+              message: 'Invoice and purchase order match; receipts are unavailable',
             },
           ],
         });
 
       const receipts = await provider.findReceipts(order.id);
       const invoiceLinesWithoutSku = state.invoice.lines.filter(({ sku }) => !sku).length;
-      const receiptLinesWithoutSku = receipts
-        .flatMap(({ lines }) => lines)
-        .filter(({ sku }) => !sku).length;
+      const receiptLinesWithoutSku = receipts.flatMap(({ lines }) => lines).filter(({ sku }) => !sku).length;
       if (invoiceLinesWithoutSku > 1 || receiptLinesWithoutSku > 1)
         return decide(state, {
-          step: "match",
-          outcome: "review",
+          step: 'match',
+          outcome: 'review',
           reasons: [
             {
-              code: "RECEIPT_LINE_IDENTITY_AMBIGUOUS",
-              message: "Multiple lines without SKUs cannot be matched safely by position",
+              code: 'RECEIPT_LINE_IDENTITY_AMBIGUOUS',
+              message: 'Multiple lines without SKUs cannot be matched safely by position',
               evidence: { invoiceLinesWithoutSku, receiptLinesWithoutSku },
             },
           ],
@@ -134,21 +127,18 @@ export function makeInvoiceMatch(runtime: InvoiceRuntime) {
         });
       const receiptMismatch =
         !receipts.length ||
-        state.invoice.lines.some(
-          (line, index) => (received.get(line.sku ?? `line:${index}`) ?? 0) < line.qty,
-        );
+        state.invoice.lines.some((line, index) => (received.get(line.sku ?? `line:${index}`) ?? 0) < line.qty);
       const verify =
-        receiptMismatch &&
-        hasLowConfidence(state.invoice, ["lines", "qty"], runtime.policy.lowConfidenceThreshold);
+        receiptMismatch && hasLowConfidence(state.invoice, ['lines', 'qty'], runtime.policy.lowConfidenceThreshold);
       return decide(state, {
-        step: "match",
-        outcome: receiptMismatch ? (verify ? "verify_extraction" : "review") : "pass",
+        step: 'match',
+        outcome: receiptMismatch ? (verify ? 'verify_extraction' : 'review') : 'pass',
         reasons: [
           {
-            code: receiptMismatch ? "RECEIPT_MISMATCH" : "THREE_WAY_MATCH",
+            code: receiptMismatch ? 'RECEIPT_MISMATCH' : 'THREE_WAY_MATCH',
             message: receiptMismatch
-              ? "Received quantities do not cover invoiced quantities"
-              : "Invoice, purchase order, and receipts match",
+              ? 'Received quantities do not cover invoiced quantities'
+              : 'Invoice, purchase order, and receipts match',
             evidence: { receiptIds: receipts.map(({ id }) => id) },
           },
         ],
@@ -156,9 +146,9 @@ export function makeInvoiceMatch(runtime: InvoiceRuntime) {
     } catch (error) {
       if (!(error instanceof ProviderUnavailableError)) throw error;
       return decide(state, {
-        step: "match",
-        outcome: "unknown_retry",
-        reasons: [{ code: "MATCH_LOOKUP_UNAVAILABLE", message: error.message }],
+        step: 'match',
+        outcome: 'unknown_retry',
+        reasons: [{ code: 'MATCH_LOOKUP_UNAVAILABLE', message: error.message }],
       });
     }
   };

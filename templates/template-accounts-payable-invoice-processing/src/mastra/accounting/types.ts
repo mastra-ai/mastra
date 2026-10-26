@@ -6,7 +6,7 @@ import type {
   PurchaseOrder,
   VendorScreeningResult,
   VendorRecord,
-} from "../invoice/schema.ts";
+} from '../invoice/schema.ts';
 
 export type VendorLookup = { name: string; taxId?: string | null };
 
@@ -34,6 +34,6 @@ export interface InvoiceHistory {
 export class ProviderUnavailableError extends Error {
   constructor(providerId: string, operation: string, options?: { cause?: unknown }) {
     super(`${providerId} unavailable during ${operation}`, options);
-    this.name = "ProviderUnavailableError";
+    this.name = 'ProviderUnavailableError';
   }
 }

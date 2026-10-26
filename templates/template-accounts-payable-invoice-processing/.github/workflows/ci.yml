@@ -20,7 +20,7 @@ jobs:
       ACCOUNTING_PROVIDER: quickbooks-mcp
       QBO_MCP_SERVER_PATH: ${{ github.workspace }}/package.json
       QBO_MCP_TOKEN_STORE_PATH: ${{ github.workspace }}/package.json
-      QBO_MCP_ENABLE_POSTING: "false"
+      QBO_MCP_ENABLE_POSTING: 'false'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6

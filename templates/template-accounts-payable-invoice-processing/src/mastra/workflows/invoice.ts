@@ -1,8 +1,8 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { createStep, createWorkflow } from "@mastra/core/workflows";
-import { z } from "zod";
-import { activeInvoiceRuntime, type InvoiceRuntime } from "../accounting/providers.ts";
-import { normalizeInvoice } from "../invoice/money.ts";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { z } from 'zod';
+import { activeInvoiceRuntime, type InvoiceRuntime } from '../accounting/providers.ts';
+import { normalizeInvoice } from '../invoice/money.ts';
 import {
   DecisionReasonSchema,
   FinalAssessmentSchema,
@@ -15,11 +15,11 @@ import {
   type FinalAssessment,
   type InvoiceResult,
   type UnsignedInvoiceWorkflowInput,
-} from "../invoice/schema.ts";
-import { makeDuplicateDetection } from "../invoice/controls/duplicates.ts";
-import { makeInvoiceMatch } from "../invoice/controls/matching.ts";
-import { makePolicyRouting } from "../invoice/controls/policy.ts";
-import { makeVendorValidation } from "../invoice/controls/vendor.ts";
+} from '../invoice/schema.ts';
+import { makeDuplicateDetection } from '../invoice/controls/duplicates.ts';
+import { makeInvoiceMatch } from '../invoice/controls/matching.ts';
+import { makePolicyRouting } from '../invoice/controls/policy.ts';
+import { makeVendorValidation } from '../invoice/controls/vendor.ts';
 
 const submissionSecret = randomBytes(32);
 
@@ -27,21 +27,21 @@ const submissionPayload = (input: UnsignedInvoiceWorkflowInput) =>
   JSON.stringify(UnsignedInvoiceWorkflowInputSchema.parse(input));
 
 export const signInvoiceSubmission = (input: UnsignedInvoiceWorkflowInput) =>
-  createHmac("sha256", submissionSecret).update(submissionPayload(input)).digest("hex");
+  createHmac('sha256', submissionSecret).update(submissionPayload(input)).digest('hex');
 
 const isTrustedSubmission = (input: z.infer<typeof InvoiceWorkflowInputSchema>) => {
-  const expected = Buffer.from(signInvoiceSubmission(input), "hex");
-  const received = Buffer.from(input.submissionSignature, "hex");
+  const expected = Buffer.from(signInvoiceSubmission(input), 'hex');
+  const received = Buffer.from(input.submissionSignature, 'hex');
   return expected.length === received.length && timingSafeEqual(expected, received);
 };
 
 const normalizeStep = createStep({
-  id: "normalize-invoice",
+  id: 'normalize-invoice',
   inputSchema: InvoiceWorkflowInputSchema,
   outputSchema: NormalizedInvoiceSchema,
   execute: async ({ inputData }) => {
     if (!isTrustedSubmission(inputData)) {
-      throw new Error("Invoice processing requires a server-validated document submission");
+      throw new Error('Invoice processing requires a server-validated document submission');
     }
     return normalizeInvoice(inputData);
   },
@@ -53,7 +53,7 @@ const makeAssessmentStep = (runtime: InvoiceRuntime) => {
   const detectDuplicates = makeDuplicateDetection(runtime);
   const applyPolicy = makePolicyRouting(runtime);
   return createStep({
-    id: "assess-invoice",
+    id: 'assess-invoice',
     inputSchema: NormalizedInvoiceSchema,
     outputSchema: FinalAssessmentSchema,
     execute: async ({ inputData }) => {
@@ -75,16 +75,15 @@ export const ApprovalRequestSchema = z.object({
   vendorName: z.string(),
   currency: z.string(),
   totalMinor: z.number().int().safe(),
-  disposition: z.literal("approval_required"),
+  disposition: z.literal('approval_required'),
   reasons: z.array(DecisionReasonSchema),
   invoiceDigest: z.string().regex(/^[a-f0-9]{64}$/),
 });
 
-export const decisionReasons = (assessment: FinalAssessment) =>
-  assessment.decisions.flatMap(({ reasons }) => reasons);
+export const decisionReasons = (assessment: FinalAssessment) => assessment.decisions.flatMap(({ reasons }) => reasons);
 
 const invoiceDigest = (assessment: FinalAssessment) =>
-  createHash("sha256")
+  createHash('sha256')
     .update(
       JSON.stringify({
         invoice: assessment.invoice,
@@ -93,13 +92,10 @@ const invoiceDigest = (assessment: FinalAssessment) =>
         policy: assessment.policy,
       }),
     )
-    .digest("hex");
+    .digest('hex');
 
-const approvalEvidence = (
-  assessment: FinalAssessment,
-  values: Partial<ApprovalEvidence>,
-): ApprovalEvidence => ({
-  status: "not_requested",
+const approvalEvidence = (assessment: FinalAssessment, values: Partial<ApprovalEvidence>): ApprovalEvidence => ({
+  status: 'not_requested',
   reviewerId: null,
   decidedAt: null,
   invoiceDigest: invoiceDigest(assessment),
@@ -110,7 +106,7 @@ const approvalEvidence = (
 const workflowResult = (
   assessment: FinalAssessment,
   approval: ApprovalEvidence,
-  executionStatus: InvoiceResult["executionStatus"],
+  executionStatus: InvoiceResult['executionStatus'],
 ): InvoiceResult => ({
   ...assessment,
   executionStatus,
@@ -121,30 +117,30 @@ const workflowResult = (
 
 const postingFailure = (
   result: InvoiceResult,
-  executionStatus: "posting_unavailable" | "posting_failed",
+  executionStatus: 'posting_unavailable' | 'posting_failed',
   postingError: string,
 ): InvoiceResult => ({ ...result, executionStatus, postingError });
 
 const approvalStep = createStep({
-  id: "approve-invoice",
+  id: 'approve-invoice',
   inputSchema: FinalAssessmentSchema,
   outputSchema: InvoiceResultSchema,
   suspendSchema: ApprovalRequestSchema,
   resumeSchema: approvalDecisionSchema,
   execute: async ({ inputData, resumeData, suspend }) => {
-    if (inputData.disposition === "auto_post") {
+    if (inputData.disposition === 'auto_post') {
       return workflowResult(
         inputData,
         approvalEvidence(inputData, {
-          status: "not_required",
+          status: 'not_required',
           decidedAt: new Date().toISOString(),
         }),
-        "ready_to_post",
+        'ready_to_post',
       );
     }
 
-    if (inputData.disposition !== "approval_required") {
-      return workflowResult(inputData, approvalEvidence(inputData, {}), "not_postable");
+    if (inputData.disposition !== 'approval_required') {
+      return workflowResult(inputData, approvalEvidence(inputData, {}), 'not_postable');
     }
 
     if (!resumeData) {
@@ -153,79 +149,75 @@ const approvalStep = createStep({
         vendorName: inputData.invoice.vendorName,
         currency: inputData.invoice.currency,
         totalMinor: inputData.invoice.totalMinor,
-        disposition: "approval_required",
+        disposition: 'approval_required',
         reasons: decisionReasons(inputData),
         invoiceDigest: invoiceDigest(inputData),
       });
     }
 
     const approval = approvalEvidence(inputData, {
-      status: resumeData.approved ? "approved" : "rejected",
-      reviewerId: "mastra-studio",
+      status: resumeData.approved ? 'approved' : 'rejected',
+      reviewerId: 'mastra-studio',
       decidedAt: new Date().toISOString(),
       comment: resumeData.comment ?? null,
     });
 
-    return workflowResult(inputData, approval, resumeData.approved ? "ready_to_post" : "rejected");
+    return workflowResult(inputData, approval, resumeData.approved ? 'ready_to_post' : 'rejected');
   },
 });
 
-const makePostingStep = (runtime: InvoiceRuntime) => createStep({
-  id: "post-invoice",
-  inputSchema: InvoiceResultSchema,
-  outputSchema: InvoiceResultSchema,
-  execute: async ({ inputData }) => {
-    if (inputData.executionStatus !== "ready_to_post") return inputData;
+const makePostingStep = (runtime: InvoiceRuntime) =>
+  createStep({
+    id: 'post-invoice',
+    inputSchema: InvoiceResultSchema,
+    outputSchema: InvoiceResultSchema,
+    execute: async ({ inputData }) => {
+      if (inputData.executionStatus !== 'ready_to_post') return inputData;
 
-    const posting = runtime.provider.postBill;
-    if (!posting)
-      return postingFailure(
-        inputData,
-        "posting_unavailable",
-        `${runtime.provider.id} is connected read-only`,
-      );
+      const posting = runtime.provider.postBill;
+      if (!posting)
+        return postingFailure(inputData, 'posting_unavailable', `${runtime.provider.id} is connected read-only`);
 
-    if (!inputData.vendor)
-      return postingFailure(inputData, "posting_failed", "Validated vendor is missing");
+      if (!inputData.vendor) return postingFailure(inputData, 'posting_failed', 'Validated vendor is missing');
 
-    try {
-      const request = PostingRequestSchema.parse({
-        idempotencyKey: `ap-${inputData.approval.invoiceDigest}`,
-        invoice: inputData.invoice,
-        vendor: inputData.vendor,
-        purchaseOrder: inputData.purchaseOrder,
-        approval: inputData.approval,
-      });
-      const receipt = await posting(request);
+      try {
+        const request = PostingRequestSchema.parse({
+          idempotencyKey: `ap-${inputData.approval.invoiceDigest}`,
+          invoice: inputData.invoice,
+          vendor: inputData.vendor,
+          purchaseOrder: inputData.purchaseOrder,
+          approval: inputData.approval,
+        });
+        const receipt = await posting(request);
 
-      await runtime.history.save({
-        id: receipt.externalBillId,
-        vendorId: inputData.vendor.id,
-        invoiceNumber: inputData.invoice.invoiceNumber,
-        invoiceDate: inputData.invoice.invoiceDate,
-        currency: inputData.invoice.currency,
-        totalMinor: inputData.invoice.totalMinor,
-      });
+        await runtime.history.save({
+          id: receipt.externalBillId,
+          vendorId: inputData.vendor.id,
+          invoiceNumber: inputData.invoice.invoiceNumber,
+          invoiceDate: inputData.invoice.invoiceDate,
+          currency: inputData.invoice.currency,
+          totalMinor: inputData.invoice.totalMinor,
+        });
 
-      return {
-        ...inputData,
-        executionStatus: "posted" as const,
-        posting: receipt,
-        postingError: null,
-      };
-    } catch (error) {
-      return postingFailure(
-        inputData,
-        "posting_failed",
-        error instanceof Error ? error.message : "Unknown posting failure",
-      );
-    }
-  },
-});
+        return {
+          ...inputData,
+          executionStatus: 'posted' as const,
+          posting: receipt,
+          postingError: null,
+        };
+      } catch (error) {
+        return postingFailure(
+          inputData,
+          'posting_failed',
+          error instanceof Error ? error.message : 'Unknown posting failure',
+        );
+      }
+    },
+  });
 
 export const createInvoiceWorkflow = (runtime: InvoiceRuntime) =>
   createWorkflow({
-    id: "process-invoice",
+    id: 'process-invoice',
     inputSchema: InvoiceWorkflowInputSchema,
     outputSchema: InvoiceResultSchema,
     options: { shouldPersistSnapshot: () => true },

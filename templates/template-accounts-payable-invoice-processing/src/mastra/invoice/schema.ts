@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 const LineItemSchema = z.object({
   sku: z.string().nullable(),
@@ -24,7 +24,7 @@ export const ExtractedInvoiceSchema = z.object({
   lines: z.array(LineItemSchema),
   confidence: z.array(FieldConfidenceSchema),
   overallConfidence: z.number().min(0).max(1),
-  source: z.enum(["PDF", "image"]).default("PDF"),
+  source: z.enum(['PDF', 'image']).default('PDF'),
 });
 export type ExtractedInvoice = z.infer<typeof ExtractedInvoiceSchema>;
 
@@ -48,14 +48,14 @@ export const InvoiceDraftSchema = z.object({
   lines: z.array(DraftLineItemSchema).optional(),
   confidence: z.array(FieldConfidenceSchema).default([]),
   overallConfidence: z.number().min(0).max(1).nullable().optional(),
-  source: z.enum(["PDF", "image"]).optional(),
+  source: z.enum(['PDF', 'image']).optional(),
 });
 export type InvoiceDraft = z.infer<typeof InvoiceDraftSchema>;
 
 const DocumentRefSchema = z.object({
   id: z.string(),
-  mimeType: z.enum(["application/pdf", "image/png", "image/jpeg"]),
-  source: z.enum(["PDF", "image"]).default("PDF"),
+  mimeType: z.enum(['application/pdf', 'image/png', 'image/jpeg']),
+  source: z.enum(['PDF', 'image']).default('PDF'),
 });
 
 const MoneySchema = z.number().int().safe();
@@ -66,7 +66,7 @@ export const DecisionReasonSchema = z.object({
 });
 const StepDecisionSchema = z.object({
   step: z.string(),
-  outcome: z.enum(["pass", "review", "blocked", "unknown_retry", "verify_extraction"]),
+  outcome: z.enum(['pass', 'review', 'blocked', 'unknown_retry', 'verify_extraction']),
   reasons: z.array(DecisionReasonSchema),
 });
 export type StepDecision = z.infer<typeof StepDecisionSchema>;
@@ -99,7 +99,7 @@ export const VendorRecordSchema = z.object({
   id: z.string(),
   name: z.string(),
   taxId: z.string().nullable(),
-  status: z.enum(["approved", "inactive", "on_hold", "blocked"]),
+  status: z.enum(['approved', 'inactive', 'on_hold', 'blocked']),
 });
 export type VendorRecord = z.infer<typeof VendorRecordSchema>;
 const PurchaseOrderLineSchema = z.object({
@@ -162,31 +162,24 @@ const AssessmentStateSchema = z.object({
 });
 export type AssessmentState = z.infer<typeof AssessmentStateSchema>;
 export const FinalAssessmentSchema = AssessmentStateSchema.extend({
-  disposition: z.enum([
-    "auto_post",
-    "approval_required",
-    "review",
-    "blocked",
-    "retry",
-    "verify_extraction",
-  ]),
+  disposition: z.enum(['auto_post', 'approval_required', 'review', 'blocked', 'retry', 'verify_extraction']),
   policy: PolicyConfigSchema,
 });
 export type FinalAssessment = z.infer<typeof FinalAssessmentSchema>;
 
 const ApprovalEvidenceSchema = z
   .object({
-    status: z.enum(["not_requested", "not_required", "approved", "rejected"]),
+    status: z.enum(['not_requested', 'not_required', 'approved', 'rejected']),
     reviewerId: z.string().trim().min(1).nullable(),
     decidedAt: z.string().datetime().nullable(),
     invoiceDigest: z.string().regex(/^[a-f0-9]{64}$/),
     comment: z.string().max(1000).nullable(),
   })
   .superRefine((value, context) => {
-    if (["approved", "rejected"].includes(value.status) && (!value.reviewerId || !value.decidedAt))
+    if (['approved', 'rejected'].includes(value.status) && (!value.reviewerId || !value.decidedAt))
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Human decisions require reviewerId and decidedAt",
+        message: 'Human decisions require reviewerId and decidedAt',
       });
   });
 export type ApprovalEvidence = z.infer<typeof ApprovalEvidenceSchema>;
@@ -199,20 +192,20 @@ export const PostingRequestSchema = z
     approval: ApprovalEvidenceSchema,
   })
   .superRefine((value, context) => {
-    if (!["approved", "not_required"].includes(value.approval.status))
+    if (!['approved', 'not_required'].includes(value.approval.status))
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Posting requires approval or an explicit not-required decision",
+        message: 'Posting requires approval or an explicit not-required decision',
       });
     if (value.idempotencyKey !== `ap-${value.approval.invoiceDigest}`)
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Idempotency key must bind to the approved invoice digest",
+        message: 'Idempotency key must bind to the approved invoice digest',
       });
   });
 export type PostingRequest = z.infer<typeof PostingRequestSchema>;
 const PostingReceiptSchema = z.object({
-  status: z.enum(["posted", "already_posted"]),
+  status: z.enum(['posted', 'already_posted']),
   providerId: z.string().min(1),
   externalBillId: z.string().min(1),
   postedAt: z.string().datetime(),
@@ -221,12 +214,12 @@ const PostingReceiptSchema = z.object({
 export type PostingReceipt = z.infer<typeof PostingReceiptSchema>;
 export const InvoiceResultSchema = FinalAssessmentSchema.extend({
   executionStatus: z.enum([
-    "not_postable",
-    "ready_to_post",
-    "rejected",
-    "posting_unavailable",
-    "posting_failed",
-    "posted",
+    'not_postable',
+    'ready_to_post',
+    'rejected',
+    'posting_unavailable',
+    'posting_failed',
+    'posted',
   ]),
   approval: ApprovalEvidenceSchema,
   posting: PostingReceiptSchema.nullable(),
