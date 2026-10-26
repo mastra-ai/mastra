@@ -444,4 +444,35 @@ describe('temporal workflow runtime helper module', () => {
     expect(incrementUntil).toHaveBeenCalledTimes(2);
     expect(stopUntil).toHaveBeenCalledTimes(2);
   });
+
+  it('records step start and end times only when the start input asks for them', async () => {
+    vi.useFakeTimers({ now: 1_000 });
+    try {
+      const fetchWeather = vi.fn(async () => {
+        vi.setSystemTime(1_250);
+        return { weather: 'sunny' };
+      });
+      const noOutput = vi.fn(async () => {
+        vi.setSystemTime(1_300);
+        return undefined;
+      });
+      proxyActivities.mockReturnValue({ 'fetch-weather': fetchWeather, 'no-output': noOutput });
+
+      const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+      const workflow = createWorkflow('weather-workflow').then('fetch-weather').then('no-output').commit();
+
+      const plain = await workflow({ inputData: { city: 'SF' } });
+      expect(plain).not.toHaveProperty('stepMeta');
+
+      vi.setSystemTime(1_000);
+      const timed = await workflow({ inputData: { city: 'SF' }, recordStepMeta: true });
+      expect(timed.steps).toEqual({ 'fetch-weather': { weather: 'sunny' }, 'no-output': undefined });
+      expect(timed.stepMeta).toEqual({
+        'fetch-weather': { startedAt: 1_000, endedAt: 1_250 },
+        'no-output': { startedAt: 1_250, endedAt: 1_300 },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
