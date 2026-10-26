@@ -87,8 +87,7 @@ export interface SandboxTemplateBuilder {
   /**
    * Install Docker Engine and Compose in the E2B template. The daemon is
    * socket-activated, so it starts on the first Docker API call. E2B
-   * recommends at least 2,048 MB of memory for Docker. Railway ignores this
-   * setting.
+   * recommends at least 2,048 MB of memory for Docker.
    */
   docker(): SandboxTemplateBuilder;
   /** Start or reuse this template's provider build without provisioning a sandbox. */
