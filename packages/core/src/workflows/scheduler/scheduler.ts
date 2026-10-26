@@ -1,5 +1,6 @@
 import { MastraBase } from '../../base';
 import type { PubSub } from '../../events/pubsub';
+import type { EventCallback } from '../../events/types';
 import { RegisteredLogger } from '../../logger/constants';
 import type { Schedule, ScheduleTrigger, SchedulesStorage } from '../../storage/domains/schedules/base';
 import { computeNextFire } from './cron';
@@ -7,7 +8,20 @@ import type { ScheduledWorkflowTrigger, SchedulerConfig } from './types';
 
 const TOPIC_WORKFLOWS = 'workflows';
 export const TOPIC_AGENT_SCHEDULES = 'agent-schedules';
-const DEFAULT_TICK_INTERVAL_MS = 10_000;
+/**
+ * Pubsub topic that signals a schedule was created or changed. A process whose
+ * scheduler isn't running starts it on wake; a running scheduler re-checks
+ * storage so it can re-arm its timer for the new earliest fire time.
+ */
+export const SCHEDULER_WAKE_TOPIC = 'scheduler';
+export const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
+const DEFAULT_MAX_SLEEP_MS = 10 * 60_000;
+// Delay before re-checking when rows are still due after a tick (skipped by the
+// stale-build fence or the missing-target grace window, a batch overflow, or a
+// storage error). Keeps those retry paths from hot-looping.
+const DUE_RETRY_DELAY_MS = 10_000;
+// setTimeout overflows above a signed 32-bit delay and fires immediately.
+const MAX_TIMEOUT_MS = 2_147_483_647;
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_MISSES_BEFORE_DELETE = 3;
 const DEFAULT_STALE_SKIPS_BEFORE_ESCALATION = 5;
@@ -23,6 +37,13 @@ const DEFAULT_STALE_SKIPS_BEFORE_ESCALATION = 5;
  *  4. Publishes a `workflow.start` event on the `workflows` pubsub topic.
  *  5. Records the trigger in the schedule's history.
  *
+ * Between ticks it sleeps until the earliest active `nextFireAt`, capped at
+ * `tickIntervalMs`. With no active schedules it doesn't touch storage until a
+ * `SCHEDULER_WAKE_TOPIC` event arrives, so idle deployments let serverless
+ * databases suspend. A scheduler with `enabled: true` keeps checking at
+ * `tickIntervalMs` instead, since it may not share a pubsub with the
+ * processes that create schedules.
+ *
  * The scheduler does **not** execute workflows. The existing
  * `WorkflowEventProcessor` consumes `workflow.start` events and runs them.
  */
@@ -31,10 +52,14 @@ export class Scheduler extends MastraBase {
   #pubsub: PubSub;
   #config: Required<Pick<SchedulerConfig, 'tickIntervalMs' | 'batchSize'>> & SchedulerConfig;
 
-  #intervalHandle?: ReturnType<typeof setInterval>;
+  #timerHandle?: ReturnType<typeof setTimeout>;
   #inflightTick?: Promise<void>;
   #started = false;
   #stopping = false;
+  // Set when a wake arrives mid-tick: that tick may have read storage before
+  // the change landed, so run another one as soon as it finishes.
+  #wakePending = false;
+  #wakeSubscription?: EventCallback;
 
   /**
    * Per-schedule count of consecutive ticks where the target workflow was
@@ -72,16 +97,17 @@ export class Scheduler extends MastraBase {
     this.#pubsub = pubsub;
     this.#config = {
       ...config,
-      tickIntervalMs: config?.tickIntervalMs ?? DEFAULT_TICK_INTERVAL_MS,
+      tickIntervalMs: config?.tickIntervalMs ?? DEFAULT_MAX_SLEEP_MS,
       batchSize: config?.batchSize ?? DEFAULT_BATCH_SIZE,
     };
   }
 
-  /** Start the periodic tick loop. Runs an immediate tick first. */
+  /** Start the tick loop. Runs an immediate tick first. */
   async start(): Promise<void> {
     if (this.#started) return;
     this.#started = true;
     this.#stopping = false;
+    this.#wakePending = false;
     // Fresh process / fresh grace window — old miss counts shouldn't carry
     // over into a new start() since the workflow registry may now look
     // different.
@@ -89,31 +115,17 @@ export class Scheduler extends MastraBase {
     this.#staleDefinitionCounts.clear();
 
     try {
-      // Run one tick immediately so newly-due schedules don't wait the full interval.
+      // Subscribe before the warm-up tick so a schedule created while it runs
+      // isn't missed.
+      await this.#subscribeToWakes();
+      // The warm-up tick arms the timer for the next due schedule.
       await this.#runTick();
-
-      // If stop() ran concurrently with the warm-up tick, don't arm a new
-      // interval afterwards — the caller has already asked us to shut down.
-      if (this.#stopping || !this.#started) return;
-
-      this.#intervalHandle = setInterval(() => {
-        // Swallow rejections here so a tick failure can't surface as an
-        // unhandled promise rejection and crash the host process. #processTick
-        // already logs its own errors and notifies onError, so we only need a
-        // belt-and-braces logger.error for anything that escapes.
-        void this.#runTick().catch(err => {
-          this.logger.error('Scheduler tick crashed', { error: err });
-        });
-      }, this.#config.tickIntervalMs);
-
-      // Don't keep the process alive solely because it has active schedules.
-      // Optional call: on runtimes where setInterval returns a number
-      // (e.g. Cloudflare Workers) there is no unref and nothing to release.
-      this.#intervalHandle.unref?.();
     } catch (err) {
       // Reset state so a future start() can retry. Without this, a failed
-      // warm-up tick would leave #started=true with no interval armed and
+      // warm-up tick would leave #started=true with no timer armed and
       // every subsequent start() call would silently no-op.
+      this.#clearTimer();
+      await this.#unsubscribeFromWakes();
       this.#started = false;
       this.#stopping = false;
       throw err;
@@ -124,11 +136,7 @@ export class Scheduler extends MastraBase {
   async stop(): Promise<void> {
     if (!this.#started) return;
     this.#stopping = true;
-
-    if (this.#intervalHandle) {
-      clearInterval(this.#intervalHandle);
-      this.#intervalHandle = undefined;
-    }
+    this.#clearTimer();
 
     if (this.#inflightTick) {
       try {
@@ -138,6 +146,8 @@ export class Scheduler extends MastraBase {
       }
     }
 
+    this.#clearTimer();
+    await this.#unsubscribeFromWakes();
     this.#started = false;
     this.#stopping = false;
   }
@@ -149,7 +159,7 @@ export class Scheduler extends MastraBase {
 
   /**
    * Run a single tick. Public for tests; production callers should rely
-   * on the interval started by `start()`.
+   * on the timer armed by `start()`.
    */
   async tick(): Promise<void> {
     await this.#runTick();
@@ -158,10 +168,17 @@ export class Scheduler extends MastraBase {
   // -------- Internals --------
 
   async #runTick(): Promise<void> {
-    if (this.#stopping || this.#inflightTick) return;
-    const promise = this.#processTick().finally(() => {
-      this.#inflightTick = undefined;
-    });
+    if (this.#stopping) return;
+    if (this.#inflightTick) {
+      this.#wakePending = true;
+      return;
+    }
+    this.#clearTimer();
+    const promise = this.#processTick()
+      .then(() => this.#armNextTick())
+      .finally(() => {
+        this.#inflightTick = undefined;
+      });
     this.#inflightTick = promise;
     await promise;
   }
@@ -178,6 +195,114 @@ export class Scheduler extends MastraBase {
     for (const schedule of due) {
       if (this.#stopping) break;
       await this.#fireSchedule(schedule);
+    }
+  }
+
+  async #armNextTick(): Promise<void> {
+    if (!this.#started || this.#stopping) return;
+
+    let delay: number | null;
+    if (this.#wakePending) {
+      this.#wakePending = false;
+      delay = 0;
+    } else {
+      delay = await this.#nextTickDelay();
+    }
+    // A wake or stop() may have landed while reading storage.
+    if (!this.#started || this.#stopping) return;
+    if (this.#wakePending) {
+      this.#wakePending = false;
+      delay = 0;
+    }
+    if (delay === null) return;
+
+    this.#clearTimer();
+    this.#timerHandle = setTimeout(
+      () => {
+        this.#timerHandle = undefined;
+        // Swallow rejections here so a tick failure can't surface as an
+        // unhandled promise rejection and crash the host process. #processTick
+        // already logs its own errors and notifies onError, so we only need a
+        // belt-and-braces logger.error for anything that escapes.
+        void this.#runTick().catch(err => {
+          this.logger.error('Scheduler tick crashed', { error: err });
+        });
+      },
+      Math.min(delay, MAX_TIMEOUT_MS),
+    );
+    // Don't keep the process alive solely because it has active schedules.
+    // Optional call: on runtimes where setTimeout returns a number
+    // (e.g. Cloudflare Workers) there is no unref and nothing to release.
+    this.#timerHandle.unref?.();
+  }
+
+  /**
+   * Milliseconds until the next tick, or `null` to stay idle until a wake.
+   */
+  async #nextTickDelay(): Promise<number | null> {
+    const maxSleep = this.#config.tickIntervalMs;
+    const retryDelay = Math.min(DUE_RETRY_DELAY_MS, maxSleep);
+
+    let nextFireAt: number | null;
+    try {
+      nextFireAt = await this.#schedulesStore.getNextFireAt();
+    } catch (err) {
+      this.logger.error('Failed to read next schedule fire time', { error: err });
+      return retryDelay;
+    }
+
+    if (nextFireAt === null) {
+      // Idle until a wake arrives, so serverless databases can suspend. An
+      // explicitly enabled scheduler may run in a process that never receives
+      // wakes (no shared pubsub), and without a wake subscription nothing would
+      // restart the loop, so both keep checking at the cap.
+      if (this.#wakeSubscription && this.#config.enabled !== true) return null;
+      return maxSleep;
+    }
+
+    const untilDue = nextFireAt - Date.now();
+    if (untilDue <= 0) return retryDelay;
+    return Math.min(untilDue, maxSleep);
+  }
+
+  #clearTimer(): void {
+    if (this.#timerHandle) {
+      clearTimeout(this.#timerHandle);
+      this.#timerHandle = undefined;
+    }
+  }
+
+  async #subscribeToWakes(): Promise<void> {
+    if (this.#wakeSubscription) return;
+    const cb: EventCallback = async (event, ack) => {
+      // Persistent backends require every delivery to be settled. Wakes are
+      // hints, so a failed tick isn't a reason to redeliver.
+      await ack?.();
+      if (event.type !== SCHEDULER_WAKE_EVENT || !this.#started || this.#stopping) return;
+      void this.#runTick().catch(err => {
+        this.logger.error('Scheduler tick crashed', { error: err });
+      });
+    };
+    try {
+      // Wakes are transient: replaying retained ones would only cause
+      // redundant ticks.
+      await this.#pubsub.subscribe(SCHEDULER_WAKE_TOPIC, cb, { startFrom: 'latest' });
+      this.#wakeSubscription = cb;
+    } catch (err) {
+      this.logger.warn('Failed to subscribe to scheduler wake events; checking storage at the max interval instead', {
+        error: err,
+      });
+    }
+  }
+
+  async #unsubscribeFromWakes(): Promise<void> {
+    const cb = this.#wakeSubscription;
+    if (!cb) return;
+    this.#wakeSubscription = undefined;
+    try {
+      await this.#pubsub.unsubscribe(SCHEDULER_WAKE_TOPIC, cb);
+    } catch (err) {
+      this.logger.warn('Failed to unsubscribe from scheduler wake events', { error: err });
     }
   }
 

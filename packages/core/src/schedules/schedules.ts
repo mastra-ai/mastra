@@ -567,6 +567,11 @@ export class Schedules {
       ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
       ...(nextStatus !== existing.status ? { status: nextStatus } : {}),
     });
+    // Running schedulers sleep until the earliest known fire time, so tell them
+    // when this edit could move it earlier.
+    if (nextFireAt !== undefined && updated.status === 'active') {
+      await this.#mastra.__publishSchedulerWake(updated.id);
+    }
     return toScheduleView(updated)!;
   }
 
@@ -684,6 +689,7 @@ export class Schedules {
       return toScheduleView(completed)!;
     }
     const updated = await store.updateSchedule(existing.id, { status: 'active', nextFireAt });
+    await this.#mastra.__publishSchedulerWake(updated.id);
     return toScheduleView(updated)!;
   }
 

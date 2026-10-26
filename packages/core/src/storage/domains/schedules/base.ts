@@ -277,6 +277,17 @@ export abstract class SchedulesStorage extends StorageDomain {
    */
   abstract listDueSchedules(now: number, limit?: number): Promise<Schedule[]>;
 
+  /**
+   * Earliest `nextFireAt` across schedules with `status === 'active'`, or
+   * `null` when there are none. The scheduler sleeps until this time instead
+   * of polling on a fixed interval. Adapters can override with a `MIN()` query.
+   */
+  async getNextFireAt(): Promise<number | null> {
+    const active = await this.listSchedules({ status: 'active' });
+    if (active.length === 0) return null;
+    return Math.min(...active.map(s => s.nextFireAt));
+  }
+
   /** Partial update of a schedule row. */
   abstract updateSchedule(id: string, patch: ScheduleUpdate): Promise<Schedule>;
 

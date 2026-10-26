@@ -27,6 +27,9 @@ export class SchedulerWorker extends MastraWorker {
   }
 
   async init(deps: WorkerDeps): Promise<void> {
+    // startWorkers() re-inits every worker. Replacing a running scheduler would
+    // orphan it: its timer and wake subscription would outlive stop().
+    if (this.#running) return;
     await super.init(deps);
 
     if (!deps.storage) {

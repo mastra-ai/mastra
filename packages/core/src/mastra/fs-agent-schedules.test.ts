@@ -499,6 +499,9 @@ describe('Mastra — file-based agent schedules', () => {
     // Make the row due now so the next tick claims it.
     const store = (await mastra.getStorage()!.getStore('schedules'))!;
     await store.updateSchedule(fsAgentScheduleRowId('support', 'heartbeat'), { nextFireAt: Date.now() - 1000 });
+    // The scheduler sleeps until the next fire time it last read, so a write
+    // that bypasses mastra.schedules has to announce itself like the API does.
+    await mastra.__publishSchedulerWake(fsAgentScheduleRowId('support', 'heartbeat'));
 
     await waitUntil(() => generate.mock.calls.length > 0, 15000);
     expect((generate.mock.calls[0] as any[])[0]).toBe('Check system health.');

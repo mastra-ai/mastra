@@ -102,6 +102,7 @@ import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-proc
 import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import { computeNextFire } from '../workflows/scheduler/cron';
+import { SCHEDULER_WAKE_EVENT, SCHEDULER_WAKE_TOPIC } from '../workflows/scheduler/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
   declaredSchedulesOf,
@@ -784,14 +785,6 @@ function serializableWorkerConfig<T extends object>(config: T | undefined): Reco
 // already-wired family also warns; falls back to the instance itself.
 const attachedLoggerOwners = new WeakMap<object, unknown>();
 
-/**
- * Pubsub topic used to tell every process running the default worker set that
- * a schedule now exists and the scheduler tick loop should start. Lets a
- * standalone worker that booted with an empty schedules table discover
- * schedules created later by the API process without continuously polling storage.
- */
-const SCHEDULER_WAKE_TOPIC = 'scheduler';
-const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
 // Default budget shutdown() gives in-flight evented workflow runs (and
 // stopWorkers() gives in-flight push events) before tearing down pubsub.
 // Mirrors BackgroundTaskManager's grace period and the deployer's
@@ -7107,7 +7100,12 @@ export class Mastra<
     // dedicated scheduler processes.
     if (!name && (this.#shouldEnableScheduler() || schedulerForcedByFilter) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
-        const sw = new SchedulerWorker(this.#schedulerConfig);
+        // A MASTRA_WORKERS=scheduler process is an explicit opt-in, so treat it
+        // like scheduler.enabled: it keeps checking storage while idle in case
+        // it doesn't share a pubsub with the processes creating schedules.
+        const sw = new SchedulerWorker(
+          schedulerForcedByFilter ? { ...this.#schedulerConfig, enabled: true } : this.#schedulerConfig,
+        );
         sw.__registerMastra(this);
         this.#workers.push(sw);
       }
