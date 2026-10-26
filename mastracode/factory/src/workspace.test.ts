@@ -464,35 +464,41 @@ describe('bundled Factory skill assets', () => {
     // The skill carries two marked blocks: the abbreviated pending summary and
     // the final handoff contract. Scope the field assertions to the final one
     // (the marked block that introduces the narrative sections) so a field
-    // present only in the pending table cannot satisfy them.
-    const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('### Understanding'));
+    // present only in the pending summary cannot satisfy them.
+    const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('### Summary'));
     const handoff = triage.slice(markerIndex);
-    // The verdict leads with a severity-coloured alert headlined by severity,
-    // type and route, then one line each for confidence, effort, impact and
-    // the next step.
-    const severityIndex = handoff.indexOf('<Severity>');
+    // A human-readable summary leads, then a one-line type/severity/route,
+    // the next step, and collapsed ratings, root cause, reproduction and
+    // assumptions; only open questions stay expanded.
+    const summaryIndex = handoff.indexOf('### Summary');
     const typeIndex = handoff.indexOf('<Type>');
+    const severityIndex = handoff.indexOf('<Severity>');
     const routeIndex = handoff.indexOf('<Route>');
-    const confidenceIndex = handoff.indexOf('**Confidence:');
-    const effortIndex = handoff.indexOf('**Effort:');
-    const impactIndex = handoff.indexOf('**Impact:');
     const nextStepIndex = handoff.indexOf('**Next step:**');
-    const understandingIndex = handoff.indexOf('### Understanding');
-    const assumptionsIndex = handoff.indexOf('### Assumptions');
+    const ratingsIndex = handoff.indexOf('<strong>Ratings</strong>');
+    const confidenceIndex = handoff.indexOf('**Confidence**');
+    const effortIndex = handoff.indexOf('**Effort**');
+    const impactIndex = handoff.indexOf('**Impact**');
+    const rootCauseIndex = handoff.indexOf('<strong>Root cause</strong>');
+    const reproductionIndex = handoff.indexOf('<strong>Reproduction</strong>');
+    const assumptionsIndex = handoff.indexOf('<strong>Assumptions</strong>');
     const questionsIndex = handoff.indexOf('### Open questions');
 
     // GitHub renders an empty header row as a blank band above the table.
     expect(triage).not.toMatch(/^\|\s+\|\s+\|$/m);
     expect(markerIndex).toBeGreaterThanOrEqual(0);
-    expect(severityIndex).toBeGreaterThan(0);
-    expect(typeIndex).toBeGreaterThan(severityIndex);
-    expect(routeIndex).toBeGreaterThan(typeIndex);
-    expect(confidenceIndex).toBeGreaterThan(routeIndex);
+    expect(summaryIndex).toBeGreaterThan(0);
+    expect(typeIndex).toBeGreaterThan(summaryIndex);
+    expect(severityIndex).toBeGreaterThan(typeIndex);
+    expect(routeIndex).toBeGreaterThan(severityIndex);
+    expect(nextStepIndex).toBeGreaterThan(routeIndex);
+    expect(ratingsIndex).toBeGreaterThan(nextStepIndex);
+    expect(confidenceIndex).toBeGreaterThan(ratingsIndex);
     expect(effortIndex).toBeGreaterThan(confidenceIndex);
     expect(impactIndex).toBeGreaterThan(effortIndex);
-    expect(nextStepIndex).toBeGreaterThan(impactIndex);
-    expect(understandingIndex).toBeGreaterThan(nextStepIndex);
-    expect(assumptionsIndex).toBeGreaterThan(understandingIndex);
+    expect(rootCauseIndex).toBeGreaterThan(impactIndex);
+    expect(reproductionIndex).toBeGreaterThan(rootCauseIndex);
+    expect(assumptionsIndex).toBeGreaterThan(reproductionIndex);
     expect(questionsIndex).toBeGreaterThan(assumptionsIndex);
     expect(triage).toContain('Severity guide:');
     expect(triage).toContain('Effort guide:');

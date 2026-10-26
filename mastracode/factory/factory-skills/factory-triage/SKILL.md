@@ -31,9 +31,9 @@ At the end of this phase, publish a small summary to the source issue as stated 
 ```markdown
 <!-- mastra-factory-triage -->
 
-> [!NOTE]
-> **Triage in progress**
-> <plain-language summary>
+### Triage in progress
+
+<one or two sentences restating what was reported, in plain language>
 ```
 
 For GitHub issues, add `status: needs triage` only if no `status:` label is present, using `gh issue edit "$ISSUE" --add-label "status: needs triage"`. For Linear issues, skip this GitHub-only label mutation.
@@ -96,39 +96,56 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 ```markdown
 <!-- mastra-factory-triage -->
 
-> [!<CAUTION|WARNING|NOTE>]
-> **<Severity>-severity <Type> · <Route>**
-> <plain-language summary>
+### Summary
 
-- **Confidence: <level>** — <evidence>
-- **Effort: <level>** — <scope>
-- **Impact: <level>** — <who is affected and how>
-- **Next step:** <one action>
+<two or three plain sentences: what goes wrong, for whom, and what will fix it>
 
-### Understanding
+**<Type>** · <Severity> severity · <Route>
+
+**Next step:** <one action>
+
+<details>
+<summary><strong>Ratings</strong> · confidence <level> · effort <level> · impact <level></summary>
+
+- **Confidence** — <evidence>
+- **Effort** — <scope>
+- **Impact** — <who is affected and how>
+
+</details>
+
+<details>
+<summary><strong>Root cause</strong></summary>
 
 <root cause with evidence, contributing areas with file paths and relevant history, affected surface, suggested direction, related issues/PRs. Distill — this is a handoff artifact, not a transcript.>
 
-### Assumptions
+</details>
+
+<details>
+<summary><strong>Reproduction</strong></summary>
+
+<for reproduced bugs: exact successful steps. Otherwise: attempted steps, environment, and result, or `Not applicable` / `Not reproduced` with a reason.>
+
+</details>
+
+<details>
+<summary><strong>Assumptions</strong></summary>
 
 <every recorded decision from the run>
 
+</details>
+
 ### Open questions
 
-<only the decisions that genuinely need a human>
-
-### Reproduction
-
-<for reproduced bugs: exact successful steps. Otherwise: attempted steps, environment, and result, or `Not applicable` / `Not reproduced` with a reason.>
+<only the decisions that genuinely need a human. Omit this heading when there are none.>
 ```
 
 Fill the placeholders as follows:
 
-- `<Severity>` is the capitalized severity level. `<Type>` is one of: bug, feature request, docs, question/support, maintenance, duplicate, resolved, invalid, spam, out-of-scope, other; pass the same value as `triageType`. `<Route>` is one of: Plan fix, Await approval, Ask author for info, Close as duplicate/resolved/invalid/spam/out-of-scope, Answer provided / close, No transition / refresh, Other.
-- The alert type follows severity: `CAUTION` for critical or high, `WARNING` for medium, `NOTE` for low.
-- `<plain-language summary>` is one sentence of at most 25 words saying what goes wrong for the user. Describe the symptom, not the mechanism; no internal identifiers. The mechanism belongs in Understanding.
-- `<level>` is the lowercase rating from the guides below. Each reason after it is at most 12 words.
-- Use no emoji and no tables.
+- Write the summary for a maintainer skimming their notifications. Say what breaks for the user, not how the code breaks; no file names, function names, or internal ids — those go under Root cause.
+- `<Type>` is one of: bug, feature request, docs, question/support, maintenance, duplicate, resolved, invalid, spam, out-of-scope, other, capitalized for display; pass the lowercase value as `triageType`. `<Severity>` and `<level>` are the lowercase ratings from the guides below. `<Route>` is one of: Plan fix, Await approval, Ask author for info, Close as duplicate/resolved/invalid/spam/out-of-scope, Answer provided / close, No transition / refresh, Other.
+- Each rating reason is at most 12 words.
+- Keep the collapsed sections collapsed. Only the summary, the type line, the next step, and open questions stay visible.
+- Use no alerts, emoji, or tables.
 
 Severity guide:
 
