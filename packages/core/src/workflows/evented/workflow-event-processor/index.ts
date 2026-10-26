@@ -2744,6 +2744,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         releaseControl();
         throw err;
       }
+      // This run's own cancel already landed and was finalized elsewhere: skip the
+      // step body. An ancestor-only abort leaves the controller unhandled, so it
+      // still goes through the path below and publishes this run's workflow.cancel.
+      if (abortController.signal.aborted && this.cancelHandledControllers.has(abortController)) {
+        releaseControl();
+        return;
+      }
     }
 
     try {

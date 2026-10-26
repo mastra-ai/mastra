@@ -32,10 +32,6 @@ function createBlocker() {
     state.calls++;
     if (state.calls > 1) return;
     markEntered();
-    if (abortSignal.aborted) {
-      state.aborted = true;
-      return;
-    }
     await new Promise<void>(resolve => {
       const timer = setTimeout(resolve, SETTLE_TIMEOUT_MS * 2);
       abortSignal.addEventListener(
@@ -508,16 +504,29 @@ describe('evented workflow cancel with workers on both replicas', () => {
     const blocker = createBlocker();
     setup.holder.current = blocker;
     const run = await setup.workflow.createRun();
+    const released: string[] = [];
+    const retain = WorkflowEventProcessor.prototype['retainRunsForStep'];
+    vi.spyOn(WorkflowEventProcessor.prototype as any, 'retainRunsForStep').mockImplementation(function (
+      this: any,
+      runIds: string[],
+    ) {
+      const release = retain.call(this, runIds);
+      return () => {
+        release();
+        released.push(...runIds);
+      };
+    });
     const resultPromise = run.start({ inputData: { count: 0 } });
     await setup.gate.reached;
     await run.cancel();
     const result = await withTimeout(resultPromise);
     expect(result === 'timed out' ? result : result.status).toBe('canceled');
     setup.gate.release();
-    await vi.waitFor(() => expect(blocker.state.aborted).toBe(true), { timeout: SETTLE_TIMEOUT_MS });
-    await vi.waitFor(() => expect([...setup.stepProcessor().stepRunRefs.keys()]).toEqual([]), {
-      timeout: SETTLE_TIMEOUT_MS,
-    });
+    // Wait until the step path for this run has retained and released it.
+    await vi.waitFor(() => expect(released).toContain(run.runId), { timeout: SETTLE_TIMEOUT_MS });
+    expect([...setup.stepProcessor().stepRunRefs.keys()]).toEqual([]);
+    // The run's own cancel is found before the step body starts, so the step never runs.
+    expect(blocker.state.calls).toBe(0);
     expect(setup.ends.get(run.runId)).toBe(1);
     const stored = await setup.workflow.getWorkflowRunById(run.runId);
     expect(stored?.status).toBe('canceled');
@@ -525,14 +534,14 @@ describe('evented workflow cancel with workers on both replicas', () => {
 
   // The abort broadcast is published while the step's processor is still subscribing to
   // workflow.control (`startFrom: 'latest'`), so it never reaches it; the storage re-check must.
-  it('aborts a step whose processor was not yet subscribed to workflow.control when the run was canceled', async () => {
+  it('skips a step whose processor was not yet subscribed to workflow.control when the run was canceled', async () => {
     const setup = await setupPinnedCancel({ gateControlSubscribe: true });
     await cancelWhileGated(setup);
   });
 
   // The subscription is long established, but the abort lands after the dispatch guard loaded the
   // run's state and before the step retained the run, so the processor had no step of it to abort.
-  it('aborts a step whose cancel arrived after its dispatch check but before the step was retained', async () => {
+  it('skips a step whose cancel arrived after its dispatch check but before the step was retained', async () => {
     const setup = await setupPinnedCancel({ gateStepRun: true });
     // Two plain runs: the first waits on the subscribe, the second is the first after it is ready.
     for (let i = 0; i < 2; i++) {
