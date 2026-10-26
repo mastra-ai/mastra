@@ -1,7 +1,7 @@
 import type { BackgroundTask } from '@mastra/core/background-tasks';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BackgroundTaskMCPTaskStore, projectTask, TASK_EXPIRED_MESSAGE, TASK_LOST_MESSAGE } from './background-store';
 import type { BackgroundTaskEnvelope } from './background-store';
 import type { MCPTaskWork } from './store';
@@ -123,6 +123,37 @@ describe('BackgroundTaskMCPTaskStore', () => {
     store.registerTool('tool');
     return { manager, store, storage: await manager.getStorage() };
   }
+
+  it('does not acknowledge an answer that storage would not store', async () => {
+    const work: MCPTaskWork = async () => ({
+      status: 'input_required',
+      inputRequests: { who: { method: 'elicitation/create', params: {} } },
+    });
+    const { store, storage } = await setup(work);
+    const access = { principal: 'alice' };
+    const task = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+    store.run(task.taskId, work);
+    await until(
+      () => store.get(task.taskId, access),
+      t => t?.status === 'input_required',
+    );
+    // Every metadata write is refused, as a storage that keeps failing would.
+    const update = storage.updateTask.bind(storage);
+    vi.spyOn(storage, 'updateTask').mockImplementation((id, change, options) =>
+      'metadata' in change ? Promise.resolve(false) : update(id, change, options),
+    );
+
+    await expect(store.update(task.taskId, { who: { action: 'accept', content: {} } }, access)).rejects.toThrow(
+      'Could not store the input responses',
+    );
+    expect(await store.get(task.taskId, access)).toMatchObject({
+      status: 'input_required',
+      inputRequests: { who: {} },
+    });
+    // Answers for keys that aren't open are ignored, as before.
+    expect(await store.update(task.taskId, { other: { action: 'accept', content: {} } }, access)).toBe(true);
+    store.close();
+  });
 
   async function rowOf(manager: NonNullable<Mastra['backgroundTaskManager']>) {
     const { tasks } = await manager.listTasks({ agentId: 'mcp-server:s' });

@@ -218,7 +218,14 @@ export class SelectingMCPTaskStore implements MCPTaskStore {
   }
 
   #store(): Promise<MCPTaskStore> {
-    this.#selecting ??= this.#select().then(store => (this.#selected = store));
+    // A failed choice (e.g. storage briefly unreachable) is not remembered: the next request chooses again.
+    this.#selecting ??= this.#select().then(
+      store => (this.#selected = store),
+      error => {
+        this.#selecting = undefined;
+        throw error;
+      },
+    );
     return this.#selecting;
   }
 

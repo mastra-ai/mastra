@@ -74,6 +74,23 @@ function makeTools(probe: Probe, counterFile: string) {
       },
     }),
     crashy: makeCrashy(counterFile),
+    waits: createTool({
+      id: 'waits',
+      description: 'Takes a while unless aborted',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        probe.runs.push({ tool: 'waits', resumeData: 'start' });
+        const aborted = await new Promise<boolean>(resolve => {
+          const timer = setTimeout(() => resolve(false), LEASE_MS * 1.5);
+          context.abortSignal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            resolve(true);
+          });
+        });
+        probe.runs.push({ tool: 'waits', resumeData: aborted ? 'aborted' : 'finished' });
+        return 'waited';
+      },
+    }),
     counted: createTool({
       id: 'counted',
       description: 'Takes a while, counting its runs',
@@ -294,7 +311,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       expect(probe.runs.filter(run => run.tool === 'hang')).toEqual([{ tool: 'hang', resumeData: 'aborted' }]);
     } finally {
       // `drain` skips the cancelled row, so stop A's run while storage is still open.
-      const [row] = (await rows(a.mastra)).filter(r => r.toolName === 'hang');
+      const [row] = (await rows(a.mastra)).filter(r => r.toolName === 'mcp-server:tasks:hang');
       await a.mastra.backgroundTaskManager!.shutdown();
       const workflow = a.mastra.__getInternalWorkflow('__background-task');
       for (let i = 0; i < 100 && (await workflow.getWorkflowRunById(row!.id)); i++) await sleep(20);
@@ -335,7 +352,29 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
   });
 
   describe("an 'auto' task's first attempt, already running under its request", () => {
-    const tasks = { tools: { counted: { mode: 'auto' as const, syncWindowMs: 50 }, hang: 'always' as const } };
+    const tasks = {
+      tools: {
+        counted: { mode: 'auto' as const, syncWindowMs: 50 },
+        waits: { mode: 'auto' as const, syncWindowMs: 50 },
+        hang: 'always' as const,
+      },
+    };
+
+    it('is stopped by a cancel while its row waits for a slot', async () => {
+      const a = await instance(tasks, { backgroundTasks: { perOwnerConcurrency: { 'mcp-server:tasks': 1 } } });
+      const onA = await requester(a.url);
+      await waitFor(onA, await call(a.url, 'hang'), 'working');
+      const taskId = await call(a.url, 'waits');
+      await until(() => probe.runs.some(run => run.tool === 'waits'));
+      expect((await rows(a.mastra)).find(r => r.toolName === 'mcp-server:tasks:waits')).toMatchObject({
+        status: 'pending',
+      });
+
+      await onA.cancel(taskId);
+      expect(await onA.get(taskId)).toMatchObject({ status: 'cancelled' });
+      await until(() => probe.runs.filter(run => run.tool === 'waits').length === 2, LEASE_MS / 3);
+      expect(probe.runs.filter(run => run.tool === 'waits').map(run => run.resumeData)).toEqual(['start', 'aborted']);
+    });
 
     it('is not run again by an idle instance', async () => {
       const a = await instance(tasks);
@@ -377,7 +416,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
         if (slots === 'oneSlot') await waitFor(onDying, await call(dying.url, 'hang'), 'working');
         const taskId = await call(dying.url, 'crashy');
         await until(() => runsIn(counterFile) === 1);
-        const row = (await rows(survivor.mastra)).find(r => r.toolName === 'crashy')!;
+        const row = (await rows(survivor.mastra)).find(r => r.toolName === 'mcp-server:tasks:crashy')!;
         // With the slot taken, the row waits pinned to the dying server while its attempt runs.
         expect(row.status).toBe(slots === 'oneSlot' ? 'pending' : 'running');
         expect(row.ownerId).toBeDefined();
@@ -389,6 +428,58 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
         expect(runsIn(counterFile)).toBe(1);
       },
     );
+  });
+
+  it('runs a task that was still queued on an instance that died, on a peer already up', async () => {
+    // Up before the task exists, so its own start-up recovery can't be what finds it.
+    const survivor = await instance({ tools: { approve: 'always', hang: 'always' } });
+    const dying = await child(false, 'oneSlot');
+    const onDying = await requester(dying.url);
+    await waitFor(onDying, await call(dying.url, 'hang'), 'working');
+    const taskId = await call(dying.url, 'approve', { item: 'invoice' });
+    const queued = (await rows(survivor.mastra)).find(r => r.toolName === 'mcp-server:tasks:approve')!;
+    expect(queued).toMatchObject({ status: 'pending' });
+    expect(queued.ownerId).toBeFalsy();
+
+    dying.process.kill('SIGKILL');
+    expect(await waitFor(await requester(survivor.url), taskId, 'input_required')).toMatchObject({
+      inputRequests: expect.any(Object),
+    });
+    expect(probe.runs.filter(run => run.tool === 'approve')).toEqual([{ tool: 'approve', resumeData: undefined }]);
+  });
+
+  it('never runs a Mastra tool named like the MCP tool for a task row no MCP server serves', async () => {
+    const plain = vi.fn(async () => 'plain tool ran');
+    const dying = await child(false, 'oneSlot');
+    const onDying = await requester(dying.url);
+    await waitFor(onDying, await call(dying.url, 'hang'), 'working');
+    const taskId = await call(dying.url, 'approve', { item: 'invoice' });
+    dying.process.kill('SIGKILL');
+
+    // A worker with the same storage but not the MCP server, and its own tool called `approve`.
+    const worker = new Mastra({
+      logger: false,
+      storage: new LibSQLStore({ id: 'tasks', url: db }),
+      backgroundTasks: { enabled: true, leaseDurationMs: LEASE_MS },
+      tools: {
+        approve: createTool({ id: 'approve', description: 'Not the MCP tool', inputSchema: z.any(), execute: plain }),
+      },
+    });
+    instances.push({
+      url: new URL('http://unused'),
+      server: undefined as never,
+      mastra: worker,
+      close: () => worker.shutdown(),
+    });
+    let row: BackgroundTask | undefined;
+    for (let i = 0; i < 100; i++) {
+      row = (await rows(worker)).find(r => r.toolName === 'mcp-server:tasks:approve');
+      if (row?.status === 'failed') break;
+      await sleep(100);
+    }
+    expect(row).toMatchObject({ status: 'failed' });
+    expect(plain).not.toHaveBeenCalled();
+    void taskId;
   });
 
   it('resumes an answered task whose queued resume was lost with its instance', async () => {
@@ -404,7 +495,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
 
     a.process.kill('SIGKILL');
     const b = await instance({ tools: { approve: 'always', hang: 'always' } });
-    const answered = (await rows(b.mastra)).find(row => row.toolName === 'approve')!;
+    const answered = (await rows(b.mastra)).find(row => row.toolName === 'mcp-server:tasks:approve')!;
     expect(answered.status).toBe('suspended');
     expect(answered.metadata).toMatchObject({ inputResponses: { [key!]: { action: 'accept' } } });
     const done = await waitFor(await requester(b.url), taskId, 'completed');
@@ -426,7 +517,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
 
     // The sweep runs once per lease.
     await sleep(LEASE_MS + 1_000);
-    const expired = (await rows(a.mastra)).find(row => row.toolName === 'approve')!;
+    const expired = (await rows(a.mastra)).find(row => row.toolName === 'mcp-server:tasks:approve')!;
     expect(expired).toMatchObject({ status: 'failed', error: { message: TASK_EXPIRED_MESSAGE } });
     expect(await onA.get(waitingId)).toMatchObject({ status: 'failed', error: { message: TASK_EXPIRED_MESSAGE } });
     // A late answer is not taken.
@@ -435,7 +526,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     expect(probe.runs.filter(run => run.tool === 'approve' && run.resumeData)).toHaveLength(0);
 
     await a.mastra.backgroundTaskManager!.cleanup();
-    expect((await rows(a.mastra)).map(row => row.toolName)).toEqual(['approve']);
+    expect((await rows(a.mastra)).map(row => row.toolName)).toEqual(['mcp-server:tasks:approve']);
     await expect(onA.get(echoed)).rejects.toMatchObject({ code: -32602 });
   });
 
@@ -496,7 +587,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
 
     // Unscoped readers and hooks get the row, but nothing that would let them act as the caller.
     const [row] = (await manager.listTasks({})).tasks;
-    expect(row).toMatchObject({ agentId: 'mcp-server:tasks', toolName: 'echo' });
+    expect(row).toMatchObject({ agentId: 'mcp-server:tasks', toolName: 'mcp-server:tasks:echo' });
     expect(row!.threadId).toBeUndefined();
     expect(completed[0]).toMatchObject({ id: row!.id, agentId: 'mcp-server:tasks' });
     for (const seen of [row, completed[0]]) {
@@ -517,6 +608,49 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     await waitFor(await requester(a.url), taskId, 'completed');
     expect(await rows(a.mastra)).toEqual([]);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('does not support task expiry'));
+  });
+
+  it('chooses the store again after storage was unreachable for one request', async () => {
+    const a = await instance({ tools: { echo: 'always' } });
+    vi.spyOn(a.mastra.backgroundTaskManager!, 'getStorage').mockRejectedValueOnce(new Error('storage unreachable'));
+    await expect(call(a.url, 'echo', { text: 'first' })).rejects.toThrow();
+
+    const taskId = await call(a.url, 'echo', { text: 'second' });
+    await waitFor(await requester(a.url), taskId, 'completed');
+    expect(await rows(a.mastra)).toHaveLength(1);
+  });
+
+  it('does not sweep storage for a server that has served no task', async () => {
+    const a = await instance({ tools: { echo: 'always' } });
+    const list = vi.spyOn(a.mastra.backgroundTaskManager!, 'listTasks');
+    await sleep(LEASE_MS * 1.5);
+    expect(list.mock.calls.filter(([filter]) => filter?.agentId === 'mcp-server:tasks')).toEqual([]);
+  });
+
+  it('warns when tasks are kept in storage under an id generated for this process', async () => {
+    const server = new MCPServer({
+      name: 'Tasks',
+      version: '1.0.0',
+      tools: makeTools(probe, counterFile),
+      tasks: { tools: { echo: 'always' } },
+    });
+    const mastra = new Mastra({
+      logger: false,
+      storage: new LibSQLStore({ id: 'tasks', url: db }),
+      backgroundTasks: { enabled: true, leaseDurationMs: LEASE_MS },
+    });
+    mastra.addMCPServer(server);
+    const served = await serveHTTP(server, { auth: () => authFor('alice') });
+    instances.push({
+      url: served.url,
+      server,
+      mastra,
+      close: async () => (await served.close(), await drain(mastra), await mastra.shutdown()),
+    });
+    const warn = vi.spyOn((server as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger, 'warn');
+
+    await waitFor(await requester(served.url), await call(served.url, 'echo', { text: 'hi' }), 'completed');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('generated id'));
   });
 
   it('uses the store passed in over Mastra background tasks', async () => {

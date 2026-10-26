@@ -165,6 +165,7 @@ export function projectTask(
 interface Gate {
   promise: Promise<{ work: MCPTaskWork; options: MCPTaskRunOptions }>;
   resolve: (value: { work: MCPTaskWork; options: MCPTaskRunOptions }) => void;
+  rowId?: string;
 }
 
 /**
@@ -182,9 +183,13 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   readonly #recoverFor: BackgroundTaskMCPTaskStoreOptions['recoverFor'];
   readonly #getLogger?: () => IMastraLogger;
   readonly #gates = new Map<string, Gate>();
+  /**
+   * Aborts for first attempts already running under their request, by row id, until the row's
+   * executor takes the attempt over. A row pinned here can wait for a slot while its attempt runs,
+   * and the manager can't abort an attempt it never started.
+   */
+  readonly #firstAttempts = new Map<string, (reason: unknown) => void>();
   readonly #executors = new Set<string>();
-  /** Rows this instance reclaimed for another attempt but could not dispatch yet. */
-  readonly #reclaimed = new Set<string>();
   #sweepTimer?: ReturnType<typeof setInterval>;
   #sweeping?: Promise<void>;
 
@@ -202,11 +207,22 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   }
 
   /**
+   * The row's `toolName`: `mcp-server:<serverId>:<tool>`. Core looks an executor up as
+   * `<agentId>:<toolName>`, then as the bare `toolName`; the bare lookup hits the executor
+   * registered under this name, never a Mastra tool named like the MCP tool. Where no executor is
+   * registered (the server closed, an older instance, a worker without the server), the attempt
+   * fails instead of running a same-named tool with the task's arguments.
+   */
+  #rowToolName(toolName: string): string {
+    return `${this.#owner}:${toolName}`;
+  }
+
+  /**
    * Registers the executor that runs `toolName`'s tasks on any worker. It must be registered on
    * every instance before the manager recovers rows, or recovered attempts find no executor.
    */
   registerTool(toolName: string): void {
-    const key = `${this.#owner}:${toolName}`;
+    const key = this.#rowToolName(toolName);
     this.#manager.registerStaticExecutor(key, {
       execute: (args, options) => {
         const { context } = args as unknown as RowArgs;
@@ -214,7 +230,6 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       },
     });
     this.#executors.add(key);
-    this.#startSweeping();
   }
 
   async create(params: MCPTaskCreateParams, { pinToWorker = false }: { pinToWorker?: boolean } = {}): Promise<MCPTask> {
@@ -223,7 +238,8 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       throw new Error('A background-task MCP task needs the tool it runs in its context');
     }
     // Tools added after registration get their executor on first use.
-    if (!this.#executors.has(`${this.#owner}:${context.toolName}`)) this.registerTool(context.toolName);
+    if (!this.#executors.has(this.#rowToolName(context.toolName))) this.registerTool(context.toolName);
+    this.#startSweeping();
     const taskId = createTaskId();
     const taskKey = taskKeyOf(taskId);
     const recover = this.#recoverFor(context.toolName);
@@ -248,16 +264,18 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
         const { work, options: runOptions } = await gate.promise;
         const initial = first ? runOptions.initialAttempt : undefined;
         first = false;
+        // From here the attempt is aborted through the executor's signal.
+        if (initial && gate.rowId) this.#firstAttempts.delete(gate.rowId);
         return this.#execute(work, args as unknown as RowArgs, options, initial);
       },
     };
     const taskContext: TaskContext = { executor };
     const args: RowArgs = { taskKey, context };
     try {
-      const { fallbackToSync } = await this.#manager.enqueue(
+      const { task, fallbackToSync } = await this.#manager.enqueue(
         {
           runId: taskKey,
-          toolName: context.toolName,
+          toolName: this.#rowToolName(context.toolName),
           toolCallId: taskKey,
           args: args as unknown as Record<string, unknown>,
           agentId: this.#owner,
@@ -276,6 +294,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       if (fallbackToSync) {
         throw new Error("Background tasks are at capacity and backpressure is 'fallback-sync'; MCP tasks need 'queue'");
       }
+      gate.rowId = task.id;
     } catch (error) {
       this.#gates.delete(taskId);
       throw error;
@@ -294,10 +313,20 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     const gate = this.#gates.get(taskId);
     if (!gate) throw new Error(`MCP task "${taskId}" not found`);
     this.#gates.delete(taskId);
+    const { initialAttempt } = options;
+    if (initialAttempt && gate.rowId) {
+      const rowId = gate.rowId;
+      this.#firstAttempts.set(rowId, initialAttempt.abort);
+      const done = () => {
+        if (this.#firstAttempts.get(rowId) === initialAttempt.abort) this.#firstAttempts.delete(rowId);
+      };
+      initialAttempt.outcome.then(done, done);
+    }
     gate.resolve({ work, options });
   }
 
   async get(taskId: string, access: MCPTaskAccess): Promise<MCPDetailedTask | undefined> {
+    this.#startSweeping();
     const found = await this.#find(taskId, access);
     if (!found) return undefined;
     const { row, envelope } = found;
@@ -309,9 +338,11 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   }
 
   async update(taskId: string, inputResponses: MCPTaskInputResponses, access: MCPTaskAccess): Promise<boolean> {
+    this.#startSweeping();
     const found = await this.#find(taskId, access);
     if (!found) return false;
     let { row, envelope } = found;
+    let stored = false;
     const storage = await this.#manager.getStorage();
     // The answers are persisted before acknowledging: the resume they trigger may be lost with
     // this process, and whichever instance sees the answered row next resumes it.
@@ -330,17 +361,29 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       );
       const reread = await storage.getTask(row.id);
       const rereadEnvelope = reread && envelopeOf(reread);
-      if (!reread || !rereadEnvelope) return true;
+      if (!reread || !rereadEnvelope) return false;
       row = reread;
       envelope = rereadEnvelope;
       // A concurrent update can overwrite these answers; check they landed, and write again if not.
-      if (written && accepted.every(([key]) => key in (envelope.inputResponses ?? {}))) break;
+      if (written && accepted.every(([key]) => key in (envelope.inputResponses ?? {}))) {
+        stored = true;
+        break;
+      }
+    }
+    // Still waiting for answers this request gave, but they weren't stored: don't acknowledge them.
+    // (Answers for keys no longer open, or for a task no longer waiting, are ignored.)
+    if (!stored && row.status === 'suspended') {
+      const open = openInputRequests(envelope);
+      if (Object.keys(inputResponses).some(key => key in open && !(key in (envelope.inputResponses ?? {})))) {
+        throw new Error(`Could not store the input responses for MCP task "${taskId}"`);
+      }
     }
     if (isFullyAnswered(row, envelope)) await this.#resume(row, envelope);
     return true;
   }
 
   async cancel(taskId: string, access: MCPTaskAccess): Promise<boolean> {
+    this.#startSweeping();
     const found = await this.#find(taskId, access);
     if (!found) return false;
     if (!isTerminalRow(found.row)) {
@@ -349,8 +392,16 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       } catch (error) {
         this.#getLogger?.().warn('Could not cancel MCP task', { error });
       }
+      this.#abortFirstAttempt(found.row.id, new Error('Task cancelled'));
     }
     return true;
+  }
+
+  #abortFirstAttempt(rowId: string, reason: Error): void {
+    const abort = this.#firstAttempts.get(rowId);
+    if (!abort) return;
+    this.#firstAttempts.delete(rowId);
+    abort(reason);
   }
 
   /** Unregisters this store's executors. Rows stay in storage. */
@@ -397,6 +448,12 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     }
     const storage = await this.#manager.getStorage();
     const now = Date.now();
+    const lease = this.#manager.config.leaseDurationMs;
+    // A first attempt running here whose row another instance cancelled or expired.
+    for (const rowId of this.#firstAttempts.keys()) {
+      const current = await storage.getTask(rowId).catch(() => undefined);
+      if (current && isTerminalRow(current)) this.#abortFirstAttempt(rowId, new Error('Task cancelled'));
+    }
     for (const row of rows) {
       const envelope = envelopeOf(row);
       if (!envelope) continue;
@@ -405,7 +462,12 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
         else if (isFullyAnswered(row, envelope)) await this.#resume(row, envelope);
         else if (isOwned(row) && row.leaseExpiresAt && row.leaseExpiresAt.getTime() <= now) {
           await this.#reclaim(storage, row, envelope);
-        } else if (row.status === 'pending' && this.#reclaimed.has(row.id)) await this.#restart(row.id);
+        } else if (row.status === 'pending' && !row.ownerId && now - row.createdAt.getTime() >= lease) {
+          // Never started, or reclaimed for another attempt, and still waiting a lease on: it may
+          // be queued in a process that died, and the manager only dispatches such rows when it
+          // starts. Nothing of it ran, and the dispatch claim is fenced, so this is safe either way.
+          await this.#restart(row.id);
+        }
       } catch (error) {
         this.#getLogger?.().debug('Could not sweep MCP task', { error });
       }
@@ -415,6 +477,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   /** Aborts the work, then records the task as failed until its retention ends. */
   async #expire(storage: BackgroundTasksStorage, row: BackgroundTask): Promise<void> {
     await this.#manager.cancel(row.id);
+    this.#abortFirstAttempt(row.id, new Error(TASK_EXPIRED_MESSAGE));
     await storage.updateTask(
       row.id,
       {
@@ -426,7 +489,6 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       },
       { expectedStatus: 'cancelled' },
     );
-    this.#reclaimed.delete(row.id);
   }
 
   /**
@@ -451,7 +513,6 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
         fence,
       );
       if (!won) return;
-      this.#reclaimed.add(row.id);
       await this.#restart(row.id);
       return;
     }
@@ -472,7 +533,6 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   async #restart(rowId: string): Promise<void> {
     try {
       await this.#manager.restart(rowId);
-      this.#reclaimed.delete(rowId);
     } catch (error) {
       // No slot yet, or another worker already took it: the next sweep tries again.
       this.#getLogger?.().debug('Could not restart MCP task', { error });

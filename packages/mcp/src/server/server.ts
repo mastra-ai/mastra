@@ -284,6 +284,7 @@ export class MCPServer extends MCPServerBase {
     this.eventsOptions = config.eventsOptions ?? {};
     this.legacy = config.legacy ?? 'reject';
     this.tasks = resolveTasksConfig(config.tasks, Object.keys(config.tools ?? {}));
+    this.hasStableId = Boolean(config.id);
     this.taskStore = this.tasks.store ?? new SelectingMCPTaskStore(() => this.selectTaskStore());
     const webhook = this.eventsOptions.webhook;
     this.eventRegistry = new ServerEventRegistry(config.events, { webhook: webhook !== undefined });
@@ -1567,6 +1568,14 @@ export class MCPServer extends MCPServerBase {
     this.backgroundTaskStore?.close();
   }
 
+  /** Whether the id was given (in the config, or as a Mastra registration key) rather than generated per process. */
+  private hasStableId = false;
+
+  override setId(id: Parameters<MCPServerBase['setId']>[0]): void {
+    super.setId(id);
+    if (this.id === id) this.hasStableId = true;
+  }
+
   /** @internal */
   override __registerMastra(mastra: Parameters<MCPServerBase['__registerMastra']>[0]): void {
     super.__registerMastra(mastra);
@@ -1605,10 +1614,16 @@ export class MCPServer extends MCPServerBase {
   private async selectTaskStore(): Promise<MCPTaskStore> {
     const manager = this.mastra?.backgroundTaskManager;
     if (manager) {
-      const storage = await manager.getStorage().catch(() => undefined);
-      if (storage?.supportsTaskExpiry === true) {
+      // Fails this request when storage is unreachable; the next task request chooses again.
+      const storage = await manager.getStorage();
+      if (storage.supportsTaskExpiry === true) {
         const prepared = this.backgroundTaskStore;
         const store = this.prepareBackgroundTaskStore()!;
+        if (!this.hasStableId) {
+          this.logger.warn(
+            `MCP server '${this.name}' keeps tasks in Mastra storage under the generated id '${this.id}', which changes on every start: other instances and restarts won't find its tasks. Pass \`id\` to the MCPServer, or register it under a key in Mastra's \`mcpServers\`.`,
+          );
+        }
         if (!prepared) {
           this.logger.warn(
             `MCP server '${this.name}' serves tasks from Mastra background tasks that started after it was registered; tasks created before a restart may not have been recovered`,
@@ -1617,7 +1632,7 @@ export class MCPServer extends MCPServerBase {
         return store;
       }
       this.logger.warn(
-        `MCP server '${this.name}' keeps tasks in memory: the background tasks storage (${storage?.constructor.name ?? 'unavailable'}) does not support task expiry. Upgrade the storage adapter to serve tasks across instances.`,
+        `MCP server '${this.name}' keeps tasks in memory: the background tasks storage (${storage.constructor.name}) does not support task expiry. Upgrade the storage adapter to serve tasks across instances.`,
       );
       this.backgroundTaskStore?.close();
       this.backgroundTaskStore = undefined;

@@ -2023,7 +2023,7 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     isOptional: true,
     defaultValue: '86400000',
     description:
-      'How long a task is kept after it is created, in milliseconds. A task still running when it expires is aborted and ends `failed`. `null` keeps tasks in memory until the server closes, and in Mastra storage indefinitely.',
+      'How long a task is kept after it is created, in milliseconds. A task still running when it expires is aborted and ends `failed`. `null` keeps tasks in memory until the server closes. In Mastra storage, `null` keeps the row until you delete it, and a task still running after about 24.8 days (the longest timer Node.js supports) ends `failed`.',
   },
   {
     name: 'recover',
@@ -2108,7 +2108,7 @@ export const mastra = new Mastra({
 ```
 
 - This needs a storage adapter that keeps a TTL per task. On an older adapter the server falls back to memory and logs a warning when it serves its first task. A `store` passed in `tasks` always wins.
-- Register the same server, with the same id and tools, on every instance. An instance without it can't run that server's tasks.
+- Register the same server, with the same id and tools, on every instance. An instance without it can't run that server's tasks, and fails them instead. Set the id with `id`, or register the server under a key in `mcpServers`: a generated id changes on every start, and the server logs a warning.
 - Each task counts against `perOwnerConcurrency` for `mcp-server:<server id>` (or `perAgentConcurrency` when unset) and against `globalConcurrency`. Keep `backpressure` at its default, `'queue'`. With other values a full queue fails the call.
 - An answer sent with `tasks/update` is stored before it's acknowledged. The task resumes even if the instance that took the answer stops before running it.
 - Expired tasks are failed, and answered tasks still waiting are resumed, by a periodic sweep on each instance.
@@ -2125,6 +2125,8 @@ When the instance running a task stops, the task's lease lapses and another inst
 
 - `recover: false` (default): the task ends `failed` with `task lost: the server restarted while it was running`. `execute` never runs twice.
 - `recover: true`: another instance runs `execute` again from the start, once. Only turn it on for tools that are safe to repeat.
+
+With `recover: true` the same single retry also covers an attempt that fails for a reason other than the tool, such as a storage write failing while the task records that it needs input. An error from the tool itself isn't retried: it ends the task with an `isError` result.
 
 `recover` doesn't affect a task waiting for input: answering it resumes it on any instance either way.
 
