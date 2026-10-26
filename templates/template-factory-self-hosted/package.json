@@ -6,6 +6,7 @@
   "private": true,
   "scripts": {
     "dev": "mastra factory dev",
+    "check": "tsc --noEmit",
     "build": "mastra build",
     "start": "mastra start",
     "db:up": "docker compose up -d --wait",

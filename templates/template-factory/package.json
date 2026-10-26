@@ -6,6 +6,7 @@
   "private": true,
   "scripts": {
     "dev": "mastra factory dev",
+    "check": "tsc --noEmit",
     "build": "mastra build",
     "start": "mastra start"
   },
@@ -19,6 +20,7 @@
   "dependencies": {
     "@mastra/core": "latest",
     "@mastra/factory": "latest",
+    "@mastra/pg": "latest",
     "@mastra/platform-workspace": "latest",
     "zod": "^4.4.3"
   },

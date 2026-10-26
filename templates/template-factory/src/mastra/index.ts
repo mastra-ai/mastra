@@ -18,12 +18,12 @@
  */
 
 import { Mastra } from '@mastra/core/mastra';
-import { PlatformSandbox, createRepoTemplate as createPlatformRepoTemplate } from '@mastra/platform-workspace';
 import { MastraFactory } from '@mastra/factory';
+import { PgFactoryStorage, PgVector } from '@mastra/pg';
+import { PlatformFactorySandbox } from '@mastra/platform-workspace';
 
-// Provider precedence: Platform when its env trio is set, else LocalSandbox.
-// Sandboxes are created lazily per session on the first command; repo
-// templates pre-warm the checkout where the provider supports it.
+// Session sandboxes run on Mastra Platform; the sandbox client reads the
+// MASTRA_PLATFORM_* env itself.
 const PLATFORM_SANDBOX_ENV_KEYS = [
   'MASTRA_PLATFORM_ACCESS_TOKEN',
   'MASTRA_ENVIRONMENT_ID',
@@ -38,19 +38,12 @@ if (!hasPlatformSandboxEnv) {
 }
 
 // One FactoryStorage backend powers agent storage, the factory app tables,
-// the distributed project lock, and better-auth. `DATABASE_URL` set →
-// Postgres (the paired PgVector rides the same database for recall search).
-// Unset (bare local dev) → libSQL on the same local file the SDK's default
-// storage resolution uses, running the FULL app surface (auth, intake,
-// audit, work-items, integrations) — no features silently off.
-//
-// `APP_DATABASE_URL` is the deprecated legacy name — still honored as a
-// fallback so existing checkouts keep working, but new setups should use
-// `DATABASE_URL` (matches the platform's managed env-var sync for attached
-// databases, so `mastra deploy` populates it automatically).
+// the distributed project lock, and better-auth; the paired PgVector rides
+// the same database for recall search. `DATABASE_URL` matches the platform's
+// managed env-var sync for attached databases, so `mastra deploy` populates it.
 const databaseUrl = process.env.DATABASE_URL?.trim() || undefined;
 if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required outside local development and tests.');
+  throw new Error('DATABASE_URL is required.');
 }
 
 // Lifecycle, transition-policy, and tool-result rules are owned by the
@@ -63,16 +56,9 @@ const factoryConfigVersion = 'mastracode-web-v1';
 export const factory = new MastraFactory({
   configVersion: factoryConfigVersion,
   sandboxStart: 'eager',
-  sandbox: ctx => {
-    return new PlatformSandbox({
-      id: ctx.sessionId,
-      template: createPlatformRepoTemplate({
-        ...ctx,
-        memoryMB: 1024 * 8,
-        cpuCount: 4,
-      }),
-    });
-  },
+  storage: new PgFactoryStorage({ id: 'factory-storage', connectionString: databaseUrl }),
+  vector: new PgVector({ id: 'factory-vectors', connectionString: databaseUrl }),
+  sandbox: new PlatformFactorySandbox({ defaults: { memoryMb: 1024 * 8, cpuCount: 4 } }),
 });
 
 const preparedArgs = await factory.prepare();
