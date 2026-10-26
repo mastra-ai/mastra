@@ -26,7 +26,10 @@ class CustomDeployer extends Deployer {
     await this.prepare(outputDirectory)
 
     // Bundle the application
-    await this._bundle('server.ts', 'mastra.ts', outputDirectory)
+    await this._bundle('server.ts', 'mastra.ts', {
+      projectRoot: process.cwd(),
+      outputDirectory,
+    })
 
     // Custom deployment logic
   }

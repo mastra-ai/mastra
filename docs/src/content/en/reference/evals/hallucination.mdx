@@ -125,7 +125,7 @@ The scorer evaluates hallucination through contradiction detection and unsupport
    - Divides by total statements
    - Scales to configured range
 
-Final score: `min(1, hallucinated_statements / total_statements) * scale`
+Final score: `min(1, hallucinated_statements / total_statements) * scale` when `total_statements > 0`, otherwise `0`.
 
 ### Important Considerations
 
