@@ -13,8 +13,9 @@ const H = 16;
 
 /** A tiny trend line, e.g. a row's series over the chart's range in a chart table. */
 export function Sparkline({ values, color, className }: SparklineProps) {
-  // A lone value still needs two points to draw.
-  const series = values.length === 1 ? [...values, ...values] : values;
+  // Infinity or NaN can't be placed; a lone value still needs two points to draw.
+  const finite = values.filter(Number.isFinite);
+  const series = finite.length === 1 ? [...finite, ...finite] : finite;
   // From zero (or the lowest value, when some are negative) to the highest, inside the box.
   const lo = Math.min(...series, 0);
   const range = Math.max(...series, 0) - lo;

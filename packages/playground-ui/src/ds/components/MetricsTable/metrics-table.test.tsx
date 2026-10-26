@@ -119,6 +119,6 @@ describe('MetricsTable', () => {
 
   it('shows the empty message when there are no rows', () => {
     render(<MetricsTable columns={columns} rows={[]} getRowKey={r => r.name} empty="Nothing in this range." />);
-    expect(screen.getByText('Nothing in this range.')).toBeDefined();
+    expect(screen.getByRole('cell', { name: 'Nothing in this range.' })).toBeDefined();
   });
 });
