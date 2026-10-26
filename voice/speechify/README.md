@@ -37,7 +37,7 @@ const stream = await voice.speak('Hello world', {
 stream.pipe(destination);
 ```
 
-## Models
+### Models
 
 - `simba-3.5`: the default and Speechify's recommended model. 48 languages on one id, and every catalog voice, cloned voices included, speaks all of them. Pass `language` to choose one.
 - `simba-3.2`: English only. A non-English voice returns an error.
