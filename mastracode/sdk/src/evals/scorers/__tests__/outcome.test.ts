@@ -107,6 +107,28 @@ describe('Outcome Scorer', () => {
       expect(reason).toContain('Build/typecheck passed');
     });
 
+    it('ignores background build commands', async () => {
+      const msgs = [
+        makeMsg('assistant', [
+          {
+            toolName: 'execute_command',
+            args: { command: 'pnpm build', background: true },
+            result: 'Started background process (PID: 42)',
+          },
+        ]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('No build/typecheck ran');
+    });
+
+    it('detects markerless TypeScript errors as build failures', async () => {
+      const msgs = [
+        makeMsg('assistant', [commandResult('pnpm build', "error TS2322: Type 'string' is not assignable")]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Build failed (TypeScript errors in output)');
+    });
+
     it('does not treat exit-code text in successful command output as a failure', async () => {
       const msgs = [makeMsg('assistant', [commandResult('pnpm build', 'case logged Exit code: 1 and passed')])];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
@@ -114,9 +136,7 @@ describe('Outcome Scorer', () => {
     });
 
     it('detects build failure from real execute_command output', async () => {
-      const msgs = [
-        makeMsg('assistant', [commandResult('pnpm build', 'stderr:\nBuild failed\n\nExit code: 1')]),
-      ];
+      const msgs = [makeMsg('assistant', [commandResult('pnpm build', 'stderr:\nBuild failed\n\nExit code: 1')])];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('Build failed (exit 1)');
     });
@@ -169,6 +189,26 @@ describe('Outcome Scorer', () => {
       ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('Tests passed');
+    });
+
+    it('detects markerless test failure output', async () => {
+      const msgs = [makeMsg('assistant', [commandResult('vitest run', '1 test failed')])];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Tests failed (inferred)');
+    });
+
+    it('ignores background test commands', async () => {
+      const msgs = [
+        makeMsg('assistant', [
+          {
+            toolName: 'execute_command',
+            args: { command: 'pnpm test', background: true },
+            result: 'Started background process (PID: 42)',
+          },
+        ]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('No tests ran');
     });
   });
 
@@ -257,6 +297,22 @@ describe('Outcome Scorer', () => {
       ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('regressed then recovered');
+    });
+
+    it('ignores background commands when detecting regressions', async () => {
+      const msgs = [
+        makeMsg('assistant', [cmd('pnpm test', 0)]),
+        makeMsg('assistant', [cmd('pnpm test', 1)]),
+        makeMsg('assistant', [
+          {
+            toolName: 'execute_command',
+            args: { command: 'pnpm test', background: true },
+            result: 'Started background process (PID: 42)',
+          },
+        ]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Tests regressed (persisted)');
     });
 
     it('scores 1.0 when no regression', async () => {

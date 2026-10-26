@@ -89,11 +89,17 @@ function isTestArgs(args: Record<string, unknown>): boolean {
   return isTestCommand(String(args.command ?? ''));
 }
 
+function isForegroundCommand(result: ExtractedToolCall): boolean {
+  return result.args.background !== true;
+}
+
 /**
  * Score build/typecheck outcome (final state).
  */
 function scoreBuild(execResults: ExtractedToolCall[]): DimensionResult {
-  const builds = execResults.filter(r => r.toolName === 'execute_command' && isBuildArgs(r.args));
+  const builds = execResults.filter(
+    r => r.toolName === 'execute_command' && isForegroundCommand(r) && isBuildArgs(r.args),
+  );
   if (builds.length === 0) return { score: 0, detail: 'No build/typecheck ran', applicable: false };
 
   const last = builds[builds.length - 1]!;
@@ -102,13 +108,12 @@ function scoreBuild(execResults: ExtractedToolCall[]): DimensionResult {
   const exitCode = getExitCode(last.result);
   if (exitCode !== null && exitCode !== 0)
     return { score: 0, detail: `Build failed (exit ${exitCode})`, applicable: true };
-  if (isSuccessResult(last.result)) return { score: 1, detail: 'Build/typecheck passed', applicable: true };
 
-  // Fallback: check result text for TS errors
   const text = typeof last.result === 'string' ? last.result : JSON.stringify(last.result ?? '');
   if (/error TS\d+|Cannot find module|is not assignable/i.test(text)) {
     return { score: 0, detail: 'Build failed (TypeScript errors in output)', applicable: true };
   }
+  if (isSuccessResult(last.result)) return { score: 1, detail: 'Build/typecheck passed', applicable: true };
 
   return { score: THRESHOLDS.ambiguousExitScore, detail: 'Build ran, outcome unclear', applicable: true };
 }
@@ -117,7 +122,9 @@ function scoreBuild(execResults: ExtractedToolCall[]): DimensionResult {
  * Score test outcome (final state).
  */
 function scoreTests(execResults: ExtractedToolCall[]): DimensionResult {
-  const tests = execResults.filter(r => r.toolName === 'execute_command' && isTestArgs(r.args));
+  const tests = execResults.filter(
+    r => r.toolName === 'execute_command' && isForegroundCommand(r) && isTestArgs(r.args),
+  );
   if (tests.length === 0) return { score: 0, detail: 'No tests ran', applicable: false };
 
   const last = tests[tests.length - 1]!;
@@ -126,15 +133,15 @@ function scoreTests(execResults: ExtractedToolCall[]): DimensionResult {
   const exitCode = getExitCode(last.result);
   if (exitCode !== null && exitCode !== 0)
     return { score: 0, detail: `Tests failed (exit ${exitCode})`, applicable: true };
-  if (isSuccessResult(last.result)) return { score: 1, detail: 'Tests passed', applicable: true };
 
   const text = typeof last.result === 'string' ? last.result : JSON.stringify(last.result ?? '');
-  if (/\d+ (?:tests? )?passed|✓|PASS/i.test(text) && !/\bfail(?:ed|ure)?\b|\berror\b/i.test(text)) {
-    return { score: 1, detail: 'Tests passed (inferred)', applicable: true };
-  }
   if (/\bFAIL\b|failed|✗|✘/i.test(text)) {
     return { score: 0, detail: 'Tests failed (inferred)', applicable: true };
   }
+  if (/\d+ (?:tests? )?passed|✓|PASS/i.test(text) && !/\bfail(?:ed|ure)?\b|\berror\b/i.test(text)) {
+    return { score: 1, detail: 'Tests passed (inferred)', applicable: true };
+  }
+  if (isSuccessResult(last.result)) return { score: 1, detail: 'Tests passed', applicable: true };
 
   return { score: THRESHOLDS.ambiguousExitScore, detail: 'Tests ran, outcome unclear', applicable: true };
 }
@@ -218,7 +225,7 @@ function scoreRegression(execResults: ExtractedToolCall[]): DimensionResult {
     ['Build', isBuildArgs],
     ['Tests', isTestArgs],
   ] as const) {
-    const cmds = execResults.filter(r => r.toolName === 'execute_command' && filter(r.args));
+    const cmds = execResults.filter(r => r.toolName === 'execute_command' && isForegroundCommand(r) && filter(r.args));
     if (cmds.length < 2) continue;
 
     let sawPass = false;
