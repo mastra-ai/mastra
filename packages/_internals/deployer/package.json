@@ -20,6 +20,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./fs-routing": {
+      "import": {
+        "types": "./dist/fs-routing.d.ts",
+        "default": "./dist/fs-routing.js"
+      },
+      "require": {
+        "types": "./dist/fs-routing.d.ts",
+        "default": "./dist/fs-routing.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

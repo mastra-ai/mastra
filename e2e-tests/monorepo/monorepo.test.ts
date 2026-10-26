@@ -887,6 +887,17 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
       const sourceFile = join(appDir, 'deployer-typecheck.ts');
       const tsconfigFile = join(appDir, 'tsconfig.deployer-typecheck.json');
 
+      // skipLibCheck would hide an unresolved bundled `@internal/*` specifier (the base class would
+      // silently become `any`), so assert the installed declarations have none.
+      for (const pkg of ['core', 'deployer']) {
+        const distDir = join(appDir, 'node_modules', '@mastra', pkg, 'dist');
+        const declarations = await glob('**/*.d.ts', { cwd: distDir, absolute: true });
+        expect(declarations.length).toBeGreaterThan(0);
+        for (const file of declarations) {
+          expect(await readFile(file, 'utf-8'), file).not.toMatch(/from ['"]@internal\//);
+        }
+      }
+
       try {
         await writeFile(
           sourceFile,

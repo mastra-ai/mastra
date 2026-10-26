@@ -1,4 +1,4 @@
-import { MAX_FS_SUBAGENT_DEPTH } from '@internal/deployer';
+import { MAX_FS_SUBAGENT_DEPTH } from '@internal/deployer/fs-routing';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraScorer, MastraScorerEntry, MastraScorers } from '../../evals';
