@@ -145,7 +145,7 @@ The scorer uses a multi-step process:
 1. **Score**: Calculates weighted similarity with penalties for contradictions
 1. **Reason**: Generates human-readable explanation
 
-Score calculation: `max(0, base_score - contradiction_penalty - missing_penalty - extra_info_penalty) × scale`
+Score calculation: `max(0, min(1, base_score - contradiction_penalty - missing_penalty - extra_info_penalty)) × scale`
 
 ## Example
 

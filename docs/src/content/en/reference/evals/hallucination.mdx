@@ -18,7 +18,7 @@ The `createHallucinationScorer()` function accepts a single options object with 
   content={[
   {
     name: 'model',
-    type: 'LanguageModel',
+    type: 'MastraModelConfig',
     required: true,
     description: 'Configuration for the model used to evaluate hallucination.',
   },
@@ -125,7 +125,7 @@ The scorer evaluates hallucination through contradiction detection and unsupport
    - Divides by total statements
    - Scales to configured range
 
-Final score: `(hallucinated_statements / total_statements) * scale`
+Final score: `min(1, hallucinated_statements / total_statements) * scale`
 
 ### Important Considerations
 
@@ -141,7 +141,7 @@ Final score: `(hallucinated_statements / total_statements) * scale`
 
 ### Score interpretation
 
-A hallucination score between 0 and 1:
+A hallucination score between 0 and `scale` (0 to 1 with the default scale). The ranges below assume the default scale:
 
 - **0.0**: No hallucination, all claims match the context.
 - **0.3 to 0.4**: Low hallucination, a few contradictions.

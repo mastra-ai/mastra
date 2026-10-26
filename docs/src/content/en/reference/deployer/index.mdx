@@ -99,13 +99,15 @@ The Deployer class inherits the following key methods from the Bundler class:
   },
   {
     name: 'writePackageJson',
-    type: '(outputDirectory: string, dependencies: Map<string, string>) => Promise<void>',
-    description: 'Generates a package.json file in the output directory with the specified dependencies.',
+    type: '(outputDirectory: string, dependencies: Map<string, string | ExternalDependencyInfo>, resolutions?: Record<string, string>) => Promise<void>',
+    description:
+      'Generates a package.json file in the output directory with the specified dependencies. When `resolutions` is non-empty, it is written to the `resolutions` field.',
   },
   {
     name: '_bundle',
-    type: '(serverFile: string, mastraEntryFile: string, outputDirectory: string, bundleLocation?: string) => Promise<void>',
-    description: 'Bundles the application using the specified server and Mastra entry files.',
+    type: '(serverFile: string, mastraEntryFile: string, options: { projectRoot: string; outputDirectory: string; enableEsmShim?: boolean; alias?: Record<string, string> }, toolsPaths?: (string | string[])[], bundleLocation?: string) => Promise<void>',
+    description:
+      'Bundles the application using the specified server and Mastra entry files. `bundleLocation` defaults to the bundler output directory inside `options.outputDirectory`.',
   },
 ]}
 />

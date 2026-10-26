@@ -118,7 +118,7 @@ The scorer evaluates relevancy through query-answer alignment, considering compl
 
 ### Score Interpretation
 
-A relevancy score between 0 and 1:
+A relevancy score between 0 and `scale` (0 to 1 with the default scale). The ranges below assume the default scale:
 
 - **1.0**: The response fully answers the query with relevant and focused information.
 - **0.7 to 0.9**: The response mostly answers the query but may include minor unrelated content.
