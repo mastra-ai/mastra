@@ -12,7 +12,7 @@ import type {
   ExperimentStatus,
   TargetType,
 } from '../../storage/types';
-import type { ExperimentAgentOverrides } from './agent-overrides';
+import type { ExperimentAgentCallOptions } from './agent-call-options';
 import type { ExperimentEventObserver } from './events';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 
@@ -277,19 +277,17 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   /** Agent version ID to record against the experiment */
   agentVersion?: string;
   /**
-   * Model override for agent targets, passed per call to `agent.generate()`. The agent
-   * version, instructions, tools and sub-agent models stay exactly as they would without it.
-   * Recorded as a `provider/modelId` label in the experiment's `metadata.agentModel`, and as
-   * `agentOverrides.model` (it is shorthand for it).
+   * Model to run an agent target on. Alias for `agentCallOptions.model`; when both are set,
+   * `agentCallOptions.model` wins.
    */
   agentModel?: MastraModelConfig;
   /**
-   * Per-run agent config tweaks for agent targets (instructions, model, generation options),
-   * passed per call to `agent.generate()`. The registered agent is not changed. The shape is a
-   * subset of a stored agent version snapshot and is recorded in `metadata.agentOverrides`.
-   * If `agentModel` is also set, `model` must name the same model.
+   * Per-call `agent.generate()` options for agent targets (`instructions`, `model`, `modelSettings`).
+   * They are layered on top of the agent's config, or of the `agentVersion` it resolves to, for each
+   * call; the registered agent is not changed. Recorded in `metadata.agentCallOptions`, with the model
+   * as its `provider/modelId` label.
    */
-  agentOverrides?: ExperimentAgentOverrides;
+  agentCallOptions?: ExperimentAgentCallOptions;
   /** Version overrides for sub-agent delegation during experiment execution */
   versions?: VersionOverrides;
   /**

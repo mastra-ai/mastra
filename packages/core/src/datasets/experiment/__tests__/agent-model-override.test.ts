@@ -188,16 +188,14 @@ describe('experiment agentModel override', () => {
         scenario: 'a model instance',
         agentModel: () => textModel('x'),
         expected: 'mock-provider/mock-model-id',
-        model: { provider: 'mock-provider', name: 'mock-model-id' },
       },
       {
         scenario: 'a labeled model',
         agentModel: () => ({ model: textModel('x'), id: 'anthropic/claude-haiku-5-5' }),
         expected: 'anthropic/claude-haiku-5-5',
-        model: { provider: 'anthropic', name: 'claude-haiku-5-5' },
       },
-      { scenario: 'no override', agentModel: () => undefined, expected: undefined, model: undefined },
-    ])('$scenario', async ({ agentModel, expected, model }) => {
+      { scenario: 'no override', agentModel: () => undefined, expected: undefined },
+    ])('$scenario', async ({ agentModel, expected }) => {
       const { mastra, dataset } = await setup();
       const generate = vi.spyOn(mastra.getAgentById('eval-agent'), 'generate');
 
@@ -211,7 +209,7 @@ describe('experiment agentModel override', () => {
       for (const [, options] of generate.mock.calls) {
         expect(options?.tracingOptions?.metadata).toEqual({
           experimentId: summary.experimentId,
-          ...(expected ? { agentModel: expected, agentOverrides: { model } } : {}),
+          ...(expected ? { agentCallOptions: { model: expected } } : {}),
         });
       }
     });
@@ -234,14 +232,13 @@ describe('experiment agentModel override', () => {
 
       const withOverride = await start(dataset, {
         agentModel: { model: textModel('x'), id: 'anthropic/claude-haiku-5-5' },
-        metadata: { owner: 'evals', agentModel: 'stale-label' },
+        metadata: { owner: 'evals', agentCallOptions: 'stale-label' },
       });
       const withoutOverride = await start(dataset, { metadata: { owner: 'evals' } });
 
       expect((await dataset.getExperiment({ experimentId: withOverride.experimentId }))?.metadata).toEqual({
         owner: 'evals',
-        agentModel: 'anthropic/claude-haiku-5-5',
-        agentOverrides: { model: { provider: 'anthropic', name: 'claude-haiku-5-5' } },
+        agentCallOptions: { model: 'anthropic/claude-haiku-5-5' },
       });
       expect((await dataset.getExperiment({ experimentId: withoutOverride.experimentId }))?.metadata).toEqual({
         owner: 'evals',

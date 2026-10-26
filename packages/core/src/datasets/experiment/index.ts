@@ -3,8 +3,11 @@ import type { MastraScorer } from '../../evals/base';
 import type { TrajectoryExpectation } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
-import { assertAgentModelTarget, withAgentModelMetadata } from './agent-model';
-import { assertAgentOverridesTarget, resolveAgentOverrides, withAgentOverridesMetadata } from './agent-overrides';
+import {
+  assertAgentCallOptionsTarget,
+  resolveAgentCallOptions,
+  withAgentCallOptionsMetadata,
+} from './agent-call-options';
 import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonValue } from './events';
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
@@ -67,7 +70,7 @@ export type {
   ScorerResult,
   StartExperimentConfig,
 } from './types';
-export type { ExperimentAgentOverrides } from './agent-overrides';
+export type { ExperimentAgentCallOptions } from './agent-call-options';
 export type {
   ExperimentEvent,
   ExperimentEventObserver,
@@ -311,9 +314,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   let execFn: (item: ExperimentItem, signal?: AbortSignal) => Promise<ExecutionResult>;
 
   try {
-    assertAgentModelTarget(config);
-    assertAgentOverridesTarget(config);
-    const agentOverrides = resolveAgentOverrides(config);
+    assertAgentCallOptionsTarget(config);
+    const agentCallOptions = resolveAgentCallOptions(config);
     if (config.task) {
       // Inline task path
       const taskFn = config.task;
@@ -354,8 +356,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           requestContext: mergedRequestContext,
           experimentId,
           versions,
-          agentModel: config.agentModel,
-          agentOverrides,
+          agentCallOptions,
           toolMocks: targetType === 'agent' ? item.toolMocks : undefined,
           unmockedToolPolicy:
             targetType === 'agent' ? (item.unmockedToolPolicy ?? config.unmockedToolPolicy ?? 'allow') : undefined,
@@ -425,10 +426,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         id: experimentId,
         name,
         description,
-        metadata: withAgentOverridesMetadata(
-          withAgentModelMetadata(metadata, config.agentModel),
-          resolveAgentOverrides(config),
-        ),
+        metadata: withAgentCallOptionsMetadata(metadata, resolveAgentCallOptions(config)),
         provenance,
         experimentSetId: grouping?.experimentSetId,
         comparisonId: grouping?.comparisonId,

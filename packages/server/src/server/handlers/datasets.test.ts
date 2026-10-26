@@ -241,7 +241,7 @@ describe('Datasets Handlers', () => {
       );
     });
 
-    it('forwards agentModel as a router string and agentOverrides unchanged, leaving model derivation to core', async () => {
+    it('forwards agentModel and agentCallOptions.model as provider/modelId router strings', async () => {
       const startExperimentAsync = vi.fn().mockResolvedValue({
         experimentId: 'experiment-1',
         status: 'pending',
@@ -253,7 +253,11 @@ describe('Datasets Handlers', () => {
         targetType: 'agent',
         targetId: 'my-agent',
         agentModel: { provider: 'my-gateway/openai', modelId: 'gpt-5-mini' },
-        agentOverrides: { instructions: 'tweaked' },
+        agentCallOptions: {
+          instructions: 'tweaked',
+          model: { provider: 'anthropic', modelId: 'claude-haiku-5-5' },
+          modelSettings: { temperature: 0.2 },
+        },
       });
       await TRIGGER_EXPERIMENT_ROUTE.handler({
         ...createTestServerContext({ mastra }),
@@ -266,7 +270,11 @@ describe('Datasets Handlers', () => {
           targetType: 'agent',
           targetId: 'my-agent',
           agentModel: 'my-gateway/openai/gpt-5-mini',
-          agentOverrides: { instructions: 'tweaked' },
+          agentCallOptions: {
+            instructions: 'tweaked',
+            model: 'anthropic/claude-haiku-5-5',
+            modelSettings: { temperature: 0.2 },
+          },
         }),
       );
     });
@@ -296,8 +304,8 @@ describe('Datasets Handlers', () => {
       );
     });
 
-    describe('Scenario: POST /datasets/:id/experiments forwards agentOverrides', () => {
-      it('runs every item on the tweaked instructions and stores the overrides', async () => {
+    describe('Scenario: POST /datasets/:id/experiments forwards agentCallOptions', () => {
+      it('runs every item on the tweaked instructions and stores the call options', async () => {
         // Given a server with agent "eval-agent" and a dataset
         const systemPrompts: string[] = [];
         const capture = (props: any) =>
@@ -311,15 +319,15 @@ describe('Datasets Handlers', () => {
           model: createMockModel({ mockText: 'answer', spyGenerate: capture, spyStream: capture }),
         });
         mastra = new Mastra({ logger: false, storage: mockStorage, agents: { 'eval-agent': agent } });
-        const dataset = await mastra.datasets.create({ name: 'Overrides DS' });
+        const dataset = await mastra.datasets.create({ name: 'Call options DS' });
         await dataset.addItem({ input: 'hello' });
-        const agentOverrides = { instructions: 'tweaked', defaultOptions: { maxSteps: 2 } };
+        const agentCallOptions = { instructions: 'tweaked', modelSettings: { temperature: 0.2 } };
 
-        // When I POST an agent experiment with agentOverrides
+        // When I POST an agent experiment with agentCallOptions
         const body = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
           targetType: 'agent',
           targetId: 'eval-agent',
-          agentOverrides,
+          agentCallOptions,
         });
         const { experimentId } = (await TRIGGER_EXPERIMENT_ROUTE.handler({
           ...createTestServerContext({ mastra }),
@@ -327,20 +335,20 @@ describe('Datasets Handlers', () => {
           ...body,
         } as any)) as any;
 
-        // Then the experiment runs on "tweaked" and stores metadata.agentOverrides
+        // Then the experiment runs on "tweaked" and stores metadata.agentCallOptions
         await vi.waitFor(async () => {
           expect((await dataset.getExperiment({ experimentId }))?.status).toBe('completed');
         });
         expect(systemPrompts.length).toBeGreaterThan(0);
         expect(systemPrompts.every(prompt => prompt.includes('tweaked'))).toBe(true);
         expect(systemPrompts.some(prompt => prompt.includes('code instructions'))).toBe(false);
-        expect((await dataset.getExperiment({ experimentId }))?.metadata).toEqual({ agentOverrides });
+        expect((await dataset.getExperiment({ experimentId }))?.metadata).toEqual({ agentCallOptions });
       });
     });
 
-    describe('Scenario: experiment read endpoints return the recorded agentOverrides', () => {
-      it('returns metadata.agentOverrides from every experiment GET route', async () => {
-        // Given an experiment triggered over HTTP with agentOverrides
+    describe('Scenario: experiment read endpoints return the recorded agentCallOptions', () => {
+      it('returns metadata.agentCallOptions from every experiment GET route', async () => {
+        // Given an experiment triggered over HTTP with agentCallOptions
         const agent = new Agent({
           id: 'eval-agent',
           name: 'eval-agent',
@@ -348,16 +356,13 @@ describe('Datasets Handlers', () => {
           model: createMockModel({ mockText: 'answer' }),
         });
         mastra = new Mastra({ logger: false, storage: mockStorage, agents: { 'eval-agent': agent } });
-        const dataset = await mastra.datasets.create({ name: 'Read overrides DS' });
+        const dataset = await mastra.datasets.create({ name: 'Read call options DS' });
         await dataset.addItem({ input: 'hello' });
-        const agentOverrides = {
-          instructions: 'tweaked',
-          defaultOptions: { modelSettings: { temperature: 0.1 }, maxSteps: 2 },
-        };
+        const agentCallOptions = { instructions: 'tweaked', modelSettings: { temperature: 0.1 } };
         const body = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
           targetType: 'agent',
           targetId: 'eval-agent',
-          agentOverrides,
+          agentCallOptions,
         });
         const { experimentId } = (await TRIGGER_EXPERIMENT_ROUTE.handler({
           ...createTestServerContext({ mastra }),
@@ -380,8 +385,8 @@ describe('Datasets Handlers', () => {
           await LIST_EXPERIMENTS_ROUTE.handler({ ...ctx, datasetId: dataset.id, page: 0, perPage: 10 } as any),
         );
 
-        // Then every response carries metadata.agentOverrides as recorded
-        const expected = { agentOverrides };
+        // Then every response carries metadata.agentCallOptions as recorded
+        const expected = { agentCallOptions };
         expect(byId.metadata).toEqual(expected);
         expect(byDataset.metadata).toEqual(expected);
         expect(all.experiments.find((e: any) => e.id === experimentId).metadata).toEqual(expected);
@@ -389,71 +394,46 @@ describe('Datasets Handlers', () => {
       });
     });
 
-    describe('Scenario Outline: invalid agentOverrides bodies are rejected', () => {
+    describe('Scenario Outline: invalid agentCallOptions bodies are rejected', () => {
       const parse = (body: Record<string, unknown>) => TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse(body);
       const agent = { targetType: 'agent', targetId: 'a' };
 
-      it('accepts a full agentOverrides for an agent target', () => {
-        const agentOverrides = {
+      it('accepts a full agentCallOptions for an agent target', () => {
+        const agentCallOptions = {
           instructions: 'tweaked',
-          model: { provider: 'openai', name: 'gpt-5-mini' },
-          defaultOptions: {
-            modelSettings: { temperature: 0.2, topP: 0.9, maxOutputTokens: 512, seed: 1 },
-            maxSteps: 3,
-            toolChoice: { type: 'tool', toolName: 'search' },
-            activeTools: ['search'],
-          },
+          model: { provider: 'openai', modelId: 'gpt-5-mini' },
+          modelSettings: { temperature: 0.2, topP: 0.9, maxOutputTokens: 512, seed: 1, stopSequences: ['END'] },
         };
-        const result = parse({ ...agent, agentOverrides });
-        expect(result.success && result.data.agentOverrides).toEqual(agentOverrides);
+        const result = parse({ ...agent, agentCallOptions });
+        expect(result.success && result.data.agentCallOptions).toEqual(agentCallOptions);
+      });
+
+      it('accepts agentModel together with agentCallOptions.model', () => {
+        const result = parse({
+          ...agent,
+          agentModel: { provider: 'openai', modelId: 'gpt-5-mini' },
+          agentCallOptions: { model: { provider: 'openai', modelId: 'gpt-5' } },
+        });
+        expect(result.success).toBe(true);
       });
 
       it.each([
-        {
-          condition: 'split the same way',
-          agentModel: { provider: 'openai', modelId: 'gpt-5-mini' },
-          provider: 'openai',
-          name: 'gpt-5-mini',
-        },
-        {
-          condition: 'split at a different slash',
-          agentModel: { provider: 'my-gateway', modelId: 'openai/gpt-5-mini' },
-          provider: 'my-gateway/openai',
-          name: 'gpt-5-mini',
-        },
-      ])(
-        'accepts agentModel and agentOverrides.model naming the same model, $condition',
-        ({ agentModel, provider, name }) => {
-          const result = parse({ ...agent, agentModel, agentOverrides: { model: { provider, name } } });
-          expect(result.success).toBe(true);
-        },
-      );
-
-      it.each([
-        { condition: 'a non-agent target', body: { targetType: 'workflow', targetId: 'w', agentOverrides: {} } },
-        { condition: 'start: false', body: { ...agent, start: false, agentOverrides: { instructions: 'x' } } },
-        {
-          condition: 'agentModel naming a different model than agentOverrides.model',
-          body: {
-            ...agent,
-            agentModel: { provider: 'openai', modelId: 'gpt-5-mini' },
-            agentOverrides: { model: { provider: 'openai', name: 'gpt-5' } },
-          },
-        },
+        { condition: 'a non-agent target', body: { targetType: 'workflow', targetId: 'w', agentCallOptions: {} } },
+        { condition: 'start: false', body: { ...agent, start: false, agentCallOptions: { instructions: 'x' } } },
         {
           condition: 'an unknown modelSettings key',
-          body: { ...agent, agentOverrides: { defaultOptions: { modelSettings: { temprature: 0.2 } } } },
+          body: { ...agent, agentCallOptions: { modelSettings: { temprature: 0.2 } } },
         },
-        { condition: 'an unknown agentOverrides key', body: { ...agent, agentOverrides: { instruction: 'x' } } },
-        {
-          condition: 'an unknown defaultOptions key',
-          body: { ...agent, agentOverrides: { defaultOptions: { max_steps: 2 } } },
-        },
-        { condition: 'maxSteps 0', body: { ...agent, agentOverrides: { defaultOptions: { maxSteps: 0 } } } },
-        { condition: 'empty instructions', body: { ...agent, agentOverrides: { instructions: '' } } },
+        { condition: 'an unknown agentCallOptions key', body: { ...agent, agentCallOptions: { instruction: 'x' } } },
+        { condition: 'maxSteps, which is not a call option', body: { ...agent, agentCallOptions: { maxSteps: 2 } } },
+        { condition: 'empty instructions', body: { ...agent, agentCallOptions: { instructions: '' } } },
         {
           condition: 'an incomplete model',
-          body: { ...agent, agentOverrides: { model: { provider: 'openai' } } },
+          body: { ...agent, agentCallOptions: { model: { provider: 'openai' } } },
+        },
+        {
+          condition: 'a model named with name instead of modelId',
+          body: { ...agent, agentCallOptions: { model: { provider: 'openai', name: 'gpt-5-mini' } } },
         },
       ])('rejects $condition', ({ body }) => {
         expect(parse(body).success).toBe(false);

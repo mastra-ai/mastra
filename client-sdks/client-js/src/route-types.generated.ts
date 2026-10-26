@@ -1065,14 +1065,15 @@ type InputShared_Type_39 =
 
 type InputShared_Type_40 = {
   temperature?: number | undefined;
-  maxTokens?: number | undefined;
   topP?: number | undefined;
   topK?: number | undefined;
+  maxOutputTokens?: number | undefined;
   frequencyPenalty?: number | undefined;
   presencePenalty?: number | undefined;
   stopSequences?: string[] | undefined;
   seed?: number | undefined;
   maxRetries?: number | undefined;
+  maxTokens?: number | undefined;
 };
 
 type InputShared_Type_41 = {
@@ -2276,14 +2277,15 @@ type Shared_Type_2 = {
 
 type Shared_Type_3 = {
   temperature?: number | undefined;
-  maxTokens?: number | undefined;
   topP?: number | undefined;
   topK?: number | undefined;
+  maxOutputTokens?: number | undefined;
   frequencyPenalty?: number | undefined;
   presencePenalty?: number | undefined;
   stopSequences?: string[] | undefined;
   seed?: number | undefined;
   maxRetries?: number | undefined;
+  maxTokens?: number | undefined;
 };
 
 type Shared_Type_4 = {
@@ -20862,49 +20864,37 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   version?: number | undefined;
   /** Agent version ID to use for experiment */
   agentVersion?: string | undefined;
-  /** Model to run an agent target on for this experiment only, instead of the model the agent is configured with. Shorthand for agentOverrides.model and recorded as such on the experiment; the agent itself is not changed. */
+  /** Model to run an agent target on for this experiment only. Alias for agentCallOptions.model, which wins when both are set. Recorded on the experiment as metadata.agentCallOptions.model; the agent itself is not changed. */
   agentModel?:
     | {
         provider: string;
         modelId: string;
       }
     | undefined;
-  /** Agent config tweaks (instructions, model, execution options) for this experiment only. Applied per call; the agent itself is not changed. Recorded on the experiment as metadata.agentOverrides. */
-  agentOverrides?:
+  /** Per-call agent.generate() options for an agent target, layered over the agent (or agentVersion) config. The agent itself is not changed. Recorded on the experiment as metadata.agentCallOptions. */
+  agentCallOptions?:
     | {
-        /** Replaces the agent's instructions */
+        /** Replaces the agent's instructions for each call */
         instructions?: string | undefined;
-        /** Model to run on, resolved as provider/name */
+        /** Model to run each call on */
         model?:
           | {
               provider: string;
-              name: string;
+              modelId: string;
             }
           | undefined;
-        defaultOptions?:
+        /** Sampling settings merged over the agent defaults */
+        modelSettings?:
           | {
-              modelSettings?:
-                | {
-                    temperature?: number | undefined;
-                    topP?: number | undefined;
-                    topK?: number | undefined;
-                    maxOutputTokens?: number | undefined;
-                    frequencyPenalty?: number | undefined;
-                    presencePenalty?: number | undefined;
-                    seed?: number | undefined;
-                  }
-                | undefined;
-              maxSteps?: number | undefined;
-              toolChoice?:
-                | (
-                    | ('auto' | 'none' | 'required')
-                    | {
-                        type: 'tool';
-                        toolName: string;
-                      }
-                  )
-                | undefined;
-              activeTools?: string[] | undefined;
+              temperature?: number | undefined;
+              topP?: number | undefined;
+              topK?: number | undefined;
+              maxOutputTokens?: number | undefined;
+              frequencyPenalty?: number | undefined;
+              presencePenalty?: number | undefined;
+              stopSequences?: string[] | undefined;
+              seed?: number | undefined;
+              maxRetries?: number | undefined;
             }
           | undefined;
       }

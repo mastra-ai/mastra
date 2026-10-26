@@ -41,11 +41,11 @@ describe('Feature: tweaked instructions stay resolvable from an experiment trace
     // Given an agent with code instructions, traced by a real Observability instance
     const exporter = new TestExporter();
     observability = new Observability({
-      configs: { default: { serviceName: 'experiment-agent-overrides', exporters: [exporter] } },
+      configs: { default: { serviceName: 'experiment-agent-call-options', exporters: [exporter] } },
     });
     const agent = new Agent({ id: 'eval-agent', name: 'Eval', instructions: 'code instructions', model: textModel() });
     const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), observability, logger: false });
-    const dataset = await mastra.datasets.create({ name: 'traced overrides' });
+    const dataset = await mastra.datasets.create({ name: 'traced call options' });
     await dataset.addItem({ input: 'first' });
     await dataset.addItem({ input: 'second' });
 
@@ -53,7 +53,7 @@ describe('Feature: tweaked instructions stay resolvable from an experiment trace
     const summary = await dataset.startExperiment({
       targetType: 'agent',
       targetId: 'eval-agent',
-      agentOverrides: { instructions: 'tweaked instructions', defaultOptions: { modelSettings: { temperature: 0.2 } } },
+      agentCallOptions: { instructions: 'tweaked instructions', modelSettings: { temperature: 0.2 } },
     });
     await observability.flush();
 
@@ -68,7 +68,7 @@ describe('Feature: tweaked instructions stay resolvable from an experiment trace
       // And the trace metadata links back to the experiment and flags the tweak without copying the prompt
       expect(span.metadata).toMatchObject({
         experimentId: summary.experimentId,
-        agentOverrides: { defaultOptions: { modelSettings: { temperature: 0.2 } } },
+        agentCallOptions: { modelSettings: { temperature: 0.2 } },
         agentInstructionsOverridden: true,
       });
       expect(JSON.stringify(span.metadata)).not.toContain('tweaked instructions');

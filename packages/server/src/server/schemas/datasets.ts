@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { paginationInfoSchema, createPagePaginationSchema } from './common';
+import { modelSettingsSchema } from './default-options';
 
 // ============================================================================
 // JSON Schema Types (for inputSchema/groundTruthSchema fields)
@@ -417,6 +418,9 @@ export const updateExperimentBodySchema = z
   })
   .strict();
 
+/** A model picked by provider and model id, run as the `provider/modelId` router string. */
+const agentModelSchema = z.object({ provider: z.string().min(1), modelId: z.string().min(1) }).strict();
+
 export const triggerExperimentBodySchema = z
   .object({
     start: z
@@ -442,49 +446,21 @@ export const triggerExperimentBodySchema = z
     scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
     version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
     agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
-    agentModel: z
-      .object({ provider: z.string().min(1), modelId: z.string().min(1) })
+    agentModel: agentModelSchema
       .optional()
       .describe(
-        'Model to run an agent target on for this experiment only, instead of the model the agent is configured with. Shorthand for agentOverrides.model and recorded as such on the experiment; the agent itself is not changed.',
+        'Model to run an agent target on for this experiment only. Alias for agentCallOptions.model, which wins when both are set. Recorded on the experiment as metadata.agentCallOptions.model; the agent itself is not changed.',
       ),
-    agentOverrides: z
+    agentCallOptions: z
       .object({
-        instructions: z.string().min(1).optional().describe("Replaces the agent's instructions"),
-        model: z
-          .object({ provider: z.string().min(1), name: z.string().min(1) })
-          .optional()
-          .describe('Model to run on, resolved as provider/name'),
-        defaultOptions: z
-          .object({
-            modelSettings: z
-              .object({
-                temperature: z.number().optional(),
-                topP: z.number().optional(),
-                topK: z.number().optional(),
-                maxOutputTokens: z.number().int().positive().optional(),
-                frequencyPenalty: z.number().optional(),
-                presencePenalty: z.number().optional(),
-                seed: z.number().int().optional(),
-              })
-              .strict()
-              .optional(),
-            maxSteps: z.number().int().positive().optional(),
-            toolChoice: z
-              .union([
-                z.enum(['auto', 'none', 'required']),
-                z.object({ type: z.literal('tool'), toolName: z.string().min(1) }),
-              ])
-              .optional(),
-            activeTools: z.array(z.string()).optional(),
-          })
-          .strict()
-          .optional(),
+        instructions: z.string().min(1).optional().describe("Replaces the agent's instructions for each call"),
+        model: agentModelSchema.optional().describe('Model to run each call on'),
+        modelSettings: modelSettingsSchema.optional().describe('Sampling settings merged over the agent defaults'),
       })
       .strict()
       .optional()
       .describe(
-        'Agent config tweaks (instructions, model, execution options) for this experiment only. Applied per call; the agent itself is not changed. Recorded on the experiment as metadata.agentOverrides.',
+        'Per-call agent.generate() options for an agent target, layered over the agent (or agentVersion) config. The agent itself is not changed. Recorded on the experiment as metadata.agentCallOptions.',
       ),
     maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
     provenance: z
@@ -530,25 +506,14 @@ export const triggerExperimentBodySchema = z
     path: ['agentModel'],
     message: 'agentModel is not supported for create-only experiments (start: false)',
   })
-  .refine(body => !body.agentOverrides || body.targetType === 'agent', {
-    path: ['agentOverrides'],
-    message: 'agentOverrides is only supported when targetType is "agent"',
+  .refine(body => !body.agentCallOptions || body.targetType === 'agent', {
+    path: ['agentCallOptions'],
+    message: 'agentCallOptions is only supported when targetType is "agent"',
   })
-  .refine(body => !body.agentOverrides || body.start !== false, {
-    path: ['agentOverrides'],
-    message: 'agentOverrides is not supported for create-only experiments (start: false)',
-  })
-  .refine(
-    body =>
-      !body.agentModel ||
-      !body.agentOverrides?.model ||
-      `${body.agentModel.provider}/${body.agentModel.modelId}` ===
-        `${body.agentOverrides.model.provider}/${body.agentOverrides.model.name}`,
-    {
-      path: ['agentOverrides', 'model'],
-      message: 'agentOverrides.model and agentModel must name the same model',
-    },
-  );
+  .refine(body => !body.agentCallOptions || body.start !== false, {
+    path: ['agentCallOptions'],
+    message: 'agentCallOptions is not supported for create-only experiments (start: false)',
+  });
 
 export const runExperimentItemBodySchema = z.object({
   attempt: z.number().int().min(0).optional().describe('Zero-based repetition index. Defaults to 0.'),

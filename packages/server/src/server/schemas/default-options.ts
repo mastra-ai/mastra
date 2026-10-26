@@ -1,5 +1,21 @@
 import { z } from 'zod/v4';
 
+/** Per-call model settings, keyed like the runtime `CallSettings` (`agent.generate({ modelSettings })`). */
+const modelSettingsShape = {
+  temperature: z.number().optional(),
+  topP: z.number().optional(),
+  topK: z.number().optional(),
+  maxOutputTokens: z.number().optional(),
+  frequencyPenalty: z.number().optional(),
+  presencePenalty: z.number().optional(),
+  stopSequences: z.array(z.string()).optional(),
+  seed: z.number().optional(),
+  maxRetries: z.number().optional(),
+};
+
+/** Strict model settings: unknown keys are rejected instead of silently dropped. */
+export const modelSettingsSchema = z.object(modelSettingsShape).strict();
+
 /**
  * Schema for agent default options.
  * Based on StorageDefaultOptions type from @mastra/core.
@@ -39,15 +55,9 @@ export const defaultOptionsSchema = z
     /** Model-specific settings like temperature, maxTokens, topP, etc. */
     modelSettings: z
       .object({
-        temperature: z.number().optional(),
+        ...modelSettingsShape,
+        /** Legacy (AI SDK v4) name for maxOutputTokens, still sent by stored agents. */
         maxTokens: z.number().optional(),
-        topP: z.number().optional(),
-        topK: z.number().optional(),
-        frequencyPenalty: z.number().optional(),
-        presencePenalty: z.number().optional(),
-        stopSequences: z.array(z.string()).optional(),
-        seed: z.number().optional(),
-        maxRetries: z.number().optional(),
       })
       .optional(),
 

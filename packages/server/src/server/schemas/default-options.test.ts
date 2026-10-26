@@ -23,3 +23,15 @@ describe('defaultOptionsSchema toolCallConcurrency', () => {
     ).toBe(false);
   });
 });
+
+describe('defaultOptionsSchema modelSettings', () => {
+  it('keeps maxOutputTokens instead of stripping it', () => {
+    const result = defaultOptionsSchema.safeParse({ modelSettings: { maxOutputTokens: 512, temperature: 0.2 } });
+    expect(result.success && result.data.modelSettings).toEqual({ maxOutputTokens: 512, temperature: 0.2 });
+  });
+
+  it('still accepts the legacy maxTokens key', () => {
+    const result = defaultOptionsSchema.safeParse({ modelSettings: { maxTokens: 512 } });
+    expect(result.success && result.data.modelSettings).toEqual({ maxTokens: 512 });
+  });
+});

@@ -4,16 +4,14 @@ import type { MessageListInput } from '../../agent/message-list';
 import type { MastraScorer } from '../../evals/base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
 import type { ScoringData } from '../../llm/model/base.types';
-import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { VersionOverrides } from '../../mastra/types';
 import { EntityType, getOrCreateSpan, resolveObservabilityContext, SpanType } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
 import type { MastraToolInvocationOptions, ToolHookContext, ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
-import { agentModelLabel } from './agent-model';
-import { agentOverridesTraceMetadata, toGenerateOptions } from './agent-overrides';
-import type { ExperimentAgentOverrides } from './agent-overrides';
+import { agentCallOptionsTraceMetadata, toGenerateOptions } from './agent-call-options';
+import type { ExperimentAgentCallOptions } from './agent-call-options';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 import { ToolMockMatcher } from './tool-mocks';
 import type { AgentExperimentOutput, ScorerExperimentOutput } from './types';
@@ -133,10 +131,8 @@ export async function executeTarget(
     requestContext?: Record<string, unknown>;
     experimentId?: string;
     versions?: VersionOverrides;
-    /** Per-call model override (agent targets only). */
-    agentModel?: MastraModelConfig;
-    /** Per-call agent config tweaks (agent targets only). */
-    agentOverrides?: ExperimentAgentOverrides;
+    /** Per-call `agent.generate()` options, with `agentModel` already folded in (agent targets only). */
+    agentCallOptions?: ExperimentAgentCallOptions;
     /** Item-level static tool mocks (agent targets only). */
     toolMocks?: ItemToolMock[];
     /** Handling for agent tool calls not declared in `toolMocks`. */
@@ -168,8 +164,7 @@ export async function executeTarget(
           assignedTraceId => {
             traceId = assignedTraceId;
           },
-          options?.agentModel,
-          options?.agentOverrides,
+          options?.agentCallOptions,
         );
         break;
       case 'workflow':
@@ -245,15 +240,13 @@ async function executeAgent(
   toolMocks?: ItemToolMock[],
   unmockedToolPolicy?: UnmockedToolPolicy,
   onTraceIdAssigned?: (traceId: string) => void,
-  agentModel?: MastraModelConfig,
-  agentOverrides?: ExperimentAgentOverrides,
+  agentCallOptions?: ExperimentAgentCallOptions,
 ): Promise<ExecutionResult> {
   const reqCtx: RequestContext | undefined = requestContext
     ? new RequestContext(Object.entries(requestContext))
     : undefined;
-  // generateLegacy() has no per-call model/overrides, so any override always runs through generate().
-  const useLegacy =
-    !agentModel && !agentOverrides && !isSupportedLanguageModel(await agent.getModel({ requestContext: reqCtx }));
+  // generateLegacy() has no per-call model or options, so call options always run through generate().
+  const useLegacy = !agentCallOptions && !isSupportedLanguageModel(await agent.getModel({ requestContext: reqCtx }));
 
   // Both generate() and generateLegacy() return different types (FullOutput vs GenerateTextResult)
   // but share the fields we extract. Cast input to MessageListInput at the boundary.
@@ -322,12 +315,11 @@ async function executeAgent(
   onTraceIdAssigned?.(assignedTraceId);
   const tracingOptions = {
     traceId: assignedTraceId,
-    ...(experimentId || agentModel || agentOverrides
+    ...(experimentId || agentCallOptions
       ? {
           metadata: {
             ...(experimentId ? { experimentId } : {}),
-            ...(agentModel ? { agentModel: agentModelLabel(agentModel) } : {}),
-            ...agentOverridesTraceMetadata(agentOverrides),
+            ...agentCallOptionsTraceMetadata(agentCallOptions),
           },
         }
       : {}),
@@ -344,9 +336,7 @@ async function executeAgent(
           ...(reqCtx ? { requestContext: reqCtx } : {}),
           tracingOptions,
           ...(versions ? { versions } : {}),
-          ...(agentOverrides ? toGenerateOptions(agentOverrides) : {}),
-          // After the overrides: agentOverrides.model is agentModel's label, but agentModel may be an instance.
-          ...(agentModel ? { model: agentModel } : {}),
+          ...(agentCallOptions ? toGenerateOptions(agentCallOptions) : {}),
           ...(mockHooks ? { hooks: mockHooks } : {}),
           ...(mockConcurrency ?? {}),
         })

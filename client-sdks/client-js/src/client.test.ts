@@ -1489,11 +1489,11 @@ describe('MastraClient', () => {
       expect(JSON.parse(init.body)).toMatchObject({ targetType: 'agent', targetId: 'agent-1', agentModel });
     });
 
-    it('triggerDatasetExperiment posts agentOverrides unchanged in the request body', async () => {
-      const agentOverrides = {
+    it('triggerDatasetExperiment posts agentCallOptions unchanged in the request body', async () => {
+      const agentCallOptions = {
         instructions: 'tweaked instructions',
-        model: { provider: 'openai', name: 'gpt-5-mini' },
-        defaultOptions: { modelSettings: { temperature: 0.1 }, maxSteps: 2, toolChoice: 'none' as const },
+        model: { provider: 'openai', modelId: 'gpt-5-mini' },
+        modelSettings: { temperature: 0.1 },
       };
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
@@ -1514,12 +1514,12 @@ describe('MastraClient', () => {
         datasetId: 'ds-1',
         targetType: 'agent',
         targetId: 'agent-1',
-        agentOverrides,
+        agentCallOptions,
       });
 
       const [url, init] = (global.fetch as any).mock.calls[0];
       expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments');
-      expect(JSON.parse(init.body)).toMatchObject({ targetType: 'agent', targetId: 'agent-1', agentOverrides });
+      expect(JSON.parse(init.body)).toMatchObject({ targetType: 'agent', targetId: 'agent-1', agentCallOptions });
     });
 
     it('updateDatasetExperiment should PATCH the experiment route with name, description and metadata', async () => {

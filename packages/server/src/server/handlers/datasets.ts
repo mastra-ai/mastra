@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import type { ExperimentAgentOverrides } from '@mastra/core/datasets';
+import type { ExperimentAgentCallOptions } from '@mastra/core/datasets';
 import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
@@ -899,7 +899,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         version,
         agentVersion,
         agentModel,
-        agentOverrides,
+        agentCallOptions,
         maxConcurrency,
         provenance,
         grouping,
@@ -917,7 +917,11 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         version?: number;
         agentVersion?: string;
         agentModel?: { provider: string; modelId: string };
-        agentOverrides?: ExperimentAgentOverrides;
+        agentCallOptions?: {
+          instructions?: string;
+          model?: { provider: string; modelId: string };
+          modelSettings?: ExperimentAgentCallOptions['modelSettings'];
+        };
         maxConcurrency?: number;
         provenance?: {
           source?: string;
@@ -976,7 +980,12 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         version,
         agentVersion,
         agentModel: agentModel ? `${agentModel.provider}/${agentModel.modelId}` : undefined,
-        agentOverrides,
+        agentCallOptions: agentCallOptions && {
+          ...agentCallOptions,
+          model: agentCallOptions.model
+            ? (`${agentCallOptions.model.provider}/${agentCallOptions.model.modelId}` as const)
+            : undefined,
+        },
         maxConcurrency,
         provenance,
         grouping,

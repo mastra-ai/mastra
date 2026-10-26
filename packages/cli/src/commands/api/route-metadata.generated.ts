@@ -5639,8 +5639,8 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "agentCallOptions",
       "agentModel",
-      "agentOverrides",
       "agentVersion",
       "description",
       "grouping",

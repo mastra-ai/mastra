@@ -1,8 +1,8 @@
 ---
-title: "Reference: dataset.startExperiment() | Datasets"
-description: "Runs an experiment on the dataset and waits for completion. Executes all items against a target (agent, workflow, or scorer) with optional scoring."
+title: 'Reference: dataset.startExperiment() | Datasets'
+description: 'Runs an experiment on the dataset and waits for completion. Executes all items against a target (agent, workflow, or scorer) with optional scoring.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # dataset.startExperiment()
@@ -60,7 +60,7 @@ console.log(`Status: ${summary2.status}`)
 
 ### Compare models without changing the agent
 
-Use `agentModel` to run the same agent against a different model. The registered agent keeps its own model, and the experiment's `metadata.agentModel` records the model the run used.
+Use `agentModel` to run the same agent against a different model. The registered agent keeps its own model, and the experiment's `metadata.agentCallOptions.model` records the model the run used.
 
 ```typescript
 const summary = await dataset.startExperiment({
@@ -71,22 +71,28 @@ const summary = await dataset.startExperiment({
 })
 ```
 
-### Tweak the agent's config for one experiment
+### Tweak the agent's call options for one experiment
 
-Use `agentOverrides` to try different instructions, a different model, or different execution options without editing the agent in code or in the editor. The registered agent is unchanged, and the experiment's `metadata.agentOverrides` records the exact tweak so you can compare runs.
+Use `agentCallOptions` to try different instructions, a different model, or different sampling settings without editing the agent in code or in the editor. The options are passed to each `agent.generate()` call the experiment makes, so the registered agent and other experiments are unaffected. The experiment's `metadata.agentCallOptions` records the options so you can compare runs.
 
 ```typescript
 const summary = await dataset.startExperiment({
   targetType: 'agent',
   targetId: 'my-agent',
-  agentOverrides: {
+  agentCallOptions: {
     instructions: 'You are a concise support agent. Answer in two sentences or fewer.',
-    model: { provider: 'anthropic', name: '__AI_SDK_ANTHROPIC_MODEL_SONNET__' },
-    defaultOptions: { modelSettings: { temperature: 0.2 }, maxSteps: 3 },
+    model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+    modelSettings: { temperature: 0.2 },
   },
   scorers: ['accuracy'],
 })
 ```
+
+The agent config is resolved in layers:
+
+1. `agentVersion` picks the base config. A stored version only sets the fields the editor owns for that agent.
+1. `agentCallOptions` is layered on top for each call. `instructions` replaces the base instructions, `model` replaces the base model (including a configured fallback list), and `modelSettings` is merged over the base model settings key by key.
+1. `versions` only picks the versions of sub-agents. It doesn't change the target agent.
 
 ## Parameters
 
@@ -109,14 +115,14 @@ const summary = await dataset.startExperiment({
     type: 'MastraModelConfig',
     isOptional: true,
     description:
-      "Model to run the agent target with, instead of the agent's own model. Accepts a `provider/modelId` string, a model config object (for example `{ id, url, apiKey }`), a model instance, or a `{ model, id }` object. Model functions and fallback arrays aren't supported. Applies only when `targetType` is `'agent'`. The model is passed with each call the experiment makes, so the registered agent and other experiments are unaffected. The agent version is picked the same way as without `agentModel`, and sub-agents keep their own models. The experiment's `metadata` and each run's trace metadata record it as `agentModel` (for example `anthropic/claude-haiku-5-5`), and also as `agentOverrides.model` (for example `{ provider: 'anthropic', name: 'claude-haiku-5-5' }`).",
+      "Model to run the agent target with, instead of the agent's own model. Alias for `agentCallOptions.model`, which wins when both are set. Accepts a `provider/modelId` string, a model config object (for example `{ id, url, apiKey }`), a model instance, or a `{ model, id }` object. Model functions and fallback arrays aren't supported. Applies only when `targetType` is `'agent'`. Sub-agents keep their own models.",
   },
   {
-    name: 'agentOverrides',
-    type: 'ExperimentAgentOverrides',
+    name: 'agentCallOptions',
+    type: 'ExperimentAgentCallOptions',
     isOptional: true,
     description:
-      "Config tweaks for the agent target, applied to each call the experiment makes. The registered agent and other experiments are unaffected. Accepts `instructions` (a string that replaces the agent's instructions), `model` (`{ provider, name }`, resolved as `provider/name`), and `defaultOptions` with `modelSettings`, `maxSteps`, `toolChoice`, and `activeTools`. Applies only when `targetType` is `'agent'`. If you also pass `agentModel`, `model` must name the same model. The fields match a stored agent version's config. The experiment's `metadata` records the object as `agentOverrides`, including the model from `agentModel`. Each run's trace metadata records the same object without `instructions`, plus `agentInstructionsOverridden: true` when instructions were overridden; the tweaked prompt is on the agent run span's `instructions` attribute.",
+      "Per-call `agent.generate()` options for the agent target, layered over the agent's config (or the `agentVersion` it resolves to). Accepts `instructions` (replaces the agent's instructions), `model` (same type as `agentModel`), and `modelSettings` (for example `temperature`, `topP`, `maxOutputTokens`; merged over the agent's model settings). Applies only when `targetType` is `'agent'`. The registered agent and other experiments are unaffected. The experiment's `metadata` records the options as `agentCallOptions`, with the model as its `provider/modelId` label and including the model from `agentModel`. Each run's trace metadata records the same object without `instructions`, plus `agentInstructionsOverridden: true` when instructions were overridden; the tweaked prompt is on the agent run span's `instructions` attribute.",
   },
   {
     name: 'scorers',

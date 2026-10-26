@@ -30,12 +30,11 @@ import type {
   UpdateDatasetItemInput,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
-import { assertAgentModelTarget, withAgentModelMetadata } from './experiment/agent-model.js';
 import {
-  assertAgentOverridesTarget,
-  resolveAgentOverrides,
-  withAgentOverridesMetadata,
-} from './experiment/agent-overrides.js';
+  assertAgentCallOptionsTarget,
+  resolveAgentCallOptions,
+  withAgentCallOptionsMetadata,
+} from './experiment/agent-call-options.js';
 import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
 import { experimentScoreId } from './experiment/scorer.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
@@ -392,8 +391,7 @@ export class Dataset {
   async startExperimentAsync<I = unknown, O = unknown, E = unknown>(
     config: StartExperimentConfig<I, O, E>,
   ): Promise<{ experimentId: string; status: 'pending'; totalItems: number }> {
-    assertAgentModelTarget(config);
-    assertAgentOverridesTarget(config);
+    assertAgentCallOptionsTarget(config);
     const persistExperiments = config.persistence?.experiments !== 'none';
     const experimentsStore = persistExperiments ? await this.#getExperimentsStore() : undefined;
     const datasetsStore = await this.#getDatasetsStore();
@@ -435,10 +433,7 @@ export class Dataset {
         totalItems: items.length,
         name: config.name,
         description: config.description,
-        metadata: withAgentOverridesMetadata(
-          withAgentModelMetadata(config.metadata, config.agentModel),
-          resolveAgentOverrides(config),
-        ),
+        metadata: withAgentCallOptionsMetadata(config.metadata, resolveAgentCallOptions(config)),
         provenance: config.provenance,
         experimentSetId: config.grouping?.experimentSetId,
         comparisonId: config.grouping?.comparisonId,

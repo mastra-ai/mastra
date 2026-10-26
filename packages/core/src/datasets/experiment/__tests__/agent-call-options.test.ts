@@ -1,6 +1,6 @@
 /**
- * agentOverrides: tweak an experiment's agent target (instructions, model, generation
- * options) per run without editing or versioning the agent. Real Agent + real Mastra +
+ * agentCallOptions: per-call generate() options (instructions, model, modelSettings) for an
+ * experiment's agent target, without editing or versioning the agent. Real Agent + real Mastra +
  * real Dataset.startExperiment; the language models are the only fakes.
  */
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
@@ -10,9 +10,8 @@ import { MastraModelGateway } from '../../../llm/model/gateways/base';
 import type { ProviderConfig } from '../../../llm/model/gateways/base';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage/mock';
-import { recordingTool, scriptedModel } from './scenarios/scenario-helpers';
 
-/** Real gateway that serves `eval-test/fake/<name>` from a fake model, so `{ provider, name }` resolves through Mastra's real string→model path. */
+/** Real gateway that serves `eval-test/fake/<name>` from a fake model, so a `provider/modelId` string resolves through Mastra's real string→model path. */
 class FakeGateway extends MastraModelGateway {
   readonly id = 'eval-test';
   readonly name = 'eval-test-gateway';
@@ -82,7 +81,7 @@ const systemPromptsOf = (m: MockLanguageModelV2) =>
       .join('\n'),
   );
 
-async function setup() {
+async function setup({ editor }: { editor?: unknown } = {}) {
   const defaultModel = textModel('from-default');
   const overrideModel = textModel('from-override');
   const agent = new Agent({
@@ -96,14 +95,15 @@ async function setup() {
     storage: new InMemoryStore(),
     gateways: { evalTest: new FakeGateway(overrideModel) },
     logger: false,
+    ...(editor ? { editor: editor as any } : {}),
   });
-  const dataset = await mastra.datasets.create({ name: 'agentOverrides DS' });
+  const dataset = await mastra.datasets.create({ name: 'agentCallOptions DS' });
   await dataset.addItem({ input: 'first' });
   await dataset.addItem({ input: 'second' });
   return { mastra, dataset, defaultModel, overrideModel };
 }
 
-describe('Feature: tweak an agent per experiment without changing it', () => {
+describe('Feature: tweak how an agent is called per experiment without changing it', () => {
   describe('Scenario: the experiment runs on tweaked instructions', () => {
     it('sends the tweaked instructions, never the code instructions, on every item', async () => {
       // Given agent "eval-agent" with instructions "code instructions" and a 2-item dataset
@@ -113,7 +113,7 @@ describe('Feature: tweak an agent per experiment without changing it', () => {
       const summary = await dataset.startExperiment({
         targetType: 'agent',
         targetId: 'eval-agent',
-        agentOverrides: { instructions: 'tweaked instructions' },
+        agentCallOptions: { instructions: 'tweaked instructions' },
       });
 
       // Then every model call's system prompt is the tweaked one
@@ -129,7 +129,7 @@ describe('Feature: tweak an agent per experiment without changing it', () => {
       await dataset.startExperiment({
         targetType: 'agent',
         targetId: 'eval-agent',
-        agentOverrides: { instructions: 'tweaked instructions' },
+        agentCallOptions: { instructions: 'tweaked instructions' },
       });
 
       // When I use the registered agent normally
@@ -143,18 +143,18 @@ describe('Feature: tweak an agent per experiment without changing it', () => {
   });
 
   describe('Scenario: the experiment runs on a different model chosen by name', () => {
-    it('routes every item to the override model and never calls the default model', async () => {
+    it('routes every item to that model and never calls the default model', async () => {
       // Given agent "eval-agent" on a default model, and a gateway serving "eval-test/fake/override-model"
       const { dataset, defaultModel, overrideModel } = await setup();
 
-      // When I start an experiment with a serializable model override
+      // When I start an experiment with a model id
       const summary = await dataset.startExperiment({
         targetType: 'agent',
         targetId: 'eval-agent',
-        agentOverrides: { model: { provider: 'eval-test/fake', name: 'override-model' } },
+        agentCallOptions: { model: 'eval-test/fake/override-model' },
       });
 
-      // Then every item output comes from the override model
+      // Then every item output comes from that model
       expect(summary.succeededCount).toBe(2);
       expect(summary.results.map(r => r.output)).toEqual([
         expect.objectContaining({ text: 'from-override' }),
@@ -166,57 +166,84 @@ describe('Feature: tweak an agent per experiment without changing it', () => {
     });
   });
 
-  describe('Scenario: the experiment runs with tweaked generation settings', () => {
-    async function toolLoopSetup() {
-      // A model that keeps calling `lookup` for 2 steps, then answers: 3 model calls by default.
-      const model = scriptedModel([
-        { toolCalls: [{ id: 'c1', toolName: 'lookup', args: {} }] },
-        { toolCalls: [{ id: 'c2', toolName: 'lookup', args: {} }] },
-        { text: 'done' },
-      ]);
-      const agent = new Agent({
-        id: 'eval-agent',
-        name: 'Eval Agent',
-        instructions: 'code instructions',
-        model,
-        tools: { lookup: recordingTool('lookup', []) },
+  describe('Scenario: the experiment runs with tweaked sampling settings', () => {
+    it('sends the tweaked modelSettings on every model call', async () => {
+      // Given agent "eval-agent"
+      const { dataset, defaultModel } = await setup();
+
+      // When I start an experiment with tweaked modelSettings
+      await dataset.startExperiment({
+        targetType: 'agent',
+        targetId: 'eval-agent',
+        agentCallOptions: { modelSettings: { temperature: 0.1, topP: 0.5 } },
       });
-      const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
-      const dataset = await mastra.datasets.create({ name: 'agentOverrides tools DS' });
-      await dataset.addItem({ input: 'only' });
-      return { dataset, model };
+
+      // Then every model call receives them
+      expect(callsOf(defaultModel).map(call => [call.temperature, call.topP])).toEqual([
+        [0.1, 0.5],
+        [0.1, 0.5],
+      ]);
+    });
+  });
+
+  describe('Scenario: call options are layered on top of the agentVersion', () => {
+    /** Editor stub whose stored version "v-1" is a full agent with its own instructions, model and sampling. */
+    function versionedEditor(versionModel: MockLanguageModelV2) {
+      return {
+        agent: {
+          applyStoredOverrides: async (a: Agent, { versionId }: { versionId?: string }) => {
+            const version = new Agent({
+              id: a.id,
+              name: a.name,
+              instructions: `${versionId} instructions`,
+              model: versionModel,
+              defaultOptions: { modelSettings: { temperature: 0.9, topP: 0.3 } },
+            });
+            version.__registerMastra(a.getMastraInstance()!);
+            return version;
+          },
+        },
+      };
     }
 
-    it('sends the tweaked temperature and toolChoice on the model call', async () => {
-      // Given agent "eval-agent" with a tool
-      const { dataset, model } = await toolLoopSetup();
+    it('keeps the version for every field the call options leave unset, and merges modelSettings', async () => {
+      // Given version "v-1" with its own instructions, model and modelSettings { temperature: 0.9, topP: 0.3 }
+      const versionModel = textModel('from-version');
+      const { dataset, defaultModel } = await setup({ editor: versionedEditor(versionModel) });
 
-      // When I start an experiment with tweaked modelSettings and toolChoice
+      // When I start an experiment on "v-1" that only tweaks the temperature
       await dataset.startExperiment({
         targetType: 'agent',
         targetId: 'eval-agent',
-        agentOverrides: { defaultOptions: { modelSettings: { temperature: 0.1 }, toolChoice: 'none', maxSteps: 1 } },
+        agentVersion: 'v-1',
+        agentCallOptions: { modelSettings: { temperature: 0.1 } },
       });
 
-      // Then the model call receives temperature 0.1 and toolChoice "none"
-      const [call] = callsOf(model);
-      expect(call?.temperature).toBe(0.1);
-      expect(call?.toolChoice).toEqual({ type: 'none' });
+      // Then the version's instructions and model are used, with its topP and the tweaked temperature
+      expect(callsOf(defaultModel)).toHaveLength(0);
+      expect(systemPromptsOf(versionModel)).toEqual(['v-1 instructions', 'v-1 instructions']);
+      expect(callsOf(versionModel).map(call => [call.temperature, call.topP])).toEqual([
+        [0.1, 0.3],
+        [0.1, 0.3],
+      ]);
     });
 
-    it('stops the tool loop after maxSteps', async () => {
-      // Given a tool-calling agent that would take 3 model calls by default
-      const { dataset, model } = await toolLoopSetup();
+    it('replaces the version instructions and model when the call options set them', async () => {
+      // Given version "v-1" with its own instructions and model
+      const versionModel = textModel('from-version');
+      const { dataset, overrideModel } = await setup({ editor: versionedEditor(versionModel) });
 
-      // When I start an experiment with maxSteps 1
+      // When I start an experiment on "v-1" with tweaked instructions and model
       await dataset.startExperiment({
         targetType: 'agent',
         targetId: 'eval-agent',
-        agentOverrides: { defaultOptions: { maxSteps: 1 } },
+        agentVersion: 'v-1',
+        agentCallOptions: { instructions: 'tweaked instructions', model: 'eval-test/fake/override-model' },
       });
 
-      // Then the loop stops after 1 step
-      expect(callsOf(model)).toHaveLength(1);
+      // Then the call options win over the version
+      expect(callsOf(versionModel)).toHaveLength(0);
+      expect(systemPromptsOf(overrideModel)).toEqual(['tweaked instructions', 'tweaked instructions']);
     });
   });
 
@@ -236,12 +263,12 @@ describe('Feature: tweak an agent per experiment without changing it', () => {
         datasetA.startExperiment({
           targetType: 'agent',
           targetId: 'eval-agent',
-          agentOverrides: { instructions: 'A' },
+          agentCallOptions: { instructions: 'A' },
         }),
         datasetB.startExperiment({
           targetType: 'agent',
           targetId: 'eval-agent',
-          agentOverrides: { instructions: 'B' },
+          agentCallOptions: { instructions: 'B' },
         }),
       ]);
 
@@ -261,31 +288,45 @@ describe('Feature: tweak an agent per experiment without changing it', () => {
   });
 
   describe('Scenario: the experiment remembers what was tweaked', () => {
-    const overrides = {
+    const callOptions = {
       instructions: 'tweaked instructions',
-      model: { provider: 'eval-test/fake', name: 'override-model' },
-      defaultOptions: { modelSettings: { temperature: 0.2 }, maxSteps: 2 },
+      model: 'eval-test/fake/override-model',
+      modelSettings: { temperature: 0.2 },
     };
 
-    it('stores the overrides on the experiment, alongside caller metadata', async () => {
-      // Given an experiment started with agentOverrides and caller metadata
+    it('stores the options on the experiment under one key, alongside caller metadata', async () => {
+      // Given an experiment started with agentCallOptions and caller metadata
       const { dataset } = await setup();
       const summary = await dataset.startExperiment({
         targetType: 'agent',
         targetId: 'eval-agent',
-        agentOverrides: overrides,
-        metadata: { owner: 'evals', agentOverrides: 'stale' },
+        agentCallOptions: callOptions,
+        metadata: { owner: 'evals', agentCallOptions: 'stale' },
       });
 
       // When I load it
       const experiment = await dataset.getExperiment({ experimentId: summary.experimentId });
 
-      // Then metadata.agentOverrides deep-equals the overrides, and caller metadata is kept
-      expect(experiment?.metadata).toEqual({ owner: 'evals', agentOverrides: overrides });
+      // Then metadata.agentCallOptions deep-equals the options, and caller metadata is kept
+      expect(experiment?.metadata).toEqual({ owner: 'evals', agentCallOptions: callOptions });
     });
 
-    it('tags every item trace with the overrides, flagging instructions instead of copying the prompt', async () => {
-      // Given an experiment started with agentOverrides
+    it('records a model instance as its provider/modelId label, never the instance', async () => {
+      // Given an experiment started with a model instance
+      const { dataset } = await setup();
+      const summary = await dataset.startExperiment({
+        targetType: 'agent',
+        targetId: 'eval-agent',
+        agentCallOptions: { model: textModel('x') },
+      });
+
+      // Then the experiment records the label
+      const experiment = await dataset.getExperiment({ experimentId: summary.experimentId });
+      expect(experiment?.metadata).toEqual({ agentCallOptions: { model: 'mock-provider/mock-model-id' } });
+    });
+
+    it('tags every item trace with the model and settings, flagging instructions instead of copying the prompt', async () => {
+      // Given an experiment started with agentCallOptions
       const { mastra, dataset } = await setup();
       const generate = vi.spyOn(mastra.getAgentById('eval-agent'), 'generate');
 
@@ -293,98 +334,81 @@ describe('Feature: tweak an agent per experiment without changing it', () => {
       const summary = await dataset.startExperiment({
         targetType: 'agent',
         targetId: 'eval-agent',
-        agentOverrides: overrides,
+        agentCallOptions: callOptions,
       });
 
-      // Then every item's trace metadata carries the overrides without the prompt text,
+      // Then every item's trace metadata carries the options without the prompt text,
       // which lives once on the experiment and on the AGENT_RUN span's instructions attribute
       expect(generate).toHaveBeenCalledTimes(2);
       for (const [, options] of generate.mock.calls) {
         expect(options?.tracingOptions?.metadata).toEqual({
           experimentId: summary.experimentId,
-          agentOverrides: { model: overrides.model, defaultOptions: overrides.defaultOptions },
+          agentCallOptions: { model: callOptions.model, modelSettings: callOptions.modelSettings },
           agentInstructionsOverridden: true,
         });
       }
     });
   });
 
-  describe('Scenario: agentModel is shorthand for agentOverrides.model', () => {
-    it('records agentModel as agentOverrides.model on the experiment and on every trace', async () => {
+  describe('Scenario: agentModel is an alias for agentCallOptions.model', () => {
+    it('runs on agentModel and records it as agentCallOptions.model', async () => {
       // Given a gateway serving "eval-test/fake/override-model"
-      const { mastra, dataset, defaultModel, overrideModel } = await setup();
-      const generate = vi.spyOn(mastra.getAgentById('eval-agent'), 'generate');
+      const { dataset, defaultModel, overrideModel } = await setup();
 
       // When I start an experiment with agentModel and tweaked instructions
       const summary = await dataset.startExperiment({
         targetType: 'agent',
         targetId: 'eval-agent',
         agentModel: 'eval-test/fake/override-model',
-        agentOverrides: { instructions: 'tweaked instructions' },
+        agentCallOptions: { instructions: 'tweaked instructions' },
       });
 
       // Then it runs on that model
       expect(callsOf(overrideModel)).toHaveLength(2);
       expect(callsOf(defaultModel)).toHaveLength(0);
-      // And the model is recorded in agentOverrides, merged with the other tweaks
-      const expected = {
-        instructions: 'tweaked instructions',
-        model: { provider: 'eval-test', name: 'fake/override-model' },
-      };
+      // And the model is recorded with the other options, under one key
       const experiment = await dataset.getExperiment({ experimentId: summary.experimentId });
-      expect(experiment?.metadata).toEqual({ agentModel: 'eval-test/fake/override-model', agentOverrides: expected });
-      for (const [, options] of generate.mock.calls) {
-        expect(options?.tracingOptions?.metadata).toMatchObject({
-          agentOverrides: { model: expected.model },
-          agentInstructionsOverridden: true,
-        });
-      }
+      expect(experiment?.metadata).toEqual({
+        agentCallOptions: { instructions: 'tweaked instructions', model: 'eval-test/fake/override-model' },
+      });
     });
 
-    it('accepts agentModel and agentOverrides.model when they name the same model', async () => {
+    it('lets agentCallOptions.model win when both are set', async () => {
       // Given a gateway serving "eval-test/fake/override-model"
       const { dataset, overrideModel } = await setup();
-      const model = { provider: 'eval-test/fake', name: 'override-model' };
+      const aliasModel = textModel('from-alias');
 
-      // When both name the same model
+      // When agentModel and agentCallOptions.model name different models
       const summary = await dataset.startExperiment({
         targetType: 'agent',
         targetId: 'eval-agent',
-        agentModel: 'eval-test/fake/override-model',
-        agentOverrides: { model },
+        agentModel: aliasModel,
+        agentCallOptions: { model: 'eval-test/fake/override-model' },
       });
 
-      // Then it runs on that model and keeps the caller's agentOverrides.model as given
+      // Then it runs on agentCallOptions.model only
       expect(summary.succeededCount).toBe(2);
       expect(callsOf(overrideModel)).toHaveLength(2);
-      const experiment = await dataset.getExperiment({ experimentId: summary.experimentId });
-      expect(experiment?.metadata?.agentOverrides).toEqual({ model });
+      expect(callsOf(aliasModel)).toHaveLength(0);
     });
   });
 
-  describe('Scenario Outline: agentOverrides is rejected where it is meaningless', () => {
-    const agentOverrides = { instructions: 'tweaked instructions' };
+  describe('Scenario Outline: agentCallOptions is rejected where it is meaningless', () => {
+    const agentCallOptions = { instructions: 'tweaked instructions' };
     const examples = [
-      { condition: 'a workflow target', config: { targetType: 'workflow' as const, targetId: 'wf', agentOverrides } },
-      { condition: 'an inline task', config: { task: async () => 'out', agentOverrides } },
-      {
-        condition: 'agentModel naming a different model than agentOverrides.model',
-        config: {
-          targetType: 'agent' as const,
-          targetId: 'eval-agent',
-          agentModel: textModel('x'),
-          agentOverrides: { model: { provider: 'eval-test/fake', name: 'override-model' } },
-        },
-      },
+      { condition: 'a workflow target', config: { targetType: 'workflow' as const, targetId: 'wf', agentCallOptions } },
+      { condition: 'an inline task', config: { task: async () => 'out', agentCallOptions } },
     ];
 
     it.each(examples)('startExperiment with $condition throws', async ({ config }) => {
       // Given a dataset
       const { dataset } = await setup();
 
-      // When I start an experiment with agentOverrides and <condition>
-      // Then it throws EXPERIMENT_INVALID_AGENT_OVERRIDES
-      await expect(dataset.startExperiment(config)).rejects.toMatchObject({ id: 'EXPERIMENT_INVALID_AGENT_OVERRIDES' });
+      // When I start an experiment with agentCallOptions and <condition>
+      // Then it throws EXPERIMENT_INVALID_AGENT_CALL_OPTIONS
+      await expect(dataset.startExperiment(config)).rejects.toMatchObject({
+        id: 'EXPERIMENT_INVALID_AGENT_CALL_OPTIONS',
+      });
     });
 
     it.each(examples)(
@@ -393,10 +417,10 @@ describe('Feature: tweak an agent per experiment without changing it', () => {
         // Given a dataset
         const { dataset } = await setup();
 
-        // When I start an async experiment with agentOverrides and <condition>
-        // Then it throws EXPERIMENT_INVALID_AGENT_OVERRIDES and nothing is stored
+        // When I start an async experiment with agentCallOptions and <condition>
+        // Then it throws EXPERIMENT_INVALID_AGENT_CALL_OPTIONS and nothing is stored
         await expect(dataset.startExperimentAsync(config)).rejects.toMatchObject({
-          id: 'EXPERIMENT_INVALID_AGENT_OVERRIDES',
+          id: 'EXPERIMENT_INVALID_AGENT_CALL_OPTIONS',
         });
         const { experiments } = await dataset.listExperiments();
         expect(experiments).toEqual([]);
