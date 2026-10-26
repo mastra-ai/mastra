@@ -1677,6 +1677,135 @@ describe('BackgroundTaskManager', () => {
       }
     });
 
+    const seedCrashedTask = async (storage: MockStore, id: string, leaseExpiresAt: Date) => {
+      const bgStore = await storage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id,
+        status: 'running',
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+        ownerId: 'dead-worker',
+        leaseExpiresAt,
+      });
+      return bgStore!;
+    };
+
+    it('reports a crashed task that the startup sweep marks failed', async () => {
+      const seedStorage = new MockStore();
+      await seedCrashedTask(seedStorage, 'crashed-at-start', new Date(Date.now() - 1_000));
+      const onTaskFailed = vi.fn();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true, onTaskFailed },
+      });
+      await local.startWorkers();
+
+      try {
+        await tick(200);
+
+        const task = await local.backgroundTaskManager!.getTask('crashed-at-start');
+        expect(task).toMatchObject({
+          status: 'failed',
+          error: { message: 'Worker process terminated before task completed' },
+        });
+        expect(onTaskFailed).toHaveBeenCalledTimes(1);
+        expect(onTaskFailed.mock.calls[0]![0]).toMatchObject({
+          id: 'crashed-at-start',
+          status: 'failed',
+          error: { message: 'Worker process terminated before task completed' },
+        });
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('reports a crashed task that a later sweep marks failed to callbacks and stream subscribers', async () => {
+      const seedStorage = new MockStore();
+      // Lease still valid at startup, so the task is only reclaimed by the
+      // sweep scheduled for its expiry.
+      await seedCrashedTask(seedStorage, 'crashed-later', new Date(Date.now() + 300));
+      const onTaskFailed = vi.fn();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true, onTaskFailed },
+      });
+      await local.startWorkers();
+      const mgr = local.backgroundTaskManager!;
+
+      const chunks: any[] = [];
+      const abortController = new AbortController();
+      const stream = mgr.stream({ abortSignal: abortController.signal });
+      const consumer = (async () => {
+        for await (const chunk of stream as any) chunks.push(chunk);
+      })();
+
+      try {
+        await tick(200);
+        expect((await mgr.getTask('crashed-later'))?.status).toBe('running');
+        expect(onTaskFailed).not.toHaveBeenCalled();
+
+        // The follow-up sweep runs about 1s after the lease lapses.
+        await tick(1_500);
+
+        expect((await mgr.getTask('crashed-later'))?.status).toBe('failed');
+        expect(onTaskFailed).toHaveBeenCalledTimes(1);
+        const failedChunks = chunks.filter(c => c.type === 'background-task-failed');
+        expect(failedChunks).toHaveLength(1);
+        expect(failedChunks[0].payload.taskId).toBe('crashed-later');
+      } finally {
+        abortController.abort();
+        await consumer;
+        await mgr.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('leaves the report to the worker whose sweep failed the task first', async () => {
+      const seedStorage = new MockStore();
+      const bgStore = await seedCrashedTask(seedStorage, 'failed-elsewhere', new Date(Date.now() - 1_000));
+      // Another replica's sweep fails the task (and reports it) between this
+      // sweep's list and its write, so this worker's fenced write loses.
+      const updateTask = bgStore.updateTask.bind(bgStore);
+      vi.spyOn(bgStore, 'updateTask').mockImplementation(async (id, update, fence) => {
+        if (id === 'failed-elsewhere' && update.status === 'failed') {
+          await updateTask(id, { ...update, error: { message: 'failed by another replica' } });
+        }
+        return updateTask(id, update, fence);
+      });
+      const onTaskFailed = vi.fn();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true, onTaskFailed },
+      });
+      await local.startWorkers();
+
+      try {
+        await tick(200);
+
+        expect(await local.backgroundTaskManager!.getTask('failed-elsewhere')).toMatchObject({
+          status: 'failed',
+          error: { message: 'failed by another replica' },
+        });
+        expect(onTaskFailed).not.toHaveBeenCalled();
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+        vi.restoreAllMocks();
+      }
+    });
+
     it('stamps an execution lease on dispatch and clears it when the task finishes', async () => {
       const local = await makeLocalManager({
         enabled: true,

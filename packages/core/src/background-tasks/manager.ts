@@ -252,12 +252,6 @@ export class BackgroundTaskManager {
         ]);
         return;
       }
-
-      if (this.config.recoverStaleTasksOnStart) {
-        // Recover stale tasks from a previous process — only workers should
-        // attempt recovery since they own execution.
-        await this.recoverStaleTasks();
-      }
     }
 
     await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
@@ -272,6 +266,14 @@ export class BackgroundTaskManager {
       lateSubscriptions.push([TOPIC_RESULT, this.resultCallback]);
       await this.#releaseLateInitSubscriptions(lateSubscriptions);
       return;
+    }
+
+    // Recover stale tasks from a previous process — only workers should
+    // attempt recovery since they own execution. This runs after the result
+    // subscription so the `task.failed` events it publishes reach
+    // `handleResult` in this process.
+    if (!isProducerOnly && this.config.recoverStaleTasksOnStart) {
+      await this.recoverStaleTasks();
     }
 
     // Start periodic cleanup if configured
@@ -1952,7 +1954,7 @@ export class BackgroundTaskManager {
             fence,
           );
         } else {
-          await storage.updateTask(
+          const markedFailed = await storage.updateTask(
             task.id,
             {
               status: 'failed',
@@ -1963,6 +1965,12 @@ export class BackgroundTaskManager {
             },
             fence,
           );
+          // Only the worker whose fenced write won publishes, so replicas
+          // sweeping the same task do not report the failure twice.
+          if (markedFailed) {
+            const failedTask = await storage.getTask(task.id);
+            if (failedTask?.status === 'failed') await this.publishLifecycleEvent('task.failed', failedTask);
+          }
         }
       }
 
