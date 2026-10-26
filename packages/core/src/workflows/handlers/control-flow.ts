@@ -42,13 +42,6 @@ import type { ForeachProgress } from './foreach-progress';
 import type { ExecuteStepParams } from './step';
 
 /**
- * Minimum spacing between two foreach progress checkpoints of the same foreach.
- * Mutable only so tests can shorten it.
- * @internal
- */
-export const foreachCheckpointTiming = { intervalMs: 1000 };
-
-/**
  * Whether finished parallel arms and foreach items are checkpointed while their block is
  * still running. These checkpoints only exist so `restart()` can skip work that already
  * ran (#26214). Engines that replay memoized durable operations (Inngest) do not support
@@ -1122,35 +1115,20 @@ export async function executeForeach(
     }) as StepResult<any, any, any, any>;
 
   // Finished items are checkpointed on one serialized chain per foreach: at most one
-  // write in flight, items that finish meanwhile are folded into the next write, and
-  // writes are spaced at least `foreachCheckpointTiming.intervalMs` apart so a long foreach
-  // does not rewrite the snapshot once per item (#26214).
+  // write in flight, and items that finish meanwhile are folded into the next write,
+  // which starts as soon as the previous one lands. A crash can then only lose items
+  // that finished during the write in flight, and writes never outpace storage (#26214).
   const checkpointProgress = checkpointsMidBlockProgress(engine);
   let checkpointDirty = false;
   let checkpointClosed = false;
   let checkpointChain: Promise<void> | undefined;
   let checkpointError: Error | undefined;
-  let lastCheckpointAt = 0;
   let checkpointCount = 0;
-  let wakeCheckpoint: (() => void) | undefined;
 
   const runCheckpointChain = async () => {
     try {
       while (checkpointDirty && !checkpointClosed) {
-        const wait = lastCheckpointAt + foreachCheckpointTiming.intervalMs - Date.now();
-        if (wait > 0) {
-          await new Promise<void>(resolve => {
-            const timer = setTimeout(resolve, wait);
-            wakeCheckpoint = () => {
-              clearTimeout(timer);
-              resolve();
-            };
-          });
-          wakeCheckpoint = undefined;
-          if (checkpointClosed) break;
-        }
         checkpointDirty = false;
-        lastCheckpointAt = Date.now();
         executionContext.activeStepsPath[stepId] = executionContext.executionPath;
         try {
           await engine.persistStepUpdate({
@@ -1184,7 +1162,6 @@ export async function executeForeach(
   /** Stops scheduling checkpoints and waits for the write in flight, if any. */
   const drainCheckpoints = async () => {
     checkpointClosed = true;
-    wakeCheckpoint?.();
     await checkpointChain;
   };
 

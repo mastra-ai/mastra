@@ -13,12 +13,11 @@
  * into fresh storage with a freshly built workflow and restarts.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
-import { foreachCheckpointTiming } from './handlers/control-flow';
 import type { WorkflowRunState } from './types';
 import { createStep } from './workflow';
 
@@ -34,8 +33,11 @@ function step(id: string, execute: (params: { inputData: any }) => Promise<any>)
   return { fn, step: createStep({ id, inputSchema: anySchema, outputSchema: anySchema, execute: fn }) };
 }
 
-/** Lets pending persists settle so the captured checkpoint reflects everything written so far. */
-const settle = () => new Promise(resolve => setTimeout(resolve, 50));
+/**
+ * Yields one macrotask before the crash. That is less time than any timer-based
+ * checkpoint could take, so only writes that start as soon as an item finishes make it.
+ */
+const nextTick = () => new Promise(resolve => setTimeout(resolve, 0));
 
 /** Finished foreach items recorded on a checkpoint. */
 function progressCount(snapshot: WorkflowRunState | undefined, stepId: string) {
@@ -43,23 +45,19 @@ function progressCount(snapshot: WorkflowRunState | undefined, stepId: string) {
 }
 
 /**
- * @param ready When given, the crash waits (up to 3s) until the latest checkpoint
- * satisfies it, so a deferred progress checkpoint can land first. Without the fix it
- * never does and the crash goes ahead, so the test fails on its assertions, not a hang.
+ * The crash keeps a JSON copy of the last snapshot storage was asked to write, taken
+ * when the write was made, so later in-memory mutation cannot leak into it.
  */
 async function crashAndRestart(
   build: (crash?: Crash) => Built,
   inputData: unknown,
-  ready?: (latest: WorkflowRunState | undefined) => boolean,
   tamper?: (crashSnapshot: WorkflowRunState) => void,
 ) {
   const storage = new MockStore();
   let crashSnapshot: WorkflowRunState | undefined;
   let latest: WorkflowRunState | undefined;
   const crash: Crash = async () => {
-    await settle();
-    const deadline = Date.now() + 3_000;
-    while (ready && !ready(latest) && Date.now() < deadline) await settle();
+    await nextTick();
     crashSnapshot = JSON.parse(JSON.stringify(latest));
   };
 
@@ -96,10 +94,6 @@ async function crashAndRestart(
 }
 
 describe('restart after a crash inside a parallel or foreach block (issue #26214)', () => {
-  afterEach(() => {
-    foreachCheckpointTiming.intervalMs = 1000;
-  });
-
   it('does not re-run a parallel arm that finished before the crash', async () => {
     const build = (crash?: Crash): Built => {
       let fastDone!: () => void;
@@ -214,12 +208,7 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
   it.each([1, 3])(
     'does not re-run foreach items that finished before the crash (concurrency %i)',
     async concurrency => {
-      // Progress writes are throttled, so the crash waits for the one that records item 1.
-      const { original, restarted, stored, fns } = await crashAndRestart(
-        foreachBuild(concurrency),
-        [0, 1, 2, 3, 4],
-        latest => progressCount(latest, 'item') === 2,
-      );
+      const { original, restarted, stored, fns } = await crashAndRestart(foreachBuild(concurrency), [0, 1, 2, 3, 4]);
 
       const ranItems = fns.item.mock.calls.map(call => call[0].inputData).sort();
       expect(ranItems).toEqual([2, 3, 4]);
@@ -234,13 +223,58 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
     },
   );
 
-  it('checkpoints items that finish after the last item start (deferred progress write)', async () => {
-    // Concurrency 5: every item starts up front and items 0 and 1 finish within one
-    // checkpoint interval, so the write that records item 1 is deferred.
+  it.each([1, 3])(
+    'charges every customer exactly once when the crash comes right after a charge (concurrency %i)',
+    async concurrency => {
+      // The issue's billing repro: the process dies right after "charged customer 1", one
+      // macrotask after the charge returns, with no time for a timed checkpoint.
+      const charged: number[] = [];
+      let original = true;
+      const build = (crash?: Crash): Built => {
+        let done = 0;
+        let firstTwoCharged!: () => void;
+        const twoCharged = new Promise<void>(resolve => (firstTwoCharged = resolve));
+        let crashed!: () => void;
+        const afterCrash = new Promise<void>(resolve => (crashed = resolve));
+        const charge = step('charge', async ({ inputData }) => {
+          if (crash && inputData >= 2) {
+            await twoCharged;
+            if (inputData === 2) {
+              await crash();
+              original = false;
+              crashed();
+            }
+            await afterCrash;
+          }
+          // Only side effects from before the crash, and from the restart, count.
+          if (original || !crash) charged.push(inputData);
+          if (crash && ++done === 2) firstTwoCharged();
+          return { charged: inputData };
+        });
+        const workflow = createWorkflow({
+          id: `foreach-billing-${concurrency}`,
+          inputSchema: anySchema,
+          outputSchema: anySchema,
+        })
+          .foreach(charge.step, { concurrency })
+          .commit();
+        return { workflow, fns: { charge: charge.fn } };
+      };
+
+      const { original: first, restarted } = await crashAndRestart(build, [0, 1, 2, 3, 4]);
+
+      expect(charged.sort()).toEqual([0, 1, 2, 3, 4]);
+      expect(restarted.status).toBe('success');
+      expect(restarted.result).toEqual(first.result);
+    },
+  );
+
+  it('checkpoints items that finish after the last item start', async () => {
+    // Concurrency 5: every item starts up front, so no later item start can carry the
+    // progress of items 0 and 1; only the progress checkpoint records them.
     const { original, restarted, fns } = await crashAndRestart(
-      foreachBuild(5, 'mid-foreach-deferred'),
+      foreachBuild(5, 'mid-foreach-all-started'),
       [0, 1, 2, 3, 4],
-      latest => progressCount(latest, 'item') === 2,
     );
 
     expect(fns.item.mock.calls.map(call => call[0].inputData).sort()).toEqual([2, 3, 4]);
@@ -249,7 +283,6 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
   });
 
   it('never lands an older foreach checkpoint over a newer one when storage latency varies', async () => {
-    foreachCheckpointTiming.intervalMs = 0;
     // Writes are copied when called and land after a seeded random delay, like a remote
     // store. If writes for the run were not kept in call order, an older snapshot would
     // land after a newer one and drop finished items from the persisted progress.
@@ -285,7 +318,6 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
   });
 
   it('fails the foreach, instead of hanging or succeeding, when a progress checkpoint cannot be written', async () => {
-    foreachCheckpointTiming.intervalMs = 0;
     const item = step('item', async ({ inputData }) => ({ doubled: inputData * 2 }));
     const after = step('after', async () => ({ ran: true }));
     const workflow = createWorkflow({ id: 'foreach-write-fails', inputSchema: anySchema, outputSchema: anySchema })
@@ -363,7 +395,6 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
   });
 
   it('ignores malformed foreach progress in a stored snapshot and restarts every item', async () => {
-    foreachCheckpointTiming.intervalMs = 0;
     const build = (crash?: Crash): Built => {
       const item = step('item', async ({ inputData }) => {
         if (crash && inputData === 2) await crash();
@@ -375,14 +406,9 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       return { workflow, fns: { item: item.fn } };
     };
 
-    const { original, restarted, fns } = await crashAndRestart(
-      build,
-      [0, 1, 2],
-      latest => progressCount(latest, 'item') >= 2,
-      snapshot => {
-        (snapshot.context.item as any).metadata.foreachProgress['0'] = null;
-      },
-    );
+    const { original, restarted, fns } = await crashAndRestart(build, [0, 1, 2], snapshot => {
+      (snapshot.context.item as any).metadata.foreachProgress['0'] = null;
+    });
 
     expect(fns.item.mock.calls.map(call => call[0].inputData)).toEqual([0, 1, 2]);
     expect(restarted.status).toBe('success');
@@ -390,7 +416,6 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
   });
 
   it('keeps progress for items that returned undefined, which JSON storage drops', async () => {
-    foreachCheckpointTiming.intervalMs = 0;
     const build = (crash?: Crash): Built => {
       const item = step('item', async ({ inputData }) => {
         if (crash && inputData === 2) await crash();
@@ -406,20 +431,17 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       return { workflow, fns: { item: item.fn } };
     };
 
-    const { original, restarted, fns } = await crashAndRestart(
-      build,
-      [0, 1, 2],
-      latest => progressCount(latest, 'item') >= 2,
-    );
+    const { original, restarted, fns } = await crashAndRestart(build, [0, 1, 2]);
 
     expect(fns.item.mock.calls.map(call => call[0].inputData)).toEqual([2]);
     expect(restarted.status).toBe('success');
     expect(restarted.result).toEqual(original.result);
   });
 
-  it('writes a bounded number of snapshots for a foreach much longer than its concurrency', async () => {
-    // Without throttling, every item rewrote the whole snapshot with all progress so far,
-    // so bytes grew with the square of the item count.
+  it('writes at most one progress checkpoint per finished item, plus one running write', async () => {
+    // Items no longer write their own start snapshot, and progress writes are coalesced
+    // on one in-flight chain, so the foreach writes at most once per finished item plus
+    // the running write before its first item.
     const payload = 'x'.repeat(200);
     const item = step('item', async ({ inputData }) => ({ index: inputData, payload }));
     const workflow = createWorkflow({ id: 'foreach-volume', inputSchema: anySchema, outputSchema: anySchema })
@@ -429,18 +451,23 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
     new Mastra({ logger: false, storage, workflows: { wf: workflow } });
     const store = (await storage.getStore('workflows'))!;
     const persist = store.persistWorkflowSnapshot.bind(store);
-    const sizes: number[] = [];
+    let foreachWrites = 0;
     vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
-      sizes.push(JSON.stringify(args.snapshot).length);
+      if (args.snapshot.context.item?.status === 'running') foreachWrites++;
       return persist(args);
     });
 
     const items = Array.from({ length: 400 }, (_, i) => i);
-    const result = await (await workflow.createRun()).start({ inputData: items });
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: items });
 
     expect(result.status).toBe('success');
-    const totalBytes = sizes.reduce((sum, size) => sum + size, 0);
-    expect(sizes.length, `writes: ${sizes.length}`).toBeLessThanOrEqual(10);
-    expect(totalBytes, `bytes: ${totalBytes}, final: ${sizes.at(-1)}`).toBeLessThan(5 * sizes.at(-1)!);
+    expect(item.fn).toHaveBeenCalledTimes(items.length);
+    expect(foreachWrites).toBeGreaterThan(1);
+    expect(foreachWrites, `foreach writes: ${foreachWrites}`).toBeLessThanOrEqual(items.length + 1);
+    // The final snapshot is what main writes: the plain foreach result, no progress record.
+    const stored = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+    expect(JSON.stringify(stored)).not.toContain('foreachProgress');
+    expect((stored!.context.item as any).output).toEqual(items.map(index => ({ index, payload })));
   });
 });
