@@ -1984,26 +1984,44 @@ export class EventedRun<
     this.serializedStepGraph = params.serializedStepGraph;
   }
 
+  #cancelPublished = false;
+
+  /**
+   * Publish the workflow.cancel event that tells the event processor owning this run to stop it.
+   * Runs at most once per run handle, whether triggered by cancel() or by abortController.abort().
+   * A failed publish is rethrown and can be retried.
+   */
+  private async publishCancel(): Promise<void> {
+    if (this.#cancelPublished) return;
+    this.#cancelPublished = true;
+    try {
+      await this.mastra?.pubsub.publish('workflows', {
+        type: 'workflow.cancel',
+        runId: this.runId,
+        data: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+        },
+      });
+    } catch (err) {
+      this.#cancelPublished = false;
+      throw err;
+    }
+  }
+
   /**
    * Set up abort signal handler to publish workflow.cancel event when abortController.abort() is called.
    * This ensures consistent cancellation behavior whether abort() is called directly or via cancel().
    */
   private setupAbortHandler(): void {
-    const abortHandler = () => {
-      this.mastra?.pubsub
-        .publish('workflows', {
-          type: 'workflow.cancel',
-          runId: this.runId,
-          data: {
-            workflowId: this.workflowId,
-            runId: this.runId,
-          },
-        })
-        .catch(err => {
-          this.mastra?.getLogger()?.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err);
-        });
-    };
-    this.abortController.signal.addEventListener('abort', abortHandler, { once: true });
+    this.abortController.signal.addEventListener(
+      'abort',
+      () =>
+        void this.publishCancel().catch(err =>
+          this.mastra?.getLogger()?.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err),
+        ),
+      { once: true },
+    );
   }
 
   async start({
@@ -2735,6 +2753,15 @@ export class EventedRun<
   async cancel() {
     if (await this.hasReachedTerminalStatus()) return;
 
+    // Publish directly instead of relying on the abort handler: a handle created on another
+    // instance (or via startAsync) never registered one, so abort() alone would reach no processor.
+    // publishCancel() claims its once-guard synchronously, so the abort listener below won't publish again.
+    const published = this.publishCancel();
+    this.abortController.abort();
+    // Only mark the run canceled once the processor can see the cancel. If the publish fails, storage
+    // keeps the run's live status so a retry from any handle or instance is not treated as finished.
+    await published;
+
     // Update storage directly for immediate status update (same pattern as Inngest)
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     await workflowsStore?.updateWorkflowState({
@@ -2748,9 +2775,5 @@ export class EventedRun<
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.
     this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
-
-    // Trigger abort signal - the abort handler will publish the workflow.cancel event
-    // This ensures consistent behavior whether cancel() or abort() is called
-    this.abortController.abort();
   }
 }

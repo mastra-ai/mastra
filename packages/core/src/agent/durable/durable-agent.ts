@@ -393,6 +393,11 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** MCP protocol context forwarded to tools for in-process durable runs. */
   mcp?: AgentExecutionOptions<OUTPUT>['mcp'];
   /**
+   * Per-call tool lifecycle hooks. Applied when tools are prepared for this execution.
+   * Function hooks are not serialized; a cross-process recovery cannot restore them.
+   */
+  hooks?: AgentExecutionOptions<OUTPUT>['hooks'];
+  /**
    * Per-invocation tool payload transform policy. The closure rides on the
    * in-process run registry; only the JSON-safe `targets` shadow is serialized
    * for cross-process engines.
@@ -3679,12 +3684,12 @@ export class DurableAgent<
       /* errors already handled by the prior segment */
     });
     // A warm resume reuses the tools built for the first request, which close
-    // over its request context and delegation hooks (#25960). Rebuild them for
+    // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
     // this call and swap in only entries still holding a request-built tool, so
     // tools a processor added or replaced are kept. Processor-added tools are
     // rebuilt for this call's request context instead (#27544). Cold resumes already
     // rebuilt everything in prepare() above.
-    if (!coldSnapshot && (options?.requestContext || options?.delegation)) {
+    if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks)) {
       try {
         const requestTools = await this.#wrappedAgent.getToolsForExecution({
           toolsets: resolvedOptions.toolsets,
@@ -3695,7 +3700,12 @@ export class DurableAgent<
           requestContext: resumeRequestContext,
           memoryConfig: resolvedOptions.memory?.options,
           autoResumeSuspendedTools: resolvedOptions.autoResumeSuspendedTools,
-          delegation: resolvedOptions.delegation,
+          // resolvedOptions always carries defaultOptions.delegation, so only a delegation passed
+          // to this resume may replace the one the first call parked on the entry.
+          delegation: options?.delegation
+            ? resolvedOptions.delegation
+            : (entry.delegation ?? resolvedOptions.delegation),
+          hooks: resolvedOptions.hooks,
           methodType: resolvedOptions.closeOnSuspend ? 'generate' : 'stream',
           backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
           backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
@@ -3715,7 +3725,10 @@ export class DurableAgent<
           reg.tools = rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext);
           if (reg.baseTools)
             reg.baseTools = rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext);
-          reg.requestTools = requestTools;
+          // Tools this rebuild did not produce still hold their earlier build, so
+          // keep that as their baseline; otherwise a later resume can never refresh them.
+          reg.requestTools = { ...reg.requestTools, ...requestTools };
+          if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }
       } catch (error) {
         this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
