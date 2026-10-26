@@ -6,6 +6,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import { listFactorySkills } from '../skills/catalog.js';
+import type { CodeSkillSource } from '../skills/code-skills.js';
 import { formatSkillMessage, resolveSkillInvocation, SkillInvocationError } from '../skills/service.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { RouteDependencies } from './route.js';
@@ -34,6 +35,7 @@ export interface SkillRoutesDeps extends RouteDependencies {
   controller: Pick<AgentController<MastraCodeState>, 'getSession'>;
   sourceControlStorage?: SourceControlStorageHandle;
   ensureSourceControlReady?: () => Promise<void>;
+  codeSkills?: CodeSkillSource;
   authorizeSessionAddress?: (context: Context, address: { sessionId: string }) => Promise<SessionAuthorizationResult>;
 }
 
@@ -160,7 +162,7 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
           return c.json({ error: 'unauthorized', message: 'Authentication required.' }, 401);
         }
       }
-      return c.json({ skills: await listFactorySkills() });
+      return c.json({ skills: await listFactorySkills(this.deps.codeSkills) });
     };
 
     return [

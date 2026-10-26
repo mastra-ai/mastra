@@ -135,6 +135,8 @@ import { createSourceControlTools } from './session/source-control-tools.js';
 import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
+import { CodeSkillSource } from './skills/code-skills.js';
+import type { FactorySkill } from './skills/code-skills.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -327,6 +329,12 @@ export interface MastraFactoryConfig {
   boardConfig?: ProjectBoardConfigInput;
   /** Code runners that board phases can name as `{ type: 'workflow', workflowId: id }`, beside the built-in ones. */
   runners?: readonly BoardRunner[];
+  /**
+   * Skills board phases can run by name (`runner.skill`), written beside the boards that use them.
+   * Every card session can load them; one named after a bundled Factory skill replaces it.
+   * An invalid skill throws here rather than on a card's first run.
+   */
+  skills?: readonly FactorySkill[];
 
   /**
    * Platform-specific overrides.
@@ -498,6 +506,7 @@ export class MastraFactory {
   /** Each project's boards (stored + code), set by `prepare()`. */
   #boardResolver: BoardResolver | undefined;
   readonly #runners: BoardRunnerRegistry;
+  readonly #skills: CodeSkillSource;
   /** What a project with no stored boards seeds and is offered; unset when it seeds none. */
   readonly #boardDefaults: ProjectBoardConfigInput | undefined;
   readonly #configVersion: string;
@@ -524,6 +533,7 @@ export class MastraFactory {
       includeDefaultBoards: config.includeDefaultBoards,
     });
     this.#runners = createRunnerRegistry(config.runners);
+    this.#skills = new CodeSkillSource(config.skills ?? []);
     this.#boardDefaults = config.boardConfig
       ? checkBoardConfigOption(config.boardConfig, this.#runners, new Set((config.boards ?? []).map(board => board.id)))
       : config.includeDefaultBoards !== false
@@ -1395,6 +1405,7 @@ export class MastraFactory {
           ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,
+          skills: this.#skills,
         }),
         disableGithubSignals: true,
         // A wake (notification or peer signal) has no signed-in request, so
@@ -1834,6 +1845,7 @@ export class MastraFactory {
             boardResolver: this.#boardResolver,
             ...(this.#boardDefaults ? { boardDefaults: this.#boardDefaults } : {}),
             boardRunners: this.#runners,
+            codeSkills: this.#skills,
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
               this.#startCoordinator = startCoordinator;

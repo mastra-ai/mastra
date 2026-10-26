@@ -745,6 +745,16 @@ describe('MastraFactory.prepare', () => {
     expect(() => new MastraFactory({ storage: fakeStorage(), configVersion: '' })).toThrow();
   });
 
+  it('rejects a code skill that would not load at construction', () => {
+    expect(
+      () =>
+        new MastraFactory({
+          storage: fakeStorage(),
+          skills: [{ name: 'Release Notes', description: 'Notes', instructions: '# Notes' }],
+        }),
+    ).toThrow(/Factory skill "Release Notes" is invalid/);
+  });
+
   it('rejects the removed rules option with a migration hint', () => {
     expect(() => new MastraFactory({ storage: fakeStorage(), rules: {} } as never)).toThrow(/configVersion/);
   });

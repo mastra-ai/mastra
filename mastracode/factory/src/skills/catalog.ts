@@ -6,12 +6,13 @@
  * override first, then bundled) so the settings UI can show users exactly what
  * each skill instructs the agent to do — and whether the runtime can load it.
  */
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { validateSkillContent } from '@mastra/core/skills';
 
 import { BUNDLED_FACTORY_SKILLS_PATH, FACTORY_SKILL_NAMES, resolveLocalFactorySkillsPath } from '../workspace.js';
+import type { CodeSkillSource } from './code-skills.js';
 
 export interface FactorySkillInfo {
   name: string;
@@ -39,23 +40,25 @@ function stripFrontmatter(raw: string): string {
 }
 
 /**
- * List the Factory skills, preferring repo-local versions over bundled ones and
- * skipping any skill missing from both roots.
+ * List the Factory skills a phase can run, in the order a session resolves
+ * them: skills passed to `MastraFactory({ skills })`, then the app's
+ * `factory-skills/` folder, then the bundled ones. Each name is listed once.
  */
-export async function listFactorySkills(): Promise<FactorySkillInfo[]> {
-  const skills: FactorySkillInfo[] = [];
+export async function listFactorySkills(codeSkills?: CodeSkillSource): Promise<FactorySkillInfo[]> {
   const localRoot = resolveLocalFactorySkillsPath();
   const roots = localRoot ? [localRoot, BUNDLED_FACTORY_SKILLS_PATH] : [BUNDLED_FACTORY_SKILLS_PATH];
-  for (const name of [...FACTORY_SKILL_NAMES].sort()) {
-    let raw: string | undefined;
-    // Repo-local skills override the bundled versions, matching runtime resolution.
+  const appNames = localRoot
+    ? (await readdir(localRoot, { withFileTypes: true }).catch(() => []))
+        .filter(entry => entry.isDirectory())
+        .map(entry => entry.name)
+    : [];
+  const names = new Set([...FACTORY_SKILL_NAMES, ...appNames, ...(codeSkills?.names ?? [])]);
+  const skills: FactorySkillInfo[] = [];
+  for (const name of [...names].sort()) {
+    let raw = codeSkills?.markdown(name);
     for (const root of roots) {
-      try {
-        raw = await readFile(join(root, name, 'SKILL.md'), 'utf8');
-        break;
-      } catch {
-        continue;
-      }
+      if (raw !== undefined) break;
+      raw = await readFile(join(root, name, 'SKILL.md'), 'utf8').catch(() => undefined);
     }
     if (raw === undefined) continue;
     skills.push(parseSkillMarkdown(name, raw));
