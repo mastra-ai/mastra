@@ -330,6 +330,9 @@ Instead of pausing every tool call at the agent level, you can mark individual t
 Set `requireApproval: true` on a tool definition. The tool pauses before execution regardless of whether `requireToolApproval` is set on the agent:
 
 ```typescript title="src/mastra/tools/test-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
 export const testTool = createTool({
   id: 'test-tool',
   description: 'Fetches weather for a location',
@@ -378,6 +381,9 @@ const handleApproval = async () => {
 With this approach, neither the agent nor the tool uses `requireApproval`. Instead, the tool's `execute` function calls `suspend()` to pause at a specific point and return context or confirmation prompts to the user. This is useful when approval depends on runtime conditions rather than being unconditional.
 
 ```typescript title="src/mastra/tools/test-tool-b.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
 export const testToolB = createTool({
   id: 'test-tool-b',
   description: 'Fetches weather for a location',
@@ -689,6 +695,9 @@ for await (const chunk of stream.fullStream) {
 Tools can also use [`suspend()`](#approval-using-suspend) to pause execution and return context to the user. This approach works through the supervisor delegation chain the same way `requireApproval` does: the suspension surfaces at the supervisor level:
 
 ```typescript title="src/mastra/tools/conditional-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
 const conditionalTool = createTool({
   id: 'conditional-operation',
   description: 'Performs an operation that may require confirmation',

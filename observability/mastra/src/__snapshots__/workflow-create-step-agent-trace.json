@@ -140,7 +140,7 @@
                       "completionStartTime": "<date>",
                       "finishReason": "stop",
                       "responseId": "1",
-                      "responseModel": "",
+                      "responseModel": "mock-model-id",
                       "usage": {
                         "inputTokens": 10,
                         "outputTokens": 20,
@@ -359,7 +359,8 @@
                                 }
                               },
                               "finishReason": "stop",
-                              "completionStartTime": "<date>"
+                              "completionStartTime": "<date>",
+                              "responseModel": "mock-model-id"
                             },
                             "metadata": {
                               "runId": "<runId-2>",

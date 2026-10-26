@@ -8,11 +8,6 @@
         "type": "toggle"
       }
     ],
-    "GLM-5.1": [
-      {
-        "type": "toggle"
-      }
-    ],
     "MiniMax-M3": [
       {
         "type": "toggle"
@@ -29,6 +24,11 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "GLM-5.1": [
+      {
+        "type": "toggle"
       }
     ],
     "glm5.2-fast": [
