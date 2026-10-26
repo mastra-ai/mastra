@@ -65,7 +65,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('BoardsStorage o
     });
     // Null is kept: the phase runs in the card's main context.
     expect(work!.phases.find(phase => phase.key === 'review')!.runner).toMatchObject({ context: null });
-    expect(work!.phases.every(phase => phase.nextPhases === null)).toBe(true);
+    expect(work!.phases.map(phase => [phase.key, phase.nextPhases])).toEqual(
+      workBoardTemplate.phases.map(phase => [phase.key, 'nextPhases' in phase ? phase.nextPhases : null]),
+    );
     // Triage and Review start on their own; Planning only for cards its rule matches.
     expect(work!.phases.filter(phase => phase.autoStart).map(phase => phase.key)).toEqual([
       'triage',

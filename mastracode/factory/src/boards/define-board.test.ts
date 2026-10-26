@@ -237,12 +237,12 @@ describe('defineBoard', () => {
 
   it('defines the built-in Work lifecycle and phase behavior', () => {
     expect(workBoard.initialPhase).toBe('intake');
-    const phases = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
-    for (const from of phases) {
-      for (const to of phases) {
-        expect(workBoard.allowsTransition(from, to), `${from} -> ${to}`).toBe(true);
-      }
-    }
+    expect(workBoard.allowsTransition('triage', 'planning')).toBe(true);
+    expect(workBoard.allowsTransition('triage', 'execute')).toBe(false);
+    expect(workBoard.allowsTransition('planning', 'execute')).toBe(true);
+    expect(workBoard.allowsTransition('execute', 'review')).toBe(true);
+    expect(workBoard.allowsTransition('review', 'execute')).toBe(true);
+    expect(workBoard.allowsTransition('review', 'planning')).toBe(false);
     expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();
     expect(workBoard.rules.intake?.gitlabIssue?.onEnter).toBeUndefined();
     expect(workBoard.rules.triage?.issue?.onEnter).toBeTypeOf('function');

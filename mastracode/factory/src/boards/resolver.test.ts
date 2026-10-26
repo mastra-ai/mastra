@@ -68,9 +68,9 @@ describe.each(engines)('BoardResolver (%s)', engine => {
       recheckMs: 1_000,
       now: () => now,
     });
-    expect((await resolver.forProject(scope)).get('work')!.allowsTransition('planning', 'intake')).toBe(true);
+    expect((await resolver.forProject(scope)).get('work')!.allowsTransition('planning', 'intake')).toBe(false);
 
-    // Another writer narrows Planning to Building plus the moves Factory makes itself.
+    // Another writer permits returning from Planning to Intake.
     await boardDefinitions.saveConfig({
       ...scope,
       userId: 'user-2',
@@ -81,7 +81,9 @@ describe.each(engines)('BoardResolver (%s)', engine => {
           {
             ...workBoardTemplate,
             phases: workBoardTemplate.phases.map(phase =>
-              phase.key === 'planning' ? { ...phase, nextPhases: ['execute', 'review', 'done', 'canceled'] } : phase,
+              phase.key === 'planning'
+                ? { ...phase, nextPhases: ['intake', 'execute', 'review', 'done', 'canceled'] }
+                : phase,
             ),
           },
         ],
@@ -89,10 +91,10 @@ describe.each(engines)('BoardResolver (%s)', engine => {
     });
 
     now = 999;
-    expect((await resolver.forProject(scope)).get('work')!.allowsTransition('planning', 'intake')).toBe(true);
+    expect((await resolver.forProject(scope)).get('work')!.allowsTransition('planning', 'intake')).toBe(false);
     now = 1_000;
     const fresh = (await resolver.forProject(scope)).get('work')!;
-    expect(fresh.allowsTransition('planning', 'intake')).toBe(false);
+    expect(fresh.allowsTransition('planning', 'intake')).toBe(true);
     expect(fresh.allowsTransition('planning', 'execute')).toBe(true);
     expect(resolver.peek(scope).get('work')).toBe(fresh);
   });

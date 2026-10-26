@@ -26,7 +26,9 @@ const LOW_EFFORT: RuleGroup = {
  * Building is a status: entering it sets a goal on that session, so it keeps working until the change is handed
  * on. Its `factory-build` skill only runs when review sends findings back.
  * Review's built-in runner still reviews in its own `review` context, apart from the builder.
- * No phase declares `nextPhases`: any move is allowed, like the code board.
+ * The pipeline is explicit: Triage → Planning or Review, Planning → Building, Building → Review,
+ * Review → Building for rework. Integration and safety exits remain available (source closure,
+ * early linked PRs, review-limit escalation to Intake, and reopening a finished PR for review).
  */
 export const workBoardTemplate = {
   key: 'work',
@@ -36,7 +38,14 @@ export const workBoardTemplate = {
     { key: 'intake', name: 'Intake', kind: 'resting' },
     // Triage and Review start on their own. Planning starts on its own only for low-effort
     // cards; any other card's plan waits for a person to approve the run.
-    { key: 'triage', name: 'Triage', kind: 'working', runner: TRIAGE, autoStart: true },
+    {
+      key: 'triage',
+      name: 'Triage',
+      kind: 'working',
+      runner: TRIAGE,
+      autoStart: true,
+      nextPhases: ['intake', 'planning', 'review', 'done', 'canceled'],
+    },
     {
       key: 'planning',
       name: 'Planning',
@@ -45,14 +54,23 @@ export const workBoardTemplate = {
       exitTool: 'submit_plan',
       autoStart: true,
       autoStartWhen: LOW_EFFORT,
+      nextPhases: ['execute', 'review', 'done', 'canceled'],
     },
     {
       key: 'execute',
       name: 'Building',
       kind: 'working',
       runner: { type: 'agent', agentId: CODE_AGENT_ID, skill: 'factory-build', context: null },
+      nextPhases: ['review', 'done', 'canceled'],
     },
-    { key: 'review', name: 'Review', kind: 'working', runner: REVIEW, autoStart: true },
+    {
+      key: 'review',
+      name: 'Review',
+      kind: 'working',
+      runner: REVIEW,
+      autoStart: true,
+      nextPhases: ['intake', 'execute', 'done', 'canceled'],
+    },
     { key: 'done', name: 'Done', kind: 'terminal', runner: COMPLETE },
     { key: 'canceled', name: 'Canceled', kind: 'terminal' },
   ],

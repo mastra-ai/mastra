@@ -81,10 +81,13 @@ function shape(board: InstalledBoard) {
 }
 
 describe('compileStoredBoard', () => {
-  it('compiles the stored Work template into the same board code used to define', () => {
+  it('keeps the original Work behaviour apart from its explicitly narrowed transitions', () => {
     const compiled = compileStoredBoard(workBoardTemplate, builtInRunners);
-    expect(shape(compiled)).toEqual(shape(preRefactorWorkBoard));
-    expect(shape(workBoard)).toEqual(shape(preRefactorWorkBoard));
+    const { transitions: _transitions, ...original } = shape(preRefactorWorkBoard);
+    const { transitions: _compiledTransitions, ...stored } = shape(compiled);
+    const { transitions: _codeTransitions, ...code } = shape(workBoard);
+    expect(stored).toEqual(original);
+    expect(code).toEqual(original);
     expect(compiled.rules.triage?.issue?.onEnter).toBe(preRefactorWorkBoard.rules.triage?.issue?.onEnter);
     expect(compiled.rules.review?.manual?.onEnter).toBe(preRefactorWorkBoard.rules.review?.manual?.onEnter);
     expect(compiled.transitionPolicy).toBe(workTransitionPolicy);
@@ -95,7 +98,7 @@ describe('compileStoredBoard', () => {
       ...workBoardTemplate,
       phases: workBoardTemplate.phases.map(phase => (phase.key === 'execute' ? { ...phase, key: 'build' } : phase)),
     };
-    expect(shape(compileStoredBoard(renamed, builtInRunners))).not.toEqual(shape(preRefactorWorkBoard));
+    expect(() => compileStoredBoard(renamed, builtInRunners)).toThrow();
 
     const swapped = {
       ...workBoardTemplate,
@@ -106,6 +109,27 @@ describe('compileStoredBoard', () => {
       ),
     };
     expect(shape(compileStoredBoard(swapped, builtInRunners))).not.toEqual(shape(preRefactorWorkBoard));
+  });
+
+  it('keeps Work on its configured pipeline, including review rework and integration safety paths', () => {
+    const expected: Record<Phase, readonly Phase[]> = {
+      intake: Object.keys(all) as Phase[],
+      triage: ['intake', 'planning', 'review', 'done', 'canceled'],
+      planning: ['execute', 'review', 'done', 'canceled'],
+      execute: ['review', 'done', 'canceled'],
+      review: ['intake', 'execute', 'done', 'canceled'],
+      done: Object.keys(all) as Phase[],
+      canceled: Object.keys(all) as Phase[],
+    };
+    for (const board of [workBoard, compileStoredBoard(workBoardTemplate, builtInRunners)]) {
+      for (const [from, destinations] of Object.entries(expected)) {
+        for (const to of Object.keys(expected)) {
+          expect(board.allowsTransition(from, to), `${from} → ${to}`).toBe(
+            from === to || destinations.includes(to as Phase),
+          );
+        }
+      }
+    }
   });
 
   it('allows only the declared next phases when a phase lists them', () => {
