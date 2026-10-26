@@ -41,6 +41,8 @@ Attaching a hosted database adds its connection variables to the environments th
 | Postgres | `DATABASE_URL` |
 | Redis | `REDIS_URL` |
 
+Managed Redis isn't enabled for every organization yet. When it's off for your organization, Redis doesn't appear as a database option and attaching it fails.
+
 Values are resolved at deploy time and never stored in your project. An environment-scoped database replaces the values of a project-scoped database of the same provider for that environment.
 
 ## Precedence
