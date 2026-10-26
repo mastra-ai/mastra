@@ -114,6 +114,8 @@ interface SlackChannelDeps {
   feed?: Pick<CommentsDomain, 'createComment'>;
   /** Overrides applied to the Slack channel adapter entry. */
   adapterOptions?: SlackAdapterChannelConfig;
+  /** Captures the adapter so the owning integration can stop its transport. */
+  onAdapter?: (adapter: ReturnType<typeof createSlackAdapter>) => void;
 }
 
 function configuredSourceControls(deps: SlackChannelDeps): readonly SourceControlStorageHandle[] {
@@ -1139,9 +1141,11 @@ async function setThreadMuted(
 
 /** Slack app credentials, passed in explicitly rather than read from env here. */
 interface SlackCredentials {
+  mode?: 'webhook' | 'socket';
   clientId?: string;
   clientSecret?: string;
-  signingSecret: string;
+  signingSecret?: string;
+  appToken?: string;
   botToken?: string;
 }
 
@@ -1149,6 +1153,7 @@ export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: Slac
   // Per HTTP attempt, not per call: the WebClient's own retry policy still
   // waits out a 429. Without it a dead socket hangs a post forever.
   const adapter = createSlackAdapter({ ...deps.slack, webClientOptions: { timeout: SLACK_REQUEST_TIMEOUT_MS } });
+  deps.onAdapter?.(adapter);
   const slack =
     deps.adapterOptions?.streaming === false
       ? { adapter, ...deps.adapterOptions }

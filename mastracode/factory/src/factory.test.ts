@@ -440,6 +440,21 @@ describe('MastraFactory constructor', () => {
 });
 
 describe('MastraFactory.prepare', () => {
+  it('shuts down transports owned by ready integrations', async () => {
+    const shutdown = vi.fn(async () => {});
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      auth: null,
+      integrations: [fakeIntegration({ id: 'socket-transport', shutdown })],
+    });
+
+    await factory.prepare();
+    await factory.shutdown();
+
+    expect(shutdown).toHaveBeenCalledOnce();
+  });
+
   it('passes the configured MastraBrowser to the agent controller', async () => {
     const browser = { getTools: vi.fn() } as unknown as MastraBrowser;
     const config = await prepareFactory({ storage: fakeStorage(), auth: null, browser });

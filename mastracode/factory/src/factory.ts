@@ -455,6 +455,7 @@ export class MastraFactory {
   #dispatcher: FactoryDecisionDispatcher | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
+  #activeIntegrations: FactoryIntegration[] = [];
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
@@ -767,6 +768,9 @@ export class MastraFactory {
         },
       };
     });
+    this.#activeIntegrations = integrationRegistrations
+      .filter(({ ready, integration }) => ready && integration.shutdown)
+      .map(({ integration }) => integration);
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
@@ -2067,8 +2071,11 @@ export class MastraFactory {
     this.#dispatcher?.start();
   }
 
-  /** Stop Factory-owned background dispatch before the host process shuts down. */
+  /** Stop Factory-owned background work and integration transports before the host process shuts down. */
   async shutdown(): Promise<void> {
-    await this.#dispatcher?.stop();
+    await Promise.all([
+      this.#dispatcher?.stop(),
+      ...this.#activeIntegrations.map(integration => integration.shutdown!()),
+    ]);
   }
 }

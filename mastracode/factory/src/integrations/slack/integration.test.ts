@@ -1,4 +1,5 @@
 import { AgentControllerChannels } from '@mastra/core/channels';
+import { createSlackAdapter } from '@mastra/slack';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@mastra/slack', () => ({
@@ -13,6 +14,65 @@ function ctxWith(overrides: Record<string, unknown> = {}) {
     runtime: { workItems: { findRunBindingByThread: async () => null } },
   } as any;
 }
+
+const createSlackAdapterMock = vi.mocked(createSlackAdapter);
+
+beforeEach(() => {
+  createSlackAdapterMock.mockClear();
+});
+
+describe('SlackIntegration transport configuration', () => {
+  it('requires a signing secret in webhook mode', () => {
+    expect(() => new SlackIntegration({})).toThrow("'signingSecret' is required");
+    expect(() => new SlackIntegration({ mode: 'webhook' })).toThrow("'signingSecret' is required");
+  });
+
+  it('requires an app token in socket mode', () => {
+    expect(() => new SlackIntegration({ mode: 'socket' })).toThrow("'appToken' is required");
+  });
+
+  it('constructs socket mode without a signing secret and forwards its transport credentials', () => {
+    const integration = new SlackIntegration({
+      mode: 'socket',
+      appToken: 'xapp-test',
+      botToken: 'xoxb-test',
+    });
+
+    integration.channels(ctxWith());
+
+    expect(createSlackAdapterMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'socket',
+        appToken: 'xapp-test',
+        botToken: 'xoxb-test',
+      }),
+    );
+  });
+
+  it('preserves webhook mode and forwards its signing secret', () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+
+    integration.channels(ctxWith());
+
+    expect(createSlackAdapterMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: undefined,
+        signingSecret: 'secret',
+      }),
+    );
+  });
+
+  it('disconnects the adapter during integration shutdown', async () => {
+    const disconnect = vi.fn();
+    createSlackAdapterMock.mockReturnValueOnce({ disconnect } as any);
+    const integration = new SlackIntegration({ mode: 'socket', appToken: 'xapp-test' });
+
+    integration.channels(ctxWith());
+    await integration.shutdown();
+
+    expect(disconnect).toHaveBeenCalledOnce();
+  });
+});
 
 describe('SlackIntegration.channels', () => {
   it('returns a channels config (not a built instance) with the slack adapter entry in config form', () => {
