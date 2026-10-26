@@ -14,8 +14,8 @@ const COMPLETE = {
  * and names match the code board in `boards/work.ts` so existing cards keep
  * their `board`/`stages` values. Each phase's agent activates the skill it always has; the agent id
  * names the built-in runner that decides when (PR auto-review, self-review, source fetch hints).
- * Building activates no skill, so it names its code runner directly.
  * Building and Review work in the card's main context, so the builder answers feedback on its own change.
+ * Building's session continues Planning's when the card has one, so the builder implements the plan it holds.
  * Review's built-in runner still reviews in its own `review` context, apart from the builder.
  * No phase declares `nextPhases`: any move is allowed, like the code board.
  */
@@ -36,7 +36,12 @@ export const workBoardTemplate = {
       // A person decides what gets planned.
       manualEntry: true,
     },
-    { key: 'execute', name: 'Building', kind: 'working', runner: { type: 'workflow', workflowId: 'factory-build' } },
+    {
+      key: 'execute',
+      name: 'Building',
+      kind: 'working',
+      runner: { type: 'agent', agentId: 'factory-build', skill: 'factory-build', context: null },
+    },
     { key: 'review', name: 'Review', kind: 'working', runner: REVIEW, autoStart: true },
     { key: 'done', name: 'Done', kind: 'terminal', runner: COMPLETE },
     { key: 'canceled', name: 'Canceled', kind: 'terminal' },

@@ -38,18 +38,18 @@ describe('work board build prompt', () => {
     const decision = await workBoard.rules.execute?.gitlabIssue?.onEnter?.(executeContext('gitlab-issue'));
     expect(decision).toMatchObject({ type: 'invokeSkill', role: 'work' });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
-    expect(decision.prompt).toContain('Do not open a pull or merge request.');
-    expect(decision.prompt).toContain('stage `review`');
-    expect(decision.prompt).toContain('GitLab issue acme/app#3');
-    expect(decision.prompt).not.toContain('pull request');
+    expect(decision.arguments).toContain('Do not open a pull or merge request.');
+    expect(decision.arguments).toContain('stage `review`');
+    expect(decision.arguments).toContain('GitLab issue acme/app#3');
+    expect(decision.arguments).not.toContain('pull request');
   });
 
   it('asks the builder to open the change request itself when self-review is off, which is the default', async () => {
     const { selfReviewEnabled: _on, ...off } = executeContext('gitlab-issue');
     const build = await workBoard.rules.execute?.gitlabIssue?.onEnter?.(off);
     if (!build || build.type !== 'invokeSkill') throw new Error('Expected build invocation.');
-    expect(build.prompt).toContain('Open a merge request when the work is ready for review.');
-    expect(build.prompt).not.toContain('Do not open');
+    expect(build.arguments).toContain('Open a merge request when the work is ready for review.');
+    expect(build.arguments).not.toContain('Do not open');
 
     const review = await workBoard.rules.review?.gitlabIssue?.onEnter?.({
       ...off,
@@ -64,7 +64,7 @@ describe('work board build prompt', () => {
     const decision = await workBoard.rules.execute?.issue?.onEnter?.(executeContext('github-issue'));
     expect(decision).toMatchObject({ type: 'invokeSkill', role: 'work' });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
-    expect(decision.prompt).toContain('Do not open a pull or merge request.');
+    expect(decision.arguments).toContain('Do not open a pull or merge request.');
   });
 
   it('passes self-review findings back to the builder', async () => {
@@ -84,8 +84,8 @@ describe('work board build prompt', () => {
       },
     });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
-    expect(decision.prompt).toContain(`Self-review requested changes on branch head ${'a'.repeat(40)}`);
-    expect(decision.prompt).toContain('1. Fix the test');
+    expect(decision.arguments).toContain(`Self-review requested changes on branch head ${'a'.repeat(40)}`);
+    expect(decision.arguments).toContain('1. Fix the test');
   });
 
   it('passes the findings back when a person resumes a card parked at the round limit', async () => {
@@ -105,7 +105,7 @@ describe('work board build prompt', () => {
       },
     });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
-    expect(decision.prompt).toContain('1. Fix the test');
+    expect(decision.arguments).toContain('1. Fix the test');
   });
 });
 

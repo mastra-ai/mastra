@@ -382,6 +382,7 @@ describe('bundled Factory skill assets', () => {
 
     expect(assetNames).toEqual([
       'configure-factory-rules',
+      'factory-build',
       'factory-complete-issue',
       'factory-gitlab-rereview',
       'factory-gitlab-review',
@@ -3218,6 +3219,7 @@ describe('FactorySkillSource layering', () => {
     const names = (await source.readdir(mount)).map(entry => entry.name).sort();
     expect(names).toEqual([
       'configure-factory-rules',
+      'factory-build',
       'factory-complete-issue',
       'factory-gitlab-rereview',
       'factory-gitlab-review',
@@ -3239,6 +3241,7 @@ describe('FactorySkillSource layering', () => {
     const hiddenNames = (await source.readdir(mount)).map(entry => entry.name).sort();
     expect(hiddenNames).toEqual([
       'configure-factory-rules',
+      'factory-build',
       'factory-complete-issue',
       'factory-plan',
       'factory-triage',
