@@ -12,7 +12,7 @@ describe('getEditorOwnership', () => {
       ownsInstructions: boolean;
       ownsTools: boolean;
       ownsToolDescriptions: boolean;
-      ownsModel?: boolean;
+      ownsModel: boolean;
       isInstructionsLocked: boolean;
       isToolsLocked: boolean;
       toolDescriptionsOnly: boolean;
@@ -28,6 +28,7 @@ describe('getEditorOwnership', () => {
         ownsInstructions: true,
         ownsTools: true,
         ownsToolDescriptions: true,
+        ownsModel: true,
         isInstructionsLocked: false,
         isToolsLocked: false,
         toolDescriptionsOnly: false,
@@ -43,6 +44,7 @@ describe('getEditorOwnership', () => {
         ownsInstructions: true,
         ownsTools: true,
         ownsToolDescriptions: true,
+        ownsModel: false,
         isInstructionsLocked: false,
         isToolsLocked: false,
         toolDescriptionsOnly: false,
@@ -57,6 +59,7 @@ describe('getEditorOwnership', () => {
         ownsInstructions: false,
         ownsTools: false,
         ownsToolDescriptions: false,
+        ownsModel: false,
         isInstructionsLocked: true,
         isToolsLocked: true,
         toolDescriptionsOnly: false,
@@ -72,6 +75,7 @@ describe('getEditorOwnership', () => {
         ownsInstructions: false,
         ownsTools: false,
         ownsToolDescriptions: false,
+        ownsModel: false,
         isInstructionsLocked: true,
         isToolsLocked: true,
         toolDescriptionsOnly: false,
@@ -86,6 +90,7 @@ describe('getEditorOwnership', () => {
         ownsInstructions: true,
         ownsTools: false,
         ownsToolDescriptions: false,
+        ownsModel: false,
         isInstructionsLocked: false,
         isToolsLocked: true,
         toolDescriptionsOnly: false,
@@ -100,6 +105,7 @@ describe('getEditorOwnership', () => {
         ownsInstructions: false,
         ownsTools: false,
         ownsToolDescriptions: false,
+        ownsModel: false,
         isInstructionsLocked: true,
         isToolsLocked: true,
         toolDescriptionsOnly: false,
@@ -114,6 +120,7 @@ describe('getEditorOwnership', () => {
         ownsInstructions: false,
         ownsTools: true,
         ownsToolDescriptions: true,
+        ownsModel: false,
         isInstructionsLocked: true,
         isToolsLocked: false,
         toolDescriptionsOnly: false,
@@ -128,6 +135,7 @@ describe('getEditorOwnership', () => {
         ownsInstructions: false,
         ownsTools: false,
         ownsToolDescriptions: true,
+        ownsModel: false,
         isInstructionsLocked: true,
         isToolsLocked: false,
         toolDescriptionsOnly: true,
@@ -143,6 +151,7 @@ describe('getEditorOwnership', () => {
         ownsInstructions: false,
         ownsTools: false,
         ownsToolDescriptions: false,
+        ownsModel: false,
         isInstructionsLocked: true,
         isToolsLocked: true,
         toolDescriptionsOnly: false,
@@ -157,6 +166,7 @@ describe('getEditorOwnership', () => {
         ownsInstructions: true,
         ownsTools: true,
         ownsToolDescriptions: true,
+        ownsModel: false,
         isInstructionsLocked: false,
         isToolsLocked: false,
         toolDescriptionsOnly: false,
@@ -182,7 +192,7 @@ describe('getEditorOwnership', () => {
 
   for (const { name, isCodeAgentOverride, editorConfig, expected } of cases) {
     it(name, () => {
-      expect(getEditorOwnership(isCodeAgentOverride, editorConfig)).toMatchObject(expected);
+      expect(getEditorOwnership(isCodeAgentOverride, editorConfig)).toEqual(expected);
     });
   }
 

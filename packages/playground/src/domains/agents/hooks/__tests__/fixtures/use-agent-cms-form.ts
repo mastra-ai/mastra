@@ -1,4 +1,6 @@
-import type { ListAgentVersionsResponse, StoredAgentResponse } from '@mastra/client-js';
+import type { GetAgentResponse, ListAgentVersionsResponse, StoredAgentResponse } from '@mastra/client-js';
+
+import { v2Agent } from '../../../components/__tests__/fixtures/composer-model-settings';
 
 /**
  * Minimal stored-agent record returned by `POST /stored/agents` when Studio
@@ -40,6 +42,33 @@ export const oneUnpublishedAgentVersion: ListAgentVersionsResponse = {
     },
   ],
   total: 1,
+};
+
+export const savedModelList = [
+  {
+    id: 'fallback',
+    model: { provider: 'anthropic', modelId: 'claude-sonnet-4-5', modelVersion: 'v2' },
+    enabled: true,
+    maxRetries: 3,
+  },
+  {
+    id: 'primary',
+    model: { provider: 'openai', modelId: 'gpt-5.4-mini', modelVersion: 'v2' },
+    enabled: false,
+    maxRetries: 0,
+  },
+] satisfies NonNullable<GetAgentResponse['modelList']>;
+
+export const modelOwnedRuntimeAgent: GetAgentResponse = {
+  ...v2Agent,
+  id: 'code-override-editable',
+  name: 'Code Override Editable',
+  instructions: 'Original code instructions for editable override agent.',
+  modelId: '__AI_SDK_OPENAI_MODEL_BASE__',
+  modelList: savedModelList,
+  source: 'code',
+  editor: { model: true },
+  modelListEditable: true,
 };
 
 /** A stored agent whose memory points at a Memory instance registered on the Mastra instance. */

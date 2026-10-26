@@ -1,3 +1,4 @@
+import { MastraClient } from '@mastra/client-js';
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { MastraReactProvider } from '@mastra/react';
 import { useAgentVersions } from '@mastra/react/hooks/agents';
@@ -22,8 +23,10 @@ import type { AgentDataSource } from '../../utils/compute-agent-initial-values';
 import { useAgentCmsForm } from '../use-agent-cms-form';
 import {
   createdCodeAgent,
+  modelOwnedRuntimeAgent,
   noAgentVersions,
   oneUnpublishedAgentVersion,
+  savedModelList,
   storedAgentWithMemoryRef,
 } from './fixtures/use-agent-cms-form';
 import { server } from '@/test/msw-server';
@@ -600,6 +603,101 @@ describe('useAgentCmsForm — model ownership', () => {
           maxRetries: 0,
         },
       ]);
+    });
+
+    it('reloads the saved draft and publishes the complete model list to runtime', async () => {
+      const client = new MastraClient({ baseUrl: BASE_URL });
+      let draftModelList = modelOwnedRuntimeAgent.modelList;
+      let publishedModelList = [...(modelOwnedRuntimeAgent.modelList ?? [])].reverse();
+      let activeVersionId = 'published-version';
+      let savedVersionId = '';
+
+      server.use(
+        http.post(`${BASE_URL}/api/stored/agents`, async ({ request }) => {
+          const body: unknown = await request.json();
+          if (!isRecord(body) || !Array.isArray(body.modelList)) {
+            throw new Error('Expected modelList in create-stored-agent request');
+          }
+
+          draftModelList = body.modelList.map(entry => {
+            if (!isRecord(entry)) throw new Error('Expected model-list entry to be an object');
+            return {
+              id: String(entry.id),
+              model: {
+                provider: String(entry.provider),
+                modelId: String(entry.modelId),
+                modelVersion: 'v2',
+              },
+              enabled: Boolean(entry.enabled),
+              maxRetries: Number(entry.maxRetries),
+            };
+          });
+          savedVersionId = 'draft-version';
+
+          return HttpResponse.json({
+            ...createdCodeAgent,
+            modelList: body.modelList,
+            activeVersionId,
+          });
+        }),
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, ({ request }) => {
+          const status = new URL(request.url).searchParams.get('status');
+          return HttpResponse.json({
+            ...modelOwnedRuntimeAgent,
+            modelList: status === 'draft' ? draftModelList : publishedModelList,
+          });
+        }),
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () =>
+          HttpResponse.json({ ...createdCodeAgent, activeVersionId }),
+        ),
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions`, () =>
+          HttpResponse.json({
+            ...oneUnpublishedAgentVersion,
+            versions: [{ ...oneUnpublishedAgentVersion.versions[0], id: savedVersionId }],
+          }),
+        ),
+        http.post(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions/:versionId/activate`, ({ params }) => {
+          activeVersionId = String(params.versionId);
+          publishedModelList = draftModelList;
+          return HttpResponse.json({ success: true, message: 'Version activated', activeVersionId });
+        }),
+      );
+
+      const modelDataSource: AgentDataSource = {
+        ...dataSource,
+        modelList: [...savedModelList].reverse(),
+      };
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: AGENT_ID,
+            dataSource: modelDataSource,
+            isCodeAgentOverride: true,
+            hasStoredOverride: false,
+            editorConfig: { model: true },
+            onSuccess: () => {},
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      act(() => {
+        result.current.form.setValue('modelList', savedModelList, { shouldDirty: true });
+      });
+      await act(async () => {
+        await result.current.handleSaveDraft();
+      });
+
+      const reloadedDraft = await client.getAgent(AGENT_ID, { status: 'draft' }).details();
+      expect(reloadedDraft.modelList).toEqual(savedModelList);
+      expect((await client.getAgent(AGENT_ID).details()).modelList).toEqual([...savedModelList].reverse());
+
+      await act(async () => {
+        await result.current.handlePublish();
+      });
+
+      expect((await client.getAgent(AGENT_ID).details()).modelList).toEqual(savedModelList);
+      expect(activeVersionId).toBe('draft-version');
     });
   });
 });
