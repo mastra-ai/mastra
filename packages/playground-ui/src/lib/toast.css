@@ -1,200 +1,399 @@
-/* Toast tokens live here — only consumed by `.mastra-toaster` so they don't need to ship in
-   components.css for every component. The bg/border alias theme-scoped status roles, so the single
-   :root declaration flips with the theme. */
-:root {
-  --toast-success-bg: var(--success-subtle);
-  --toast-success-border: var(--success-edge);
-  --toast-destructive-bg: var(--destructive-subtle);
-  --toast-destructive-border: var(--destructive-edge);
-  --toast-warning-bg: var(--warning-subtle);
-  --toast-warning-border: var(--warning-edge);
-  --toast-info-bg: var(--info-subtle);
-  --toast-info-border: var(--info-edge);
-  --toast-shadow: var(--elevation-overlay);
-}
+@import '../ds/components/Notice/notice-material.css';
 
-/* Mastra toast theming — applied to sonner's Toaster wrapper via className.
-   Sonner reads its per-type colors from --success-bg / --error-bg / etc. (richColors mode).
-   The `[data-sonner-toaster][data-sonner-theme]` prefix matches sonner's own theme rules
-   (specificity 0,2,0) and adds our class for (0,3,0) so our notice tokens win without !important. */
 [data-sonner-toaster][data-sonner-theme].mastra-toaster {
   --normal-bg: var(--card);
   --normal-text: var(--foreground);
-  --normal-border: var(--border);
-  --success-bg: var(--toast-success-bg);
+  --normal-border: var(--surface-rim);
+  --success-bg: color-mix(in oklab, var(--success-subtle) 35%, var(--card));
   --success-text: var(--success-subtle-foreground);
-  --success-border: var(--toast-success-border);
-  --error-bg: var(--toast-destructive-bg);
+  --success-border: var(--surface-rim);
+  --error-bg: color-mix(in oklab, var(--destructive-subtle) 35%, var(--card));
   --error-text: var(--destructive-subtle-foreground);
-  --error-border: var(--toast-destructive-border);
-  --warning-bg: var(--toast-warning-bg);
+  --error-border: var(--surface-rim);
+  --warning-bg: color-mix(in oklab, var(--warning-subtle) 35%, var(--card));
   --warning-text: var(--warning-subtle-foreground);
-  --warning-border: var(--toast-warning-border);
-  --info-bg: var(--toast-info-bg);
+  --warning-border: var(--surface-rim);
+  --info-bg: color-mix(in oklab, var(--info-subtle) 35%, var(--card));
   --info-text: var(--info-subtle-foreground);
-  --info-border: var(--toast-info-border);
-  --border-radius: var(--radius-xl);
-
-  /* Move the close button to the top-right corner. Sonner's defaults pin it to the LEFT in LTR;
-     we flip start/end and mirror the overhang transform so the chip sits in the same position
-     RTL would normally use. Keeps the icon and the close affordance from competing visually. */
-  --toast-close-button-start: unset;
-  --toast-close-button-end: 0;
-  --toast-close-button-transform: translate(35%, -35%);
-}
-[data-sonner-toaster].mastra-toaster [data-sonner-toast] {
-  box-shadow: var(--toast-shadow);
-}
-
-/* Type. Sonner pins its own system stack on the toaster and 13px on the toast, so neither the
-   product font nor the text roles reach a toast without this. Title is `text-label`, description
-   `text-body-sm`: the same 13px, told apart by weight. A toast floats like a popover, so fields
-   inside it take the on-surface field material (the Cancel button below wears it). */
-[data-sonner-toaster][data-sonner-theme].mastra-toaster {
+  --info-border: var(--surface-rim);
+  --border-radius: var(--radius-lg);
   font-family: var(--font-sans);
 }
+
+[data-sonner-toaster].mastra-toaster[data-mastra-measured] {
+  --front-toast-height: var(--mastra-front-height) !important;
+}
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-mastra-measured] {
+  --initial-height: var(--mastra-toast-height) !important;
+  --offset: var(--mastra-toast-offset) !important;
+}
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-mastra-measured][data-front='true'][data-styled='true'] {
+  height: var(--mastra-toast-height);
+}
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-promise='true'][data-styled='true'] {
+  overflow: clip;
+  transition:
+    transform 400ms,
+    opacity 400ms,
+    height 0s,
+    box-shadow var(--duration-normal);
+}
+
+[data-sonner-toaster].mastra-toaster:has(
+    > [data-sonner-toast][data-front='true'][data-promise='true']:is([data-type='success'], [data-type='error'])
+  )
+  > [data-sonner-toast][data-front='false'] {
+  transition:
+    transform var(--duration-normal) cubic-bezier(0.645, 0.045, 0.355, 1),
+    opacity 400ms,
+    height 400ms,
+    box-shadow var(--duration-normal);
+}
+
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] {
   --field: var(--field-on-surface);
   --field-rim: var(--field-rim-on-surface);
-  font-size: var(--text-body-sm);
-  line-height: var(--text-body-sm--line-height);
+  align-items: start;
+  align-content: start;
+  flex-wrap: wrap;
+  column-gap: calc(var(--spacing) * 3);
+  row-gap: calc(var(--spacing) * 2);
+  padding: calc(var(--spacing) * 3);
+  border: 0;
+  background: var(--notice-fill);
+  color: var(--notice-ink);
+  box-shadow: var(--notice-shadow);
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
 }
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true']:has([data-close-button]) {
+  padding-inline-end: calc(var(--spacing) * 11);
+}
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-content] {
+  flex: 1 0 calc(100% - var(--spacing) * 8);
+  min-width: 0;
+  max-height: min(45dvh, calc(var(--spacing) * 64));
+  overflow-y: visible;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted-foreground) transparent;
+  gap: var(--spacing);
+  overflow-wrap: anywhere;
+}
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-content][tabindex='0'] {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-inline-end: calc(var(--spacing) * 2);
+}
+
+[data-sonner-toaster].mastra-toaster [data-content][tabindex='0']:has([data-description]) [data-title] {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: calc(var(--spacing) * 2);
+  border-bottom: 1px solid var(--surface-rim);
+  background: var(--notice-fill);
+}
+
+[data-sonner-toaster].mastra-toaster [data-content]:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+  border-radius: var(--radius-xs);
+}
+
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-title] {
   font-weight: var(--text-label--font-weight);
   line-height: var(--text-label--line-height);
 }
+
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-description] {
+  color: inherit;
+  font-size: var(--text-body-sm);
   font-weight: var(--text-body-sm--font-weight);
   line-height: var(--text-body-sm--line-height);
 }
 
-/* Action and cancel buttons follow `Button` at size `sm`: a pill at the small control height with
-   a `text-label` label. Action is the `primary` variant, cancel the `default` one, the same pair
-   a dialog footer uses. `font: inherit` because a <button> does not inherit the font by default.
-   Focus is an outline like `Button`'s, replacing sonner's box-shadow ring, which would also wipe
-   the cancel button's rim. */
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-icon] {
+  width: calc(var(--spacing) * 5);
+  height: calc(var(--spacing) * 5);
+  justify-content: center;
+  margin: 0;
+}
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='success'] [data-icon] {
+  color: var(--success-indicator);
+}
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='info'] [data-icon] {
+  color: var(--info-indicator);
+}
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='warning'] [data-icon] {
+  color: var(--warning-foreground);
+}
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='error'] [data-icon] {
+  color: var(--destructive-indicator);
+}
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true']:not(:has([data-icon])) [data-content] {
+  flex-basis: 100%;
+}
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-icon] > svg {
+  width: var(--spacing-icon-sm);
+  height: var(--spacing-icon-sm);
+  margin: 0;
+}
+
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button] {
-  height: var(--spacing-control-sm);
-  padding-inline: 0.9em;
+  position: relative;
+  align-self: center;
+  height: auto;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  margin-inline-end: var(--spacing);
   border: 0;
-  border-radius: 9999px;
+  border-radius: var(--radius-xs);
   font: inherit;
   font-size: var(--text-label);
   font-weight: var(--text-label--font-weight);
   line-height: var(--text-label--line-height);
-  background: var(--fill-inverse);
-  color: var(--background);
-  transition:
-    background-color var(--duration-fast) var(--ease-out-custom),
-    color var(--duration-fast) var(--ease-out-custom);
+  background: transparent;
+  color: var(--muted-foreground);
+  box-shadow: none;
+  flex-shrink: 1;
+  text-align: start;
+  overflow-wrap: anywhere;
+  transition: color var(--duration-fast) var(--ease-out-custom);
 }
-[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button]:hover {
-  background: var(--fill-inverse-hover);
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] > [data-content] ~ * {
+  align-self: center;
 }
-[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button]:active {
-  background: var(--fill-inverse-active);
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true']:has([data-icon]) > [data-content] + * {
+  margin-inline-start: calc(var(--spacing) * 8);
 }
+
+@media (hover: hover) {
+  [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button]:hover {
+    color: var(--foreground);
+  }
+}
+
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button]:focus-visible {
   outline: 1px solid var(--border-focus);
   outline-offset: 2px;
   box-shadow: none;
 }
 
-/* Cancel: the raised field material `Button`'s default variant wears (see `shadow-input` in
-   components.css). States wash through `--surface-tint` so the fill stays put. The extra
-   [data-cancel] keeps it ahead of sonner's dark-theme cancel rule. */
-[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button][data-cancel] {
-  --surface-tint: transparent;
-  --surface-rim: var(--field-rim);
-  background: var(--field);
+[data-sonner-toaster][data-sonner-theme].mastra-toaster [data-sonner-toast][data-styled='true'] [data-close-button] {
+  inset-inline-start: auto;
+  inset-inline-end: calc(var(--spacing) * 3);
+  top: calc(var(--spacing) * 3);
+  width: calc(var(--spacing) * 5);
+  height: calc(var(--spacing) * 5);
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  box-shadow: none;
+  transform: none;
+  transition: color var(--duration-fast) var(--ease-out-custom);
+}
+
+[data-sonner-toaster][data-sonner-theme].mastra-toaster [data-close-button]::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--spacing) * -3);
+}
+
+[data-sonner-toaster][data-sonner-theme].mastra-toaster
+  [data-sonner-toast][data-styled='true']
+  [data-close-button]:hover {
+  background: var(--fill-subtle);
   color: var(--foreground);
-  box-shadow:
-    var(--elevation-lip),
-    inset 0 0 0 1px var(--surface-rim),
-    inset 0 0 0 9999px var(--surface-tint),
-    var(--elevation-raised);
-}
-[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button][data-cancel]:hover {
-  --surface-tint: var(--fill-subtle);
-}
-[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button][data-cancel]:active {
-  --surface-tint: var(--fill);
-}
-[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button][data-cancel]:focus-visible {
-  --surface-rim: var(--border-focus);
-  outline: none;
 }
 
-/* Close button — size + transitions are shared. Per-variant rules below own bg/border colors
-   and beat sonner's per-type rules on specificity (we add .mastra-toaster + [data-type] for 0,5,0). */
-[data-sonner-toaster].mastra-toaster [data-sonner-toast] [data-close-button] {
-  width: 22px;
-  height: 22px;
-  box-shadow: var(--elevation-raised);
-  transition:
-    background-color 160ms var(--ease-out-custom),
-    border-color 160ms var(--ease-out-custom),
-    box-shadow 160ms var(--ease-out-custom),
-    transform 200ms var(--ease-out-custom);
+[data-sonner-toaster][data-sonner-theme].mastra-toaster
+  [data-sonner-toast][data-styled='true']
+  [data-close-button]:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
 }
 
-/* Per-variant tint cascade. Three vars per variant — all theme-aware via the underlying tokens:
-     --close-tint     → text/icon color (always strong contrast in both themes)
-     --close-bg       → chip surface, equal to the toast's own bg so the chip blends at rest
-     --close-border   → chip border, equal to the toast's own border so the chip blends at rest */
-[data-sonner-toaster].mastra-toaster [data-sonner-toast]:not([data-type]) {
-  --close-tint: var(--foreground);
-  --close-bg: var(--normal-bg);
-  --close-border: var(--normal-border);
-}
-[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='success'] {
-  --close-tint: var(--success-subtle-foreground);
-  --close-bg: var(--success-bg);
-  --close-border: var(--success-border);
-}
-[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='error'] {
-  --close-tint: var(--destructive-subtle-foreground);
-  --close-bg: var(--error-bg);
-  --close-border: var(--error-border);
-}
-[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='warning'] {
-  --close-tint: var(--warning-subtle-foreground);
-  --close-bg: var(--warning-bg);
-  --close-border: var(--warning-border);
-}
-[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='info'] {
-  --close-tint: var(--info-subtle-foreground);
-  --close-bg: var(--info-bg);
-  --close-border: var(--info-border);
-}
-
-/* Default state: chip mirrors the toast — only the X icon shows. `color` is set explicitly
-   because sonner's theme-conditional color rule won't apply when the Toaster's `theme` prop
-   doesn't match the app theme; var(--close-tint) flips correctly via the underlying tokens. */
-[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type] [data-close-button],
-[data-sonner-toaster].mastra-toaster [data-sonner-toast]:not([data-type]) [data-close-button] {
-  background: var(--close-bg);
-  border-color: var(--close-border);
-  color: var(--close-tint);
-}
-
-/* Hover/focus: chip lifts — bg shifts one tonal step toward the tint, border bumps to a
-   visible-but-soft 55%-mix of the tint. Smooth in dark mode (no stark white edge). */
-[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type]:hover [data-close-button]:hover,
-[data-sonner-toaster].mastra-toaster [data-sonner-toast]:not([data-type]):hover [data-close-button]:hover,
-[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type] [data-close-button]:focus-visible,
-[data-sonner-toaster].mastra-toaster [data-sonner-toast]:not([data-type]) [data-close-button]:focus-visible {
-  background: var(--close-border);
-  border-color: var(--close-tint);
-  box-shadow: var(--elevation-overlay);
-  transform: var(--toast-close-button-transform) scale(1.08);
-}
-
-[data-sonner-toaster].mastra-toaster [data-sonner-toast] [data-close-button]:active {
-  transform: var(--toast-close-button-transform) scale(0.94);
-  transition-duration: 80ms;
-}
 [data-sonner-toaster].mastra-toaster [data-sonner-toast] [data-close-button] svg {
-  width: 13px;
-  height: 13px;
+  width: var(--spacing-icon-xs);
+  height: var(--spacing-icon-xs);
+}
+
+.mastra-toaster .toast-promise-loader {
+  --toast-morph-ease: cubic-bezier(0.645, 0.045, 0.355, 1);
+  color: inherit;
+}
+
+.mastra-toaster .toast-promise-loader :is(circle, line) {
+  transform-box: view-box;
+  transition:
+    transform var(--duration-normal) var(--toast-morph-ease),
+    opacity var(--duration-normal) var(--toast-morph-ease);
+}
+
+.mastra-toaster .toast-promise-loader .brand-loader-b1 {
+  transform-origin: 4.498px 16.192px;
+}
+
+.mastra-toaster .toast-promise-loader :is(.brand-loader-b2, .brand-loader-ln23) {
+  transform-origin: 10.387px 4.498px;
+}
+
+.mastra-toaster .toast-promise-loader :is(.brand-loader-b3, .brand-loader-ln34) {
+  transform-origin: 16.899px 16.192px;
+}
+
+.mastra-toaster .toast-promise-loader :is(.brand-loader-b4, .brand-loader-ln45) {
+  transform-origin: 22.815px 4.56px;
+}
+
+.mastra-toaster .toast-promise-loader .brand-loader-b5 {
+  transform-origin: 28.57px 16.192px;
+}
+
+.mastra-toaster [data-promise='true'][data-type='success']:has(.toast-promise-success) .sonner-loader,
+.mastra-toaster [data-promise='true'][data-type='error']:has(.toast-promise-error) .sonner-loader {
+  display: block;
+  opacity: 1;
+  transform: translate(-50%, -50%);
+  transition: none;
+}
+
+.mastra-toaster [data-promise='true'][data-type='success']:has(.toast-promise-success) [data-icon] > svg,
+.mastra-toaster [data-promise='true'][data-type='error']:has(.toast-promise-error) [data-icon] > svg {
+  display: none;
+}
+
+.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success,
+.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error {
+  animation: toast-promise-complete-color var(--duration-normal) var(--toast-morph-ease);
+}
+
+.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success :is(circle, line),
+.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error :is(circle, line) {
+  animation: none;
+}
+
+.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-b1 {
+  transform: translate(3.502px, -6.192px) scale(0);
+}
+
+.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-b2 {
+  transform: translate(-2.387px, 5.502px) scale(0.256);
+}
+
+.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-ln23 {
+  transform: translate(-2.387px, 5.502px) rotate(45deg) scaleX(0.633944) rotate(-60.888deg);
+}
+
+.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-b3 {
+  transform: translate(-2.899px, -0.192px) scale(0.256);
+}
+
+.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-ln34 {
+  transform: translate(-2.899px, -0.192px) rotate(-45deg) scaleX(1.300426) rotate(63.042deg);
+}
+
+.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-b4 {
+  transform: translate(3.185px, -0.56px) scale(0.256);
+}
+
+.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-ln45 {
+  transform: translate(3.185px, -0.56px) scale(0);
+}
+
+.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-b5 {
+  transform: translate(-2.57px, -12.192px) scale(0);
+}
+
+.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-b1 {
+  transform: translate(12.502px, -5.692px) scale(0);
+}
+
+.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-b2 {
+  transform: translate(-0.387px, -0.998px) scale(0.256);
+}
+
+.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-ln23 {
+  transform: translate(-0.387px, -0.998px) rotate(45deg) scaleX(1.479202) rotate(-60.888deg);
+}
+
+.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-b3 {
+  transform: translate(7.101px, 1.308px) scale(0.256);
+}
+
+.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-ln34 {
+  opacity: 0;
+  transform: translate(7.101px, 1.308px) rotate(-90deg) scaleX(1.072797) rotate(63.042deg);
+}
+
+.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-b4 {
+  transform: translate(1.185px, -1.06px) scale(0.256);
+}
+
+.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-ln45 {
+  transform: translate(1.185px, -1.06px) rotate(135deg) scaleX(1.525604) rotate(-63.676deg);
+}
+
+.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-b5 {
+  transform: translate(-18.57px, 1.308px) scale(0.256);
+}
+
+@keyframes toast-promise-complete-color {
+  from {
+    color: var(--foreground);
+  }
+
+  to {
+    color: inherit;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] .toast-promise-loader,
+  [data-sonner-toaster].mastra-toaster .brand-loader circle,
+  [data-sonner-toaster].mastra-toaster .brand-loader line {
+    animation: none;
+    transition: none;
+  }
+
+  [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button],
+  [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-close-button] {
+    transition: none;
+  }
+}
+
+html.light .mastra-toaster:not(.mastra-toaster-neutral) [data-sonner-toast][data-type='success'] {
+  --notice-shadow: inset 0 0 0 0.5px color(display-p3 0.793 0.851 0.795), 0 1px 2px -1px oklch(0% 0 0 / 5%);
+}
+
+[data-sonner-toaster].mastra-toaster .sonner-loader[data-visible='false'] {
+  display: none;
+}
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-promise='true'] [data-icon] > svg {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+
+[data-sonner-toaster].mastra-toaster.mastra-toaster-neutral [data-sonner-toast] {
+  --notice-fill: var(--card);
+  --notice-ink: var(--foreground);
+  --notice-semantic-rim: inset 0 0 0 0 transparent;
 }
