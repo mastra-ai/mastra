@@ -40,6 +40,9 @@ Sampling strategies let you capture a representative subset of traces while ensu
 You can configure sampling at the observability config level:
 
 ```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
@@ -136,6 +139,9 @@ Metadata set here will be shown in all configured exporters.
 Set the top-level `environment` field on Mastra to automatically attach the deployment environment to all observability signals without passing `tracingOptions.metadata.environment` on each call.
 
 ```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+
 export const mastra = new Mastra({
   environment: 'production',
   observability: new Observability({
@@ -162,6 +168,9 @@ Instead of manually adding metadata to each span, you can configure Mastra to au
 Define which RequestContext keys to extract in your tracing configuration. These keys will be automatically included as metadata for all spans created with this configuration:
 
 ```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
@@ -453,6 +462,8 @@ You can create custom span processors by implementing the `SpanOutputProcessor` 
 
 ```ts title="src/processors/lowercase-input-processor.ts"
 import type { SpanOutputProcessor, AnySpan } from '@mastra/core/observability'
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
 
 export class LowercaseInputProcessor implements SpanOutputProcessor {
   name = 'lowercase-processor'
@@ -554,6 +565,8 @@ import { BraintrustExporter } from '@mastra/braintrust'
 import { LangfuseExporter } from '@mastra/langfuse'
 import { SpanType } from '@mastra/core/observability'
 import type { CustomSpanFormatter } from '@mastra/core/observability'
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
 
 // Formatter that extracts plain text from AI messages
 const plainTextFormatter: CustomSpanFormatter = span => {
@@ -679,6 +692,9 @@ Serialization options control how span data (input, output, and attributes) is t
 Add `serializationOptions` to your observability configuration:
 
 ```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
