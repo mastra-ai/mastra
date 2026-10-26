@@ -38,6 +38,21 @@
   }
 }
 
+/* A floating card: a wide, faint drop and a lighter rim than `shadow-raised`, so
+ * its edge reads as shadow rather than line. Set on a raised surface through
+ * `--elevation-raised` and `--surface-rim`, which keeps its focus rim. */
+@layer base {
+  :root {
+    --elevation-soft: 0 1px 2px oklch(0% 0 0deg / 20%), 0 12px 32px -12px oklch(0% 0 0deg / 60%);
+    --surface-rim-soft: var(--surface-rim);
+  }
+
+  html.light {
+    --elevation-soft: 0 1px 2px oklch(0% 0 0deg / 3%), 0 8px 24px -8px oklch(0% 0 0deg / 10%);
+    --surface-rim-soft: oklch(0% 0 0deg / 4%);
+  }
+}
+
 /* The board card's corner. It is not a free number: a card is a rounded box with
  * a capsule pill sitting in its bottom corner, and the two only look concentric
  * while the card's radius is the pill's plus the padding between them —

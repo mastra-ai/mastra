@@ -52,7 +52,7 @@ describe('the new session page', () => {
     await waitFor(() => expect(message).toBeEnabled());
     await user.type(message, 'my own idea');
 
-    const starters = screen.getByRole('region', { name: 'Start from a prompt' });
+    const starters = screen.getByRole('list', { name: 'Start from a prompt' });
     const starter = within(starters).getByRole('button', { name: /^Triage new intake/ });
     await user.hover(starter);
     const previewed = message.value;
