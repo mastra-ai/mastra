@@ -182,14 +182,35 @@ describe('BackgroundTaskManager: non-agent owners', () => {
 
     it('falls back to global-TTL cleanup on an adapter without expiry support', async () => {
       const old = new PreExpiryAdapter({ db: new InMemoryDB() });
-      const mgr = await makeManager({}, undefined, composite(old));
-      const now = new Date();
-      await old.createTask({ ...foreignRunningRow('fresh'), status: 'completed', completedAt: now });
+      const mgr = await makeManager(
+        { cleanup: { completedTtlMs: 1_000, failedTtlMs: 5_000 } },
+        undefined,
+        composite(old),
+      );
+      const now = Date.now();
+      const ago = (ms: number) => new Date(now - ms);
+      const row = (id: string, status: BackgroundTask['status'], at: Date) =>
+        old.createTask({ ...foreignRunningRow(id), status, createdAt: at, completedAt: at });
+      await row('completed-old', 'completed', ago(2_000));
+      await row('completed-fresh', 'completed', ago(0));
+      await row('failed-recent', 'failed', ago(2_000));
+      await row('failed-old', 'failed', ago(10_000));
+      await old.createTask({ ...foreignRunningRow('running-old'), createdAt: ago(60_000) });
 
-      await mgr.cleanup();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+      try {
+        await mgr.cleanup();
+      } finally {
+        vi.mocked(Date.now).mockRestore();
+      }
 
-      expect(await old.getTask('fresh')).not.toBeNull();
-      expect(old.deleteFilters.some(f => f.dateFilterBy === 'expiresAt' || 'hasExpiresAt' in f)).toBe(false);
+      const remaining = (await old.listTasks({})).tasks.map(t => t.id).sort();
+      expect(remaining).toEqual(['completed-fresh', 'failed-recent', 'running-old']);
+      // Exactly the filters `cleanup()` sends on main.
+      expect(old.deleteFilters).toEqual([
+        { status: ['completed'], toDate: new Date(now - 1_000), dateFilterBy: 'completedAt' },
+        { status: ['failed', 'cancelled', 'timed_out'], toDate: new Date(now - 5_000), dateFilterBy: 'completedAt' },
+      ]);
     });
 
     it('honours expiresAt when the adapter comes from a composite store', async () => {
