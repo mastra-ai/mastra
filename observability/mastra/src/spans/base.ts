@@ -58,11 +58,11 @@ const LINEAGE_KEYS = [
   'rootEntityVersionId',
 ] as const satisfies readonly (keyof SpanEntityLineage)[];
 
-/** Copy only the lineage fields that have values, so spans don't carry undefined keys */
 function ownEntityVersionId(span: AnySpan): string | undefined {
   return span instanceof BaseSpan ? span.ownEntityVersionId : undefined;
 }
 
+/** Copy only the lineage fields that have values, so spans don't carry undefined keys */
 function definedLineage(source: SpanEntityLineage): SpanEntityLineage {
   const lineage: SpanEntityLineage = {};
   for (const key of LINEAGE_KEYS) {
@@ -632,7 +632,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       entityType: this.entityType,
       entityId: this.entityId,
       entityName: this.entityName,
-      entityVersionId: getMetadataString('entityVersionId'),
+      entityVersionId: this.ownEntityVersionId,
       ...parentLineage,
       ...rootLineage,
       userId: getMetadataString('userId'),
@@ -680,6 +680,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       ...(this.isInternal ? { isInternal: true } : {}),
+      ...(correlation.entityVersionId ? { entityVersionId: correlation.entityVersionId } : {}),
       ...definedLineage(correlation),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
