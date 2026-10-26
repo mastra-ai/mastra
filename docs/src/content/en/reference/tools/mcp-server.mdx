@@ -2068,7 +2068,7 @@ A declined or cancelled input request completes the task with `isError: true`. A
 
 Task runs are rebuilt from what the task stored when it was created. This keeps a task store free to run them again after a restart. Every run of a task gets the stored request context and no `context.mcp`. The one exception is the first run of an `'auto'` tool, which started under the request before the sync window elapsed.
 
-- The bearer token is removed from `authInfo` before the request context is stored. Everything else is stored as it is, including `authInfo.extra` and the `user` returned by `mapAuthInfoToUser`. Don't put credentials there that the task store shouldn't keep.
+- The bearer token is removed from `authInfo` before the request context is stored. Everything else is stored unchanged, including `authInfo.extra` and the `user` returned by `mapAuthInfoToUser`. Don't put credentials there that the task store shouldn't keep.
 - Values are stored as JSON. A run reads back plain objects, so a `user` class instance arrives as a plain object with the same fields.
 - A key that can't be stored as JSON is left out, and the server logs a warning when it creates the task. If that key is `user`, authorization checks on later runs fail.
 - Read cancellation from `context.abortSignal`, because `context.mcp` isn't available.
