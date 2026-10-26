@@ -152,14 +152,14 @@ describe('starterPrompts', () => {
     expect(listed(triage.prompt)).toEqual(['Card unclassified']);
   });
 
-  it('names the five newest cards in Intake and counts the rest', () => {
+  it('triages the five newest cards in Intake and leaves the rest for another session', () => {
     const cards = Array.from({ length: 7 }, (_, index) =>
       card(`intake-${index}`, { stageHistory: [{ stage: 'intake', enteredAt: daysAgo(index), by: 'user-1' }] }),
     );
 
     const triage = promptFor('triage', cards);
 
-    expect(triage.title).toBe('Triage 7 cards in Intake');
+    expect(triage.title).toBe('Triage 5 of 7 cards in Intake');
     expect(listed(triage.prompt)).toEqual([
       'Card intake-0',
       'Card intake-1',
@@ -167,7 +167,7 @@ describe('starterPrompts', () => {
       'Card intake-3',
       'Card intake-4',
     ]);
-    expect(triage.prompt).toMatch(/\b2 more\b/);
+    expect(triage.prompt).toMatch(/\bother 2\b/);
   });
 
   it('plans only the bugs nobody has planned or started', () => {
@@ -198,6 +198,21 @@ describe('starterPrompts', () => {
     ]);
 
     expect(listed(recap.prompt)).toEqual(['Card inside-the-week']);
+  });
+
+  it('gives the recap its scale and start date, with the latest ten as examples', () => {
+    const recap = promptFor('shipped', [
+      ...Array.from({ length: 11 }, (_, index) => done(`work-${index}`, index / 10)),
+      {
+        ...pullRequest(1, ['done'], { merged: true }),
+        stageHistory: [{ stage: 'done', enteredAt: daysAgo(3), by: 'github:octocat' }],
+      },
+    ]);
+
+    expect(recap.title).toBe('Recap 12 cards done this week');
+    expect(recap.prompt).toContain('since 2026-10-19');
+    expect(recap.prompt).toContain('1 pull request and 11 cards');
+    expect(listed(recap.prompt)).toEqual(Array.from({ length: 10 }, (_, index) => `Card work-${index}`));
   });
 
   it('unblocks the cards whose last run failed, with the error, ignoring runs still queued', () => {

@@ -66,7 +66,7 @@ test.describe('New session suggestions', () => {
       const message = page.getByRole('textbox', { name: 'Message' });
       await expect(message).toBeEnabled();
       await message.fill(draft);
-      const suggestion = page.getByRole('button', { name: /^Triage 7 cards in Intake/ });
+      const suggestion = page.getByRole('button', { name: /^Triage 5 of 7 cards in Intake/ });
       await expect(suggestion).toBeVisible();
       await page.evaluate(() =>
         Promise.all(

@@ -15,11 +15,15 @@ export interface StarterPrompt {
 }
 
 const LISTED = 5;
-const RECAPPED = 20;
+const RECAP_EXAMPLES = 10;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 function count(amount: number, noun: string): string {
   return `${amount} ${noun}${amount === 1 ? '' : 's'}`;
+}
+
+function batch(total: number, noun: string): string {
+  return total > LISTED ? `${LISTED} of ${count(total, noun)}` : count(total, noun);
 }
 
 function label(item: WorkItem): string {
@@ -48,16 +52,20 @@ function starter(
   kind: StarterKind,
   title: string,
   lines: readonly string[],
-  { lead, ask, limit = LISTED }: { lead: string; ask?: string; limit?: number },
+  {
+    lead,
+    ask,
+    limit = LISTED,
+    scope = 'batch',
+  }: { lead: string; ask?: string; limit?: number; scope?: 'batch' | 'examples' },
 ): StarterPrompt {
   const rest = lines.length - limit;
   const listed = lines
     .slice(0, limit)
     .map(line => `- ${line}`)
     .join('\n');
-  const prompt = [`${lead}\n${listed}`, rest > 0 ? `And ${rest} more on the board.` : undefined, ask]
-    .filter(part => part !== undefined)
-    .join('\n\n');
+  const leaveRest = rest > 0 && scope === 'batch' ? `Leave the other ${rest} for another session.` : undefined;
+  const prompt = [`${lead}\n${listed}`, leaveRest, ask].filter(part => part !== undefined).join('\n\n');
   return { kind, title, detail: lines.slice(0, 3).join(' · '), prompt };
 }
 
@@ -69,9 +77,9 @@ function unblock(cards: readonly WorkItem[], effectByItem: ReadonlyMap<string, F
     return [error ? `${label(item)}: ${error}` : label(item)];
   });
   if (failed.length === 0) return undefined;
-  return starter('unblock', `Unblock ${count(failed.length, 'failed run')}`, failed, {
+  return starter('unblock', `Unblock ${batch(failed.length, 'failed run')}`, failed, {
     lead: 'These Factory runs failed:',
-    ask: 'Find out why each one failed, retry what’s fixable, and list the rest for me with what they need.',
+    ask: 'Find out why each one failed, retry the fixable ones, and tell me what the remaining ones need.',
   });
 }
 
@@ -85,7 +93,7 @@ function feedback(cards: readonly WorkItem[]) {
   if (changesRequested.length === 0) return undefined;
   return starter(
     'feedback',
-    `Fix review feedback on ${count(changesRequested.length, 'Factory pull request')}`,
+    `Fix review feedback on ${batch(changesRequested.length, 'Factory pull request')}`,
     changesRequested.map(label),
     {
       lead: 'The Factory review requested changes on these pull requests:',
@@ -104,7 +112,7 @@ function review(cards: readonly WorkItem[]) {
     )
     .sort((a, b) => openedAt(a) - openedAt(b));
   if (waiting.length === 0) return undefined;
-  return starter('review', `Review ${count(waiting.length, 'open pull request')}`, waiting.map(label), {
+  return starter('review', `Review ${batch(waiting.length, 'open pull request')}`, waiting.map(label), {
     lead: 'Start a review session for each of these open pull requests, oldest first:',
   });
 }
@@ -117,9 +125,9 @@ function triage(cards: readonly WorkItem[]) {
     )
     .sort((a, b) => arrivedAt(b) - arrivedAt(a));
   if (arrived.length === 0) return undefined;
-  return starter('triage', `Triage ${count(arrived.length, 'card')} in Intake`, arrived.map(label), {
+  return starter('triage', `Triage ${batch(arrived.length, 'card')} in Intake`, arrived.map(label), {
     lead: 'Triage these cards in Intake on the Work board, newest first:',
-    ask: 'Accept the obvious ones and flag the rest for me.',
+    ask: 'Accept the obvious ones and flag the unclear ones for me.',
   });
 }
 
@@ -148,13 +156,22 @@ function shipped(cards: readonly WorkItem[], now: Date) {
       const at = item.stages.includes('done') ? enteredAt(item, 'done') : undefined;
       return at !== undefined && at >= since ? [{ item, at }] : [];
     })
-    .sort((a, b) => b.at - a.at)
-    .map(({ item }) => label(item));
+    .sort((a, b) => b.at - a.at);
   if (done.length === 0) return undefined;
-  return starter('shipped', `Recap ${count(done.length, 'card')} done this week`, done, {
-    lead: 'Summarize what shipped this week from the cards that reached Done:',
-    ask: 'Group them by theme and call out anything still waiting on someone.',
-    limit: RECAPPED,
+  const merged = done.filter(({ item }) => belongsToBoard(item, 'review')).length;
+  const scale = [
+    merged > 0 ? count(merged, 'pull request') : undefined,
+    done.length > merged ? count(done.length - merged, 'card') : undefined,
+  ]
+    .filter(part => part !== undefined)
+    .join(' and ');
+  const day = new Date(since).toISOString().slice(0, 10);
+  const latest = done.map(({ item }) => label(item));
+  return starter('shipped', `Recap ${count(done.length, 'card')} done this week`, latest, {
+    lead: `Summarize what shipped since ${day}: ${scale} reached Done. The latest:`,
+    ask: 'Group it by theme and call out anything still waiting on someone.',
+    limit: RECAP_EXAMPLES,
+    scope: 'examples',
   });
 }
 
