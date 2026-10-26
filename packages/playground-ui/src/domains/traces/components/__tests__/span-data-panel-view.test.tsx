@@ -21,8 +21,10 @@ describe('SpanDataPanelView — header summary', () => {
 
     expect(screen.getByLabelText(/^Started at/)).toBeTruthy();
     expect(screen.queryByLabelText(/^Ended at/)).toBeNull();
-    // Same `X.XXX s` format as the timeline timing column.
-    expect(screen.getByLabelText(/^Duration/).textContent).toBe('1.000 s');
+    // Compact like the trace header right above it; the exact value is in the tooltip.
+    const duration = screen.getByLabelText(/^Duration/);
+    expect(duration.textContent).toBe('1s');
+    expect(duration.getAttribute('aria-label')).toBe('Duration 1.000 s');
     expect(screen.queryByText('Started')).toBeNull();
     expect(screen.queryByText('Ended')).toBeNull();
     expect(screen.queryByText('Duration')).toBeNull();
