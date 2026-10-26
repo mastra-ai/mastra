@@ -58,6 +58,37 @@ describe('Factory tool body', () => {
     });
   });
 
+  describe('when the agent takes a browser screenshot', () => {
+    const screenshotTool = {
+      toolCallId: 'shot',
+      toolName: 'browser_screenshot',
+      args: {},
+      argsText: '{}',
+      status: 'done' as const,
+      output: '',
+      result: { base64: 'iVBORw0KGgo=', url: 'https://3000-sbx.e2b.app', title: 'Vite App' },
+    };
+
+    it('shows the screenshot instead of its base64', async () => {
+      renderWithProviders(<ToolCard tool={screenshotTool} />);
+      await userEvent.click(screen.getByRole('button', { name: /screenshot/i }));
+
+      expect(screen.getByRole('img', { name: "Screenshot of the agent's browser" })).toHaveAttribute(
+        'src',
+        'data:image/png;base64,iVBORw0KGgo=',
+      );
+      expect(screen.queryByText(/iVBORw0KGgo/)).not.toBeInTheDocument();
+    });
+
+    it('shows the failure message when no image came back', async () => {
+      renderWithProviders(<ToolCard tool={{ ...screenshotTool, result: { message: 'Browser is not open' } }} />);
+      await userEvent.click(screen.getByRole('button', { name: /screenshot/i }));
+
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(screen.getByText(/Browser is not open/)).toBeVisible();
+    });
+  });
+
   describe('when a result exceeds the preview limit', () => {
     it('copies the whole result', async () => {
       const user = userEvent.setup();
