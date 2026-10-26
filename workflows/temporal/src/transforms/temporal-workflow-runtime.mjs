@@ -67,7 +67,7 @@ export class TemporalExecutionEngine {
 
       case 'childWorkflow': {
         log.info('childWorkflow', { workflowType: entry.workflowType });
-        return this.timed(stepResults, entry.id ?? entry.workflowType, async () => {
+        return this.timed(stepResults, entry.id, async () => {
           const childResult = await executeChild(entry.workflowType, {
             args: [{ inputData, ...this.executionContext }],
           });
@@ -105,7 +105,7 @@ export class TemporalExecutionEngine {
 
       case 'parallel': {
         const entryId = parallelEntry =>
-          parallelEntry.type === 'childWorkflow' ? parallelEntry.workflowType : parallelEntry.step.id;
+          parallelEntry.type === 'childWorkflow' ? parallelEntry.id : parallelEntry.step.id;
         log.info('parallel', { steps: entry.steps.map(entryId) });
         const results = await Promise.all(entry.steps.map(step => this.executeEntry(step, inputData, stepResults)));
         const out = {};
@@ -170,21 +170,21 @@ export class TemporalExecutionEngine {
             : (entry.opts.concurrency ?? 1);
         const concurrency = Number.isFinite(configured) ? Math.max(1, Math.floor(configured)) : 1;
         log.info('foreach', { step: entry.step.id, concurrency });
-        const results = new Array(items.length);
-        let index = 0;
-        const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-          while (true) {
-            const i = index++;
-            if (i >= items.length) {
-              break;
-            }
-            results[i] = await this.activityHandle[entry.step.id](
-              this.activityParams(items[i], { initData: this.initData }),
-            );
-          }
-        });
-
         return this.timed(stepResults, entry.step.id, async () => {
+          const results = new Array(items.length);
+          let index = 0;
+          const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+            while (true) {
+              const i = index++;
+              if (i >= items.length) {
+                break;
+              }
+              results[i] = await this.activityHandle[entry.step.id](
+                this.activityParams(items[i], { initData: this.initData }),
+              );
+            }
+          });
+
           await Promise.all(workers);
           return results;
         });
