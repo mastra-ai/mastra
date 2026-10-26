@@ -1418,6 +1418,9 @@ For the streaming version of the same chunk shape, see the [ChunkType reference]
 This example covers a tool that calls `suspend()`. The tool declares a `suspendSchema` for the data it passes to `suspend()` and a `resumeSchema` for the data it needs to continue:
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
 const weatherTool = createTool({
   id: 'get-weather',
   inputSchema: z.object({ location: z.string().optional() }),
