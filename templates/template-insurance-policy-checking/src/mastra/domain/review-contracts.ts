@@ -175,11 +175,13 @@ export type ReviewDecision = (
     text: string;
   },
 ) => Promise<unknown>;
+/** Select the last recorded broker disposition for each finding in event order. */
 export function latestDispositions(approval: Pick<Approval, 'events'>) {
   const saved = new Map<string, ReviewEvent>();
   for (const event of approval.events) if (event.disposition) saved.set(event.disposition.findingId, event);
   return saved;
 }
+/** Select confirmed, fully evidenced discrepancies eligible for a proposed correction. */
 export function actionableFindings(snapshot: ReportSnapshot, approval: Approval) {
   const dispositions = latestDispositions(approval);
   return snapshot.comparisons.filter(

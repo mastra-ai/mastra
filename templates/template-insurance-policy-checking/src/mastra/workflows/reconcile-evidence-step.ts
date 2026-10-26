@@ -7,6 +7,7 @@ import type { ReconciliationService } from '../services/reconciliation-service.j
 import type { ReportService } from '../services/report-service.js';
 import { operationContext } from '../tools/tool-context.js';
 
+/** Run evidence reconciliation or an authorized presentation revision within the selected case. */
 export function createReconcileEvidenceStep(
   service: ReconciliationService,
   cases: CaseService,

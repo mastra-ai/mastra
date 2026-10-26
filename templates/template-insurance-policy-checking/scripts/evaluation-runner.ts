@@ -83,6 +83,7 @@ export type Measurement = {
   /** Scheduled cases without enough evidence to measure this metric. */
   unknown: number;
 };
+/** Normalize evaluation labels without depending on model-generated term identifiers. */
 const normalizeIdentity = (value: string) => value.toLowerCase().replace(/[_-]/g, ' ').replace(/\s+/g, ' ').trim();
 const categoryAliases: Record<string, string[]> = {
   entity: ['entity', 'identity', 'named insured'],
@@ -98,10 +99,12 @@ const scopeAliases: Record<string, string[]> = {
   Premises: ['premises', 'insured premises'],
   'All premises': ['all premises', 'all insured premises', 'all locations'],
 };
+/** Match category and scope using the evaluator's independently specified aliases. */
 const semanticIdentity = (actual: Pick<Term, 'category' | 'scope'>, expected: Pick<Term, 'category' | 'scope'>) =>
   (categoryAliases[expected.category] ?? [normalizeIdentity(expected.category)]).includes(
     normalizeIdentity(actual.category),
   ) && (scopeAliases[expected.scope] ?? [normalizeIdentity(expected.scope)]).includes(normalizeIdentity(actual.scope));
+/** Normalize decimal formatting and equivalent occurrence units before scoring extracted values. */
 function normalizedValue(value: TermValue | null) {
   if (!value) return null;
   const decimal = (amount: string) => (amount.includes('.') ? amount.replace(/0+$/, '').replace(/\.$/, '') : amount);
@@ -113,6 +116,7 @@ function normalizedValue(value: TermValue | null) {
     };
   return value;
 }
+/** Score observed evidence and review behavior against fixed expectations, retaining missing denominators. */
 export function evaluateCase(test: EvaluationCase, actual?: EvaluationObservation) {
   const state = actual?.state ?? 'unknown';
   const actualFindings = actual?.comparisons ?? [];
@@ -289,6 +293,7 @@ export function evaluateCase(test: EvaluationCase, actual?: EvaluationObservatio
     measurements,
   };
 }
+/** Combine metric counts across every scheduled case, including failed and unknown outcomes. */
 export function aggregateEvaluation(results: ReturnType<typeof evaluateCase>[]) {
   const metrics = Object.fromEntries(
     metricNames.map(name => {

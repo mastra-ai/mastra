@@ -11,6 +11,7 @@ import { artifactBytes } from '../storage/artifact-storage.js';
 import type { FinalizationRepository } from '../storage/finalization-repository.js';
 import type { ReviewRepository } from '../storage/review-repository.js';
 
+/** Record broker decisions and materialize approved outputs from durable finalization reservations. */
 export function createReviewService(
   repository: ReviewRepository,
   finalizations: FinalizationRepository,

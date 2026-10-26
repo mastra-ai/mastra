@@ -5,6 +5,7 @@ import { reportRequestSchema } from '../domain/report-contracts.js';
 import type { CaseService } from '../services/case-service.js';
 import { operationContext } from './tool-context.js';
 export type ReportReader = (context: OperationContext, input: unknown) => Promise<unknown>;
+/** Expose read-only access to a saved draft without granting approval or publication retries. */
 export function createReportTool(cases: CaseService, read: ReportReader, operatorId: string) {
   return createTool({
     id: 'read-policy-report',

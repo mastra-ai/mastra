@@ -25,6 +25,7 @@ const controlledProviderEnvironmentSchema = z
       });
   });
 
+/** Resolve a loopback provider override only when the environment explicitly enables test mode. */
 export function resolveControlledProviderEndpoint(
   environment: Record<string, string | undefined> = process.env,
 ): string | undefined {
@@ -40,6 +41,7 @@ export function resolveControlledProviderEndpoint(
 
 const modelUnavailable =
   'The conversation model is unavailable. Read /status to check captured documents before retrying.';
+/** Replace nested model error payloads with safe messages before returning them to Studio. */
 function scrubErrors(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(scrubErrors);
   if (!value || typeof value !== 'object') return value;
@@ -57,6 +59,7 @@ function scrubErrors(value: unknown): unknown {
   return Object.fromEntries(Object.entries(record).map(([key, item]) => [key, scrubErrors(item)]));
 }
 
+/** Configure loopback-only access, request limits, safe errors, and context-bound artifact downloads. */
 export function createLocalServer(
   port: number,
   limits: InputLimits,

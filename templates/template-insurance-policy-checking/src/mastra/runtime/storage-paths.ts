@@ -3,6 +3,7 @@ import { chmod, lstat, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { IntakeError } from '../domain/operation-errors.js';
 
+/** Require an owned, ordinary directory and restrict its permissions to the local operator. */
 export async function ensurePrivateDirectory(path: string) {
   await mkdir(path, { recursive: true, mode: 0o700 });
   const entry = await lstat(path);
@@ -15,6 +16,7 @@ export async function ensurePrivateDirectory(path: string) {
   await chmod(path, 0o700);
 }
 
+/** Locate the complete template from CLI runtime paths by verifying the maintained PDF worker. */
 export function projectRoot() {
   // Installed CLI dev runs under src/mastra/public and exposes .mastra as its project root.
   // Start/build variants can expose the original root instead. Verify the maintained worker.

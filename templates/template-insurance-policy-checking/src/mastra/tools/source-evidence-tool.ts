@@ -4,6 +4,7 @@ import { safely } from '../domain/operation-errors.js';
 import type { CaseService } from '../services/case-service.js';
 import { operationContext } from './tool-context.js';
 
+/** Expose captured physical-page or record-field evidence within the current conversation. */
 export function createSourceEvidenceTool(caseService: CaseService, operatorId: string) {
   return createTool({
     id: 'source-evidence',

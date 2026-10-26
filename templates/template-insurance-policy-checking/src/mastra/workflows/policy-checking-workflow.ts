@@ -16,6 +16,7 @@ import type { ReportService } from '../services/report-service.js';
 import { createReconcileEvidenceStep } from './reconcile-evidence-step.js';
 import { createReviewCheckpointStep, reviewedComparisonResultSchema } from './review-checkpoint-step.js';
 
+/** Persist comparison runs and, when reports are enabled, suspend for a bound broker decision. */
 export function createPolicyCheckingWorkflow(
   service: ReconciliationService,
   cases: CaseService,

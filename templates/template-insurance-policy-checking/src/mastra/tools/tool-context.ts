@@ -2,6 +2,7 @@ import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { CaseService } from '../services/case-service.js';
 
+/** Bind tool execution to the configured operator and a required conversation identifier. */
 export function operationContext(caseService: CaseService, operatorId: string, requestContext?: RequestContext) {
   const threadId =
     (requestContext?.get('insuranceThreadId') as string | undefined) ??

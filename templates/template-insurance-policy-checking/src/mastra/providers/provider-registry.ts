@@ -15,6 +15,7 @@ const registrationSchema = z.object({
 
 export type Registrations = { [C in keyof ProviderCategories]: readonly ProviderCategories[C][] };
 export type Selections = Partial<{ [C in keyof ProviderCategories]: string }>;
+/** Validate provider categories and defaults before exposing stage-specific provider selection. */
 export function createRegistry(registrations: Registrations, defaults: Selections) {
   const maps = new Map<string, Map<string, ProviderCategories[keyof ProviderCategories]>>();
   for (const category of ['input', 'draftOutput', 'reportOutput', 'correctionOutput'] as const) {

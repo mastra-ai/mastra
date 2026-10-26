@@ -9,6 +9,7 @@ import { fixtureFiles } from '../tests/reconciliation-fixtures.js';
 import { reportContext, reportRuntime } from '../tests/report-runtime.js';
 import type { EvaluationObservation } from './evaluation-runner.js';
 
+/** Exercise capture, comparison, report publication, and explicit approval while collecting saved outcomes. */
 export async function runEvaluationCase(
   test: EvaluationCase,
   root: string,
@@ -179,7 +180,9 @@ export async function runEvaluationCase(
   }
 }
 
+/** Collapse layout whitespace before comparing text extracted from generated reports. */
 const normalize = (text: string) => text.replace(/\s+/g, ' ').trim();
+/** Extract report text, optionally excluding headers, footers, and continuation labels. */
 async function pdfText(bytes: Uint8Array, body = false) {
   const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: false });
   const document = await task.promise;

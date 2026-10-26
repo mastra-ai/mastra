@@ -10,6 +10,7 @@ import { createComparePolicyTool } from '../tools/compare-policy-tool.js';
 import { createReportTool, type ReportReader } from '../tools/report-tool.js';
 import { createSourceEvidenceTool } from '../tools/source-evidence-tool.js';
 
+/** Build the broker-facing agent with persistent memory and explicit case operations. */
 export function createPolicyCheckingAgent(
   caseService: CaseService,
   memory: Memory,

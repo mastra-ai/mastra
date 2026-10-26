@@ -94,6 +94,7 @@ export class EvidenceValidationError extends IntakeError {
     this.sourceId = sourceId;
   }
 }
+/** Expose known recovery instructions while replacing unknown errors with a generic failure. */
 export function safeFailure(error: unknown): Failure {
   if (error instanceof IntakeError)
     return failureSchema.parse({
@@ -151,6 +152,7 @@ export function safeFailure(error: unknown): Failure {
       'Check case status before retrying. Check the local database and private artifact directory if the problem continues.',
   };
 }
+/** Convert a rejected operation into the same safe failure contract used by agent tools. */
 export async function safely<T>(operation: () => Promise<T>): Promise<T | Failure> {
   try {
     return await operation();
@@ -158,11 +160,13 @@ export async function safely<T>(operation: () => Promise<T>): Promise<T | Failur
     return safeFailure(error);
   }
 }
+/** Format the sanitized failure message, recovery action, and diagnostic code for the broker. */
 export function failureText(error: unknown): string {
   const failure = safeFailure(error);
   return `${failure.message}${failure.nextAction ? ` ${failure.nextAction}` : ''} (${failure.code})`;
 }
 
+/** Identify SQLite write contention that callers can handle without changing the operation. */
 export function isDatabaseBusy(error: unknown) {
   return Boolean(
     error &&

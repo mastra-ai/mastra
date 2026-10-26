@@ -10,6 +10,7 @@ const common = {
   snapshotHash: hash.describe('SHA-256 checksum binding this request to the exact report snapshot.'),
   snapshot: reportSnapshotSchema.describe('Complete immutable report snapshot consumed by the output provider.'),
 };
+/** Require the output request to identify the exact validated report snapshot. */
 const binding = (request: {
   snapshotId: string;
   snapshotHash: string;
@@ -22,6 +23,7 @@ export const draftOutputRequestSchema = z
   })
   .strict()
   .refine(binding, 'Snapshot identity and checksum must match the immutable report.');
+/** Require approval, workflow, case, and version identities to match the requested snapshot. */
 const approvedBinding = (request: Omit<z.infer<typeof reportOutputRequestObject>, 'stage'> & { stage: string }) =>
   binding(request) &&
   request.approval.snapshotId === request.snapshotId &&

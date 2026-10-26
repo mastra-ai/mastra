@@ -16,6 +16,7 @@ import {
 } from '../domain/review-contracts.js';
 import { projectRoot } from '../runtime/storage-paths.js';
 
+/** Render an immutable report snapshot with source citations and any recorded broker approval. */
 export async function renderDraftPdf(report: ReportSnapshot, approved?: Approval): Promise<Buffer> {
   const r = reportSnapshotSchema.parse(report);
   const approval = approved ? approvalSchema.parse(approved) : undefined;
@@ -484,6 +485,7 @@ export async function renderDraftPdf(report: ReportSnapshot, approved?: Approval
   doc.end();
   return complete;
 }
+/** Write draft PDFs atomically and return descriptors bound to their report snapshot. */
 export function createDraftPdfProvider(): OutputProvider<'draftOutput'> {
   return {
     id: 'local-pdf-draft',

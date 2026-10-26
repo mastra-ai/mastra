@@ -47,11 +47,13 @@ const reportNoticeSchema = z.object({
     .optional()
     .describe('Durable approved publication and its artifact availability.'),
 });
+/** Escape source text before including it in broker-facing Markdown. */
 export const markdown = (value: string) =>
   value
     .replace(/[\\`*_{}\[\]()#+!|]/g, '\\$&')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+/** Require completed finalization and a saved report artifact before offering a final download. */
 export function finalReportAvailable(value: unknown) {
   const result = reportNoticeSchema.parse(value);
   return (
@@ -60,6 +62,7 @@ export function finalReportAvailable(value: unknown) {
     result.finalization.artifacts.some(artifact => artifact.stage === 'reportOutput')
   );
 }
+/** Present the saved report, findings, review state, and context-bound artifact links in chat. */
 export function reportNotice(value: unknown, context: OperationContext, compact = false) {
   const result = reportNoticeSchema.parse(value);
   const report = result.report;

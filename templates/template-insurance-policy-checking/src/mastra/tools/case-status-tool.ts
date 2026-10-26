@@ -4,6 +4,7 @@ import { safely } from '../domain/operation-errors.js';
 import type { CaseService } from '../services/case-service.js';
 import { operationContext } from './tool-context.js';
 
+/** Expose authoritative case status using the configured operator and current conversation. */
 export function createCaseStatusTool(caseService: CaseService, operatorId: string) {
   return createTool({
     id: 'case-status',

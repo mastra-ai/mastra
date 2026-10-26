@@ -8,7 +8,9 @@ import { termValue } from '../domain/report-presentation.js';
 import { actionableFindings } from '../domain/review-contracts.js';
 import { renderDraftPdf } from './draft-pdf-provider.js';
 
+/** Escape source text before including it in broker-facing Markdown. */
 const markdown = (text: string) => text.replace(/[\\`*_{}\[\]()#+!|<>]/g, '\\$&');
+/** Materialize the approved report or correction draft using the frozen approval and provider stage. */
 export function createApprovedOutputProvider<C extends 'reportOutput' | 'correctionOutput'>(
   stage: C,
 ): OutputProvider<C> {

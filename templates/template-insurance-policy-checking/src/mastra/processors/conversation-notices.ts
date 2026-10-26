@@ -4,6 +4,7 @@ import { markdown } from './report-notice-formatter.js';
 
 export const conversationHelp =
   'Attach PDFs with selectable text, then tell me which file is the proposal or contract you accepted and which is the issued policy. Say “Show status”, “Compare the documents”, “Show the report”, or “Show page 1 of "filename.pdf"”.';
+/** Summarize saved sources and the next clarification or workflow action for the selected case. */
 export function statusNotice(status: Awaited<ReturnType<CaseService['status']>>) {
   if (!status.case) return `No case is selected. Attach textual PDFs to begin.\n\n${conversationHelp}`;
   const record = status.case;

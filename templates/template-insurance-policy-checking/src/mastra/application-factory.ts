@@ -24,6 +24,7 @@ import { ReportRepository } from './storage/report-repository.js';
 import { ReviewRepository } from './storage/review-repository.js';
 import { createPolicyCheckingWorkflow } from './workflows/policy-checking-workflow.js';
 
+/** Open private storage and assemble the local agent, providers, services, and review workflow. */
 export async function createApplication() {
   operation({ stage: 'startup', outcome: 'started', costMicros: null });
 

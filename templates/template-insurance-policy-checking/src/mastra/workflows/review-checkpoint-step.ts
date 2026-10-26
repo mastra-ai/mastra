@@ -17,6 +17,7 @@ export const reviewedComparisonResultSchema = z.union([
   failureSchema,
 ]);
 
+/** Publish the immutable draft and suspend until its recorded broker decision can be verified. */
 export function createReviewCheckpointStep(cases: CaseService, operatorId: string, reports: ReportService) {
   const outputSchema = z.union([comparisonResultSchema, failureSchema]);
   return createStep({

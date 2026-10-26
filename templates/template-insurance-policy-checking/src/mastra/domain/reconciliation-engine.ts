@@ -16,6 +16,7 @@ import type {
 import { compareDecimals, normalizeDecimal } from './decimal-utils.js';
 import { normalizeText, sameTerm } from './term-utils.js';
 
+/** Compare typed insurance values after normalizing formatting while retaining comparison dimensions. */
 export function equalValues(left: TermValue, right: TermValue): boolean {
   const normalized = (value: TermValue): unknown => {
     switch (value.type) {
@@ -52,6 +53,7 @@ export function equalValues(left: TermValue, right: TermValue): boolean {
   };
   return canonicalJson(normalized(left)) === canonicalJson(normalized(right));
 }
+/** Reject evidence whose source identity, locator, or exact excerpt differs from captured content. */
 export function verifyEvidence(
   evidence: Evidence,
   sources: SavedSource[],
@@ -79,6 +81,7 @@ export function verifyEvidence(
       throw invalid('excerpt_not_exact', 'excerpt');
   }
 }
+/** Find the first typed value component unsupported by the quoted source wording. */
 function unsupportedValueField(value: TermValue, original: string): GroundingPath[number] | undefined {
   const contains = (text: string) => normalizeText(original).includes(normalizeText(text));
   const numbers = original.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/g) ?? [];
@@ -119,9 +122,11 @@ function unsupportedValueField(value: TermValue, original: string): GroundingPat
       return;
   }
 }
+/** Check that the quoted wording supports every component of a typed insurance value. */
 export function valueSupported(value: TermValue, original: string): boolean {
   return unsupportedValueField(value, original) === undefined;
 }
+/** Verify source ownership, typed values, evidence excerpts, and reviewed locators before comparison. */
 export function verifyExtraction(extraction: Extraction, source: SavedSource) {
   const invalid = (reason: ConstructorParameters<typeof EvidenceValidationError>[0]['reason'], path: GroundingPath) =>
     new EvidenceValidationError({ reason, path }, source.sourceId);
@@ -153,6 +158,7 @@ export function verifyExtraction(extraction: Extraction, source: SavedSource) {
     if (index !== -1) throw invalid('reviewed_locator_missing', ['reviewedRecords', index]);
   }
 }
+/** Require every captured page or record to be reviewed without unresolved scope limitations. */
 export function completeScope(extraction: Extraction, source: SavedSource): boolean {
   if (!extraction.complete || extraction.limitations.length || source.limitations.length) return false;
   return source.kind === 'pdf'
@@ -161,6 +167,7 @@ export function completeScope(extraction: Extraction, source: SavedSource): bool
         extraction.reviewedRecords.some(locator => locator.recordId === item.recordId && locator.field === item.field),
       );
 }
+/** Retain short source-bound excerpts from reviewed locations as evidence of the comparison scope. */
 function searchEvidence(extraction: Extraction, source: SavedSource): Evidence[] {
   const common = {
     sourceId: source.sourceId,
@@ -191,6 +198,7 @@ function searchEvidence(extraction: Extraction, source: SavedSource): Evidence[]
           excerpt: (typeof item.value === 'string' ? item.value : canonicalJson(item.value)).slice(0, 200),
         }));
 }
+/** Check the complete source for a term label, original wording, or entity name. */
 function sourceMentions(term: Term, source: SavedSource): boolean {
   const content = normalizeText(
     source.kind === 'pdf' ? source.pages.map(page => page.text).join('\n') : canonicalJson(source.records),
@@ -199,6 +207,7 @@ function sourceMentions(term: Term, source: SavedSource): boolean {
   return names.some(value => content.includes(normalizeText(value)));
 }
 type AuthorityConcern = { uncertainty: string; evidence: Evidence | null };
+/** Scan the entire amendment for revoked, conditional, or otherwise uncertain authority. */
 function sourceAuthorityConcerns(source: SavedSource): AuthorityConcern[] {
   // Inspect the whole immutable amendment, including context the model omitted from its positive quotation.
   // An adverse status leaves the applicable authority interval unresolved; dates or upload order cannot restore it.
@@ -245,6 +254,7 @@ function sourceAuthorityConcerns(source: SavedSource): AuthorityConcern[] {
     ];
   });
 }
+/** Explain a lower limit only when currency, basis, and other comparison dimensions agree. */
 function limitReductionRationale(term: Term, expected: TermValue | null, actual: Term | null): string | null {
   const observed = actual?.value;
   if (!/(?:^|[\s_.-])(?:sub)?limits?(?:$|[\s_.-])/.test(normalizeText(term.category)) || !expected || !observed)
@@ -263,6 +273,7 @@ function limitReductionRationale(term: Term, expected: TermValue | null, actual:
     value.type === 'money' ? `${value.currency} ${value.amount}` : `${value.amount} ${value.unit}`;
   return `The documented limit decreased from ${describe(expected)} to ${describe(observed)} for ${term.scope} under the same comparison dimensions. This potentially material reduction is a High review priority, not a coverage conclusion.`;
 }
+/** Explain opposite coverage statements about the same risk in aligned, unambiguous clauses. */
 function exclusionChangeRationale(
   expected: TermValue | null,
   actual: Term | null,
@@ -302,6 +313,7 @@ function exclusionChangeRationale(
     return null;
   return `The reference states that it ${reference.disposition} "${reference.subject}"; the target states that it ${target.disposition} the same subject. Read both complete clauses and their qualifications. This potentially material exclusion change has High review priority, not a coverage conclusion.`;
 }
+/** Require an explicit sourced approval for this policy, term, value, and effective date. */
 function authorized(change: Extraction['changes'][number], term: Term, input: AnalysisInput): boolean {
   if (
     input.clarification.intent !== 'agreed_terms_checking' ||
@@ -325,6 +337,7 @@ function authorized(change: Extraction['changes'][number], term: Term, input: An
     valueSupported(change.value, change.approvalStatement)
   );
 }
+/** Classify extracted terms using verified evidence, amendment authority, scope completeness, and rules. */
 export function reconcile(
   input: AnalysisInput,
   extractions: Extraction[],

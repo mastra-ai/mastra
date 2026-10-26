@@ -296,6 +296,7 @@ export const sourceBundleSchema = z
   });
 export type CapturedSource = z.infer<typeof sourceSchema>;
 export type SourceBundle = z.infer<typeof sourceBundleSchema>;
+/** Hash exact bytes or UTF-8 text for immutable source and artifact identity. */
 export const hashBytes = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 /** Serialize JSON with recursive UTF-16 code-unit key ordering, independent of the process locale. */
 export function canonicalJson(value: unknown): string {
@@ -308,6 +309,7 @@ export function canonicalJson(value: unknown): string {
       .join(',')}}`;
   return JSON.stringify(value);
 }
+/** Validate captured source content, provenance, checksums, and configured capacity before storage. */
 export function validateBundle(input: unknown, limits: InputLimits, providerId: string): SourceBundle {
   const bundle = sourceBundleSchema.parse(input);
   if (bundle.sources.length > limits.maxDocumentsPerCase)

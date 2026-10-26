@@ -5,6 +5,7 @@ import { reviewRequestSchema, type ReviewRequest } from './review-contracts.js';
 
 const version = z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const note = z.string().trim().min(1).max(4000);
+/** Recognize explicit, versioned broker review commands; return null for other conversation text. */
 export function parseNaturalReview(text: string) {
   const approval = /^Approve report version ([1-9]\d*)\.?$/i.exec(text.trim());
   if (approval) return { action: 'approve' as const, version: version.parse(approval[1]) };
@@ -23,6 +24,7 @@ export function parseNaturalReview(text: string) {
     };
   return null;
 }
+/** Select findings that need attention in the conversational report summary. */
 export const visibleFindings = (report: ReportSnapshot) =>
   report.comparisons.filter(finding => finding.classification !== 'MATCH');
 
@@ -70,6 +72,7 @@ export function naturalReviewRequest(
   });
 }
 
+/** Parse filename-based source roles and policy identity, rejecting ambiguous or missing details. */
 export function parseNamedClarification(text: string) {
   const lines = text
     .trim()

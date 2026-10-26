@@ -15,6 +15,7 @@ import { normalizeText, sameTerm } from '../domain/term-utils.js';
 import { operation } from '../runtime/operation-logger.js';
 import type { ReconciliationRepository } from '../storage/reconciliation-repository.js';
 
+/** Run budgeted comparisons with persisted attempts, verified evidence, and explicit retry authority. */
 export function createReconciliationService(
   repository: ReconciliationRepository,
   model: StructuredProcessingModel,

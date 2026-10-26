@@ -12,6 +12,7 @@ import { operation } from '../runtime/operation-logger.js';
 import type { ReportRepository } from '../storage/report-repository.js';
 import type { ReviewService } from './review-service.js';
 
+/** Prepare and publish immutable drafts, preserving provider identity and recoverable publication state. */
 export function createReportService(
   repository: ReportRepository,
   provider: OutputProvider<'draftOutput'>,

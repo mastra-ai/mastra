@@ -212,6 +212,7 @@ export const reportSnapshotSchema = z
       }
   });
 export type ReportSnapshot = z.infer<typeof reportSnapshotSchema>;
+/** Count finding outcomes without presenting incomplete searches as fully checked terms. */
 export function reportCounts(
   findings: { classification: string; baseline: unknown; actual: unknown; searched: { complete: boolean }[] }[],
 ) {
@@ -242,6 +243,7 @@ export function reportCounts(
   }
   return counts;
 }
+/** Derive the report conclusion while preserving incomplete evidence and unresolved review needs. */
 export function reportStatus(findings: { classification: string }[], incomplete: boolean, ruleCount = 0) {
   return !findings.length ||
     incomplete ||
@@ -251,6 +253,7 @@ export function reportStatus(findings: { classification: string }[], incomplete:
       ? 'REVIEW_REQUIRED'
       : 'NO_DISCREPANCIES_DETECTED';
 }
+/** Verify analysis citations and freeze findings, provenance, and review status into a report version. */
 export function buildReport(analysis: Analysis, id: string, version: number, runId: string): ReportSnapshot {
   for (const f of analysis.comparisons)
     for (const e of [
@@ -313,6 +316,7 @@ export function buildReport(analysis: Analysis, id: string, version: number, run
     sources,
   });
 }
+/** Hash the validated report so approval and output requests bind to the same content. */
 export const reportHash = (report: ReportSnapshot) => hashBytes(canonicalJson(reportSnapshotSchema.parse(report)));
 export const reportRequestSchema = z
   .object({

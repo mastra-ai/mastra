@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { hashBytes } from '../domain/case-contracts.js';
 import { IntakeError } from '../domain/operation-errors.js';
 
+/** Flush directory entries after artifact publication so filenames survive a process interruption. */
 async function syncDirectory(root: string) {
   const directory = await open(root, 'r');
   try {
@@ -14,6 +15,7 @@ async function syncDirectory(root: string) {
     await directory.close();
   }
 }
+/** Read only a regular artifact inside private storage whose bytes match the saved checksum. */
 export async function artifactBytes(rootDirectory: string, artifactId: string, hash: string) {
   try {
     const root = await realpath(rootDirectory);
@@ -41,6 +43,7 @@ export async function artifactBytes(rootDirectory: string, artifactId: string, h
 }
 // Call while holding the publication database write transaction. The immutable
 // identity is reserved before rendering; only complete synced files acquire it.
+/** Durably publish verified bytes under an immutable artifact name, recovering incomplete prior writes. */
 export async function stageArtifact(root: string, artifactId: string, hash: string, bytes: Uint8Array) {
   if (!bytes.length || hashBytes(bytes) !== hash)
     throw new IntakeError(

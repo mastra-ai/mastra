@@ -37,6 +37,7 @@ export const workingMemorySchema = z.object({
     .describe('Persisted broker review state, separate from the analytical conclusion.'),
 });
 
+/** Capture attachments privately and route explicit broker commands through case services. */
 export function createDocumentIntakeProcessor(
   caseService: CaseService,
   memory: Memory,

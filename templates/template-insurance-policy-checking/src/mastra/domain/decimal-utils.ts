@@ -7,6 +7,7 @@ export function normalizeDecimal(value: string): string {
   return negative && magnitude !== '0' ? `-${magnitude}` : magnitude;
 }
 
+/** Compare decimal strings at a shared BigInt scale without losing monetary precision. */
 export function compareDecimals(left: string, right: string): number {
   const scale = Math.max(left.split('.')[1]?.length ?? 0, right.split('.')[1]?.length ?? 0);
   const integer = (value: string) => {

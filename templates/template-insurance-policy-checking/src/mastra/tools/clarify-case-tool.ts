@@ -4,6 +4,7 @@ import { safely } from '../domain/operation-errors.js';
 import type { CaseService } from '../services/case-service.js';
 import { operationContext } from './tool-context.js';
 
+/** Record explicit broker clarification through a schema-validated tool call. */
 export function createClarifyCaseTool(caseService: CaseService, operatorId: string) {
   return createTool({
     id: 'clarify-case',

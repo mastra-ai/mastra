@@ -109,6 +109,7 @@ export const configurationSchema = z
       });
   });
 
+/** Run the frozen live dataset only after validating spending authorization and reserving each case budget. */
 export async function main() {
   const configIndex = process.argv.indexOf('--config');
   const outputIndex = process.argv.indexOf('--output');
@@ -213,6 +214,7 @@ export async function main() {
     allocation.close();
   }
 }
+/** Validate the approved dataset and targets, rejecting controlled endpoints for live quality claims. */
 export function validateLiveConfiguration(value: unknown, controlledEndpoint?: string) {
   const config = configurationSchema.parse(value);
   if (config.dataset.sha256 !== datasetIdentity.sha256)
@@ -220,6 +222,7 @@ export function validateLiveConfiguration(value: unknown, controlledEndpoint?: s
   if (controlledEndpoint) throw Error('A controlled endpoint cannot establish live model quality.');
   return config;
 }
+/** Open a durable, configuration-bound budget ledger that rejects repeated case reservations. */
 export async function evaluationAllocation(path: string, config: z.infer<typeof configurationSchema>) {
   const ledger = createClient({ url: `file:${path}` });
   await ledger.executeMultiple(
@@ -278,6 +281,7 @@ export async function evaluationAllocation(path: string, config: z.infer<typeof 
     },
   };
 }
+/** Replace a local evaluation result atomically with owner-only file permissions. */
 async function save(path: string, value: unknown) {
   await writeFile(path + '.tmp', JSON.stringify(value, null, 2), { mode: 0o600 });
   await rename(path + '.tmp', path);

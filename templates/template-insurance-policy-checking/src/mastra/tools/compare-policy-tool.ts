@@ -4,6 +4,7 @@ import { compareRequestSchema, type ComparisonRunner } from '../domain/reconcili
 import type { CaseService } from '../services/case-service.js';
 import { operationContext } from './tool-context.js';
 
+/** Expose comparison through the persistent workflow with the current conversation context. */
 export function createComparePolicyTool(cases: CaseService, runner: ComparisonRunner, operatorId: string) {
   return createTool({
     id: 'compare-policy',

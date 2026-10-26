@@ -3,6 +3,7 @@ import { contextSchema, validateBundle, type InputProvider, type OperationContex
 import { IntakeError } from '../domain/operation-errors.js';
 import type { CaseRepository } from '../storage/case-repository.js';
 
+/** Coordinate validated capture, clarification, and evidence access against the authoritative case store. */
 export function createCaseService(
   repository: CaseRepository,
   inputProvider: InputProvider,

@@ -43,6 +43,7 @@ export const reportLabels = {
   intent: { document_comparison: 'Document comparison', agreed_terms_checking: 'Agreed-term policy checking' },
   severity: { High: 'High', Medium: 'Medium', Low: 'Low' },
 } as const;
+/** Convert technical category and scope labels into comparable lowercase words. */
 const words = (value: string) =>
   value
     .replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -50,12 +51,14 @@ const words = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
+/** Use a familiar category label when available, with a readable fallback for custom categories. */
 export function categoryLabel(category: string): string {
   const readable = words(category);
   const known = Object.entries(reportLabels.category).find(([key]) => words(key) === readable)?.[1];
   return known ?? (readable ? readable[0]!.toUpperCase() + readable.slice(1) : 'Additional policy terms');
 }
 
+/** Expand a partial ISO date into its earliest and latest possible calendar dates. */
 function dateBounds(value: string): [number, number] {
   const [year, month, day] = value.split('-').map(Number) as [number, number?, number?];
   const lastMonth = month ?? 12;
@@ -108,6 +111,7 @@ export function issuedPolicyDates(report: ReportSnapshot): string {
   if (!start && !end && !startReview && !endReview) return 'Not available';
   return `${start ? 'Starts ' + start : startReview ? 'Inception requires review' : 'Inception not available'}; ${end ? 'expires ' + end : endReview ? 'expiry requires review' : 'expiry not available'}`;
 }
+/** Present a typed term without dropping currency, basis, bounds, or entity location details. */
 export function termValue(value: TermValue | null | undefined): string {
   if (!value) return 'Not available';
   switch (value.type) {

@@ -7,6 +7,7 @@ import { hashBytes, roleSchema, type InputProvider } from '../domain/case-contra
 import { IntakeError } from '../domain/operation-errors.js';
 import { projectRoot } from '../runtime/storage-paths.js';
 
+/** Build the PDF attachment contract using the configured document and encoded-byte limits. */
 export function attachmentSchema(limits: InputLimits) {
   const maxEncodedLength = 'data:application/pdf;base64,'.length + Math.ceil(limits.pdf.maxBytesPerFile / 3) * 4;
   return z
@@ -79,6 +80,7 @@ const extractionSchema = z.object({
     .describe('Captured physical PDF pages in contiguous order starting at one.'),
 });
 
+/** Extract physical pages in a child process with bounded CPU, heap, output, and elapsed time. */
 export async function extractPdf(
   bytes: Uint8Array,
   maxPages: number,
@@ -155,6 +157,7 @@ export async function extractPdf(
   });
 }
 
+/** Capture textual PDFs as checksummed sources with physical-page evidence and explicit limitations. */
 export function createPdfProvider(limits: InputLimits, workerPath?: string): InputProvider {
   const schema = attachmentSchema(limits);
   return {

@@ -30,6 +30,7 @@ export const processingConfigurationSchema = z
       .describe('Default or custom processing ceilings; null disables paid dispatch for programmatic callers.'),
   })
   .strict();
+/** Read an optional budget file relative to the project, or use the configured defaults. */
 function readProcessingBudget(path: string | undefined): unknown {
   if (!path?.trim()) return defaultProcessingBudget;
   const budgetPath = resolve(projectRoot(), path);
@@ -49,6 +50,7 @@ export const processingConfiguration = processingConfigurationSchema.parse({
   budget: readProcessingBudget(process.env.POLICY_PROCESSING_BUDGET),
 });
 
+/** Accept the production provider URL, allowing loopback overrides only in test mode. */
 export function processingEndpoint(endpoint = 'https://api.openai.com/v1') {
   if (
     endpoint !== 'https://api.openai.com/v1' &&
