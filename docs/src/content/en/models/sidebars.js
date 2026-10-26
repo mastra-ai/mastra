@@ -716,6 +716,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/munito',
+          label: 'Munito AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/munito-eu',
+          label: 'Munito AI (EU)',
+        },
+        {
+          type: 'doc',
           id: 'providers/nan',
           label: 'NaN',
         },

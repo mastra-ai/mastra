@@ -996,6 +996,75 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(await output.finishReason).not.toBe('aborted');
   }, 20_000);
 
+  // Durable and evented runs also hold an execution claim, which a stall past its TTL ends on its own terms.
+  it.skipIf(isDurableEngineVariant(engine))(
+    'keeps a run going when its whole process stalls past the lease TTL while a renewal is in flight',
+    async () => {
+      const thread = 'stalled-process-thread';
+      for (let i = 0; i < 8; i++) {
+        llm.on(
+          { userMessage: 'stalled process', sequenceIndex: i },
+          { toolCalls: [{ id: `call_stalled_process_${i}`, name: 'tick', arguments: {} }] },
+        );
+      }
+      llm.on({ userMessage: 'stalled process', sequenceIndex: 8 }, { content: 'stalled process done' });
+
+      const shared = new SharedLeases();
+      /**
+       * A backend answers a renewal one I/O round trip after it is sent, as a lease file or Redis does. A process that
+       * stalls in between (a long synchronous task, a machine too loaded to schedule it) gets the answer only after
+       * the lease has run out, though the renewal went out while the lease was still live.
+       */
+      class StallingProcessPubSub extends ReplicaPubSub {
+        stallNext = false;
+        override async renewLease(key: string, owner: string, ttlMs: number) {
+          if (key.startsWith(`${RESOURCE}\u0000`)) {
+            if (this.stallNext) {
+              this.stallNext = false;
+              // Well past the TTL (300ms): the process does nothing else meanwhile, not even its timers.
+              queueMicrotask(() => {
+                const until = Date.now() + 700;
+                while (Date.now() < until) {
+                  // stalled
+                }
+              });
+            }
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+          return super.renewLease(key, owner, ttlMs);
+        }
+      }
+      const pubsub = new StallingProcessPubSub(shared);
+      let ticks = 0;
+      const tick = createTool({
+        id: 'tick',
+        description: 'Tick once',
+        inputSchema: z.object({}),
+        execute: async () => {
+          ticks++;
+          await new Promise(resolve => setTimeout(resolve, 100));
+          return 'ticked';
+        },
+      });
+      const { output, drain } = await startStream(
+        replica(shared, new MockMemory(), { tick }, pubsub),
+        'stalled process',
+        { maxSteps: 12, memory: { thread, resource: RESOURCE } },
+      );
+      const done = drain();
+      await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+      pubsub.stallNext = true;
+      await done;
+
+      // Nobody else took the thread, so the run takes its lapsed lease back and finishes.
+      expect(ticks).toBe(8);
+      expect(await output.text).toBe('stalled process done');
+      expect(await output.finishReason).not.toBe('aborted');
+    },
+    20_000,
+  );
+
   it('keeps a run going while its own retake holds the lease under its temporary token', async () => {
     const thread = `own-retake-fence-thread-${engine}`;
     const key = [RESOURCE, thread].join('\u0000');
