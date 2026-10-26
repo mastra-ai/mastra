@@ -1658,6 +1658,9 @@ export class DurableAgent<
       // caller re-passing the option.
       returnScorerData: workflowInput.options?.returnScorerData,
       mastra: this.#mastra,
+      // The live model below makes resolveRuntimeDependencies skip its rebuild,
+      // so processor hooks only get the agent if it is stored here.
+      agent: wrapped,
       model,
       modelList,
       tools,
@@ -5678,12 +5681,12 @@ export class DurableAgent<
         }
       }
 
-      // A pinned version comes back as a DurableAgent fork; hooks get the inner Agent.
+      // Hooks get the agent the output processors come from, not an entry's agent
+      // (which is the current version). A pinned version is a DurableAgent fork; unwrap it.
       streamAgent =
-        observedEntry?.agent ??
-        (isDurableAgentLike(processorAgent) && processorAgent.agent !== processorAgent
+        isDurableAgentLike(processorAgent) && processorAgent.agent !== processorAgent
           ? processorAgent.agent
-          : processorAgent);
+          : processorAgent;
       try {
         outputProcessors = (await processorAgent.listOutputProcessors(requestContext)) ?? [];
       } catch (error) {

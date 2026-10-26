@@ -21,7 +21,7 @@ import type { WorkflowRunState } from '../../../workflows/types';
 import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
-import { globalRunRegistry } from '../run-registry';
+import { globalRunRegistry, setRunRegistryEntry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 
 function createTextModel(text: string) {
@@ -83,17 +83,26 @@ describe('DurableAgent.observe() passes the inner Agent to output processors', (
       outputProcessors: [createRecorder(observedAgents)],
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub, cleanupTimeoutMs: 60_000 });
+    const storage = new InMemoryStore();
     new Mastra({
       agents: { 'observe-agent': durableAgent },
       logger: false,
-      storage: new InMemoryStore(),
+      storage,
       pubsub: cachingPubsub,
     });
+    // A cold observe rebuilds processors from the persisted snapshot, which terminal
+    // cleanup deletes once the run settles. Keep the rows, as another process would
+    // still see them, and wait for that cleanup so the test does not race it.
+    const workflows = (await storage.getStore('workflows'))!;
+    const deleteRows = dropRegistryEntry
+      ? vi.spyOn(workflows, 'deleteWorkflowRunById').mockResolvedValue(undefined)
+      : undefined;
 
     const result = await durableAgent.stream('Say hello', { maxSteps: 1 });
     await drain(result.fullStream);
 
     if (dropRegistryEntry) {
+      await vi.waitFor(() => expect(deleteRows).toHaveBeenCalled());
       durableAgent.runRegistry.cleanup(result.runId);
       globalRunRegistry.delete(result.runId);
     }
@@ -107,80 +116,92 @@ describe('DurableAgent.observe() passes the inner Agent to output processors', (
     for (const agent of observedAgents) expect(agent).toBe(baseAgent);
   });
 
-  it('a cold observe of a run pinned to another version sees the pinned inner Agent', async () => {
-    const store = new InMemoryStore();
-    const baseAgent = new Agent({
-      id: 'pinned-observe-agent',
-      name: 'Pinned Observe Agent',
-      instructions: 'You are a helpful agent.',
-      model: createTextModel('unused') as LanguageModelV2,
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-    const mastra = new Mastra({ agents: { pinnedObserveAgent: durableAgent }, storage: store, logger: false });
+  // An entry without a messageList (e.g. one a worker rebuilt in resolve-runtime) still
+  // takes the cold path; its agent is the current version, not the pinned one.
+  it.each([
+    ['no registry entry', false],
+    ['an agent-only registry entry', true],
+  ])(
+    'a cold observe of a run pinned to another version sees the pinned inner Agent (%s)',
+    async (_label, seedEntry) => {
+      const store = new InMemoryStore();
+      const baseAgent = new Agent({
+        id: 'pinned-observe-agent',
+        name: 'Pinned Observe Agent',
+        instructions: 'You are a helpful agent.',
+        model: createTextModel('unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const mastra = new Mastra({ agents: { pinnedObserveAgent: durableAgent }, storage: store, logger: false });
 
-    // Stands in for the editor: `Mastra.resolveVersionedAgent` returns the
-    // DurableAgent's `__fork()`, which wraps a fork of the inner Agent.
-    const observedAgents: unknown[] = [];
-    let pinnedInner: Agent | undefined;
-    vi.spyOn(mastra, 'resolveVersionedAgent').mockImplementation(async (agent, selector) => {
-      const fork = agent.__fork();
-      if ('versionId' in selector && selector.versionId) {
-        fork.__setRawConfig({ resolvedVersionId: selector.versionId });
-      }
-      fork.__markStoredVersionApplied();
-      pinnedInner = (fork as unknown as { agent: Agent }).agent;
-      vi.spyOn(fork, 'listOutputProcessors').mockResolvedValue([createRecorder(observedAgents)]);
-      return fork as typeof agent;
-    });
+      // Stands in for the editor: `Mastra.resolveVersionedAgent` returns the
+      // DurableAgent's `__fork()`, which wraps a fork of the inner Agent.
+      const observedAgents: unknown[] = [];
+      let pinnedInner: Agent | undefined;
+      vi.spyOn(mastra, 'resolveVersionedAgent').mockImplementation(async (agent, selector) => {
+        const fork = agent.__fork();
+        if ('versionId' in selector && selector.versionId) {
+          fork.__setRawConfig({ resolvedVersionId: selector.versionId });
+        }
+        fork.__markStoredVersionApplied();
+        pinnedInner = (fork as unknown as { agent: Agent }).agent;
+        vi.spyOn(fork, 'listOutputProcessors').mockResolvedValue([createRecorder(observedAgents)]);
+        return fork as typeof agent;
+      });
 
-    const runId = 'pinned-observe-run';
-    const memory = { threadId: 't-pinned-observe', resourceId: 'r-pinned-observe' };
-    const workflows = (await store.getStore('workflows'))!;
-    await workflows.persistWorkflowSnapshot({
-      workflowName: DurableStepIds.AGENTIC_LOOP,
-      runId,
-      resourceId: memory.resourceId,
-      snapshot: {
+      const runId = 'pinned-observe-run';
+      const memory = { threadId: 't-pinned-observe', resourceId: 'r-pinned-observe' };
+      const workflows = (await store.getStore('workflows'))!;
+      await workflows.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
         runId,
-        status: 'running',
-        value: {},
-        context: {
-          input: {
-            __workflowKind: 'durable-agent',
-            runId,
-            agentId: durableAgent.id,
-            agentVersionId: 'v1',
-            messageListState: { memoryInfo: memory },
-            state: memory,
+        resourceId: memory.resourceId,
+        snapshot: {
+          runId,
+          status: 'running',
+          value: {},
+          context: {
+            input: {
+              __workflowKind: 'durable-agent',
+              runId,
+              agentId: durableAgent.id,
+              agentVersionId: 'v1',
+              messageListState: { memoryInfo: memory },
+              state: memory,
+            },
           },
-        },
-        activePaths: [],
-        activeStepsPath: {},
-        suspendedPaths: {},
-        resumeLabels: {},
-        serializedStepGraph: [],
-        waitingPaths: {},
-        timestamp: Date.now(),
-      } as unknown as WorkflowRunState,
-    });
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          waitingPaths: {},
+          timestamp: Date.now(),
+        } as unknown as WorkflowRunState,
+      });
 
-    const observed = await durableAgent.observe(runId);
-    const chunks = drain(observed.fullStream);
-    await emitChunkEvent(pubsub, runId, {
-      type: 'text-delta',
-      runId,
-      from: 'AGENT',
-      payload: { id: 'text-1', text: 'Hi' },
-    } as any);
-    await emitFinishEvent(pubsub, runId, {
-      output: { text: 'Hi', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
-      stepResult: { reason: 'stop', warnings: [], isContinued: false },
-    });
-    await chunks;
+      if (seedEntry) {
+        setRunRegistryEntry(runId, { tools: {}, model: await baseAgent.getModel(), agent: baseAgent }, mastra);
+      }
 
-    expect(pinnedInner).toBeInstanceOf(Agent);
-    expect(pinnedInner).not.toBe(baseAgent);
-    expect(observedAgents.length).toBeGreaterThan(0);
-    for (const agent of observedAgents) expect(agent).toBe(pinnedInner);
-  });
+      const observed = await durableAgent.observe(runId);
+      const chunks = drain(observed.fullStream);
+      await emitChunkEvent(pubsub, runId, {
+        type: 'text-delta',
+        runId,
+        from: 'AGENT',
+        payload: { id: 'text-1', text: 'Hi' },
+      } as any);
+      await emitFinishEvent(pubsub, runId, {
+        output: { text: 'Hi', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+        stepResult: { reason: 'stop', warnings: [], isContinued: false },
+      });
+      await chunks;
+
+      expect(pinnedInner).toBeInstanceOf(Agent);
+      expect(pinnedInner).not.toBe(baseAgent);
+      expect(observedAgents.length).toBeGreaterThan(0);
+      for (const agent of observedAgents) expect(agent).toBe(pinnedInner);
+    },
+  );
 });
