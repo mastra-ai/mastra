@@ -35,12 +35,6 @@ import {
 import type { ObservabilityStorage, TraceQueryTenantScope } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuckDBConnection } from '../../db/index';
-import {
-  spanAggregateFeatures,
-  spanQueryFeatures,
-  threadQueryFeatures,
-  timeToFirstChunkFeatures,
-} from '../../features';
 import { DuckDBStore } from '../../index';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import { aggregateTraces as aggregateDuckDBTraces } from './trace-aggregate';
@@ -48,38 +42,6 @@ import type { ObservabilityStorageDuckDB } from './index';
 import { ObservabilityStorageDuckDB as ConcreteObservabilityStorageDuckDB } from './index';
 
 let sharedSuiteStore: DuckDBStore | undefined;
-
-/**
- * Conditional feature groups come from features.ts so the expectation follows the
- * core version under test instead of drifting each time a group is added.
- */
-function expectedObservabilityFeatures({ deltaPolling }: { deltaPolling: boolean }): string[] {
-  return [
-    'metrics',
-    'logs',
-    'entity-type-discovery',
-    'entity-name-discovery',
-    'service-name-discovery',
-    'environment-discovery',
-    'tag-discovery',
-    'metric-discovery',
-    ...(deltaPolling ? ['delta-polling'] : []),
-    'trace-query',
-    'trace-aggregate',
-    ...spanQueryFeatures,
-    ...spanAggregateFeatures,
-    ...threadQueryFeatures,
-    'trace-query-root-duration',
-    'trace-query-discovery',
-    'thread-query',
-    'trace-query-tenant-scope',
-    'feedback',
-    'trace-query-context-ids',
-    ...timeToFirstChunkFeatures,
-    'trace-query-root-span-fields',
-    'trace-query-root-entity-id',
-  ];
-}
 
 createObservabilityVNextTests({
   capabilities: {
@@ -177,11 +139,62 @@ describe('ObservabilityStorageDuckDB', () => {
 
     try {
       coreFeatures.add('observability-delta-polling');
-      expect(storage.getFeatures()).toEqual(expectedObservabilityFeatures({ deltaPolling: true }));
+      expect(storage.getFeatures()).toEqual([
+        'metrics',
+        'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
+        'delta-polling',
+        'trace-query',
+        'trace-aggregate',
+        'span-query',
+        'span-query-context-fields',
+        'span-aggregate',
+        'thread-query-rows',
+        'trace-query-root-duration',
+        'trace-query-discovery',
+        'thread-query',
+        'trace-query-tenant-scope',
+        'feedback',
+        'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-time-to-first-chunk-sort',
+        'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
+      ]);
 
       coreFeatures.delete('observability-delta-polling');
 
-      expect(storage.getFeatures()).toEqual(expectedObservabilityFeatures({ deltaPolling: false }));
+      expect(storage.getFeatures()).toEqual([
+        'metrics',
+        'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
+        'trace-query',
+        'trace-aggregate',
+        'span-query',
+        'span-query-context-fields',
+        'span-aggregate',
+        'thread-query-rows',
+        'trace-query-root-duration',
+        'trace-query-discovery',
+        'thread-query',
+        'trace-query-tenant-scope',
+        'feedback',
+        'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-time-to-first-chunk-sort',
+        'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
+      ]);
       await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
         'This storage provider does not support observability delta polling',
       );
@@ -199,10 +212,61 @@ describe('ObservabilityStorageDuckDB', () => {
 
     try {
       coreFeatures.add('observability-delta-polling');
-      expect(lazyStore.observability.getFeatures()).toEqual(expectedObservabilityFeatures({ deltaPolling: true }));
+      expect(lazyStore.observability.getFeatures()).toEqual([
+        'metrics',
+        'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
+        'delta-polling',
+        'trace-query',
+        'trace-aggregate',
+        'span-query',
+        'span-query-context-fields',
+        'span-aggregate',
+        'thread-query-rows',
+        'trace-query-root-duration',
+        'trace-query-discovery',
+        'thread-query',
+        'trace-query-tenant-scope',
+        'feedback',
+        'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-time-to-first-chunk-sort',
+        'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
+      ]);
 
       coreFeatures.delete('observability-delta-polling');
-      expect(lazyStore.observability.getFeatures()).toEqual(expectedObservabilityFeatures({ deltaPolling: false }));
+      expect(lazyStore.observability.getFeatures()).toEqual([
+        'metrics',
+        'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
+        'trace-query',
+        'trace-aggregate',
+        'span-query',
+        'span-query-context-fields',
+        'span-aggregate',
+        'thread-query-rows',
+        'trace-query-root-duration',
+        'trace-query-discovery',
+        'thread-query',
+        'trace-query-tenant-scope',
+        'feedback',
+        'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-time-to-first-chunk-sort',
+        'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
+      ]);
     } finally {
       coreFeatures.clear();
       for (const feature of originalFeatures) {
