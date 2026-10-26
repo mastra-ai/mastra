@@ -62,7 +62,7 @@ const MoneySchema = z.number().int().safe();
 export const DecisionReasonSchema = z.object({
   code: z.string(),
   message: z.string(),
-  evidence: z.record(z.unknown()).optional(),
+  evidence: z.record(z.string(), z.unknown()).optional(),
 });
 const StepDecisionSchema = z.object({
   step: z.string(),

@@ -14,18 +14,18 @@
     "check": "npm run typecheck && npm test"
   },
   "dependencies": {
-    "@mastra/core": "1.60.0",
-    "@mastra/libsql": "1.21.0",
-    "@mastra/mcp": "1.17.0",
-    "@mastra/memory": "1.27.0",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
     "currency-codes": "2.2.0",
     "decimal.js": "10.6.0",
     "dotenv": "16.6.1",
-    "zod": "3.25.76"
+    "zod": "^4.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "mastra": "1.25.1",
+    "mastra": "latest",
     "typescript": "^5.9.3"
   },
   "engines": {
