@@ -62,43 +62,12 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "Qwen/Qwen3.6-35B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.8-27B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
-      {
-        "type": "toggle"
-      }
-    ],
     "deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "toggle"
       }
@@ -108,7 +77,38 @@
         "type": "toggle"
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+    "ibm-granite/granite-4.2-8b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "reflection/Beam-1.0-501B-A23B": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "Qwen/Qwen3.8-27B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.6-35B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": [
       {
         "type": "toggle"
       }
@@ -123,15 +123,15 @@
         "type": "toggle"
       }
     ],
-    "ibm-granite/granite-4.2-8b": [
+    "zai-org/GLM-5.2": [
       {
         "type": "toggle"
       }
     ],
-    "reflection/Beam-1.0-501B-A23B": [
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ]
   }

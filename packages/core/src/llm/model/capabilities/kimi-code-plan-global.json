@@ -14,10 +14,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "k3-256k": [
+    "k3.1-pro-highspeed": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "k3.1-pro": [
@@ -26,10 +26,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "k3.1-pro-highspeed": [
+    "k3-256k": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }
