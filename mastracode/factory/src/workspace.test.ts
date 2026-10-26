@@ -467,15 +467,15 @@ describe('bundled Factory skill assets', () => {
     // present only in the pending table cannot satisfy them.
     const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('### Understanding'));
     const handoff = triage.slice(markerIndex);
-    // The verdict leads with a severity-coloured alert carrying type and route,
-    // then a Severity/Confidence/Effort/Impact scorecard, one-line reasons, and
+    // The verdict leads with a severity-coloured alert headlined by severity,
+    // type and route, then one line each for confidence, effort, impact and
     // the next step.
+    const severityIndex = handoff.indexOf('<Severity>');
     const typeIndex = handoff.indexOf('<Type>');
     const routeIndex = handoff.indexOf('<Route>');
-    const severityIndex = handoff.indexOf('**Severity**');
-    const confidenceIndex = handoff.indexOf('**Confidence**');
-    const effortIndex = handoff.indexOf('**Effort**');
-    const impactIndex = handoff.indexOf('**Impact**');
+    const confidenceIndex = handoff.indexOf('**Confidence:');
+    const effortIndex = handoff.indexOf('**Effort:');
+    const impactIndex = handoff.indexOf('**Impact:');
     const nextStepIndex = handoff.indexOf('**Next step:**');
     const understandingIndex = handoff.indexOf('### Understanding');
     const assumptionsIndex = handoff.indexOf('### Assumptions');
@@ -484,10 +484,10 @@ describe('bundled Factory skill assets', () => {
     // GitHub renders an empty header row as a blank band above the table.
     expect(triage).not.toMatch(/^\|\s+\|\s+\|$/m);
     expect(markerIndex).toBeGreaterThanOrEqual(0);
-    expect(typeIndex).toBeGreaterThan(0);
+    expect(severityIndex).toBeGreaterThan(0);
+    expect(typeIndex).toBeGreaterThan(severityIndex);
     expect(routeIndex).toBeGreaterThan(typeIndex);
-    expect(severityIndex).toBeGreaterThan(routeIndex);
-    expect(confidenceIndex).toBeGreaterThan(severityIndex);
+    expect(confidenceIndex).toBeGreaterThan(routeIndex);
     expect(effortIndex).toBeGreaterThan(confidenceIndex);
     expect(impactIndex).toBeGreaterThan(effortIndex);
     expect(nextStepIndex).toBeGreaterThan(impactIndex);

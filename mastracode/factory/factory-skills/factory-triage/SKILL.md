@@ -32,7 +32,8 @@ At the end of this phase, publish a small summary to the source issue as stated 
 <!-- mastra-factory-triage -->
 
 > [!NOTE]
-> **<Type> → triage in progress.** <one-sentence classification>
+> **Triage in progress**
+> <plain-language summary>
 ```
 
 For GitHub issues, add `status: needs triage` only if no `status:` label is present, using `gh issue edit "$ISSUE" --add-label "status: needs triage"`. For Linear issues, skip this GitHub-only label mutation.
@@ -96,18 +97,13 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 <!-- mastra-factory-triage -->
 
 > [!<CAUTION|WARNING|NOTE>]
-> **<Type> → <Route>.** <one-sentence classification>
+> **<Severity>-severity <Type> · <Route>**
+> <plain-language summary>
 
-| Severity | Confidence | Effort  | Impact  |
-| -------- | ---------- | ------- | ------- |
-| <level>  | <level>    | <level> | <level> |
-
-- **Severity** — <short reason>
-- **Confidence** — <short reason>
-- **Effort** — <short implementation-scope reason>
-- **Impact** — <short user/business-consequence reason>
-
-**Next step:** <concise maintainer-facing next action>
+- **Confidence: <level>** — <evidence>
+- **Effort: <level>** — <scope>
+- **Impact: <level>** — <who is affected and how>
+- **Next step:** <one action>
 
 ### Understanding
 
@@ -128,11 +124,11 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 
 Fill the placeholders as follows:
 
-- `<Type>` is one of: bug, feature request, docs, question/support, maintenance, duplicate, resolved, invalid, spam, out-of-scope, other. Pass the same value as `triageType`.
-- `<Route>` is one of: Plan fix, Await approval, Ask author for info, Close as duplicate/resolved/invalid/spam/out-of-scope, Answer provided / close, No transition / refresh, Other.
-- `<level>` is the plain lowercase rating from the guides below.
+- `<Severity>` is the capitalized severity level. `<Type>` is one of: bug, feature request, docs, question/support, maintenance, duplicate, resolved, invalid, spam, out-of-scope, other; pass the same value as `triageType`. `<Route>` is one of: Plan fix, Await approval, Ask author for info, Close as duplicate/resolved/invalid/spam/out-of-scope, Answer provided / close, No transition / refresh, Other.
 - The alert type follows severity: `CAUTION` for critical or high, `WARNING` for medium, `NOTE` for low.
-- Use no emoji. Keep each reason to one line and put detail in Understanding.
+- `<plain-language summary>` is one sentence of at most 25 words saying what goes wrong for the user. Describe the symptom, not the mechanism; no internal identifiers. The mechanism belongs in Understanding.
+- `<level>` is the lowercase rating from the guides below. Each reason after it is at most 12 words.
+- Use no emoji and no tables.
 
 Severity guide:
 
