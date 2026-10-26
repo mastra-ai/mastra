@@ -441,28 +441,30 @@ export class MessageList {
   /**
    * Attribute system messages stored from now on to `span`, until `endSystemOrigin(span)`.
    * Several origins can be active at once (parallel processors); see `resolveSystemOrigin`.
+   * @internal
    */
   public startSystemOrigin(span?: AnySpan): void {
     if (span?.isValid) this.systemOrigins.add(span);
   }
 
+  /** @internal */
   public endSystemOrigin(span?: AnySpan): void {
     if (span) this.systemOrigins.delete(span);
   }
 
-  /** Id of the span that added the system message this prompt message was built from. */
+  /** Id of the span that added the system message this prompt message was built from. @internal */
   public getPromptMessageSpanId(message: object): string | undefined {
     return this.promptMessageSpanIds.get(message);
   }
 
-  /** Keep a prompt message's origin on the copy that replaced it, e.g. when guidance is appended at request time. */
+  /** Keep a prompt message's origin on the copy that replaced it, e.g. when guidance is appended at request time. @internal */
   public inheritPromptMessageSpanId(from: object | undefined, to: object | undefined): void {
     if (!from || !to || from === to) return;
     const spanId = this.promptMessageSpanIds.get(from);
     if (spanId) this.promptMessageSpanIds.set(to, spanId);
   }
 
-  /** Id of the span that added this stored system message. */
+  /** Id of the span that added this stored system message. @internal */
   public getSystemMessageSpanId(message: CoreMessageV4): string | undefined {
     return this.systemMessageSpanIds.get(message);
   }

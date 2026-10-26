@@ -13,6 +13,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
+import { MockMemory } from '@mastra/core/memory';
 import { SpanType } from '@mastra/core/observability';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
@@ -598,6 +599,47 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
         expect(systemMessage(inferences[1], 'Untagged step 1').spanId).toBe(idOf(step1Span));
         expect(systemMessage(inferences[1], 'Tagged stable').spanId).toBe(idOf(step0Span));
         expect(systemMessage(inferences[1], 'Base instructions').spanId).toBe(idOf(agentRun));
+      },
+    );
+
+    it.each(['durable', 'evented'] as const)(
+      '%s agent: leaves system-role input messages unattributed, like the non-durable agent',
+      async variant => {
+        const agent = new Agent({
+          id: 'a',
+          name: 'a',
+          instructions: 'Base instructions',
+          model: textModel('Hello') as any,
+        });
+        const { wrapped } = buildMastra(testExporter, agent, variant);
+        const res = await wrapped.stream([
+          { role: 'system', content: 'System from input' },
+          { role: 'user', content: 'hi' },
+        ]);
+        await res.output.consumeStream();
+        await settle(testExporter);
+        res.cleanup?.();
+
+        const [inference] = testExporter.getSpansByType('model_inference' as any);
+        const [agentRun] = testExporter.getSpansByType('agent_run' as any);
+        expect(systemMessage(inference, 'Base instructions').spanId).toBe(idOf(agentRun));
+        expect(systemMessage(inference, 'System from input').spanId).toBeUndefined();
+      },
+    );
+
+    it.each(['durable', 'evented'] as const)(
+      '%s agent: rejects invalid input before saving a thread or opening AGENT_RUN',
+      async variant => {
+        const memory = new MockMemory();
+        const agent = new Agent({ id: 'a', name: 'a', instructions: 'Base', model: textModel('Hello') as any, memory });
+        const { wrapped } = buildMastra(testExporter, agent, variant);
+
+        await expect(
+          wrapped.stream([{ role: 'banana', content: 42 }], { memory: { thread: 't-invalid', resource: 'r1' } }),
+        ).rejects.toThrow();
+
+        expect(await memory.getThreadById({ threadId: 't-invalid' })).toBeNull();
+        expect(testExporter.getIncompleteSpans()).toHaveLength(0);
       },
     );
   });
