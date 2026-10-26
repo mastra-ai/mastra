@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added `agentOverrides` to experiments so you can try different instructions, a different model, or different execution options on an agent without editing it in code or in the editor. The tweak is applied to each call the experiment makes, so the registered agent and other running experiments are unaffected. The experiment's `metadata.agentOverrides` and each run's trace record the exact tweak, so runs can be compared.
+Added `agentOverrides` to experiments so you can try different instructions, a different model, or different execution options on an agent without editing it in code or in the editor. The tweak is applied to each call the experiment makes, so the registered agent and other running experiments are unaffected. The experiment's `metadata.agentOverrides` records the exact tweak, so runs can be compared. Each run's trace records the model and options, and flags overridden instructions with `agentInstructionsOverridden: true` instead of copying the prompt; the prompt itself is on the agent run span's `instructions` attribute.
 
 ```ts
 await dataset.startExperiment({

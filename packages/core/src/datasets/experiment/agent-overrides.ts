@@ -59,6 +59,19 @@ export function withAgentOverridesMetadata(
   return agentOverrides ? { ...metadata, agentOverrides } : metadata;
 }
 
+/**
+ * Overrides as recorded on each item's trace. The instructions text is left out (it is already on the
+ * experiment and on the AGENT_RUN span's `instructions` attribute), replaced by a flag.
+ */
+export function agentOverridesTraceMetadata(overrides: ExperimentAgentOverrides | undefined) {
+  if (!overrides) return {};
+  const { instructions, ...rest } = overrides;
+  return {
+    ...(Object.keys(rest).length ? { agentOverrides: rest } : {}),
+    ...(instructions !== undefined ? { agentInstructionsOverridden: true } : {}),
+  };
+}
+
 /** Maps overrides to per-call `agent.generate()` options. Only the allow-listed option keys are forwarded. */
 export function toGenerateOptions(overrides: ExperimentAgentOverrides) {
   const { modelSettings, maxSteps, toolChoice, activeTools } = overrides.defaultOptions ?? {};

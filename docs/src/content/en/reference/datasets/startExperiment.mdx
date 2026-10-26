@@ -116,7 +116,7 @@ const summary = await dataset.startExperiment({
     type: 'ExperimentAgentOverrides',
     isOptional: true,
     description:
-      "Config tweaks for the agent target, applied to each call the experiment makes. The registered agent and other experiments are unaffected. Accepts `instructions` (a string that replaces the agent's instructions), `model` (`{ provider, name }`, resolved as `provider/name`), and `defaultOptions` with `modelSettings`, `maxSteps`, `toolChoice`, and `activeTools`. Applies only when `targetType` is `'agent'`. If you also pass `agentModel`, `model` must name the same model. The fields match a stored agent version's config. The experiment's `metadata` and each run's trace metadata record the object as `agentOverrides`, including the model from `agentModel`.",
+      "Config tweaks for the agent target, applied to each call the experiment makes. The registered agent and other experiments are unaffected. Accepts `instructions` (a string that replaces the agent's instructions), `model` (`{ provider, name }`, resolved as `provider/name`), and `defaultOptions` with `modelSettings`, `maxSteps`, `toolChoice`, and `activeTools`. Applies only when `targetType` is `'agent'`. If you also pass `agentModel`, `model` must name the same model. The fields match a stored agent version's config. The experiment's `metadata` records the object as `agentOverrides`, including the model from `agentModel`. Each run's trace metadata records the same object without `instructions`, plus `agentInstructionsOverridden: true` when instructions were overridden; the tweaked prompt is on the agent run span's `instructions` attribute.",
   },
   {
     name: 'scorers',

@@ -284,7 +284,7 @@ describe('Feature: tweak an agent per experiment without changing it', () => {
       expect(experiment?.metadata).toEqual({ owner: 'evals', agentOverrides: overrides });
     });
 
-    it('tags every item trace with the overrides', async () => {
+    it('tags every item trace with the overrides, flagging instructions instead of copying the prompt', async () => {
       // Given an experiment started with agentOverrides
       const { mastra, dataset } = await setup();
       const generate = vi.spyOn(mastra.getAgentById('eval-agent'), 'generate');
@@ -296,12 +296,14 @@ describe('Feature: tweak an agent per experiment without changing it', () => {
         agentOverrides: overrides,
       });
 
-      // Then every item's trace metadata carries the overrides
+      // Then every item's trace metadata carries the overrides without the prompt text,
+      // which lives once on the experiment and on the AGENT_RUN span's instructions attribute
       expect(generate).toHaveBeenCalledTimes(2);
       for (const [, options] of generate.mock.calls) {
         expect(options?.tracingOptions?.metadata).toEqual({
           experimentId: summary.experimentId,
-          agentOverrides: overrides,
+          agentOverrides: { model: overrides.model, defaultOptions: overrides.defaultOptions },
+          agentInstructionsOverridden: true,
         });
       }
     });
@@ -332,7 +334,10 @@ describe('Feature: tweak an agent per experiment without changing it', () => {
       const experiment = await dataset.getExperiment({ experimentId: summary.experimentId });
       expect(experiment?.metadata).toEqual({ agentModel: 'eval-test/fake/override-model', agentOverrides: expected });
       for (const [, options] of generate.mock.calls) {
-        expect(options?.tracingOptions?.metadata).toMatchObject({ agentOverrides: expected });
+        expect(options?.tracingOptions?.metadata).toMatchObject({
+          agentOverrides: { model: expected.model },
+          agentInstructionsOverridden: true,
+        });
       }
     });
 

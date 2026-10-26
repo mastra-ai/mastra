@@ -12,7 +12,7 @@ import type { TargetType } from '../../storage/types';
 import type { MastraToolInvocationOptions, ToolHookContext, ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
 import { agentModelLabel } from './agent-model';
-import { toGenerateOptions } from './agent-overrides';
+import { agentOverridesTraceMetadata, toGenerateOptions } from './agent-overrides';
 import type { ExperimentAgentOverrides } from './agent-overrides';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 import { ToolMockMatcher } from './tool-mocks';
@@ -327,7 +327,7 @@ async function executeAgent(
           metadata: {
             ...(experimentId ? { experimentId } : {}),
             ...(agentModel ? { agentModel: agentModelLabel(agentModel) } : {}),
-            ...(agentOverrides ? { agentOverrides } : {}),
+            ...agentOverridesTraceMetadata(agentOverrides),
           },
         }
       : {}),
