@@ -11,7 +11,12 @@ import { useLocation } from 'react-router';
 
 import { MODEL_DEFAULTS_ANCHORS } from '../../../settingsSections';
 import { IconTile } from './IconTile';
-import { MODEL_DEFAULTS_ICONS, MODEL_DEFAULTS_LABELS, MODEL_DEFAULTS_TONES } from './model-routes';
+import {
+  MODEL_DEFAULTS_ICONS,
+  MODEL_DEFAULTS_LABELS,
+  MODEL_DEFAULTS_TONES,
+  MODEL_DEFAULTS_UNUSED_NOTE,
+} from './model-routes';
 import type { ModelDefaults } from './model-routes';
 
 export function DefaultsCard({
@@ -44,7 +49,7 @@ export function DefaultsCard({
                 </Txt>
                 {!inUse && (
                   <Txt variant="meta" tone="muted">
-                    Not used in this scope
+                    {MODEL_DEFAULTS_UNUSED_NOTE}
                   </Txt>
                 )}
               </div>

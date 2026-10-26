@@ -68,6 +68,7 @@ describe('ModelRoutingSection', () => {
     const { client } = renderRoutingSection();
 
     await waitFor(() => expect(routing('Personal')).toBeChecked());
+    expect(within(region('Factory defaults')).getByText('Not used in this scope')).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Factory default model' })).not.toBeInTheDocument();
 
     await user.click(routing('Factory'));

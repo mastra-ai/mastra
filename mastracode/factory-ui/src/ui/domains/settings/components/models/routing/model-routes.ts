@@ -19,6 +19,8 @@ export const MODEL_DEFAULTS_LABELS: Record<ModelDefaults, string> = {
   factory: 'Factory defaults',
 };
 
+export const MODEL_DEFAULTS_UNUSED_NOTE = 'Not used in this scope';
+
 export const MODEL_DEFAULTS_ICONS: Record<ModelDefaults, LucideIcon> = {
   personal: CircleUserRound,
   factory: Building2,
