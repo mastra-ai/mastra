@@ -85,7 +85,7 @@ export function createFactory(storage: MastraFactoryConfig['storage']) {
 }
 ```
 
-Handlers return one typed decision or `undefined`. Supported sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Each Factory instance resolves handlers from its installed definitions. To replace Work or Review, disable both default boards and install a board with the same ID. You can reinstall the exported `workBoard` and `reviewBoard` definitions unchanged, or use their phases as the starting point for a customized definition:
+Handlers return one typed decision or `undefined`. Supported sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Each Factory instance resolves handlers from its installed definitions. To replace Work, disable the default boards and install a board with the same ID. You can reinstall the exported `workBoard` definition unchanged, or use its phases as the starting point for a customized definition. The id `review` is retired (pull requests are reviewed on Work) and is rejected:
 
 ```typescript
 import { MastraFactory, workBoard } from '@mastra/factory';
@@ -298,7 +298,7 @@ const releaseBoard = defineBoard({
 
 Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with roles `triage`, `plan`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with role `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
 
-Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the installed board's declarations; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
+Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the installed board's declarations; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one, and rows naming the retired `review` board, are read as Work.
 
 Unknown semantics fail closed. When the board is not installed or the phase is not declared: external-event transitions ask for consent, no sweep or cleanup treats the card as finished, and a rule-started run from rest with no lane for its role is rejected.
 
@@ -476,7 +476,8 @@ new MastraFactory({
 ```
 
 - A phase runner is either `{ type: 'workflow', workflowId }`, naming a code runner (`factory-triage`, `factory-plan`, `factory-build`, `factory-review`, `factory-complete`, or one from `runners`), or `{ type: 'agent', agentId, skill?, instructions?, seat? }`, which starts the skill (or sends the instructions) in the card's `seat` session when a card enters the phase. Skills come from the repository (`.mastracode/skills`, `.claude/skills`, `.agents/skills`) or the app's `factory-skills/` folder.
-- Intake routes place new cards. Factory tries them in order and uses the first whose `when` condition matches the new item (`source.kind`, `source.integration`, `source.repository`, `item.labels`, `item.authorTrusted`, …); a route names a `boardKey` and an optional entry `phaseKey` (the board's first phase otherwise). The default sends pull requests to Work › Triage and everything else to Work › Intake.
+- The Work board keeps its phase keys (`intake`, `triage`, `planning`, `execute`, `review`, `done`, `canceled`) and their kinds, and can't be removed or re-keyed: integrations and the transition policy move cards by them. Its next phases may narrow moves but must keep the ones Factory makes itself (for example `execute` → `review` when a pull request opens, and any phase → `done`/`canceled` when its source closes).
+- Intake routes place new cards. Factory tries them in order and uses the first whose `when` condition matches the new item (`source.kind`, `source.integration`, `source.repository`, `item.labels`, `item.authorTrusted`, …); a route names a `boardKey` and an optional entry `phaseKey` (the board's first phase otherwise). The default sends pull requests to Work › Triage and everything else to Work › Intake. Pull requests always stay on Work and only follow a route that has a condition and names Work's `intake`, `triage` or `review` phase; routes written for issues leave them in Triage.
 - Event routes move existing cards when their source changes: `pull_request.opened`, `.merged`, `.closed`, `.review_requested`, `.updated` and `issue.closed`, each with optional `fromPhases` and a `when` condition (for example `item.hasOtherOpenPullRequest`, `issue.stateReason`). The first match sends the card to `toPhaseKey`; with no match the card stays where it is. Integration checks (trusted actor, recorded review verdict) still run first, so a route cannot move a card the integration would not.
 - Conditions are `{ operator: 'AND' | 'OR', conditions: [{ field, operator, value }] }`, nested at most three levels deep, over a fixed list of fields.
 - `boardConfig` is checked at construction: an invalid board, an unknown runner id or a board key also used in `boards` throws. Saving from Settings rejects unknown runner ids the same way.

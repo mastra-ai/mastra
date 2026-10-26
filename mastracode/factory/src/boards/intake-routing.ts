@@ -14,6 +14,19 @@ export interface IntakeRouteTarget {
  * installed. A route without a phase (or naming a phase the board lacks) lands
  * the card on the board's initial phase.
  */
+/** The Work phases a pull request card can start in; from anywhere else it could never be reviewed. */
+export const PULL_REQUEST_ENTRY_PHASES: readonly string[] = ['intake', 'triage', 'review'];
+
+/**
+ * The routes that may place a pull request: a condition, the Work board and an explicit entry phase.
+ * Routes written for issues (no condition, or another phase) leave pull requests in Work › Triage.
+ */
+export function pullRequestIntakeRoutes(routes: readonly StoredIntakeRoute[]): StoredIntakeRoute[] {
+  return routes.filter(
+    route => route.when && route.boardKey === 'work' && PULL_REQUEST_ENTRY_PHASES.includes(route.phaseKey ?? ''),
+  );
+}
+
 export function matchIntakeRoute(
   routes: readonly StoredIntakeRoute[],
   facts: RuleFacts,

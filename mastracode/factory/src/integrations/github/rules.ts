@@ -10,7 +10,7 @@ import {
   workItemPhaseSemantics,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
-import { matchIntakeRoute } from '../../boards/intake-routing.js';
+import { matchIntakeRoute, pullRequestIntakeRoutes } from '../../boards/intake-routing.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import type { BoardResolver } from '../../boards/resolver.js';
 import { currentBoardId } from '../../boards/semantics.js';
@@ -430,11 +430,12 @@ export class GithubRules {
       ...(pullRequest ? { 'item.draft': pullRequest.draft, 'item.author': pullRequest.author } : {}),
     };
     const routed = matchIntakeRoute(
-      stored.filter(route => route.when),
+      pullRequest ? pullRequestIntakeRoutes(stored) : stored.filter(route => route.when),
       facts,
       boards,
     );
     if (routed) return { board: routed.board, initialPhase: routed.phase };
+    if (pullRequest) return undefined;
     const fallback = () => {
       const target = matchIntakeRoute(
         stored.filter(route => !route.when),
@@ -444,8 +445,7 @@ export class GithubRules {
       return target ? { board: target.board, initialPhase: target.phase } : undefined;
     };
     const intake = this.options.intake;
-    // Label routes and repository bindings only ever placed issues.
-    if (!intake || pullRequest) return fallback();
+    if (!intake) return fallback();
     if (labels.length > 0) {
       const routes = await intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
       const route = resolveIntakeLabelRoute(routes, labels);

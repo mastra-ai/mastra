@@ -3291,7 +3291,11 @@ describe('GithubRules label routes', () => {
   }
 
   describe('with stored intake routes', () => {
-    async function setupStored(storedRoute: boolean, legacyRoute?: string) {
+    async function setupStored(
+      storedRoute: boolean,
+      legacyRoute?: string,
+      extraRoutes: (typeof defaultProjectBoardConfig)['intakeRoutes'] = [],
+    ) {
       const base = await setupRoutes(legacyRoute);
       const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
       await base.boardDefinitions.saveConfig({
@@ -3313,6 +3317,7 @@ describe('GithubRules label routes', () => {
                   },
                 ]
               : []),
+            ...extraRoutes,
             ...defaultProjectBoardConfig.intakeRoutes,
           ],
         },
@@ -3370,18 +3375,47 @@ describe('GithubRules label routes', () => {
       );
     });
 
-    it('files a pull request where a stored intake route says, and in Work › Triage by default', async () => {
-      const { service, workItems, project } = await setupStored(true);
-      const routed = pullRequest('opened', 'stored-route-pr-hotfix');
-      (routed.payload.pull_request as Record<string, unknown>).labels = [{ name: 'hotfix' }];
-      await expect(service.ingest(routed)).resolves.toEqual({ status: 'committed' });
-      const plain = pullRequest('opened', 'stored-route-pr-plain');
-      Object.assign(plain.payload.pull_request, { number: 18, html_url: 'https://github.com/acme/repo/pull/18' });
-      await expect(service.ingest(plain)).resolves.toEqual({ status: 'committed' });
+    it('files a pull request where a pull request route says, ignoring routes written for issues', async () => {
+      const draftsWait = {
+        when: {
+          operator: 'AND' as const,
+          conditions: [
+            { field: 'source.kind', operator: 'equals' as const, value: 'pull_request' },
+            { field: 'item.draft', operator: 'equals' as const, value: true },
+          ],
+        },
+        boardKey: 'work',
+        phaseKey: 'intake',
+      };
+      // The hotfix route sends issues to Planning; a pull request can't start there.
+      const { service, workItems, project } = await setupStored(true, undefined, [draftsWait]);
+      const opened = (deliveryId: string, number: number, extra: Record<string, unknown>) => {
+        const event = pullRequest('opened', deliveryId);
+        Object.assign(event.payload.pull_request, {
+          number,
+          html_url: `https://github.com/acme/repo/pull/${number}`,
+          ...extra,
+        });
+        return event;
+      };
+      for (const event of [
+        opened('pr-hotfix', 17, { labels: [{ name: 'hotfix' }] }),
+        opened('pr-draft', 18, { draft: true }),
+        opened('pr-plain', 19, {}),
+      ]) {
+        await expect(service.ingest(event)).resolves.toEqual({ status: 'committed' });
+      }
       const decisions = (await workItems.listDeferredDecisions('org-1', project.id)).map(record => record.decision);
-      expect(decisions).toEqual([
-        expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'github-pr', board: 'work', stage: 'planning' }),
-        expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'github-pr', board: 'work', stage: 'triage' }),
+      expect(
+        decisions.map(decision =>
+          'source' in decision && 'board' in decision && 'stage' in decision
+            ? [decision.source, decision.board, decision.stage]
+            : decision.type,
+        ),
+      ).toEqual([
+        ['github-pr', 'work', 'triage'],
+        ['github-pr', 'work', 'intake'],
+        ['github-pr', 'work', 'triage'],
       ]);
     });
 

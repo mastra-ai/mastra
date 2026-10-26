@@ -1352,7 +1352,7 @@ describe('FactoryTransitionService', () => {
           {
             ...workBoardTemplate,
             phases: workBoardTemplate.phases.map(phase =>
-              phase.key === 'planning' ? { ...phase, nextPhases: ['execute'] } : phase,
+              phase.key === 'planning' ? { ...phase, nextPhases: ['execute', 'done', 'canceled'] } : phase,
             ),
           },
         ],
@@ -1365,16 +1365,16 @@ describe('FactoryTransitionService', () => {
       resolver: new BoardResolver({ codeBoards: createBoardRegistry(), storage: seeded.boardDefinitions }),
     });
     const reason =
-      'The Work board does not allow moving from planning to done. Next stages declared from planning: execute.';
+      'The Work board does not allow moving from planning to review. Next stages declared from planning: execute, done, canceled.';
 
     expect(
       await service.transition({
-        ...request(item, { stage: 'done' }),
+        ...request(item, { stage: 'review' }),
         actor: { type: 'agent', bindingId: 'planner', role: 'plan' },
         ingress: { type: 'agent', identity: 'agent-done' },
       }),
     ).toMatchObject({ status: 'rejected', code: 'invalid_transition', reason });
-    expect(await service.transition(request(item, { stage: 'done', identity: 'person-done' }))).toMatchObject({
+    expect(await service.transition(request(item, { stage: 'review', identity: 'person-done' }))).toMatchObject({
       status: 'rejected',
       code: 'invalid_transition',
       reason,
@@ -1383,7 +1383,7 @@ describe('FactoryTransitionService', () => {
 
     // The code Work board, which every unseeded project still runs, allows the same move.
     const unseeded = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
-    expect(await unseeded.transition(request(item, { stage: 'done', identity: 'code-done' }))).toMatchObject({
+    expect(await unseeded.transition(request(item, { stage: 'review', identity: 'code-done' }))).toMatchObject({
       status: 'accepted',
     });
   });

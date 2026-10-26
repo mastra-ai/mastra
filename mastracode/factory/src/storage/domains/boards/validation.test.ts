@@ -36,6 +36,32 @@ describe('stored board validation', () => {
     );
   });
 
+  it("keeps the kinds of Work's phases and leaves their moves to Factory", () => {
+    const [work] = defaultProjectBoardConfig.boards;
+    const edited = {
+      ...defaultProjectBoardConfig,
+      boards: [
+        {
+          ...work,
+          phases: work.phases.map(phase =>
+            phase.key === 'review'
+              ? { ...phase, kind: 'resting' as const, runner: undefined, exitTool: undefined }
+              : phase.key === 'triage'
+                ? { ...phase, nextPhases: ['intake'] }
+                : phase,
+          ),
+        },
+      ],
+    };
+    const result = projectBoardConfigInputSchema.safeParse(edited);
+    expect(result.error?.issues.map(issue => issue.message)).toEqual(
+      expect.arrayContaining([
+        "Work's review phase must stay working.",
+        "Work's triage phase must allow moving to planning, review, done, canceled; Factory moves cards there itself.",
+      ]),
+    );
+  });
+
   it("rejects the retired Review board's key", () => {
     const result = projectBoardConfigInputSchema.safeParse({
       boards: [{ ...defaultProjectBoardConfig.boards[0], key: 'review', eventRoutes: [] }],

@@ -192,10 +192,30 @@ export type EventRouteInput = z.infer<typeof eventRouteInputSchema>;
 const MAX_BOARDS = 50;
 
 /**
- * Integrations, the Work transition policy and source-closed handling move Work cards by these phase
- * keys, so the Work board keeps them (names, runners and next phases stay editable).
+ * Integrations, the Work transition policy and source-closed handling move Work cards between these
+ * phases by key, so the Work board keeps each with its kind. Names, descriptions and runners stay
+ * editable; next phases may narrow moves but must keep the ones Factory makes itself (pull request
+ * opened, reviewed, merged or closed; the issue pipeline; reopening).
  */
-export const WORK_BOARD_REQUIRED_PHASES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'];
+const WORK_BOARD_REQUIRED_KINDS: Readonly<Record<string, 'resting' | 'working' | 'terminal'>> = {
+  intake: 'resting',
+  triage: 'working',
+  planning: 'working',
+  execute: 'working',
+  review: 'working',
+  done: 'terminal',
+  canceled: 'terminal',
+};
+const WORK_BOARD_REQUIRED_MOVES: Readonly<Record<string, readonly string[]>> = {
+  intake: ['triage', 'done', 'canceled'],
+  triage: ['intake', 'planning', 'review', 'done', 'canceled'],
+  planning: ['execute', 'done', 'canceled'],
+  execute: ['review', 'done', 'canceled'],
+  review: ['execute', 'done', 'canceled'],
+  done: ['review'],
+  canceled: ['review'],
+};
+export const WORK_BOARD_REQUIRED_PHASES = Object.keys(WORK_BOARD_REQUIRED_KINDS);
 /** The retired Review board's id: cards and routes naming it are read as Work. */
 export const RETIRED_BOARD_KEY = 'review';
 
@@ -229,6 +249,28 @@ export const projectBoardConfigInputSchema = z
             message: `The Work board needs the phases ${missing.join(', ')}; Factory moves cards by these keys.`,
           });
         }
+        board.phases.forEach((phase, phaseIndex) => {
+          const kind = WORK_BOARD_REQUIRED_KINDS[phase.key];
+          if (!kind) return;
+          const path = ['boards', index, 'phases', phaseIndex];
+          if (phase.kind !== kind) {
+            ctx.addIssue({
+              code: 'custom',
+              path: [...path, 'kind'],
+              message: `Work's ${phase.key} phase must stay ${kind}.`,
+            });
+          }
+          const dropped = phase.nextPhases
+            ? (WORK_BOARD_REQUIRED_MOVES[phase.key] ?? []).filter(next => !phase.nextPhases!.includes(next))
+            : [];
+          if (dropped.length > 0) {
+            ctx.addIssue({
+              code: 'custom',
+              path: [...path, 'nextPhases'],
+              message: `Work's ${phase.key} phase must allow moving to ${dropped.join(', ')}; Factory moves cards there itself.`,
+            });
+          }
+        });
       }
     });
     config.boards.forEach((board, boardIndex) => {
