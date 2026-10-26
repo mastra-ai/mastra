@@ -894,7 +894,7 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
         const declarations = await glob('**/*.d.ts', { cwd: distDir, absolute: true });
         expect(declarations.length).toBeGreaterThan(0);
         for (const file of declarations) {
-          expect(await readFile(file, 'utf-8'), file).not.toMatch(/from ['"]@internal\//);
+          expect(await readFile(file, 'utf-8'), file).not.toMatch(/['"]@internal\//);
         }
       }
 
