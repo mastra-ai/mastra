@@ -3209,6 +3209,7 @@ export class DurableAgent<
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
       processorStates: registryEntry.processorStates,
+      agent: registryEntry.agent,
       requestContext: registryEntry.requestContext,
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
@@ -3974,6 +3975,7 @@ export class DurableAgent<
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
       processorStates: entry.processorStates,
+      agent: entry.agent,
       requestContext: resolvedOptions.requestContext,
       // Caller option wins, then the flag persisted at prepare time. Only fall
       // back to resolvedOptions (which merges agent defaultOptions) last, so a
@@ -4788,6 +4790,7 @@ export class DurableAgent<
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
       processorStates: registryEntry.processorStates,
+      agent: registryEntry.agent,
       requestContext: registryEntry.requestContext,
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,

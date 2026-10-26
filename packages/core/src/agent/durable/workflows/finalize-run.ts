@@ -247,8 +247,8 @@ export async function runDurableFinishSideEffects({
   // returned message arrays back onto it, including removals and replacements.
   if (registryEntry?.outputProcessors?.length) {
     try {
-      let agent: AnyAgent | undefined;
-      if (mastra) {
+      let agent: AnyAgent | undefined = registryEntry.agent;
+      if (!agent && mastra) {
         try {
           agent = mastra.getAgentById(initData.agentId);
         } catch {

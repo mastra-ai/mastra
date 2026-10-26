@@ -72,6 +72,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             outputProcessors: rest.outputProcessors,
             logger: rest.logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            agent: rest.agent,
             processorStates: dataChunkProcessorStates,
           })
         : undefined;

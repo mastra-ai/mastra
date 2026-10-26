@@ -794,6 +794,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         outputProcessors: options.outputProcessors,
         logger: this.logger,
         agentName: 'MastraModelOutput',
+        agent: options.agent,
         processorStates: options.processorStates,
       });
     }

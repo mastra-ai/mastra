@@ -892,6 +892,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 errorProcessors: registryEntry?.errorProcessors ?? [],
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
+                agent: registryEntry?.agent,
                 processorStates: registryEntry?.processorStates,
               });
               try {
@@ -1144,6 +1145,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     outputProcessors: [],
                     logger: logger as any,
                     agentName: typedInput.agentName ?? typedInput.agentId,
+                    agent: registryEntry?.agent,
                     processorStates: registryEntry?.processorStates,
                   })
                 : undefined;
@@ -1671,6 +1673,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 outputProcessors: effectiveOutputProcessors,
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
+                agent: registryEntry?.agent,
                 processorStates: registryEntry?.processorStates,
               });
               return toolResultRunner;
@@ -2419,6 +2422,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     errorProcessors: registryEntryInner.errorProcessors,
                     logger: logger as any,
                     agentName: typedInput.agentName ?? typedInput.agentId,
+                    agent: registryEntryInner?.agent,
                     processorStates: registryEntryInner.processorStates,
                   });
                   const { retry } = await runner.runProcessAPIError({
@@ -2646,6 +2650,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 outputProcessors: effectiveOutputProcessors,
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
+                agent: registryEntry?.agent,
                 processorStates: registryEntry?.processorStates,
               });
 
@@ -2898,6 +2903,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   errorProcessors: registryEntry.errorProcessors,
                   logger: logger as any,
                   agentName: typedInput.agentName ?? typedInput.agentId,
+                  agent: registryEntry?.agent,
                   processorStates: registryEntry.processorStates,
                 });
                 const { retry } = await runner.runProcessAPIError({

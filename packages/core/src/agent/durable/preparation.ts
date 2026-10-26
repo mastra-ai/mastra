@@ -954,6 +954,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     outputProcessors,
     errorProcessors,
     processorStates,
+    agent: agent as unknown as Agent<any, any, any, any>,
     backgroundTaskManager,
     backgroundTasksConfig,
     agentSpan,

@@ -24,6 +24,7 @@ import type {
   ToolCallChunk,
   ToolResultChunk,
 } from '../../stream/types';
+import type { Agent } from '../agent';
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { StructuredOutputOptions } from '../types';
@@ -249,6 +250,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Processor state map shared with the durable workflow's producer-side processing. */
   processorStates?: Map<string, ProcessorState>;
+  /** The agent running this run, passed to output processors as `agent`. */
+  agent?: Agent<any, any, any, any>;
   /** When true, `getFullOutput()` includes `scoringData` assembled from the MessageList. */
   returnScorerData?: boolean;
   /** Run context passed to output processors for every streamed chunk. */
@@ -329,6 +332,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     structuredOutput,
     outputProcessors,
     processorStates,
+    agent,
     returnScorerData,
     requestContext,
     tracingContext,
@@ -938,6 +942,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       resolveFinalPromises: true,
       outputProcessors,
       processorStates,
+      agent,
       returnScorerData,
       requestContext,
       tracingContext,
