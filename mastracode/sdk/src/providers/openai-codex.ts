@@ -23,6 +23,7 @@ export { supportsMaxReasoningEffort } from '../thinking.js';
 const CODEX_API_ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
 const CODEX_ORIGINATOR = 'mastracode';
 const CODEX_USER_AGENT = 'mastracode';
+const CODEX_PROVIDER_NAME = 'OpenAI Codex';
 
 // Singleton auth storage instance (shared with claude-max.ts)
 let authStorageInstance: AuthStorage | null = null;
@@ -193,21 +194,19 @@ async function getCodexBearer(
 
   let cred = storage.get('openai-codex');
   if (!cred || cred.type !== 'oauth') {
-    throw new ProviderAuthRequiredError('Not logged in to OpenAI Codex.');
+    throw ProviderAuthRequiredError.notSignedIn(CODEX_PROVIDER_NAME);
   }
 
   if (storage.getOAuthCredential) {
     cred = await storage.getOAuthCredential('openai-codex');
-    if (!cred) throw new ProviderAuthRequiredError('Failed to refresh the OpenAI Codex token.');
+    if (!cred) throw ProviderAuthRequiredError.signInExpired(CODEX_PROVIDER_NAME);
   } else if (Date.now() >= cred.expires) {
     const refreshedToken = await storage.getApiKey('openai-codex');
-    if (!refreshedToken) {
-      throw new ProviderAuthRequiredError('Failed to refresh the OpenAI Codex token.');
-    }
+    if (!refreshedToken) throw ProviderAuthRequiredError.signInExpired(CODEX_PROVIDER_NAME);
     storage.reload();
     const reloaded = storage.get('openai-codex');
     if (!reloaded || reloaded.type !== 'oauth') {
-      throw new ProviderAuthRequiredError('Not logged in to OpenAI Codex.');
+      throw ProviderAuthRequiredError.notSignedIn(CODEX_PROVIDER_NAME);
     }
     cred = { ...reloaded, access: refreshedToken };
   }
@@ -271,7 +270,7 @@ export function buildOpenAICodexOAuthFetch(
     });
     try {
       return await rejectUnauthorizedResponse(await fetch(finalRequest), {
-        providerName: 'OpenAI Codex',
+        providerName: CODEX_PROVIDER_NAME,
         requestUrl: finalUrl.toString(),
       });
     } catch (error) {

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "2.6.0-alpha.0",
+  "version": "2.6.0-alpha.1",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -45,7 +45,7 @@
   "dependencies": {
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/core": "2.3.1",
-    "@modelcontextprotocol/ext-apps": "^2.0.0",
+    "@modelcontextprotocol/ext-apps": "^2.0.3",
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.3.1",
     "exit-hook": "^5.1.0",
@@ -59,7 +59,7 @@
   },
   "devDependencies": {
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.135",
-    "@copilotkit/aimock": "^1.29.0",
+    "@copilotkit/aimock": "^1.46.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",
@@ -70,8 +70,8 @@
     "@mastra/schema-compat": "workspace:*",
     "@mendable/firecrawl-js": "^1.29.3",
     "@modelcontextprotocol/conformance": "0.2.0-alpha.11",
-    "@types/node": "22.20.5",
-    "@types/semver": "^7.7.1",
+    "@types/node": "22.19.15",
+    "@types/semver": "^7.8.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "semver": "^7.8.5",
@@ -79,7 +79,7 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:",
-    "zod-to-json-schema": "^3.25.1"
+    "zod-to-json-schema": "^3.25.2"
   },
   "homepage": "https://mastra.ai",
   "repository": {

@@ -629,7 +629,7 @@ export interface AgentStreamEvent<T = unknown> {
    */
   index?: number;
   /**
-   * The `chunk` event's chunk already ran through the run's output processors
+   * The `chunk` or `step-start` event's chunk already ran through the run's output processors
    * before it was published, so the stream consumer must not run them again.
    */
   outputProcessed?: boolean;
@@ -899,6 +899,12 @@ export interface RunRegistryEntry {
    * allowing them.
    */
   requireToolApproval?: RequireToolApproval;
+  /**
+   * Per-call delegation config (`onDelegationStart`, `onDelegationComplete`,
+   * `messageFilter`, ...). Closures, so in-process only. A warm resume that
+   * rebuilds tools reuses it when the resume call supplies no `delegation`.
+   */
+  delegation?: AgentExecutionOptions['delegation'];
   /**
    * Signal drain closure. When the durable agent inherits `sendSignal()` from
    * its wrapped `Agent`, signals are queued in `AgentThreadStreamRuntime`. This

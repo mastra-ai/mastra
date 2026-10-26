@@ -152,6 +152,9 @@ export class WorkflowEventProcessor extends EventProcessor {
   private stepExecutionStrategy?: StepExecutionStrategy;
   // Map of runId -> AbortController for active workflow runs
   private abortControllers: Map<string, AbortController> = new Map();
+  // Controllers aborted by a workflow.cancel this processor is already ending. A step that
+  // unwinds on one of these must not publish a second workflow.cancel (and so a second workflow.end).
+  private cancelHandledControllers: WeakSet<AbortController> = new WeakSet();
   // Map of child runId -> parent runId for tracking nested workflows
   private parentChildRelationships: Map<string, string> = new Map();
   private runFormats: Map<string, 'legacy' | 'vnext' | undefined> = new Map();
@@ -712,6 +715,9 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowCancel({ workflowId, runId, prevResult, ...args }: ProcessorArgs) {
+    const controller = this.abortControllers.get(runId);
+    if (controller) this.cancelHandledControllers.add(controller);
+
     // Cancel this workflow and all nested child workflows
     this.cancelRunAndChildren(runId);
 
@@ -2567,6 +2573,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (abortController?.signal?.aborted) {
+      if (this.cancelHandledControllers.has(abortController)) return;
       // Extract updated state from step result
       const updatedState = (stepResult as any).__state ?? currentState;
       //cancel the workflow

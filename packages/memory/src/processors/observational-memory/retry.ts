@@ -88,6 +88,21 @@ export class OmIncompleteResponseError extends Error {
 }
 
 /**
+ * A model reply that finished but contains no text, or only whitespace.
+ * Retryable, so an empty reply is retried like a transport error.
+ *
+ * @internal
+ */
+export class OmEmptyResponseError extends Error {
+  readonly isRetryable = true;
+
+  constructor(label: string) {
+    super(`${label} returned empty output`);
+    this.name = 'OmEmptyResponseError';
+  }
+}
+
+/**
  * OM calls are single-step (`maxSteps: 1`). A step that ends with `other` or
  * `unknown` means the stream closed before the model finished, so its text is
  * partial. Throw a retryable error so `withRetry` re-runs the whole call

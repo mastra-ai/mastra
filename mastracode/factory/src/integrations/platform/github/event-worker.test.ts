@@ -297,7 +297,7 @@ describe('PlatformGithubEventWorker', () => {
     await resumed.stop();
   });
 
-  it('forwards created PR comments to Factory rules but never retriggers from edits', async () => {
+  it('forwards created PR comments and PR verdict edits to Factory rules, never issue comment edits', async () => {
     const settings = createSettingsStorage();
     const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
       delivered: 1,
@@ -336,8 +336,20 @@ describe('PlatformGithubEventWorker', () => {
                 event: 'issue_comment',
                 payload: { action: 'edited' },
               },
+              {
+                id: '2003-0',
+                deliveryId: 'delivery-pr-comment-edited',
+                event: 'issue_comment',
+                payload: { action: 'edited', issue: { pull_request: { url: 'pr' } } },
+              },
+              {
+                id: '2004-0',
+                deliveryId: 'delivery-review-edited',
+                event: 'pull_request_review',
+                payload: { action: 'edited' },
+              },
             ],
-            nextCursor: '2002-0',
+            nextCursor: '2004-0',
           });
         }
         return json({ events: [], nextCursor: null });
@@ -358,8 +370,10 @@ describe('PlatformGithubEventWorker', () => {
 
     // A submitted review and a new pull-request comment are the two ways review
     // feedback reaches the agent that authored the branch. Comment edits stay
-    // with the subscription dispatcher — re-waking on an edit would double-fire.
-    expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+    // with the subscription dispatcher, except edits on a pull request: the
+    // review skill edits its verdict in place, and the rules engine decides
+    // whether the edit carries a verdict worth waking the author for.
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(4);
     expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, {
       event: 'pull_request_review',
       deliveryId: 'delivery-review',
@@ -370,7 +384,15 @@ describe('PlatformGithubEventWorker', () => {
       deliveryId: 'delivery-comment',
       payload: { action: 'created' },
     });
-    expect(dispatch).toHaveBeenCalledTimes(3);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ deliveryId: 'delivery-pr-comment-edited' }),
+    );
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({ deliveryId: 'delivery-review-edited' }),
+    );
+    expect(dispatch).toHaveBeenCalledTimes(5);
     await worker.stop();
   });
 
