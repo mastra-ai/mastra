@@ -171,6 +171,10 @@ export class WorkflowEventProcessor extends EventProcessor {
   // release them; otherwise a later restart of the same runId would pick up an
   // already-aborted controller.
   private controlAbortedControllers: WeakSet<AbortController> = new WeakSet();
+  // Runs whose workflow.start this processor handled. Their abort controller and
+  // parent link belong to the start path and live until cleanupRun; for other
+  // runs, the step path drops both once its last step releases the run.
+  private startedRuns: Set<string> = new Set();
   private runFormats: Map<string, 'legacy' | 'vnext' | undefined> = new Map();
   // Map of event.id -> number of times we've returned { retry: true } for it.
   // Used to cap transport-level redelivery so a poisoned event (e.g. sustained
@@ -429,9 +433,16 @@ export class WorkflowEventProcessor extends EventProcessor {
           const entry = this.controlSubscriptions.get(runId);
           if (!entry || --entry.refs > 0) return;
           this.controlSubscriptions.delete(runId);
-          const controller = this.abortControllers.get(runId);
-          if (controller && this.controlAbortedControllers.has(controller)) {
+          if (!this.startedRuns.has(runId)) {
+            // This processor may never see the run's workflow.end, so nothing
+            // else would clean up what the step path recorded for it.
             this.abortControllers.delete(runId);
+            this.parentChildRelationships.delete(runId);
+          } else {
+            const controller = this.abortControllers.get(runId);
+            if (controller && this.controlAbortedControllers.has(controller)) {
+              this.abortControllers.delete(runId);
+            }
           }
           if (!(await entry.subscribed)) return;
           try {
@@ -450,6 +461,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    */
   private cleanupRun(runId: string): void {
     this.abortControllers.delete(runId);
+    this.startedRuns.delete(runId);
     this.parentChildRelationships.delete(runId);
     this.runFormats.delete(runId);
 
@@ -968,6 +980,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       await this.mastra.pubsub.clearTopic(workflowControlTopic(runId));
     }
     // Create abort controller for this workflow run
+    this.startedRuns.add(runId);
     this.getOrCreateAbortController(runId);
 
     // Track parent-child relationship if this is a nested workflow

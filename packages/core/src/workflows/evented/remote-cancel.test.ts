@@ -370,6 +370,48 @@ describe('evented workflow cancel with workers on both replicas', () => {
       .commit();
   }
 
+  // The replica that runs a step is not necessarily the one that handles the run's workflow.end, so
+  // the step path must drop the abort controller and parent links it records for runs it did not start.
+  it('does not leave step-recorded run state on replicas that never finalize the run', async () => {
+    const storage = new MockStore();
+    const pubsub = new EventEmitterPubSub();
+    const workflows = [0, 1].map(() => buildBothWorkflow(true, async () => {}));
+    const [owner, other] = workflows.map(
+      workflow => new Mastra({ logger: false, storage, pubsub, workflows: { [WORKFLOW_ID]: workflow } }),
+    );
+    cleanups.push(
+      () => owner!.stopWorkers(),
+      () => other!.stopWorkers(),
+    );
+
+    // Pin the topology: 'other' only runs steps, the owner starts and finalizes every run.
+    const processors = new Map<Mastra, any>();
+    const handle = WorkflowEventProcessor.prototype.handle;
+    vi.spyOn(WorkflowEventProcessor.prototype, 'handle').mockImplementation(function (this: any, event) {
+      processors.set(this.mastra, this);
+      const target = processors.get(event.type === 'workflow.step.run' ? other! : owner!) ?? this;
+      return handle.call(target, event);
+    });
+
+    await owner!.startWorkers();
+    await other!.startWorkers();
+    for (let i = 0; i < 4; i++) {
+      const result = await withTimeout((await workflows[0]!.createRun()).start({ inputData: { count: 0 } }));
+      expect(result === 'timed out' ? result : result.status).toBe('success');
+    }
+
+    const stepOnly = processors.get(other!);
+    expect(stepOnly).toBeDefined();
+    await vi.waitFor(
+      () => {
+        expect(stepOnly.controlSubscriptions.size).toBe(0);
+        expect([...stepOnly.abortControllers.keys()]).toEqual([]);
+        expect([...stepOnly.parentChildRelationships.keys()]).toEqual([]);
+      },
+      { timeout: SETTLE_TIMEOUT_MS },
+    );
+  });
+
   describe.each(PUBSUBS)('$name', pubsubFactory => {
     // UnixSocketPubSub delivers the ungrouped push `workflows` subscription to every replica that
     // owns the workflow, so both process each event (pre-existing; also true on main). Exactly-once
