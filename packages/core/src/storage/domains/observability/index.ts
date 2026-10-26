@@ -161,3 +161,4 @@ export * from './tracing';
 export * from './types';
 export * from './span-query';
 export * from './thread-query';
+export { buildSpanPreviews } from './span-previews';

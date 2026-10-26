@@ -12,10 +12,11 @@ const require = createRequire(import.meta.url);
 // Keep real core behavior, removing only the newer exports at the package boundary.
 describe.each(['esm', 'cjs'] as const)('preview compatibility (%s)', format => {
   it.each([
-    { missing: ['buildPreview'] },
-    { missing: ['PREVIEW_MAX_LENGTH'] },
-    { missing: ['buildPreview', 'PREVIEW_MAX_LENGTH'] },
-  ])('preserves spans when core lacks $missing', async ({ missing }) => {
+    { mode: 'span', missing: [] },
+    { mode: 'span', missing: ['buildPreview', 'PREVIEW_MAX_LENGTH'] },
+    { mode: 'generic', missing: ['buildSpanPreviews'] },
+    { mode: 'passthrough', missing: ['buildSpanPreviews', 'buildPreview', 'PREVIEW_MAX_LENGTH'] },
+  ])('uses $mode previews when core lacks $missing', async ({ mode, missing }) => {
     const directory = await mkdtemp(join(import.meta.dirname, '.preview-compat-'));
     try {
       const extension = format === 'esm' ? 'mjs' : 'cjs';
@@ -46,28 +47,48 @@ describe.each(['esm', 'cjs'] as const)('preview compatibility (%s)', format => {
         join(directory, `run.${extension}`),
         `${script}
         const span = {
-          id: 'span', traceId: 'trace', type: 'agent_run',
-          input: [{role:'user',content:'Find my order'}],
-          output: {text:'Order shipped'}, errorInfo: {message:'Partial failure'},
-          inputPreview: '', outputPreview: 'Caller supplied', errorPreview: null,
+          id: 'span', traceId: 'trace', type: 'model_step',
+          input: [{role:'user',content:'Find my order'}, {role:'tool',content:'Order 123 was shipped'}],
+          output: {object:{orderId:'123'},text:'Order shipped'}, errorInfo: {name:'TimeoutError',message:'Partial failure'},
+          inputPreview: '', outputPreview: 'Caller supplied', errorPreview: '',
         };
         const result = withSpanPreviews(span);
-        if (result !== span) throw new Error('Unsupported core must retain the original span');
+        if (${JSON.stringify(mode)} === 'passthrough' && result !== span) throw new Error('Unsupported core must retain the original span');
         const withoutPreviews = {...span};
         delete withoutPreviews.inputPreview;
         delete withoutPreviews.outputPreview;
         delete withoutPreviews.errorPreview;
-        process.stdout.write(JSON.stringify([result, withSpanPreviews(withoutPreviews)]));
+        const unsafeError = withSpanPreviews({...withoutPreviews, errorInfo: {
+          message: {stack:'secret'}, stack:'secret', details:{token:'secret'},
+        }});
+        process.stdout.write(JSON.stringify([result, withSpanPreviews(withoutPreviews), unsafeError]));
       `,
       );
       const result = JSON.parse(
         execFileSync(process.execPath, [join(directory, `run.${extension}`)], { encoding: 'utf8' }),
       );
-      expect(result[0]).toMatchObject({ inputPreview: '', outputPreview: 'Caller supplied', errorPreview: null });
-      expect(result[1]).not.toHaveProperty('inputPreview');
-      expect(result[1]).not.toHaveProperty('outputPreview');
-      expect(result[1]).not.toHaveProperty('errorPreview');
-      expect(result[1].output).toEqual({ text: 'Order shipped' });
+      expect(result[0]).toMatchObject({ inputPreview: '', outputPreview: 'Caller supplied', errorPreview: '' });
+      if (mode === 'passthrough') {
+        expect(result[1]).not.toHaveProperty('inputPreview');
+        expect(result[1]).not.toHaveProperty('outputPreview');
+        expect(result[1]).not.toHaveProperty('errorPreview');
+      } else {
+        expect(result[1]).toMatchObject(
+          mode === 'span'
+            ? {
+                inputPreview: 'Tool: Order 123 was shipped',
+                outputPreview: '{"orderId":"123"}',
+                errorPreview: 'TimeoutError: Partial failure',
+              }
+            : {
+                inputPreview: 'Find my order',
+                outputPreview: 'Order shipped',
+                errorPreview: 'Partial failure',
+              },
+        );
+      }
+      expect(result[2].errorPreview).toBe(mode === 'passthrough' ? undefined : '');
+      expect(result[1].output).toEqual({ object: { orderId: '123' }, text: 'Order shipped' });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
