@@ -5,6 +5,7 @@ import type {
   BackgroundTask,
   BackgroundTaskManagerConfig,
   BackgroundTaskStatus,
+  EnqueueOptions,
   EnqueueResult,
   ResumeOptions,
   TaskContext,
@@ -96,6 +97,10 @@ export class BackgroundTaskManager {
   // lease at `leaseDurationMs / 3`. A worker that dies stops renewing, so its
   // leases expire and other workers may safely reclaim the tasks.
   private ownedLeases = new Set<string>();
+  // Pending task IDs enqueued with `pinToWorker`. Their rows carry this
+  // manager's owner ID and a lease, renewed by the same heartbeat, so other
+  // workers leave them alone until this manager claims them or dies.
+  private pinnedPendingLeases = new Set<string>();
   private heartbeatInterval?: ReturnType<typeof setInterval>;
 
   // Pending follow-up pass for stale-task recovery. A running task whose lease
@@ -375,9 +380,15 @@ export class BackgroundTaskManager {
    * Enqueue a task for background execution.
    * Prefer `createBackgroundTask()` which returns a self-contained handle.
    */
-  async enqueue(payload: TaskPayload, context?: TaskContext): Promise<EnqueueResult> {
+  async enqueue(payload: TaskPayload, context?: TaskContext, options?: EnqueueOptions): Promise<EnqueueResult> {
     if (this.shuttingDown) {
       throw new Error('BackgroundTaskManager is shutting down, cannot enqueue new tasks');
+    }
+    const pinned = options?.pinToWorker === true;
+    if (pinned && !context) {
+      // A portable row pinned here would be skipped by every other worker on
+      // the shared dispatch topic while this process holds no closure for it.
+      throw new Error('pinToWorker requires a task context');
     }
 
     // Mastra fires `init` as fire-and-forget. If a caller hits enqueue
@@ -387,6 +398,7 @@ export class BackgroundTaskManager {
     // with id __background-task not found"). Await readiness up front.
     if (this.initPromise) await this.initPromise;
 
+    const createdAt = new Date();
     const task: BackgroundTask = {
       id: this.#mastra?.generateId() ?? globalThis.crypto.randomUUID(),
       status: 'pending',
@@ -400,9 +412,12 @@ export class BackgroundTaskManager {
       retryCount: 0,
       maxRetries: payload.maxRetries ?? this.config.defaultRetries?.maxRetries ?? 0,
       timeoutMs: payload.timeoutMs ?? this.config.defaultTimeoutMs,
-      createdAt: new Date(),
+      createdAt,
       ...(payload.expiresAt ? { expiresAt: payload.expiresAt } : {}),
       ...(payload.metadata ? { metadata: payload.metadata } : {}),
+      ...(pinned
+        ? { ownerId: this.workerId, leaseExpiresAt: new Date(createdAt.getTime() + this.config.leaseDurationMs) }
+        : {}),
     };
 
     // Register per-task context if provided
@@ -412,6 +427,7 @@ export class BackgroundTaskManager {
 
     const storage = await this.getStorage();
     await storage.createTask(task);
+    if (pinned) this.pinnedPendingLeases.add(task.id);
 
     const isProcessAffine = Boolean(context);
     const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
@@ -420,12 +436,14 @@ export class BackgroundTaskManager {
       try {
         await this.dispatch(task);
       } catch (error) {
+        this.pinnedPendingLeases.delete(task.id);
         const failed = await storage.updateTask(
           task.id,
           {
             status: 'failed',
             error: { message: error instanceof Error ? error.message : String(error) },
             completedAt: new Date(),
+            ...(pinned ? { ownerId: undefined, leaseExpiresAt: undefined } : {}),
           },
           { expectedStatus: 'pending' },
         );
@@ -442,11 +460,13 @@ export class BackgroundTaskManager {
     // Backpressure
     switch (this.config.backpressure) {
       case 'reject':
+        this.pinnedPendingLeases.delete(task.id);
         this.deregisterTaskContext(task.id);
         await storage.deleteTask(task.id);
         throw new Error(`Concurrency limit reached, cannot enqueue task for tool "${task.toolName}"`);
 
       case 'fallback-sync':
+        this.pinnedPendingLeases.delete(task.id);
         this.deregisterTaskContext(task.id);
         await storage.deleteTask(task.id);
         return { task, fallbackToSync: true };
@@ -495,6 +515,7 @@ export class BackgroundTaskManager {
         continue;
       }
       this.ownedLeases.delete(taskId);
+      this.pinnedPendingLeases.delete(taskId);
       this.localPendingResumes.delete(taskId);
 
       if (previousStatus === 'pending') {
@@ -1147,6 +1168,30 @@ export class BackgroundTaskManager {
         // Storage unavailable — leases expire on their own.
       }
     }
+    if (this.pinnedPendingLeases.size > 0) {
+      const pinnedTaskIds = [...this.pinnedPendingLeases];
+      this.pinnedPendingLeases.clear();
+      try {
+        const storage = await this.getStorage();
+        // Expire the lease but keep the owner: the work this pin stood for is
+        // abandoned, so peers recover the row now as a lost attempt (consuming a
+        // retry or failing) rather than as fresh, never-run work.
+        await this.#waitForShutdownStep(
+          'background task pinned lease release',
+          Promise.allSettled(
+            pinnedTaskIds.map(taskId =>
+              storage.updateTask(
+                taskId,
+                { leaseExpiresAt: new Date() },
+                { expectedStatus: 'pending', expectedOwnerId: this.workerId },
+              ),
+            ),
+          ),
+        );
+      } catch {
+        // Storage unavailable — leases expire on their own.
+      }
+    }
     if (this.initPromise) {
       await this.#waitForShutdownStep('background task pubsub flush', this.pubsub.flush());
     }
@@ -1316,6 +1361,16 @@ export class BackgroundTaskManager {
       return task.ownerId === this.workerId;
     }
 
+    if (task.status === 'pending' && task.ownerId && task.ownerId !== this.workerId) {
+      // Pinned to another worker (`pinToWorker`), which holds the work for it.
+      // Claiming it here would run the task twice. If that worker dies, stale
+      // recovery accounts for the lost attempt and re-dispatches the row.
+      return true;
+    }
+    // A row pinned to this worker is claimed fenced on the owner alone: the
+    // heartbeat may renew its lease between the read above and this write.
+    const pinnedHere = task.status === 'pending' && task.ownerId === this.workerId;
+
     // A broker redelivery only counts against the retry budget when a previous
     // delivery actually started execution (the task was marked `running`, e.g.
     // the worker crashed mid-run). A dispatch declined cleanly during shutdown
@@ -1340,13 +1395,16 @@ export class BackgroundTaskManager {
       },
       isRestart
         ? { expectedStatus: task.status }
-        : {
-            expectedStatus: task.status,
-            expectedOwnerId: task.ownerId ?? null,
-            expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
-          },
+        : pinnedHere
+          ? { expectedStatus: 'pending', expectedOwnerId: this.workerId }
+          : {
+              expectedStatus: task.status,
+              expectedOwnerId: task.ownerId ?? null,
+              expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
+            },
     );
     if (!started) return true;
+    this.pinnedPendingLeases.delete(taskId);
     this.ownedLeases.add(taskId);
     if (this.shuttingDown) return false;
 
@@ -1859,7 +1917,7 @@ export class BackgroundTaskManager {
    * reclaimed by another owner, so it is dropped from the tracking set.
    */
   async #renewOwnedLeases(): Promise<void> {
-    if (this.ownedLeases.size === 0) return;
+    if (this.ownedLeases.size === 0 && this.pinnedPendingLeases.size === 0) return;
     let storage;
     try {
       storage = await this.getStorage();
@@ -1882,6 +1940,20 @@ export class BackgroundTaskManager {
         }
       } catch {
         // Transient storage error — keep the lease tracked and retry next tick.
+      }
+    }
+    for (const taskId of [...this.pinnedPendingLeases]) {
+      try {
+        // A failed renewal means the row was claimed, cancelled, or recovered
+        // by another worker after this lease lapsed — stop tracking it.
+        const renewed = await storage.updateTask(
+          taskId,
+          { leaseExpiresAt: new Date(Date.now() + this.config.leaseDurationMs) },
+          { expectedStatus: 'pending', expectedOwnerId: this.workerId },
+        );
+        if (!renewed) this.pinnedPendingLeases.delete(taskId);
+      } catch {
+        // Transient storage error — retry next tick.
       }
     }
   }
@@ -2105,6 +2177,43 @@ export class BackgroundTaskManager {
         orderDirection: 'asc',
       });
       for (const task of pendingTasks) {
+        if (task.ownerId) {
+          // Pinned with `pinToWorker`: work for the row is in flight on its
+          // owner. Leave it alone while the owner keeps renewing the lease.
+          const leaseExpiry = task.leaseExpiresAt?.getTime();
+          if (leaseExpiry !== undefined && leaseExpiry > now) {
+            nextSweepAt = nextSweepAt === undefined ? leaseExpiry : Math.min(nextSweepAt, leaseExpiry);
+            continue;
+          }
+          // The owner died with the work in flight: account for the lost
+          // attempt exactly like a `running` row whose lease lapsed.
+          const fence = {
+            expectedStatus: 'pending' as const,
+            expectedOwnerId: task.ownerId,
+            expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
+          };
+          if (task.retryCount < task.maxRetries) {
+            const unpinned = await storage.updateTask(
+              task.id,
+              { retryCount: task.retryCount + 1, ownerId: undefined, leaseExpiresAt: undefined },
+              fence,
+            );
+            if (!unpinned) continue;
+          } else {
+            await storage.updateTask(
+              task.id,
+              {
+                status: 'failed',
+                error: { message: 'Worker process terminated before task completed' },
+                completedAt: new Date(),
+                ownerId: undefined,
+                leaseExpiresAt: undefined,
+              },
+              fence,
+            );
+            continue;
+          }
+        }
         if (await this.checkConcurrency(task.agentId)) {
           await this.dispatch(task);
         }
