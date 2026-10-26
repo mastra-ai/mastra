@@ -910,6 +910,13 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
       expect(hasWorkspaceMappedPath).toBeFalsy();
     });
 
+    it('should resolve tsconfig paths to files with dots in their names', async () => {
+      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
+      const content = await readFile(inputFile, 'utf-8');
+
+      expect(content).not.toContain('@/api/route/test.response');
+    });
+
     it('should preserve exports from multiple optimized dependency entries', async () => {
       const response = await fetch(`http://localhost:${port}/optimized-dependencies`);
       expect(response.status).toBe(200);

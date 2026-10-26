@@ -291,7 +291,9 @@ export async function setupSharedTestInfrastructure({
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
       await fetch(`http://localhost:${HANDLER_PORT}/inngest/api`, { method: 'PUT' });
-      const registration = await fetch(`http://localhost:${INNGEST_PORT}/dev`).then(response => response.json());
+      const registration = (await fetch(`http://localhost:${INNGEST_PORT}/dev`).then(response => response.json())) as {
+        functions?: { slug: string }[];
+      };
       if (registration.functions?.some((fn: { slug: string }) => fn.slug.endsWith(`workflow.${workflow.id}`))) return;
       await new Promise(resolve => setTimeout(resolve, 100));
     }

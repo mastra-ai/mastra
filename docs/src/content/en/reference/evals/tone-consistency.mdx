@@ -82,11 +82,11 @@ The scorer evaluates sentiment consistency through tone pattern analysis and mod
    **Tone Consistency** (non-empty `referenceTone`):
    - Compares the output's sentiment with the `referenceTone` sentiment
    - Calculates the absolute sentiment difference
-   - Score = max(0, 1 - sentiment\_difference)
+   - Score = max(0, 1 - sentiment_difference)
      **Tone Stability** (`referenceTone` omitted or empty):
    - Analyzes sentiment across the output's sentences
    - Calculates sentiment variance
-   - Score = max(0, 1 - sentiment\_variance)
+   - Score = max(0, 1 - sentiment_variance)
 
 Final score: `mode_specific_score`
 
