@@ -31,6 +31,8 @@ export interface FactoryUserSession {
   title?: string;
   branch: string;
   baseBranch: string;
+  /** The session that started this one as a side session (`factory_start_session`); null otherwise. */
+  originSessionId?: string | null;
   sandboxId: string | null;
   sandboxWorkdir: string | null;
   materializedAt: string | null;

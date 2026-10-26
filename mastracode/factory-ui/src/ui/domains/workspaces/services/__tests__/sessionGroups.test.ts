@@ -207,4 +207,15 @@ describe('collapsedRowsKeepingActive', () => {
       'work-7',
     ]);
   });
+
+  it('keeps the row that holds the open session when the caller says which one does', () => {
+    expect(sessionIds(collapsedRowsKeepingActive(rows(), row => row.session.sessionId === 'work-8'))).toEqual([
+      'work-1',
+      'work-2',
+      'work-3',
+      'work-4',
+      'work-5',
+      'work-8',
+    ]);
+  });
 });
