@@ -41,16 +41,16 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "DeepSeek-V4-Flash-Vision-Exp": [
+    "DeepSeek-V4-Flash": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "DeepSeek-V4-Flash": [
+    "GLM-5.3-Flash": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "Qwen3.8-Flash-Next": [
@@ -65,10 +65,10 @@
         "values": ["low", "medium"]
       }
     ],
-    "GLM-5.3-Flash": [
+    "DeepSeek-V4-Flash-Vision-Exp": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

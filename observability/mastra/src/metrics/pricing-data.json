@@ -31636,9 +31636,9 @@
       },
       "~moonshotai/kimi-latest": {
         "cost": {
-          "input": 0.152,
-          "output": 16,
-          "cache_read": 0.142
+          "input": 0.1919,
+          "output": 8.1113,
+          "cache_read": 0.19
         }
       },
       "~openai/gpt-astra-latest": {
@@ -54668,9 +54668,9 @@
       },
       "~moonshotai/kimi-latest": {
         "cost": {
-          "input": 0.226,
+          "input": 0.191,
           "output": 16,
-          "cache_read": 0.216
+          "cache_read": 0.181
         }
       },
       "~openai/gpt-astra-latest": {

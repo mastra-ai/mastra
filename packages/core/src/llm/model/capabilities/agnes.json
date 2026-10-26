@@ -8,17 +8,17 @@
         "type": "toggle"
       }
     ],
-    "agnes-2.5-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
     "agnes-2.5-pro-alpha": [
       {
         "type": "toggle"
       }
     ],
     "agnes-3.0-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "agnes-2.5-flash": [
       {
         "type": "toggle"
       }
