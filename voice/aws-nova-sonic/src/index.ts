@@ -435,7 +435,6 @@ export class NovaSonicVoice extends MastraVoice<
                           pendingResolvers.splice(index, 1);
                           resolve();
                         }
-                        return;
                       }
                       // Otherwise, Promise stays pending until signalQueue() is called
                       // This allows SDK to establish connection while waiting

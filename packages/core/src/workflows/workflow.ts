@@ -2080,7 +2080,7 @@ export class Workflow<
           return;
         case 'mapping':
           this.steps[entry.id] = createMappingStep(entry.id, entry.mapConfig as MappingConfig) as any;
-          return;
+          break;
       }
     };
     switch (live.type) {
@@ -2111,9 +2111,9 @@ export class Workflow<
           outputSchema: z.object({}),
           execute: async () => ({}),
         });
-        return;
+        break;
       default:
-        return;
+        break;
     }
   }
 
