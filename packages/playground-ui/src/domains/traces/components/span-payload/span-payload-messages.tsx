@@ -1,9 +1,14 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { SpanInputMessage } from '@mastra/core/observability';
 import type { ReactNode } from 'react';
 import { SpanPayloadAttachment } from './span-payload-attachment';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMarkdown, SpanPayloadLabel } from './span-payload-primitives';
 import { SpanPayloadTool } from './span-payload-tool';
+import { SignalDetails } from './span-signal-details';
+import { SignalBadge } from '@/domains/chat/messages/signal-badge';
+import { isUserSignalType, toReactiveSignalData } from '@/domains/chat/messages/signal-data';
+import type { SignalData } from '@/domains/chat/messages/signal-data';
 import { parseSkillMarkup } from '@/domains/chat/messages/skill-activation';
 import { SkillMessage } from '@/domains/chat/messages/skill-message';
 import { ReasoningActivity } from '@/ds/components/ai/activity';
@@ -74,10 +79,37 @@ function skillOf(parts: unknown[]) {
   return typeof text === 'string' ? parseSkillMarkup(text) : undefined;
 }
 
+/** A `role: 'signal'` message as memory stores it, which processor and memory spans record as is. */
+function isSignalMessage(message: Record<string, unknown>): message is Record<string, unknown> & MastraDBMessage {
+  return message.role === 'signal' && isRecord(message.content) && Array.isArray(message.content.parts);
+}
+
+/**
+ * A signal, drawn the same wherever a span recorded it: a user signal reads as the user message
+ * it is, any other signal (a skill, a system reminder, a notification…) as the signal row the
+ * chat draws for it. Its metadata follows.
+ */
+export function SpanSignal({ signal }: { signal: SignalData }) {
+  const isUser = isUserSignalType(signal.type);
+  const details = <SignalDetails signal={signal} isUser={isUser} />;
+  return (
+    <div data-slot="span-signal" data-signal-type={signal.type} className="flex min-w-0 flex-col gap-1">
+      {isUser ? (
+        <SpanMessage message={{ role: 'user', content: signal.contents }} footer={details} />
+      ) : (
+        <>
+          <SignalBadge signal={signal} defaultOpen />
+          {details}
+        </>
+      )}
+    </div>
+  );
+}
+
 // `unknown` on purpose: SpanInputMessage is a wide union of SDK message shapes, and the
 // renderer only needs `isRecord` narrowing to read `role` / `content` / `parts` defensively.
 /** One message of a span; `footer` sits right under it (e.g. the metadata of the signal it came from). */
-export function SpanMessage({ message, footer }: { message: unknown; footer?: ReactNode }) {
+function SpanMessage({ message, footer }: { message: unknown; footer?: ReactNode }) {
   if (typeof message === 'string') {
     return (
       <Message from="user" data-role="user" footer={footer}>
@@ -89,6 +121,7 @@ export function SpanMessage({ message, footer }: { message: unknown; footer?: Re
     );
   }
   if (!isRecord(message)) return <SpanPayloadJson value={message} />;
+  if (isSignalMessage(message)) return <SpanSignal signal={toReactiveSignalData(message)} />;
 
   const role = typeof message.role === 'string' ? message.role : 'unknown';
   const parts = messageParts(message);

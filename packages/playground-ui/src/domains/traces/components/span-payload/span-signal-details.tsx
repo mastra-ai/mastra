@@ -1,7 +1,5 @@
 import { CheckIcon, CopyIcon } from 'lucide-react';
-import { SpanMessage } from './span-payload-messages';
-import { SignalBadge } from '@/domains/chat/messages/signal-badge';
-import { formatSignalValue, isUserSignalType } from '@/domains/chat/messages/signal-data';
+import { formatSignalValue } from '@/domains/chat/messages/signal-data';
 import type { SignalData } from '@/domains/chat/messages/signal-data';
 import { Badge } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
@@ -56,7 +54,7 @@ function SignalId({ id }: { id: string }) {
  * A user signal's row is the footer of its bubble, so it wraps toward the right like the bubble,
  * and skips the type and tag the bubble already conveys.
  */
-function SignalDetails({ signal, isUser }: { signal: SignalData; isUser: boolean }) {
+export function SignalDetails({ signal, isUser }: { signal: SignalData; isUser: boolean }) {
   const attributes = Object.entries(signal.attributes ?? {});
   return (
     <ul
@@ -71,27 +69,5 @@ function SignalDetails({ signal, isUser }: { signal: SignalData; isUser: boolean
       ))}
       {signal.id !== undefined && <SignalId id={signal.id} />}
     </ul>
-  );
-}
-
-/**
- * Input of an agent run started by a signal: the signal itself, followed by its metadata. A
- * user signal reads as the user message it is, any other signal (a skill, a system reminder,
- * a notification…) as the signal row the chat draws for it.
- */
-export function SpanSignalInput({ signal }: { signal: SignalData }) {
-  const isUser = isUserSignalType(signal.type);
-  const details = <SignalDetails signal={signal} isUser={isUser} />;
-  return (
-    <div data-slot="span-signal-input" data-signal-type={signal.type} className="flex min-w-0 flex-col gap-1">
-      {isUser ? (
-        <SpanMessage message={{ role: 'user', content: signal.contents }} footer={details} />
-      ) : (
-        <>
-          <SignalBadge signal={signal} defaultOpen />
-          {details}
-        </>
-      )}
-    </div>
   );
 }
