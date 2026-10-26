@@ -34,6 +34,11 @@
     "zai-org/GLM-5.2"
   ],
   "reasoning": {
+    "evroc/roc": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "Qwen/Qwen3.8-27B": [
       {
         "type": "toggle"
@@ -65,16 +70,6 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "evroc/roc": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "moonshotai/Kimi-K2.6": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "zai-org/GLM-5.2": [
       {
         "type": "toggle"
@@ -82,6 +77,11 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "budget_tokens"
       }
     ]
   }

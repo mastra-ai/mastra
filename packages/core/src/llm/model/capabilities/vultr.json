@@ -39,9 +39,41 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "mimo-v2.6-pro-rl": [
       {
         "type": "toggle"
+      }
+    ],
+    "glm-5.x-menthol": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.6-flash-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.8-flash-next": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "muse-glimmer-30b": [
@@ -59,18 +91,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3-flash": [
+    "glm-5.2": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "high", "max"]
       }
     ],
-    "glm-5.x-menthol": [
+    "nemotron-3.5-content-safety": [
       {
         "type": "toggle"
       }
@@ -89,34 +116,6 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nemotron-3.5-content-safety": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3.8-flash-next": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
     "deepseek-v4-flash-0731": [
       {
         "type": "toggle"
@@ -126,9 +125,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "mimo-v2.6-flash-rl": [
+    "glm-5.3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }
