@@ -342,6 +342,12 @@ overrides:
   jsondiffpatch: '>=0.7.6'
   ssri: '>=6.0.2'
   jws: ^4.0.1
+  # Vanta 2026-10-23: GHSA-67mh-4wv8-2f99. drizzle-kit (dev CLI) -> @esbuild-kit/core-utils
+  # pins esbuild ~0.18.20 and has no newer release; core-utils only uses the transform API.
+  '@esbuild-kit/core-utils>esbuild': 0.25.12
+  # Vanta 2026-10-23: AIKIDO-2026-886499 (fixed in 4.1.1). deepeval -> open@9 ->
+  # default-browser@4 pins bundle-name ^3; 4.x keeps the same bundleName() API.
+  'default-browser@4.0.0>bundle-name': 4.1.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
   client-js-e2e-tests-zod-v4>zod: ^4.6.7
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
