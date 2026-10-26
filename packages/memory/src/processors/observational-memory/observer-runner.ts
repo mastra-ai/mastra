@@ -27,7 +27,7 @@ import {
   parseMultiThreadObserverOutput,
   describeDegenerateOutput,
 } from './observer-agent';
-import { assertCompleteModelResponse, RETRY_CONFIG, withRetry } from './retry';
+import { assertCompleteModelResponse, OmEmptyResponseError, RETRY_CONFIG, withRetry } from './retry';
 import { createTemporaryOmMemoryContext } from './temporary-memory';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
@@ -387,7 +387,10 @@ export class ObserverRunner {
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
-                  return assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM observer');
+                  return assertNonEmptyObserverOutput(
+                    assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM observer'),
+                    'OM observer',
+                  );
                 } catch (error) {
                   this.mastra?.getLogger?.().error('OM observer provider call failed', {
                     diagnostic: formatOmError(error),
@@ -417,7 +420,6 @@ export class ObserverRunner {
     };
 
     let result = await doGenerate();
-    assertNonEmptyObserverOutput(result.text);
     let parsed = parseObserverOutput(result.text, activeExtractors);
     let retriedDueToDegenerate = false;
 
@@ -426,7 +428,6 @@ export class ObserverRunner {
         `[OM:callObserver] degenerate repetition detected, retrying once. ${describeDegenerateOutput(result.text, 2000)}`,
       );
       result = await doGenerate();
-      assertNonEmptyObserverOutput(result.text);
       parsed = parseObserverOutput(result.text, activeExtractors);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
@@ -721,7 +722,10 @@ export class ObserverRunner {
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
-                  return assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM multi-thread observer');
+                  return assertNonEmptyObserverOutput(
+                    assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM multi-thread observer'),
+                    'OM multi-thread observer',
+                  );
                 } catch (error) {
                   this.mastra?.getLogger?.().error('OM multi-thread observer provider call failed', {
                     diagnostic: formatOmError(error),
@@ -753,7 +757,6 @@ export class ObserverRunner {
     };
 
     let result = await doGenerate();
-    assertNonEmptyObserverOutput(result.text);
     let parsed = parseMultiThreadObserverOutput(result.text, activeExtractors);
     let retriedDueToDegenerate = false;
 
@@ -762,7 +765,6 @@ export class ObserverRunner {
         `[OM:callMultiThreadObserver] degenerate repetition detected, retrying once. ${describeDegenerateOutput(result.text, 2000)}`,
       );
       result = await doGenerate();
-      assertNonEmptyObserverOutput(result.text);
       parsed = parseMultiThreadObserverOutput(result.text, activeExtractors);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
@@ -866,11 +868,14 @@ export class ObserverRunner {
 }
 
 /**
- * An empty Observer response must fail like a model error. Committing it would
- * advance `lastObservedAt` past messages that were never observed.
+ * An empty Observer response must not be committed: that would advance
+ * `lastObservedAt` past messages that were never observed. Throwing a retryable
+ * error lets `withRetry` retry it like a transport error; once retries run out
+ * it surfaces as `OmModelExecutionError`, so `failurePolicy` decides the turn.
  */
-function assertNonEmptyObserverOutput(text: string | undefined): void {
-  if (!text?.trim()) {
-    throw new OmModelExecutionError('observer-model', new Error('Observer returned empty output'));
+function assertNonEmptyObserverOutput<T extends { text?: string }>(output: T, label: string): T {
+  if (!output.text?.trim()) {
+    throw new OmEmptyResponseError(label);
   }
+  return output;
 }
