@@ -275,6 +275,58 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
     expect(JSON.stringify(requests[1]!.body.messages)).toContain('call-only');
   });
 
+  it.each([
+    ['constructor', 'hooks'],
+    ['defaultOptions', 'executionHooks'],
+  ] as const)('keeps %s hooks when the call passes null hooks', async (_label, configKey) => {
+    const guardBefore = vi.fn(({ input }: { input: unknown }) =>
+      (input as { key: string }).key === 'forbidden'
+        ? { proceed: false as const, output: { value: 'blocked-by-guard' } }
+        : undefined,
+    );
+    const guardAfter = vi.fn();
+    const execute = vi.fn(async ({ key }: { key: string }) => ({ value: `executed-${key}` }));
+    const llm = getMock();
+    const tool = createTool({
+      id: 'guarded_tool',
+      description: 'A guarded tool.',
+      inputSchema: z.object({ key: z.string() }),
+      execute,
+    });
+
+    const { requests } = await runLoopScenario({
+      engine,
+      llm,
+      prompt: 'Call the guarded tool.',
+      sharedAgent: buildHookedAgent(llm, {
+        tools: { guarded_tool: tool },
+        [configKey]: { beforeToolCall: guardBefore, afterToolCall: guardAfter },
+      }),
+      // A JSON request body can carry `null`, but never a function.
+      hooks: JSON.parse('{"beforeToolCall":null,"afterToolCall":null}'),
+      stopWhen: stepCountIs(5),
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              { id: 'call_forbidden', name: 'guarded_tool', arguments: { key: 'forbidden' } },
+              { id: 'call_allowed', name: 'guarded_tool', arguments: { key: 'allowed' } },
+            ],
+          },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
+      },
+    });
+
+    expect(guardBefore).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith({ key: 'allowed' }, expect.anything());
+    expect(guardAfter).toHaveBeenCalledTimes(1);
+    expect(guardAfter).toHaveBeenCalledWith(expect.objectContaining({ output: { value: 'executed-allowed' } }));
+    expect(JSON.stringify(requests[1]!.body.messages)).toContain('blocked-by-guard');
+  });
+
   it('uses call-time hooks passed to generate()', async () => {
     const llm = getMock();
     const defaultBefore = vi.fn();
