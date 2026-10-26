@@ -2596,11 +2596,9 @@ export class MemoryMySQL extends MemoryStorage {
               bestOverBoundary = boundary;
               bestOverTokens = cumulativeMessageTokens;
             }
-          } else {
-            if (cumulativeMessageTokens > bestUnderTokens) {
-              bestUnderBoundary = boundary;
-              bestUnderTokens = cumulativeMessageTokens;
-            }
+          } else if (cumulativeMessageTokens > bestUnderTokens) {
+            bestUnderBoundary = boundary;
+            bestUnderTokens = cumulativeMessageTokens;
           }
         }
 

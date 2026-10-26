@@ -645,7 +645,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
           ...(chunk.payload || {}),
         } as OutputChunkType<OUTPUT>;
       }
-      return;
+      return undefined;
   }
 }
 

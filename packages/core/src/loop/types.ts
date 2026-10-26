@@ -10,6 +10,7 @@ import type {
 } from '@internal/ai-sdk-v5';
 import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
 import { z } from 'zod/v4';
+import type { Agent } from '../agent';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
@@ -339,6 +340,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * Keyed by processor ID.
    */
   processorStates?: Map<string, ProcessorState>;
+  /** The agent running this loop, passed to every processor hook as `agent`. */
+  agent?: Agent<any, any, any, any>;
 } & Partial<ObservabilityContext>;
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopOptions<Tools, OUTPUT> & {
