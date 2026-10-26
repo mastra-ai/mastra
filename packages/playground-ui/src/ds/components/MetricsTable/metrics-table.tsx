@@ -2,6 +2,7 @@ import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { MetricsTableColumn, MetricsTableProps, MetricsTableSort } from './metrics-table-types';
+import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
 import { cn } from '@/lib/utils';
 
 /**
@@ -16,6 +17,15 @@ const ROW_LINE =
 
 const FOCUS =
   'focus-visible:outline-1 focus-visible:outline-solid focus-visible:outline-border-focus focus-visible:-outline-offset-1';
+
+/** A click on the sorted column flips it; on another column, starts that column's way. */
+function nextSort<Row>(current: MetricsTableSort | undefined, column: MetricsTableColumn<Row>): MetricsTableSort {
+  if (current?.column !== column.id) return { column: column.id, direction: column.firstDirection ?? 'desc' };
+  return { column: column.id, direction: current.direction === 'desc' ? 'asc' : 'desc' };
+}
+
+const ARIA_SORT = { asc: 'ascending', desc: 'descending' } as const;
+const SORT_ICON = { asc: ArrowUpIcon, desc: ArrowDownIcon };
 
 function sortRows<Row>(rows: Row[], columns: MetricsTableColumn<Row>[], sort: MetricsTableSort | undefined) {
   const by = columns.find(c => c.id === sort?.column)?.sortValue;
@@ -54,94 +64,94 @@ export function MetricsTable<Row>({
   const template = { gridTemplateColumns: columns.map(c => c.width ?? 'max-content').join(' ') };
 
   const sortBy = (column: MetricsTableColumn<Row>) => {
-    const direction =
-      current?.column === column.id
-        ? current.direction === 'desc'
-          ? 'asc'
-          : 'desc'
-        : (column.firstDirection ?? 'desc');
-    const next = { column: column.id, direction } as const;
+    const next = nextSort(current, column);
     setOwnSort(next);
     onSortChange?.(next);
   };
 
   return (
-    <div role="table" aria-label={ariaLabel} className={cn('grid', className)}>
-      <div
-        role="row"
-        className={cn('relative grid items-end gap-3 px-3 pb-2 text-body-sm font-medium text-placeholder', HEADER_LINE)}
-        style={template}
-      >
-        {columns.map(column => {
-          const sorted = current?.column === column.id ? current.direction : undefined;
-          const end = column.align === 'end';
+    // Narrower than its content (a phone), the table scrolls sideways instead of squeezing columns or the page.
+    <ScrollArea orientation="horizontal" className={className}>
+      <div role="table" aria-label={ariaLabel} className="grid min-w-max">
+        <div
+          role="row"
+          className={cn(
+            'relative grid items-end gap-3 px-3 pb-2 text-body-sm font-medium text-placeholder',
+            HEADER_LINE,
+          )}
+          style={template}
+        >
+          {columns.map(column => {
+            const sorted = current?.column === column.id ? current.direction : undefined;
+            const SortIcon = sorted && SORT_ICON[sorted];
+            const end = column.align === 'end';
+            return (
+              <div
+                key={column.id}
+                role="columnheader"
+                aria-sort={sorted && ARIA_SORT[sorted]}
+                className={cn('flex min-w-0', end && 'justify-end text-right')}
+              >
+                {column.sortValue ? (
+                  <button
+                    type="button"
+                    onClick={() => sortBy(column)}
+                    className={cn(
+                      'flex items-center gap-1 rounded whitespace-nowrap hover:text-muted-foreground',
+                      FOCUS,
+                    )}
+                  >
+                    {column.header}
+                    {SortIcon && <SortIcon aria-hidden className="size-3" />}
+                  </button>
+                ) : (
+                  <span className="whitespace-nowrap">{column.header}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {shown.map(row => {
+          const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            // Space would also scroll the page.
+            e.preventDefault();
+            onRowClick?.(row);
+          };
           return (
             <div
-              key={column.id}
-              role="columnheader"
-              aria-sort={sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : undefined}
-              className={cn('flex min-w-0', end && 'justify-end text-right')}
-            >
-              {column.sortValue ? (
-                <button
-                  type="button"
-                  onClick={() => sortBy(column)}
-                  className={cn('flex items-center gap-1 rounded whitespace-nowrap hover:text-muted-foreground', FOCUS)}
-                >
-                  {column.header}
-                  {sorted === 'desc' ? (
-                    <ArrowDownIcon aria-hidden className="size-3" />
-                  ) : sorted === 'asc' ? (
-                    <ArrowUpIcon aria-hidden className="size-3" />
-                  ) : null}
-                </button>
-              ) : (
-                <span className="whitespace-nowrap">{column.header}</span>
+              key={getRowKey(row)}
+              role="row"
+              tabIndex={onRowClick ? 0 : undefined}
+              title={rowTitle?.(row)}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              onKeyDown={onRowClick ? onKeyDown : undefined}
+              onMouseEnter={onRowHover ? () => onRowHover(row) : undefined}
+              onMouseLeave={onRowHover ? () => onRowHover(undefined) : undefined}
+              className={cn(
+                'relative grid items-center gap-3 rounded px-3 py-2 text-body-sm text-foreground transition-opacity duration-150',
+                ROW_LINE,
+                onRowClick && cn('cursor-pointer', FOCUS),
+                isRowDimmed?.(row) && 'opacity-40',
               )}
+              style={template}
+            >
+              {columns.map(column => (
+                <div
+                  key={column.id}
+                  role="cell"
+                  className={cn('flex min-w-0 items-center', column.align === 'end' && 'justify-end text-right')}
+                >
+                  {column.cell(row)}
+                </div>
+              ))}
             </div>
           );
         })}
+        {shown.length === 0 && empty ? (
+          <p className="py-8 text-center text-body-sm text-muted-foreground">{empty}</p>
+        ) : null}
       </div>
-      {shown.map(row => {
-        const onKeyDown = (e: KeyboardEvent) => {
-          if (e.key !== 'Enter' && e.key !== ' ') return;
-          // Space would also scroll the page.
-          e.preventDefault();
-          onRowClick?.(row);
-        };
-        return (
-          <div
-            key={getRowKey(row)}
-            role="row"
-            tabIndex={onRowClick ? 0 : undefined}
-            title={rowTitle?.(row)}
-            onClick={onRowClick ? () => onRowClick(row) : undefined}
-            onKeyDown={onRowClick ? onKeyDown : undefined}
-            onMouseEnter={onRowHover ? () => onRowHover(row) : undefined}
-            onMouseLeave={onRowHover ? () => onRowHover(undefined) : undefined}
-            className={cn(
-              'relative grid items-center gap-3 rounded px-3 py-2 text-body-sm text-foreground transition-opacity duration-150',
-              ROW_LINE,
-              onRowClick && cn('cursor-pointer', FOCUS),
-              isRowDimmed?.(row) && 'opacity-40',
-            )}
-            style={template}
-          >
-            {columns.map(column => (
-              <div
-                key={column.id}
-                role="cell"
-                className={cn('flex min-w-0 items-center', column.align === 'end' && 'justify-end text-right')}
-              >
-                {column.cell(row)}
-              </div>
-            ))}
-          </div>
-        );
-      })}
-      {shown.length === 0 && empty ? (
-        <p className="py-8 text-center text-body-sm text-muted-foreground">{empty}</p>
-      ) : null}
-    </div>
+    </ScrollArea>
   );
 }
