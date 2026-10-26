@@ -1,5 +1,15 @@
 # @mastra/fastembed
 
+## 1.3.5-alpha.2
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@huggingface/hub@^2.17.9` ↗︎](https://www.npmjs.com/package/@huggingface/hub/v/2.17.9) (from `^2.12.0`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+- Fixed FastEmbed silently returning empty embeddings for invalid setups. `FlagEmbedding.init()` and `SparseTextEmbedding.init()` now throw a `RangeError` when `maxLength` is not a positive integer (for example `0`, `0.5` or `NaN`), and embedding now throws a clear error when a custom ONNX model's output does not have the expected `[batch, sequence, features]` shape, instead of returning empty vectors. ([#28454](https://github.com/mastra-ai/mastra/pull/28454))
+
 ## 1.3.5-alpha.1
 
 ### Patch Changes
