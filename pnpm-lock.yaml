@@ -2636,8 +2636,8 @@ importers:
         specifier: ^0.21.1
         version: 0.21.1(zod@4.6.7)
       '@ai-sdk/amazon-bedrock':
-        specifier: ^3.0.141
-        version: 3.0.141(zod@4.6.7)
+        specifier: ^5.0.124
+        version: 5.0.124(zod@4.6.7)
       '@ai-sdk/anthropic':
         specifier: ^3.0.135
         version: 3.0.135(zod@4.6.7)
@@ -2769,8 +2769,8 @@ importers:
         specifier: ^0.21.1
         version: 0.21.1(zod@4.6.7)
       '@ai-sdk/amazon-bedrock':
-        specifier: ^3.0.141
-        version: 3.0.141(zod@4.6.7)
+        specifier: ^5.0.124
+        version: 5.0.124(zod@4.6.7)
       '@ai-sdk/anthropic':
         specifier: ^3.0.135
         version: 3.0.135(zod@4.6.7)
@@ -9101,9 +9101,9 @@ importers:
 
   voice/speechify:
     dependencies:
-      '@speechify/api-sdk':
-        specifier: ^2.5.4
-        version: 2.5.4
+      '@speechify/api':
+        specifier: ^4.0.1
+        version: 4.0.1
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -10311,6 +10311,12 @@ packages:
     peerDependencies:
       zod: 4.6.7
 
+  '@ai-sdk/amazon-bedrock@5.0.124':
+    resolution: {integrity: sha512-nm05hQoPUySR49bSbtBnptBfnsKbg5t1D+LxQWL+dBCmZtPAvund1FO9CFGVOP3GrNCqMYKHSwzS8arNjSfCwA==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      zod: 4.6.7
+
   '@ai-sdk/anthropic@1.2.12':
     resolution: {integrity: sha512-YSzjlko7JvuiyQFmI9RN1tNZdEiZxc+6xld/0tq/VkJaHpEzGAb1yiNxxvmYVcjvfu/PcvCxAAYXmTYQQ63IHQ==}
     engines: {node: '>=18'}
@@ -10343,6 +10349,12 @@ packages:
 
   '@ai-sdk/anthropic@4.0.82':
     resolution: {integrity: sha512-1HvCBHdBsfG/OTDOmo3R+rwKtVofnPCWKyMKqOa75yieQEC8V7leB40EaG6uQ1wKnqeXdc31s7tNyq+OnKV/mg==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      zod: 4.6.7
+
+  '@ai-sdk/anthropic@4.0.88':
+    resolution: {integrity: sha512-7h/rI3jLCfLbQsjVt37Q5PCEGOHrpVgrO2zl+y///UpUcWfiRDcqk8DL7br//OFxiEhyxgeIoU/5ulsN1llOyg==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: 4.6.7
@@ -10554,6 +10566,12 @@ packages:
   '@ai-sdk/openai@3.0.131':
     resolution: {integrity: sha512-aiyMcWBF//Z73wCWn2oGsxGMxykioZZL5ACXQEzpkRmwcjVKOSg4/7tbxwvM/MdRkZI9TrqTUuDHu3+aXU2XXg==}
     engines: {node: '>=18'}
+    peerDependencies:
+      zod: 4.6.7
+
+  '@ai-sdk/openai@4.0.102':
+    resolution: {integrity: sha512-8hvs5UO6OgGSR0HASptyopqoJYgdCccVfksUlBLeJ8/h2KoKYU2ZiFjArOkS6ciJbmnDz3G+Zoo4KiI4rlQSoA==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: 4.6.7
 
@@ -19827,9 +19845,9 @@ packages:
     resolution: {integrity: sha512-f8AqJMH1+BL15G6bHDzb1jyY+wW4gOYQs5JumSxmnE/H/+KgqbIZgaPwDdRwoeciDGojoSVrRHiTZjbe7n7dJA==}
     engines: {node: '>=18'}
 
-  '@speechify/api-sdk@2.5.4':
-    resolution: {integrity: sha512-3oe844uNpR/XLy306xMoOkeURvlo5fYKtAtOVJpYq4BrSImLNjvR+Vf5gmahrk3WzZ6wW//bhXRPjxOmjjQdpQ==}
-    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+  '@speechify/api@4.0.1':
+    resolution: {integrity: sha512-OsfZbx4o47kIZ29OmntUj/9J2LYrlntRHfAwZ8uRLCw2gsu5zgQf46yasDgGe9fNgC5XI1+JfJwCweYVs5w+4w==}
+    engines: {node: '>=18.0.0'}
 
   '@speed-highlight/core@1.2.24':
     resolution: {integrity: sha512-qeW2e1l78afw8VhRPfPQ1Gjj+KU5XFQ/OFV5ti6eTa9bruO7mJyZtA4vw0ofqmA3tKCkROE9xLk3VZoeRc98nw==}
@@ -32242,6 +32260,18 @@ snapshots:
       '@smithy/util-utf8': 4.5.2
       aws4fetch: 1.0.20
       zod: 4.6.7
+    optional: true
+
+  '@ai-sdk/amazon-bedrock@5.0.124(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/anthropic': 4.0.88(zod@4.6.7)
+      '@ai-sdk/openai': 4.0.102(zod@4.6.7)
+      '@ai-sdk/provider': 4.0.34
+      '@ai-sdk/provider-utils': 5.0.68(zod@4.6.7)
+      '@smithy/eventstream-codec': 4.5.2
+      '@smithy/util-utf8': 4.5.2
+      aws4fetch: 1.0.20
+      zod: 4.6.7
 
   '@ai-sdk/anthropic@1.2.12(zod@4.6.7)':
     dependencies:
@@ -32260,6 +32290,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@ai-sdk/provider-utils': 3.0.42(zod@4.6.7)
       zod: 4.6.7
+    optional: true
 
   '@ai-sdk/anthropic@3.0.133(zod@4.6.7)':
     dependencies:
@@ -32277,6 +32308,12 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 4.0.29
       '@ai-sdk/provider-utils': 5.0.62(zod@4.6.7)
+      zod: 4.6.7
+
+  '@ai-sdk/anthropic@4.0.88(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.34
+      '@ai-sdk/provider-utils': 5.0.68(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/azure@2.0.143(zod@4.6.7)':
@@ -32527,6 +32564,12 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 3.0.19
       '@ai-sdk/provider-utils': 4.0.62(zod@4.6.7)
+      zod: 4.6.7
+
+  '@ai-sdk/openai@4.0.102(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.34
+      '@ai-sdk/provider-utils': 5.0.68(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/openai@4.0.96(zod@4.6.7)':
@@ -43527,7 +43570,7 @@ snapshots:
     dependencies:
       yoctocolors-cjs: 2.1.3
 
-  '@speechify/api-sdk@2.5.4': {}
+  '@speechify/api@4.0.1': {}
 
   '@speed-highlight/core@1.2.24': {}
 
