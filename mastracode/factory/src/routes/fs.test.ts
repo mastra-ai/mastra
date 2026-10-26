@@ -708,7 +708,8 @@ describe('readSessionWorkspaceFile', () => {
       const check = treeCheck(args);
       if (check) return check;
       if (script.includes(`p='${abs}'`)) return { exitCode: 0, stdout: `${WORKDIR}\n${abs}` };
-      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `regular file|${content.length}|1700000000|0\n` };
+      if (script.startsWith('stat -L -c'))
+        return { exitCode: 0, stdout: `regular file|${content.length}|1700000000|0\n` };
       if (script.includes('base64 <')) return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
       return { exitCode: 1, stdout: '', stderr: `unexpected script: ${script}` };
     };
@@ -745,7 +746,7 @@ describe('readSessionWorkspaceFile', () => {
       if (script.includes(`p='${WORKDIR}/.artifacts'`)) {
         return { exitCode: 0, stdout: `${WORKDIR}\n${WORKDIR}/.artifacts` };
       }
-      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `directory|0|1700000000|0\n` };
+      if (script.startsWith('stat -L -c')) return { exitCode: 0, stdout: `directory|0|1700000000|0\n` };
       return { exitCode: 1, stdout: '' };
     });
 
@@ -1279,7 +1280,7 @@ describe('workspace changes across environment repositories', () => {
       const abs = match?.[1];
       if (abs && files[abs] !== undefined && script.includes('readlink'))
         return { exitCode: 0, stdout: `${ROOT}\n${abs}` };
-      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: 'regular file|8|1700000000|0\n' };
+      if (script.startsWith('stat -L -c')) return { exitCode: 0, stdout: 'regular file|8|1700000000|0\n' };
       const read = /base64 < '([^']+)'/.exec(script);
       if (read && files[read[1]!] !== undefined) {
         return { exitCode: 0, stdout: Buffer.from(files[read[1]!]!, 'utf8').toString('base64') };
