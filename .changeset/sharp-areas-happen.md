@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Quieter Notice and toast surfaces, with more control over Notice actions.
+Added quieter Notice and toast surfaces, with more control over Notice actions.
 
 - **Notice:** `actionPlacement="end"` puts the action beside the message, and `onDismiss` adds a close button. `Notice` also accepts native `div` props and a ref.
 - **Toast:** surfaces match Notice, actions sit below the message, and long content scrolls inside the toast. `<Toaster variant="neutral">` keeps every tone on a gray surface with its semantic icon.
