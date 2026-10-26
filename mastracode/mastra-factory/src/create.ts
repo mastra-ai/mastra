@@ -23,9 +23,16 @@ import {
 import { cloneTemplate, renameProject } from './utils/clone.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
+export const PLATFORM_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory';
+export const SELF_HOSTED_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory-self-hosted';
+
 export interface CreateArgs {
   projectName?: string;
-  template: string;
+  /**
+   * Public GitHub URL of the template to scaffold. Omitted → the platform
+   * template, or the self-hosted template with `noPlatform`.
+   */
+  template?: string;
   /**
    * Skip the platform round-trip (auth, project, sk_ key, Neon). Useful for
    * offline scaffold testing. `.env` is left as-is from the template's
@@ -99,7 +106,10 @@ export async function create(args: CreateArgs): Promise<void> {
   const spinner = p.spinner();
   spinner.start('Downloading the Mastra Factory template...');
   try {
-    await cloneTemplate(args.template, projectPath);
+    await cloneTemplate(
+      args.template ?? (args.noPlatform ? SELF_HOSTED_TEMPLATE_REPO : PLATFORM_TEMPLATE_REPO),
+      projectPath,
+    );
     await renameProject(projectPath, projectName);
     // Seed .env from the example. Platform-provisioning below rewrites the
     // handful of platform keys idempotently; other keys stay as-is so the

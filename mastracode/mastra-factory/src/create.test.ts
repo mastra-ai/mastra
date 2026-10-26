@@ -216,6 +216,36 @@ describe('create --no-platform', () => {
   });
 });
 
+describe('create template selection', () => {
+  const degitRepo = () =>
+    tinyexec.x.mock.calls.find(([command, args]) => command === 'npx' && args[0] === 'degit')?.[1][1];
+
+  it('scaffolds the platform template by default', async () => {
+    await create({ projectName: 'my-factory', analytics });
+
+    expect(degitRepo()).toBe('mastra-ai/template-factory');
+    expect(platform.createServerProject).toHaveBeenCalled();
+  });
+
+  it('scaffolds the self-hosted template with --no-platform', async () => {
+    await create({ projectName: 'my-factory', noPlatform: true, analytics });
+
+    expect(degitRepo()).toBe('mastra-ai/template-factory-self-hosted');
+    expect(cliAuth.getToken).not.toHaveBeenCalled();
+  });
+
+  it('uses an explicit --template over the --no-platform default', async () => {
+    await create({
+      projectName: 'my-factory',
+      template: 'https://github.com/acme/custom-factory',
+      noPlatform: true,
+      analytics,
+    });
+
+    expect(degitRepo()).toBe('acme/custom-factory');
+  });
+});
+
 describe('create (platform provisioning)', () => {
   it('writes platform credentials to .env and shows the "Platform connected" outro', async () => {
     await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
