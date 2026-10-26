@@ -1,6 +1,6 @@
 import { hasLabel, metadataLabels, pullRequestStatusForItem, sourceCreatedAt, workItemKey } from './boardItems';
 import { belongsToBoard, boardStages, itemAppearsInStage } from './boardStages';
-import { reviewVerdict } from './components/WorkItemCardRows';
+import { reviewVerdict } from './reviewVerdict';
 import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem } from './services/workItems';
 import { BOARD_STAGES, isTerminalStage } from './stages';
@@ -111,7 +111,10 @@ function review(cards: readonly WorkItem[]) {
 
 function triage(cards: readonly WorkItem[]) {
   const arrived = cards
-    .filter(item => belongsToBoard(item, 'work') && itemAppearsInStage(item, 'intake', BOARD_STAGES))
+    .filter(
+      item =>
+        belongsToBoard(item, 'work') && itemAppearsInStage(item, 'intake', BOARD_STAGES) && item.triageType === null,
+    )
     .sort((a, b) => arrivedAt(b) - arrivedAt(a));
   if (arrived.length === 0) return undefined;
   return starter('triage', `Triage ${count(arrived.length, 'card')} in Intake`, arrived.map(label), {

@@ -7,7 +7,7 @@ Added suggestions built from your board and an **In flight** line to the Factory
 - **Unblock 3 failed runs**: cards whose last run failed, with the error.
 - **Fix review feedback on 2 Factory pull requests**: open Factory pull requests where the current review requested changes.
 - **Review 4 open pull requests**: pull requests waiting in Review board Intake, oldest first.
-- **Triage 12 cards in Intake**: Work board Intake, newest first.
+- **Triage 12 cards in Intake**: Work board Intake cards triage has not classified yet, newest first.
 - **Plan a fix for one of 5 open bugs**: bugs not yet planned or started.
 - **Recap 8 cards done this week**: cards that reached Done in the last seven days.
 

@@ -143,6 +143,15 @@ describe('starterPrompts', () => {
     expect(listed(review.prompt)).toEqual(['#1 Pull request 1', '#2 Pull request 2']);
   });
 
+  it('leaves cards triage already classified to a person, out of the triage prompt', () => {
+    const triage = promptFor('triage', [
+      card('unclassified'),
+      card('held-question', { triageType: 'question/support' }),
+    ]);
+
+    expect(listed(triage.prompt)).toEqual(['Card unclassified']);
+  });
+
   it('names the five newest cards in Intake and counts the rest', () => {
     const cards = Array.from({ length: 7 }, (_, index) =>
       card(`intake-${index}`, { stageHistory: [{ stage: 'intake', enteredAt: daysAgo(index), by: 'user-1' }] }),
