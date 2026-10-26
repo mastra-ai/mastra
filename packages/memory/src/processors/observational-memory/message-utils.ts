@@ -285,7 +285,9 @@ export function filterObservedMessages(opts: {
 
       if (lastObservedAt && msg.createdAt) {
         const msgDate = new Date(msg.createdAt);
-        if (msgDate <= lastObservedAt) {
+        // A message at the cursor millisecond that is not in observedIds may be unobserved (a timestamp tie);
+        // only fall back to removing it when observed ids are not tracked for this record.
+        if (msgDate < lastObservedAt || (observedIds.size === 0 && msgDate.getTime() === lastObservedAt.getTime())) {
           if (hasPendingPair) continue;
           messagesToRemove.push(msg.id);
         }

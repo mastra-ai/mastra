@@ -2268,8 +2268,15 @@ ${workingMemory}`;
       // When lastObservedAt exists, load only messages after the boundary.
       // When lastObservedAt is NULL (no observations yet), load ALL messages
       // so the threshold check can fire on the full context.
+      // With observed ids tracked, the cursor millisecond is loaded too (an unobserved message can share it)
+      // and the observed ones are dropped by id below. Without ids, keep the cursor exclusive.
+      const observedIds = new Set(omRecord.observedMessageIds ?? []);
       const dateFilter = omRecord.lastObservedAt
-        ? { dateRange: { start: new Date(new Date(omRecord.lastObservedAt).getTime() + 1) } }
+        ? {
+            dateRange: {
+              start: new Date(new Date(omRecord.lastObservedAt).getTime() + (observedIds.size > 0 ? 0 : 1)),
+            },
+          }
         : undefined;
 
       const boundary = omRecord.lastObservedAt ? new Date(omRecord.lastObservedAt).toISOString() : '';
@@ -2302,6 +2309,7 @@ ${workingMemory}`;
           ? await runState.load(`observational-memory:messages:thread:${threadId}:${boundary}`, loadMessages)
           : await loadMessages();
       }
+      if (observedIds.size > 0) messages = messages.filter(m => !observedIds.has(m.id));
     } else {
       // No OM: load recent messages
       const lastMessages = normalizeMessageHistoryConfig(config.lastMessages, config.messageHistory);
