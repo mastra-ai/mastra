@@ -143,7 +143,8 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
   // The durable engines rebuild steps from Mastra tool-result chunk payloads
   // ({ args, result }, no `type`) rather than AI SDK ToolResultParts
   // ({ type, input, output: { type: 'json', value } }), so a predicate that reads
-  // `output` sees undefined there.
+  // `output` sees undefined there. Tracked in
+  // https://github.com/mastra-ai/mastra/issues/28519; drop the it.fails once fixed.
   (isDurableEngineVariant(engine) ? it.fails : it)(
     'passes toolResults to the predicate as AI SDK tool-result parts',
     async () => {
