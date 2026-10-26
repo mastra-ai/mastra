@@ -2461,6 +2461,9 @@ importers:
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
+      msw:
+        specifier: ^2.12.11
+        version: 2.14.6(@types/node@22.19.15)(typescript@6.0.3)
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(@volar/typescript@2.4.23(typescript@6.0.3))(oxc-resolver@11.21.2)(tsx@4.23.1)(typescript@6.0.3)
@@ -2737,6 +2740,9 @@ importers:
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
+      msw:
+        specifier: ^2.12.11
+        version: 2.14.6(@types/node@22.19.15)(typescript@6.0.3)
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(@volar/typescript@2.4.23(typescript@6.0.3))(oxc-resolver@11.21.2)(tsx@4.23.1)(typescript@6.0.3)

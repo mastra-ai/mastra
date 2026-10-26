@@ -4,6 +4,7 @@ export type ProviderCredential = NonNullable<ProviderInfo['userCredential']>;
 export type CredentialScope = 'user' | 'org';
 
 export const CREDENTIAL_LABEL: Record<ProviderCredential, string> = { oauth: 'Signed in', api_key: 'Key saved' };
+export const SIGN_IN_EXPIRED_LABEL = 'Sign-in expired';
 
 export const SHARED_SOURCE: Partial<Record<ProviderInfo['source'], { label: string; description: string }>> = {
   env: { label: 'From env', description: 'Read from the server environment' },
@@ -24,6 +25,16 @@ export function credentialAt(provider: ProviderInfo, scope: CredentialScope): Pr
   return undefined;
 }
 
+/** The sign-in at this scope expired and could not be renewed, so requests fail until the user signs in again. */
+export function signInExpiredAt(provider: ProviderInfo, scope: CredentialScope): boolean {
+  return (scope === 'org' ? provider.orgCredentialExpired : provider.userCredentialExpired) === true;
+}
+
 export function isConnectedAt(provider: ProviderInfo, scope: CredentialScope): boolean {
   return credentialAt(provider, scope) !== undefined || SHARED_SOURCE[provider.source] !== undefined;
+}
+
+export function soleOAuthMode(provider: ProviderInfo): string | undefined {
+  const modes = provider.oauth?.modes ?? [];
+  return modes.length === 1 ? modes[0] : undefined;
 }

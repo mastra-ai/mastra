@@ -96,6 +96,7 @@
     "@internal/workspace-test-utils": "workspace:*",
     "@libsql/client": "^0.18.0",
     "@types/node": "22.20.5",
+    "msw": "^2.12.11",
     "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:ts6",

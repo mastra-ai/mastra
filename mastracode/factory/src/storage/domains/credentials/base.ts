@@ -44,6 +44,8 @@ export interface CredentialRecord {
   scope: CredentialScope;
   credential: AuthCredential;
   updatedAt: Date;
+  /** When the last OAuth token refresh failed; cleared by the next successful refresh or a new sign-in. */
+  refreshFailedAt?: Date;
 }
 
 /** Result of per-caller resolution: the winning credential and its scope. */
@@ -104,6 +106,7 @@ export const MODEL_CREDENTIALS_SCHEMA: CollectionSchema = {
     data: { type: 'json' },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
+    refresh_failed_at: { type: 'timestamp', nullable: true },
   },
   uniqueIndexes: [
     // Scope is encoded in `user_id` nullability (NULL = org-scoped shared
@@ -140,6 +143,7 @@ interface CredentialDbRow extends Record<string, unknown> {
   user_id: string | null;
   data: unknown;
   updated_at: Date;
+  refresh_failed_at: Date | null;
 }
 
 /** Column shape of one `oauth_login_sessions` row as returned by ops. */
@@ -229,6 +233,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
         type: credential.type,
         data: encrypted,
         updated_at: new Date(),
+        refresh_failed_at: null,
       });
 
     let lastError: unknown;
@@ -274,12 +279,14 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
         scope: 'user' as const,
         credential: await this.#decryptCredential(row.data),
         updatedAt: row.updated_at,
+        refreshFailedAt: row.refresh_failed_at ?? undefined,
       })),
       ...orgRows.map(async row => ({
         provider: row.provider,
         scope: 'org' as const,
         credential: await this.#decryptCredential(row.data),
         updatedAt: row.updated_at,
+        refreshFailedAt: row.refresh_failed_at ?? undefined,
       })),
     ]);
   }
@@ -320,7 +327,8 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
    * rotating refresh tokens. The expiry is re-checked under the lock —
    * another replica may have refreshed already, in which case `refreshFn` is
    * skipped and the fresh credential is returned. Returns `undefined` when no
-   * OAuth row exists for the tenant.
+   * OAuth row exists for the tenant. A failed `refreshFn` is recorded on the
+   * row (surfaced as `CredentialRecord.refreshFailedAt`) and rethrown.
    */
   async refreshOAuth(
     tenant: CredentialTenant,
@@ -328,6 +336,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     refreshFn: (current: OAuthCredential) => Promise<OAuthCredential>,
   ): Promise<OAuthCredential | undefined> {
     let result: OAuthCredential | undefined;
+    let failure: { error: unknown } | undefined;
     await this.#db.updateAtomic<CredentialDbRow>(
       'model_provider_credentials',
       tenantWhere(tenant, provider),
@@ -340,11 +349,16 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
           result = current;
           return decrypted.needsReencryption ? { data: await this.encryption.encrypt(current) } : null;
         }
-        const next = await refreshFn(current);
-        result = next;
-        return { data: await this.encryption.encrypt(next), updated_at: new Date() };
+        try {
+          result = await refreshFn(current);
+        } catch (error) {
+          failure = { error };
+          return { refresh_failed_at: new Date() };
+        }
+        return { data: await this.encryption.encrypt(result), updated_at: new Date(), refresh_failed_at: null };
       },
     );
+    if (failure) throw failure.error;
     return result;
   }
 

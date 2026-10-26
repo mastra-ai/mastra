@@ -221,7 +221,10 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: CredentialStore }
 
     const accessToken = await storage.getApiKey('anthropic');
     if (!accessToken) {
-      throw new ProviderAuthRequiredError('Not logged in to Anthropic.');
+      const signedIn = storage.get('anthropic')?.type === 'oauth';
+      throw new ProviderAuthRequiredError(
+        signedIn ? 'Failed to refresh the Anthropic token.' : 'Not logged in to Anthropic.',
+      );
     }
 
     // Preserve Request headers and let explicit init headers override them.
