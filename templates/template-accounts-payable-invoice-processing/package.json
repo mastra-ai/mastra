@@ -14,7 +14,8 @@
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
     "format": "oxfmt --config .oxfmtrc.json .",
     "format:check": "oxfmt --config .oxfmtrc.json --check .",
-    "lint": "oxlint --config oxlint.config.ts --deny-warnings src test"
+    "lint": "oxlint --config oxlint.config.ts --deny-warnings src test",
+    "test:integration": "node --experimental-strip-types --test test/integration.quickbooks.ts"
   },
   "dependencies": {
     "@mastra/core": "latest",

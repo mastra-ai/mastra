@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { afterEach, describe, it } from 'node:test';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
 import { LibSQLStore } from '@mastra/libsql';
 import {
@@ -10,6 +9,9 @@ import {
   parseQuickBooksRecords,
   type McpToolClient,
 } from '../src/mastra/accounting/quickbooks.ts';
+
+const localTestDirectory = resolve('.local/tests');
+await mkdir(localTestDirectory, { recursive: true });
 
 const originalEnvironment = {
   AP_APPROVAL_THRESHOLD_MINOR: process.env.AP_APPROVAL_THRESHOLD_MINOR,
@@ -134,7 +136,7 @@ describe('QuickBooks provider', () => {
   });
 
   it('posts an approved, reconciled bill', async () => {
-    const lockDirectory = await mkdtemp(join(tmpdir(), 'qbo-posting-test-'));
+    const lockDirectory = await mkdtemp(join(localTestDirectory, 'qbo-posting-test-'));
     process.env.QBO_MCP_ENABLE_POSTING = 'true';
     process.env.QBO_MCP_EXPENSE_ACCOUNT_ID = 'expense-1';
     process.env.QBO_MCP_POSTING_LOCK_DIR = lockDirectory;
@@ -191,7 +193,7 @@ describe('QuickBooks provider', () => {
   });
 
   it('runs the provider-neutral workflow with the configured QuickBooks adapter', async () => {
-    const lockDirectory = await mkdtemp(join(tmpdir(), 'qbo-workflow-test-'));
+    const lockDirectory = await mkdtemp(join(localTestDirectory, 'qbo-workflow-test-'));
     process.env.AP_APPROVAL_THRESHOLD_MINOR = '1';
     process.env.AP_ALLOW_UNSCREENED_VENDORS = 'false';
     process.env.QBO_MCP_ENABLE_POSTING = 'true';
