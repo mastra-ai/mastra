@@ -25,7 +25,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { createScorer, filterRun } from '@mastra/core/evals';
 
-import { isBuildCommand, isTestCommand, getExitCode } from './classify-command.js';
+import { isBuildCommand, isTestCommand, getExitCode, isSuccessResult } from './classify-command.js';
 import type { ExtractedToolCall } from './extract-tools.js';
 import { extractToolCalls } from './extract-tools.js';
 
@@ -100,9 +100,9 @@ function scoreBuild(execResults: ExtractedToolCall[]): DimensionResult {
   if (last.isError) return { score: 0, detail: 'Build/typecheck tool errored', applicable: true };
 
   const exitCode = getExitCode(last.result);
-  if (exitCode === 0) return { score: 1, detail: 'Build/typecheck passed', applicable: true };
   if (exitCode !== null && exitCode !== 0)
     return { score: 0, detail: `Build failed (exit ${exitCode})`, applicable: true };
+  if (isSuccessResult(last.result)) return { score: 1, detail: 'Build/typecheck passed', applicable: true };
 
   // Fallback: check result text for TS errors
   const text = typeof last.result === 'string' ? last.result : JSON.stringify(last.result ?? '');
@@ -124,9 +124,9 @@ function scoreTests(execResults: ExtractedToolCall[]): DimensionResult {
   if (last.isError) return { score: 0, detail: 'Test command errored', applicable: true };
 
   const exitCode = getExitCode(last.result);
-  if (exitCode === 0) return { score: 1, detail: 'Tests passed', applicable: true };
   if (exitCode !== null && exitCode !== 0)
     return { score: 0, detail: `Tests failed (exit ${exitCode})`, applicable: true };
+  if (isSuccessResult(last.result)) return { score: 1, detail: 'Tests passed', applicable: true };
 
   const text = typeof last.result === 'string' ? last.result : JSON.stringify(last.result ?? '');
   if (/\d+ (?:tests? )?passed|✓|PASS/i.test(text) && !/\bfail(?:ed|ure)?\b|\berror\b/i.test(text)) {
@@ -224,8 +224,11 @@ function scoreRegression(execResults: ExtractedToolCall[]): DimensionResult {
     let sawPass = false;
     let sawRegression = false;
     for (const cmd of cmds) {
-      const exit = getExitCode(cmd.result);
-      if (exit === 0) {
+      const exitCode = getExitCode(cmd.result);
+      const passed = isSuccessResult(cmd.result, cmd.isError);
+      const failed = cmd.isError || (exitCode !== null && exitCode !== 0);
+
+      if (passed) {
         if (sawRegression) {
           // Recovered from regression
           regressions.push({ label, recovered: true });
@@ -233,7 +236,7 @@ function scoreRegression(execResults: ExtractedToolCall[]): DimensionResult {
         }
         sawPass = true;
       }
-      if (sawPass && exit !== null && exit !== 0) {
+      if (sawPass && failed) {
         sawRegression = true;
       }
     }
