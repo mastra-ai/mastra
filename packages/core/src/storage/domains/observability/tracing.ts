@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
-import { PREVIEW_MAX_LENGTH, truncatePreview } from '../../../observability/preview-text';
+import { PREVIEW_MAX_LENGTH, truncatePreview } from '../../../observability/span-previews';
 import { SpanType } from '../../../observability/types';
 import type { SpanInput, SpanOutput, SpanTypeMap } from '../../../observability/types';
 import {
@@ -472,7 +472,7 @@ export function extractBranchSpans<
 // Lightweight Span & Trace Schemas (for timeline rendering)
 // ============================================================================
 
-export { PREVIEW_MAX_LENGTH } from '../../../observability/preview-text';
+export { PREVIEW_MAX_LENGTH } from '../../../observability/span-previews';
 
 /** @deprecated Use {@link PREVIEW_MAX_LENGTH}. */
 export const INPUT_PREVIEW_MAX_LENGTH = PREVIEW_MAX_LENGTH;
