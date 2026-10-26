@@ -1,4 +1,5 @@
-import type { MCPDetailedTask, MCPTask, MCPTaskInputResponses } from '../../shared/tasks';
+import type { CallToolResult } from '@modelcontextprotocol/server';
+import type { MCPDetailedTask, MCPTask, MCPTaskInputRequests, MCPTaskInputResponses } from '../../shared/tasks';
 
 /**
  * What {@link MCPTaskStore.create} durably records.
@@ -26,9 +27,9 @@ export interface MCPTaskAccess {
 }
 
 /**
- * Where `MCPServer` keeps MCP tasks. The `tasks/*` handlers only call these four methods; how the
- * work runs (in-process, as a workflow run, on a background-task worker) is up to the store and
- * whatever executes the task.
+ * Where `MCPServer` keeps MCP tasks. The `tasks/*` handlers call `get`, `update` and `cancel`;
+ * `MCPServer` creates a task and hands its work to `run`. Where the work runs (in-process, on a
+ * background-task worker) is up to the store.
  *
  * - `create` must not resolve before an immediate `get(taskId)` would succeed, including on another
  *   instance when the store is shared (SEP-2663 durable creation).
@@ -46,4 +47,65 @@ export interface MCPTaskStore {
   get(taskId: string, access: MCPTaskAccess): Promise<MCPDetailedTask | undefined>;
   update(taskId: string, inputResponses: MCPTaskInputResponses, access: MCPTaskAccess): Promise<boolean>;
   cancel(taskId: string, access: MCPTaskAccess): Promise<boolean>;
+  /**
+   * Drives `work` for a task this store created: runs it now, runs it again with `resume` once every
+   * open input key is answered, and records each outcome. A rejected attempt marks the task `failed`
+   * (-32603). Outcomes that arrive after the task is terminal are ignored.
+   *
+   * `work` must be a pure function of the `context` given to `create`, so a store that outlives the
+   * process can rebuild and dispatch it again. With `options.initialAttempt`, that attempt stands in
+   * for the first call to `work`; every later attempt still goes through `work`.
+   */
+  run(taskId: string, work: MCPTaskWork, options?: MCPTaskRunOptions): void;
 }
+
+/** @experimental SEP-2663 extension; API may change. */
+export interface MCPTaskRunOptions {
+  /**
+   * A first attempt already running in this process, e.g. an `'auto'` tool that outlived its sync
+   * window. The store awaits `outcome` as attempt 1 instead of calling `work`, and calls `abort`
+   * if the task is cancelled or expires meanwhile.
+   *
+   * It is process-local and never persisted: it may hold request-local state, so a durable store
+   * treats it as process-affine and never dispatches it elsewhere.
+   */
+  initialAttempt?: {
+    outcome: Promise<MCPTaskAttemptOutcome>;
+    abort: (reason?: unknown) => void;
+  };
+}
+
+/**
+ * One run of a task's work. The first attempt has no `resume`; after an `input_required` outcome
+ * the next attempt receives the client's answers.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export interface MCPTaskAttempt {
+  /** Aborts when the task is cancelled or expires. */
+  signal: AbortSignal;
+  resume?: {
+    /** The answers to every key the previous attempt asked for. */
+    inputResponses: MCPTaskInputResponses;
+    /** What the previous attempt handed back with its input requests. */
+    suspendPayload: unknown;
+  };
+}
+
+/**
+ * How one attempt ended. Errors raised by the work itself belong in a `completed` result with
+ * `isError: true`; only a rejected attempt makes the task `failed`.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export type MCPTaskAttemptOutcome =
+  | { status: 'completed'; result: CallToolResult }
+  | {
+      status: 'input_required';
+      /** Keys must be unique over the task's lifetime; a reused key fails the task. */
+      inputRequests: MCPTaskInputRequests;
+      suspendPayload?: unknown;
+    };
+
+/** @experimental SEP-2663 extension; API may change. */
+export type MCPTaskWork = (attempt: MCPTaskAttempt) => Promise<MCPTaskAttemptOutcome>;

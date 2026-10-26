@@ -8,7 +8,15 @@ import type {
   MCPTaskInputResponses,
   MCPTaskStatus,
 } from '../../shared/tasks';
-import type { MCPTaskAccess, MCPTaskCreateParams, MCPTaskStore } from './store';
+import type {
+  MCPTaskAccess,
+  MCPTaskAttempt,
+  MCPTaskAttemptOutcome,
+  MCPTaskCreateParams,
+  MCPTaskRunOptions,
+  MCPTaskStore,
+  MCPTaskWork,
+} from './store';
 
 /**
  * Writes the state of one in-memory task. The code executing the task holds it.
@@ -142,6 +150,82 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
   /** The context recorded at creation. */
   context(taskId: string): Record<string, unknown> | undefined {
     return this.#tasks.get(taskId)?.context;
+  }
+
+  run(taskId: string, work: MCPTaskWork, options: MCPTaskRunOptions = {}): void {
+    const record = this.#tasks.get(taskId);
+    if (!record) throw new Error(`MCP task "${taskId}" not found`);
+    const initial = options.initialAttempt;
+    if (!initial) {
+      this.#attempt(record, work);
+      return;
+    }
+    const signal = record.abort.signal;
+    const abort = () => initial.abort(signal.reason);
+    if (signal.aborted) abort();
+    else signal.addEventListener('abort', abort, { once: true });
+    this.#settle(
+      record,
+      work,
+      initial.outcome.finally(() => signal.removeEventListener('abort', abort)),
+    );
+  }
+
+  #attempt(record: TaskRecord, work: MCPTaskWork, resume?: MCPTaskAttempt['resume']): void {
+    const attempt: MCPTaskAttempt = { signal: record.abort.signal, ...(resume && { resume }) };
+    this.#settle(
+      record,
+      work,
+      Promise.resolve().then(() => work(attempt)),
+    );
+  }
+
+  #settle(record: TaskRecord, work: MCPTaskWork, outcome: Promise<MCPTaskAttemptOutcome>): void {
+    outcome.then(
+      result => this.#record(record, work, result),
+      (error: unknown) =>
+        this.#fail(record, {
+          code: TASKS_ERROR_CODES.InternalError,
+          message: error instanceof Error ? error.message : String(error),
+        }),
+    );
+  }
+
+  #record(record: TaskRecord, work: MCPTaskWork, outcome: MCPTaskAttemptOutcome): void {
+    if (isTerminalTaskStatus(record.status)) return;
+    if (outcome.status === 'completed') {
+      record.result = outcome.result;
+      this.#finish(record, 'completed');
+      return;
+    }
+    const keys = Object.keys(outcome.inputRequests);
+    const reused = keys.find(key => record.usedInputKeys.has(key));
+    if (keys.length === 0 || reused !== undefined) {
+      this.#fail(record, {
+        code: TASKS_ERROR_CODES.InternalError,
+        message:
+          reused === undefined
+            ? 'Task asked for input without any input request'
+            : `Input request key "${reused}" was already used by this task`,
+      });
+      return;
+    }
+    for (const key of keys) record.usedInputKeys.add(key);
+    const { suspendPayload } = outcome;
+    record.pendingInput = {
+      requests: outcome.inputRequests,
+      responses: {},
+      resolve: inputResponses => this.#attempt(record, work, { inputResponses, suspendPayload }),
+      // Cancellation and expiry abort the signal; nothing is waiting on this attempt.
+      reject: () => {},
+    };
+    this.#transition(record, 'input_required');
+  }
+
+  #fail(record: TaskRecord, error: MCPTaskError): void {
+    if (isTerminalTaskStatus(record.status)) return;
+    record.error = error;
+    this.#finish(record, 'failed', new Error(error.message));
   }
 
   /** The writer for a task this store holds. Writes after the task is terminal are ignored. */

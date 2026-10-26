@@ -82,6 +82,7 @@ export async function rawRequest(
     headers = {},
     httpMethod = 'POST',
     id = 1,
+    capabilities = {},
   }: {
     method?: string;
     params?: Record<string, unknown>;
@@ -89,13 +90,15 @@ export async function rawRequest(
     headers?: Record<string, string>;
     httpMethod?: string;
     id?: number | null;
+    /** The client capabilities the envelope declares. */
+    capabilities?: Record<string, unknown>;
   },
 ): Promise<RawResponse> {
   const meta = envelope
     ? {
         [PROTOCOL_VERSION_META_KEY]: '2026-07-28',
         [CLIENT_INFO_META_KEY]: { name: 'raw', version: '1.0.0' },
-        [CLIENT_CAPABILITIES_META_KEY]: {},
+        [CLIENT_CAPABILITIES_META_KEY]: capabilities,
       }
     : undefined;
   const body = method

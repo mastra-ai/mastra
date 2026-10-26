@@ -1952,6 +1952,131 @@ Records an occurrence, delivers it to matching push streams and webhook subscrip
 - Webhook delivery state (pending retries, suspension, verification results) is in memory and rebuilt when clients refresh.
 - Event-list change announcements require the `eventsListChanged` filter on `subscriptions/listen`, which the MCP TypeScript SDK version used by `@mastra/mcp` doesn't carry. Until that support is available, the server neither advertises `listChanged` nor sends `notifications/events/list_changed`. Clients should re-run `events/list` to see changed event types.
 
+## Tasks (experimental)
+
+:::warning
+
+Tasks implement SEP-2663, the `io.modelcontextprotocol/tasks` MCP extension. This API may change in any release.
+
+:::
+
+The `tasks` option lets a tool answer `tools/call` with a task instead of a result. The client gets a task handle at once and polls `tasks/get` until the task finishes, so the result outlives the request and isn't limited by HTTP timeouts. When at least one tool can answer with a task, the server advertises the extension and answers `tasks/get`, `tasks/update` and `tasks/cancel` over both stdio and Streamable HTTP. Without a `tasks` option, it does neither.
+
+Only clients that declare the extension on a request get a task. Every other client gets a synchronous answer, unless the tool is listed in `required`.
+
+```typescript
+import { MCPServer } from '@mastra/mcp'
+
+const server = new MCPServer({
+  id: 'reports',
+  name: 'Reports',
+  version: '1.0.0',
+  tools: { buildReport, lookupCustomer },
+  tasks: {
+    tools: {
+      buildReport: 'always',
+      lookupCustomer: { mode: 'auto', syncWindowMs: 1000 },
+    },
+  },
+})
+```
+
+### Modes
+
+| Mode | Client declared the extension | Client didn't |
+| - | - | - |
+| `'off'` | Synchronous answer. | Synchronous answer. |
+| `'always'` | Task handle at once. | Synchronous answer, or error `-32021` when the tool is in `required`. |
+| `'auto'` | Synchronous answer if the tool finishes within `syncWindowMs`. Otherwise a task handle, and the same run continues. | Synchronous answer, or error `-32021` when the tool is in `required`. |
+
+The server creates the task before it answers, so a `tasks/get` sent right after the handle arrives succeeds.
+
+### `tasks` options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'default',
+    type: "'off' | 'auto' | 'always'",
+    isOptional: true,
+    defaultValue: "'off'",
+    description:
+      'Mode for tools not listed in `tools`, including tools added later with `toolActions.add()`. Agent (`ask_*`) and workflow (`run_*`) tools always answer synchronously.',
+  },
+  {
+    name: 'tools',
+    type: "Record<string, 'off' | 'auto' | 'always' | { mode; syncWindowMs?; ttlMs? }>",
+    isOptional: true,
+    description:
+      "Mode per tool name. `syncWindowMs` (default `2000`) is how long `'auto'` waits for a synchronous answer. `ttlMs` overrides `tasks.ttlMs` for that tool. A name that isn't one of the server's tools throws when the server is created.",
+  },
+  {
+    name: 'required',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      "Tools that only run as tasks. A client that didn't declare the extension gets error `-32021` instead of a synchronous answer. Each name must be a tool served as a task.",
+  },
+  {
+    name: 'ttlMs',
+    type: 'number | null',
+    isOptional: true,
+    defaultValue: '86400000',
+    description:
+      'How long a task is kept after it is created, in milliseconds. A task still running when it expires is aborted and ends `failed`. `null` keeps tasks until the server closes.',
+  },
+  {
+    name: 'store',
+    type: 'MCPTaskStore',
+    isOptional: true,
+    defaultValue: 'new InMemoryMCPTaskStore()',
+    description: 'Where tasks are kept. The default store keeps them in memory, in this process.',
+  },
+  {
+    name: 'authorize',
+    type: '(context: { principal: string; task: MCPDetailedTask; requestContext: RequestContext }) => boolean | Promise<boolean>',
+    isOptional: true,
+    description:
+      'Runs on every `tasks/get`, `tasks/update` and `tasks/cancel`, after the caller is matched to the task. Return `false` to refuse; the caller gets the same error as for an unknown task.',
+  },
+  {
+    name: 'workflows',
+    type: 'never',
+    isOptional: true,
+    description: 'Not supported yet. Setting it throws when the server is created.',
+  },
+  {
+    name: 'agents',
+    type: 'never',
+    isOptional: true,
+    description: 'Not supported yet. Setting it throws when the server is created.',
+  },
+]}
+/>
+
+### Access to tasks
+
+A task id is an unguessable bearer token, and each task is bound to the caller that created it. The caller is identified the same way as for [continuation state](#continuation-state): by the OAuth subject, the mapped `user`, or a hash of the bearer token. Another caller asking for the task, and a caller `authorize` refuses, both get error `-32602`, the same answer as for an id that doesn't exist. There is no way to list tasks.
+
+### Asking for input inside a task
+
+A tool that calls `suspend()` inside a task moves it to `input_required`. Its input request is the same form a synchronous call would get, built from the tool's `resumeSchema`. When the client answers with `tasks/update`, the server runs `execute` again with `resumeData`, as for a synchronous call. Keep the work before `suspend()` safe to repeat.
+
+A declined or cancelled input request completes the task with `isError: true`. Answers to keys the task didn't ask for are ignored.
+
+The resumed run receives the request context of the call that created the task, with the bearer token removed. `context.mcp` isn't available in a resumed run, so read cancellation from `context.abortSignal`.
+
+### Cancellation and errors
+
+- `tasks/cancel` aborts the tool's `abortSignal` and the task ends `cancelled`. Stopping is up to the tool; a result it returns afterwards is discarded.
+- A tool that throws completes the task with `isError: true` and the serialized error, as a synchronous call answers.
+- A task ends `failed` only when the server can't run it, for example when its TTL expires.
+
+### Limits
+
+- The default store keeps tasks in memory. They are lost when the process restarts, and a multi-instance deployment needs every `tasks/*` request for a task to reach the instance that created it. Streamable HTTP requests carry the task id in the `Mcp-Name` header, so a load balancer can route on it.
+- Progress and log notifications sent after the task handle is answered are dropped.
+
 ## Related information
 
 - For connecting to MCP servers in Mastra, see the [MCPClient documentation](./mcp-client).
