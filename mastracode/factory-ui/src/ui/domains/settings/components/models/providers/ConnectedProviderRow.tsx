@@ -14,7 +14,7 @@ import {
   useStartProviderOAuth,
 } from '../../../../../../hooks/use-providers';
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
-import { soleOAuthMode } from '../../provider-credential';
+import { signInRequest } from '../../provider-credential';
 import type { CredentialScope, ProviderCredential } from '../../provider-credential';
 
 export interface ProviderConnection {
@@ -83,13 +83,10 @@ export function ConnectedProviderRow({
   };
 
   const signInAgain = () => {
-    startOAuthMutation.mutate(
-      { provider: provider.provider, mode: soleOAuthMode(provider), scope: requestScope },
-      {
-        onSuccess: session => onOAuthStarted(provider.provider, session),
-        onError: error => toast.error(error.message || 'Failed to start sign-in'),
-      },
-    );
+    startOAuthMutation.mutate(signInRequest(provider, requestScope), {
+      onSuccess: session => onOAuthStarted(provider.provider, session),
+      onError: error => toast.error(error.message || 'Failed to start sign-in'),
+    });
   };
 
   const removeKey = () => {

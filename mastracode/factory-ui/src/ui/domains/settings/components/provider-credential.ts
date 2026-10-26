@@ -1,4 +1,5 @@
 import type { ProviderInfo } from '../../../../api/types';
+import type { StartProviderOAuthArgs } from '../../../../hooks/use-providers';
 
 export type ProviderCredential = NonNullable<ProviderInfo['userCredential']>;
 export type CredentialScope = 'user' | 'org';
@@ -34,7 +35,7 @@ export function isConnectedAt(provider: ProviderInfo, scope: CredentialScope): b
   return credentialAt(provider, scope) !== undefined || SHARED_SOURCE[provider.source] !== undefined;
 }
 
-export function soleOAuthMode(provider: ProviderInfo): string | undefined {
+export function signInRequest(provider: ProviderInfo, scope: CredentialScope | undefined): StartProviderOAuthArgs {
   const modes = provider.oauth?.modes ?? [];
-  return modes.length === 1 ? modes[0] : undefined;
+  return { provider: provider.provider, mode: modes.length === 1 ? modes[0] : undefined, scope };
 }

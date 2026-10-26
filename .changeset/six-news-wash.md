@@ -2,4 +2,4 @@
 '@mastra/code-sdk': patch
 ---
 
-Fixed the Anthropic subscription error shown when a saved sign-in can no longer be renewed. It now says "Failed to refresh the Anthropic token." instead of "Not logged in to Anthropic.", matching the other subscription providers.
+Subscription providers (Anthropic, OpenAI Codex, GitHub Copilot, xAI, Kimi For Coding) now say "<Provider> sign-in expired." when a saved sign-in can no longer be renewed, matching the **Sign-in expired** status in Settings. Before, Anthropic said "Not logged in to Anthropic." and the others said "Failed to refresh the <Provider> token." "Not logged in to <Provider>." is now only shown when no sign-in is saved.

@@ -210,6 +210,16 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     return (await this.encryption.decrypt<AuthCredential>(value)).value;
   }
 
+  async #toRecord(row: CredentialDbRow, scope: CredentialScope): Promise<CredentialRecord> {
+    return {
+      provider: row.provider,
+      scope,
+      credential: await this.#decryptCredential(row.data),
+      updatedAt: row.updated_at,
+      refreshFailedAt: row.refresh_failed_at ?? undefined,
+    };
+  }
+
   async #migrateCredential(id: string): Promise<void> {
     await this.#db.updateAtomic<CredentialDbRow>('model_provider_credentials', { id }, async row => {
       const decrypted = await this.encryption.decrypt<AuthCredential>(row.data);
@@ -274,20 +284,8 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
       this.#db.findMany<CredentialDbRow>('model_provider_credentials', { org_id: orgId, user_id: null }),
     ]);
     return Promise.all([
-      ...userRows.map(async row => ({
-        provider: row.provider,
-        scope: 'user' as const,
-        credential: await this.#decryptCredential(row.data),
-        updatedAt: row.updated_at,
-        refreshFailedAt: row.refresh_failed_at ?? undefined,
-      })),
-      ...orgRows.map(async row => ({
-        provider: row.provider,
-        scope: 'org' as const,
-        credential: await this.#decryptCredential(row.data),
-        updatedAt: row.updated_at,
-        refreshFailedAt: row.refresh_failed_at ?? undefined,
-      })),
+      ...userRows.map(row => this.#toRecord(row, 'user')),
+      ...orgRows.map(row => this.#toRecord(row, 'org')),
     ]);
   }
 
@@ -298,27 +296,9 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     provider: string,
     scope: CredentialScope,
   ): Promise<ResolvedCredential | undefined> {
-    const readUser = async (): Promise<ResolvedCredential | undefined> => {
-      const row = await this.#db.findOne<CredentialDbRow>('model_provider_credentials', {
-        org_id: orgId,
-        provider,
-        user_id: userId,
-      });
-      return row
-        ? { provider: row.provider, scope: 'user', credential: await this.#decryptCredential(row.data) }
-        : undefined;
-    };
-    const readOrg = async (): Promise<ResolvedCredential | undefined> => {
-      const row = await this.#db.findOne<CredentialDbRow>('model_provider_credentials', {
-        org_id: orgId,
-        provider,
-        user_id: null,
-      });
-      return row
-        ? { provider: row.provider, scope: 'org', credential: await this.#decryptCredential(row.data) }
-        : undefined;
-    };
-    return scope === 'org' ? readOrg() : readUser();
+    const tenant = scope === 'org' ? { orgId } : { orgId, userId };
+    const row = await this.#db.findOne<CredentialDbRow>('model_provider_credentials', tenantWhere(tenant, provider));
+    return row ? { provider: row.provider, scope, credential: await this.#decryptCredential(row.data) } : undefined;
   }
 
   /**

@@ -23,7 +23,7 @@ import {
   SIGN_IN_EXPIRED_LABEL,
   credentialAt,
   signInExpiredAt,
-  soleOAuthMode,
+  signInRequest,
 } from '../../provider-credential';
 import type { CredentialScope } from '../../provider-credential';
 
@@ -83,10 +83,9 @@ export function AddProviderDrawer({
   const startingProvider = startOAuthMutation.isPending ? startOAuthMutation.variables.provider : undefined;
 
   const signIn = (provider: ProviderInfo) => {
-    startOAuthMutation.mutate(
-      { provider: provider.provider, mode: soleOAuthMode(provider), scope: requestScope },
-      { onSuccess: session => onOAuthStarted(provider.provider, session) },
-    );
+    startOAuthMutation.mutate(signInRequest(provider, requestScope), {
+      onSuccess: session => onOAuthStarted(provider.provider, session),
+    });
   };
 
   const closeUnlessStarting = (nextOpen: boolean) => {
