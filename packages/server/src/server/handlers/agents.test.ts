@@ -124,6 +124,23 @@ describe('getProvidersHandler', () => {
     delete (global as any).__MOCK_PROVIDER_REGISTRY__;
   });
 
+  it('includes catalog release dates for model pickers', async () => {
+    Object.assign(globalThis, {
+      __MOCK_PROVIDER_REGISTRY__: {
+        acme: {
+          name: 'ACME',
+          models: ['acme-classic', 'acme-next'],
+          modelReleaseDates: { 'acme-next': '2025-08-07' },
+          apiKeyEnvVar: 'ACME_API_KEY',
+          gateway: 'models.dev',
+        },
+      },
+    });
+    const result = await GET_PROVIDERS_ROUTE.handler({});
+    const acme = result.providers.find(provider => provider.id === 'acme');
+    expect(acme?.modelReleaseDates).toEqual({ 'acme-next': '2025-08-07' });
+  });
+
   it('should return all providers from the registry', async () => {
     const result = await GET_PROVIDERS_ROUTE.handler({});
 
@@ -150,6 +167,7 @@ describe('getProvidersHandler', () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
     // Ensure Google is not connected
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
 
     const result = await GET_PROVIDERS_ROUTE.handler({});
 
@@ -170,6 +188,7 @@ describe('getProvidersHandler', () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
 
     const result = await GET_PROVIDERS_ROUTE.handler({});
 
@@ -448,6 +467,7 @@ describe('isProviderConnected', () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
   });
 
   afterEach(() => {

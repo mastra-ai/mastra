@@ -207,6 +207,7 @@ export abstract class ObservationStrategy {
     const cycleId = this.generateCycleId();
 
     try {
+      abortSignal?.throwIfAborted();
       if (this.needsLock) {
         const fresh = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
         if (fresh?.lastObservedAt && record.lastObservedAt && fresh.lastObservedAt > record.lastObservedAt) {
@@ -214,6 +215,7 @@ export abstract class ObservationStrategy {
         }
       }
 
+      abortSignal?.throwIfAborted();
       const { messages, existingObservations, contextRecord } = await this.prepare();
       if (messages.length === 0) {
         // Nothing is unobserved (e.g. a stale persisted pending count met the threshold). Observing
@@ -230,7 +232,9 @@ export abstract class ObservationStrategy {
         observationMessages,
         observerContext.wasTruncated,
       );
+      abortSignal?.throwIfAborted();
       let processed = await this.process(output, existingObservations);
+      abortSignal?.throwIfAborted();
       let committedRecord = record;
       const outcome = await this.persist(processed);
       // A cycle another instance already covered wrote nothing, so there is nothing new to curate.
@@ -246,6 +250,7 @@ export abstract class ObservationStrategy {
         processed = outcome.processed;
         committedRecord = outcome.record;
       }
+      abortSignal?.throwIfAborted();
       await this.emitEndMarkers(cycleId, processed);
 
       if (this.needsReflection) {
@@ -275,6 +280,7 @@ export abstract class ObservationStrategy {
 
       return { observed: true, usage: output.usage, providerMetadata: output.providerMetadata };
     } catch (error) {
+      if (abortSignal?.aborted) throw error;
       await this.emitFailedMarkers(cycleId, error);
 
       if (!this.rethrowOnFailure) {
@@ -524,6 +530,7 @@ export abstract class ObservationStrategy {
           composedFrom = head.activeObservations ?? '';
           processed = await opts.recompose(head);
         }
+        this.opts.abortSignal?.throwIfAborted();
         const input = {
           id: target.id,
           observations: processed.observations,
@@ -565,7 +572,14 @@ export abstract class ObservationStrategy {
   /** Runs one storage commit in this thread's (or resource's) slot of the process-wide commit queue. */
   protected runCommit<T>(op: () => Promise<T>): Promise<T> {
     const { threadId, resourceId, record } = this.opts;
-    return runOMCommit(getOMLockKey(this.scope, record.threadId ?? threadId, record.resourceId ?? resourceId), op);
+    return runOMCommit(
+      getOMLockKey(this.scope, record.threadId ?? threadId, record.resourceId ?? resourceId),
+      () => {
+        this.opts.abortSignal?.throwIfAborted();
+        return op();
+      },
+      { abortSignal: this.opts.abortSignal },
+    );
   }
 
   protected async indexObservationGroups(
@@ -711,6 +725,7 @@ export abstract class ObservationStrategy {
     threadId: string,
     resourceId?: string,
   ): Promise<void> {
+    if (this.opts.abortSignal?.aborted) return;
     const parts = msg.content?.parts;
     if (!parts || !Array.isArray(parts)) return;
     const markerData = marker.data as { cycleId?: string } | undefined;
@@ -754,6 +769,7 @@ export abstract class ObservationStrategy {
         orderBy: { field: 'createdAt', direction: 'DESC' },
         ...(opts?.notAfter ? { filter: { dateRange: { end: opts.notAfter } } } : {}),
       });
+      if (this.opts.abortSignal?.aborted) return;
       const assistants = (result?.messages ?? []).filter(
         msg => msg?.role === 'assistant' && Array.isArray(msg.content?.parts),
       );
@@ -795,7 +811,7 @@ export abstract class ObservationStrategy {
     threadId: string,
     resourceId?: string,
   ): Promise<boolean> {
-    if (!messageList) return false;
+    if (this.opts.abortSignal?.aborted || !messageList) return false;
     const allMsgs = getObservableMessages(messageList);
     for (let i = allMsgs.length - 1; i >= 0; i--) {
       const msg = allMsgs[i];

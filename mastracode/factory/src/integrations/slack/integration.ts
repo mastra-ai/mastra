@@ -27,6 +27,8 @@ import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
 
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { announcePullRequest } from '../channel-thread-announcements.js';
+import { parseCreatedPullRequest } from '../github/session-subscriptions.js';
 import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
 import { FactoryChannelSessionLinkProcessor } from './channel-session-link-processor.js';
 import { createSlackConnectRoutes } from './connect-route.js';
@@ -218,6 +220,23 @@ export class SlackIntegration implements FactoryIntegration {
       ...createShareFileTool(requestContext, this.#deps),
       ...(this.#textHidden ? createReplyTool(requestContext, this.#deps) : {}),
     };
+  }
+
+  /**
+   * When a run opens a pull request, post its link into the session's Slack
+   * thread.
+   */
+  async postToolObserver({
+    toolContext,
+    requestContext,
+  }: Parameters<NonNullable<FactoryIntegration['postToolObserver']>>[0]): Promise<void> {
+    const url = parseCreatedPullRequest(toolContext);
+    const threadId = (requestContext?.get('controller') as { threadId?: string } | undefined)?.threadId;
+    if (!url || !requestContext || !threadId || !(await isSlackThread(requestContext, this.#deps))) return;
+    // Not awaited: the tool call must not wait on Slack.
+    void announcePullRequest(this.#channels?.(), threadId, 'opened', url).catch(error =>
+      console.warn('[slack] pull request opened announcement failed', error),
+    );
   }
 
   channels(ctx: IntegrationContext): FactoryChannelsConfig {

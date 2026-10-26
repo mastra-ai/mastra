@@ -610,7 +610,6 @@ export async function runIdleLoop<
         // already closed
       }
       forceClose();
-      return;
     } finally {
       releaseContinuationToolCallIds(continuationContext, continuationToolCallIds);
       isProcessing = false;

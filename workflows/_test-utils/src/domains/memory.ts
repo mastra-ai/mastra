@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel } from '../mock-models';
 
-export function createMemoryTests({ createAgent, eventPropagationDelay }: DurableAgentTestContext) {
+export function createMemoryTests({ createAgent }: DurableAgentTestContext) {
   describe('memory integration', () => {
     it('should track threadId and resourceId in stream result', async () => {
       const mockModel = createTextStreamModel('Hello');

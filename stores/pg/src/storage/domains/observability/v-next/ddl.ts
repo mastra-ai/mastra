@@ -398,6 +398,9 @@ export function additiveColumns(schema: string): { table: string; column: string
   ];
 }
 
+/** Existence probe for the target schema. Params: schema. */
+export const schemaExistsSQL = `SELECT 1 FROM information_schema.schemata WHERE schema_name = $1`;
+
 /** Existence probe for an additive column. Params: schema, table, column. */
 export const columnExistsSQL = `SELECT 1 FROM information_schema.columns
    WHERE table_schema = $1 AND table_name = $2 AND column_name = $3`;

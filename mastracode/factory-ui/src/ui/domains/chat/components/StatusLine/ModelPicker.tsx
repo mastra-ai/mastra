@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/c
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { formatModelName } from '@mastra/playground-ui/utils/model';
+import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
 import { Check, ChevronDown, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
@@ -36,6 +36,11 @@ function groupByProvider(models: AvailableModelOption[]): [string, AvailableMode
     const group = groups.get(model.provider);
     if (group) group.push(model);
     else groups.set(model.provider, [model]);
+  }
+  for (const group of groups.values()) {
+    group.sort(
+      (a, b) => compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.modelName.localeCompare(b.modelName),
+    );
   }
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
