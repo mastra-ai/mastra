@@ -97,10 +97,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * because we now persist that status — which is exactly what boot-time
    * recovery relies on.
    *
-   * `replayingCanceled` marks a run time traveled while its stored status was
-   * already `canceled` (the claim that flips it to `running` was skipped). That
-   * status is the run's starting point, not a cancellation of this execution,
-   * so it is not honored until the replay writes a status of its own.
+   * `replayingCanceled` marks a run that starts while its stored status is
+   * already `canceled`: a time-travel replay whose claim to flip it to
+   * `running` was skipped, or a fresh `start()` reusing the runId of a canceled
+   * attempt. That status is the run's starting point, not a cancellation of
+   * this execution, so it is not honored until the run writes a status of its own.
    */
   protected lastPersistedStatusByRun = new Map<string, { status?: WorkflowRunStatus; replayingCanceled: boolean }>();
 
@@ -821,7 +822,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       throw empty_graph_error;
     }
 
-    const replayingCanceled = !!timeTravel && (await isWorkflowRunCanceled(this, workflowId, runId));
+    // Time travel and a fresh start() both own the runId, so a stored `canceled` is where they begin.
+    const startsFromStoredStatus = !!timeTravel || (!resume && !restart);
+    const replayingCanceled = startsFromStoredStatus && (await isWorkflowRunCanceled(this, workflowId, runId));
     const tracked = this.lastPersistedStatusByRun.get(runId);
     if (tracked || replayingCanceled) {
       this.lastPersistedStatusByRun.set(runId, { status: tracked?.status, replayingCanceled });
