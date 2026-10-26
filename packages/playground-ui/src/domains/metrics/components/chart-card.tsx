@@ -2,6 +2,7 @@ import { Maximize2Icon } from 'lucide-react';
 import type { ElementType, ReactNode } from 'react';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsCardTitleMenuProps } from '@/ds/components/MetricsCard';
+import type { LinkComponentProps } from '@/lib/framework';
 import { cn } from '@/lib/utils';
 
 export type ChartCardProps = {
@@ -18,8 +19,8 @@ export type ChartCardProps = {
    * chart in an explorer). Ignored with `titleMenu`.
    */
   href?: string;
-  /** Renders `href` links, e.g. the app's router link. Default `a`. */
-  LinkComponent?: ElementType;
+  /** Renders `href` links, e.g. the app's router link; it gets anchor props. Default `a`. */
+  LinkComponent?: ElementType<LinkComponentProps>;
   /** Makes the title a dropdown of the card's views (e.g. by model, by provider). */
   titleMenu?: Omit<MetricsCardTitleMenuProps<string>, 'title' | 'className'>;
   /** Compact cards: the card's total, right of the title in the same type. */
@@ -134,7 +135,7 @@ function ChartCardTitleLink({
   children,
 }: {
   href: string;
-  LinkComponent?: ElementType;
+  LinkComponent?: ElementType<LinkComponentProps>;
   medium: boolean;
   children: string;
 }) {
