@@ -1,4 +1,7 @@
-import type { Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
+import type {
+  Experimental_DecisionModelV4 as DecisionModelV4,
+  Experimental_EvaluationModelV4 as EvaluationModelV4,
+} from '@ai-sdk/provider-v7';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Classifier } from '../classifier';
@@ -287,6 +290,42 @@ describe('createClassifierScorer', () => {
     expect(doEvaluate).toHaveBeenCalledWith(
       expect.objectContaining({ state: [{ type: 'json', value: { output: ['Paris is the capital of France.'] } }] }),
     );
+  });
+
+  it('evaluates every configured question in one decision call but scores only the selected one', async () => {
+    const doDecide = vi.fn<DecisionModelV4['doDecide']>(async () => ({
+      answers: {
+        route: { type: 'choice', choice: 'correct', probabilities: { correct: 1, partial: 0, incorrect: 0 } },
+        quality: { type: 'score', score: 2, probabilities: { '0': 0, '1': 0, '2': 1 } },
+        factual: { type: 'boolean', probability: 0.25 },
+      },
+      usage: { inputTokens: 4, outputTokens: 3 },
+      warnings: [],
+    }));
+    const classifier = new Classifier({
+      id: 'shared-judge',
+      model: {
+        specificationVersion: 'v4',
+        provider: 'openai.decisions',
+        modelId: 'decision-model',
+        supportedQuestionTypes: ['choice', 'score', 'boolean'],
+        doDecide,
+      },
+      questions,
+    });
+    const scorer = createClassifierScorer({
+      id: 'shared-factual',
+      classifier,
+      question: 'factual',
+      state: ({ run }) => ({ output: run.output }),
+    });
+
+    const result = await scorer.run({ output: 'answer' });
+
+    expect(doDecide).toHaveBeenCalledTimes(1);
+    expect(Object.keys(doDecide.mock.calls[0]![0].questions).sort()).toEqual(['factual', 'quality', 'route']);
+    expect(result.score).toBe(0.25);
+    expect(result.analyzeStepResult).toMatchObject({ question: 'factual' });
   });
 
   it.each([
