@@ -304,6 +304,50 @@ describe('span previews', () => {
     expect(withSpanPreviews(span({ output: { status: 'suspended' } })).errorPreview).toBe('');
   });
 
+  it('falls back to readable payload text when a span-specific field cannot be read', () => {
+    const output = { text: 'Order shipped' };
+    Object.defineProperty(output, 'object', {
+      get() {
+        throw new Error('Unreadable structured output');
+      },
+    });
+    const result = withSpanPreviews(span({ output }));
+    expect(result.outputPreview).toBe('Order shipped');
+    expect(result.output).toBe(output);
+
+    const attributes = {};
+    Object.defineProperty(attributes, 'processorPhase', {
+      get() {
+        throw new Error('Unreadable phase');
+      },
+    });
+    expect(withSpanPreviews(span({ attributes, input: 'Find my order' })).inputPreview).toBe('Find my order');
+  });
+
+  it('recovers safe error fields without serializing stack or details when an accessor throws', () => {
+    const errorInfo = { message: '', name: 'TimeoutError', stack: 'secret stack', details: { token: 'secret' } };
+    Object.defineProperty(errorInfo, 'message', {
+      get() {
+        throw new Error('Unreadable message');
+      },
+    });
+    expect(withSpanPreviews(span({ errorInfo })).errorPreview).toBe('TimeoutError');
+    const messageOnly = { message: 'Order service timed out' };
+    Object.defineProperty(messageOnly, 'name', {
+      get() {
+        throw new Error('Unreadable name');
+      },
+    });
+    expect(withSpanPreviews(span({ errorInfo: messageOnly })).errorPreview).toBe('Order service timed out');
+    const unknown = { message: '', stack: 'secret stack', details: { token: 'secret' } };
+    Object.defineProperty(unknown, 'message', {
+      get() {
+        throw new Error('Unreadable message');
+      },
+    });
+    expect(withSpanPreviews(span({ errorInfo: unknown })).errorPreview).toBe('');
+  });
+
   it('bounds large payload traversal and tolerates circular or malformed payloads', () => {
     const output = {
       text: 'a'.repeat(1000),
@@ -379,6 +423,10 @@ describe.each(['realtime', 'batch-with-updates', 'insert-only'] as const)(
       try {
         await formattedLocal.init({ mastra });
         const initial = span({ input: 'Find order', errorPreview: '' });
+        await platform.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: initial });
+        await platform.exportTracingEvent({ type: TracingEventType.SPAN_UPDATED, exportedSpan: initial });
+        await platform.flush();
+        expect(received).toEqual([]);
         await formattedLocal.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: initial });
         await formattedLocal.flush();
         const store = await storage.getStore('observability');

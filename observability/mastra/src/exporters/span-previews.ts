@@ -57,12 +57,12 @@ function jsonPreview(value: unknown): string {
         let keys = 0;
         for (const key in item) {
           if (result.length > PREVIEW_MAX_LENGTH) break;
+          if (!Object.hasOwn(item, key)) continue;
           if (++keys > 128) {
             if (!first) append(',');
             append('"…":"[More fields]"');
             break;
           }
-          if (!Object.hasOwn(item, key)) continue;
           const field = (item as RecordValue)[key];
           if (field === undefined || typeof field === 'function' || typeof field === 'symbol') continue;
           if (!first) append(',');
@@ -330,11 +330,18 @@ function errorPreview(value: unknown): string {
   if (typeof value === 'string') return limit(value);
   const data = record(value);
   if (!data) return '';
-  const message = text(data.message);
-  const name = text(data.name);
+  const field = (key: string): string | undefined => {
+    try {
+      return text(data[key]);
+    } catch {
+      return undefined;
+    }
+  };
+  const message = field('message');
+  const name = field('name');
   if (message)
     return limit(name && name !== 'Error' && !message.startsWith(`${name}:`) ? `${name}: ${message}` : message);
-  return limit(name ?? text(data.id) ?? text(data.domain) ?? text(data.category) ?? '');
+  return limit(name ?? field('id') ?? field('domain') ?? field('category') ?? '');
 }
 
 /** Shared by storage and Platform after processing/redaction and custom span formatting.
@@ -353,8 +360,14 @@ export function withSpanPreviews(span: AnyExportedSpan): AnyExportedSpan {
       const writer = typeof phase === 'string' && processorPhases.has(phase) ? processorWriter : writers[span.type];
       return limit(writer?.(span, direction) ?? generic(span[direction]));
     } catch {
-      // Malformed historical payloads or accessors must not prevent telemetry delivery.
-      return '';
+      // A specialized field may be unreadable while the payload still has useful
+      // text. Keep fallback bounded here rather than asking storage to serialize it.
+      try {
+        return generic(span[direction]);
+      } catch {
+        // Neither formatter can safely preview this payload.
+        return '';
+      }
     }
   };
   let error = '';
