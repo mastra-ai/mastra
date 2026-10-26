@@ -733,7 +733,7 @@ export class ObserverRunner {
                       'OM multi-thread observer',
                     ),
                     'OM multi-thread observer',
-                    text => hasMultiThreadObserverContent(text, activeExtractors),
+                    text => hasMultiThreadObserverContent(text, activeExtractors, threadOrder),
                   );
                 } catch (error) {
                   this.mastra?.getLogger?.().error('OM multi-thread observer provider call failed', {
@@ -917,9 +917,13 @@ function hasSingleThreadObserverContent(text: string, extractors: readonly Extra
 
 /**
  * Multi-thread replies carry every recognised section inside `<thread>` blocks, so a reply
- * with no thread block has nothing to record for any thread.
+ * with no block for any requested thread has nothing to record.
  */
-function hasMultiThreadObserverContent(text: string, extractors: readonly Extractor<any>[]): boolean {
+function hasMultiThreadObserverContent(
+  text: string,
+  extractors: readonly Extractor<any>[],
+  threadOrder: readonly string[],
+): boolean {
   const parsed = parseMultiThreadObserverOutput(text, extractors);
-  return Boolean(parsed.degenerate || parsed.threads.size > 0);
+  return Boolean(parsed.degenerate || threadOrder.some(threadId => parsed.threads.has(threadId)));
 }

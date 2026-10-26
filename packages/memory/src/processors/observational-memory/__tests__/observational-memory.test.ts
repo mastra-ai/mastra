@@ -4556,6 +4556,40 @@ User asked about </current-task> parsing and how it works
         expect(result.currentTask).toContain('User asked about </current-task> parsing');
         expect(result.observations).not.toContain('User asked about </current-task> parsing');
       });
+
+      it('should NOT be truncated by a content line that ends with a closing tag', () => {
+        const output = `<observations>
+- 🔴 User asked how to close a block with </observations>
+- 🔴 Important: preserve all content
+</observations>
+
+<current-task>
+Explain the closing tag </current-task>
+Then review the parser
+</current-task>
+
+<suggested-response>
+Mention </suggested-response>
+Then continue
+</suggested-response>`;
+
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('User asked how to close a block with </observations>');
+        expect(result.observations).toContain('Important: preserve all content');
+        expect(result.currentTask).toContain('Then review the parser');
+        expect(result.suggestedContinuation).toContain('Then continue');
+      });
+
+      it('should parse sections written on one line', () => {
+        const output = `<observations>- 🔴 One-line note</observations>
+<current-task>One-line task</current-task>
+<suggested-response>One-line reply</suggested-response>`;
+
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('One-line note');
+        expect(result.currentTask).toBe('One-line task');
+        expect(result.suggestedContinuation).toBe('One-line reply');
+      });
     });
   });
 

@@ -1813,14 +1813,16 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
 
   // Extract <observations> content (supports multiple blocks)
   // Opening tags must be at the start of a line (with optional leading whitespace) to avoid
-  // capturing inline mentions like "User discussed <observations> tags". Closing tags must
-  // start or end a line, so one-line sections like `<observations>X</observations>` parse
-  // without truncating content that mentions a closing tag mid-line.
-  const observationsRegex = /^[ \t]*<observations>([\s\S]*?)(?:^[ \t]*<\/observations>|<\/observations>[ \t]*$)/gim;
+  // capturing inline mentions like "User discussed <observations> tags". A section closes either
+  // at the end of its own opening line (`<observations>X</observations>`) or at a line that
+  // starts with the closing tag, so a content line that mentions or ends with a closing tag
+  // does not truncate a multi-line section.
+  const observationsRegex =
+    /^[ \t]*<observations>(?:([^\r\n]*?)<\/observations>[ \t]*$|([\s\S]*?)^[ \t]*<\/observations>)/gim;
   const observationsMatches = [...content.matchAll(observationsRegex)];
   if (observationsMatches.length > 0) {
     result.observations = observationsMatches
-      .map(m => m[1]?.trim() ?? '')
+      .map(m => (m[1] ?? m[2])?.trim() ?? '')
       .filter(Boolean)
       .join('\n');
   } else {
@@ -1830,21 +1832,23 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
   }
 
   // Extract <current-task> content (first match only)
-  // Opening tag must start a line; closing tag must start or end one (see above)
+  // Same opening/closing rules as <observations> above
   const currentTaskMatch = content.match(
-    /^[ \t]*<current-task>([\s\S]*?)(?:^[ \t]*<\/current-task>|<\/current-task>[ \t]*$)/im,
+    /^[ \t]*<current-task>(?:([^\r\n]*?)<\/current-task>[ \t]*$|([\s\S]*?)^[ \t]*<\/current-task>)/im,
   );
-  if (currentTaskMatch?.[1]) {
-    result.currentTask = currentTaskMatch[1].trim();
+  const currentTask = currentTaskMatch?.[1] ?? currentTaskMatch?.[2];
+  if (currentTask) {
+    result.currentTask = currentTask.trim();
   }
 
   // Extract <suggested-response> content (first match only)
-  // Opening tag must start a line; closing tag must start or end one (see above)
+  // Same opening/closing rules as <observations> above
   const suggestedResponseMatch = content.match(
-    /^[ \t]*<suggested-response>([\s\S]*?)(?:^[ \t]*<\/suggested-response>|<\/suggested-response>[ \t]*$)/im,
+    /^[ \t]*<suggested-response>(?:([^\r\n]*?)<\/suggested-response>[ \t]*$|([\s\S]*?)^[ \t]*<\/suggested-response>)/im,
   );
-  if (suggestedResponseMatch?.[1]) {
-    result.suggestedResponse = suggestedResponseMatch[1].trim();
+  const suggestedResponse = suggestedResponseMatch?.[1] ?? suggestedResponseMatch?.[2];
+  if (suggestedResponse) {
+    result.suggestedResponse = suggestedResponse.trim();
   }
 
   // Extract <thread-title> content (first match only)

@@ -117,6 +117,11 @@ const resourceObserverText = `<observations>
 - 🔴 User asked for help with a task
 <current-task>Help the user</current-task>
 </thread>
+<thread id="thread-B">
+## January 28, 2026
+- 🔴 User continued the task on another thread
+<current-task>Help the user</current-task>
+</thread>
 </observations>`;
 
 const omTriggerTool = createTool({

@@ -196,6 +196,25 @@ describe('Observer reply with text but no observations', { timeout: 30_000 }, ()
     });
   });
 
+  it('resource scope: retries a reply whose only thread block names a thread that was not requested', async () => {
+    const { result, record, observerCalls } = await runTurn({
+      scope: 'resource',
+      observerReplies: [
+        { content: `<observations>\n<thread id="invented-thread">\n${OBSERVATION}\n</thread>\n</observations>` },
+        { content: goodObserverReply('resource') },
+      ],
+      maxRetries: 1,
+      failurePolicy: 'abort',
+    });
+
+    expect(observerCalls).toHaveLength(2);
+    expect(result.tripwire).toBeUndefined();
+    expect(result.text).toBe(ACTOR_REPLY);
+    expect(record?.lastObservedAt).toBeInstanceOf(Date);
+    expect(record?.activeObservations).toContain('zero-downtime billing database migration');
+    expect(record?.activeObservations).not.toContain('invented-thread');
+  });
+
   it('thread scope: commits a reply whose sections put tag and content on one line', async () => {
     const { result, record, observerCalls, memoryStore } = await runTurn({
       scope: 'thread',
