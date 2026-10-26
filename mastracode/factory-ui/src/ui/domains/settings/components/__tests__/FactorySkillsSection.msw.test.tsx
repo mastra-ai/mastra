@@ -148,11 +148,8 @@ describe('FactorySkillsSection', () => {
     const work = await screen.findByRole('region', { name: 'Work board' });
     expect(within(work).getByText('factory-triage')).toBeInTheDocument();
     expect(within(work).getByText('factory-plan')).toBeInTheDocument();
-    expect(within(work).queryByText('factory-review')).not.toBeInTheDocument();
-
-    const review = screen.getByRole('region', { name: 'Review board' });
-    expect(within(review).getByText('factory-review')).toBeInTheDocument();
-    expect(within(review).getByText('factory-rereview')).toBeInTheDocument();
+    expect(within(work).getByText('factory-review')).toBeInTheDocument();
+    expect(within(work).getByText('factory-rereview')).toBeInTheDocument();
 
     const release = screen.getByRole('region', { name: 'Release Preview board' });
     expect(within(release).getByText('release-preparer')).toBeInTheDocument();
@@ -162,7 +159,7 @@ describe('FactorySkillsSection', () => {
 
     // Built-ins come first regardless of registry order.
     const regions = screen.getAllByRole('region', { name: / board$/ }).map(region => region.getAttribute('aria-label'));
-    expect(regions).toEqual(['Work board', 'Review board', 'Release Preview board']);
+    expect(regions).toEqual(['Work board', 'Release Preview board']);
   });
 
   it('says so when a custom-only deployment has no board skills to show', async () => {

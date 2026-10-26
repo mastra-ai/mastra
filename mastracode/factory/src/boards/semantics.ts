@@ -15,12 +15,20 @@ export interface PhaseSemantics {
 }
 
 /**
- * Board that owns a work item. Rows created before boards were persisted carry no `board`;
- * they belong to Review when they track a pull request and to Work otherwise, matching the
- * legacy assignment the transition service performs on their next move.
+ * Board that owns a work item. Issues and pull requests share the Work board: rows created
+ * before boards were persisted carry no `board`, and rows from the retired Review board still
+ * say `review` until the boards migration moves them; both belong to Work.
  */
 export function boardForWorkItem(item: Pick<WorkItemRow, 'board' | 'externalSource'>): string {
-  return item.board ?? (item.externalSource?.type === 'pull-request' ? 'review' : 'work');
+  return item.board === null || item.board === LEGACY_REVIEW_BOARD ? 'work' : item.board;
+}
+
+/** Board id of the retired Review board; only migration and compat reads name it. */
+export const LEGACY_REVIEW_BOARD = 'review';
+
+/** A board id as it reads today: decisions and requests recorded before Review folded into Work still name it. */
+export function currentBoardId(board: string): string {
+  return board === LEGACY_REVIEW_BOARD ? 'work' : board;
 }
 
 /**
@@ -106,7 +114,7 @@ export function isTerminalWorkItem(
   const semantics = workItemPhaseSemantics(boards, item);
   if (semantics) return semantics.kind === 'terminal';
   const board = boardForWorkItem(item);
-  if (board !== 'work' && board !== 'review') return false;
+  if (board !== 'work') return false;
   const stage = item.stages.length === 1 ? item.stages[0] : undefined;
   return stage === 'done' || stage === 'canceled';
 }

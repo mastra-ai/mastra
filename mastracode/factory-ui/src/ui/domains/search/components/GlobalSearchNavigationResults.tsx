@@ -25,10 +25,10 @@ export function GlobalSearchNavigationResults({
       />
       <CommandPaletteItem
         icon={<GitPullRequest />}
-        title="Review"
+        title="Pull requests"
         subtitle="Factory navigation"
-        value={`Review Factory navigation /factories/${factoryId}/review`}
-        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'review'), false)}
+        value={`Pull requests Review Factory navigation /factories/${factoryId}/work?source=pr`}
+        onSelect={() => onSelect(`/factories/${factoryId}/work?source=pr`, false)}
       />
       <CommandPaletteItem
         icon={<Timeline />}

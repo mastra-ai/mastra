@@ -18,6 +18,7 @@ import { EnvironmentSection } from './EnvironmentSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactorySkillsSection } from './FactorySkillsSection';
+import { BoardsSection } from './BoardsSection';
 import { IntakeSection } from './IntakeSection';
 import { McpClientsSection } from './McpClientsSection';
 import { RepositoriesSection } from './RepositoriesSection';
@@ -89,6 +90,7 @@ export function SettingsPanel() {
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'environment' && <EnvironmentSection />}
       {section === 'intake' && <IntakeSection />}
+      {section === 'boards' && <BoardsSection factoryId={factoryId} />}
       {section === 'models' && <FactoryModelsSettings models={models} />}
       {section === 'personal-models' && <PersonalModelsSettings />}
       {(section === 'memory' || section === 'factory-memory') && (

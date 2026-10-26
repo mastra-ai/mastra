@@ -2,7 +2,7 @@ import type { FactoryRuleItemContext, FactoryStageRuleContext, FactoryToolResult
 import { needsApproval } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
 import type { BoardToolRule, ReadonlyBoardPhaseHandlers } from './define-board.js';
-import { advanceApprovedPlan } from './work-tool-rules.js';
+import { reviewPullRequest } from './review.js';
 
 function sourceIdentifier(item: FactoryRuleItemContext): string | undefined {
   const identifier = item.metadata?.identifier;
@@ -270,10 +270,26 @@ export interface BoardRunner {
 
 export type BoardRunnerRegistry = ReadonlyMap<string, BoardRunner>;
 
+/**
+ * A pull request arriving in Triage goes straight to Review when its author is trusted (or Factory
+ * wrote it) and it was opened after Factory started; anything else waits for a person to start it.
+ */
+function triagePullRequest(context: FactoryStageRuleContext) {
+  if (context.item.metadata?.autoStartCandidate !== true) return;
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:start-review`,
+    board: context.board,
+    stage: 'review',
+  } as const;
+}
+
 const triageRunner: BoardRunner = {
   id: 'factory-triage',
   role: 'triage',
   onEnter: {
+    pullRequest: triagePullRequest,
+    gitlabPullRequest: triagePullRequest,
     issue: triageIssueEntry,
     gitlabIssue: investigateTriagedGitLabIssue,
     linearIssue: investigateTriagedLinearIssue,
@@ -293,7 +309,6 @@ const planRunner: BoardRunner = {
     incidentioFollowUp: planWorkItem,
     manual: planWorkItem,
   },
-  tools: { submit_plan: { onResult: advanceApprovedPlan } },
 };
 
 const buildRunner: BoardRunner = {
@@ -316,6 +331,9 @@ const reviewRunner: BoardRunner = {
   id: 'factory-review',
   role: 'work',
   onEnter: {
+    // A pull request's own card is reviewed by an independent reviewer in its review seat.
+    pullRequest: reviewPullRequest,
+    gitlabPullRequest: reviewPullRequest,
     issue: selfReviewWorkItem,
     gitlabIssue: selfReviewWorkItem,
     linearIssue: selfReviewWorkItem,

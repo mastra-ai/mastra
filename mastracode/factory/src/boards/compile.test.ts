@@ -6,6 +6,7 @@ import type { BoardPhaseDefinition, ReadonlyBoardPhaseHandlers } from './define-
 import type { InstalledBoard } from './registry.js';
 import { builtInRunners } from './runners.js';
 import { workBoardTemplate } from './templates/work.js';
+import { exitToolRule } from './work-tool-rules.js';
 import { workTransitionPolicy } from './work-transition-policy.js';
 import { workBoard } from './work.js';
 
@@ -41,7 +42,7 @@ const preRefactorWorkBoard = defineBoard<'work', Record<Phase, BoardPhaseDefinit
   transitionPolicy: workTransitionPolicy,
   sourceClosed: { completed: 'done', canceled: 'canceled' },
   tools: {
-    submit_plan: runner('factory-plan').tools!.submit_plan!,
+    submit_plan: exitToolRule({ tool: 'submit_plan', phase: 'planning', nextPhase: 'execute', role: 'plan' }),
     factory_record_review_verdict: runner('factory-review').tools!.factory_record_review_verdict!,
   },
   phases: {
@@ -69,7 +70,8 @@ function shape(board: InstalledBoard) {
     ),
     transitions: board.transitions,
     rules: board.rules,
-    tools: board.tools,
+    // Exit-tool rules are generated per board, so compare which tools end a phase.
+    tools: Object.keys(board.tools).sort(),
     events: board.events,
     sourceClosed: board.sourceClosed,
     transitionPolicy: board.transitionPolicy,
@@ -143,5 +145,52 @@ describe('compileStoredBoard', () => {
     expect(board.phaseKind('doing')).toBe('resting');
     expect(board.rules.doing).toBeUndefined();
     expect(warnings).toEqual(["Board 'flow' phase 'doing' names unknown runner 'not-a-runner'; it runs nothing."]);
+  });
+
+  it('runs a stored agent phase in its seat with its skill and instructions', () => {
+    const board = compileStoredBoard(
+      {
+        key: 'flow',
+        name: 'Flow',
+        phases: [
+          { key: 'open', name: 'Open', kind: 'resting' },
+          {
+            key: 'docs',
+            name: 'Docs',
+            kind: 'working',
+            runner: {
+              type: 'agent',
+              agentId: 'writer',
+              skill: 'write-docs',
+              instructions: 'Keep it short.',
+              seat: 'plan',
+            },
+          },
+          {
+            key: 'notes',
+            name: 'Notes',
+            kind: 'working',
+            runner: { type: 'agent', agentId: 'writer', instructions: 'Add notes.' },
+          },
+          { key: 'closed', name: 'Closed', kind: 'terminal' },
+        ],
+      },
+      builtInRunners,
+    );
+    const context = { ingress: { id: 'in-1' }, item: { title: 'Fix login', url: 'https://x/1' } } as never;
+    expect(board.phaseKind('docs')).toBe('working');
+    expect(board.rules.docs?.issue?.onEnter?.(context)).toEqual({
+      type: 'invokeSkill',
+      idempotencyKey: 'in-1:phase-docs',
+      role: 'plan',
+      skillName: 'write-docs',
+      arguments: 'Work item: Fix login (https://x/1)\n\nKeep it short.',
+    });
+    expect(board.rules.notes?.manual?.onEnter?.(context)).toEqual({
+      type: 'invokeSkill',
+      idempotencyKey: 'in-1:phase-notes',
+      role: 'work',
+      prompt: 'Add notes.\n\nWork item: Fix login (https://x/1)',
+    });
   });
 });

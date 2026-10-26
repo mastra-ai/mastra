@@ -11,7 +11,7 @@ describe('createBoardRegistry', () => {
   it('installs the built-in boards and custom boards by default', () => {
     const registry = createBoardRegistry({ boards: [customBoard] });
 
-    expect([...registry.keys()]).toEqual(['work', 'review', 'release']);
+    expect([...registry.keys()]).toEqual(['work', 'release']);
     expect(registry.get('release')).toBe(customBoard);
     expect(Object.isFrozen(registry)).toBe(true);
   });

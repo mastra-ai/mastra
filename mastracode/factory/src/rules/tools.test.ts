@@ -615,7 +615,7 @@ describe('factory_transition_work_item', () => {
     expect(onEnter).toHaveBeenCalledTimes(1);
   });
 
-  it('derives the Review board for PR bindings and ignores linked-card presence for Work authority', async () => {
+  it('derives the Work board for PR bindings and ignores linked-card presence for Work authority', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const review = await prepareBoundItem(storage, 'github-pr');
     const transition = vi.fn(async () => ({ status: 'accepted' as const }));
@@ -631,7 +631,7 @@ describe('factory_transition_work_item', () => {
       expectedRevision: review.item.revision,
       rationale: 'Review started.',
     });
-    expect(transition).toHaveBeenCalledWith(expect.objectContaining({ board: 'review', workItemId: review.item.id }));
+    expect(transition).toHaveBeenCalledWith(expect.objectContaining({ board: 'work', workItemId: review.item.id }));
   });
 
   describe('factory_record_review_verdict', () => {

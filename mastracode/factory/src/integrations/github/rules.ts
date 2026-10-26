@@ -13,6 +13,7 @@ import type { BoardRegistry } from '../../boards/index.js';
 import { matchIntakeRoute } from '../../boards/intake-routing.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import type { BoardResolver } from '../../boards/resolver.js';
+import { currentBoardId } from '../../boards/semantics.js';
 import { hasExplicitRuleOverride, selectEventRule } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
@@ -386,8 +387,12 @@ export class GithubRules {
     const links = await this.options.storage.listSources({ ...project, workItemId: item.id });
     const pullRequestLinks = links.filter(link => link.kind === 'pull_request');
     const openPullRequestNumber = item.metadata?.openPullRequestNumber;
+    // A pull request's own card links it under its intake key, not the key Factory links authored ones with.
+    const ownKey = item.externalSource?.type === 'pull-request' ? externalSourceKey(item.externalSource) : null;
     const hasOtherOpenPullRequest = pullRequestLinks.length
-      ? pullRequestLinks.some(link => link.state === 'open' && link.sourceKey !== pullRequestKey)
+      ? pullRequestLinks.some(
+          link => link.state === 'open' && link.sourceKey !== pullRequestKey && link.sourceKey !== ownKey,
+        )
       : typeof openPullRequestNumber === 'number' && openPullRequestNumber !== context.pullRequest?.number;
     return routeEventMoves({
       decisions: decisions as { type: string }[],
@@ -441,7 +446,7 @@ export class GithubRules {
     if (labels.length > 0) {
       const routes = await intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
       const route = resolveIntakeLabelRoute(routes, labels);
-      const board = route ? boards.get(route.board) : undefined;
+      const board = route ? boards.get(currentBoardId(route.board)) : undefined;
       if (board) return { board: board.id, initialPhase: board.initialPhase };
     }
     // GitHub bindings are keyed by the internal repository id; the slug is accepted too since the
@@ -452,7 +457,7 @@ export class GithubRules {
         candidate.factoryProjectId === factoryProjectId &&
         (candidate.sourceId === project.projectRepository.repositoryId || candidate.sourceId.toLowerCase() === slug),
     );
-    const board = binding?.board ? boards.get(binding.board) : undefined;
+    const board = binding?.board ? boards.get(currentBoardId(binding.board)) : undefined;
     return board ? { board: board.id, initialPhase: board.initialPhase } : fallback();
   }
 

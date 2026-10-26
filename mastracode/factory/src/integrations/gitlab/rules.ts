@@ -8,6 +8,7 @@ import {
 import type { BoardRegistry } from '../../boards/index.js';
 import { matchIntakeRoute } from '../../boards/intake-routing.js';
 import type { BoardResolver } from '../../boards/resolver.js';
+import { currentBoardId } from '../../boards/semantics.js';
 import { hasExplicitRuleOverride, selectEventRule } from '../../rules/event-rules.js';
 import type {
   FactoryGitLabEventName,
@@ -234,7 +235,7 @@ export class GitLabRules {
             boards,
           ));
     if (routed) return { board: routed.board, initialPhase: routed.phase };
-    const board = boards.get(boundBoard ?? 'work');
+    const board = boards.get(currentBoardId(boundBoard ?? 'work'));
     return board ? { board: board.id, initialPhase: board.initialPhase } : undefined;
   }
 

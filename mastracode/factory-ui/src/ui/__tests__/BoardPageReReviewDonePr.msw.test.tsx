@@ -106,6 +106,7 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
       HttpResponse.json({ issues: [], nextPage: null }),
     ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () => HttpResponse.json({ issues: [], nextPage: null })),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: [], nextPage: null }),
     ),
@@ -135,7 +136,7 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
 }
 
 function renderReviewBoard() {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/review`] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
   return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
 
@@ -149,9 +150,9 @@ describe('Re-review action for open PRs in Done', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Re-review' }));
 
     await waitForMutationsIdle(client);
-    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/review`);
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`);
     expect(transitions).toEqual([
-      expect.objectContaining({ board: 'review', stage: 'review', cause: 'card_action', expectedRevision: 1 }),
+      expect.objectContaining({ board: 'work', stage: 'review', cause: 'card_action', expectedRevision: 1 }),
     ]);
   });
 

@@ -6,6 +6,7 @@ export type SettingsSection =
   | 'repositories'
   | 'environment'
   | 'intake'
+  | 'boards'
   | 'models'
   | 'personal-models'
   | 'memory'
@@ -21,6 +22,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   repositories: 'Repositories',
   environment: 'Environment',
   intake: 'Work Intake',
+  boards: 'Boards',
   models: 'Factory models',
   'personal-models': 'Your models',
   memory: 'Your memory',

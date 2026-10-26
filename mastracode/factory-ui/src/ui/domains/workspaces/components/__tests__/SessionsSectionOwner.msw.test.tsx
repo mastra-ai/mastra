@@ -126,10 +126,9 @@ describe('Sessions sidebar owner filter', () => {
     await pickSessionProperty(user, 'Owner', 'All owners');
 
     const work = await screen.findByRole('region', { name: 'Work sessions' });
-    const review = await screen.findByRole('region', { name: 'Review sessions' });
     const userGroup = screen.getByRole('region', { name: 'User sessions' });
     expect(within(work).getByRole('link', { name: 'factory/issue-20003' })).toBeInTheDocument();
-    expect(within(review).getByRole('link', { name: 'factory/pr-20004' })).toBeInTheDocument();
+    expect(within(work).getByRole('link', { name: 'factory/pr-20004' })).toBeInTheDocument();
     expect(within(userGroup).getByRole('link', { name: 'task-20005' })).toBeInTheDocument();
     expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
   });

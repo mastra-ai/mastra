@@ -76,7 +76,7 @@ describe('Deleting a workspace', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review sessions' });
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
     await user.click(within(group).getByRole('button', { name: 'Session actions for factory/pr-20474' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 

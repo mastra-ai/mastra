@@ -78,6 +78,28 @@ describe('stored board validation', () => {
     ]);
   });
 
+  it('needs an agent runner to carry a skill or instructions, and a resting first phase', () => {
+    const doing = (runner: unknown) => ({ key: 'doing', name: 'Doing', kind: 'working', runner });
+    expect(
+      messages(storedBoardInputSchema.safeParse(board([open, doing({ type: 'agent', agentId: 'factory' }), closed]))),
+    ).toContain('An agent runner needs a skill or instructions.');
+    expect(
+      storedBoardInputSchema.safeParse(
+        board([open, doing({ type: 'agent', agentId: 'factory', skill: 'write-docs', seat: 'plan' }), closed]),
+      ).success,
+    ).toBe(true);
+    expect(
+      storedBoardInputSchema.safeParse(
+        board([open, doing({ type: 'agent', agentId: 'factory', instructions: 'Go.', seat: 'boss' }), closed]),
+      ).success,
+    ).toBe(false);
+    expect(
+      messages(
+        storedBoardInputSchema.safeParse(board([doing({ type: 'agent', agentId: 'f', instructions: 'Go.' }), closed])),
+      ),
+    ).toContain('The first phase must be resting.');
+  });
+
   it('rejects two boards with one key', () => {
     const result = projectBoardConfigInputSchema.safeParse({
       boards: [board([open, closed]), board([open, closed])],

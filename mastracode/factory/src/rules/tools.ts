@@ -190,7 +190,9 @@ function createReviewVerdictTool(
         }
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
+        const pullRequestCard = item.externalSource?.type === 'pull-request';
         if (
+          !pullRequestCard &&
           boardForWorkItem(item) === 'work' &&
           item.stages[0] === 'review' &&
           typeof item.metadata?.openPullRequestNumber !== 'number'
@@ -206,7 +208,7 @@ function createReviewVerdictTool(
             toolCallId: execution.agent?.toolCallId,
           });
         }
-        if (boardForWorkItem(item) !== 'review' || item.stages[0] !== 'review') {
+        if (!pullRequestCard || item.stages[0] !== 'review') {
           throw new Error(`Only a card in Reviewing records a verdict; this one is in ${item.stages.join(', ')}.`);
         }
         const reviewedAt = new Date().toISOString();

@@ -465,7 +465,7 @@ describe('Global search', () => {
     expect(screen.getByText('Docs Factory')).toBeInTheDocument();
     for (const label of [
       'Work',
-      'Review',
+      'Pull requests',
       'Activity',
       'Rules',
       'Audit log',
@@ -701,7 +701,7 @@ describe('Global search', () => {
     expect(requests.created).toEqual([
       expect.objectContaining({
         title: 'Search GitLab MR',
-        board: 'review',
+        board: 'work',
         stages: ['intake'],
         externalSource: expect.objectContaining({ integrationId: 'gitlab', type: 'pull-request' }),
       }),
@@ -758,7 +758,7 @@ describe('Global search', () => {
     await waitFor(() => expect(requests.transitions).toHaveLength(1));
     expect(requests.transitions[0]).toMatchObject({
       itemId: 'work-item-unstarted-review',
-      body: { board: 'review', stage: 'review', cause: 'card_action' },
+      body: { board: 'work', stage: 'review', cause: 'card_action' },
     });
     expect(requests.createSessionRequests).toBe(0);
   });
@@ -945,7 +945,7 @@ describe('Global search', () => {
     await waitFor(() => expect(requests.transitions).toHaveLength(1));
     await waitForMutationsIdle(client);
     expect(requests.created).toEqual([
-      expect.objectContaining({ title: 'Harden the review board drop target', board: 'review', stages: ['intake'] }),
+      expect.objectContaining({ title: 'Harden the review board drop target', board: 'work', stages: ['intake'] }),
     ]);
     expect(requests.transitions[0]).toMatchObject({ itemId: 'work-item-filed', body: { stage: 'review' } });
     expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();

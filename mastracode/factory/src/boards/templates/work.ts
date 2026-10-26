@@ -13,7 +13,13 @@ export const workBoardTemplate = {
   phases: [
     { key: 'intake', name: 'Intake', kind: 'resting' },
     { key: 'triage', name: 'Triage', kind: 'working', runner: { type: 'workflow', workflowId: 'factory-triage' } },
-    { key: 'planning', name: 'Planning', kind: 'working', runner: { type: 'workflow', workflowId: 'factory-plan' } },
+    {
+      key: 'planning',
+      name: 'Planning',
+      kind: 'working',
+      runner: { type: 'workflow', workflowId: 'factory-plan' },
+      exitTool: 'submit_plan',
+    },
     { key: 'execute', name: 'Building', kind: 'working', runner: { type: 'workflow', workflowId: 'factory-build' } },
     { key: 'review', name: 'Review', kind: 'working', runner: { type: 'workflow', workflowId: 'factory-review' } },
     { key: 'done', name: 'Done', kind: 'terminal', runner: { type: 'workflow', workflowId: 'factory-complete' } },

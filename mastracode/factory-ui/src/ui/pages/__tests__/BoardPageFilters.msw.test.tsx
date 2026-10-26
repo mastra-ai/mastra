@@ -250,13 +250,14 @@ describe('BoardPage filters', () => {
     expect(screen.getByText('Card bug')).toBeInTheDocument();
     expect(candidateTitles()).toEqual([]);
     await openPropertiesMenu(user, MENU);
-    expect(screen.queryByRole('menuitem', { name: /^Review requested/ })).not.toBeInTheDocument();
+    // Pull requests land on Work, so it offers the review-requested filter too.
+    expect(screen.getByRole('menuitem', { name: /^Review requested/ })).toBeInTheDocument();
     await closePropertiesMenus(user);
   });
 
   it('keeps only review cards authored by one person with review requested from another', async () => {
     const user = userEvent.setup();
-    const { client } = renderBoard('review');
+    const { client } = renderBoard('work');
     expect(await screen.findByText('Card authored')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     await togglePropertyOption(user, MENU, 'Involves', /alice/i);
@@ -289,7 +290,7 @@ describe('BoardPage filters', () => {
       ),
     );
     const user = userEvent.setup();
-    const { client } = renderBoard('review', '?teammate=github%3Aalice');
+    const { client } = renderBoard('work', '?teammate=github%3Aalice');
     expect(await screen.findByText('Card authored')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     await openPropertySubmenu(user, MENU, 'Involves');
@@ -304,7 +305,7 @@ describe('BoardPage filters', () => {
     );
     expect(screen.getByText('Card authored')).toBeInTheDocument();
     expect(screen.queryByText('Card requested')).not.toBeInTheDocument();
-    await waitFor(() => expect(candidateTitles()).toEqual(['Pull 20']));
+    await waitFor(() => expect(candidateTitles()).toEqual(['Issue 10', 'Pull 20']));
   });
 
   it('searches a long list of people and keeps picked people on top', async () => {

@@ -857,20 +857,20 @@ describe('attention links open the board the card is on', () => {
     expect(await targetBoards(item)).toEqual(everyKind('release'));
   });
 
-  it('links a pull request on the Review board to Review', async () => {
+  it('links a pull request left on the old Review board to Work', async () => {
     const item = await seedCard({
       board: 'review',
       externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:12' },
     });
-    expect(await targetBoards(item)).toEqual(everyKind('review'));
+    expect(await targetBoards(item)).toEqual(everyKind('work'));
   });
 
-  it('links a GitLab merge request with no stored board to Review', async () => {
+  it('links a GitLab merge request with no stored board to Work', async () => {
     const item = await seedCard({
       board: null,
       externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: 'gitlab-mr:17' },
     });
-    expect(await targetBoards(item)).toEqual(everyKind('review'));
+    expect(await targetBoards(item)).toEqual(everyKind('work'));
   });
 
   it('links a plain card with no stored board to Work', async () => {

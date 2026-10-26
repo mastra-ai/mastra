@@ -31,8 +31,15 @@ export const phaseRunnerSchema = z.discriminatedUnion('type', [
       agentId: runnerIdSchema,
       instructions: z.string().max(MAX_INSTRUCTIONS_LENGTH).optional(),
       model: z.string().trim().min(1).max(200).optional(),
+      /** Skill the agent activates when a card enters the phase. */
+      skill: runnerIdSchema.optional(),
+      /** Session seat the run uses; defaults to the card's `work` session. */
+      seat: z.enum(['triage', 'plan', 'work', 'review']).optional(),
     })
-    .strict(),
+    .strict()
+    .refine(runner => !!runner.skill || !!runner.instructions?.trim(), {
+      message: 'An agent runner needs a skill or instructions.',
+    }),
   z.object({ type: z.literal('workflow'), workflowId: runnerIdSchema }).strict(),
 ]);
 export type StoredPhaseRunner = z.infer<typeof phaseRunnerSchema>;
@@ -46,11 +53,28 @@ export const storedPhaseInputSchema = z
     runner: phaseRunnerSchema.nullable().optional(),
     /** Phases a card may move to from here. Absent means any phase on the board. */
     nextPhases: z.array(storedKeySchema).max(MAX_PHASES).nullable().optional(),
+    /** A successful call of this tool while the card is here moves it to the next phase in board order. */
+    exitTool: z
+      .string()
+      .trim()
+      .min(1)
+      .max(MAX_RUNNER_ID_LENGTH)
+      .regex(/^[A-Za-z0-9_-]+$/, 'Use the tool name, e.g. submit_plan.')
+      .nullable()
+      .optional(),
+    /** Card conditions under which the exit tool is approved without a person. */
+    autoApproveWhen: intakeRouteWhenSchema.nullable().optional(),
   })
   .strict()
   .superRefine((phase, ctx) => {
     if (phase.kind === 'resting' && phase.runner) {
       ctx.addIssue({ code: 'custom', path: ['runner'], message: 'A resting phase runs nothing.' });
+    }
+    if (phase.kind !== 'working' && phase.exitTool) {
+      ctx.addIssue({ code: 'custom', path: ['exitTool'], message: 'Only a working phase has an exit tool.' });
+    }
+    if (phase.autoApproveWhen && !phase.exitTool) {
+      ctx.addIssue({ code: 'custom', path: ['autoApproveWhen'], message: 'Auto-approval needs an exit tool.' });
     }
   });
 export type StoredPhaseInput = z.infer<typeof storedPhaseInputSchema>;
@@ -98,7 +122,35 @@ export const storedBoardInputSchema = z
     }
     if (board.phases[0]?.kind === 'terminal') {
       ctx.addIssue({ code: 'custom', path: ['phases', 0], message: 'The first phase cannot be terminal.' });
+    } else if (board.phases[0]?.kind === 'working') {
+      ctx.addIssue({ code: 'custom', path: ['phases', 0], message: 'The first phase must be resting.' });
     }
+    const exitTools = new Set<string>();
+    board.phases.forEach((phase, index) => {
+      if (!phase.exitTool) return;
+      if (exitTools.has(phase.exitTool)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['phases', index, 'exitTool'],
+          message: `Tool '${phase.exitTool}' already ends another phase.`,
+        });
+      }
+      exitTools.add(phase.exitTool);
+      const next = board.phases[index + 1];
+      if (!next) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['phases', index, 'exitTool'],
+          message: 'The last phase has no next phase.',
+        });
+      } else if (phase.nextPhases && !phase.nextPhases.includes(next.key)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['phases', index, 'nextPhases'],
+          message: `The exit tool moves cards to '${next.key}', so list it as a next phase.`,
+        });
+      }
+    });
   });
 export type StoredBoardInput = z.input<typeof storedBoardInputSchema>;
 
@@ -143,7 +195,7 @@ const MAX_BOARDS = 50;
 export const projectBoardConfigInputSchema = z
   .object({
     boards: z.array(storedBoardInputSchema).max(MAX_BOARDS),
-    intakeRoutes: z.array(intakeRouteInputSchema).max(MAX_ROUTES),
+    intakeRoutes: z.array(intakeRouteInputSchema).max(MAX_ROUTES).default([]),
   })
   .strict()
   .superRefine((config, ctx) => {

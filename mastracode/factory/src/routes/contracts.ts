@@ -2,15 +2,23 @@ import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { z } from 'zod';
 
+import { RULE_OPERATORS } from '../rules/rule-group.js';
+import type { RuleGroup } from '../rules/rule-group.js';
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+import {
+  BOARD_EVENTS,
+  PHASE_KINDS,
+  phaseRunnerSchema,
+  projectBoardConfigInputSchema,
+} from '../storage/domains/boards/validation.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
 const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   description: string;
   pathSchema?: z.ZodType;
@@ -466,6 +474,63 @@ const attentionActionPathSchema = z
     path: ['sourceId'],
   });
 
+const ruleScalarSchema = z.union([z.string(), z.number(), z.boolean()]);
+const ruleConditionSchema = z.object({
+  field: z.string(),
+  operator: z.enum(RULE_OPERATORS),
+  value: z.union([ruleScalarSchema, z.array(ruleScalarSchema)]).optional(),
+});
+const ruleGroupSchema: z.ZodType<RuleGroup> = z.object({
+  operator: z.enum(['AND', 'OR']),
+  get conditions() {
+    return z.array(z.union([ruleConditionSchema, ruleGroupSchema]));
+  },
+});
+
+/** A project's stored boards and intake routes, as the board settings screen reads them. */
+const storedBoardConfigSchema = z.object({
+  revision: z.number().int(),
+  boards: z.array(
+    z.object({
+      id: z.string(),
+      key: z.string(),
+      name: z.string(),
+      description: z.string().nullable(),
+      phases: z.array(
+        z.object({
+          key: z.string(),
+          name: z.string(),
+          description: z.string().nullable(),
+          kind: z.enum(PHASE_KINDS),
+          runner: phaseRunnerSchema.nullable(),
+          nextPhases: z.array(z.string()).nullable(),
+          exitTool: z.string().nullable(),
+          autoApproveWhen: ruleGroupSchema.nullable(),
+        }),
+      ),
+      eventRoutes: z.array(
+        z.object({
+          event: z.enum(BOARD_EVENTS),
+          fromPhases: z.array(z.string()).nullable(),
+          when: ruleGroupSchema.nullable(),
+          toPhaseKey: z.string(),
+          enabled: z.boolean(),
+        }),
+      ),
+    }),
+  ),
+  intakeRoutes: z.array(
+    z.object({
+      when: ruleGroupSchema.nullable(),
+      boardKey: z.string(),
+      phaseKey: z.string().nullable(),
+      enabled: z.boolean(),
+    }),
+  ),
+  updatedBy: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+});
+
 export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
     method: 'GET',
@@ -600,6 +665,24 @@ export const FACTORY_ROUTE_CONTRACTS = {
         }),
       ),
     }),
+  },
+  boardConfigGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/boards/config',
+    description: "Get a project's stored boards and intake routes",
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({
+      config: storedBoardConfigSchema,
+      runners: z.array(z.object({ id: z.string(), role: z.string().nullable() })),
+    }),
+  },
+  boardConfigUpdate: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/boards/config',
+    description: "Replace a project's stored boards and intake routes",
+    pathSchema: projectPathSchema,
+    bodySchema: z.object({ expectedRevision: z.number().int().min(0), config: projectBoardConfigInputSchema }).strict(),
+    responseSchema: z.object({ config: storedBoardConfigSchema }),
   },
   workItemList: {
     method: 'GET',

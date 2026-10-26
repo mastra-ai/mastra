@@ -3,6 +3,7 @@ import type { AgentController, AgentControllerEventListener, Session } from '@ma
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
+import { phaseAutoApproves } from '../boards/auto-approve.js';
 import {
   boardForWorkItem,
   createBoardRegistry,
@@ -12,6 +13,7 @@ import {
 import type { BoardRegistry } from '../boards/index.js';
 import { moveCardToBoard } from '../boards/relocate.js';
 import type { BoardResolver } from '../boards/resolver.js';
+import { currentBoardId } from '../boards/semantics.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   heartbeatSessionOpenRun,
@@ -174,6 +176,8 @@ function watchRun(
   let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
   let supersededAtEnd: Promise<boolean> | undefined;
   let parked: { toolName: string; toolCallId: string } | undefined;
+  // Tools the agent called while this watch was open; the phase exit check reads it.
+  const calledTools = new Set<string>();
   // Latest observational-memory failure seen on this run. The stream aborts the
   // run when observation/reflection fails, but the abort itself carries no
   // reason — so without this the true cause (e.g. a provider rejecting the OM
@@ -208,6 +212,10 @@ function watchRun(
       if (event.error) omFailure = event.error;
       return;
     }
+    if (event.type === 'tool_start') {
+      calledTools.add(event.toolName);
+      return;
+    }
     if (event.type === 'tool_suspended') {
       parked = { toolName: event.toolName, toolCallId: event.toolCallId };
       return;
@@ -237,6 +245,7 @@ function watchRun(
     endReason: () => endReason,
     /** The tool the run is parked on, when it ended suspended. */
     parked: () => parked,
+    called: (toolName: string) => calledTools.has(toolName),
     close: unsubscribe,
     /** The run's own verdict, thrown as what the dispatcher should record. */
     async settle(): Promise<void> {
@@ -514,7 +523,9 @@ function requestsConsent(
   if (decision.type === 'invokeSkill') return true;
   if (decision.type !== 'transition' || !externalActor(record.actor)) return false;
   // Fail closed: a phase the installed board does not declare is treated as working, so consent is asked.
-  return (resolvePhaseSemantics(boards, decision.board, decision.stage)?.kind ?? 'working') === 'working';
+  return (
+    (resolvePhaseSemantics(boards, currentBoardId(decision.board), decision.stage)?.kind ?? 'working') === 'working'
+  );
 }
 
 // The Factory reviewing code it wrote is part of the same work, not new work to
@@ -524,7 +535,7 @@ function reviewsFactoryAuthoredCode(
   decision: FactoryCommitDecision,
 ): boolean {
   if (item.metadata?.factoryAuthored !== true) return false;
-  if (decision.type === 'transition') return decision.board === 'review' && decision.stage === 'review';
+  if (decision.type === 'transition') return decision.stage === 'review';
   return decision.type === 'invokeSkill' && decision.role === 'review';
 }
 
@@ -1218,6 +1229,7 @@ export class FactoryDecisionDispatcher {
                 },
                 () => this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle()),
               );
+              await this.#checkPhaseExit({ record, session, requestContext, run, deliveryId, userId: startedBy });
             } catch (error) {
               // Roles share one session. When this role handed the card on
               // mid-turn, the next role's kickoff was delivered onto the same
@@ -1297,6 +1309,7 @@ export class FactoryDecisionDispatcher {
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<void> {
+    decision = { ...decision, board: currentBoardId(decision.board) };
     // A lost completion acknowledgement must not reinterpret a committed
     // materialization against a replacement installation.
     const existing = await this.#storage.getByProjectSource({
@@ -1590,15 +1603,104 @@ export class FactoryDecisionDispatcher {
     return session;
   }
 
+  /**
+   * A phase with an exit tool finishes by calling it. When the run ended with the card still in that
+   * phase, not parked on a question, and the tool never called, the agent is told once to call it.
+   * If it still does not, the card is flagged for a person and stays where it is.
+   */
+  async #checkPhaseExit({
+    record,
+    session,
+    requestContext,
+    run,
+    deliveryId,
+    userId,
+  }: {
+    record: FactoryDeferredDecisionRecord;
+    session: BoundDispatcherSession;
+    requestContext: ReturnType<typeof factoryRequestContext>;
+    run: ReturnType<typeof watchRun>;
+    deliveryId: string;
+    userId: string;
+  }): Promise<void> {
+    if (!this.#resolver || !record.workItemId) return;
+    const pendingExitTool = async () => {
+      if (run.parked()) return undefined;
+      const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId! });
+      if (!item || item.stages.length !== 1) return undefined;
+      const phase = await this.#resolver!.storedPhase(item, boardForWorkItem(item), item.stages[0]!);
+      if (!phase?.exitTool || run.called(phase.exitTool)) return undefined;
+      return { item, tool: phase.exitTool, phase: phase.name };
+    };
+    try {
+      await this.#nudgeToExit({ record, session, requestContext, run, deliveryId, userId, pendingExitTool });
+    } catch (error) {
+      // The run itself succeeded; a failed nudge or flag must not fail (and retry) its decision.
+      console.warn(`[factory] phase exit check failed for work item ${record.workItemId}:`, error);
+    }
+  }
+
+  async #nudgeToExit({
+    record,
+    session,
+    requestContext,
+    run,
+    deliveryId,
+    userId,
+    pendingExitTool,
+  }: {
+    record: FactoryDeferredDecisionRecord;
+    session: BoundDispatcherSession;
+    requestContext: ReturnType<typeof factoryRequestContext>;
+    run: ReturnType<typeof watchRun>;
+    deliveryId: string;
+    userId: string;
+    pendingExitTool: () => Promise<{ item: WorkItemRow; tool: string; phase: string } | undefined>;
+  }): Promise<void> {
+    const missing = await pendingExitTool();
+    if (!missing) return;
+    run.arm();
+    const nudge = await session.sendSignal(
+      {
+        id: `${deliveryId}:exit-nudge`,
+        type: 'user',
+        tagName: 'user',
+        contents: `You have not finished ${missing.phase}. Finish it by calling ${missing.tool}.`,
+      },
+      { requestContext, requireDelivery: true },
+    ).accepted;
+    if (nudge.action === 'wake' || nudge.action === 'deliver') await run.settle();
+    const still = await pendingExitTool();
+    if (!still) return;
+    await this.#storage.update({
+      orgId: record.orgId,
+      id: still.item.id,
+      userId,
+      expectedRevision: still.item.revision,
+      patch: {
+        metadata: {
+          ...still.item.metadata,
+          needsAttention: `The agent ended ${still.phase} without calling ${still.tool}.`,
+        },
+      },
+    });
+  }
+
   /** Unset means off: a plan nobody asked us to answer is a plan someone should see. */
   async #plansAreAutoApproved({
     orgId,
     factoryProjectId,
+    workItemId,
   }: {
     orgId: string;
     factoryProjectId: string;
+    workItemId: string | null;
   }): Promise<boolean> {
-    return this.#autoApprovePlans ? await this.#autoApprovePlans({ orgId, factoryProjectId }) : false;
+    if (this.#autoApprovePlans && (await this.#autoApprovePlans({ orgId, factoryProjectId }))) return true;
+    // The card's phase may approve its exit tool for this card (its stored `autoApproveWhen` matches).
+    if (!this.#resolver || !workItemId) return false;
+    const item = await this.#storage.get({ orgId, id: workItemId });
+    return item ? await phaseAutoApproves(this.#resolver, item) : false;
   }
 
   async #requireSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession> {
@@ -1794,7 +1896,7 @@ export class FactoryDecisionDispatcher {
           const since = new Date();
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved(record),
+            approvePlans: await this.#plansAreAutoApproved({ ...record, workItemId: binding.workItemId }),
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),

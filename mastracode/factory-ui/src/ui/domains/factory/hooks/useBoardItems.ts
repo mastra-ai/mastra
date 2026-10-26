@@ -11,7 +11,7 @@ import {
 } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
 import { persistedSourceKeys } from '../boardItems';
-import { belongsToBoard, itemBoard } from '../boardStages';
+import { belongsToBoard, isAuthoredPullRequestCard, itemBoard } from '../boardStages';
 import type { BoardKind } from '../boardStages';
 import { createWorkItemComment } from '../services/comments';
 import { inferredParentWorkItemId } from '../services/relationships';
@@ -52,7 +52,7 @@ export function useBoardItems({
   const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
   // Sources whose card sits on another board: the only withheld feed items worth explaining.
   const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
-  const visible = all.filter(item => belongsToBoard(item, kind));
+  const visible = all.filter(item => belongsToBoard(item, kind) && !isAuthoredPullRequestCard(item));
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
     setTransitionReasons(current => {

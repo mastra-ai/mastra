@@ -20,6 +20,11 @@ function githubActorLogin(context: Pick<FactoryGithubRuleContext, 'actor'>): str
   return context.actor.type === 'github' ? context.actor.login : undefined;
 }
 
+/** The bound card is the pull request's own card (reviewed by Factory), not the issue card that authored it. */
+function pullRequestCard(context: FactoryGithubRuleContext): boolean {
+  return context.item?.source === 'github-pr';
+}
+
 function retriageGithubIssue(context: FactoryGithubRuleContext) {
   if (!context.item || context.item.source !== 'github-issue' || !context.item.url) return;
   if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
@@ -133,14 +138,14 @@ function materializePullRequestIntake(
   {
     idempotencyKey,
     autoStartCandidate,
-    stage = 'intake',
-  }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'review' },
+    stage = 'triage',
+  }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'triage' | 'review' },
 ) {
   if (!context.pullRequest) return;
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey,
-    board: 'review',
+    board: 'work',
     source: 'github-pr',
     sourceKey: githubSourceKey(context, 'github-pr', context.pullRequest.number),
     title: context.pullRequest.title,
@@ -175,7 +180,7 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   // yet", Review means one is open. The card rests there through every round of
   // feedback — the builder is woken in place — until the merge closes it.
   if (context.item && context.pullRequestIntake !== true) {
-    if (context.board !== 'work' || context.pullRequest.state !== 'open') return;
+    if (context.board !== 'work' || pullRequestCard(context) || context.pullRequest.state !== 'open') return;
     if (!context.item.stages.includes('execute')) return;
     // Resolution can match a Work item by branch alone, so a fork's pull
     // request must not be able to move it: same bar as auto-starting a review.
@@ -200,7 +205,7 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
 
 function pullRequestMerged(context: FactoryGithubRuleContext) {
   if (!context.item || !context.pullRequest?.merged) return;
-  if (context.board === 'review') {
+  if (pullRequestCard(context)) {
     // The event is bound to the PR's own Review card: a merged PR is finished
     // review work, so always move the card to Done. The message only reaches
     // an active session (if any) — cards without one just move, instead of
@@ -208,7 +213,7 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
     return {
       type: 'transition',
       idempotencyKey: `${context.ingress.id}:pull-request-merged`,
-      board: 'review',
+      board: 'work',
       stage: 'done',
       message: {
         text:
@@ -248,7 +253,7 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
   // Only the Work item that authored the PR can act on the feedback. Provenance
   // binds the event there; a Review card seeing its own posted review must not
   // react to it (that would loop the reviewer against itself).
-  if (context.board !== 'work') return;
+  if (context.board !== 'work' || pullRequestCard(context)) return;
   // A closed or merged pull request has no branch left to push fixes to.
   if (context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // `approved` needs no work, and `commented` (a review body with no verdict)
@@ -305,7 +310,7 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
   // Provenance binds the comment to the Work item that authored the PR — the
   // only session that can act on it. A Review card must not react to comments
   // on the PR it is reviewing.
-  if (context.board !== 'work') return;
+  if (context.board !== 'work' || pullRequestCard(context)) return;
   if (context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // `factoryAuthored` is one bit for the whole Factory, so Factory's own
   // comments are indistinguishable between roles — waking on all of them would
@@ -334,13 +339,13 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
 
 function pullRequestClosed(context: FactoryGithubRuleContext) {
   if (!context.item || !context.pullRequest || context.pullRequest.merged) return;
-  if (context.board !== 'review') return;
+  if (!pullRequestCard(context)) return;
   // A PR closed without merging is abandoned review work: clear the card off
   // the board instead of leaving it in Reviewing forever.
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:pull-request-closed`,
-    board: 'review',
+    board: 'work',
     stage: 'canceled',
     message: {
       text:
@@ -354,7 +359,7 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
   // GitHub reviewer requests and Factory's exact mention command are both
   // explicit requests to enter the same Review lifecycle.
   const factoryReviewEntry = context.reviewRequest?.factoryReviewer || context.reviewCommand !== undefined;
-  if ((context.item && context.board !== 'review') || !factoryReviewEntry) return;
+  if ((context.item && !pullRequestCard(context)) || !factoryReviewEntry) return;
   if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // Trusted (write/admin) requesters only: creating or re-entering review checks
   // out and executes PR code, the same bar pullRequestOpened applies to auto-review.
@@ -379,21 +384,21 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:re-review-requested`,
-    board: 'review',
+    board: 'work',
     stage: 'review',
     ...(reviewing ? { reenter: true } : {}),
   } as const;
 }
 
 function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
-  if (!context.item || context.board !== 'review') return;
+  if (!context.item || !pullRequestCard(context)) return;
   if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // Intake has not started a review pass yet, so a push there is just more of
   // the code the first pass will read. A push to a card sitting in Reviewing is
   // different: it invalidates whatever that pass is reading, so re-enter the
   // stage to supersede it. `reviewPullRequest` cancels the stale run and picks
   // the right skill for the entry it sees.
-  if (context.item.stages.some(stage => stage === 'intake')) return;
+  if (context.item.stages.some(stage => stage === 'intake' || stage === 'triage')) return;
   // A fork's author controls its head branch, so an untrusted push must not be
   // able to start review passes on demand; a maintainer can still request one.
   if (!trustedGithubActor(context) && !context.pullRequest.factoryAuthored) return;
@@ -401,7 +406,7 @@ function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:re-review-updated`,
-    board: 'review',
+    board: 'work',
     stage: 'review',
     // Re-entry is the point when the card is already Reviewing: the stage's
     // entry rule is what cancels the superseded pass and starts one on the code

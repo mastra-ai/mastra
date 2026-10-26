@@ -785,39 +785,73 @@ describe('MastraFactory.prepare', () => {
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
 
-  it.each([
-    { includeDefaultBoards: undefined, revision: 1 },
-    { includeDefaultBoards: false, revision: 0 },
-  ])(
-    'seeds stored boards for projects that predate them (includeDefaultBoards: $includeDefaultBoards)',
-    async ({ includeDefaultBoards, revision }) => {
-      const dir = mkdtempSync(join(tmpdir(), 'factory-board-seed-'));
-      onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
-      const url = `file:${join(dir, 'factory.db')}`;
-      const earlier = new LibSQLFactoryStorage({ url, id: 'factory-test-storage' });
-      const projects = earlier.registerDomain(new FactoryProjectsStorage());
-      await earlier.init();
-      const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Old project' } });
-      await earlier.close();
+  const opsBoardConfig = {
+    boards: [
+      {
+        key: 'ops',
+        name: 'Ops',
+        phases: [
+          { key: 'open', name: 'Open', kind: 'resting' as const },
+          {
+            key: 'checking',
+            name: 'Checking',
+            kind: 'working' as const,
+            runner: { type: 'workflow' as const, workflowId: 'ops-check' },
+          },
+          { key: 'closed', name: 'Closed', kind: 'terminal' as const },
+        ],
+      },
+    ],
+  };
 
-      const storage = new LibSQLFactoryStorage({ url, id: 'factory-test-storage' });
-      onTestFinished(() => storage.close());
-      await prepareFactory({
-        storage,
-        ...(includeDefaultBoards === false ? { includeDefaultBoards, boards: [createTestBoard()] } : {}),
-      });
-      const boards = storage.getDomain<BoardsStorage>('boards');
-      const scope = { orgId: 'org-1', factoryProjectId: project.id };
-      await vi.waitFor(async () => expect(await boards.getRevision(scope)).toBe(revision));
-      if (revision === 0) {
-        // Give the background pass time it would need to write.
-        await new Promise(resolve => setTimeout(resolve, 50));
-        expect(await boards.getRevision(scope)).toBe(0);
-      } else {
-        expect((await boards.getConfig(scope)).updatedBy).toBe('user-1');
-      }
+  it.each([
+    { label: 'default', config: {}, boards: ['work'] },
+    { label: 'includeDefaultBoards: false', config: { includeDefaultBoards: false }, boards: null },
+    {
+      label: 'boardConfig',
+      config: {
+        includeDefaultBoards: false,
+        boardConfig: opsBoardConfig,
+        runners: [{ id: 'ops-check', role: 'work' }],
+      },
+      boards: ['ops'],
     },
-  );
+  ])('seeds stored boards for projects that predate them ($label)', async ({ config, boards: expected }) => {
+    const dir = mkdtempSync(join(tmpdir(), 'factory-board-seed-'));
+    onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+    const url = `file:${join(dir, 'factory.db')}`;
+    const earlier = new LibSQLFactoryStorage({ url, id: 'factory-test-storage' });
+    const projects = earlier.registerDomain(new FactoryProjectsStorage());
+    await earlier.init();
+    const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Old project' } });
+    await earlier.close();
+
+    const storage = new LibSQLFactoryStorage({ url, id: 'factory-test-storage' });
+    onTestFinished(() => storage.close());
+    await prepareFactory({
+      storage,
+      ...config,
+      ...(config.includeDefaultBoards === false ? { boards: [createTestBoard()] } : {}),
+    });
+    const boards = storage.getDomain<BoardsStorage>('boards');
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    if (expected === null) {
+      // Give the background pass time it would need to write.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(await boards.getRevision(scope)).toBe(0);
+      return;
+    }
+    await vi.waitFor(async () => expect(await boards.getRevision(scope)).toBe(1));
+    const stored = await boards.getConfig(scope);
+    expect(stored.updatedBy).toBe('user-1');
+    expect(stored.boards.map(board => board.key)).toEqual(expected);
+  });
+
+  it('refuses a boardConfig that names a runner it does not have', () => {
+    expect(() => new MastraFactory({ storage: fakeStorage(), boardConfig: opsBoardConfig })).toThrow(
+      "MastraFactory: 'boardConfig' is invalid. ops.checking: No runner is called 'ops-check'.",
+    );
+  });
 
   it('passes no sandbox callback when the slot is omitted', async () => {
     const ctx = await prepareIntegrationContext({ storage: fakeStorage() });

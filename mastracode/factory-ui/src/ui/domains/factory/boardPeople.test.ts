@@ -75,7 +75,7 @@ const activityPage: AuditEventPage = {
 
 const asIs = boardPersonIdentity(undefined, undefined);
 
-function picks(entries: Array<[string, string]>, kind: BoardKind = 'review') {
+function picks(entries: Array<[string, string]>, kind: BoardKind = 'work') {
   return boardFiltersFromParams(new URLSearchParams(entries), kind);
 }
 
@@ -195,18 +195,18 @@ describe('board person filters', () => {
     expect(workItemMatchesPeople(item, activityPage, withPeopleFolded(stored, hubot), hubot)).toBe(true);
   });
 
-  it('offers Review requested only on review boards and ignores the retired relevance parameter', () => {
-    const work = picks(
+  it('offers Review requested only on Work, where pull requests land, and ignores the retired relevance parameter', () => {
+    const release = picks(
       [
         ['reviewer', 'github:monalisa'],
         ['relevance', 'assigned'],
         ['teammate', 'github:octocat'],
       ],
-      'work',
+      'release',
     );
 
-    expect(work.reviewer.size).toBe(0);
-    expect(workItemMatchesPeople(item, activityPage, work, asIs)).toBe(true);
+    expect(release.reviewer.size).toBe(0);
+    expect(workItemMatchesPeople(item, activityPage, release, asIs)).toBe(true);
   });
 
   it('filters intake candidates by GitHub, GitLab, Linear, Jira, and incident.io provider metadata', () => {

@@ -108,7 +108,7 @@ function renderSection(openSessionId?: string) {
 
 async function reviewRowLabels(client: QueryClient): Promise<(string | null)[]> {
   await waitForMutationsIdle(client);
-  const group = await screen.findByRole('region', { name: 'Review sessions' });
+  const group = await screen.findByRole('region', { name: 'Work sessions' });
   const rows = await within(group).findAllByRole('link', { name: /^factory\/pr-\d+$/ });
   return rows.map(row => row.getAttribute('aria-label'));
 }

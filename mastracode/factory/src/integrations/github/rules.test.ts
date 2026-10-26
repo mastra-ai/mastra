@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../../boards/index.js';
+import { migrateBoards } from '../../boards/migrate.js';
 import { BoardResolver } from '../../boards/resolver.js';
 import { defaultProjectBoardConfig } from '../../boards/templates/work.js';
 import { createTestBoard } from '../../boards/test-utils.js';
@@ -13,6 +14,7 @@ import { defaultGithubRules, resolveGithubRules } from './default-rules.js';
 import type { GithubRuleOverrides } from './default-rules.js';
 import {
   createGithubPullRequestReconciler,
+  githubPullRequestLinkKey,
   GithubRules,
   polledPullRequestEvent,
   reconciledClosedEvent,
@@ -1472,7 +1474,7 @@ describe('GithubRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([
       expect.objectContaining({
         workItemId: reviewed.item.id,
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'review' }),
       }),
     ]);
 
@@ -1483,7 +1485,7 @@ describe('GithubRules', () => {
       expect.arrayContaining([
         expect.objectContaining({
           workItemId: reviewed.item.id,
-          decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }),
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'review' }),
         }),
       ]),
     );
@@ -1572,7 +1574,7 @@ describe('GithubRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([
       expect.objectContaining({
         workItemId: card.item.id,
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'review' }),
       }),
     ]);
   });
@@ -1787,7 +1789,11 @@ describe('GithubRules', () => {
     const configVersion = 'factory-config-v1';
     const dispatcher = new FactoryDecisionDispatcher({
       controller: { getSession: vi.fn(async () => undefined) } as never,
-      transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards: createBoardRegistry() }),
+      transitionService: new FactoryTransitionService({
+        storage: workItems,
+        configVersion,
+        boards: createBoardRegistry(),
+      }),
       storage: workItems,
       boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
@@ -2901,7 +2907,7 @@ describe('GithubRules', () => {
           decision: expect.objectContaining({
             type: 'upsertLinkedWorkItem',
             source: 'github-pr',
-            board: 'review',
+            board: 'work',
             idempotencyKey: '7:delivery-two-cards:pull-request-intake',
           }),
         }),
@@ -3005,8 +3011,8 @@ describe('GithubRules', () => {
     ]);
     // The pull request still gets its own card, linked to that item.
     expect(cards.find(card => card.externalSource?.type === 'pull-request')).toMatchObject({
-      board: 'review',
-      stages: ['intake'],
+      board: 'work',
+      stages: ['review'],
       parentWorkItemId: work.item.id,
     });
   });
@@ -3047,7 +3053,7 @@ describe('GithubRules', () => {
     expect(decisions).toEqual([
       expect.objectContaining({
         workItemId: card.item.id,
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
       }),
     ]);
     // The card must read merged straight away, not only after the next sweep.
@@ -3104,7 +3110,7 @@ describe('GithubRules', () => {
       expect.arrayContaining([
         expect.objectContaining({
           workItemId: card.item.id,
-          decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
         }),
         expect.objectContaining({
           workItemId: work.id,
@@ -3173,7 +3179,7 @@ describe('GithubRules', () => {
         }),
         expect.objectContaining({
           workItemId: card.item.id,
-          decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
         }),
       ]),
     );
@@ -3765,7 +3771,7 @@ describe('createGithubPullRequestReconciler', () => {
     expect(decisions).toEqual([
       expect.objectContaining({
         workItemId: card.item.id,
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
       }),
     ]);
 
@@ -4372,7 +4378,7 @@ describe('createGithubPullRequestReconciler', () => {
     expect(decisions).toEqual([
       expect.objectContaining({
         workItemId: card.item.id,
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'canceled' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'canceled' }),
       }),
     ]);
 
@@ -4403,7 +4409,7 @@ describe('createGithubPullRequestReconciler', () => {
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toEqual([
       expect.objectContaining({
         workItemId: card.item.id,
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
       }),
     ]);
     await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ merged: 1, failed: 0 });
@@ -4441,7 +4447,7 @@ describe('createGithubPullRequestReconciler', () => {
     const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
     expect(decisions).toEqual([
       expect.objectContaining({
-        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
       }),
     ]);
   });
@@ -4727,5 +4733,232 @@ describe('GithubRules push hand-off', () => {
       configVersion: 'v1',
     });
     await expect(withoutHook.ingest(push('refs/heads/main'))).resolves.toEqual({ status: 'ignored' });
+  });
+});
+
+describe('boards migration on data an older Factory wrote', () => {
+  const pullRequestEvent = (
+    number: number,
+    action: string,
+    deliveryId: string,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    event: 'pull_request',
+    deliveryId,
+    payload: {
+      action,
+      installation: { id: 7 },
+      repository: { id: 10, full_name: 'acme/repo' },
+      sender: { login: 'maintainer' },
+      ...extra,
+      pull_request: {
+        number,
+        title: `PR ${number}`,
+        html_url: `https://github.com/acme/repo/pull/${number}`,
+        created_at: '2030-01-01T00:00:00Z',
+        state: action === 'closed' ? 'closed' : 'open',
+        merged: extra.merged === true,
+        head: { ref: `feature-${number}` },
+        base: { ref: 'main' },
+      },
+    },
+  });
+
+  it('moves Review cards and routes onto Work, then keeps handling their review, merge and close', async () => {
+    const seeded = await setup('write');
+    const { github, sourceControl, integrationStorage, workItems, projects, project, intake, boardDefinitions } =
+      seeded;
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+
+    // What the previous release left behind: an issue card whose Factory-opened PR #17 has its
+    // own card on the Review board, an external PR #18 waiting in Review/Intake, and Review routing.
+    const issue = (
+      await workItems.upsert({
+        ...scope,
+        userId: 'user-1',
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github-issue:42',
+            url: 'https://github.com/acme/repo/issues/42',
+          },
+          title: 'Issue 42',
+          board: 'work',
+          stages: ['review'],
+          sessions: {},
+          metadata: { openPullRequestNumber: 17 },
+        },
+      })
+    ).item;
+    const authored = (
+      await workItems.upsert({
+        ...scope,
+        userId: 'user-1',
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: 'github-pr:17',
+            url: 'https://github.com/acme/repo/pull/17',
+          },
+          parentWorkItemId: issue.id,
+          title: 'PR 17',
+          board: 'review',
+          stages: ['review'],
+          sessions: {},
+          metadata: {
+            githubRepositoryId: 10,
+            githubPullRequestNumber: 17,
+            factoryAuthored: true,
+            reviewVerdict: 'approve',
+            reviewedHeadSha: 'abc123',
+          },
+        },
+      })
+    ).item;
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: issue.id },
+    });
+    const external = (
+      await workItems.upsert({
+        ...scope,
+        userId: 'user-1',
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: 'github-pr:18',
+            url: 'https://github.com/acme/repo/pull/18',
+          },
+          title: 'PR 18',
+          board: 'review',
+          stages: ['intake'],
+          sessions: {},
+          metadata: { authorTrusted: true },
+        },
+      })
+    ).item;
+    await intake.setLabelRoute({ ...scope, integrationId: 'github', label: 'needs-review', board: 'review' });
+    await intake.setBinding({ ...scope, integrationId: 'github', sourceId: 'acme/repo', board: 'review' });
+
+    const migrate = (mode: 'apply' | 'dry-run') =>
+      migrateBoards({
+        mode,
+        projects: [project],
+        boards: boardDefinitions,
+        workItems,
+        intake,
+        seedConfig: defaultProjectBoardConfig,
+      });
+
+    const preview = await migrate('dry-run');
+    expect(preview).toEqual({
+      mode: 'dry-run',
+      projects: 1,
+      boardsSeeded: 1,
+      linksBackfilled: 0,
+      pullRequestLinksMoved: 1,
+      cardsMoved: 2,
+      labelRoutesRetargeted: 1,
+      bindingsRetargeted: 1,
+      skipped: [],
+    });
+    // A dry run writes nothing.
+    expect(await boardDefinitions.getRevision(scope)).toBe(0);
+    expect((await workItems.get({ orgId: 'org-1', id: authored.id }))?.board).toBe('review');
+    expect((await intake.listLabelRoutes({ orgId: 'org-1' })).map(route => route.board)).toEqual(['review']);
+
+    expect(await migrate('apply')).toEqual({ ...preview, mode: 'apply' });
+    expect(await migrate('apply')).toEqual({
+      mode: 'apply',
+      projects: 1,
+      boardsSeeded: 0,
+      linksBackfilled: 0,
+      pullRequestLinksMoved: 0,
+      cardsMoved: 0,
+      labelRoutesRetargeted: 0,
+      bindingsRetargeted: 0,
+      skipped: [],
+    });
+
+    expect((await boardDefinitions.getConfig(scope)).boards.map(board => board.key)).toEqual(['work']);
+    for (const id of [issue.id, authored.id, external.id]) {
+      expect((await workItems.get({ orgId: 'org-1', id }))?.board).toBe('work');
+    }
+    const authoredLinks = (await workItems.listSources({ ...scope, workItemId: issue.id })).filter(
+      link => link.kind === 'pull_request',
+    );
+    expect(authoredLinks).toEqual([
+      expect.objectContaining({
+        // The key Factory links the pull requests it opens with, so merge and close find it.
+        sourceKey: githubPullRequestLinkKey(10, 17),
+        factoryAuthored: true,
+        reviewVerdict: 'approve',
+        reviewedHeadSha: 'abc123',
+      }),
+    ]);
+    expect((await intake.listLabelRoutes({ orgId: 'org-1' })).map(route => route.board)).toEqual(['work']);
+    expect((await intake.listBindings({ orgId: 'org-1' })).map(binding => binding.board)).toEqual(['work']);
+
+    // The migrated cards keep behaving: the runtime reads the stored Work board.
+    const configVersion = 'factory-config-v1';
+    const codeBoards = createBoardRegistry();
+    const resolver = new BoardResolver({ codeBoards, storage: boardDefinitions });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: codeBoards,
+      boardResolver: resolver,
+      intake,
+      configVersion,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSession: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({ storage: workItems, configVersion, resolver }),
+      storage: workItems,
+      resolver,
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+    const stagesOf = async (id: string) => (await workItems.get({ orgId: 'org-1', id }))?.stages;
+
+    await expect(
+      service.ingest(
+        pullRequestEvent(18, 'review_requested', 'delivery-18-rr', {
+          requested_reviewer: { login: 'factory-app[bot]' },
+        }),
+      ),
+    ).resolves.toEqual({ status: 'committed' });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    expect(await stagesOf(external.id)).toEqual(['review']);
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: external.id,
+          decision: expect.objectContaining({ type: 'invokeSkill', role: 'review' }),
+        }),
+      ]),
+    );
+
+    await expect(
+      service.ingest(pullRequestEvent(17, 'closed', 'delivery-17-merged', { merged: true })),
+    ).resolves.toEqual({ status: 'committed' });
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+    expect(await stagesOf(authored.id)).toEqual(['done']);
+    expect(await stagesOf(issue.id)).toEqual(['done']);
+
+    await expect(service.ingest(pullRequestEvent(18, 'closed', 'delivery-18-closed'))).resolves.toEqual({
+      status: 'committed',
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+    expect(await stagesOf(external.id)).toEqual(['canceled']);
   });
 });

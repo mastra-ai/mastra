@@ -10,9 +10,9 @@ export type BoardFilterFieldId = (typeof BOARD_FILTER_FIELDS)[number];
 /** The values picked per filter. An empty set narrows nothing; filters combine with AND. */
 export type BoardFilterState = Readonly<Record<BoardFilterFieldId, ReadonlySet<string>>>;
 
-/** Requested reviewers only exist on pull requests, so only the Review board filters by them. */
+/** Requested reviewers only exist on pull requests, which land on Work. */
 export function boardFilterFieldIds(kind: BoardKind): BoardFilterFieldId[] {
-  return BOARD_FILTER_FIELDS.filter(fieldId => fieldId !== 'reviewer' || kind === 'review');
+  return BOARD_FILTER_FIELDS.filter(fieldId => fieldId !== 'reviewer' || kind === 'work');
 }
 
 function boardFilterState(kind: BoardKind, valuesOf: (fieldId: BoardFilterFieldId) => readonly unknown[]) {

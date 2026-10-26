@@ -1322,7 +1322,7 @@ describe('FactoryTransitionService', () => {
     expect(await ruleDecisionKeys(storage, 'org-1')).toEqual(['notify-exit', 'message-enter']);
   });
 
-  it('rejects Review board moves outside its declared lifecycle', async () => {
+  it('keeps a pull request card on its review lifecycle', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { source: 'github-pr', stages: ['review'] });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
@@ -1333,7 +1333,7 @@ describe('FactoryTransitionService', () => {
       status: 'rejected',
       code: 'invalid_transition',
       reason:
-        'The Review board does not allow moving from review to planning. Next stages declared from review: intake, done, canceled.',
+        'A pull request card cannot move from review to planning. It moves between Intake, Triage, Review, Done and Canceled.',
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
   });
@@ -1788,7 +1788,7 @@ describe('FactoryTransitionService', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stageHistory).toHaveLength(1);
   });
 
-  it('rejects excessive causal depth and wrong Work/Review authority', async () => {
+  it('rejects excessive causal depth and keeps issue and pull request cards in their own lanes', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const workItem = await createItem(storage);
     const reviewItem = await createItem(storage, {
@@ -1804,12 +1804,6 @@ describe('FactoryTransitionService', () => {
     await expect(service.transition(request(workItem, { identity: 'causal', causalChain }))).resolves.toMatchObject({
       status: 'rejected',
       code: 'causal_depth_exceeded',
-    });
-    await expect(
-      service.transition(request(workItem, { identity: 'wrong-work', board: 'review' })),
-    ).resolves.toMatchObject({
-      status: 'rejected',
-      code: 'invalid_transition',
     });
     await expect(
       service.transition(request(reviewItem, { identity: 'wrong-review', board: 'work' })),

@@ -11,9 +11,12 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { unknownRunnerIssues } from '../boards/config.js';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { BoardResolver } from '../boards/resolver.js';
+import { builtInRunners } from '../boards/runners.js';
+import type { BoardRunnerRegistry } from '../boards/runners.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type {
@@ -27,6 +30,10 @@ import type { WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import { BoardRevisionConflictError } from '../storage/domains/boards/base.js';
+import type { BoardsStorage } from '../storage/domains/boards/base.js';
+import { projectBoardConfigInputSchema } from '../storage/domains/boards/validation.js';
+import type { ProjectBoardConfigInput } from '../storage/domains/boards/validation.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -63,6 +70,11 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   boardRegistry?: BoardRegistry;
   /** Each project's boards (stored + code); catalog, create and board moves use it when set. */
   boardResolver?: BoardResolver;
+  /** Stored board definitions; the board settings routes read and write them when set. */
+  boardDefinitions?: BoardsStorage;
+  /** Boards offered (unsaved, revision 0) to a project that stores none yet. */
+  boardDefaults?: ProjectBoardConfigInput;
+  boardRunners?: BoardRunnerRegistry;
   /** Comments domain — backs the mention attention provider. */
   comments: WorkItemCommentsStorage;
   /** Per-project queue-health threshold config. */
@@ -349,6 +361,84 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               })),
             })),
           });
+        },
+      }),
+      // ── Stored boards and intake routes: the board settings screen ─────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardConfigGet.path, {
+        method: FACTORY_ROUTE_CONTRACTS.boardConfigGet.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          const storage = this.deps.boardDefinitions;
+          if (!storage) return c.json({ error: 'boards_unavailable' }, 503);
+          const config = await storage.getConfig(resolved);
+          const runners = [...(this.deps.boardRunners ?? builtInRunners).values()].map(runner => ({
+            id: runner.id,
+            role: runner.role ?? null,
+          }));
+          if (config.revision === 0 && this.deps.boardDefaults) {
+            // Nothing stored yet: offer the default boards; saving at revision 0 stores them.
+            const defaults = projectBoardConfigInputSchema.parse(this.deps.boardDefaults);
+            return c.json({
+              config: {
+                revision: 0,
+                boards: defaults.boards.map(board => ({ id: '', ...board })),
+                intakeRoutes: defaults.intakeRoutes,
+                updatedBy: null,
+                updatedAt: null,
+              },
+              runners,
+            });
+          }
+          return c.json({ config: { ...config, updatedAt: config.updatedAt?.toISOString() ?? null }, runners });
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardConfigUpdate.path, {
+        method: FACTORY_ROUTE_CONTRACTS.boardConfigUpdate.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const storage = this.deps.boardDefinitions;
+          if (!storage) return c.json({ error: 'boards_unavailable' }, 503);
+          const parsed = FACTORY_ROUTE_CONTRACTS.boardConfigUpdate.bodySchema.safeParse(await readJson(context));
+          if (!parsed.success) {
+            return c.json(
+              {
+                error: parsed.error.issues
+                  .slice(0, 3)
+                  .map(issue => (issue.path.length ? `${issue.path.join('.')}: ${issue.message}` : issue.message))
+                  .join(' '),
+                issues: parsed.error.issues.map(issue => ({ message: issue.message, path: issue.path.map(String) })),
+              },
+              422,
+            );
+          }
+          const unknownRunners = unknownRunnerIssues(parsed.data.config, this.deps.boardRunners ?? builtInRunners);
+          if (unknownRunners.length) {
+            return c.json(
+              { error: unknownRunners.join(' '), issues: unknownRunners.map(message => ({ message, path: [] })) },
+              422,
+            );
+          }
+          try {
+            const config = await storage.saveConfig({
+              orgId: resolved.orgId,
+              factoryProjectId: resolved.factoryProjectId,
+              userId: resolved.userId,
+              expectedRevision: parsed.data.expectedRevision,
+              config: parsed.data.config,
+            });
+            this.deps.boardResolver?.invalidate(resolved);
+            return c.json({ config: { ...config, updatedAt: config.updatedAt?.toISOString() ?? null } });
+          } catch (error) {
+            if (error instanceof BoardRevisionConflictError) {
+              return c.json({ error: error.message }, 409);
+            }
+            throw error;
+          }
         },
       }),
       // ── List the org's work items for a project, and which are being worked ─

@@ -100,8 +100,9 @@ function isOwnedByViewer(session: FactoryUserSession, viewer: SessionViewerProfi
   return !viewer?.userId || session.userId === viewer.userId;
 }
 
-export function sessionBoard(session: FactoryUserSession, item: WorkItem | undefined): string {
-  return item ? itemBoard(item) : getFactorySessionKind(session, undefined);
+export function sessionBoard(item: WorkItem | undefined): string {
+  // Pull requests live on Work, so a session whose card has not loaded yet groups there too.
+  return item ? itemBoard(item) : 'work';
 }
 
 function reachedTerminalPhase(item: WorkItem, boards: readonly InstalledBoardInfo[] | undefined): boolean {
@@ -169,7 +170,7 @@ export function buildFactorySessionRow({
   return {
     session,
     origin: 'factory',
-    board: sessionBoard(session, item),
+    board: sessionBoard(item),
     kind: getFactorySessionKind(session, item) === 'review' ? 'Review session' : 'Work session',
     source: getFactorySessionSource(session, item),
     name: factorySessionName(session, item),

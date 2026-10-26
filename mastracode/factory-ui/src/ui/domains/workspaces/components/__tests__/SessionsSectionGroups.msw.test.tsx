@@ -117,11 +117,11 @@ const rowNamesIn = (groupLabel: string) =>
     .map(row => row.getAttribute('aria-label'));
 
 describe('Sessions sidebar groups', () => {
-  it('groups sessions by board: Work, Review, custom boards, then User', async () => {
+  it('groups sessions by board: Work (pull requests included), custom boards, then User', async () => {
     renderSection();
 
     await screen.findByRole('link', { name: 'Release old' });
-    expect(groupRegions()).toEqual(['Work sessions', 'Review sessions', 'Release Preview sessions', 'User sessions']);
+    expect(groupRegions()).toEqual(['Work sessions', 'Release Preview sessions', 'User sessions']);
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release old', 'Release new']);
   });
 
@@ -129,15 +129,13 @@ describe('Sessions sidebar groups', () => {
     const user = userEvent.setup();
     renderSection();
     await screen.findByRole('link', { name: 'Release old' });
-    expect(rowNamesIn('Work sessions')).toEqual(['Work old', 'Work new']);
-    expect(rowNamesIn('Review sessions')).toEqual(['Review old', 'Review new']);
+    expect(rowNamesIn('Work sessions')).toEqual(['Work old', 'Review old', 'Work new', 'Review new']);
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release old', 'Release new']);
     expect(rowNamesIn('User sessions')).toEqual(['User old', 'User new']);
 
     await pickSessionProperty(user, 'Sort', 'Last created');
 
-    await waitFor(() => expect(rowNamesIn('Work sessions')).toEqual(['Work new', 'Work old']));
-    expect(rowNamesIn('Review sessions')).toEqual(['Review new', 'Review old']);
+    await waitFor(() => expect(rowNamesIn('Work sessions')).toEqual(['Work new', 'Review new', 'Work old', 'Review old']));
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release new', 'Release old']);
     expect(rowNamesIn('User sessions')).toEqual(['User new', 'User old']);
   });
@@ -181,19 +179,19 @@ describe('Sessions sidebar groups', () => {
     await screen.findByRole('link', { name: 'Release old' });
 
     await openSessionProperty(user, 'Group');
-    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Review' }));
-    expect(screen.getByRole('menuitemcheckbox', { name: 'Review' })).not.toBeChecked();
+    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Release Preview' }));
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Release Preview' })).not.toBeChecked();
     await closeSessionProperties(user);
 
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Review sessions' })).toBeNull());
-    expect(groupRegions()).toEqual(['Work sessions', 'Release Preview sessions', 'User sessions']);
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Release Preview sessions' })).toBeNull());
+    expect(groupRegions()).toEqual(['Work sessions', 'User sessions']);
     expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
 
     await openSessionProperties(user);
     await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
 
     await waitFor(() =>
-      expect(groupRegions()).toEqual(['Work sessions', 'Review sessions', 'Release Preview sessions', 'User sessions']),
+      expect(groupRegions()).toEqual(['Work sessions', 'Release Preview sessions', 'User sessions']),
     );
   });
 
@@ -250,7 +248,7 @@ describe('Sessions sidebar groups', () => {
     expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveFocus();
     await closeSessionProperties(user);
 
-    expect(groupRegions()).toEqual(['Review sessions', 'Release Preview sessions', 'Work sessions', 'User sessions']);
+    expect(groupRegions()).toEqual(['Release Preview sessions', 'User sessions', 'Work sessions']);
   });
 
   it('forgets the group order once the groups are moved back', async () => {

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { defaultProjectBoardConfig } from '../boards/templates/work.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -87,6 +88,8 @@ function buildApp(
       audit,
       projects: seed.projects,
       workItems: seed.workItems,
+      boardDefinitions: seed.boardDefinitions,
+      boardDefaults: defaultProjectBoardConfig,
       boardRegistry,
       comments: seed.comments,
       queueHealth: seed.queueHealth,
@@ -158,6 +161,104 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('stored board config', () => {
+  const path = () => `/web/factory/projects/${PROJECT_ID}/boards/config`;
+  const scope = () => ({ orgId: 'org1', factoryProjectId: PROJECT_ID });
+
+  it('offers the combined Work board to a project that stores none, and stores it on save', async () => {
+    const offered = (await (await json('GET', path())).json()).config;
+    expect(offered.revision).toBe(0);
+    expect(offered.boards.map((board: { key: string }) => board.key)).toEqual(['work']);
+    expect(offered.boards[0].phases.map((phase: { key: string }) => phase.key)).toEqual([
+      'intake',
+      'triage',
+      'planning',
+      'execute',
+      'review',
+      'done',
+      'canceled',
+    ]);
+    expect(await seed.boardDefinitions.getRevision(scope())).toBe(0);
+
+    const boards = offered.boards.map(({ id: _id, ...board }: { id: string }) => board);
+    const saved = await json('PUT', path(), {
+      expectedRevision: 0,
+      config: { boards, intakeRoutes: offered.intakeRoutes },
+    });
+    expect(saved.status).toBe(200);
+    const stored = await seed.boardDefinitions.getConfig(scope());
+    expect(stored).toMatchObject({ revision: 1, updatedBy: 'u1' });
+    expect(stored.boards[0]!.id).not.toBe('');
+    expect(stored.intakeRoutes.map(route => [route.boardKey, route.phaseKey])).toEqual([
+      ['work', 'triage'],
+      ['work', null],
+    ]);
+  });
+
+  it('lists the runners a phase can name and refuses one the server does not have', async () => {
+    const { config, runners } = await (await json('GET', path())).json();
+    expect(runners.map((runner: { id: string }) => runner.id)).toEqual([
+      'factory-triage',
+      'factory-plan',
+      'factory-build',
+      'factory-review',
+      'factory-complete',
+    ]);
+    expect(runners[0]).toEqual({ id: 'factory-triage', role: 'triage' });
+
+    const boards = config.boards.map(({ id: _id, ...board }: { id: string }) => board);
+    boards[0].phases.find((phase: { key: string }) => phase.key === 'execute').runner = {
+      type: 'workflow',
+      workflowId: 'factory-deploy',
+    };
+    const rejected = await json('PUT', path(), { expectedRevision: 0, config: { boards, intakeRoutes: [] } });
+    expect(rejected.status).toBe(422);
+    expect((await rejected.json()).error).toBe("work.execute: No runner is called 'factory-deploy'.");
+    expect(await seed.boardDefinitions.getRevision(scope())).toBe(0);
+  });
+
+  it('saves what it serves, so a settings screen can edit and write it back', async () => {
+    await seed.boardDefinitions.seedDefaults({ ...scope(), userId: 'u1' });
+    const { config } = await (await json('GET', path())).json();
+    expect(config.revision).toBe(1);
+    const planning = config.boards[0].phases.find((phase: { key: string }) => phase.key === 'planning');
+    expect(planning).toMatchObject({ exitTool: 'submit_plan', autoApproveWhen: null });
+
+    const autoApproveWhen = {
+      operator: 'OR',
+      conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort: low' }],
+    };
+    planning.autoApproveWhen = autoApproveWhen;
+    const boards = config.boards.map(({ id: _id, ...board }: { id: string }) => board);
+    const saved = await json('PUT', path(), {
+      expectedRevision: 1,
+      config: { boards, intakeRoutes: config.intakeRoutes },
+    });
+    expect(saved.status).toBe(200);
+    expect((await saved.json()).config.revision).toBe(2);
+
+    const stored = await seed.boardDefinitions.getConfig(scope());
+    expect(stored.boards[0]!.phases.find(phase => phase.key === 'planning')?.autoApproveWhen).toEqual(autoApproveWhen);
+    expect(stored.updatedBy).toBe('u1');
+  });
+
+  it('rejects a stale revision and an invalid board with a readable error', async () => {
+    await seed.boardDefinitions.seedDefaults({ ...scope(), userId: 'u1' });
+    const { config } = await (await json('GET', path())).json();
+    const boards = config.boards.map(({ id: _id, ...board }: { id: string }) => board);
+
+    const stale = await json('PUT', path(), { expectedRevision: 0, config: { boards, intakeRoutes: [] } });
+    expect(stale.status).toBe(409);
+    expect((await stale.json()).error).toBe('Boards changed (revision 1, expected 0). Reload and try again.');
+
+    boards[0].phases[0].kind = 'terminal';
+    const invalid = await json('PUT', path(), { expectedRevision: 1, config: { boards, intakeRoutes: [] } });
+    expect(invalid.status).toBe(422);
+    expect((await invalid.json()).error).toContain('The first phase cannot be terminal.');
+    expect((await seed.boardDefinitions.getConfig(scope())).revision).toBe(1);
+  });
+});
+
 describe('installed board catalog', () => {
   it.each([true, false])('returns only structural metadata (defaults: %s)', async includeDefaultBoards => {
     const board = defineBoard({
@@ -188,7 +289,7 @@ describe('installed board catalog', () => {
     expect(response.status).toBe(200);
     const { boards } = await response.json();
     expect(boards.map((entry: { id: string }) => entry.id)).toEqual(
-      includeDefaultBoards ? ['work', 'review', 'release'] : ['release'],
+      includeDefaultBoards ? ['work', 'release'] : ['release'],
     );
     expect(boards.at(-1)).toEqual({
       id: 'release',
@@ -817,11 +918,15 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     expect(await decisionCount()).toBe(2);
   });
 
-  it('rejects a work item addressed through the Review board', async () => {
+  it('treats a move addressed to the old Review board as a move on Work', async () => {
     const item = await createItem();
     const res = await transition(item, { board: 'review' });
-    expect(res.status).toBe(422);
-    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ result: { status: 'accepted' } });
+    expect(await seed.workItems.get({ orgId: 'org1', id: item.id })).toMatchObject({
+      board: 'work',
+      stages: ['execute'],
+    });
   });
 });
 

@@ -52,8 +52,8 @@ describe.each(engines)('BoardResolver (%s)', engine => {
     expect(stored).not.toBe(workBoard);
     expect(stored.transitions).toEqual(workBoard.transitions);
     expect(stored.rules.triage?.issue?.onEnter).toBe(workBoard.rules.triage?.issue?.onEnter);
-    // The code Review board stays installed beside the stored Work board until PR 4.
-    expect(after.get('review')).toBeDefined();
+    // Pull requests live on Work; there is no Review board.
+    expect(after.get('review')).toBeUndefined();
     expect((await resolver.intakeRoutes(scope)).map(route => route.boardKey)).toEqual(['work', 'work']);
   });
 

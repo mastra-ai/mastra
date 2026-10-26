@@ -103,6 +103,23 @@ export const FACTORY_API_ROUTE_METADATA = {
       "listProperty": "boards"
     }
   },
+  "GET /web/factory/projects/:id/boards/config": {
+    "contractKey": "boardConfigGet",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/boards/config",
+    "description": "Get a project's stored boards and intake routes",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "runners"
+    }
+  },
   "GET /web/factory/projects/:id/decisions": {
     "contractKey": "decisionList",
     "method": "GET",
@@ -565,6 +582,25 @@ export const FACTORY_API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "record"
     }
+  },
+  "PUT /web/factory/projects/:id/boards/config": {
+    "contractKey": "boardConfigUpdate",
+    "method": "PUT",
+    "path": "/web/factory/projects/:id/boards/config",
+    "description": "Replace a project's stored boards and intake routes",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "config",
+      "expectedRevision"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
   }
 } as const;
 
@@ -906,6 +942,433 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "required": [
         "boards"
       ]
+    }
+  },
+  "GET /web/factory/projects/:id/boards/config": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "config": {
+          "type": "object",
+          "properties": {
+            "revision": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "boards": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "phases": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "resting",
+                            "working",
+                            "terminal"
+                          ]
+                        },
+                        "runner": {
+                          "anyOf": [
+                            {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "$ref": "#/$defs/__schema0"
+                                    },
+                                    "agentId": {
+                                      "$ref": "#/$defs/__schema1"
+                                    },
+                                    "instructions": {
+                                      "$ref": "#/$defs/__schema2"
+                                    },
+                                    "model": {
+                                      "$ref": "#/$defs/__schema3"
+                                    },
+                                    "skill": {
+                                      "$ref": "#/$defs/__schema4"
+                                    },
+                                    "seat": {
+                                      "$ref": "#/$defs/__schema5"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "agentId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "const": "workflow"
+                                    },
+                                    "workflowId": {
+                                      "$ref": "#/$defs/__schema1"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "workflowId"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "nextPhases": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "exitTool": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "autoApproveWhen": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/__schema6"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "name",
+                        "description",
+                        "kind",
+                        "runner",
+                        "nextPhases",
+                        "exitTool",
+                        "autoApproveWhen"
+                      ]
+                    }
+                  },
+                  "eventRoutes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "event": {
+                          "type": "string",
+                          "enum": [
+                            "pull_request.opened",
+                            "pull_request.merged",
+                            "pull_request.closed",
+                            "pull_request.review_requested",
+                            "pull_request.updated",
+                            "issue.closed"
+                          ]
+                        },
+                        "fromPhases": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "when": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/__schema6"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "toPhaseKey": {
+                          "type": "string"
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "event",
+                        "fromPhases",
+                        "when",
+                        "toPhaseKey",
+                        "enabled"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "key",
+                  "name",
+                  "description",
+                  "phases",
+                  "eventRoutes"
+                ]
+              }
+            },
+            "intakeRoutes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "when": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/__schema6"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "boardKey": {
+                    "type": "string"
+                  },
+                  "phaseKey": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "when",
+                  "boardKey",
+                  "phaseKey",
+                  "enabled"
+                ]
+              }
+            },
+            "updatedBy": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "updatedAt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "revision",
+            "boards",
+            "intakeRoutes",
+            "updatedBy",
+            "updatedAt"
+          ]
+        },
+        "runners": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "role": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "role"
+            ]
+          }
+        }
+      },
+      "required": [
+        "config",
+        "runners"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "const": "agent"
+        },
+        "__schema1": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "__schema2": {
+          "type": "string",
+          "maxLength": 20000
+        },
+        "__schema3": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "__schema4": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "__schema5": {
+          "type": "string",
+          "enum": [
+            "triage",
+            "plan",
+            "work",
+            "review"
+          ]
+        },
+        "__schema6": {
+          "type": "object",
+          "properties": {
+            "operator": {
+              "type": "string",
+              "enum": [
+                "AND",
+                "OR"
+              ]
+            },
+            "conditions": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "field": {
+                        "type": "string"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "enum": [
+                          "equals",
+                          "not_equals",
+                          "contains",
+                          "not_contains",
+                          "in",
+                          "not_in",
+                          "exists",
+                          "not_exists",
+                          "greater_than",
+                          "less_than",
+                          "greater_than_or_equal",
+                          "less_than_or_equal"
+                        ]
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/__schema7"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/$defs/__schema7"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "field",
+                      "operator"
+                    ]
+                  },
+                  {
+                    "$ref": "#/$defs/__schema6"
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "operator",
+            "conditions"
+          ]
+        },
+        "__schema7": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        }
+      }
     }
   },
   "GET /web/factory/projects/:id/decisions": {
@@ -3247,6 +3710,1085 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "additionalProperties": {}
     }
+  },
+  "PUT /web/factory/projects/:id/boards/config": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "boards": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "intakeRoutes": {
+              "$ref": "#/$defs/__schema35"
+            }
+          },
+          "required": [
+            "boards"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "config"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        "__schema1": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "name": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "description": {
+              "$ref": "#/$defs/__schema4"
+            },
+            "phases": {
+              "$ref": "#/$defs/__schema5"
+            },
+            "eventRoutes": {
+              "$ref": "#/$defs/__schema27"
+            }
+          },
+          "required": [
+            "key",
+            "name",
+            "phases"
+          ],
+          "additionalProperties": false
+        },
+        "__schema2": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "__schema3": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "__schema4": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "__schema5": {
+          "minItems": 1,
+          "maxItems": 30,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema6"
+          }
+        },
+        "__schema6": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "name": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "description": {
+              "$ref": "#/$defs/__schema4"
+            },
+            "kind": {
+              "$ref": "#/$defs/__schema7"
+            },
+            "runner": {
+              "$ref": "#/$defs/__schema8"
+            },
+            "nextPhases": {
+              "$ref": "#/$defs/__schema15"
+            },
+            "exitTool": {
+              "$ref": "#/$defs/__schema16"
+            },
+            "autoApproveWhen": {
+              "$ref": "#/$defs/__schema17"
+            }
+          },
+          "required": [
+            "key",
+            "name",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "__schema7": {
+          "type": "string",
+          "enum": [
+            "resting",
+            "working",
+            "terminal"
+          ]
+        },
+        "__schema8": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/$defs/__schema9"
+                    },
+                    "agentId": {
+                      "$ref": "#/$defs/__schema10"
+                    },
+                    "instructions": {
+                      "$ref": "#/$defs/__schema11"
+                    },
+                    "model": {
+                      "$ref": "#/$defs/__schema12"
+                    },
+                    "skill": {
+                      "$ref": "#/$defs/__schema13"
+                    },
+                    "seat": {
+                      "$ref": "#/$defs/__schema14"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "agentId"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "workflow"
+                    },
+                    "workflowId": {
+                      "$ref": "#/$defs/__schema10"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "workflowId"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "__schema9": {
+          "type": "string",
+          "const": "agent"
+        },
+        "__schema10": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "__schema11": {
+          "type": "string",
+          "maxLength": 20000
+        },
+        "__schema12": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "__schema13": {
+          "$ref": "#/$defs/__schema10"
+        },
+        "__schema14": {
+          "type": "string",
+          "enum": [
+            "triage",
+            "plan",
+            "work",
+            "review"
+          ]
+        },
+        "__schema15": {
+          "anyOf": [
+            {
+              "maxItems": 30,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema2"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "__schema16": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "__schema17": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema18"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "__schema18": {
+          "type": "object",
+          "properties": {
+            "operator": {
+              "type": "string",
+              "enum": [
+                "AND",
+                "OR"
+              ]
+            },
+            "conditions": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema19"
+              }
+            }
+          },
+          "required": [
+            "operator",
+            "conditions"
+          ],
+          "additionalProperties": false
+        },
+        "__schema19": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema20"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema26"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema20": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema21"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema22"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema23"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema21": {
+          "type": "string",
+          "enum": [
+            "source.kind",
+            "source.integration",
+            "source.repository",
+            "source.team",
+            "source.project",
+            "item.labels",
+            "item.author",
+            "item.title",
+            "item.authorTrusted",
+            "item.draft"
+          ]
+        },
+        "__schema22": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema23": {
+          "$ref": "#/$defs/__schema24"
+        },
+        "__schema24": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema25"
+            },
+            {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema25"
+              }
+            }
+          ]
+        },
+        "__schema25": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "__schema26": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema20"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema20"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema27": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema28"
+          }
+        },
+        "__schema28": {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "enum": [
+                "pull_request.opened",
+                "pull_request.merged",
+                "pull_request.closed",
+                "pull_request.review_requested",
+                "pull_request.updated",
+                "issue.closed"
+              ]
+            },
+            "fromPhases": {
+              "anyOf": [
+                {
+                  "minItems": 1,
+                  "maxItems": 30,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema2"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "when": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "operator": {
+                      "type": "string",
+                      "enum": [
+                        "AND",
+                        "OR"
+                      ]
+                    },
+                    "conditions": {
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema29"
+                      }
+                    }
+                  },
+                  "required": [
+                    "operator",
+                    "conditions"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "toPhaseKey": {
+              "$ref": "#/$defs/__schema2"
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "event",
+            "toPhaseKey"
+          ],
+          "additionalProperties": false
+        },
+        "__schema29": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema30"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema34"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema30": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/__schema31"
+            },
+            "operator": {
+              "$ref": "#/$defs/__schema32"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema33"
+            }
+          },
+          "required": [
+            "field",
+            "operator"
+          ],
+          "additionalProperties": false
+        },
+        "__schema31": {
+          "type": "string",
+          "enum": [
+            "pullRequest.merged",
+            "pullRequest.draft",
+            "pullRequest.factoryAuthored",
+            "issue.stateReason",
+            "item.hasOtherOpenPullRequest",
+            "actor.trusted",
+            "item.sourceKind"
+          ]
+        },
+        "__schema32": {
+          "type": "string",
+          "enum": [
+            "equals",
+            "not_equals",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "exists",
+            "not_exists",
+            "greater_than",
+            "less_than",
+            "greater_than_or_equal",
+            "less_than_or_equal"
+          ]
+        },
+        "__schema33": {
+          "$ref": "#/$defs/__schema24"
+        },
+        "__schema34": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/__schema30"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "AND",
+                    "OR"
+                  ]
+                },
+                "conditions": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema30"
+                  }
+                }
+              },
+              "required": [
+                "operator",
+                "conditions"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "__schema35": {
+          "default": [],
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema36"
+          }
+        },
+        "__schema36": {
+          "type": "object",
+          "properties": {
+            "when": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema18"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "boardKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "phaseKey": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema2"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "boardKey"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "config": {
+          "type": "object",
+          "properties": {
+            "revision": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "boards": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "phases": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "resting",
+                            "working",
+                            "terminal"
+                          ]
+                        },
+                        "runner": {
+                          "anyOf": [
+                            {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "$ref": "#/$defs/__schema0"
+                                    },
+                                    "agentId": {
+                                      "$ref": "#/$defs/__schema1"
+                                    },
+                                    "instructions": {
+                                      "$ref": "#/$defs/__schema2"
+                                    },
+                                    "model": {
+                                      "$ref": "#/$defs/__schema3"
+                                    },
+                                    "skill": {
+                                      "$ref": "#/$defs/__schema4"
+                                    },
+                                    "seat": {
+                                      "$ref": "#/$defs/__schema5"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "agentId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": {
+                                      "type": "string",
+                                      "const": "workflow"
+                                    },
+                                    "workflowId": {
+                                      "$ref": "#/$defs/__schema1"
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "workflowId"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "nextPhases": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "exitTool": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "autoApproveWhen": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/__schema6"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "name",
+                        "description",
+                        "kind",
+                        "runner",
+                        "nextPhases",
+                        "exitTool",
+                        "autoApproveWhen"
+                      ]
+                    }
+                  },
+                  "eventRoutes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "event": {
+                          "type": "string",
+                          "enum": [
+                            "pull_request.opened",
+                            "pull_request.merged",
+                            "pull_request.closed",
+                            "pull_request.review_requested",
+                            "pull_request.updated",
+                            "issue.closed"
+                          ]
+                        },
+                        "fromPhases": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "when": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/__schema6"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "toPhaseKey": {
+                          "type": "string"
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "event",
+                        "fromPhases",
+                        "when",
+                        "toPhaseKey",
+                        "enabled"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "key",
+                  "name",
+                  "description",
+                  "phases",
+                  "eventRoutes"
+                ]
+              }
+            },
+            "intakeRoutes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "when": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/__schema6"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "boardKey": {
+                    "type": "string"
+                  },
+                  "phaseKey": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "when",
+                  "boardKey",
+                  "phaseKey",
+                  "enabled"
+                ]
+              }
+            },
+            "updatedBy": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "updatedAt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "revision",
+            "boards",
+            "intakeRoutes",
+            "updatedBy",
+            "updatedAt"
+          ]
+        }
+      },
+      "required": [
+        "config"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "const": "agent"
+        },
+        "__schema1": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "__schema2": {
+          "type": "string",
+          "maxLength": 20000
+        },
+        "__schema3": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "__schema4": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "__schema5": {
+          "type": "string",
+          "enum": [
+            "triage",
+            "plan",
+            "work",
+            "review"
+          ]
+        },
+        "__schema6": {
+          "type": "object",
+          "properties": {
+            "operator": {
+              "type": "string",
+              "enum": [
+                "AND",
+                "OR"
+              ]
+            },
+            "conditions": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "field": {
+                        "type": "string"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "enum": [
+                          "equals",
+                          "not_equals",
+                          "contains",
+                          "not_contains",
+                          "in",
+                          "not_in",
+                          "exists",
+                          "not_exists",
+                          "greater_than",
+                          "less_than",
+                          "greater_than_or_equal",
+                          "less_than_or_equal"
+                        ]
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/$defs/__schema7"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/$defs/__schema7"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "field",
+                      "operator"
+                    ]
+                  },
+                  {
+                    "$ref": "#/$defs/__schema6"
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "operator",
+            "conditions"
+          ]
+        },
+        "__schema7": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        }
+      }
+    }
   }
 } as const;
 
@@ -3257,6 +4799,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "projectGet": "GET /web/factory/projects/:id",
   "attentionList": "GET /web/factory/projects/:id/attention",
   "boardCatalog": "GET /web/factory/projects/:id/boards",
+  "boardConfigGet": "GET /web/factory/projects/:id/boards/config",
   "decisionList": "GET /web/factory/projects/:id/decisions",
   "projectEnvironmentGet": "GET /web/factory/projects/:id/environment",
   "projectEnvironmentBuilds": "GET /web/factory/projects/:id/environment/builds",
@@ -3280,5 +4823,6 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "workItemStart": "POST /web/factory/projects/:id/runs/start",
   "workItemCreate": "POST /web/factory/projects/:id/work-items",
   "workItemAutomationRun": "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs",
-  "workItemTransition": "POST /web/factory/projects/:id/work-items/:workItemId/transition"
+  "workItemTransition": "POST /web/factory/projects/:id/work-items/:workItemId/transition",
+  "boardConfigUpdate": "PUT /web/factory/projects/:id/boards/config"
 } as const;

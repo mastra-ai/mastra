@@ -12,6 +12,7 @@ import {
   CircleUserRound,
   GitBranch,
   Inbox,
+  KanbanSquare,
   Palette,
   SlidersHorizontal,
 } from 'lucide-react';
@@ -124,6 +125,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.intake,
         icon: Inbox,
         searchText: 'work intake sources tasks issues pull requests github linear feed sync',
+      },
+      {
+        id: 'boards',
+        label: SETTINGS_SECTION_LABELS.boards,
+        icon: KanbanSquare,
+        searchText: 'boards phases lanes next phases exit tool auto approve labels intake routes',
       },
       {
         id: 'factory',

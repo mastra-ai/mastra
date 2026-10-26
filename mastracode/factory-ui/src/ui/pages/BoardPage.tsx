@@ -1,5 +1,5 @@
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { useParams } from 'react-router';
+import { Navigate, useParams } from 'react-router';
 import type { InstalledBoardInfo } from '../../api/types';
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 import { ConnectRepositoryEmptyState } from '../domains/factory/components/ConnectRepositoryEmptyState';
@@ -23,8 +23,9 @@ export function WorkBoardPage() {
   return <BoardLayout kind="work" />;
 }
 
+/** Review was folded into Work; old links open Work filtered to pull requests. */
 export function ReviewBoardPage() {
-  return <BoardLayout kind="review" />;
+  return <Navigate to="../work?source=pr" replace />;
 }
 
 export function CustomBoardPage() {

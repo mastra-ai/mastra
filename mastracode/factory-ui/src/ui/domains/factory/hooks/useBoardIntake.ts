@@ -26,7 +26,7 @@ import {
 import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidates';
 import type { BoardFilterState } from '../boardFilters';
 import { hasLabel, isPersistedCandidate } from '../boardItems';
-import { pickedBoardSources } from '../boardSourceFilters';
+import { PULL_REQUESTS_SOURCE, pickedBoardSources } from '../boardSourceFilters';
 import type { IntakeSourceBinding } from '../services/intake';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { BoardStageId } from '../stages';
@@ -121,6 +121,8 @@ export function useBoardIntake({
 }) {
   const kind = definition.id;
   const review = kind === 'review';
+  // Work is the one built-in board: it browses issues and pull requests alike.
+  const browsesPullRequests = review || kind === 'work';
   const initialPhase = definition.initialPhase;
   const repository = repositories[0];
   const projectRepositoryId = repository?.projectRepositoryId;
@@ -206,18 +208,26 @@ export function useBoardIntake({
   // confused with the Work board's review-receiving lane.
   const githubIntakeActive =
     !gitlabRepository && (kind === 'work' || routedHere || routesFailed) && githubEnabled && githubSelected;
+  const pullRequestSource: IntakeSource = gitlabRepository ? 'gitlab-prs' : 'github-prs';
+  // Work browses pull requests only where it also takes that provider's issues.
+  const pullRequestsActive =
+    browsesPullRequests && (gitlabRepository ? gitlabReady : githubEnabled && githubSelected);
   const available: IntakeSource[] = review
-    ? [gitlabRepository ? 'gitlab-prs' : 'github-prs']
+    ? [pullRequestSource]
     : [
         ...(githubIntakeActive ? (['github'] as const) : []),
         ...(gitlabReady ? (['gitlab'] as const) : []),
         ...(linearReady ? (['linear'] as const) : []),
         ...(jiraReady ? (['jira'] as const) : []),
         ...(incidentioReady ? (['incidentio'] as const) : []),
+        ...(pullRequestsActive ? [pullRequestSource] : []),
       ];
   const pickedSources = sourceFilters ? pickedBoardSources(sourceFilters) : new Set<string>();
   const browsedSources = available.filter(
-    source => pickedSources.size === 0 || pickedSources.has(source.split('-')[0]),
+    source =>
+      pickedSources.size === 0 ||
+      pickedSources.has(source.split('-')[0]) ||
+      (source.endsWith('-prs') && pickedSources.has(PULL_REQUESTS_SOURCE)),
   );
   const browsesGithub = browsedSources.includes('github');
 
@@ -237,10 +247,12 @@ export function useBoardIntake({
     return routedBoard === kind;
   });
   const projectBindings = (bindingsQuery.data ?? []).filter(binding => binding.factoryProjectId === factoryProjectId);
-  const pulls = useProjectPullRequestsQuery(review && !gitlabRepository ? reviewRepositoryIds : NO_REPOSITORIES);
+  const pulls = useProjectPullRequestsQuery(
+    browsesPullRequests && !gitlabRepository ? reviewRepositoryIds : NO_REPOSITORIES,
+  );
   const mergeRequests = useGitLabMergeRequestsQuery(
-    review && gitlabRepository ? factoryProjectId : undefined,
-    review && gitlabRepository ? projectRepositoryId : undefined,
+    browsesPullRequests && gitlabRepository ? factoryProjectId : undefined,
+    browsesPullRequests && gitlabRepository ? projectRepositoryId : undefined,
   );
   const gitlabIssues = useGitLabIssuesQuery(
     !review && gitlabReady ? factoryProjectId : undefined,
@@ -280,7 +292,9 @@ export function useBoardIntake({
     ...boardJiraIssues.map(jiraCandidate),
     ...boardIncidentioIssues.map(incidentioCandidate),
   ];
-  const participantCandidates = review ? reviewCandidates : workCandidates;
+  const participantCandidates = review
+    ? reviewCandidates
+    : [...workCandidates, ...(browsesPullRequests ? reviewCandidates : [])];
   const browsedCandidates = browsedSources.flatMap(source => {
     const initialCandidates = participantCandidates
       .filter(candidate => {

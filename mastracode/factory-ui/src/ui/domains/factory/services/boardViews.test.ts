@@ -16,7 +16,8 @@ describe('board views', () => {
     expect(rememberedBoardPath('fp-1', 'work')).toBe(
       '/factories/fp-1/work?label=bug&label=ui&sort=created-newest&layout=board',
     );
-    expect(rememberedBoardPath('fp-1', 'review')).toBe('/factories/fp-1/review');
+    // The Review board folded into Work; its old links open Work.
+    expect(rememberedBoardPath('fp-1', 'review')).toBe('/factories/fp-1/work');
     expect(rememberedBoardPath('fp-2', 'work')).toBe('/factories/fp-2/work');
   });
 

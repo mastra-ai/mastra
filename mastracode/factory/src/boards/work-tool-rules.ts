@@ -1,4 +1,5 @@
 import type { FactoryToolResultRuleContext } from '../rules/types.js';
+import type { BoardToolRule } from './define-board.js';
 
 function resultContent(value: unknown): string | undefined {
   if (typeof value === 'string') return value;
@@ -7,23 +8,31 @@ function resultContent(value: unknown): string | undefined {
   return typeof content === 'string' ? content : undefined;
 }
 
-// Interactive-session path only: factory-plan never calls submit_plan — it
-// advances planning → execute via factory_transition_work_item directly.
-export function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
-  if (
-    context.result.status !== 'success' ||
-    context.item.stages.length !== 1 ||
-    context.item.stages[0] !== 'planning' ||
-    context.actor.type !== 'agent' ||
-    context.actor.role !== 'plan' ||
-    !resultContent(context.result.value)?.startsWith('Plan approved.')
-  ) {
-    return;
-  }
+/**
+ * A phase's exit tool: a successful call by the phase's own agent while the card
+ * sits in that phase moves it to `nextPhase`. `submit_plan` only counts once the
+ * plan was approved (by a person, or by the dispatcher when auto-approval applies).
+ */
+export function exitToolRule(input: { tool: string; phase: string; nextPhase: string; role?: string }): BoardToolRule {
+  const { tool, phase, nextPhase, role } = input;
   return {
-    type: 'transition',
-    idempotencyKey: `${context.ingress.id}:approved-plan`,
-    board: 'work',
-    stage: 'execute',
-  } as const;
+    onResult(context: FactoryToolResultRuleContext) {
+      if (
+        context.result.status !== 'success' ||
+        context.item.stages.length !== 1 ||
+        context.item.stages[0] !== phase ||
+        context.actor.type !== 'agent' ||
+        (role !== undefined && context.actor.role !== role)
+      ) {
+        return;
+      }
+      if (tool === 'submit_plan' && !resultContent(context.result.value)?.startsWith('Plan approved.')) return;
+      return {
+        type: 'transition',
+        idempotencyKey: `${context.ingress.id}:${tool === 'submit_plan' ? 'approved-plan' : `exit-${phase}`}`,
+        board: context.board,
+        stage: nextPhase,
+      } as const;
+    },
+  };
 }

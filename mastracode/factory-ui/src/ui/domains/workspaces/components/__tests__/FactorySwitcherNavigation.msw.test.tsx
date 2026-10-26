@@ -63,7 +63,8 @@ describe('Factory switch navigation', () => {
         tab: 'review',
         initialEntry:
           '/factories/factory-current/review?teammate=github%3Aoctocat&reviewer=github%3Amonalisa&label=needs-review#queue',
-        expectedLocation: '/factories/factory-next/review#queue',
+        // The Review board folded into Work; its old links open Work.
+        expectedLocation: '/factories/factory-next/work#queue',
       },
     ])('keeps the $tab location without the previous Factory filters', async ({ initialEntry, expectedLocation }) => {
       const { currentLocation } = renderFactorySwitcher(initialEntry);

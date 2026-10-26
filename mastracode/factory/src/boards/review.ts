@@ -114,7 +114,7 @@ const reviewTransitionPolicy: BoardTransitionPolicy = ({ actor, toStage }) => {
   };
 };
 
-function reviewPullRequest(context: FactoryStageRuleContext) {
+export function reviewPullRequest(context: FactoryStageRuleContext) {
   // Only a Review-to-Review re-entry can supersede an active pass. A card
   // returning from Done has no live review to cancel; aborting its bound session
   // would instead cancel the fresh re-review kickoff.

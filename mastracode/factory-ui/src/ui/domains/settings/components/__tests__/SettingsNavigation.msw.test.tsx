@@ -55,6 +55,7 @@ describe('SettingsNavigation', () => {
       'Repositories',
       'Environment',
       'Work Intake',
+      'Boards',
       'Manage Factory',
     ]);
     expect(within(personal).getByRole('link', { name: 'Your models' })).toHaveAttribute(

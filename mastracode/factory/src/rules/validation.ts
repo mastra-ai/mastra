@@ -1,4 +1,5 @@
 import type { BoardRegistry } from '../boards/registry.js';
+import { currentBoardId } from '../boards/semantics.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleDecision,
@@ -98,12 +99,18 @@ export function assertFactoryDecisionTarget(
   itemBoard?: string | null,
 ): void {
   if (decision.type !== 'transition' && decision.type !== 'upsertLinkedWorkItem') return;
-  const board = boards.get(decision.board);
+  // Decisions recorded before Review folded into Work still name it.
+  const boardId = currentBoardId(decision.board);
+  const board = boards.get(boardId);
   if (!board) throw new FactoryRuleValidationError('Factory decision target board is not installed.');
   if (!Object.hasOwn(board.phases, decision.stage)) {
     throw new FactoryRuleValidationError('Factory decision target phase is not defined on its board.');
   }
-  if (decision.type === 'transition' && itemBoard !== undefined && itemBoard !== decision.board) {
+  if (
+    decision.type === 'transition' &&
+    itemBoard !== undefined &&
+    (itemBoard === null ? 'work' : currentBoardId(itemBoard)) !== boardId
+  ) {
     throw new FactoryRuleValidationError('Factory transition cannot change the item board.');
   }
 }

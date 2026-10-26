@@ -424,7 +424,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       configVersion: this.options.configVersion,
     };
     const value: ActivePhaseSnapshotValue =
-      board === 'review'
+      binding.role === 'review'
         ? {
             ...baseValue,
             board,
@@ -451,7 +451,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       (runtime
         ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning-setting=${escapeText(runtime.thinkingLevel)}\n`
         : '') +
-      ((board === 'work' || board === 'review') && stage === 'intake'
+      (board === 'work' && stage === 'intake'
         ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
         : '') +
       `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;

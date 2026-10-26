@@ -537,22 +537,6 @@ describe('Board work-item activity', () => {
     expect(screen.queryByText('Requested PR')).not.toBeInTheDocument();
   });
 
-  it('shows a filter-specific review empty state', async () => {
-    stubBoardEndpoints();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({ workItems: relevanceReviewItems }),
-      ),
-    );
-
-    const { client } = renderBoard('review', '?teammate=github%3Anobody');
-    await waitForMutationsIdle(client);
-
-    expect(
-      await within(screen.getByTestId('board-column-review')).findByText('No change requests match filters'),
-    ).toBeInTheDocument();
-  });
-
   it('shows distinct draft, open, closed, and merged pull request icons', async () => {
     stubBoardEndpoints();
     server.use(

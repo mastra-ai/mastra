@@ -12,7 +12,7 @@ import type { SessionGroup, SessionGroupBy, SessionGroupContext } from '../sessi
 import type { SessionListRow } from '../sessionRows';
 import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
 
-const [workBoard, reviewBoard] = builtinBoardCatalog.boards;
+const [workBoard] = builtinBoardCatalog.boards;
 
 const workRow = factoryRow(testSession('work-1', { branch: 'factory/issue-1' }));
 const reviewRow = factoryRow(testSession('review-1', { branch: 'factory/pr-2' }));
@@ -38,17 +38,16 @@ function ownedRow(sessionId: string, userId: string, name: string) {
 }
 
 describe('groupSessionRows by board', () => {
-  it('orders Work, Review, custom boards, then User, whatever the catalog order', () => {
+  it('orders Work (pull request sessions included), custom boards, then User, whatever the catalog order', () => {
     const groups = groupRows(
       [userRow('user-1'), releaseRow, reviewRow, workRow],
       'board',
-      { boards: [reviewBoard, releaseBoard, workBoard], viewerUserId: undefined },
+      { boards: [releaseBoard, workBoard], viewerUserId: undefined },
       [],
     );
 
     expect(groupSummary(groups)).toEqual([
-      { label: 'Work', sessionIds: ['work-1'] },
-      { label: 'Review', sessionIds: ['review-1'] },
+      { label: 'Work', sessionIds: ['review-1', 'work-1'] },
       { label: 'Release Preview', sessionIds: ['release-1'] },
       { label: 'User', sessionIds: ['user-1'] },
     ]);
@@ -111,7 +110,8 @@ describe('groupSessionRows by board', () => {
 
     const ordered = orderGroupHeadings(defaults, ['user', 'board:gone', 'board:review']);
 
-    expect(ordered.map(heading => heading.label)).toEqual(['User', 'Review', 'Work', 'Release Preview', 'Slack']);
+    // 'board:review' is stale now that pull requests group under Work.
+    expect(ordered.map(heading => heading.label)).toEqual(['User', 'Work', 'Release Preview', 'Slack']);
   });
 });
 

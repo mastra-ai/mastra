@@ -7,8 +7,9 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
 import { boardForWorkItem } from '../boards/index.js';
-import type { BoardRegistry } from '../boards/index.js';
+import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
 import type { BoardResolver } from '../boards/resolver.js';
+import type { BoardRunnerRegistry } from '../boards/runners.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
@@ -17,6 +18,7 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import { factoryLaneForRole } from '../rules/types.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
@@ -28,6 +30,8 @@ import type { LiveSessions } from '../session/live-sessions.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
+import type { BoardsStorage } from '../storage/domains/boards/base.js';
+import type { ProjectBoardConfigInput } from '../storage/domains/boards/validation.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
@@ -114,6 +118,7 @@ export interface FactoryApiRoutesDeps {
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
     comments: WorkItemCommentsStorage;
+    boardDefinitions?: BoardsStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -130,6 +135,10 @@ export interface FactoryApiRoutesDeps {
   boardRegistry: BoardRegistry;
   /** Each project's boards (stored + code). */
   boardResolver?: BoardResolver;
+  /** Boards a project that stores none yet is offered in board settings (unset: offer nothing). */
+  boardDefaults?: ProjectBoardConfigInput;
+  /** Runner ids a stored phase may name; the board settings screen lists them. */
+  boardRunners?: BoardRunnerRegistry;
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
@@ -265,6 +274,15 @@ async function inheritEarlierSession(
  * browser and no interactive user, so nothing else would catch a regression in
  * what it forwards.
  */
+/**
+ * The lane named after a role, when no phase seats it: on Work the review phase runs in the work
+ * seat for issues, but a pull request's review runs in the review seat and still belongs there.
+ */
+function roleLane(board: InstalledBoard | undefined, role: string): string | undefined {
+  const lane = factoryLaneForRole(role);
+  return lane !== undefined && board?.phaseKind(lane) === 'working' ? lane : undefined;
+}
+
 export async function prepareFactoryRuleBinding(
   sourceControlProvider: SourceControlStorageHandle | Pick<GithubIntegration, 'sourceControlStorage'>,
   coordinator: Pick<FactoryStartCoordinator, 'prepare'>,
@@ -291,7 +309,7 @@ export async function prepareFactoryRuleBinding(
       currentKind === undefined
         ? undefined
         : currentKind === 'resting'
-          ? board?.phaseForRole(input.role)
+          ? (board?.phaseForRole(input.role) ?? roleLane(board, input.role))
           : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
@@ -819,6 +837,9 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
           boardResolver: deps.boardResolver,
+          ...(deps.boardDefaults ? { boardDefaults: deps.boardDefaults } : {}),
+          ...(deps.boardRunners ? { boardRunners: deps.boardRunners } : {}),
+          ...(deps.domains.boardDefinitions ? { boardDefinitions: deps.domains.boardDefinitions } : {}),
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,

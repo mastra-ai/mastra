@@ -56,7 +56,7 @@ export async function createFactoryWorkItem({
   input,
   origin,
 }: CreateFactoryWorkItemArgs): Promise<CreateFactoryWorkItemResult> {
-  const boardId = input.board ?? (input.externalSource?.type === 'pull-request' ? 'review' : 'work');
+  const boardId = input.board ?? 'work';
   const board = boards.get(boardId);
   if (!board) return { status: 'refused', code: 'invalid_board', message: `Board '${boardId}' is not installed.` };
   const initialStages = input.stages ?? [board.initialPhase];

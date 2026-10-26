@@ -1,6 +1,8 @@
+import { phaseAutoApproves } from '../boards/auto-approve.js';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { BoardResolver } from '../boards/resolver.js';
+import { boardForWorkItem, currentBoardId, LEGACY_REVIEW_BOARD } from '../boards/semantics.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
 import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -274,6 +276,8 @@ export class FactoryTransitionService {
   }
 
   async transition(request: FactoryTransitionRequest): Promise<FactoryTransitionResult> {
+    // Decisions recorded before Review folded into Work still name it.
+    if (request.board === LEGACY_REVIEW_BOARD) request = { ...request, board: currentBoardId(request.board) };
     const replay = await this.#storage.getTransitionResultByIngress(
       request.orgId,
       request.factoryProjectId,
@@ -382,8 +386,7 @@ export class FactoryTransitionService {
     }
     const itemSource = workItemSource(item.externalSource);
     const source = factoryRuleSourceForWorkItem(itemSource);
-    const isPullRequest = source === 'pullRequest' || source === 'gitlabPullRequest';
-    const legacyBoard = isPullRequest ? 'review' : 'work';
+    const legacyBoard = 'work';
     if (item.board === null && !boards.has(legacyBoard)) {
       return this.#commitRejection(
         request,
@@ -392,21 +395,13 @@ export class FactoryTransitionService {
         'This legacy work item has no assigned board. Assign an installed board and phase through the work-item PATCH endpoint before transitioning it.',
       );
     }
-    const itemBoard = item.board ?? legacyBoard;
+    const itemBoard = boardForWorkItem(item);
     if (request.board !== itemBoard) {
       return this.#commitRejection(
         request,
         transitionId,
         'invalid_transition',
         `The work item belongs to board "${itemBoard}", not "${request.board}".`,
-      );
-    }
-    if ((itemBoard === 'review' && !isPullRequest) || (itemBoard === 'work' && isPullRequest)) {
-      return this.#commitRejection(
-        request,
-        transitionId,
-        'invalid_transition',
-        'The work item does not belong to the requested board.',
       );
     }
     const board = boards.get(request.board);
@@ -485,9 +480,10 @@ export class FactoryTransitionService {
         (async () => {
           // Resolve the project switch inside the timed block so a resolver rejection
           // surfaces as a committed rule_error and a slow lookup is bounded.
-          const plansAutoApproved = this.#autoApprovePlans
-            ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
-            : false;
+          const plansAutoApproved =
+            (this.#autoApprovePlans
+              ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
+              : false) || (this.#resolver ? await phaseAutoApproves(this.#resolver, item) : false);
           const policy = boardTransitionPolicyResultSchema.parse(
             await board.transitionPolicy?.(
               immutablePolicySnapshot({

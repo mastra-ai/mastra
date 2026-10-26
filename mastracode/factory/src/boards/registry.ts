@@ -1,5 +1,4 @@
 import type { BoardDefinition } from './define-board.js';
-import { reviewBoard } from './review.js';
 import { workBoard } from './work.js';
 
 export type InstalledBoard = BoardDefinition<string, string>;
@@ -12,7 +11,7 @@ export interface BoardRegistry extends Iterable<[string, InstalledBoard]> {
   entries(): MapIterator<[string, InstalledBoard]>;
 }
 
-export const defaultBoards = Object.freeze([workBoard, reviewBoard]) as readonly InstalledBoard[];
+export const defaultBoards = Object.freeze([workBoard]) as readonly InstalledBoard[];
 
 export function createBoardRegistry(
   options: {

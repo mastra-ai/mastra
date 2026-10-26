@@ -48,10 +48,14 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
+import { checkBoardConfigOption, createRunnerRegistry } from './boards/config.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import { boardsMigrationMode, migrateBoards } from './boards/migrate.js';
 import { BoardResolver } from './boards/resolver.js';
+import type { BoardRunner, BoardRunnerRegistry } from './boards/runners.js';
 import { boardForWorkItem } from './boards/semantics.js';
+import { defaultProjectBoardConfig } from './boards/templates/work.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
@@ -137,6 +141,7 @@ import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
 import { BoardsStorage } from './storage/domains/boards/base.js';
+import type { ProjectBoardConfigInput } from './storage/domains/boards/validation.js';
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
 import { CommentsDomain } from './storage/domains/comments/domain.js';
@@ -313,6 +318,15 @@ export interface MastraFactoryConfig {
   boards?: readonly InstalledBoard[];
   /** Whether the built-in Work and Review boards are installed. Default: true. */
   includeDefaultBoards?: boolean;
+  /**
+   * The boards every project starts with, in the shape Settings → Boards edits: phases, runners,
+   * next phases, exit tools, auto-approve conditions, event routes and intake routes. A project
+   * stores it on its first start and edits it from then on; projects that already stored boards
+   * keep theirs. Default: the built-in Work board (`defaultProjectBoardConfig`).
+   */
+  boardConfig?: ProjectBoardConfigInput;
+  /** Code runners that board phases can name as `{ type: 'workflow', workflowId: id }`, beside the built-in ones. */
+  runners?: readonly BoardRunner[];
 
   /**
    * Platform-specific overrides.
@@ -483,6 +497,9 @@ export class MastraFactory {
   readonly #boards: BoardRegistry;
   /** Each project's boards (stored + code), set by `prepare()`. */
   #boardResolver: BoardResolver | undefined;
+  readonly #runners: BoardRunnerRegistry;
+  /** What a project with no stored boards seeds and is offered; unset when it seeds none. */
+  readonly #boardDefaults: ProjectBoardConfigInput | undefined;
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
@@ -506,6 +523,12 @@ export class MastraFactory {
       boards: config.boards,
       includeDefaultBoards: config.includeDefaultBoards,
     });
+    this.#runners = createRunnerRegistry(config.runners);
+    this.#boardDefaults = config.boardConfig
+      ? checkBoardConfigOption(config.boardConfig, this.#runners, new Set((config.boards ?? []).map(board => board.id)))
+      : config.includeDefaultBoards !== false
+        ? defaultProjectBoardConfig
+        : undefined;
     if ('rules' in config) {
       throw new Error(
         "MastraFactory: 'rules' was removed. Set 'configVersion' for the audit label and declare tool-result " +
@@ -661,13 +684,16 @@ export class MastraFactory {
       codeBoards: this.#boards,
       installedBoardIds: new Set((this.#config.boards ?? []).map(board => board.id)),
       storage: boardsStorage,
+      runners: this.#runners,
       storageReady: () => storage.isDomainReady('boards'),
     });
     this.#boardResolver = boardResolver;
-    // `includeDefaultBoards: false` opts out of the stored Work board too.
-    const seedsBoards = this.#config.includeDefaultBoards !== false;
-    const seedProjectBoards = seedsBoards
-      ? (scope: { orgId: string; factoryProjectId: string; userId: string }) => boardsStorage.seedDefaults(scope)
+    // `includeDefaultBoards: false` without a `boardConfig` opts out of stored boards too.
+    const boardDefaults = this.#boardDefaults;
+    const seedsBoards = boardDefaults !== undefined;
+    const seedProjectBoards = boardDefaults
+      ? (scope: { orgId: string; factoryProjectId: string; userId: string }) =>
+          boardsStorage.seedDefaults({ ...scope, config: boardDefaults })
       : undefined;
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
@@ -843,23 +869,37 @@ export class MastraFactory {
         }
       });
     }
-    // Projects created before stored boards get the Work board seeded in the background; until then
-    // they run the code boards, which compile to the same thing. Seeding is idempotent, so a failed
-    // pass is retried next start.
-    if (seedsBoards && storage.isDomainReady('boards') && storage.isDomainReady('projects')) {
-      void timedPhase('background.seed.boards', async () => {
+    // Projects created before stored boards are moved onto one stored Work board in the background:
+    // seed the board, link cards to their sources, move Review cards to Work. Every step is
+    // idempotent, so a failed pass is retried next start. Until it finishes, legacy Review rows read
+    // as Work. `MASTRA_FACTORY_BOARDS_MIGRATION=dry-run` only logs what it would change.
+    const migrationMode = boardsMigrationMode();
+    if (
+      migrationMode !== 'off' &&
+      storage.isDomainReady('boards') &&
+      storage.isDomainReady('projects') &&
+      storage.isDomainReady('work-items')
+    ) {
+      void timedPhase('background.migrate.boards', async () => {
         try {
-          for (const project of await factoryProjectsStorage.listAll()) {
-            await boardsStorage.seedDefaults({
-              orgId: project.orgId,
-              factoryProjectId: project.id,
-              userId: project.createdBy,
-            });
+          const report = await migrateBoards({
+            mode: migrationMode,
+            projects: await factoryProjectsStorage.listAll(),
+            boards: boardsStorage,
+            workItems: workItemsStorage,
+            ...(storage.isDomainReady('intake') ? { intake: intakeStorage } : {}),
+            ...(boardDefaults ? { seedConfig: boardDefaults } : {}),
+          });
+          const { skipped, ...counts } = report;
+          if (
+            report.mode === 'dry-run' ||
+            Object.values(counts).some(value => typeof value === 'number' && value > 0 && value !== report.projects) ||
+            skipped.length
+          ) {
+            console.info(`[factory] boards migration ${JSON.stringify(report)}`);
           }
         } catch (error) {
-          console.warn(
-            `[factory] seeding project boards stopped early: ${error instanceof Error ? error.message : error}`,
-          );
+          console.warn(`[factory] boards migration stopped early: ${error instanceof Error ? error.message : error}`);
         }
       });
     }
@@ -1775,6 +1815,8 @@ export class MastraFactory {
             configVersion,
             boardRegistry: this.#boards,
             boardResolver: this.#boardResolver,
+            ...(this.#boardDefaults ? { boardDefaults: this.#boardDefaults } : {}),
+            boardRunners: this.#runners,
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
               this.#startCoordinator = startCoordinator;

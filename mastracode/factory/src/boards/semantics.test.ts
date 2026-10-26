@@ -23,13 +23,14 @@ describe('boardForWorkItem', () => {
     ).toBe('release');
   });
 
-  it('infers Review for legacy pull-request rows and Work otherwise', () => {
+  it('puts legacy pull-request rows and Review rows on Work', () => {
     expect(
       boardForWorkItem({
         board: null,
         externalSource: { integrationId: 'github', type: 'pull-request', externalId: '1' },
       }),
-    ).toBe('review');
+    ).toBe('work');
+    expect(boardForWorkItem({ board: 'review', externalSource: null })).toBe('work');
     expect(boardForWorkItem({ board: null, externalSource: null })).toBe('work');
   });
 });
@@ -82,7 +83,7 @@ describe('workItemPhaseSemantics', () => {
         externalSource: { integrationId: 'github', type: 'pull-request', externalId: '1' },
         stages: ['review'],
       }),
-    ).toEqual({ kind: 'working', role: 'review' });
+    ).toEqual({ kind: 'working', role: 'work' });
   });
 
   it('is undefined for multi-stage rows', () => {

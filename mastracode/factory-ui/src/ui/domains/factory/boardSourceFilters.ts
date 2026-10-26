@@ -2,6 +2,9 @@ import type { BoardCandidate } from './boardCandidates';
 import type { BoardFilterState } from './boardFilters';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 
+/** Narrows Work to pull request cards from any provider (the old Review board view). */
+export const PULL_REQUESTS_SOURCE = 'pr';
+
 export const BOARD_SOURCE_OPTIONS = [
   { value: 'github', label: 'GitHub' },
   { value: 'gitlab', label: 'GitLab' },
@@ -9,6 +12,7 @@ export const BOARD_SOURCE_OPTIONS = [
   { value: 'jira', label: 'Jira' },
   { value: 'incidentio', label: 'incident.io' },
   { value: 'manual', label: 'Manual' },
+  { value: PULL_REQUESTS_SOURCE, label: 'Pull requests' },
 ];
 
 type BoardSourceFilters = Pick<BoardFilterState, 'source' | 'linearProject'>;
@@ -36,7 +40,9 @@ export function cardMatchesSourceFilters(
   liveCandidate?: BoardCandidate,
 ): boolean {
   const sources = pickedBoardSources(filters);
-  if (sources.size > 0 && !sources.has(boardSource(card.source))) return false;
+  const pullRequest = card.source === 'github-pr' || card.source === 'gitlab-pr';
+  if (sources.size > 0 && !sources.has(boardSource(card.source)) && !(pullRequest && sources.has(PULL_REQUESTS_SOURCE)))
+    return false;
   if (card.source !== 'linear-issue' || filters.linearProject.size === 0) return true;
   const projectId = (liveCandidate ?? card).metadata.linearProjectId;
   return typeof projectId === 'string' && filters.linearProject.has(projectId);

@@ -1,4 +1,10 @@
-import type { BoardScope, BoardsStorage, StoredEventRoute, StoredIntakeRoute } from '../storage/domains/boards/base.js';
+import type {
+  BoardScope,
+  BoardsStorage,
+  StoredEventRoute,
+  StoredIntakeRoute,
+  StoredPhase,
+} from '../storage/domains/boards/base.js';
 import { compileStoredBoard } from './compile.js';
 import { freezeRegistry } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
@@ -14,6 +20,8 @@ interface ProjectBoards {
   intakeRoutes: readonly StoredIntakeRoute[];
   /** Event routes of each stored board that compiled, by board key. */
   eventRoutes: ReadonlyMap<string, readonly StoredEventRoute[]>;
+  /** Stored phases of each stored board that compiled, keyed by `board\u0000phase`. */
+  phases: ReadonlyMap<string, StoredPhase>;
 }
 
 interface CachedBoards extends ProjectBoards {
@@ -99,6 +107,11 @@ export class BoardResolver {
     return (await this.#resolve(scope)).eventRoutes.get(boardKey) ?? null;
   }
 
+  /** The stored definition of a phase, or null when the board is not stored. */
+  async storedPhase(scope: BoardScope, boardKey: string, phaseKey: string): Promise<StoredPhase | null> {
+    return (await this.#resolve(scope)).phases.get(`${boardKey}\u0000${phaseKey}`) ?? null;
+  }
+
   #resolve(scope: BoardScope): Promise<ProjectBoards> {
     const key = scopeKey(scope);
     const cached = this.#cache.get(key);
@@ -113,7 +126,7 @@ export class BoardResolver {
 
   async #refresh(scope: BoardScope, key: string, cached: CachedBoards | undefined): Promise<ProjectBoards> {
     if (!this.#storage || !this.#storageReady())
-      return { revision: 0, registry: this.#code, intakeRoutes: [], eventRoutes: new Map() };
+      return { revision: 0, registry: this.#code, intakeRoutes: [], eventRoutes: new Map(), phases: new Map() };
     const revision = await this.#storage.getRevision(scope);
     if (cached && cached.revision === revision) {
       cached.checkedAt = this.#now();
@@ -121,7 +134,7 @@ export class BoardResolver {
     }
     const compiled =
       revision === 0
-        ? { revision, registry: this.#code, intakeRoutes: [], eventRoutes: new Map() }
+        ? { revision, registry: this.#code, intakeRoutes: [], eventRoutes: new Map(), phases: new Map() }
         : await this.#compile(scope);
     this.#cache.set(key, { ...compiled, checkedAt: this.#now() });
     return compiled;
@@ -131,6 +144,7 @@ export class BoardResolver {
     const config = await this.#storage!.getConfig(scope);
     const boards = new Map<string, InstalledBoard>(this.#code.entries());
     const eventRoutes = new Map<string, readonly StoredEventRoute[]>();
+    const phases = new Map<string, StoredPhase>();
     const where = `project ${scope.factoryProjectId}`;
     for (const stored of config.boards) {
       if (this.#installed.has(stored.key)) {
@@ -143,6 +157,7 @@ export class BoardResolver {
           compileStoredBoard(stored, this.#runners, { warn: message => this.#warn(`${message} (${where})`) }),
         );
         eventRoutes.set(stored.key, stored.eventRoutes);
+        for (const phase of stored.phases) phases.set(`${stored.key}\u0000${phase.key}`, phase);
       } catch (error) {
         this.#warn(`Stored board '${stored.key}' in ${where} could not be compiled: ${(error as Error).message}`);
       }
@@ -152,6 +167,7 @@ export class BoardResolver {
       registry: freezeRegistry(boards),
       intakeRoutes: config.intakeRoutes,
       eventRoutes,
+      phases,
     };
   }
 }

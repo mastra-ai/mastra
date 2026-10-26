@@ -26,6 +26,10 @@ export interface StoredPhase {
   runner: StoredPhaseRunner | null;
   /** `null` means a card may move to any phase on the board. */
   nextPhases: string[] | null;
+  /** A successful call of this tool while the card is here moves it to the next phase in board order. */
+  exitTool: string | null;
+  /** When it matches the card, the exit tool's approval is given without a person. */
+  autoApproveWhen: RuleGroup | null;
 }
 
 export interface StoredEventRoute {
@@ -106,6 +110,8 @@ interface PhaseRow extends Record<string, unknown> {
   kind: StoredPhaseKind;
   runner: StoredPhaseRunner | null;
   next_phases: string[] | null;
+  exit_tool?: string | null;
+  auto_approve_when?: RuleGroup | null;
 }
 
 interface IntakeRouteRow extends Record<string, unknown> {
@@ -172,10 +178,13 @@ export class BoardsStorage extends FactoryStorageDomain {
    * boards. Safe to race: the losing writer sees a revision conflict and
    * leaves the winner's rows alone. Returns whether this call wrote them.
    */
-  async seedDefaults(scope: BoardScope & { userId: string }): Promise<boolean> {
+  async seedDefaults({
+    config = defaultProjectBoardConfig,
+    ...scope
+  }: BoardScope & { userId: string; config?: ProjectBoardConfigInput }): Promise<boolean> {
     if ((await this.getRevision(scope)) !== 0) return false;
     try {
-      await this.saveConfig({ ...scope, expectedRevision: 0, config: defaultProjectBoardConfig });
+      await this.saveConfig({ ...scope, expectedRevision: 0, config });
       return true;
     } catch (error) {
       if (error instanceof BoardRevisionConflictError) return false;
@@ -211,6 +220,8 @@ export class BoardsStorage extends FactoryStorageDomain {
                 kind: phase.kind,
                 runner: phase.runner,
                 nextPhases: phase.next_phases,
+                exitTool: phase.exit_tool ?? null,
+                autoApproveWhen: phase.auto_approve_when ?? null,
               })),
             eventRoutes: eventRoutes
               .filter(route => route.board_key === board.key)
@@ -320,6 +331,8 @@ export class BoardsStorage extends FactoryStorageDomain {
               kind: phase.kind,
               runner: phase.runner ?? null,
               next_phases: phase.nextPhases ?? null,
+              exit_tool: phase.exitTool ?? null,
+              auto_approve_when: phase.autoApproveWhen ?? null,
             });
           }
           for (const [position, route] of (board.eventRoutes ?? []).entries()) {

@@ -55,12 +55,6 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     currentUserId,
     onFailure: toastFailureAfterPaletteCloses,
   });
-  const reviewBoard = useBoardItems({
-    factoryProjectId: searchableFactoryId,
-    kind: 'review',
-    currentUserId,
-    onFailure: toastFailureAfterPaletteCloses,
-  });
   const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
   const { effectByItem } = useItemDecisions(searchableFactoryId);
   const { selectPath } = useGlobalSearchNavigation(closeSearch);
@@ -125,16 +119,11 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                 if (target.kind === 'candidate') {
                   closeSearch();
                   const [move] = cardMoves(target.candidate, target.candidate.column);
-                  const board =
-                    target.candidate.source === 'github-pr' || target.candidate.source === 'gitlab-pr'
-                      ? reviewBoard
-                      : workBoard;
-                  if (move) board.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
+                  if (move) workBoard.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
                   return;
                 }
                 const item = target.item;
-                const board = item.board === 'review' ? reviewBoard : workBoard;
-                const movingTo = board.evaluatingStages.get(item.id);
+                const movingTo = workBoard.evaluatingStages.get(item.id);
                 const { owner } = boardCardState({
                   decision: effectByItem.get(item.id),
                   moving:
@@ -149,7 +138,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                 const [move] = cardMoves(item, 'intake');
                 if (move) {
                   closeSearch();
-                  board.move(item.id, move.stage);
+                  workBoard.move(item.id, move.stage);
                   return;
                 }
                 void runs

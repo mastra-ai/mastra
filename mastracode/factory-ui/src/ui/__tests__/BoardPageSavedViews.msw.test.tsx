@@ -4,10 +4,19 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { builtinBoardCatalog, releaseBoard } from '../../../e2e/ui/board-catalog';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
+
+// A second board to leave Work for (the Review board folded into Work).
+const stubReleaseBoard = () =>
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () =>
+      HttpResponse.json({ boards: [...builtinBoardCatalog.boards, releaseBoard] }),
+    ),
+  );
 import {
   closePropertiesMenus,
   openPropertiesMenu,
@@ -135,6 +144,7 @@ describe('Factory board saved views', () => {
 
   it('searches within a saved view without changing its filters or entering the editor', async () => {
     stubWorkBoard();
+    stubReleaseBoard();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/work?label=later`],
     });
@@ -165,8 +175,8 @@ describe('Factory board saved views', () => {
 
     await user.type(search, 'Moved');
     const boards = screen.getByRole('region', { name: 'Boards' });
-    await user.click(within(boards).getByRole('link', { name: 'Review' }));
-    await screen.findByTestId('board-column-review');
+    await user.click(within(boards).getByRole('link', { name: 'Release Preview' }));
+    await screen.findByTestId('board-column-queued');
     await user.click(within(boards).getByRole('link', { name: 'Work' }));
     await within(await screen.findByTestId('board-column-triage')).findByText('Created later');
     expect(screen.getByRole('searchbox', { name: 'Search cards' })).toHaveValue('');

@@ -29,6 +29,14 @@ export function belongsToBoard(item: WorkItem, kind: BoardKind): boolean {
   return itemBoard(item) === kind;
 }
 
+/**
+ * A pull request Factory opened for a card is filed as that card's child: it hosts the
+ * independent review. The board shows the parent card, which carries the pull request link.
+ */
+export function isAuthoredPullRequestCard(item: Pick<WorkItem, 'source' | 'parentWorkItemId'>): boolean {
+  return (item.source === 'github-pr' || item.source === 'gitlab-pr') && item.parentWorkItemId != null;
+}
+
 export function itemAppearsInStage(
   item: WorkItem,
   stage: BoardStageId,
@@ -58,8 +66,9 @@ export function boardLoadingStages({
   return loading;
 }
 
-export function itemBoard(item: WorkItem): string {
-  return item.board ?? (item.source === 'github-pr' || item.source === 'gitlab-pr' ? 'review' : 'work');
+/** The Review board was folded into Work; cards still recorded on it read as Work. */
+export function itemBoard(item: Pick<WorkItem, 'board'>): string {
+  return item.board == null || item.board === 'review' ? 'work' : item.board;
 }
 
 export function itemStageOptions(item: WorkItem): ReadonlyArray<BoardStage> {

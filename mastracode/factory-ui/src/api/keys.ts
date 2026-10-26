@@ -28,6 +28,7 @@ export const queryKeys = {
   factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
   boardCatalog: (factoryProjectId: string | undefined) => ['factory', 'boards', factoryProjectId ?? null] as const,
+  boardConfig: (factoryProjectId: string | undefined) => ['factory', 'board-config', factoryProjectId ?? null] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
   factoryCreateFlow: () => ['factories', 'create-flow'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,

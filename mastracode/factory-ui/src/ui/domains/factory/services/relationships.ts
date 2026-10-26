@@ -93,7 +93,7 @@ export function inferredParentWorkItemId(
 }
 
 export function relationshipPath(item: Pick<WorkItem, 'source'>, factoryId: string): string {
-  return rememberedBoardPath(factoryId, isPullRequestSource(item.source) ? 'review' : 'work');
+  return rememberedBoardPath(factoryId, 'work');
 }
 
 export function relationshipLabel(item: WorkItem): string {

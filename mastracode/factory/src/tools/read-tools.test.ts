@@ -202,8 +202,9 @@ describe('factory_list_work_items', () => {
     expect(await ids({ query: 'LOGIN' })).toEqual(['a']);
     expect(await ids({ query: '#12' })).toEqual(['a']);
     expect(await ids({ stage: 'execute' })).toEqual(['b']);
-    expect(await ids({ board: 'review' })).toEqual(['c']);
-    expect(await ids({ board: 'work' })).toEqual(['b', 'a']);
+    // A card left on the old Review board reads as Work.
+    expect(await ids({ board: 'review' })).toEqual([]);
+    expect(await ids({ board: 'work' })).toEqual(['c', 'b', 'a']);
     expect(await ids({ role: 'review' })).toEqual(['c']);
     expect(await ids({ active: true })).toEqual(['b']);
     expect(await ids({ active: false })).toEqual(['c', 'a']);

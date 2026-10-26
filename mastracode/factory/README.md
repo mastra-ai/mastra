@@ -430,6 +430,56 @@ Intake bindings are explicit. A Linear project, Jira project, or GitHub reposito
 - **Jira:** each connected-site project binding selects one installed board. The create-Factory flow can select a Jira project and initially binds it to Work. The browser checks routed projects for new issues every 30 seconds and on window focus; issues observed for a routed project materialize automatically as work items on the bound board (mirroring Linear), and closed issues transition their linked card to done or canceled. Both `JiraIntegration` and `PlatformJiraIntegration` reconcile imported cards every five minutes by default so status and metadata continue to refresh without an open browser, and both accept a `rules` option to replace or disable the `issueObserved` / `issueClosed` defaults. Agents on Jira-sourced runs get `jira_get_issue` and `jira_create_comment`. Set `MASTRACODE_JIRA_RECONCILE_ENABLED=false` to disable reconciliation or `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence.
 - **GitHub:** Settings › Intake › GitHub routing maps a label to a board per Factory project (`GET`/`PUT /web/intake/label-routes`). Labels match case-insensitively; unrouted issues go to Work. Saving a route relocates matching cards the same way, and `issues.labeled` / `issues.unlabeled` webhooks move a card between its routed board and Work while refreshing its label metadata. Routes apply to every repository linked to the project; label input is free text (no repository label autocomplete yet).
 
+### Stored boards
+
+Each Factory project keeps its boards in its own database: phases, the runner each phase starts, the next phases a card may move to, the tool that ends a phase, the condition that auto-approves that tool, event routes and intake routes. Settings › Boards edits them (`GET`/`PUT /web/factory/projects/:id/boards/config`, guarded by `expectedRevision`).
+
+Pass `boardConfig` to choose the boards a project starts with, in the same shape. A project stores it on its first start and edits it from then on; projects that already stored boards keep theirs. Without `boardConfig`, projects start with the default Work board, which takes both issues and pull requests (`defaultProjectBoardConfig`).
+
+```typescript
+import { MastraFactory } from '@mastra/factory';
+import { defaultProjectBoardConfig } from '@mastra/factory/boards';
+import type { BoardRunner } from '@mastra/factory/boards';
+
+const opsCheck: BoardRunner = {
+  id: 'ops-check',
+  role: 'work',
+  onEnter: {
+    manual: context => ({
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'ops-check',
+      idempotencyKey: `${context.ingress.id}:ops-check`,
+    }),
+  },
+};
+
+new MastraFactory({
+  storage,
+  runners: [opsCheck],
+  boardConfig: {
+    boards: [
+      ...defaultProjectBoardConfig.boards,
+      {
+        key: 'ops',
+        name: 'Ops',
+        phases: [
+          { key: 'open', name: 'Open', kind: 'resting' },
+          { key: 'checking', name: 'Checking', kind: 'working', runner: { type: 'workflow', workflowId: 'ops-check' } },
+          { key: 'closed', name: 'Closed', kind: 'terminal' },
+        ],
+      },
+    ],
+    intakeRoutes: defaultProjectBoardConfig.intakeRoutes,
+  },
+});
+```
+
+- A phase runner is either `{ type: 'workflow', workflowId }`, naming a code runner (`factory-triage`, `factory-plan`, `factory-build`, `factory-review`, `factory-complete`, or one from `runners`), or `{ type: 'agent', agentId, skill?, instructions?, seat? }`, which starts the skill (or sends the instructions) in the card's `seat` session when a card enters the phase. Skills come from the repository (`.mastracode/skills`, `.claude/skills`, `.agents/skills`) or the app's `factory-skills/` folder.
+- `boardConfig` is checked at construction: an invalid board, an unknown runner id or a board key also used in `boards` throws. Saving from Settings rejects unknown runner ids the same way.
+- `boards` (code boards) and `includeDefaultBoards` work as before. `includeDefaultBoards: false` without `boardConfig` stores no boards.
+- Existing data moves at startup: Review cards move to Work, PR links are written on cards, label routes and bindings that named Review now name Work. Set `MASTRA_FACTORY_BOARDS_MIGRATION=dry-run` to log the report without writing, or `off` to skip it.
+
 ### GitHub event rules
 
 Both `GithubIntegration` and `PlatformGithubIntegration` own their GitHub event handlers. Existing installations retain the defaults without additional configuration.

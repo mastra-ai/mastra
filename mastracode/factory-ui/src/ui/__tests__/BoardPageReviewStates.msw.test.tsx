@@ -70,6 +70,7 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () => HttpResponse.json({ issues: [], nextPage: null })),
     http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
       HttpResponse.json({ pullRequests: candidate ? [reviewCandidate] : [], nextPage: null }),
     ),
@@ -127,7 +128,7 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
 }
 
 function renderReviewBoard() {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/review`] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
@@ -138,7 +139,7 @@ describe('Review card action lifecycle', () => {
     const { client } = renderReviewBoard();
     await user.click(await screen.findByRole('button', { name: 'Review' }));
 
-    const reviewing = screen.getByRole('region', { name: 'Reviewing' });
+    const reviewing = screen.getByRole('region', { name: 'Review' });
     await waitFor(() => expect(within(reviewing).getByRole('button', { name: 'Moving…' })).toBeDisabled());
     expect(within(reviewing).queryByRole('button', { name: 'Review' })).toBeNull();
 
@@ -182,7 +183,7 @@ describe('Review card action lifecycle', () => {
     );
     expect(within(panel).queryByRole('button', { name: 'Review' })).toBeNull();
     await waitFor(() => expect(within(panel).queryByText('Starting an automated run…')).toBeNull());
-    expect(transitions).toEqual([expect.objectContaining({ board: 'review', stage: 'review', cause: 'card_action' })]);
+    expect(transitions).toEqual([expect.objectContaining({ board: 'work', stage: 'review', cause: 'card_action' })]);
   });
 
   it('keeps automatic and manual retries busy, and offers Retry after a final failure', async () => {

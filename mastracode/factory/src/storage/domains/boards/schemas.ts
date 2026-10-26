@@ -56,6 +56,8 @@ export const FACTORY_BOARD_PHASES_SCHEMA: CollectionSchema = {
     kind: { type: 'text' },
     runner: { type: 'json', nullable: true },
     next_phases: { type: 'json', nullable: true },
+    exit_tool: { type: 'text', nullable: true },
+    auto_approve_when: { type: 'json', nullable: true },
   },
   uniqueIndexes: [
     {

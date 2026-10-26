@@ -21,21 +21,20 @@ interface DisplayedSkill {
   title: string;
 }
 
-const BUILT_IN_BOARD_SKILLS: Record<'work' | 'review', DisplayedSkill[]> = {
+// Pull requests are reviewed on Work, so its review skills sit there too.
+const BUILT_IN_BOARD_SKILLS: Record<'work', DisplayedSkill[]> = {
   work: [
     { name: 'factory-triage', title: 'Triage' },
     { name: 'factory-plan', title: 'Planning' },
-  ],
-  review: [
     { name: 'factory-review', title: 'Review' },
     { name: 'factory-rereview', title: 'Re-review' },
   ],
 };
 
-const DISPLAYED_SKILLS: DisplayedSkill[] = [...BUILT_IN_BOARD_SKILLS.work, ...BUILT_IN_BOARD_SKILLS.review];
+const DISPLAYED_SKILLS: DisplayedSkill[] = BUILT_IN_BOARD_SKILLS.work;
 
-function isBuiltInBoard(id: string): id is 'work' | 'review' {
-  return id === 'work' || id === 'review';
+function isBuiltInBoard(id: string): id is 'work' {
+  return id === 'work';
 }
 
 function SkillContent({ content }: { content: string }) {

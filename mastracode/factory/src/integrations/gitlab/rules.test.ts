@@ -464,7 +464,7 @@ describe('GitLabRules', () => {
         decision: {
           type: 'upsertLinkedWorkItem',
           source: 'gitlab-pr',
-          board: 'review',
+          board: 'work',
           metadata: {
             gitlabProjectId: 101,
             gitlabMergeRequestIid: 17,
@@ -577,7 +577,7 @@ describe('GitLabRules', () => {
     });
     await expect(service.ingest(mergeRequestOpened())).resolves.toEqual({ status: 'committed' });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
-      { decision: { type: 'upsertLinkedWorkItem', source: 'gitlab-pr', board: 'review' } },
+      { decision: { type: 'upsertLinkedWorkItem', source: 'gitlab-pr', board: 'work' } },
     ]);
   });
 
@@ -623,7 +623,7 @@ describe('GitLabRules', () => {
     const deferred = await seeded.workItems.listDeferredDecisions('org-1', project.id);
     expect(deferred.map(entry => entry.decision)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-pr', board: 'review' }),
+        expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-pr', board: 'work' }),
         expect.objectContaining({ type: 'sendMessage', role: 'work' }),
       ]),
     );
