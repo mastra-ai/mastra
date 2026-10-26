@@ -48,9 +48,14 @@ function revealsSettledPromise(notification: HTMLElement, previous: Card, interr
   );
 }
 
+function cssTimeInMs(value: string) {
+  const time = value.trim();
+  return Number.parseFloat(time) * (time.endsWith('ms') ? 1 : 1000);
+}
+
 function revealSettledPromise(notification: HTMLElement, reveal: number, radius: string) {
   const style = getComputedStyle(notification);
-  const duration = Number.parseFloat(style.getPropertyValue('--duration-normal'));
+  const duration = cssTimeInMs(style.getPropertyValue('--duration-normal'));
   const easing = style.getPropertyValue('--toast-settle-ease').trim();
   const animations = [
     notification.animate(
