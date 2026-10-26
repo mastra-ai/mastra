@@ -95,7 +95,7 @@ export function BoardListRow({
         <span className="flex min-w-0 items-center gap-3 empty:hidden max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-3 sm:contents">
           <span
             className={cn(
-              'max-w-72 min-w-0 shrink-[100] empty:hidden max-sm:hidden @max-[32rem]:hidden [&>*]:max-w-full',
+              'max-w-72 min-w-0 shrink-[100] overflow-hidden empty:hidden max-sm:hidden @max-[32rem]:hidden [&>*]:max-w-full',
               SWAP_FOR_ACTION_ON_HOVER,
             )}
           >

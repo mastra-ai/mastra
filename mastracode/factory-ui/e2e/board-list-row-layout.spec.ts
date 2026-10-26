@@ -202,6 +202,40 @@ test.describe('Factory board list row layout', () => {
           }),
         );
         expect(overlaps).toEqual([]);
+
+        // Inside a cell, no two visible pieces of text may draw over each other (squeezed labels ran into the verdict).
+        const collisions = await rows.evaluateAll(elements =>
+          elements.flatMap(row => {
+            const boxes: { text: string; left: number; right: number; top: number; bottom: number }[] = [];
+            const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+            while (walker.nextNode()) {
+              const node = walker.currentNode as Text;
+              const text = node.textContent?.trim();
+              if (!text || !node.parentElement?.checkVisibility({ opacityProperty: true, visibilityProperty: true })) {
+                continue;
+              }
+              const range = document.createRange();
+              range.selectNodeContents(node);
+              const rect = range.getBoundingClientRect();
+              let { left, right } = rect;
+              for (let parent = node.parentElement; parent && parent !== row; parent = parent.parentElement) {
+                if (getComputedStyle(parent).overflowX !== 'visible') {
+                  const clip = parent.getBoundingClientRect();
+                  left = Math.max(left, clip.left);
+                  right = Math.min(right, clip.right);
+                }
+              }
+              if (right - left > 0.5) boxes.push({ text, left, right, top: rect.top, bottom: rect.bottom });
+            }
+            return boxes.flatMap((a, i) =>
+              boxes
+                .slice(i + 1)
+                .filter(b => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom && b.top < a.bottom)
+                .map(b => `${row.getAttribute('aria-label')}: "${a.text}" draws over "${b.text}"`),
+            );
+          }),
+        );
+        expect(collisions).toEqual([]);
       });
     });
   }
