@@ -1,6 +1,11 @@
 import type { AnyExportedSpan } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
-import { buildPreview, PREVIEW_MAX_LENGTH } from '@mastra/core/storage';
+import * as coreStorage from '@mastra/core/storage';
+
+// Older supported core versions do not export these helpers. Read capabilities
+// from the namespace so native ESM loading (and bundlers) cannot require them.
+const buildPreview: typeof coreStorage.buildPreview | undefined = Reflect.get(coreStorage, 'buildPreview');
+const PREVIEW_MAX_LENGTH: number = Reflect.get(coreStorage, 'PREVIEW_MAX_LENGTH') ?? 0;
 
 type RecordValue = Record<string, unknown>;
 type Direction = 'input' | 'output';
@@ -10,7 +15,7 @@ const record = (value: unknown): RecordValue | undefined =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as RecordValue) : undefined;
 const text = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() ? value.trim() : undefined;
-const limit = (value: string): string => buildPreview(value) ?? '';
+const limit = (value: string): string => buildPreview?.(value) ?? '';
 
 /** Only serialize enough JSON for a preview. Never walk an entire embedding, message history,
  * or tool result just to return 100 characters. Cycles/deep values remain readable. */
@@ -79,7 +84,7 @@ function generic(value: unknown): string {
   if (value == null) return '';
   if (typeof value === 'string') return limit(value);
   const data = record(value);
-  if (data?.__isCreatedSignal === true) return buildPreview(value) ?? '';
+  if (data?.__isCreatedSignal === true) return buildPreview?.(value) ?? '';
   const content = text(data?.text) ?? text(data?.message);
   return content ? limit(content) : jsonPreview(value);
 }
@@ -335,6 +340,10 @@ function errorPreview(value: unknown): string {
 /** Shared by storage and Platform after processing/redaction and custom span formatting.
  * Do not mutate or cache the live span: every export snapshot can have new output/error data. */
 export function withSpanPreviews(span: AnyExportedSpan): AnyExportedSpan {
+  // Preserve legacy exporter/storage behavior, including caller-supplied fields.
+  if (typeof buildPreview !== 'function' || !Number.isFinite(PREVIEW_MAX_LENGTH) || PREVIEW_MAX_LENGTH <= 0) {
+    return span;
+  }
   const preview = (direction: Direction): string => {
     try {
       const upstream = span[direction === 'input' ? 'inputPreview' : 'outputPreview'];

@@ -55,7 +55,7 @@ Stack traces and error details aren't included. Missing or unrecognized errors p
 
 Generated previews are refreshed for each exported snapshot. An empty preview at span start doesn't suppress later output or errors. Storage preserves explicit empty strings; stored `NULL` remains the marker for missing previews that may need legacy fallback. Query responses may represent stored empty previews as `null` without regenerating them.
 
-Use the updated `@mastra/core` alongside `@mastra/observability` to preserve intentionally empty previews. Earlier core versions can regenerate them from the payload. Platform ingestion must also preserve upstream empty strings when deploying this exporter behavior.
+Preview generation requires the shared preview helpers in `@mastra/core`. With older core versions that lack these helpers, both exporters skip generation and pass through existing preview fields and payloads unchanged. The peer dependency range is unchanged. Use the updated `@mastra/core` to preserve intentionally empty previews through storage; earlier storage implementations can regenerate them from the payload. Platform ingestion must also preserve upstream empty strings when deploying this exporter behavior.
 
 ## Constructor
 
