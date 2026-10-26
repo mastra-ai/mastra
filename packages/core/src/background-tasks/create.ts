@@ -123,7 +123,10 @@ export function createBackgroundTask(
       if (!taskId) throw new Error('Task has not been dispatched yet');
       manager.registerTaskContext(taskId, context);
       try {
-        return await manager.resume(taskId, resumeData, resumeOptions);
+        // Only forward options when given, so existing callers see the same call.
+        return resumeOptions
+          ? await manager.resume(taskId, resumeData, resumeOptions)
+          : await manager.resume(taskId, resumeData);
       } catch (error) {
         manager.deregisterTaskContext(taskId);
         throw error;
