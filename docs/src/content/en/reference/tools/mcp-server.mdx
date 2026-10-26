@@ -2005,10 +2005,10 @@ The server creates the task before it answers, so a `tasks/get` sent right after
   },
   {
     name: 'tools',
-    type: "Record<string, 'off' | 'auto' | 'always' | { mode; syncWindowMs?; ttlMs? }>",
+    type: "Record<string, 'off' | 'auto' | 'always' | { mode; syncWindowMs?; ttlMs?; recover? }>",
     isOptional: true,
     description:
-      "Mode per tool name. `syncWindowMs` (default `2000`) is how long `'auto'` waits for a synchronous answer. `ttlMs` overrides `tasks.ttlMs` for that tool. A name that isn't one of the server's tools throws when the server is created.",
+      "Mode per tool name. `syncWindowMs` (default `2000`) is how long `'auto'` waits for a synchronous answer. `ttlMs` and `recover` override `tasks.ttlMs` and `tasks.recover` for that tool. A name that isn't one of the server's tools throws when the server is created.",
   },
   {
     name: 'required',
@@ -2023,14 +2023,22 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     isOptional: true,
     defaultValue: '86400000',
     description:
-      'How long a task is kept after it is created, in milliseconds. A task still running when it expires is aborted and ends `failed`. `null` keeps tasks until the server closes.',
+      'How long a task is kept after it is created, in milliseconds. A task still running when it expires is aborted and ends `failed`. `null` keeps tasks in memory until the server closes, and in Mastra storage indefinitely.',
+  },
+  {
+    name: 'recover',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Whether a task whose server stopped mid-run runs `execute` again from the start on another instance. Only applies to tasks kept in Mastra storage. See [Recovery after a crash](#recovery-after-a-crash).',
   },
   {
     name: 'store',
     type: 'MCPTaskStore',
     isOptional: true,
-    defaultValue: 'new InMemoryMCPTaskStore()',
-    description: 'Where tasks are kept. The default store keeps them in memory, in this process.',
+    description:
+      'Where tasks are kept. By default, a server registered on a Mastra instance with background tasks keeps them in Mastra storage (see [Tasks across instances](#tasks-across-instances)); any other server keeps them in memory, in this process.',
   },
   {
     name: 'authorize',
@@ -2080,9 +2088,49 @@ Task runs are rebuilt from what the task stored when it was created. This keeps 
 - A tool that throws completes the task with `isError: true` and the serialized error, as a synchronous call answers.
 - A task ends `failed` only when the server can't run it, for example when its TTL expires.
 
+### Tasks across instances
+
+Register the server on a Mastra instance with [background tasks](/docs/harness/background-tasks) enabled and its tasks are kept in Mastra storage. Any instance sharing that storage can answer `tasks/get`, `tasks/update` and `tasks/cancel` for a task, and run it.
+
+```typescript
+import { Mastra } from '@mastra/core/mastra'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({ id: 'mastra', url: 'file:./mastra.db' }),
+  backgroundTasks: {
+    enabled: true,
+    // MCP tasks share the per-agent limit (5) unless their owner gets its own
+    perOwnerConcurrency: { 'mcp-server:reports': 50 },
+  },
+  mcpServers: { reports: server },
+})
+```
+
+- This needs a storage adapter that keeps a TTL per task. On an older adapter the server falls back to memory and logs a warning when it serves its first task. A `store` passed in `tasks` always wins.
+- Register the same server, with the same id and tools, on every instance. An instance without it can't run that server's tasks.
+- Each task counts against `perOwnerConcurrency` for `mcp-server:<server id>` (or `perAgentConcurrency` when unset) and against `globalConcurrency`. Keep `backpressure` at its default, `'queue'`. With other values a full queue fails the call.
+- An answer sent with `tasks/update` is stored before it's acknowledged. The task resumes even if the instance that took the answer stops before running it.
+- Expired tasks are failed, and answered tasks still waiting are resumed, by a periodic sweep on each instance.
+
+Tasks are rows in the background tasks storage, owned by agent id `mcp-server:<server id>` with resource id `mcp-server:<server id>:<caller>`:
+
+- They don't belong to any agent, thread or memory, so they never appear in an agent's conversation.
+- The `/background-tasks` routes don't return them to a caller scoped to a resource. Callers without a resource scope can list them, as can the global `onTaskComplete` and `onTaskFailed` hooks. Check `task.agentId.startsWith('mcp-server:')` in hooks that only expect agent tasks.
+- A row stores a hash of the task id, not the id itself, and the request context without the bearer token. `authInfo.extra` and `user` are stored unchanged, so they're visible to anyone who can read the row.
+
+### Recovery after a crash
+
+When the instance running a task stops, the task's lease lapses and another instance notices it. What happens next depends on `recover`:
+
+- `recover: false` (default): the task ends `failed` with `task lost: the server restarted while it was running`. `execute` never runs twice.
+- `recover: true`: another instance runs `execute` again from the start, once. Only turn it on for tools that are safe to repeat.
+
+`recover` doesn't affect a task waiting for input: answering it resumes it on any instance either way.
+
 ### Limits
 
-- The default store keeps tasks in memory. They're lost when the process restarts, and a multi-instance deployment needs every `tasks/*` request for a task to reach the instance that created it. Streamable HTTP requests carry the task id in the `Mcp-Name` header, so a load balancer can route on it.
+- Without Mastra background tasks, tasks are kept in memory. They're lost when the process restarts, and a multi-instance deployment needs every `tasks/*` request for a task to reach the instance that created it. Streamable HTTP requests carry the task id in the `Mcp-Name` header, so a load balancer can route on it.
 - Progress and log notifications sent after the task handle is answered are dropped.
 
 ## Related information
