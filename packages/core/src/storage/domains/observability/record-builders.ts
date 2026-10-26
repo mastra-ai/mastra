@@ -179,7 +179,7 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     entityType: span.entityType ?? null,
     entityId: span.entityId ?? null,
     entityName: span.entityName ?? null,
-    entityVersionId: getStringOrNull(metadata.entityVersionId),
+    entityVersionId: span.entityVersionId ?? null,
     parentEntityType: span.parentEntityType ?? null,
     parentEntityId: span.parentEntityId ?? null,
     parentEntityName: span.parentEntityName ?? null,

@@ -58,7 +58,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
       case 'Backspace':
         event.preventDefault();
         remove();
-        return;
+        break;
       default:
     }
   };
