@@ -37,6 +37,7 @@ class AckTrackingPubSub extends PubSub implements LeaseProvider {
   #subscribers = new Map<string, Set<EventCallback>>();
   #index = 0;
   #deliveryIndex = 0;
+  #redeliveries = new Map<string, () => Promise<void>>();
 
   async publish(topic: string, event: any): Promise<void> {
     const id = `event-${this.#index++}`;
@@ -44,22 +45,33 @@ class AckTrackingPubSub extends PubSub implements LeaseProvider {
     for (const subscriber of [...(this.#subscribers.get(topic) ?? [])]) {
       const deliveryId = `${id}:${this.#deliveryIndex++}`;
       this.pending.add(deliveryId);
-      const ack = async () => {
-        this.pending.delete(deliveryId);
-        this.acked.push(id);
-        this.#order++;
+      const deliver = async () => {
+        const ack = async () => {
+          this.pending.delete(deliveryId);
+          this.#redeliveries.delete(deliveryId);
+          this.acked.push(id);
+          this.#order++;
+        };
+        const nack = async () => {
+          this.nacked.push(id);
+          this.#redeliveries.set(deliveryId, deliver);
+        };
+        try {
+          await subscriber(envelope, ack, nack);
+        } catch {
+          // A rejected callback is the negative acknowledgement signal; a real
+          // backend nacks on it rather than dropping the entry.
+          await nack();
+        }
       };
-      const nack = async () => {
-        this.nacked.push(id);
-      };
-      try {
-        await subscriber(envelope, ack, nack);
-      } catch {
-        // A rejected callback is the negative acknowledgement signal; a real
-        // backend nacks on it rather than dropping the entry.
-        await nack();
-      }
+      await deliver();
     }
+  }
+
+  async redeliverNacked(): Promise<void> {
+    const deliveries = [...this.#redeliveries.values()];
+    this.#redeliveries.clear();
+    for (const deliver of deliveries) await deliver();
   }
 
   async flush(): Promise<void> {}
@@ -315,12 +327,16 @@ describe('thread stream subscriber acknowledgements', () => {
       expect(stopped).toBe(false);
       expect(pubsub.nacked).toHaveLength(1);
       expect(pubsub.acked).toHaveLength(ackedBefore);
+      expect(pubsub.pending.size).toBe(1);
+      const failedEventId = pubsub.nacked[0];
 
-      // A failed delivery must not poison the serial event tail or mark the run aborted.
-      await abort();
+      // Retry the same delivery, not a newly published abort request.
+      await pubsub.redeliverNacked();
       expect(stopped).toBe(true);
       expect(attempts).toBe(2);
       expect(pubsub.acked).toHaveLength(ackedBefore + 1);
+      expect(pubsub.acked.at(-1)).toBe(failedEventId);
+      expect(pubsub.pending.size).toBe(0);
 
       // Stale streams and unknown runs remain acknowledged no-ops, not abort fallbacks.
       await abort(output.runId, 'old-stream');
