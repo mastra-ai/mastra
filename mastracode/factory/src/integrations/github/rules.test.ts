@@ -3370,6 +3370,21 @@ describe('GithubRules label routes', () => {
       );
     });
 
+    it('files a pull request where a stored intake route says, and in Work › Triage by default', async () => {
+      const { service, workItems, project } = await setupStored(true);
+      const routed = pullRequest('opened', 'stored-route-pr-hotfix');
+      (routed.payload.pull_request as Record<string, unknown>).labels = [{ name: 'hotfix' }];
+      await expect(service.ingest(routed)).resolves.toEqual({ status: 'committed' });
+      const plain = pullRequest('opened', 'stored-route-pr-plain');
+      Object.assign(plain.payload.pull_request, { number: 18, html_url: 'https://github.com/acme/repo/pull/18' });
+      await expect(service.ingest(plain)).resolves.toEqual({ status: 'committed' });
+      const decisions = (await workItems.listDeferredDecisions('org-1', project.id)).map(record => record.decision);
+      expect(decisions).toEqual([
+        expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'github-pr', board: 'work', stage: 'planning' }),
+        expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'github-pr', board: 'work', stage: 'triage' }),
+      ]);
+    });
+
     it('lets a legacy label route win over the stored fallback route', async () => {
       const { service, workItems, project } = await setupStored(false, 'release');
       const ingress = issueOpened('legacy-route-open');

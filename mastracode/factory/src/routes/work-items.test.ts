@@ -257,6 +257,17 @@ describe('stored board config', () => {
     expect((await invalid.json()).error).toContain('The first phase cannot be terminal.');
     expect((await seed.boardDefinitions.getConfig(scope())).revision).toBe(1);
   });
+
+  it('refuses a save that removes or re-keys the Work board', async () => {
+    const { config } = await (await json('GET', path())).json();
+    const boards = config.boards.map(({ id: _id, ...board }: { id: string }) => ({ ...board, key: 'delivery' }));
+    const rejected = await json('PUT', path(), { expectedRevision: 0, config: { boards, intakeRoutes: [] } });
+    expect(rejected.status).toBe(422);
+    expect((await rejected.json()).error).toBe(
+      "The Work board can't be removed or re-keyed; Factory files issues and pull requests on it.",
+    );
+    expect(await seed.boardDefinitions.getRevision(scope())).toBe(0);
+  });
 });
 
 describe('installed board catalog', () => {

@@ -201,7 +201,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('BoardsStorage o
       ...otherProject,
       userId: 'u',
       expectedRevision: 0,
-      config: { boards: [twoPhaseBoard('work')], intakeRoutes: [] },
+      config: { boards: [twoPhaseBoard('ops')], intakeRoutes: [] },
     });
 
     expect((await boards.getConfig(scope)).boards[0]!.phases).toHaveLength(7);

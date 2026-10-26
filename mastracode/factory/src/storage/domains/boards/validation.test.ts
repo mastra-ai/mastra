@@ -12,6 +12,40 @@ describe('stored board validation', () => {
     expect(projectBoardConfigInputSchema.safeParse(defaultProjectBoardConfig).success).toBe(true);
   });
 
+  it('keeps the phase keys Factory moves Work cards by, and lets their names change', () => {
+    const [work] = defaultProjectBoardConfig.boards;
+    const renamed = {
+      ...defaultProjectBoardConfig,
+      boards: [{ ...work, phases: work.phases.map(phase => ({ ...phase, name: `${phase.name}!` })) }],
+    };
+    expect(projectBoardConfigInputSchema.safeParse(renamed).success).toBe(true);
+    const withoutTriage = {
+      ...defaultProjectBoardConfig,
+      boards: [
+        {
+          ...work,
+          phases: work.phases.filter(phase => phase.key !== 'triage'),
+          eventRoutes: [],
+        },
+      ],
+      intakeRoutes: [],
+    };
+    const result = projectBoardConfigInputSchema.safeParse(withoutTriage);
+    expect(result.error?.issues.map(issue => issue.message)).toContain(
+      'The Work board needs the phases triage; Factory moves cards by these keys.',
+    );
+  });
+
+  it("rejects the retired Review board's key", () => {
+    const result = projectBoardConfigInputSchema.safeParse({
+      boards: [{ ...defaultProjectBoardConfig.boards[0], key: 'review', eventRoutes: [] }],
+      intakeRoutes: [],
+    });
+    expect(result.error?.issues.map(issue => issue.message)).toContain(
+      "'review' was the Review board's id and now means Work. Pick another key.",
+    );
+  });
+
   const board = (phases: unknown[], extra: Record<string, unknown> = {}) => ({ key: 'b', name: 'B', phases, ...extra });
   const open = { key: 'open', name: 'Open', kind: 'resting' };
   const closed = { key: 'closed', name: 'Closed', kind: 'terminal' };

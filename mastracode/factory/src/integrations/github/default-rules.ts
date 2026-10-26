@@ -142,6 +142,9 @@ function materializePullRequestIntake(
   }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'triage' | 'review' },
 ) {
   if (!context.pullRequest) return;
+  // A stored intake route picks the Work phase a pull request enters (Triage otherwise). Pull requests stay
+  // on Work: its transition policy is what stops an agent from marking a pull request done.
+  const routed = stage === 'triage' && context.intake?.board === 'work' ? context.intake : undefined;
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey,
@@ -150,7 +153,7 @@ function materializePullRequestIntake(
     sourceKey: githubSourceKey(context, 'github-pr', context.pullRequest.number),
     title: context.pullRequest.title,
     url: context.pullRequest.url,
-    stage,
+    stage: routed?.initialPhase ?? stage,
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,

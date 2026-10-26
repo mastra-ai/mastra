@@ -416,16 +416,18 @@ export class GithubRules {
     project: ExternalRepositoryProjectTarget,
     repositoryName: string,
     labels: readonly string[],
+    pullRequest?: { draft: boolean; author: string | undefined },
   ): Promise<{ board: string; initialPhase: string } | undefined> {
     const { orgId, factoryProjectId } = project;
     const resolver = this.options.boardResolver;
     const boards = resolver ? await resolver.forProject(project) : this.options.boards;
     const stored = resolver ? await resolver.intakeRoutes(project) : [];
     const facts = {
-      'source.kind': 'issue',
+      'source.kind': pullRequest ? 'pull_request' : 'issue',
       'source.integration': 'github',
       'source.repository': repositoryName,
       'item.labels': labels,
+      ...(pullRequest ? { 'item.draft': pullRequest.draft, 'item.author': pullRequest.author } : {}),
     };
     const routed = matchIntakeRoute(
       stored.filter(route => route.when),
@@ -442,7 +444,8 @@ export class GithubRules {
       return target ? { board: target.board, initialPhase: target.phase } : undefined;
     };
     const intake = this.options.intake;
-    if (!intake) return fallback();
+    // Label routes and repository bindings only ever placed issues.
+    if (!intake || pullRequest) return fallback();
     if (labels.length > 0) {
       const routes = await intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
       const route = resolveIntakeLabelRoute(routes, labels);
@@ -737,7 +740,12 @@ export class GithubRules {
       reviewEntryRequested && resolvedItem?.externalSource?.type !== 'pull-request' ? undefined : resolvedItem;
     const intake = issueNumber
       ? await this.#intakeTarget(project, repositoryName, labelNames(issue?.labels))
-      : undefined;
+      : pullRequestNumber && pullRequest
+        ? await this.#intakeTarget(project, repositoryName, labelNames(pullRequest.labels), {
+            draft: pullRequest.draft === true,
+            author: pullRequestAuthor,
+          })
+        : undefined;
     const actor = await githubActor(this.options.github, {
       installationId,
       repository: repositoryName,

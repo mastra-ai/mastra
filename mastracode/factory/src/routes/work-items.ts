@@ -423,6 +423,17 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               422,
             );
           }
+          // Issues and pull requests are filed on Work, so a project that has it keeps it (key included).
+          const current = await storage.getConfig(resolved);
+          const currentBoards =
+            current.revision === 0
+              ? (this.deps.boardDefaults?.boards ?? []).map(board => board.key)
+              : current.boards.map(board => board.key);
+          if (currentBoards.includes('work') && !parsed.data.config.boards.some(board => board.key === 'work')) {
+            const message =
+              "The Work board can't be removed or re-keyed; Factory files issues and pull requests on it.";
+            return c.json({ error: message, issues: [{ message, path: ['boards'] }] }, 422);
+          }
           try {
             const config = await storage.saveConfig({
               orgId: resolved.orgId,

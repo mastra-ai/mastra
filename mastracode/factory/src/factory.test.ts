@@ -828,6 +828,8 @@ describe('MastraFactory.prepare', () => {
 
     const storage = new LibSQLFactoryStorage({ url, id: 'factory-test-storage' });
     onTestFinished(() => storage.close());
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    onTestFinished(() => info.mockRestore());
     await prepareFactory({
       storage,
       ...config,
@@ -839,6 +841,10 @@ describe('MastraFactory.prepare', () => {
       // Give the background pass time it would need to write.
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(await boards.getRevision(scope)).toBe(0);
+      // Review cards would move to a Work board this Factory doesn't have, so they stay.
+      expect(info).toHaveBeenCalledWith(
+        '[factory] boards migration leaves Review cards in place: no Work board is installed.',
+      );
       return;
     }
     await vi.waitFor(async () => expect(await boards.getRevision(scope)).toBe(1));

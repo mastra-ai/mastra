@@ -52,8 +52,11 @@ export async function migrateBoards(input: {
   intake?: IntakeStorage;
   /** The boards a project with none stored is seeded with; unset seeds nothing. */
   seedConfig?: ProjectBoardConfigInput;
+  /** False when this Factory installs no Work board: Review cards and routes then stay where they are. */
+  moveToWork?: boolean;
 }): Promise<BoardsMigrationReport> {
   const apply = input.mode === 'apply';
+  const moveToWork = input.moveToWork !== false;
   const report: BoardsMigrationReport = {
     mode: input.mode,
     projects: input.projects.length,
@@ -171,7 +174,7 @@ export async function migrateBoards(input: {
       }
 
       const onReview = item.board === LEGACY_REVIEW_BOARD || (item.board === null && kind === 'pull_request');
-      if (!onReview) return;
+      if (!onReview || !moveToWork) return;
       report.cardsMoved++;
       if (!apply) return;
       const moved = await input.workItems.update({
@@ -193,7 +196,7 @@ export async function migrateBoards(input: {
     }
   }
 
-  if (input.intake) {
+  if (input.intake && moveToWork) {
     for (const orgId of orgs) {
       for (const route of await input.intake.listLabelRoutes({ orgId })) {
         if (route.board !== LEGACY_REVIEW_BOARD) continue;

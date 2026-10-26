@@ -54,12 +54,17 @@ describe('createBoardRegistry', () => {
     expect(registry.get('work')).toBe(replacement);
   });
 
-  it('allows reinstalling the exported built-in boards when defaults are disabled', () => {
-    const registry = createBoardRegistry({ boards: [workBoard, reviewBoard], includeDefaultBoards: false });
+  it('allows reinstalling the exported Work board when defaults are disabled', () => {
+    const registry = createBoardRegistry({ boards: [workBoard], includeDefaultBoards: false });
 
-    expect([...registry.keys()]).toEqual(['work', 'review']);
+    expect([...registry.keys()]).toEqual(['work']);
     expect(registry.get('work')).toBe(workBoard);
-    expect(registry.get('review')).toBe(reviewBoard);
+  });
+
+  it('rejects the retired Review board id, which now reads as Work', () => {
+    expect(() => createBoardRegistry({ boards: [workBoard, reviewBoard], includeDefaultBoards: false })).toThrow(
+      "board id 'review' is retired",
+    );
   });
 
   it('rejects duplicate replacement ids when default boards are disabled', () => {

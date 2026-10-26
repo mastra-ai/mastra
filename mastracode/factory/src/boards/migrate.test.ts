@@ -76,4 +76,25 @@ describe.each(engines)('boards migration (%s)', engine => {
     });
     expect(again).toMatchObject({ boardsSeeded: 0, linksBackfilled: 0, cardsMoved: 0, skipped: [] });
   });
+
+  it('leaves Review cards in place when this Factory installs no Work board', async () => {
+    const { boards, workItems, orgId, project } = await setup(engine);
+    const only = await project('Only');
+    const legacy = await workItems.upsert({
+      orgId,
+      factoryProjectId: only.id,
+      userId: 'user-1',
+      input: {
+        title: 'Old review',
+        board: 'review',
+        stages: ['review'],
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: '8' },
+      },
+    });
+
+    const report = await migrateBoards({ mode: 'apply', projects: [only], boards, workItems, moveToWork: false });
+
+    expect(report).toMatchObject({ boardsSeeded: 0, cardsMoved: 0, skipped: [] });
+    expect((await workItems.get({ orgId, id: legacy.item.id }))?.board).toBe('review');
+  });
 });

@@ -1,3 +1,4 @@
+import { RETIRED_BOARD_KEY } from '../storage/domains/boards/validation.js';
 import type { BoardDefinition } from './define-board.js';
 import { workBoard } from './work.js';
 
@@ -25,6 +26,12 @@ export function createBoardRegistry(
   for (const board of [...installed, ...(options.boards ?? [])]) {
     if (registry.has(board.id)) {
       throw new Error(`MastraFactory: duplicate board id '${board.id}' in 'boards'.`);
+    }
+    if (board.id === RETIRED_BOARD_KEY) {
+      // Cards and routes naming 'review' are read as Work, so a board with this id would never be reached.
+      throw new Error(
+        `MastraFactory: board id '${RETIRED_BOARD_KEY}' is retired; pull requests are reviewed on the Work board.`,
+      );
     }
     registry.set(board.id, board);
   }

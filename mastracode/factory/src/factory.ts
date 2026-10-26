@@ -316,7 +316,7 @@ export interface MastraFactoryConfig {
   configVersion?: string;
   /** Board definitions installed for this Factory instance. */
   boards?: readonly InstalledBoard[];
-  /** Whether the built-in Work and Review boards are installed. Default: true. */
+  /** Whether the built-in Work board is installed (and seeded as a stored board). Default: true. */
   includeDefaultBoards?: boolean;
   /**
    * The boards every project starts with, in the shape Settings → Boards edits: phases, runners,
@@ -874,6 +874,12 @@ export class MastraFactory {
     // idempotent, so a failed pass is retried next start. Until it finishes, legacy Review rows read
     // as Work. `MASTRA_FACTORY_BOARDS_MIGRATION=dry-run` only logs what it would change.
     const migrationMode = boardsMigrationMode();
+    // Review cards and routes only move to Work when this Factory installs a Work board.
+    const installsWork =
+      this.#boards.has('work') || (boardDefaults?.boards.some(board => board.key === 'work') ?? false);
+    if (!installsWork && migrationMode !== 'off') {
+      console.info('[factory] boards migration leaves Review cards in place: no Work board is installed.');
+    }
     if (
       migrationMode !== 'off' &&
       storage.isDomainReady('boards') &&
@@ -889,6 +895,7 @@ export class MastraFactory {
             workItems: workItemsStorage,
             ...(storage.isDomainReady('intake') ? { intake: intakeStorage } : {}),
             ...(boardDefaults ? { seedConfig: boardDefaults } : {}),
+            moveToWork: installsWork,
           });
           const { skipped, ...counts } = report;
           if (

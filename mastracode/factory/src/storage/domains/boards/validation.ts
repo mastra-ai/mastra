@@ -191,6 +191,14 @@ export type EventRouteInput = z.infer<typeof eventRouteInputSchema>;
 
 const MAX_BOARDS = 50;
 
+/**
+ * Integrations, the Work transition policy and source-closed handling move Work cards by these phase
+ * keys, so the Work board keeps them (names, runners and next phases stay editable).
+ */
+export const WORK_BOARD_REQUIRED_PHASES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'];
+/** The retired Review board's id: cards and routes naming it are read as Work. */
+export const RETIRED_BOARD_KEY = 'review';
+
 /** One project's whole stored configuration: its boards (each with its event routes) and its intake routes. */
 export const projectBoardConfigInputSchema = z
   .object({
@@ -205,6 +213,23 @@ export const projectBoardConfigInputSchema = z
         ctx.addIssue({ code: 'custom', path: ['boards', index, 'key'], message: `Board '${board.key}' is repeated.` });
       }
       phasesByBoard.set(board.key, new Set(board.phases.map(phase => phase.key)));
+      if (board.key === RETIRED_BOARD_KEY) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['boards', index, 'key'],
+          message: `'${RETIRED_BOARD_KEY}' was the Review board's id and now means Work. Pick another key.`,
+        });
+      }
+      if (board.key === 'work') {
+        const missing = WORK_BOARD_REQUIRED_PHASES.filter(key => !board.phases.some(phase => phase.key === key));
+        if (missing.length > 0) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['boards', index, 'phases'],
+            message: `The Work board needs the phases ${missing.join(', ')}; Factory moves cards by these keys.`,
+          });
+        }
+      }
     });
     config.boards.forEach((board, boardIndex) => {
       const phases = phasesByBoard.get(board.key)!;
