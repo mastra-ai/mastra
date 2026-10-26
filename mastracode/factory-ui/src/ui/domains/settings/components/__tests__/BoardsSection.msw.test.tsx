@@ -151,10 +151,7 @@ describe('BoardsSection', () => {
     await user.click(screen.getAllByRole('button', { name: 'Save' })[0]);
     await waitForMutationsIdle(client);
 
-    expect(saved[0].config.boards[0].phases[2]).toMatchObject({
-      key: 'execute',
-      autoStartWhen: { operator: 'AND', conditions: [] },
-    });
+    expect(saved[0].config.boards[0].phases[2]).toMatchObject({ key: 'execute', autoStart: true });
   });
 
   it('offers the runners the server has, including the app’s own', async () => {

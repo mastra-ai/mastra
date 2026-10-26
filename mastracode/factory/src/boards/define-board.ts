@@ -100,10 +100,9 @@ type BoardPhaseBase<PhaseId extends string> = {
   readonly title: string;
   /** Defaults to `review` for a working phase seating `review`, so code boards that do keep it. */
   readonly factoryTools?: readonly FactoryPhaseTool[];
-  /**
-   * Its runs start without anyone approving them, even with the project's auto-run
-   * off, for cards this matches; a group with no conditions matches every card.
-   */
+  /** Its runs start without anyone approving them, even with the project's auto-run off. */
+  readonly autoStart?: boolean;
+  /** With `autoStart`, only cards this matches start on their own. */
   readonly autoStartWhen?: RuleGroup;
   readonly next?: PhaseId;
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
@@ -324,6 +323,7 @@ export function defineBoard<
           kind: phase.kind,
           ...(phase.kind === 'working' ? { role: phase.role } : {}),
           ...(phase.factoryTools ? { factoryTools: Object.freeze([...phase.factoryTools]) } : {}),
+          ...(phase.autoStart ? { autoStart: true } : {}),
           ...(phase.autoStartWhen ? { autoStartWhen: phase.autoStartWhen } : {}),
           ...(phase.next !== undefined ? { next: phase.next } : {}),
           ...(phase.outcomes ? { outcomes: Object.freeze({ ...phase.outcomes }) } : {}),
@@ -398,10 +398,9 @@ export function defineBoard<
     toolsForPhase: (phase: string) => phaseTools.get(phase) ?? [],
     startsAutomatically: (phase: string, facts?: RuleFacts) => {
       const definition = phases[phase as PhaseId] as BoardPhaseDefinition<PhaseId> | undefined;
-      const rule = kinds.get(phase) === 'working' ? definition?.autoStartWhen : undefined;
-      if (!rule) return false;
-      if (rule.conditions.length === 0) return true;
-      return facts !== undefined && evaluateRuleGroup(rule, facts);
+      if (kinds.get(phase) !== 'working' || definition?.autoStart !== true) return false;
+      if (!definition.autoStartWhen) return true;
+      return facts !== undefined && evaluateRuleGroup(definition.autoStartWhen, facts);
     },
   });
 }

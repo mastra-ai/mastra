@@ -10,9 +10,6 @@ const COMPLETE = {
   context: 'triage',
 } as const;
 
-/** No conditions: every card starts on its own. */
-const ALWAYS: RuleGroup = { operator: 'AND', conditions: [] };
-
 /** Cards labelled `effort: low` plan without waiting for anyone. */
 const LOW_EFFORT: RuleGroup = {
   operator: 'AND',
@@ -38,13 +35,14 @@ export const workBoardTemplate = {
     { key: 'intake', name: 'Intake', kind: 'resting' },
     // Triage and Review start on their own. Planning starts on its own only for low-effort
     // cards; any other card's plan waits for a person to approve the run.
-    { key: 'triage', name: 'Triage', kind: 'working', runner: TRIAGE, autoStartWhen: ALWAYS },
+    { key: 'triage', name: 'Triage', kind: 'working', runner: TRIAGE, autoStart: true },
     {
       key: 'planning',
       name: 'Planning',
       kind: 'working',
       runner: { type: 'agent', agentId: 'factory-plan', skill: 'factory-plan', context: 'plan' },
       exitTool: 'submit_plan',
+      autoStart: true,
       autoStartWhen: LOW_EFFORT,
     },
     {
@@ -53,7 +51,7 @@ export const workBoardTemplate = {
       kind: 'working',
       runner: { type: 'agent', agentId: 'factory-build', skill: 'factory-build', context: null },
     },
-    { key: 'review', name: 'Review', kind: 'working', runner: REVIEW, autoStartWhen: ALWAYS },
+    { key: 'review', name: 'Review', kind: 'working', runner: REVIEW, autoStart: true },
     { key: 'done', name: 'Done', kind: 'terminal', runner: COMPLETE },
     { key: 'canceled', name: 'Canceled', kind: 'terminal' },
   ],

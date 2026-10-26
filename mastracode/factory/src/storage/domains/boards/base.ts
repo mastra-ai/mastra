@@ -30,10 +30,9 @@ export interface StoredPhase {
   exitTool: string | null;
   /** When it matches the card, the exit tool's approval is given without a person. */
   autoApproveWhen: RuleGroup | null;
-  /**
-   * The phase's runs start without anyone approving them for cards this matches:
-   * no conditions matches every card, null starts none.
-   */
+  /** Its runs start without anyone approving them, even with the project's auto-run off. */
+  autoStart: boolean;
+  /** With `autoStart`, only cards this matches start on their own; null starts every card. */
   autoStartWhen: RuleGroup | null;
 }
 
@@ -117,6 +116,7 @@ interface PhaseRow extends Record<string, unknown> {
   next_phases: string[] | null;
   exit_tool?: string | null;
   auto_approve_when?: RuleGroup | null;
+  auto_start?: boolean | null;
   auto_start_when?: RuleGroup | null;
 }
 
@@ -228,6 +228,7 @@ export class BoardsStorage extends FactoryStorageDomain {
                 nextPhases: phase.next_phases,
                 exitTool: phase.exit_tool ?? null,
                 autoApproveWhen: phase.auto_approve_when ?? null,
+                autoStart: phase.auto_start === true,
                 autoStartWhen: phase.auto_start_when ?? null,
               })),
             eventRoutes: eventRoutes
@@ -340,6 +341,7 @@ export class BoardsStorage extends FactoryStorageDomain {
               next_phases: phase.nextPhases ?? null,
               exit_tool: phase.exitTool ?? null,
               auto_approve_when: phase.autoApproveWhen ?? null,
+              auto_start: phase.autoStart ?? false,
               auto_start_when: phase.autoStartWhen ?? null,
             });
           }

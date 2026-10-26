@@ -96,10 +96,18 @@ describe('stored board validation', () => {
   });
 
   it('lets only a working phase start on its own', () => {
-    const always = { operator: 'AND' as const, conditions: [] };
-    expect(messages(storedBoardInputSchema.safeParse(board([{ ...open, autoStartWhen: always }, closed])))).toContain(
+    expect(messages(storedBoardInputSchema.safeParse(board([{ ...open, autoStart: true }, closed])))).toContain(
       'Only a working phase starts a runner.',
     );
+    const rule = {
+      operator: 'AND' as const,
+      conditions: [{ field: 'item.labels', operator: 'contains' as const, value: 'x' }],
+    };
+    const work = { key: 'work', name: 'Work', kind: 'working', autoStartWhen: rule };
+    expect(messages(storedBoardInputSchema.safeParse(board([open, work, closed])))).toContain(
+      'A start condition needs autoStart.',
+    );
+    expect(storedBoardInputSchema.safeParse(board([open, { ...work, autoStart: true }, closed])).success).toBe(true);
   });
 
   it('rejects keys that are not lowercase slugs and names that are blank once trimmed', () => {

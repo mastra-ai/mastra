@@ -406,6 +406,7 @@ function PhaseEditor({
                       ...(kind === 'resting' ? { runner: null } : {}),
                       exitTool: null,
                       autoApproveWhen: null,
+                      autoStart: false,
                       autoStartWhen: null,
                     },
               );
@@ -487,12 +488,12 @@ function PhaseEditor({
           <label className="flex items-center gap-2">
             <Switch
               aria-label={`${phase.name} starts on its own`}
-              checked={Boolean(phase.autoStartWhen)}
+              checked={phase.autoStart === true}
               disabled={disabled}
-              onCheckedChange={on => onChange({ autoStartWhen: on ? { operator: 'AND', conditions: [] } : null })}
+              onCheckedChange={autoStart => onChange({ autoStart, ...(autoStart ? {} : { autoStartWhen: null }) })}
             />
             <Txt as="span" variant="caption" className="text-muted-foreground">
-              {phase.autoStartWhen?.conditions.length
+              {phase.autoStart && phase.autoStartWhen
                 ? 'Starts on its own for cards its start rule matches'
                 : 'Starts on its own, without anyone approving the run'}
             </Txt>

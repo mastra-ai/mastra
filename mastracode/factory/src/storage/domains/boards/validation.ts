@@ -72,6 +72,7 @@ export const storedPhaseInputSchema = z
     autoApproveWhen: intakeRouteWhenSchema.nullable().optional(),
     /** Only people move cards into this phase; an agent's move into it is refused. */
     /** The runner starts without anyone approving it, even with the project's auto-run off. */
+    autoStart: z.boolean().optional(),
     autoStartWhen: intakeRouteWhenSchema.nullable().optional(),
   })
   .strict()
@@ -82,8 +83,11 @@ export const storedPhaseInputSchema = z
     if (phase.kind !== 'working' && phase.exitTool) {
       ctx.addIssue({ code: 'custom', path: ['exitTool'], message: 'Only a working phase has an exit tool.' });
     }
-    if (phase.kind !== 'working' && phase.autoStartWhen) {
-      ctx.addIssue({ code: 'custom', path: ['autoStartWhen'], message: 'Only a working phase starts a runner.' });
+    if (phase.kind !== 'working' && phase.autoStart) {
+      ctx.addIssue({ code: 'custom', path: ['autoStart'], message: 'Only a working phase starts a runner.' });
+    }
+    if (phase.autoStartWhen && !phase.autoStart) {
+      ctx.addIssue({ code: 'custom', path: ['autoStartWhen'], message: 'A start condition needs autoStart.' });
     }
     if (phase.autoApproveWhen && !phase.exitTool) {
       ctx.addIssue({ code: 'custom', path: ['autoApproveWhen'], message: 'Auto-approval needs an exit tool.' });

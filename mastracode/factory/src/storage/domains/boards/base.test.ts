@@ -67,7 +67,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('BoardsStorage o
     expect(work!.phases.find(phase => phase.key === 'review')!.runner).toMatchObject({ context: null });
     expect(work!.phases.every(phase => phase.nextPhases === null)).toBe(true);
     // Triage and Review start on their own; Planning only for cards its rule matches.
-    expect(work!.phases.filter(phase => phase.autoStartWhen).map(phase => phase.key)).toEqual([
+    expect(work!.phases.filter(phase => phase.autoStart).map(phase => phase.key)).toEqual([
       'triage',
       'planning',
       'review',
@@ -76,10 +76,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('BoardsStorage o
       'planning',
       { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort: low' }] },
     ]);
-    expect(work!.phases.find(phase => phase.key === 'triage')!.autoStartWhen).toEqual({
-      operator: 'AND',
-      conditions: [],
-    });
+    expect(work!.phases.find(phase => phase.key === 'triage')!.autoStartWhen).toBeNull();
     expect(work!.phases.find(phase => phase.key === 'execute')!.autoStartWhen).toBeNull();
     expect(work!.eventRoutes.map(route => [route.event, route.toPhaseKey])).toEqual(
       workBoardTemplate.eventRoutes.map(route => [route.event, route.toPhaseKey]),
