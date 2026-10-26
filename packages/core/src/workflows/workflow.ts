@@ -1917,6 +1917,7 @@ export class Workflow<
   #mastra?: Mastra;
 
   #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> = new Map();
+  #runCreationLocks = new Map<string, Promise<void>>();
 
   #schedules: WorkflowScheduleConfig[];
 
@@ -2937,6 +2938,18 @@ export class Workflow<
     return this.serializedStepFlow;
   }
 
+  /** Reopens an existing run, including nested children, after the caller has authorized access to its run ID. */
+  async createRunForExistingRun(options: { runId: string; resourceId?: string }) {
+    const existing = await this.getWorkflowRunById(options.runId, { withNestedWorkflows: false });
+    if (!existing) {
+      throw new Error(`Workflow run "${options.runId}" does not exist`);
+    }
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.id, runId: options.runId });
+    const parentWorkflow = snapshot?.parentWorkflow ?? this.#runs.get(options.runId)?.parentWorkflow;
+    return this.createRun({ ...options, parentWorkflow });
+  }
+
   /**
    * Creates a new workflow run instance and stores a snapshot of the workflow in the storage
    * @param options Optional configuration for the run
@@ -2983,101 +2996,132 @@ export class Workflow<
       }) ||
       globalThis.crypto.randomUUID();
 
-    // Return a new Run instance with object parameters
-    const run =
-      this.#runs.get(runIdToUse) ??
-      new Run({
-        workflowId: this.id,
-        stateSchema: this.stateSchema,
-        inputSchema: this.inputSchema,
-        requestContextSchema: this.requestContextSchema,
-        runId: runIdToUse,
-        parentWorkflow: options?.parentWorkflow,
-        resourceId: options?.resourceId,
-        isInternalWorkflow: this.isInternal,
-        executionEngine: this.executionEngine,
-        executionGraph: this.executionGraph,
-        mastra: this.#mastra,
-        retryConfig: this.retryConfig,
-        serializedStepGraph: this.serializedStepGraph,
-        disableScorers: options?.disableScorers,
-        cleanup: () => {
-          this.#runs.delete(runIdToUse);
-          this.executionEngine.clearRunPersistenceOverride(runIdToUse);
-        },
-        tracingPolicy: options?.tracingPolicy ?? this.#options?.tracingPolicy,
-        workflowSteps: this.steps,
-        validateInputs: this.#options?.validateInputs,
-        workflowEngineType: this.engineType,
-        pubsub: options?.pubsub,
-        recoverable:
-          this.engineType === 'default' && this.#options.autoRestartActiveRuns !== false && this.type !== 'processor',
+    // Serialize same-ID creation through snapshot validation and persistence.
+    const pending = this.#runCreationLocks.get(runIdToUse);
+    let release!: () => void;
+    const completion = new Promise<void>(resolve => (release = resolve));
+    this.#runCreationLocks.set(runIdToUse, completion);
+    if (pending) await pending;
+    try {
+      // Return a new Run instance with object parameters
+      const cachedRun = this.#runs.get(runIdToUse);
+      const run =
+        cachedRun ??
+        new Run({
+          workflowId: this.id,
+          stateSchema: this.stateSchema,
+          inputSchema: this.inputSchema,
+          requestContextSchema: this.requestContextSchema,
+          runId: runIdToUse,
+          parentWorkflow: options?.parentWorkflow,
+          resourceId: options?.resourceId,
+          isInternalWorkflow: this.isInternal,
+          executionEngine: this.executionEngine,
+          executionGraph: this.executionGraph,
+          mastra: this.#mastra,
+          retryConfig: this.retryConfig,
+          serializedStepGraph: this.serializedStepGraph,
+          disableScorers: options?.disableScorers,
+          cleanup: () => {
+            this.#runs.delete(runIdToUse);
+            this.executionEngine.clearRunPersistenceOverride(runIdToUse);
+          },
+          tracingPolicy: options?.tracingPolicy ?? this.#options?.tracingPolicy,
+          workflowSteps: this.steps,
+          validateInputs: this.#options?.validateInputs,
+          workflowEngineType: this.engineType,
+          pubsub: options?.pubsub,
+          recoverable:
+            this.engineType === 'default' && this.#options.autoRestartActiveRuns !== false && this.type !== 'processor',
+        });
+
+      const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
+        workflowStatus: run.workflowRunStatus,
+        stepResults: {},
       });
 
-    this.#runs.set(runIdToUse, run);
+      // A freshly-minted run for a workflow that never persists a snapshot (e.g. the
+      // transient processor workflows from #17344) cannot have a stored row, so this
+      // existence read would be a guaranteed miss. Skipping it removes one storage
+      // round trip per streamed chunk on the agent output-processor hot path (#19015).
+      const existingRun =
+        shouldPersistSnapshot || options?.runId
+          ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
+          : undefined;
 
-    if (options?.shouldPersistSnapshot) {
-      this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);
-    }
+      // Check if run exists in persistent storage (not just in-memory)
+      const existsInStorage = existingRun && !existingRun.isFromInMemory;
 
-    const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
-      workflowStatus: run.workflowRunStatus,
-      stepResults: {},
-    });
-
-    // A freshly-minted run for a workflow that never persists a snapshot (e.g. the
-    // transient processor workflows from #17344) cannot have a stored row, so this
-    // existence read would be a guaranteed miss. Skipping it removes one storage
-    // round trip per streamed chunk on the agent output-processor hot path (#19015).
-    const existingRun =
-      shouldPersistSnapshot || options?.runId
-        ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
+      const workflowsStore = existsInStorage ? await this.mastra?.getStorage()?.getStore('workflows') : undefined;
+      const storedSnapshot = existsInStorage
+        ? await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.id, runId: runIdToUse })
         : undefined;
+      if (cachedRun || existsInStorage) {
+        const actualParent = storedSnapshot?.parentWorkflow ?? cachedRun?.parentWorkflow;
+        const requestedParent = options?.parentWorkflow;
+        // Legacy nested snapshots lack parent metadata; only the original parent's shared
+        // run ID may reopen one. A known nested run must name its parent to be reused.
+        if (
+          requestedParent
+            ? actualParent
+              ? actualParent.workflowId !== requestedParent.workflowId ||
+                actualParent.runId !== requestedParent.runId ||
+                actualParent.stepId !== requestedParent.stepId ||
+                actualParent.foreachIndex !== requestedParent.foreachIndex
+              : runIdToUse !== requestedParent.runId
+            : !!actualParent
+        ) {
+          throw new Error(`Run ID "${runIdToUse}" already belongs to another workflow execution`);
+        }
+      }
 
-    // Check if run exists in persistent storage (not just in-memory)
-    const existsInStorage = existingRun && !existingRun.isFromInMemory;
+      this.#runs.set(runIdToUse, run);
+      if (options?.shouldPersistSnapshot) {
+        this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);
+      }
 
-    // If a run exists in storage, update the run's status to reflect the actual state
-    // This fixes the issue where createRun checks storage but doesn't use the stored data
-    if (existsInStorage && existingRun.status) {
-      run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      const storedSnapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.id, runId: runIdToUse });
-      run.parentWorkflow = storedSnapshot?.parentWorkflow ?? run.parentWorkflow;
+      // If a run exists in storage, update the run's status to reflect the actual state
+      if (existsInStorage && existingRun.status) {
+        run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
+        run.parentWorkflow = storedSnapshot?.parentWorkflow ?? run.parentWorkflow;
+      }
+
+      if (!existsInStorage && shouldPersistSnapshot) {
+        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+        const initialSnapshot: WorkflowRunState = {
+          runId: runIdToUse,
+          status: 'pending',
+          parentWorkflow: options?.parentWorkflow,
+          // A nested run restarted before its first step only has this snapshot to rebuild from,
+          // so it must carry the parent's state alongside the input.
+          value: nestedRunStart?.state ?? {},
+          // @ts-expect-error - context type mismatch
+          context: nestedRunStart?.input ? { input: nestedRunStart.input } : {},
+          activePaths: [],
+          activeStepsPath: {},
+          serializedStepGraph: this.serializedStepGraph,
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          result: undefined,
+          error: undefined,
+          timestamp: Date.now(),
+        };
+        await workflowsStore?.persistWorkflowSnapshot({
+          workflowName: this.id,
+          runId: runIdToUse,
+          resourceId: options?.resourceId,
+          snapshot: this.#options.pruneSnapshot
+            ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
+            : initialSnapshot,
+        });
+      }
+
+      return run;
+    } finally {
+      if (this.#runCreationLocks.get(runIdToUse) === completion) this.#runCreationLocks.delete(runIdToUse);
+      release();
     }
-
-    if (!existsInStorage && shouldPersistSnapshot) {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      const initialSnapshot: WorkflowRunState = {
-        runId: runIdToUse,
-        status: 'pending',
-        parentWorkflow: options?.parentWorkflow,
-        // A nested run restarted before its first step only has this snapshot to rebuild from,
-        // so it must carry the parent's state alongside the input.
-        value: nestedRunStart?.state ?? {},
-        // @ts-expect-error - context type mismatch
-        context: nestedRunStart?.input ? { input: nestedRunStart.input } : {},
-        activePaths: [],
-        activeStepsPath: {},
-        serializedStepGraph: this.serializedStepGraph,
-        suspendedPaths: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        result: undefined,
-        error: undefined,
-        timestamp: Date.now(),
-      };
-      await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: this.id,
-        runId: runIdToUse,
-        resourceId: options?.resourceId,
-        snapshot: this.#options.pruneSnapshot
-          ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
-          : initialSnapshot,
-      });
-    }
-
-    return run;
   }
 
   async listScorers({
@@ -3956,7 +4000,7 @@ export class Run<
         return;
       }
 
-      const parentRun = await parentWorkflow.createRun({ runId: parent.runId });
+      const parentRun = await parentWorkflow.createRunForExistingRun({ runId: parent.runId });
       await parentRun.resume({
         step: parent.stepId,
         forEachIndex: parent.foreachIndex,
@@ -5413,7 +5457,7 @@ export class Run<
         throw new Error(`No snapshot found for parent workflow run: ${this.parentWorkflow.runId}`);
       }
 
-      const parentRun = await parentWorkflow.createRun({ runId: this.parentWorkflow.runId });
+      const parentRun = await parentWorkflow.createRunForExistingRun({ runId: this.parentWorkflow.runId });
       try {
         await parentRun.#claimRun({ workflowsStore, snapshot: parentSnapshot });
       } catch (error) {

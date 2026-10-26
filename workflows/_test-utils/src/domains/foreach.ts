@@ -7,8 +7,8 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 import { MockRegistry } from '../mock-registry';
+import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 /**
  * Create all workflows needed for foreach tests.
@@ -632,6 +632,30 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  {
+    const item = createStep({
+      id: 'item',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+      execute: async ({ inputData }) => ({ value: inputData.value * 2 + 1 }),
+    });
+    const child = createWorkflow({
+      id: 'foreach-occurrence-child',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+    })
+      .then(item)
+      .commit();
+    const workflow = createWorkflow({
+      id: 'foreach-occurrence-parent',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.array(z.object({ value: z.number() })),
+    })
+      .foreach(child, { concurrency: 3 })
+      .commit();
+    workflows['foreach-occurrence-parent'] = { workflow, mocks: {} };
+  }
+
   // Tests: a failing foreach iteration fails the run (#26390). Each workflow runs two items
   // concurrently. Item 2 waits until the run reports item 1's failed iteration, so item 1 is
   // always the first failure regardless of engine scheduling.
@@ -700,6 +724,14 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
   const { execute, skipTests } = ctx;
 
   describe('foreach', () => {
+    it('keeps nested workflow outputs distinct for each concurrent foreach item', async () => {
+      const { workflow } = registry!['foreach-occurrence-parent']!;
+      const result = await execute(workflow, [{ value: 1 }, { value: 10 }, { value: 100 }]);
+
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual([{ value: 3 }, { value: 21 }, { value: 201 }]);
+    });
+
     // Note: Single concurrency test is skipped for Inngest due to snapshot race condition
     // (steps show "running" instead of "success" when result is returned)
     it.skipIf(skipTests.foreachSingleConcurrency)(

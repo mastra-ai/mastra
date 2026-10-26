@@ -21,6 +21,23 @@ import type { NestedWorkflowResult } from './nested-workflow-output';
 import { NESTED_WORKFLOW_OUTPUT_MODE } from './nested-workflow-output';
 import { InngestWorkflow } from './workflow';
 
+/**
+ * Mirrors core's `scopeOperationId` so a nested workflow used as a loop body or
+ * foreach item gets a distinct invoke id per occurrence. Kept local because the
+ * peer range allows core versions that don't export the helper.
+ */
+function scopeOperationId(operationId: string, executionContext: ExecutionContext): string {
+  const { loopIteration, foreachIndex } = executionContext;
+  let scoped = operationId;
+  if (loopIteration !== undefined && loopIteration > 1) {
+    scoped += `.iter.${loopIteration}`;
+  }
+  if (foreachIndex !== undefined) {
+    scoped += `.fe.${foreachIndex}`;
+  }
+  return scoped;
+}
+
 function isNonRetryableStepFailure(error: unknown): boolean {
   if (error instanceof MastraNonRetryableError || error instanceof NonRetriableError) {
     return true;
@@ -585,7 +602,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     const derivedNestedRunId =
       executionContext.foreachIndex !== undefined
         ? `${executionContext.runId}-foreach-${executionContext.foreachIndex}`
-        : executionContext.runId;
+        : executionContext.loopIteration !== undefined && executionContext.loopIteration > 1
+          ? `${executionContext.runId}-iter-${executionContext.loopIteration}`
+          : executionContext.runId;
+
+    const invokeOperationId = scopeOperationId(
+      `workflow.${executionContext.workflowId}.step.${step.id}`,
+      executionContext,
+    );
 
     try {
       if (isResume) {
@@ -618,7 +642,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         }
         const nestedResumeStepId = nestedResumeSteps[0];
 
-        const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
+        const invokeResp = (await this.inngestStep.invoke(invokeOperationId, {
           function: step.getFunction(),
           data: {
             inputData,
@@ -662,7 +686,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           snapshot,
           graph: step.buildExecutionGraph(),
         });
-        const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
+        const invokeResp = (await this.inngestStep.invoke(invokeOperationId, {
           function: step.getFunction(),
           data: {
             timeTravel: timeTravelParams,
@@ -688,7 +712,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         // Derived (not random) so every replay pass addresses the same child
         // snapshot — see `derivedNestedRunId` above.
         const nestedRunId = derivedNestedRunId;
-        const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
+        const invokeResp = (await this.inngestStep.invoke(invokeOperationId, {
           function: step.getFunction(),
           data: {
             inputData,
@@ -738,7 +762,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     }
 
     const res = await this.inngestStep.run(
-      `workflow.${executionContext.workflowId}.step.${step.id}.nestedwf-results`,
+      scopeOperationId(`workflow.${executionContext.workflowId}.step.${step.id}.nestedwf-results`, executionContext),
       async () => {
         if (result.status === 'failed') {
           await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {

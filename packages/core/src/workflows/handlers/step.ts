@@ -39,6 +39,7 @@ import {
   validateStepStateData,
   validateStepRequestContext,
 } from '../utils';
+import { scopeOperationId } from './operation-id';
 
 export interface ExecuteStepParams extends ObservabilityContext {
   workflowId: string;
@@ -110,10 +111,18 @@ export async function executeStep(
       ? stepResults[step.id]?.suspendPayload?.__workflow_meta?.foreachOutput?.[executionContext.foreachIndex]?.metadata
           ?.nestedRunId
       : stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId;
+  // Nested workflows get their own child run per repeated occurrence so the child's
+  // operation ids (which include its run id) don't repeat. Loop iterations derive the
+  // id deterministically so a restarted or replayed iteration finds the same child run.
+  const loopIteration = executionContext.loopIteration;
   const nestedRunId =
-    step.component === 'WORKFLOW' && executionContext.foreachIndex !== undefined
-      ? (persistedNestedRunId ?? globalThis.crypto.randomUUID())
-      : undefined;
+    step.component !== 'WORKFLOW'
+      ? undefined
+      : executionContext.foreachIndex !== undefined
+        ? (persistedNestedRunId ?? globalThis.crypto.randomUUID())
+        : loopIteration !== undefined && loopIteration > 1
+          ? `${runId}-iter-${loopIteration}`
+          : undefined;
 
   const { inputData, validationError: inputValidationError } = await validateStepInput({
     prevOutput,
@@ -203,7 +212,7 @@ export async function executeStep(
   const stepSpan = await engine.createStepSpan({
     parentSpan: observabilityContext.tracingContext.currentSpan,
     stepId: step.id,
-    operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.start`,
+    operationId: scopeOperationId(`workflow.${workflowId}.run.${runId}.step.${step.id}.span.start`, executionContext),
     options: {
       name: `workflow step: '${step.id}'`,
       type: SpanType.WORKFLOW_STEP,
@@ -222,7 +231,10 @@ export async function executeStep(
     executionContext,
   });
 
-  const operationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.running_ev`;
+  const operationId = scopeOperationId(
+    `workflow.${workflowId}.run.${runId}.step.${step.id}.running_ev`,
+    executionContext,
+  );
   await engine.onStepExecutionStart({
     step,
     inputData,
@@ -278,7 +290,10 @@ export async function executeStep(
         if (workflowResult.status === 'failed') {
           await engine.errorStepSpan({
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
-            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
+            operationId: scopeOperationId(
+              `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
+              executionContext,
+            ),
             errorOptions: {
               error:
                 workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
@@ -293,7 +308,10 @@ export async function executeStep(
 
           await engine.endStepSpan({
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
-            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+            operationId: scopeOperationId(
+              `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+              executionContext,
+            ),
             endOptions: {
               output,
               attributes: { status: workflowResult.status },
@@ -336,11 +354,19 @@ export async function executeStep(
   const retries = step.retries ?? executionContext.retryConfig.attempts ?? 0;
   const delay = executionContext.retryConfig.delay ?? 0;
 
+  // One-shot steps keep the legacy id. Repeated occurrences also include the run id so
+  // occurrences inside different nested child runs (e.g. foreach within a foreach item) differ.
+  const legacyRetryOperationId = `workflow.${workflowId}.step.${step.id}`;
+  const retryOperationId =
+    scopeOperationId(legacyRetryOperationId, executionContext) === legacyRetryOperationId
+      ? legacyRetryOperationId
+      : scopeOperationId(`workflow.${workflowId}.run.${runId}.step.${step.id}`, executionContext);
+
   // Use executeStepWithRetry to handle retry logic
   // Default engine: internal retry loop
   // Inngest engine: throws RetryAfterError for external retry handling
   const stepRetryResult = await engine.executeStepWithRetry(
-    `workflow.${workflowId}.step.${step.id}`,
+    retryOperationId,
     async () => {
       if (validationError) {
         throw validationError;
@@ -590,7 +616,10 @@ export async function executeStep(
   delete executionContext.activeStepsPath[step.id];
 
   if (!skipEmits) {
-    const emitOperationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.emit_result`;
+    const emitOperationId = scopeOperationId(
+      `workflow.${workflowId}.run.${runId}.step.${step.id}.emit_result`,
+      executionContext,
+    );
     await engine.wrapDurableOperation(emitOperationId, async () => {
       await emitStepResultEvents({
         stepId: step.id,
@@ -607,7 +636,7 @@ export async function executeStep(
   if (execResults.status != 'failed') {
     await engine.endStepSpan({
       span: stepSpan,
-      operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+      operationId: scopeOperationId(`workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`, executionContext),
       endOptions: {
         output: execResults.output,
         attributes: {
