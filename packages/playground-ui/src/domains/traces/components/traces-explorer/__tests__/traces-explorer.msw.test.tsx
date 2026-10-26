@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { Profiler, useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,7 +11,7 @@ import {
 } from '../../../hooks/use-traces-list-source';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
-import { TracesExplorer, useTracesFilterBar, useTracesFilterBarFields } from '../index';
+import { TracesExplorer, useTracesConfig, useTracesFilterBar, useTracesFilterBarFields } from '../index';
 import type { TracesExplorerLayoutProps, TracesExplorerPanelProps } from '../index';
 import { DEFAULT_TRACES_FILTERS, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type {
@@ -34,11 +34,14 @@ import {
   idleDeltaBatch,
   noDeltaPollingCapabilities,
   noRootDurationCapabilities,
+  noSpanQueryCapabilities,
+  noThreadRowsCapabilities,
   traceQueryCapabilities,
   twoTracesPage,
   weatherRootSpan,
   weatherTraceSpans,
   weatherTraceUsage,
+  workflowTracesPage,
 } from './fixtures/traces-explorer';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField } from '@/ds/components/FilterBar';
@@ -147,6 +150,17 @@ type HarnessProps = {
   panelProps?: Partial<TracesExplorerPanelProps>;
 };
 
+// Stands in for the host's view switch, which offers each view only when its query API is on.
+function ViewLinks() {
+  const { withSpanQuery, withThreadQuery } = useTracesConfig();
+  return (
+    <>
+      {withSpanQuery ? <a href="/spans">Spans view</a> : null}
+      {withThreadQuery ? <a href="/threads">Threads view</a> : null}
+    </>
+  );
+}
+
 // Plain React state stands in for the host: no router, no search params.
 function Harness({
   initialSelection = EMPTY_TRACES_SELECTION,
@@ -183,11 +197,11 @@ function Harness({
     >
       <TracesExplorer.Layout
         renderError={renderError}
+        tabs={<ViewLinks />}
         actionRow={
           <div>
             {filterBar}
             <TracesExplorer.ColumnsMenu />
-            <TracesExplorer.AutoRefresh />
           </div>
         }
       >
@@ -240,6 +254,9 @@ beforeAll(() => {
   }
   globalThis.ResizeObserver = ResizeObserverStub;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1200, 800));
+  // The virtualizer sizes its scroll container from clientWidth/clientHeight.
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1200);
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(800);
   Element.prototype.getAnimations ??= () => [];
   if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
 });
@@ -349,7 +366,7 @@ describe('TracesExplorer', () => {
   });
 
   describe('when a trace is open', () => {
-    const openTraceActions = async (traceHref?: TracesExplorerPanelProps['traceHref']) => {
+    const openTrace = async (traceHref?: TracesExplorerPanelProps['traceHref']) => {
       setExplorerHandlers();
       const { queryClient } = renderExplorer({
         initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
@@ -357,22 +374,22 @@ describe('TracesExplorer', () => {
       });
       await settle(queryClient);
       const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
-      fireEvent.click(within(dialog).getByRole('button', { name: 'Open trace actions' }));
-      await screen.findByRole('menuitem', { name: 'Download trace JSON' });
+      await within(dialog).findByRole('button', { name: 'Download trace JSON' });
+      return dialog;
     };
 
     it('links to the host trace page of the selected trace', async () => {
-      await openTraceActions(traceId => `/observe/traces/${traceId}`);
+      const dialog = await openTrace(traceId => `/observe/traces/${traceId}`);
 
-      expect(screen.getByRole('menuitem', { name: 'Open trace page' }).getAttribute('href')).toBe(
+      expect(within(dialog).getByRole('link', { name: 'Open trace page' }).getAttribute('href')).toBe(
         '/observe/traces/trace-weather',
       );
     });
 
     it('offers no trace page link without traceHref', async () => {
-      await openTraceActions();
+      const dialog = await openTrace();
 
-      expect(screen.queryByRole('menuitem', { name: 'Open trace page' })).toBeNull();
+      expect(within(dialog).queryByRole('link', { name: 'Open trace page' })).toBeNull();
     });
   });
 
@@ -396,6 +413,48 @@ describe('TracesExplorer', () => {
       fireEvent.click(traceRow('What is the weather in Paris'));
 
       expect(await screen.findByRole('dialog', { name: 'Trace details' })).toBeTruthy();
+    });
+  });
+
+  describe('when a trace opens, the drawer width follows its entity', () => {
+    const openDrawerSize = async (tracesPage: typeof twoTracesPage) => {
+      setExplorerHandlers(traceQueryCapabilities, tracesPage);
+      const { queryClient } = renderExplorer();
+      await settle(queryClient);
+
+      fireEvent.click(traceRow('What is the weather in Paris'));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
+      return dialog.closest('[data-slot="data-panel-popup"]')?.getAttribute('data-size');
+    };
+
+    it('opens an agent trace wide, to fit the Messages column', async () => {
+      expect(await openDrawerSize(twoTracesPage)).toBe('wide');
+    });
+
+    it('opens a workflow trace at half width', async () => {
+      expect(await openDrawerSize(workflowTracesPage)).toBe('half');
+    });
+  });
+
+  describe('when a span opens, the drawer grows one size from its entity width', () => {
+    const openSpanDrawerSize = async (tracesPage: typeof twoTracesPage) => {
+      setExplorerHandlers(traceQueryCapabilities, tracesPage);
+      const { queryClient } = renderExplorer({
+        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather', spanId: 'span-weather' },
+      });
+      await settle(queryClient);
+
+      const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
+      return dialog.closest('[data-slot="data-panel-popup"]')?.getAttribute('data-size');
+    };
+
+    it('opens an agent trace full width', async () => {
+      expect(await openSpanDrawerSize(twoTracesPage)).toBe('full');
+    });
+
+    it('opens a workflow trace wide', async () => {
+      expect(await openSpanDrawerSize(workflowTracesPage)).toBe('wide');
     });
   });
 
@@ -675,6 +734,83 @@ describe('TracesExplorer', () => {
     });
   });
 
+  describe('when the server supports span queries and the host turns them on', () => {
+    it('lets the host offer the spans view', async () => {
+      setExplorerHandlers();
+
+      const { queryClient } = renderExplorer({ features: { spanQuery: true } });
+      await settle(queryClient);
+
+      expect(screen.getByRole('link', { name: 'Spans view' })).toBeTruthy();
+    });
+  });
+
+  describe('when the server does not support span queries', () => {
+    it('keeps the spans view hidden', async () => {
+      setExplorerHandlers(noSpanQueryCapabilities);
+
+      const { queryClient } = renderExplorer({ features: { spanQuery: true } });
+      await settle(queryClient);
+
+      expect(screen.queryByRole('link', { name: 'Spans view' })).toBeNull();
+    });
+  });
+
+  describe('when the host does not turn span queries on', () => {
+    it('keeps the spans view hidden', async () => {
+      setExplorerHandlers();
+
+      const { queryClient } = renderExplorer();
+      await settle(queryClient);
+
+      expect(screen.queryByRole('link', { name: 'Spans view' })).toBeNull();
+    });
+  });
+
+  describe('when the host turns the span query API off', () => {
+    it('keeps the spans view hidden', async () => {
+      setExplorerHandlers();
+
+      const { queryClient } = renderExplorer({ features: { spanQuery: false } });
+      await settle(queryClient);
+
+      expect(screen.queryByRole('link', { name: 'Spans view' })).toBeNull();
+    });
+  });
+
+  describe('when the server supports thread rows and the host turns thread queries on', () => {
+    it('lets the host offer the threads view', async () => {
+      setExplorerHandlers();
+
+      const { queryClient } = renderExplorer({ features: { threadQuery: true } });
+      await settle(queryClient);
+
+      expect(screen.getByRole('link', { name: 'Threads view' })).toBeTruthy();
+    });
+  });
+
+  describe('when the server does not support thread rows', () => {
+    it('keeps the threads view hidden', async () => {
+      setExplorerHandlers(noThreadRowsCapabilities);
+
+      const { queryClient } = renderExplorer({ features: { threadQuery: true } });
+      await settle(queryClient);
+
+      expect(screen.queryByRole('link', { name: 'Threads view' })).toBeNull();
+    });
+  });
+
+  describe('when the host does not turn thread queries on', () => {
+    it('keeps the threads view hidden', async () => {
+      setExplorerHandlers();
+
+      const { queryClient } = renderExplorer({ features: { spanQuery: true } });
+      await settle(queryClient);
+
+      expect(screen.queryByRole('link', { name: 'Threads view' })).toBeNull();
+    });
+  });
+
   describe('when the filters match the host baseline', () => {
     it('reports no applied filters', async () => {
       setExplorerHandlers(traceQueryCapabilities, emptyTracesPage);
@@ -746,8 +882,8 @@ describe('TracesExplorer', () => {
     });
   });
 
-  describe('the trace actions menu', () => {
-    const openTraceActions = async (panelProps?: Partial<TracesExplorerPanelProps>) => {
+  describe('the trace header actions', () => {
+    const openTracePanel = async (panelProps?: Partial<TracesExplorerPanelProps>) => {
       setExplorerHandlers();
       const { queryClient } = renderExplorer({
         panelProps,
@@ -755,21 +891,20 @@ describe('TracesExplorer', () => {
       });
       const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
       await settle(queryClient);
-      fireEvent.click(within(dialog).getByRole('button', { name: 'Open trace actions' }));
-      await screen.findByRole('menuitem', { name: 'Download trace JSON' });
+      return dialog;
     };
 
     it('offers adding the trace to a dataset by default', async () => {
-      await openTraceActions();
+      const dialog = await openTracePanel();
 
-      expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).toBeTruthy();
+      expect(within(dialog).getByRole('button', { name: 'Add to dataset' })).toBeTruthy();
     });
 
-    it('hides "Add full trace to dataset" when the host turns it off', async () => {
-      await openTraceActions({ withAddTraceToDataset: false });
+    it('hides "Add to dataset" when the host turns it off', async () => {
+      const dialog = await openTracePanel({ withAddTraceToDataset: false });
 
-      expect(screen.queryByRole('menuitem', { name: 'Add full trace to dataset' })).toBeNull();
-      expect(screen.getByRole('menuitem', { name: 'Download trace JSON' })).toBeTruthy();
+      expect(within(dialog).queryByRole('button', { name: 'Add to dataset' })).toBeNull();
+      expect(within(dialog).getByRole('button', { name: 'Download trace JSON' })).toBeTruthy();
     });
   });
 
@@ -913,6 +1048,94 @@ describe('TracesExplorer', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+});
+
+describe('TracesExplorer.Layout', () => {
+  const renderLayout = () =>
+    renderWithProviders(
+      <TestLinkProvider>
+        <TracesExplorer
+          selection={EMPTY_TRACES_SELECTION}
+          filters={DEFAULT_TRACES_FILTERS}
+          onChange={() => {}}
+          sortDirection="desc"
+          onSortDirectionChange={() => {}}
+          metricsSupport={METRICS_SUPPORTED}
+        >
+          <TracesExplorer.Layout
+            breadcrumbs={<span>Traces</span>}
+            tabs={<nav aria-label="Views">Tabs</nav>}
+            toolbar={
+              <div role="toolbar" aria-label="Trace filters">
+                <TracesExplorer.FilterBar />
+              </div>
+            }
+          >
+            <TracesExplorer.List />
+          </TracesExplorer.Layout>
+        </TracesExplorer>
+      </TestLinkProvider>,
+    );
+
+  describe('when the traces have loaded', () => {
+    it('pins the tabs above the page body', async () => {
+      setExplorerHandlers();
+
+      renderLayout();
+
+      expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
+      const tabs = screen.getByRole('navigation', { name: 'Views' });
+      expect(tabs.closest('main')).toBeNull();
+      expect(tabs.closest('header')).toBeNull();
+    });
+
+    it('puts the toolbar in the page body, above the list', async () => {
+      setExplorerHandlers();
+
+      renderLayout();
+
+      expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
+      const toolbar = screen.getByRole('toolbar', { name: 'Trace filters' });
+      const main = screen.getByRole('main');
+      expect(main.contains(toolbar)).toBe(true);
+      const row = screen.getByText('What is the weather in Paris?');
+      expect(toolbar.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
+
+  describe('when the filter fields are still being discovered', () => {
+    it('keeps the tabs and holds the toolbar behind the skeleton', async () => {
+      setExplorerHandlers();
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, async () => {
+          await delay('infinite');
+          return HttpResponse.json(emptyTraceQueryFields);
+        }),
+      );
+
+      renderLayout();
+
+      expect(await screen.findByTestId('traces-page-skeleton')).toBeTruthy();
+      expect(screen.getByRole('navigation', { name: 'Views' })).toBeTruthy();
+      expect(screen.queryByRole('toolbar', { name: 'Trace filters' })).toBeNull();
+    });
+  });
+
+  describe('when the list request fails', () => {
+    it('keeps the toolbar so the filters can still be changed', async () => {
+      setExplorerHandlers();
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () =>
+          HttpResponse.json({ error: 'Bad filter' }, { status: 422 }),
+        ),
+      );
+
+      renderLayout();
+
+      expect(await screen.findByText('Failed to load traces')).toBeTruthy();
+      expect(screen.getByRole('toolbar', { name: 'Trace filters' })).toBeTruthy();
     });
   });
 });

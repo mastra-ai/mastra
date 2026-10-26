@@ -96,6 +96,7 @@ export {
   runResumeDurableStreamUntilIdle,
   type DurableStreamUntilIdleDeps,
 } from './durable-stream-until-idle';
+export { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';

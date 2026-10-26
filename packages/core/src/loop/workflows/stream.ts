@@ -21,25 +21,28 @@ import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
-export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
-  resumeContext,
-  requireToolApproval,
-  models,
-  toolChoice,
-  modelSettings,
-  _internal,
-  messageId,
-  runId,
-  messageList,
-  startTimestamp,
-  streamState,
-  agentId,
-  toolCallId,
-  toolCallConcurrency,
-  ...rest
-}: LoopRun<Tools, OUTPUT>) {
-  return new ReadableStream<ChunkType<OUTPUT>>({
-    start: async streamController => {
+export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
+  {
+    resumeContext,
+    requireToolApproval,
+    models,
+    toolChoice,
+    modelSettings,
+    _internal,
+    messageId,
+    runId,
+    messageList,
+    startTimestamp,
+    streamState,
+    agentId,
+    toolCallId,
+    toolCallConcurrency,
+    ...rest
+  }: LoopRun<Tools, OUTPUT>,
+  finalization?: { register: (cleanup: () => Promise<void>) => void },
+) {
+  const loopSource = {
+    start: async (streamController: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
       // Stamp chunks when the loop produces them; consumers may read them much later.
       const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
         enqueue: chunk => {
@@ -526,7 +529,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           return;
         }
 
-        await deleteRunSnapshots();
+        // Enqueuing finish does not await the agent's final memory save. Hand successful
+        // cleanup to the output's awaited finish lifecycle; bails retain immediate cleanup.
+        if (finalization && executionResult.result.stepResult.reason !== 'tripwire' && !upstreamAbortSignal?.aborted) {
+          finalization.register(deleteRunSnapshots);
+        } else {
+          await deleteRunSnapshots();
+        }
 
         // Always emit finish chunk, even for abort (tripwire) cases
         // This ensures the stream properly completes and all promises are resolved
@@ -558,6 +567,23 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           rest.mastra?.__unregisterInternalWorkflow(agenticLoopWorkflow.id, runId);
         }
       }
+    },
+  };
+
+  // A rejected `start` would error the stream at once, and erroring a ReadableStream discards every
+  // chunk still queued for a reader that has not caught up (e.g. one that began reading late). Hold
+  // the failure until `pull` runs, which only happens once the queue is empty.
+  let failure: { error: unknown } | undefined;
+  return new ReadableStream<ChunkType<OUTPUT>>({
+    start: async streamController => {
+      try {
+        await loopSource.start(streamController);
+      } catch (error) {
+        failure = { error };
+      }
+    },
+    pull: streamController => {
+      if (failure) streamController.error(failure.error);
     },
   });
 }

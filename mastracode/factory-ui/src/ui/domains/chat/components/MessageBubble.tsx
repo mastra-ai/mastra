@@ -34,7 +34,14 @@ import { RunErrorNotice } from './RunErrorNotice';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
 import { ToolFactory } from './ToolFactory';
-import { collectToolGroups, draws, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
+import {
+  collectToolGroups,
+  draws,
+  hasVisibleText,
+  messageText,
+  renderableParts,
+  toolFromInvocationPart,
+} from './transcript-parts';
 import {
   isSkillNotificationSignal,
   notificationMetadata,
@@ -97,8 +104,30 @@ export function MessageBubble({
   const steeringPending = entry.deliveryStatus === 'pending';
   const steeringFailed = entry.deliveryStatus === 'failed';
   const metadata = entry.message.content.metadata;
-  const replyModelId = meta && typeof metadata?.modelId === 'string' ? metadata.modelId : undefined;
-  const credentialLabel = replyModelId && metadata ? replyCredentialLabel(metadata, owner, viewerId) : undefined;
+  const modelId = typeof metadata?.modelId === 'string' ? metadata.modelId : undefined;
+  const credentialLabel = modelId && metadata ? replyCredentialLabel(metadata, owner, viewerId) : undefined;
+  const modelLabel = modelId && (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <MessageMetadata tabIndex={0}>
+            {formatModelName(modelId)}
+            {credentialLabel && ` · ${credentialLabel}`}
+          </MessageMetadata>
+        }
+      />
+      <TooltipContent>{modelId}</TooltipContent>
+    </Tooltip>
+  );
+  const replyFooter = (text: string) => ({
+    model: modelLabel,
+    actions: (
+      <MessageActions>
+        <MessageCopyButton text={text} />
+        <MessageTimestamp value={entry.message.createdAt} />
+      </MessageActions>
+    ),
+  });
   const messageActions = meta ? (
     <MessageActions>
       <MessageCopyButton text={meta} />
@@ -139,19 +168,7 @@ export function MessageBubble({
         footer={
           messageActions && (
             <div className="flex flex-wrap items-center gap-2">
-              {replyModelId && (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <MessageMetadata tabIndex={0}>
-                        {formatModelName(replyModelId)}
-                        {credentialLabel && ` · ${credentialLabel}`}
-                      </MessageMetadata>
-                    }
-                  />
-                  <TooltipContent>{replyModelId}</TooltipContent>
-                </Tooltip>
-              )}
+              {modelLabel}
               {messageActions}
             </div>
           )
@@ -167,7 +184,7 @@ export function MessageBubble({
   const renderers = {
     Error: (part: MastraErrorPart) => <RunErrorNotice error={part.error} entryId={entry.id} />,
     Text: (part: TextPart) => {
-      if (!part.text.trim()) return null;
+      if (!hasVisibleText(part.text)) return null;
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
         return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
@@ -213,6 +230,8 @@ export function MessageBubble({
             toolName={tool.toolName}
             toolCallId={tool.toolCallId}
             input={suspension?.suspendPayload ?? tool.args}
+            argsText={tool.argsText}
+            replyFooter={replyFooter}
             output={tool.result}
             status={suspension ? 'running' : tool.status}
             isSubmitting={isSubmitting}

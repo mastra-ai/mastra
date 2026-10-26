@@ -112,7 +112,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
 
               <div className="my-6 flex justify-end">
                 <Button size="sm" onClick={() => setDatasetDialogOpen(true)} icon={<SaveIcon />}>
-                  Save as Dataset Item
+                  Save as dataset item
                 </Button>
               </div>
 

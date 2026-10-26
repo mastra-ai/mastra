@@ -429,12 +429,9 @@ export class MountManager {
     if (Array.isArray(obj)) return obj.map(item => this.sortKeysDeep(item));
     return Object.keys(obj as Record<string, unknown>)
       .sort()
-      .reduce(
-        (acc, key) => {
-          acc[key] = this.sortKeysDeep((obj as Record<string, unknown>)[key]);
-          return acc;
-        },
-        {} as Record<string, unknown>,
-      );
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = this.sortKeysDeep((obj as Record<string, unknown>)[key]);
+        return acc;
+      }, {});
   }
 }

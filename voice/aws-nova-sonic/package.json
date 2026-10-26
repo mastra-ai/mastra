@@ -32,19 +32,19 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.1095.0",
-    "@aws-sdk/credential-provider-node": "^3.972.72",
-    "@smithy/node-http-handler": "^4.0.0",
-    "@smithy/types": "^4.0.0"
+    "@aws-sdk/client-bedrock-runtime": "^3.1156.0",
+    "@aws-sdk/credential-provider-node": "^3.972.88",
+    "@smithy/node-http-handler": "^4.12.1",
+    "@smithy/types": "^4.19.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/voice": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",

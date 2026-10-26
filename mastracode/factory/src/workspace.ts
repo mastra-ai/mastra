@@ -80,13 +80,15 @@ export const BUNDLED_FACTORY_SKILLS_PATH =
  * addition to the bundled skills so projects can add (or override) Factory
  * skills without patching the installed package. Candidates cover the cwd
  * variants the dev server runs with (`repo root`, `--dir src/mastra` which
- * runs with cwd `src/mastra/public`).
+ * runs with cwd `src/mastra/public`), then the platform build output when
+ * the server runs from its parent directory.
  */
 export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): string | undefined {
   const candidates = [
     join(cwd, 'src', 'mastra', 'public', 'factory-skills'),
     join(cwd, 'public', 'factory-skills'),
     join(cwd, 'factory-skills'),
+    join(cwd, 'output', 'factory-skills'),
   ];
   return candidates.find(
     candidate => path.normalize(candidate) !== path.normalize(BUNDLED_FACTORY_SKILLS_PATH) && existsSync(candidate),
@@ -619,6 +621,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
     const factorySandbox = sandboxConfig;
     const githubProvider = sourceControl.github;
+    const gitIdentity = githubProvider?.gitIdentity ?? { name: user.name, email: user.email };
 
     const storage = sourceControl.storage;
     const projectRepository = session.projectRepositoryId
@@ -1207,6 +1210,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         storage: storage.sessions,
       });
       await checkoutSessionBranch(target, workdir, {
+        identity: gitIdentity,
         branch: session.branch,
         baseBranch: session.baseBranch || projectRepository.branch || repository.defaultBranch,
         token,
@@ -1309,7 +1313,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             dir: entry.dir,
             branch: null,
             defaultBranch: repo.defaultBranch,
-            position: repo.position,
             setupStatus: repo.setupCommand ? 'ok' : 'skipped',
           };
           states.push(state);
@@ -1352,6 +1355,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
             const synced = await timedPhase(`workspace.sync(${repo.slug})`, () =>
               syncEnvironmentRepository(target, entry.dir, {
+                identity: gitIdentity,
                 branch: session.branch,
                 defaultBranch: repo.defaultBranch,
                 token,

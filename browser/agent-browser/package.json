@@ -30,18 +30,18 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "agent-browser": "0.39.1"
+    "agent-browser": "0.19.0"
   },
   "devDependencies": {
     "@internal/browser-test-utils": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "playwright-core": "^1.61.1",
-    "tsdown": "0.22.9",
+    "playwright-core": "^1.64.1",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

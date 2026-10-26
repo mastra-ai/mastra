@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MastraDBMessage, MastraErrorPart } from '../../agent/message-list';
 import { MessageList } from '../../agent/message-list';
+import { MAX_PERSISTED_RESPONSE_BODY_LENGTH } from './provider-error-details';
 import { recordTerminalErrorMessage, toPersistedErrorIdentity } from './record-terminal-error-message';
 
 function errorPartsOf(message: MastraDBMessage | undefined): MastraErrorPart[] {
@@ -29,18 +30,20 @@ function makeListWithPartialAttempt(attemptId: string, parts: MastraDBMessage['c
 }
 
 describe('toPersistedErrorIdentity', () => {
-  it('keeps name, message and the provider facts, nothing else', () => {
+  it('keeps name, message, provider HTTP details and provider facts, nothing else', () => {
     const error = Object.assign(new TypeError('boom'), {
       statusCode: 429,
       responseBody: '{"error":{"code":"insufficient_quota"}}',
-      requestBodyValues: { messages: [{ role: 'user', content: 'my secret prompt' }] },
       cause: new Error('inner'),
+      url: 'https://api.example.com/v1?key=secret',
+      requestBodyValues: { messages: [{ role: 'user', content: 'my secret prompt' }] },
     });
 
     expect(toPersistedErrorIdentity(error)).toEqual({
       name: 'TypeError',
       message: 'boom',
       statusCode: 429,
+      responseBody: '{"error":{"code":"insufficient_quota"}}',
       codes: ['insufficient_quota'],
     });
     expect(Object.keys(toPersistedErrorIdentity(new Error('boom')))).toEqual(['name', 'message']);
@@ -51,15 +54,24 @@ describe('toPersistedErrorIdentity', () => {
           responseBody: '{"error":{"message":"prompt is too long"}}',
         }),
       ),
-    ).toEqual({ name: 'Error', message: 'Bad Request', statusCode: 400, reason: 'prompt is too long' });
-    expect(
-      toPersistedErrorIdentity(
-        Object.assign(new Error('Bad Gateway'), {
-          statusCode: 502,
-          responseBody: '<html><body>proxy page</body></html>',
-        }),
-      ),
-    ).toEqual({ name: 'Error', message: 'Bad Gateway', statusCode: 502 });
+    ).toMatchObject({ statusCode: 400, reason: 'prompt is too long' });
+  });
+
+  it('keeps a bounded response body and the provider request id', () => {
+    const error = Object.assign(new Error('Bad Request'), {
+      statusCode: 400,
+      responseBody: 'x'.repeat(MAX_PERSISTED_RESPONSE_BODY_LENGTH + 50),
+      responseHeaders: { 'request-id': 'req_123', 'set-cookie': 'secret' },
+    });
+
+    const identity = toPersistedErrorIdentity(error);
+    expect(identity).toEqual({
+      name: 'Error',
+      message: 'Bad Request',
+      statusCode: 400,
+      responseBody: `${'x'.repeat(MAX_PERSISTED_RESPONSE_BODY_LENGTH)}…`,
+      requestId: 'req_123',
+    });
   });
 
   it('does not mutate the supplied error or invoke toJSON', () => {
@@ -360,7 +372,7 @@ describe('recordTerminalErrorMessage', () => {
     expect(errorPartsOf(all[1])).toHaveLength(1);
   });
 
-  it('stores only a JSON-safe identity payload', () => {
+  it('stores only a JSON-safe name/message/status payload', () => {
     const messageList = makeListWithPartialAttempt('attempt-1', []);
     const error = Object.assign(new Error('boom'), {
       statusCode: 500,

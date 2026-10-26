@@ -50,10 +50,10 @@
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
     "json-schema": "^0.4.0",
-    "react": "^19.2.5",
-    "resolve.exports": "^2.0.3",
+    "react": "catalog:",
+    "resolve.exports": "^2.0.4",
     "ts-morph": "^27.0.2",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:"
   },
