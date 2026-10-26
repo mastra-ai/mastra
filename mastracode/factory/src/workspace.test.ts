@@ -480,6 +480,8 @@ describe('bundled Factory skill assets', () => {
     const assumptionsIndex = handoff.indexOf('### Assumptions');
     const questionsIndex = handoff.indexOf('### Open questions');
 
+    // GitHub renders an empty header row as a blank band above the table.
+    expect(triage).not.toMatch(/^\|\s+\|\s+\|$/m);
     expect(markerIndex).toBeGreaterThanOrEqual(0);
     expect(typeIndex).toBeGreaterThan(0);
     expect(routeIndex).toBeGreaterThan(typeIndex);

@@ -31,7 +31,7 @@ At the end of this phase, publish a small summary to the source issue as stated 
 ```markdown
 <!-- mastra-factory-triage -->
 
-|                |                                                                                                                                                      |
+| Field          | Assessment                                                                                                                                           |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Type**       | <bug\|feature request\|docs\|question/support\|maintenance\|duplicate\|resolved\|invalid\|spam\|out-of-scope\|other> — <one-sentence classification> |
 | **Route**      | Pending                                                                                                                                              |
@@ -100,7 +100,7 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 ```markdown
 <!-- mastra-factory-triage -->
 
-|                |                                                                                                                                                                 |
+| Field          | Assessment                                                                                                                                                      |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Type**       | <bug\|feature request\|docs\|question/support\|maintenance\|duplicate\|resolved\|invalid\|spam\|out-of-scope\|other> — <one-sentence classification>            |
 | **Route**      | <Plan fix\|Await approval\|Ask author for info\|Close as duplicate/resolved/invalid/spam/out-of-scope\|Answer provided / close\|No transition / refresh\|Other> |
