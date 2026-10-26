@@ -59,7 +59,8 @@ export const mastra = new Mastra({
   {
     name: 'signUpEnabled',
     type: 'boolean',
-    description: 'Whether new users can register via sign-up. Set to `false` to disable public registration.',
+    description:
+      'Whether new users can register via sign-up. Set to `false` to disable public registration. Only applies to the instance the provider builds itself. When you pass `auth`, disable sign-up in your Better Auth configuration instead.',
     isOptional: true,
     defaultValue: 'true',
   },
@@ -103,7 +104,7 @@ interface BetterAuthUser {
 }
 ```
 
-- `session`: The Better Auth session object containing session metadata. `activeOrganizationId` comes from the organization plugin, which the provider registers
+- `session`: The Better Auth session object containing session metadata. `activeOrganizationId` comes from the organization plugin. The provider registers that plugin only on the instance it builds itself. When you pass `auth`, add the plugin to that instance if you use organization features.
 - `user`: The authenticated user object with user details
 
 The `Session` and `User` types are exported by the Better Auth package.

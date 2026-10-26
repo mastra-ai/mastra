@@ -128,7 +128,7 @@ Register request logging middleware. `init()` calls this after the context, auth
 registerHttpLoggingMiddleware(): void {
   if (!this.httpLoggingConfig?.enabled) return;
 
-  this.app.use('*', async (req, res, next) => {
+  this.app.use((req, res, next) => {
     if (!this.shouldLogRequest(req.path)) {
       return next();
     }
@@ -137,12 +137,27 @@ registerHttpLoggingMiddleware(): void {
     res.on('finish', () => {
       const duration = Date.now() - start;
       const level = this.httpLoggingConfig?.level || 'info';
-      this.logger[level](`${req.method} ${req.path} ${res.statusCode} ${duration}ms`, {
+      const logData: Record<string, unknown> = {
         method: req.method,
         path: req.path,
         status: res.statusCode,
         duration: `${duration}ms`,
-      });
+      };
+
+      if (this.httpLoggingConfig?.includeQueryParams) {
+        logData.query = req.query;
+      }
+
+      if (this.httpLoggingConfig?.includeHeaders) {
+        const headers = { ...req.headers };
+        for (const name of this.httpLoggingConfig.redactHeaders || []) {
+          const key = name.toLowerCase();
+          if (headers[key] !== undefined) headers[key] = '[REDACTED]';
+        }
+        logData.headers = headers;
+      }
+
+      this.logger[level](`${req.method} ${req.path} ${res.statusCode} ${duration}ms`, logData);
     });
     next();
   });
