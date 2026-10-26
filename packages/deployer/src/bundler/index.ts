@@ -680,8 +680,10 @@ export abstract class Bundler extends MastraBundler {
       dependenciesToInstall.set(dep, applySourceDependencyRange(dep, depInfo, sourceDependencyConstraints));
     }
 
+    // Workspace packages listed only in `dependencies` are compiled into the bundle, so only the ones kept
+    // external need to be packed and installed (#28303).
     const initialWorkspaceDependencies = new Set<string>();
-    for (const dep of [...analyzedBundleInfo.dependencies.keys(), ...analyzedBundleInfo.externalDependencies.keys()]) {
+    for (const dep of analyzedBundleInfo.externalDependencies.keys()) {
       const pkgName = getPackageName(dep);
       if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
         initialWorkspaceDependencies.add(pkgName);
