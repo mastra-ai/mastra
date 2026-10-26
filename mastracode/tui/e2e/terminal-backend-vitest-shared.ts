@@ -122,15 +122,42 @@ async function initializeStorage(dbPath: string): Promise<void> {
   await storage.close();
 }
 
+// aimock (>=1.37.2) journals bodies over 64 KB as a truncation marker, and
+// Mastra Code requests carry the full tool list (~80 KB). A never-matching
+// predicate fixture sees each normalized request in full; restore truncated
+// journal entries from it by the byte size the marker records.
 async function startAimock({ fixturePath }: { fixturePath?: string }): Promise<AimockHandle> {
   const mock = new LLMock({ port: 0 });
   if (fixturePath) mock.loadFixtureFile(fixturePath);
+  const seen = new Set<object>();
+  mock.prependFixture({
+    match: {
+      predicate: req => {
+        seen.add(req);
+        return false;
+      },
+    },
+    response: { content: '' },
+  });
   await mock.start();
+
+  const requests = () => {
+    const unused = [...seen].map(body => ({ body, size: Buffer.byteLength(JSON.stringify(body), 'utf8') }));
+    return mock.getRequests().map(entry => {
+      const marker = entry.body as { __aimock_truncated?: boolean; originalByteSize?: number } | null;
+      if (!marker?.__aimock_truncated) return entry;
+      const index = unused.findIndex(candidate => candidate.size === marker.originalByteSize);
+      if (index === -1) return entry;
+      const [full] = unused.splice(index, 1);
+      return full ? { ...entry, body: full.body } : entry;
+    });
+  };
+
   return {
     url: mock.url,
     stop: () => mock.stop(),
     requestCount: () => mock.getRequests().length,
-    requests: () => mock.getRequests() as unknown[],
+    requests,
   };
 }
 
