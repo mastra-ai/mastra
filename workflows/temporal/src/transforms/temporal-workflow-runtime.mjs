@@ -1,8 +1,27 @@
-import { executeChild, proxyActivities, log, sleep } from '@temporalio/workflow';
+import {
+  ApplicationFailure,
+  condition,
+  defineQuery,
+  defineSignal,
+  executeChild,
+  proxyActivities,
+  log,
+  setHandler,
+  sleep,
+} from '@temporalio/workflow';
+
+const resumeSignal = defineSignal('mastra.resume');
+const statusQuery = defineQuery('mastra.status');
 
 export class TemporalExecutionEngine {
   startToCloseTimeout;
   activityHandle;
+  resumePayloads = new Map();
+  suspendedSteps = new Set();
+  resumeLabels = new Map();
+  currentResult;
+  initData;
+  initialState;
 
   constructor(params) {
     this.startToCloseTimeout = params?.options?.startToCloseTimeout ?? '1 minute';
@@ -10,10 +29,18 @@ export class TemporalExecutionEngine {
       startToCloseTimeout: this.startToCloseTimeout,
       ...(params?.options?.retry !== undefined && { retry: params.options.retry }),
     });
+    setHandler(resumeSignal, payload => {
+      const id = this.resumeTarget(payload);
+      if (id !== undefined && !this.resumePayloads.has(id)) {
+        this.resumePayloads.set(id, payload);
+      }
+    });
+    setHandler(statusQuery, () => this.currentResult);
   }
 
   async execute(params) {
     this.initData = params.input;
+    this.initialState = params.initialState;
     this.executionContext = {
       ...(params.requestContext !== undefined && { requestContext: params.requestContext }),
       ...(params.runId !== undefined && { runId: params.runId }),
@@ -22,18 +49,119 @@ export class TemporalExecutionEngine {
     };
     let result = params.input;
     const stepResults = {};
+    this.currentResult = {
+      status: 'running',
+      input: params.input,
+      state: params.initialState,
+      steps: stepResults,
+    };
 
     for (const entry of params.graph.steps) {
       result = await this.executeEntry(entry, result, stepResults);
     }
 
-    return {
+    this.currentResult = {
       status: 'success',
       input: params.input,
       result,
       state: params.initialState,
       steps: stepResults,
     };
+    return this.currentResult;
+  }
+
+  resumeTarget(payload) {
+    if (payload?.step !== undefined) {
+      return this.suspendedSteps.has(payload.step) ? payload.step : undefined;
+    }
+    if (payload?.label !== undefined) {
+      const labeledStep = this.resumeLabels.get(payload.label);
+      return labeledStep !== undefined && this.suspendedSteps.has(labeledStep) ? labeledStep : undefined;
+    }
+    return this.suspendedSteps.size === 1 ? [...this.suspendedSteps][0] : undefined;
+  }
+
+  updateSuspendedResult(stepResults) {
+    const suspended = [...this.suspendedSteps].map(id => [id]);
+    this.currentResult = {
+      status: 'suspended',
+      input: this.initData,
+      state: this.initialState,
+      steps: stepResults,
+      suspended,
+      suspendPayload: Object.fromEntries(suspended.map(([id]) => [id, stepResults[id]?.suspendPayload])),
+      resumeLabels: Object.fromEntries([...this.resumeLabels].map(([label, stepId]) => [label, { stepId }])),
+    };
+  }
+
+  updateRunningResult(stepResults) {
+    this.currentResult = {
+      status: 'running',
+      input: this.initData,
+      state: this.initialState,
+      steps: stepResults,
+    };
+  }
+
+  // Record steps in the core StepResult shape ({ status, payload, output, startedAt, endedAt }).
+  async recordStep(stepResults, id, payload, run) {
+    const startedAt = Date.now();
+    let output = await run();
+    let suspendPayload;
+    let resumeData;
+
+    while (output?.__temporalSuspension === true) {
+      suspendPayload = output.suspendPayload;
+      stepResults[id] = {
+        __temporalStepResult: true,
+        status: 'suspended',
+        payload,
+        suspendPayload,
+        suspendedAt: Date.now(),
+      };
+      for (const [label, target] of Object.entries(output.resumeLabels ?? {})) {
+        if (target?.stepId === id) {
+          this.resumeLabels.set(label, id);
+        }
+      }
+      this.suspendedSteps.add(id);
+      this.updateSuspendedResult(stepResults);
+      try {
+        await condition(() => this.resumePayloads.has(id));
+        resumeData = this.resumePayloads.get(id)?.resumeData;
+        this.resumePayloads.delete(id);
+      } finally {
+        this.suspendedSteps.delete(id);
+        for (const [label, stepId] of this.resumeLabels.entries()) {
+          if (stepId === id) {
+            this.resumeLabels.delete(label);
+          }
+        }
+      }
+      if (this.suspendedSteps.size > 0) {
+        this.updateSuspendedResult(stepResults);
+      } else {
+        this.updateRunningResult(stepResults);
+      }
+      output = await run(resumeData);
+    }
+
+    stepResults[id] = {
+      __temporalStepResult: true,
+      status: 'success',
+      payload,
+      output,
+      ...(suspendPayload !== undefined && { suspendPayload }),
+      ...(resumeData !== undefined && { resumeData }),
+      startedAt,
+      endedAt: Date.now(),
+    };
+    if (this.suspendedSteps.size > 0) {
+      this.updateSuspendedResult(stepResults);
+    } else {
+      this.updateRunningResult(stepResults);
+    }
+    return output;
   }
 
   activityParams(inputData, extra = {}) {
@@ -44,28 +172,36 @@ export class TemporalExecutionEngine {
     switch (entry.type) {
       case 'step': {
         log.info('step', { stepId: entry.step.id });
-        const out = await this.activityHandle[entry.step.id](
-          this.activityParams(inputData, { initData: this.initData }),
+        return this.recordStep(stepResults, entry.step.id, inputData, resumeData =>
+          this.activityHandle[entry.step.id](
+            this.activityParams(inputData, {
+              initData: this.initData,
+              ...(resumeData !== undefined && { resumeData }),
+            }),
+          ),
         );
-        stepResults[entry.step.id] = out;
-        return out;
       }
 
       case 'childWorkflow': {
         log.info('childWorkflow', { workflowType: entry.workflowType });
-        const childResult = await executeChild(entry.workflowType, {
-          args: [{ inputData, ...this.executionContext }],
+        return this.recordStep(stepResults, entry.workflowType, inputData, async () => {
+          const childResult = await executeChild(entry.workflowType, {
+            args: [{ inputData, ...this.executionContext }],
+          });
+          if (childResult?.status === 'suspended' || childResult?.__temporalSuspension === true) {
+            throw ApplicationFailure.nonRetryable(
+              'Temporal workflows do not support suspending inside child workflows yet.',
+            );
+          }
+          return childResult?.result ?? childResult;
         });
-        const out = childResult?.result ?? childResult;
-        stepResults[entry.workflowType] = out;
-        return out;
       }
 
       case 'mapping': {
         log.info('mapping', { mappingId: entry.id });
-        const out = await this.activityHandle[entry.id](this.activityParams(inputData, { initData: this.initData }));
-        stepResults[entry.id] = out;
-        return out;
+        return this.recordStep(stepResults, entry.id, inputData, () =>
+          this.activityHandle[entry.id](this.activityParams(inputData, { initData: this.initData })),
+        );
       }
 
       case 'sleep': {
@@ -117,9 +253,14 @@ export class TemporalExecutionEngine {
         for (let i = 0; i < entry.steps.length; i++) {
           if (condResults[i]) {
             const stepId = entry.steps[i].step.id;
-            const res = await this.activityHandle[stepId](this.activityParams(inputData, { initData: this.initData }));
-            out[stepId] = res;
-            stepResults[stepId] = res;
+            out[stepId] = await this.recordStep(stepResults, stepId, inputData, resumeData =>
+              this.activityHandle[stepId](
+                this.activityParams(inputData, {
+                  initData: this.initData,
+                  ...(resumeData !== undefined && { resumeData }),
+                }),
+              ),
+            );
           }
         }
 
@@ -131,8 +272,15 @@ export class TemporalExecutionEngine {
         let current = inputData;
 
         while (true) {
-          current = await this.activityHandle[entry.step.id](this.activityParams(current, { initData: this.initData }));
-          stepResults[entry.step.id] = current;
+          const payload = current;
+          current = await this.recordStep(stepResults, entry.step.id, payload, resumeData =>
+            this.activityHandle[entry.step.id](
+              this.activityParams(payload, {
+                initData: this.initData,
+                ...(resumeData !== undefined && { resumeData }),
+              }),
+            ),
+          );
           const shouldContinue = Boolean(
             await this.activityHandle[entry.serializedCondition.id](this.activityParams(current)),
           );
@@ -154,6 +302,7 @@ export class TemporalExecutionEngine {
             : (entry.opts.concurrency ?? 1);
         const concurrency = Number.isFinite(configured) ? Math.max(1, Math.floor(configured)) : 1;
         log.info('foreach', { step: entry.step.id, concurrency });
+        const startedAt = Date.now();
         const results = new Array(items.length);
         let index = 0;
         const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
@@ -162,14 +311,27 @@ export class TemporalExecutionEngine {
             if (i >= items.length) {
               break;
             }
-            results[i] = await this.activityHandle[entry.step.id](
+            const itemResult = await this.activityHandle[entry.step.id](
               this.activityParams(items[i], { initData: this.initData }),
             );
+            if (itemResult?.__temporalSuspension === true) {
+              throw ApplicationFailure.nonRetryable(
+                'Temporal workflows do not support suspending inside foreach steps yet.',
+              );
+            }
+            results[i] = itemResult;
           }
         });
 
         await Promise.all(workers);
-        stepResults[entry.step.id] = results;
+        stepResults[entry.step.id] = {
+          __temporalStepResult: true,
+          status: 'success',
+          payload: inputData,
+          output: results,
+          startedAt,
+          endedAt: Date.now(),
+        };
         return results;
       }
 

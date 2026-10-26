@@ -5,12 +5,24 @@ export type WorkflowRuntimeOptions = {
   retry?: ActivityOptions['retry'];
 };
 
-export interface WorkflowExecutionResult {
+export type StepExecutionResult = {
   status: 'success';
+  payload: unknown;
+  output: unknown;
+  startedAt: number;
+  endedAt: number;
+  suspendPayload?: unknown;
+  resumeData?: unknown;
+};
+
+export interface WorkflowExecutionResult {
+  status: 'success' | 'running' | 'suspended';
   input: unknown;
-  result: unknown;
+  result?: unknown;
   state: unknown;
-  steps: Record<string, unknown>;
+  steps: Record<string, StepExecutionResult | unknown>;
+  suspended?: string[][];
+  suspendPayload?: Record<string, unknown>;
 }
 
 export type StepEntry = {

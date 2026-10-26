@@ -281,7 +281,7 @@ describe('@mastra/temporal activities module transform', () => {
     `);
 
     expect(output).not.toMatch(/await import\(/);
-    expect(output).toContain('return args.execute({');
+    expect(output).toContain('return executeTemporalStep(args, {');
     expect(output).toContain('mastra');
   });
 
@@ -299,7 +299,7 @@ describe('@mastra/temporal activities module transform', () => {
 
     expect(output).toContain('const mastra = new Mastra({');
     expect(output).not.toContain('weatherWorkflow');
-    expect(output).toContain('return args.execute({');
+    expect(output).toContain('return executeTemporalStep(args, {');
   });
 
   it('strips createStep and createWorkflow from workflow imports while preserving other imports', async () => {
