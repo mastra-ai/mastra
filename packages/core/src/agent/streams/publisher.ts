@@ -3,6 +3,7 @@ import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
 import type { ChunkType } from '../../stream/types';
 import type { AgentSuspendedEventData } from '../durable/types';
+import { subscribeToAbortRequests } from './abort-transport';
 import { AGENT_STREAM_TOPIC } from './constants';
 import { emitChunkEvent, emitErrorEvent, emitFinishEvent, emitStepStartEvent, emitSuspendedEvent } from './events';
 
@@ -14,6 +15,14 @@ import { emitChunkEvent, emitErrorEvent, emitFinishEvent, emitStepStartEvent, em
  */
 export interface AgentStreamPublisher {
   readonly runId: string;
+  /**
+   * Aborts when the caller's signal does, or when an abort request for this
+   * run arrives on its control topic (from `observe().abort()` or
+   * `abortRunStream()` in any process sharing the bus). Pass it to the loop.
+   */
+  readonly abortSignal: AbortSignal;
+  /** Abort the run in this process. */
+  abort(reason?: unknown): void;
   /** Queue a chunk the loop emitted to its caller. */
   publish(chunk: ChunkType<any>): void;
   /**
@@ -32,6 +41,8 @@ export interface CreateAgentStreamPublisherOptions {
   /** Grace period before a finished run's topic is cleared (0 = never). */
   cleanupTimeoutMs: number;
   logger?: IMastraLogger;
+  /** The caller's own abort signal, folded into {@link AgentStreamPublisher.abortSignal}. */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -50,7 +61,36 @@ export function createAgentStreamPublisher({
   runId,
   cleanupTimeoutMs,
   logger,
+  abortSignal: callerSignal,
 }: CreateAgentStreamPublisherOptions): AgentStreamPublisher {
+  const controller = new AbortController();
+  const abort = (reason?: unknown) => {
+    if (!controller.signal.aborted) controller.abort(reason ?? new Error('Aborted'));
+  };
+  const onCallerAbort = () => abort(callerSignal?.reason);
+  if (callerSignal?.aborted) onCallerAbort();
+  else callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
+
+  // Listen for abort requests until the run ends. Subscribing is async; a
+  // request published before the subscription lands is missed, like one sent
+  // to a run that already finished.
+  let stopListening: (() => Promise<void>) | undefined;
+  let listening: Promise<void> | undefined = subscribeToAbortRequests(pubsub, runId, () => abort())
+    .then(unsubscribe => {
+      stopListening = unsubscribe;
+    })
+    .catch(error => {
+      logger?.warn?.('[AgentStream:' + runId + '] failed to listen for abort requests', { error });
+    });
+  const stopAbortListener = async () => {
+    callerSignal?.removeEventListener('abort', onCallerAbort);
+    const pending = listening;
+    listening = undefined;
+    await pending;
+    await stopListening?.().catch(() => {});
+    stopListening = undefined;
+  };
+
   let queue: Promise<void> = Promise.resolve();
   let finished = false;
   let ended = false;
@@ -75,6 +115,7 @@ export function createAgentStreamPublisher({
   const end = async (fallbackError: () => unknown) => {
     if (ended) return queue;
     ended = true;
+    void stopAbortListener();
     if (!finished) {
       if (suspended) {
         const data = suspended;
@@ -91,6 +132,8 @@ export function createAgentStreamPublisher({
 
   return {
     runId,
+    abortSignal: controller.signal,
+    abort,
     publish(chunk) {
       if (ended) return;
       switch (chunk.type) {

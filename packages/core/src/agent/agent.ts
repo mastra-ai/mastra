@@ -222,6 +222,7 @@ import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { AgentSignalInput, CreatedAgentSignal } from './signals';
 import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
+import { publishAbortRequest } from './streams/abort-transport';
 import { AgentStreamBus } from './streams/bus';
 import { agentStreamsConfig, areAgentStreamsEnabled, mergeDurableStreamsConfig } from './streams/config';
 import type { AgentStreamsOption } from './streams/config';
@@ -1729,7 +1730,7 @@ export class Agent<
     return !!this.#durable || !!this.__getStreamBus();
   }
 
-  #createStreamPublisher(runId: string): AgentStreamPublisher | undefined {
+  #createStreamPublisher(runId: string, abortSignal?: AbortSignal): AgentStreamPublisher | undefined {
     const bus = this.#ownStreamBus();
     if (!bus) return undefined;
     return createAgentStreamPublisher({
@@ -1737,7 +1738,21 @@ export class Agent<
       runId,
       cleanupTimeoutMs: bus.cleanupTimeoutMs,
       logger: this.logger,
+      abortSignal,
     });
+  }
+
+  /**
+   * Ask whichever process runs `runId` to abort it, over the run's control
+   * topic. Best-effort: a failed publish is logged, and a request nobody hears
+   * is a no-op, like aborting a finished run.
+   */
+  async #requestStreamAbort(bus: AgentStreamBus, runId: string): Promise<void> {
+    try {
+      await publishAbortRequest(bus.pubsub, runId);
+    } catch (error) {
+      this.logger.warn(`[Agent:${this.id}] failed to publish abort request`, { runId, error });
+    }
   }
 
   /**
@@ -9054,10 +9069,17 @@ export class Agent<
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
 
+    const streamPublisher = this.#createStreamPublisher(runId, options.abortSignal);
+
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({
       capabilities: capabilities as AgentCapabilities,
-      options: { ...options, methodType } as any,
+      // A published run also stops on abort requests from other readers.
+      options: {
+        ...options,
+        ...(streamPublisher ? { abortSignal: streamPublisher.abortSignal } : {}),
+        methodType,
+      } as any,
       threadFromArgs,
       resourceId,
       runId,
@@ -9072,7 +9094,7 @@ export class Agent<
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       toolCallConcurrency: options.toolCallConcurrency,
-      streamPublisher: this.#createStreamPublisher(runId),
+      streamPublisher,
       // Resolved to a boolean here, at the one entry point the contract covers, rather
       // than left undefined and defaulted deep in the loop. Anything that reaches the
       // agentic-execution workflow without coming through a regular agent call — the
@@ -10067,6 +10089,10 @@ export class Agent<
     const parked = agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
     const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
     if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
+    // A published run may be executing in another process; it listens on its
+    // control topic.
+    const bus = this.#ownStreamBus();
+    if (!aborted && bus) void this.#requestStreamAbort(bus, runId);
     return aborted;
   }
 
@@ -12058,7 +12084,7 @@ export class Agent<
       cleanup: detach,
       detach,
       abort: async () => {
-        this.abortRunStream(runId);
+        await this.#requestStreamAbort(bus, runId);
       },
     };
   }
