@@ -39,6 +39,19 @@ describe('ProductAvatar', () => {
     expect(screen.getByRole('img', { name: 'Studio' }).classList.contains('size-avatar-md')).toBe(true);
   });
 
+  it('fits a text row at the inline size', () => {
+    render(
+      <Avatar.Group size="inline" aria-label="Products">
+        <ProductAvatar product="server" />
+        <ProductAvatar product="studio" />
+      </Avatar.Group>,
+    );
+    const group = screen.getByLabelText('Products');
+    const sizes = Array.from(group.querySelectorAll('[data-slot=avatar]'), avatar => avatar.getAttribute('data-size'));
+    expect(sizes).toEqual(['inline', 'inline']);
+    expect(screen.getByRole('img', { name: 'Studio' }).classList.contains('size-icon-md')).toBe(true);
+  });
+
   it('opens a tooltip on hover inside a group', async () => {
     render(
       <TooltipProvider delay={0}>

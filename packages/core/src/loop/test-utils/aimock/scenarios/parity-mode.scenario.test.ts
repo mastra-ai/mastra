@@ -253,6 +253,7 @@ function generateScenario(overrides: Partial<EngineParityScenario> = {}): Engine
 function backgroundScenario(
   overrides: Partial<EngineParityScenario> = {},
   executions?: Partial<Record<ParityEngine, number>>,
+  executeDelayMs = 0,
 ): EngineParityScenario {
   return {
     model: { tapes: [toolCallTape('research', { topic: 'AI' }), textOnlyTape('Done.')] },
@@ -268,7 +269,10 @@ function backgroundScenario(
             description: 'Research a topic',
             inputSchema: z.object({ topic: z.string() }),
             execute: async ({ topic }) => {
+              // Count on entry: plain does not wait for the task, so host shutdown
+              // can cut the delay short.
               if (executions) executions[engine] = (executions[engine] ?? 0) + 1;
+              if (executeDelayMs) await new Promise(resolve => setTimeout(resolve, executeDelayMs));
               return { summary: `Research on ${topic}` };
             },
             background: { enabled: true },
@@ -578,7 +582,7 @@ describeParity('parity mode', target => {
     const difference: EngineDifference = {
       reason:
         'COR-1390: taskId is a per-engine stubbed UUID, and wrapped engines strip the LLM-only _background override.',
-      ignore: ['chunkPayloads', 'requests'],
+      ignore: ['chunkPayloads', 'finishChunk', 'requests'],
     };
     const results = await expectParity(
       target,
@@ -607,7 +611,7 @@ describeParity('parity mode', target => {
     const difference: EngineDifference = {
       reason:
         'COR-1390: taskId is a per-engine stubbed UUID, and wrapped engines strip the LLM-only _background override.',
-      ignore: ['chunkPayloads', 'requests'],
+      ignore: ['chunkPayloads', 'finishChunk', 'requests'],
     };
     const executions: Partial<Record<ParityEngine, number>> = {};
     const results = await expectParity(
@@ -656,7 +660,9 @@ describeParity('parity mode', target => {
     // A deferred dispatch is only comparable with the chunk and result fields
     // declared: the wrapped engines stream an extra `background-task-progress`
     // and flush the completed result after `step-finish`, where plain keeps the
-    // dispatch placeholder.
+    // dispatch placeholder. The tool runs long enough to still be outstanding
+    // when the wrapped engines' wait step arms, so that progress chunk is there
+    // however fast the bus delivers the dispatch.
     const difference: EngineDifference = {
       reason:
         'COR-1390: wrapped engines stream background-task-progress and flush the completed result after step-finish ' +
@@ -672,16 +678,17 @@ describeParity('parity mode', target => {
           differences: { durable: difference, evented: difference },
         },
         withHostExecutions,
+        200,
       ),
     );
 
     for (const engine of ['plain', target] as const) {
       const turn = withHost[engine]!.turns[0]!;
-      // The task finishes before the loop's wait step arms, so no
-      // `background-task-completed` chunk is emitted on any engine: the proof a
+      // No `background-task-completed` chunk is emitted on any engine: the proof a
       // dispatch really went to the background is this `-started` chunk plus the
-      // result shape below, not a wait for completion.
+      // result shape below.
       expect(turn.chunkTypes).toContain('background-task-started');
+      expect(turn.chunkTypes.includes('background-task-progress'), engine).toBe(engine !== 'plain');
       expect(turn.text).toBe('Done.');
       if (engine === 'plain') {
         // Plain hands the model the dispatch placeholder and keeps going.
@@ -800,7 +807,10 @@ describe('expectEngineParity', () => {
         });
       },
       input: 'use both',
-      options: { maxSteps: 2 },
+      // Run the tools one at a time. Concurrent, the two instant tools finish in
+      // whichever order the scheduler picks, and durable/evented stream tool
+      // results in finish order, so evented would differ from plain by chance.
+      options: { maxSteps: 2, toolCallConcurrency: 1 },
     }).catch((e: Error) => e);
 
     expect(error).toBeInstanceOf(Error);
@@ -891,8 +901,9 @@ describe('expectEngineParity', () => {
           durable: {
             reason: 'self-test: durable uses other instructions',
             // The answer text reaches the caller through the stream, the chunk
-            // payloads and `getFullOutput`, so all of them are declared.
-            ignore: ['text', 'streamedText', 'fullOutput', 'chunkPayloads', 'requests'],
+            // payloads, the finish chunk's messages and `getFullOutput`, so all
+            // of them are declared.
+            ignore: ['text', 'streamedText', 'fullOutput', 'chunkPayloads', 'finishChunk', 'requests'],
           },
         },
       }),
@@ -905,7 +916,7 @@ describe('expectEngineParity', () => {
         differences: {
           durable: {
             reason: 'self-test: durable uses other instructions',
-            ignore: ['chunkPayloads', 'requests'],
+            ignore: ['chunkPayloads', 'finishChunk', 'requests'],
             expect: plain => ({
               ...plain,
               turns: plain.turns.map(t => ({

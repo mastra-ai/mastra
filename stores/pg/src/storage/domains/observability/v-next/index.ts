@@ -116,6 +116,8 @@ import type {
   TraceQueryResponse,
   TrustedThreadQueryPlan,
   TrustedTraceAggregatePlan,
+  TrustedSpanAggregatePlan,
+  SpanAggregateResponse,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryValuesPlan,
@@ -132,6 +134,7 @@ import {
   columnExistsSQL,
   qualifiedTable,
   schemaDDL,
+  schemaExistsSQL,
   TABLE_DISCOVERY,
   TABLE_FEEDBACK_EVENTS,
   TABLE_LOG_EVENTS,
@@ -151,6 +154,7 @@ import { deltaPollingFeatureEnabled } from './polling';
 import { prunePartitionedTable, pruneTimescaleTable, retentionCutoff } from './retention';
 import * as scoresOps from './scores';
 import * as spanQueryOps from './span-query';
+import * as threadQueryOps from './thread-query';
 import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as tracesOps from './traces';
@@ -160,6 +164,8 @@ const spanQueryFeatures =
   typeof coreStorage.planSpanQuery === 'function'
     ? (['span-query', 'span-query-context-fields'] as const)
     : ([] as const);
+const spanAggregateFeatures =
+  typeof coreStorage.planSpanAggregate === 'function' ? (['span-aggregate'] as const) : ([] as const);
 
 export type { PartitionMode, PartitioningOptions } from './partitioning';
 export type { DiscoveryConfig } from './discovery';
@@ -257,14 +263,21 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
       const ddlMode = mode === 'timescale' ? 'timescale' : 'partitioned';
 
-      try {
-        await this.#client.none(schemaDDL(this.#schema));
-      } catch (error) {
-        // `CREATE SCHEMA IF NOT EXISTS` is not atomic; two concurrent
-        // init() calls against a fresh schema can both pass the
-        // existence probe and one will surface 42P06 or a 23505 on
-        // pg_namespace_nspname_index. Treat it as success.
-        if (!isDuplicateSchemaError(error)) throw error;
+      // Only issue CREATE SCHEMA when the schema is missing. Postgres checks
+      // the database-level CREATE privilege before the IF NOT EXISTS clause,
+      // so running it unconditionally fails with 42501 for roles that can
+      // create tables in an existing schema but cannot create schemas.
+      const schemaExists = await this.#client.oneOrNone(schemaExistsSQL, [this.#schema]);
+      if (!schemaExists) {
+        try {
+          await this.#client.none(schemaDDL(this.#schema));
+        } catch (error) {
+          // `CREATE SCHEMA IF NOT EXISTS` is not atomic; two concurrent
+          // init() calls against a fresh schema can both pass the
+          // existence probe and one will surface 42P06 or a 23505 on
+          // pg_namespace_nspname_index. Treat it as success.
+          if (!isDuplicateSchemaError(error)) throw error;
+        }
       }
 
       for (const ddl of allTableDDL(this.#schema, ddlMode)) {
@@ -385,12 +398,17 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'trace-query',
         'trace-aggregate',
         ...spanQueryFeatures,
+        ...spanAggregateFeatures,
+        ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        ...traceQueryOps.timeToFirstChunkFeatures,
+        'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
       ] as const;
     }
     return [
@@ -406,12 +424,17 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'trace-query',
       'trace-aggregate',
       ...spanQueryFeatures,
+      ...spanAggregateFeatures,
+      ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
+      ...traceQueryOps.timeToFirstChunkFeatures,
+      'trace-query-root-span-fields',
+      'trace-query-root-entity-id',
     ] as const;
   }
 
@@ -501,6 +524,12 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     );
   }
 
+  override async aggregateSpans(plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+    return this.#run('AGGREGATE_SPANS', () =>
+      traceAggregateOps.aggregateSpans(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
   override async getTraceQueryObservedFields(
     plan: TrustedTraceQueryObservedFieldsPlan,
   ): Promise<TraceQueryObservedFieldsResult> {
@@ -515,9 +544,18 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     );
   }
 
-  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+  override async queryThreads(plan: coreStorage.TrustedThreadRowsQueryPlan): Promise<coreStorage.ThreadQueryResponse>;
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse> {
     return this.#run('QUERY_THREADS', () =>
-      traceQueryOps.queryThreads(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+      plan.result === 'threadRows'
+        ? threadQueryOps.queryThreadRows(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs)
+        : traceQueryOps.queryThreads(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
     );
   }
 

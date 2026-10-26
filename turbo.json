@@ -11,7 +11,8 @@
       "outputLogs": "new-only"
     },
     "lint": {
-      "dependsOn": []
+      "dependsOn": [],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/oxlint.config.ts"]
     },
     "lint:fix": {
       "dependsOn": [],
@@ -35,6 +36,11 @@
     // The watch rebuilds dist from scratch, so it cannot run while `build` writes the same directory.
     "@mastra/playground-ui#dev": {
       "dependsOn": ["^build", "@mastra/playground-ui#build"],
+      "cache": false,
+      "persistent": true
+    },
+    "@mastra/react#dev": {
+      "dependsOn": ["^build", "@mastra/react#build"],
       "cache": false,
       "persistent": true
     },

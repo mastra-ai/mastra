@@ -1,29 +1,35 @@
 {
-  "attachment": ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
-  "structuredOutput": ["k3", "k3-256k", "kimi-for-coding-highspeed"],
+  "attachment": ["k3", "k3-256k", "k3.1-pro", "k3.1-pro-highspeed", "kimi-for-coding", "kimi-for-coding-highspeed"],
+  "structuredOutput": ["k3", "k3-256k", "k3.1-pro", "k3.1-pro-highspeed", "kimi-for-coding-highspeed"],
   "reasoning": {
-    "kimi-for-coding": [
-      {
-        "type": "toggle"
-      },
+    "k3.1-pro": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "k3.1-pro-highspeed": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-for-coding": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "k3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "k3-256k": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "k3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

@@ -188,6 +188,17 @@ const stream = await agent.stream('Research solana for me', {
 
 Visit [`Agent.stream()`](/reference/streaming/agents/stream) for the full API.
 
+To change the default for every `untilIdle: true` call, including calls Mastra makes internally, set `untilIdleMaxIdleMs` on the Mastra `backgroundTasks` config. Use a value longer than your slowest background task so its completion still triggers a continuation turn. A per-call `maxIdleMs` still takes precedence:
+
+```typescript
+export const mastra = new Mastra({
+  backgroundTasks: {
+    enabled: true,
+    untilIdleMaxIdleMs: 30 * 60_000,
+  },
+})
+```
+
 ### Aggregate properties
 
 `stream()` with `untilIdle` returns a `MastraModelOutput` that looks like the one from a regular `stream()` call, but `fullStream` alone spans the initial turn and any auto-continuations. Aggregate properties (`text`, `toolCalls`, `toolResults`, `finishReason`, `messageList`, `getFullOutput()`) still resolve against the **first turn's** internal buffer. If you need an aggregate view across continuations, consume `fullStream` yourself and accumulate.
@@ -227,10 +238,12 @@ If a subagent isn't listed under the supervisor's `backgroundTasks.tools` but ha
 The background config used for the inherited dispatch (for example `waitTimeoutMs`) is derived from the subagent's own `backgroundTasks` config.
 
 ```typescript title="src/mastra/agents/researcher.ts"
+import { Agent } from '@mastra/core/agent'
+
 const researchAgent = new Agent({
   id: 'research-agent',
   description: 'Gathers factual information.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: { deepResearchTool },
   // highlight-start
   backgroundTasks: {
@@ -316,6 +329,8 @@ Each layer can register terminal-state callbacks. They don't replace one another
 - Manager-level `onTaskComplete` / `onTaskFailed`: scoped globally.
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   storage,
   backgroundTasks: {

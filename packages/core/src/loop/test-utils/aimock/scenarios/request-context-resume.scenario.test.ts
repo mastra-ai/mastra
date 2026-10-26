@@ -3,7 +3,7 @@
  *
  * A run suspends on a tool that needs approval. The caller that approves it
  * passes its own request context, which is what the approved tool must see
- * (#25960) — except for tools an input processor added (#27544). Agents that
+ * (#25960), including tools an input processor added (#27544). Agents that
  * pick their memory from the request context must still resume against the
  * conversation the run suspended in.
  */
@@ -165,8 +165,7 @@ describeForAllEngines('AIMock loop scenario: request context on approval resume'
       expect(seen).toHaveLength(1);
     });
 
-    // #27544: a processor-added tool still runs with the context the run suspended with.
-    it.fails('a tool only an input processor added sees the request context passed to approveToolCall', async () => {
+    it('a tool only an input processor added sees the request context passed to approveToolCall', async () => {
       const { seen } = await approveProcessorAddedTool();
 
       expect(seen).toEqual(['second']);

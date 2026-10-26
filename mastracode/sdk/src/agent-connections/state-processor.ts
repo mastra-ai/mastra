@@ -7,21 +7,17 @@ import type {
   ProcessorActiveStateSignal,
 } from '@mastra/core/processors';
 
-import { AgentConnectionRegistry, type AgentConnectionRegistryOptions } from './registry.js';
+import { AgentConnectionRegistry } from './registry.js';
+import type { AgentConnectionRegistryOptions } from './registry.js';
 import {
   AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY,
   getCarriedAgentConnections,
   isThreadStateStore,
   normalizeConnectedPeers,
-  type ResolvedAgentConnectionStore,
 } from './thread-state.js';
-import {
-  AGENT_CONNECTIONS_STATE_ID,
-  AGENT_CONNECTIONS_STATE_TYPE,
-  type AgentConnectionDeltaOp,
-  type AgentPeerView,
-  type ConnectedAgentPeer,
-} from './types.js';
+import type { ResolvedAgentConnectionStore } from './thread-state.js';
+import { AGENT_CONNECTIONS_STATE_ID, AGENT_CONNECTIONS_STATE_TYPE } from './types.js';
+import type { AgentConnectionDeltaOp, AgentPeerView, ConnectedAgentPeer } from './types.js';
 import {
   UNTRUSTED_PEER_ID_MAX_LENGTH,
   UNTRUSTED_PEER_METADATA_MAX_LENGTH,

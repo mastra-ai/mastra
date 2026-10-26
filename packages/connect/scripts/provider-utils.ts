@@ -160,7 +160,10 @@ export function currentTemplateSha(): string {
 export function templateProviderIds(): string[] {
   if (!existsSync(templatesDir)) return [];
   return readdirSync(templatesDir, { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && existsSync(resolve(templatesDir, entry.name, 'actions')))
+    .filter(
+      entry =>
+        (entry.isDirectory() || entry.isSymbolicLink()) && existsSync(resolve(templatesDir, entry.name, 'actions')),
+    )
     .map(entry => entry.name)
     .sort();
 }

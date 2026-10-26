@@ -12,12 +12,15 @@ export function ChartPlot({
   plotRef,
   onResize,
   clickable,
+  className,
   children,
 }: {
   height: ChartHeight;
   plotRef: React.Ref<HTMLDivElement>;
   onResize: (width: number, height: number) => void;
   clickable?: boolean;
+  /** On the element around the SVG, e.g. to style Recharts' parts from a chart option. */
+  className?: string;
   children: ReactNode;
 }) {
   // Recharts makes parts of the plot focusable for keyboard use; a mouse click shouldn't leave a
@@ -26,6 +29,7 @@ export function ChartPlot({
     'w-full [&_.recharts-surface]:overflow-visible [&_.recharts-surface]:outline-none',
     '[&_*:focus:not(:focus-visible)]:outline-none',
     clickable && '[&_.recharts-surface]:cursor-pointer',
+    className,
   );
   if (height === 'fill') {
     return (

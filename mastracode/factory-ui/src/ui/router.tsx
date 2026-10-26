@@ -14,10 +14,8 @@
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
-import { everyEventPath } from './domains/factory/activity';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { RootGuards } from './domains/auth/components/RootGuards';
-import { ActivityPage } from './pages/ActivityPage';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
@@ -67,17 +65,12 @@ function FactoryHomeRedirect() {
   return <FactoryBoardLanding factoryId={factoryId} />;
 }
 
-function ActivityRedirect({ everyEvent = false }: { everyEvent?: boolean }) {
-  const { factoryId } = useParams<{ factoryId: string }>();
-  return <Navigate to={everyEvent ? everyEventPath(factoryId) : `/factories/${factoryId}/activity`} replace />;
-}
-
 /**
  * Factory-agnostic thread deep link, used by server-built links that don't
  * know a factory id (e.g. the Slack "View Session" card, whose channel
  * sessions are controller-scoped). Forwards to the first factory's workspaces
- * thread route, preserving the query string — the `?resourceId=` override
- * binds the chat surface to the channel session's resource there.
+ * thread route, preserving the query string — the `?sessionId=` override
+ * (`?resourceId=` in older links) binds the chat surface to the channel session there.
  */
 function ChannelThreadRedirect() {
   const { data: factories, isPending } = useFactoriesQuery();
@@ -152,11 +145,11 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'work', element: <WorkBoardPage /> },
                 { path: 'review', element: <ReviewBoardPage /> },
                 { path: 'boards/:boardId', element: <CustomBoardPage /> },
-                { path: 'activity', element: <ActivityPage /> },
-                { path: 'overview', element: <ActivityRedirect /> },
-                { path: 'attention', element: <ActivityRedirect /> },
-                { path: 'metrics', element: <ActivityRedirect /> },
-                { path: 'audit', element: <ActivityRedirect everyEvent /> },
+                { path: 'activity', element: <FactoryHomeRedirect /> },
+                { path: 'overview', element: <FactoryHomeRedirect /> },
+                { path: 'attention', element: <FactoryHomeRedirect /> },
+                { path: 'metrics', element: <FactoryHomeRedirect /> },
+                { path: 'audit', element: <FactoryHomeRedirect /> },
                 { path: 'rules', element: <RulesPage /> },
                 { path: 'knowledge', element: <KnowledgeRoute /> },
                 {

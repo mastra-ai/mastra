@@ -736,6 +736,137 @@ describe('workspace_grep', () => {
     expect(result).not.toContain('generated.js');
   });
 
+  it('applies .gitignore files below the workspace root, relative to their directory', async () => {
+    // Multi-repo layout: no root .gitignore, each repository has its own.
+    await fs.mkdir(path.join(tempDir, 'repo', 'src'), { recursive: true });
+    await fs.mkdir(path.join(tempDir, 'repo', 'build'), { recursive: true });
+    await fs.mkdir(path.join(tempDir, 'repo', 'pkg', 'build'), { recursive: true });
+    await fs.mkdir(path.join(tempDir, 'repo', 'pkg', 'gen'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'repo', '.gitignore'), '/build\n');
+    await fs.writeFile(path.join(tempDir, 'repo', 'pkg', '.gitignore'), 'gen/\n');
+    await fs.writeFile(path.join(tempDir, 'repo', 'src', 'app.ts'), 'findme');
+    await fs.writeFile(path.join(tempDir, 'repo', 'build', 'out.js'), 'findme');
+    // `/build` is anchored to repo/, so pkg/build is not ignored.
+    await fs.writeFile(path.join(tempDir, 'repo', 'pkg', 'build', 'keep.ts'), 'findme');
+    await fs.writeFile(path.join(tempDir, 'repo', 'pkg', 'gen', 'generated.ts'), 'findme');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
+
+    expect(result).toContain('2 matches across 2 files');
+    expect(result).toContain('repo/src/app.ts');
+    expect(result).toContain('repo/pkg/build/keep.ts');
+    expect(result).not.toContain('out.js');
+    expect(result).not.toContain('generated.ts');
+  });
+
+  it('applies the .gitignore of a directory above the search path', async () => {
+    await fs.mkdir(path.join(tempDir, 'repo', 'channels', 'discord', 'deps'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'repo', '.gitignore'), 'deps\n');
+    await fs.writeFile(path.join(tempDir, 'repo', 'channels', 'discord', 'bot.ts'), 'isBot: true');
+    await fs.writeFile(path.join(tempDir, 'repo', 'channels', 'discord', 'deps', 'lib.js'), 'isBot: false');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+      { pattern: 'isBot:', path: 'repo/channels' },
+      { workspace },
+    );
+
+    expect(result).toContain('1 match across 1 file');
+    expect(result).toContain('repo/channels/discord/bot.ts');
+    expect(result).not.toContain('lib.js');
+  });
+
+  it('skips node_modules without a .gitignore unless the search path points inside it', async () => {
+    await fs.mkdir(path.join(tempDir, 'src'), { recursive: true });
+    await fs.mkdir(path.join(tempDir, 'node_modules', 'dep'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'src', 'app.ts'), 'findme');
+    await fs.writeFile(path.join(tempDir, 'node_modules', 'dep', 'index.js'), 'findme');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+    const grep = tools[WORKSPACE_TOOLS.FILESYSTEM.GREP];
+
+    const fromRoot = await grep.execute({ pattern: 'findme' }, { workspace });
+    const inside = await grep.execute({ pattern: 'findme', path: 'node_modules/dep' }, { workspace });
+
+    expect(fromRoot).toContain('1 match across 1 file');
+    expect(fromRoot).not.toContain('node_modules');
+    expect(inside).toContain('1 match across 1 file');
+    expect(inside).toContain('node_modules/dep/index.js');
+  });
+
+  it('filters native grep results with nested .gitignore files and node_modules', async () => {
+    await fs.mkdir(path.join(tempDir, 'repo'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'repo', '.gitignore'), 'dist/\n');
+    class NativeGrepFilesystem extends LocalFilesystem {
+      async grep(): Promise<FilesystemGrepResult[]> {
+        const match = [{ line: 1, column: 0, text: 'findme' }];
+        return [
+          { path: 'src/app.ts', matches: match },
+          { path: 'dist/app.js', matches: match },
+          { path: 'node_modules/dep/index.js', matches: match },
+        ];
+      }
+    }
+    const workspace = new Workspace({ filesystem: new NativeGrepFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+      { pattern: 'findme', path: 'repo' },
+      { workspace },
+    );
+
+    expect(result).toContain('1 match across 1 file');
+    expect(result).toContain('repo/src/app.ts');
+  });
+
+  it('applies .gitignore files below the search path to native grep results', async () => {
+    await fs.mkdir(path.join(tempDir, 'repo', 'pkg'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'repo', '.gitignore'), 'dist/\n');
+    await fs.writeFile(path.join(tempDir, 'repo', 'pkg', '.gitignore'), 'gen/\n');
+    class NativeGrepFilesystem extends LocalFilesystem {
+      async grep(): Promise<FilesystemGrepResult[]> {
+        const match = [{ line: 1, column: 0, text: 'findme' }];
+        return [
+          { path: 'repo/src/app.ts', matches: match },
+          { path: 'repo/dist/app.js', matches: match },
+          { path: 'repo/pkg/gen/out.ts', matches: match },
+          { path: 'repo/pkg/src/lib.ts', matches: match },
+        ];
+      }
+    }
+    const workspace = new Workspace({ filesystem: new NativeGrepFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
+
+    expect(result).toContain('2 matches across 2 files');
+    expect(result).toContain('repo/src/app.ts');
+    expect(result).toContain('repo/pkg/src/lib.ts');
+    expect(result).not.toContain('app.js');
+    expect(result).not.toContain('out.ts');
+  });
+
+  it('lets a deeper .gitignore re-include what a parent ignores', async () => {
+    await fs.mkdir(path.join(tempDir, 'repo', 'logs'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'repo', '.gitignore'), '*.log\n');
+    await fs.writeFile(path.join(tempDir, 'repo', 'logs', '.gitignore'), '!keep.log\n');
+    await fs.writeFile(path.join(tempDir, 'repo', 'logs', 'keep.log'), 'findme');
+    await fs.writeFile(path.join(tempDir, 'repo', 'logs', 'drop.log'), 'findme');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir, textExtensions: ['.log'] }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
+
+    expect(result).toContain('1 match across 1 file');
+    expect(result).toContain('repo/logs/keep.log');
+    expect(result).not.toContain('drop.log');
+  });
+
   it('should not search files with an unregistered extension by default', async () => {
     await fs.writeFile(path.join(tempDir, 'a.sasx'), 'findme');
     const workspace = new Workspace({
@@ -842,9 +973,8 @@ describe('workspace_grep', () => {
     });
 
     it('treats an ENOTDIR target resolution failure as a missing target, not a read error', async () => {
-      const filesystem = new FailingLocalFilesystem({ basePath: tempDir });
-      filesystem.errorCode = 'ENOTDIR';
-      filesystem.failStatFor = p => p.endsWith('missing') || p === 'file.ts/missing';
+      await fs.writeFile(path.join(tempDir, 'file.ts'), 'const needle = 1;');
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem });
       const tools = await createWorkspaceTools(workspace);
 

@@ -1,5 +1,8 @@
 import { format } from 'node:util';
+import { createOpenAI } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import { LLMock } from '@copilotkit/aimock';
+import type { ChatMessage } from '@copilotkit/aimock';
 import type { Author, FetchOptions, Message, Thread } from 'chat';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -16,7 +19,7 @@ import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
-import type { ChannelHandler } from '../types';
+import type { ChannelContext, ChannelHandler } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -692,6 +695,42 @@ describe('AgentChannels', () => {
         expect(dispatchApproval).toHaveBeenCalledTimes(1);
       });
 
+      it('passes byUser on approve (#27093)', async () => {
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'approved' ? { kind: 'post', message: `Onaylandı: ${event.byUser}` } : undefined,
+        );
+        const { adapter, click, dispatchApproval } = await setup(toolDisplay);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(toolDisplay).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'approved', byUser: 'Clicker' }),
+          expect.anything(),
+        );
+        expect(adapter.editMessage).toHaveBeenCalledWith('channel-1:thread-1', 'card-1', 'Onaylandı: Clicker');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('passes byUser as undefined when approved in a DM (#27093)', async () => {
+        const toolDisplay = vi.fn(() => undefined);
+        const { click } = await setup(toolDisplay, true);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(toolDisplay).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'approved', byUser: undefined }),
+          expect.anything(),
+        );
+      });
+
+      it('shows the approving user on the default approved card (#27093)', async () => {
+        const { adapter, click } = await setup(() => undefined);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(JSON.stringify(adapter.editMessage.mock.calls[0]![2])).toContain('Approved by Clicker');
+      });
+
       it('edits the card with the renderer output on deny and passes byUser', async () => {
         const toolDisplay = vi.fn((event: any) =>
           event.kind === 'denied' ? { kind: 'post', message: `Reddedildi: ${event.byUser}` } : undefined,
@@ -963,6 +1002,7 @@ describe('AgentChannels', () => {
         {
           contents: 'hello from discord',
           attributes: {
+            platform: 'discord',
             messageId: 'message-1',
             authorName: 'Tyler Barnes',
             authorId: 'user-1',
@@ -3336,6 +3376,7 @@ describe('thread history', () => {
       expect(s.attributes.source).toBe('thread-history');
     }
     expect(signals[0].attributes).toEqual({
+      platform: 'slack',
       messageId: 'h0',
       authorName: 'Alice',
       authorId: 'U1',
@@ -3343,7 +3384,7 @@ describe('thread history', () => {
       source: 'thread-history',
     });
     expect(signals[0].createdAt).toEqual(new Date(BASE_TIME));
-    expect(signals[1].attributes).toEqual({ source: 'thread-history', kind: 'gap', omitted: '5' });
+    expect(signals[1].attributes).toEqual({ platform: 'slack', source: 'thread-history', kind: 'gap', omitted: '5' });
     expect(signals[1].createdAt).toEqual(new Date(BASE_TIME + 1));
     // Platform badge without an author, so clients can tag the marker as channel context.
     expect(signals[1].providerOptions).toEqual({ mastra: { channels: { slack: {} } } });
@@ -3928,55 +3969,60 @@ describe('per-sender handler runs end to end', () => {
   const userA: Author = { userId: 'user-a', userName: 'ann', fullName: 'Ann', isBot: false, isMe: false };
   const userB: Author = { userId: 'user-b', userName: 'ben', fullName: 'Ben', isBot: false, isMe: false };
 
+  const llms: LLMock[] = [];
+  afterEach(async () => {
+    await Promise.all(llms.splice(0).map(llm => llm.stop()));
+  });
+
   function deferred() {
     let resolve!: () => void;
     const promise = new Promise<void>(r => (resolve = r));
     return { promise, resolve };
   }
 
-  async function createHarness() {
-    const { MockLanguageModelV2, convertArrayToReadableStream } = await import('@internal/ai-sdk-v5/test');
+  async function createHarness(
+    options: {
+      onMessage?: 'handle' | false;
+      hold?: boolean;
+      skipFirstReply?: boolean;
+      isDM?: boolean;
+      disableDirect?: boolean;
+      disableMention?: boolean;
+    } = {},
+  ) {
     const { Mastra } = await import('../../mastra');
     const { InMemoryStore } = await import('../../storage/mock');
     const { MockMemory } = await import('../../memory/mock');
 
-    const prompts: LanguageModelV2Prompt[] = [];
-    const model = new MockLanguageModelV2({
-      doStream: async ({ prompt }) => {
-        prompts.push(prompt);
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
-            { type: 'text-start', id: 't-1' },
-            { type: 'text-delta', id: 't-1', delta: 'Hello' },
-            { type: 'text-end', id: 't-1' },
-            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
-          ]),
-        };
-      },
-    });
+    const llm = new LLMock({ port: 0 });
+    await llm.start();
+    llms.push(llm);
+    llm.onMessage(/[\s\S]*/, { content: 'Hello' });
+    const model = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` }).chat(
+      'gpt-4o-mini',
+    );
     const storage = new InMemoryStore();
     const adapter = createMockAdapter('slack');
-    adapter.isDM = () => false;
+    adapter.isDM = () => options.isDM ?? false;
     adapter.fetchMessages = vi.fn().mockResolvedValue({ messages: [], nextCursor: undefined });
 
-    const invocations: [wrapper: 'mention' | 'subscribed', id: string][] = [];
+    const invocations: [wrapper: 'mention' | 'subscribed' | 'message' | 'direct', id: string][] = [];
+    const contexts: RequestContext[] = [];
     const held = deferred();
     const entered = deferred();
     const handle =
-      (wrapper: 'mention' | 'subscribed'): ChannelHandler =>
+      (wrapper: 'mention' | 'subscribed' | 'message' | 'direct'): ChannelHandler =>
       async (thread, message, defaultHandler, ctx) => {
         invocations.push([wrapper, message.id]);
+        contexts.push(ctx.requestContext);
         // Host refusal: sender B gets nothing dispatched, nothing thrown.
         if (message.author.userId === 'user-b') return;
         ctx.requestContext.set('tenant', message.author.userId);
-        if (wrapper === 'mention') {
+        if (options.hold !== false && message.id === 'A1') {
           entered.resolve();
           await held.promise; // keep the SDK lock held so later messages queue
         }
+        if (options.skipFirstReply && message.id === 'A1') return;
         await defaultHandler(thread, message);
         // The default handler subscribes fire-and-forget; await it so the
         // queue drain routes the batch to onSubscribedMessage deterministically.
@@ -3986,18 +4032,26 @@ describe('per-sender handler runs end to end', () => {
     const channels = new AgentChannels({
       adapters: { slack: adapter },
       chatOptions: { concurrency: { strategy: 'queue' } },
-      handlers: { onMention: handle('mention'), onSubscribedMessage: handle('subscribed') },
+      handlers: {
+        onDirectMessage: options.disableDirect ? false : handle('direct'),
+        onMention: options.disableMention ? false : handle('mention'),
+        onSubscribedMessage: handle('subscribed'),
+        onMessage: options.onMessage === 'handle' ? handle('message') : options.onMessage,
+      },
     });
     const agent = new Agent({
       id: 'runs-agent',
       name: 'runs-agent',
-      instructions: ({ requestContext }) => `tenant=${requestContext.get('tenant') ?? 'none'}`,
+      instructions: ({ requestContext }) =>
+        `tenant=${requestContext.get('tenant') ?? 'none'} event=${requestContext.get<ChannelContext>('channel')?.eventType}`,
       model,
       memory: new MockMemory({ storage, options: { lastMessages: 50 } }),
       channels,
     });
     const mastra = new Mastra({ storage, agents: { agent } });
     await channels.initialize(mastra);
+    const sdk = channels.sdk;
+    if (!sdk) throw new Error('Channel SDK was not initialized');
 
     const msg = (id: string, text: string, author: Author, offset: number) =>
       makeMessage({
@@ -4008,14 +4062,166 @@ describe('per-sender handler runs end to end', () => {
         metadata: { dateSent: new Date(BASE_TIME + offset), edited: false },
       });
     return {
-      prompts,
+      contexts,
+      sdk,
+      adapter,
+      // Chat-completion messages of each request the agent sent to the model.
+      get prompts() {
+        return llm.getRequests().map(request => request.body?.messages ?? []);
+      },
       invocations,
       held,
       entered,
       msg,
-      deliver: (m: Message) => (channels.sdk as any).processMessage(adapter, THREAD_ID, m) as Promise<void>,
+      deliver: (m: Message) => sdk.processMessage(adapter, THREAD_ID, m),
     };
   }
+
+  it('opts in to unmentioned messages and reuses the agent reply and subscription path (#27060)', async () => {
+    const h = await createHarness({ onMessage: 'handle', hold: false });
+    await h.deliver(h.msg('question', 'How can I get support?', userA, 0));
+    expect(h.invocations).toEqual([['message', 'question']]);
+    expect(h.prompts).toHaveLength(1);
+    expect(JSON.stringify(h.prompts[0])).toContain('How can I get support?');
+    expect(JSON.stringify(h.prompts[0])).toContain('event=message');
+    expect(JSON.stringify([...h.adapter.postMessage.mock.calls, ...h.adapter.editMessage.mock.calls])).toContain(
+      'Hello',
+    );
+    expect(await h.sdk.getState().isSubscribed(THREAD_ID)).toBe(true);
+    await h.deliver(h.msg('follow-up', 'Thanks, another question', userA, 1000));
+    expect(h.invocations).toEqual([
+      ['message', 'question'],
+      ['subscribed', 'follow-up'],
+    ]);
+    expect(JSON.stringify(h.prompts.at(-1))).toContain('event=mention');
+  });
+
+  it.each([undefined, false] as const)('ignores unmentioned messages when onMessage is %s', async onMessage => {
+    const h = await createHarness({ onMessage, hold: false });
+    await h.deliver(h.msg('ignored', 'No mention here', userA, 0));
+    expect(h.invocations).toEqual([]);
+    expect(h.prompts).toEqual([]);
+    expect(h.adapter.postMessage).not.toHaveBeenCalled();
+    await h.deliver(h.msg('mention', '@TestBot help', userA, 1000));
+    expect(h.invocations).toEqual([['mention', 'mention']]);
+    expect(JSON.stringify(h.prompts[0])).toContain('event=mention');
+  });
+
+  it('routes mentions before the opt-in unmentioned handler', async () => {
+    const h = await createHarness({ onMessage: 'handle', hold: false });
+    await h.deliver(h.msg('mention', '@TestBot help', userA, 0));
+    expect(h.invocations).toEqual([['mention', 'mention']]);
+    expect(h.prompts).toHaveLength(1);
+  });
+
+  it.each([false, true])('keeps DMs on their existing route with direct handling disabled=%s', async disableDirect => {
+    const h = await createHarness({ onMessage: 'handle', hold: false, isDM: true, disableDirect });
+    await h.deliver(h.msg('dm', 'A private question', userA, 0));
+    expect(h.invocations).toEqual([[disableDirect ? 'mention' : 'direct', 'dm']]);
+    expect(h.prompts).toHaveLength(1);
+    expect(JSON.stringify(h.prompts[0])).toContain('event=message');
+  });
+
+  it('ignores DMs when direct and mention handling are disabled, even with onMessage', async () => {
+    const h = await createHarness({
+      onMessage: 'handle',
+      hold: false,
+      isDM: true,
+      disableDirect: true,
+      disableMention: true,
+    });
+    await h.deliver(h.msg('dm', 'A private question', userA, 0));
+    expect(h.invocations).toEqual([]);
+    expect(h.prompts).toEqual([]);
+  });
+
+  it('separates senders and preserves skipped text in unmentioned message batches', async () => {
+    const h = await createHarness({ onMessage: 'handle', skipFirstReply: true });
+    const first = h.deliver(h.msg('A1', 'Hold without subscribing', userA, 0));
+    try {
+      await h.entered.promise;
+      await h.deliver(h.msg('B1', 'Refused sender', userB, 1000));
+      await h.deliver(h.msg('A2', 'First question', userA, 2000));
+      await h.deliver(h.msg('A3', 'Second question', userA, 3000));
+    } finally {
+      h.held.resolve();
+      await first;
+    }
+    expect(h.invocations).toEqual([
+      ['message', 'A1'],
+      ['message', 'B1'],
+      ['message', 'A3'],
+    ]);
+    expect(new Set(h.contexts).size).toBe(3);
+    expect(h.prompts).toHaveLength(1);
+    const prompt = JSON.stringify(h.prompts[0]);
+    expect(prompt).toContain('First question');
+    expect(prompt).toContain('Second question');
+    expect(prompt).not.toContain('Refused sender');
+    expect(prompt).toContain('tenant=user-a event=message');
+  }, 20_000);
+
+  it.each(['handle', undefined, false] as const)(
+    'routes mixed queued sender runs with onMessage=%s (#27060)',
+    async onMessage => {
+      const h = await createHarness({ onMessage, skipFirstReply: true });
+      const first = h.deliver(h.msg('A1', '@TestBot hold without subscribing', userA, 0));
+      try {
+        await h.entered.promise;
+        await h.deliver(h.msg('A2', '@TestBot help with support', userA, 1000));
+        await h.deliver(h.msg('A3', 'More detail for my mention', userA, 2000));
+        await h.deliver(h.msg('B1', 'An unmentioned message to filter', userB, 3000));
+        await h.deliver(h.msg('A4', 'A separate unmentioned question', userA, 4000));
+      } finally {
+        h.held.resolve();
+        await first;
+      }
+      // Without onMessage, unmentioned runs keep reaching onMention as on main.
+      const unmentioned = onMessage === 'handle' ? 'message' : 'mention';
+      expect(h.invocations).toEqual([
+        ['mention', 'A1'],
+        ['mention', 'A3'],
+        [unmentioned, 'B1'],
+        [unmentioned, 'A4'],
+      ]);
+      expect(h.prompts).toHaveLength(2);
+      expect(JSON.stringify(h.prompts[0])).toContain('help with support');
+      expect(JSON.stringify(h.prompts[0])).toContain('More detail for my mention');
+      expect(JSON.stringify(h.prompts[0])).toContain('event=mention');
+      expect(JSON.stringify(h.prompts[1])).toContain('A separate unmentioned question');
+      expect(JSON.stringify(h.prompts[1])).toContain(`event=${unmentioned}`);
+      expect(JSON.stringify(h.prompts)).not.toContain('An unmentioned message to filter');
+    },
+    20_000,
+  );
+
+  it.each(['mention first', 'mention last'] as const)(
+    'keeps disabled mention runs out of the unmentioned handler in a mixed queue (%s)',
+    async order => {
+      const h = await createHarness({ onMessage: 'handle', disableMention: true, skipFirstReply: true });
+      const first = h.deliver(h.msg('A1', 'Hold without subscribing', userA, 0));
+      try {
+        await h.entered.promise;
+        const mention = h.msg('B1', '@TestBot this mention is disabled', userB, 1000);
+        const unmentioned = h.msg('A2', 'An unmentioned question', userA, 2000);
+        // The SDK routes a batch by its last message, so a trailing mention
+        // takes the mention route even though onMention is disabled.
+        for (const m of order === 'mention first' ? [mention, unmentioned] : [unmentioned, mention]) await h.deliver(m);
+      } finally {
+        h.held.resolve();
+        await first;
+      }
+      expect(h.invocations).toEqual([
+        ['message', 'A1'],
+        ['message', 'A2'],
+      ]);
+      expect(h.prompts).toHaveLength(1);
+      expect(JSON.stringify(h.prompts[0])).toContain('An unmentioned question');
+      expect(JSON.stringify(h.prompts[0])).toContain('event=message');
+      expect(JSON.stringify(h.prompts[0])).not.toContain('this mention is disabled');
+    },
+    20_000,
+  );
 
   it("calls the custom handler once per sender turn with that turn's context", async () => {
     const h = await createHarness();
@@ -4036,15 +4242,13 @@ describe('per-sender handler runs end to end', () => {
       ['subscribed', 'B1'],
       ['subscribed', 'A2'],
     ]);
-    const lastUserText = (p: LanguageModelV2Prompt) => {
-      const user = p.filter(m => m.role === 'user').at(-1);
-      return user?.content.map(part => (part.type === 'text' ? part.text : '')).join('') ?? '';
-    };
-    const systemText = (p: LanguageModelV2Prompt) =>
+    const textOf = (p: ChatMessage[], role: ChatMessage['role']) =>
       p
-        .filter(m => m.role === 'system')
-        .map(m => m.content)
+        .filter(m => m.role === role)
+        .map(m => JSON.stringify(m.content))
         .join('\n');
+    const lastUserText = (p: ChatMessage[]) => textOf(p.filter(m => m.role === 'user').slice(-1), 'user');
+    const systemText = (p: ChatMessage[]) => textOf(p, 'system');
     expect(h.prompts.some(p => lastUserText(p).includes('b text'))).toBe(false);
     const followUp = h.prompts.find(p => lastUserText(p).includes('a follow-up'));
     expect(followUp).toBeDefined();

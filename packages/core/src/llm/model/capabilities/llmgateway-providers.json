@@ -1,9 +1,9 @@
 {
   "attachment": [
     "alibaba/deepseek-v4.1-flash",
+    "alibaba/deepseek-v4.1-flash-1017",
     "alibaba/kimi-k2.5",
     "alibaba/kimi-k3",
-    "alibaba/qwen-max",
     "alibaba/qwen3-vl-plus",
     "alibaba/qwen3.5-122b-a10b",
     "alibaba/qwen3.5-27b",
@@ -37,7 +37,6 @@
     "aws-bedrock/claude-haiku-4-5",
     "aws-bedrock/claude-haiku-4-5-20251001",
     "aws-bedrock/claude-haiku-5-5",
-    "aws-bedrock/claude-opus-4-1-20250805",
     "aws-bedrock/claude-opus-4-5-20251101",
     "aws-bedrock/claude-opus-4-6",
     "aws-bedrock/claude-opus-4-7",
@@ -110,7 +109,7 @@
     "consensusprotocol/deepseek-v4.1-flash",
     "consensusprotocol/glm-5.3-flash",
     "deepinfra/deepseek-v4.1-flash",
-    "deepinfra/inkling",
+    "deepinfra/deepseek-v4.1-flash-1017",
     "deepinfra/ling-3.0-flash-vl",
     "deepinfra/mimo-v2.6-flash",
     "deepinfra/mimo-v2.6-pro",
@@ -119,9 +118,9 @@
     "deepinfra/qwen3-vl-235b-a22b-instruct",
     "deepinfra/qwen3-vl-30b-a3b-instruct",
     "deepinfra/qwen3.5-9b",
-    "deepseek/deepseek-v4.1-flash",
     "deepseek/deepseek-v4.1-flash-1017",
     "entrim/deepseek-v4.1-flash",
+    "entrim/deepseek-v4.1-flash-1017",
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4.1-flash",
     "fireworks/glm-5.3-flash",
@@ -144,8 +143,10 @@
     "google-vertex/gemini-3.7-flash",
     "google-vertex/gemini-3.8-flash",
     "google-vertex/gemini-4-argon",
+    "greenference/glm-5.3-flash",
     "inference.net/deepseek-v4.1-flash-1017",
     "inference.net/glm-5.3-flash",
+    "inference.net/minimax-m3.1-flash",
     "luminal/deepseek-v4.1-flash",
     "meta-contributor/muse-spark-1.2-contributor",
     "meta-contributor/muse-spark-1.3-contributor",
@@ -154,6 +155,7 @@
     "meta/muse-spark-1.3",
     "meta/muse-wonder-1.0",
     "minimax/minimax-m3",
+    "minimax/minimax-m3.1-flash",
     "mistral/ministral-14b-2512",
     "mistral/ministral-3b-2512",
     "mistral/ministral-8b-2512",
@@ -167,7 +169,11 @@
     "moonshot/kimi-k2.7-code",
     "moonshot/kimi-k2.7-code-highspeed",
     "moonshot/kimi-k3",
+    "moonshot/kimi-k3.1-pro",
+    "moonshot/kimi-k3.1-pro-highspeed",
+    "nebius/minimax-m3.1-flash",
     "novita/deepseek-v4.1-flash",
+    "novita/deepseek-v4.1-flash-1017",
     "novita/ernie-4.5-vl-424b-a47b",
     "novita/glm-4.5v",
     "novita/glm-4.6v",
@@ -177,7 +183,7 @@
     "novita/kimi-k3",
     "novita/llama-4-maverick-17b-instruct",
     "novita/llama-4-scout-17b-instruct",
-    "novita/mimo-v2.5",
+    "novita/minimax-m3.1-flash",
     "novita/qwen3-vl-235b-a22b-instruct",
     "novita/qwen3-vl-235b-a22b-thinking",
     "novita/qwen3-vl-30b-a3b-instruct",
@@ -186,12 +192,12 @@
     "novita/qwen3.8-max",
     "novita/qwen35-397b-a17b",
     "novita/step-3.7-flash",
-    "openai/gpt-4-turbo",
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",
-    "openai/gpt-4.1-nano",
     "openai/gpt-4o",
     "openai/gpt-4o-mini",
+    "openai/gpt-4o-mini-transcribe",
+    "openai/gpt-4o-transcribe",
     "openai/gpt-5",
     "openai/gpt-5-mini",
     "openai/gpt-5-pro",
@@ -212,13 +218,17 @@
     "openai/gpt-6-luna",
     "openai/gpt-6-sol",
     "openai/gpt-6.1-sol",
-    "openai/o1",
+    "openai/gpt-live-transcribe",
+    "openai/gpt-transcribe",
     "openai/o3",
-    "openai/o4-mini",
     "quartz/gemini-3.1-pro-preview",
+    "reka-ai/deepseek-v4.1-flash",
+    "reka-ai/deepseek-v4.1-flash-1017",
+    "reka-ai/glm-5.3-flash",
     "reka-ai/reka-edge-2603",
     "runpod/kimi-k3",
     "runware/deepseek-v4.1-flash",
+    "runware/deepseek-v4.1-flash-1017",
     "runware/gemma-4-31b-it",
     "runware/glm-5.3-flash",
     "runware/kimi-k2.6",
@@ -226,7 +236,6 @@
     "sakana/fugu-max",
     "sakana/fugu-ultra",
     "sakana/fugu-ultra-v2.0",
-    "sciforium/deepseek-v4.1-flash",
     "scx-ai-gp/glm-5.3-flash",
     "scx-ai-gp/kimi-k2.7-code",
     "scx-ai-gp/kimi-k3",
@@ -238,8 +247,10 @@
     "tencent/kimi-k3",
     "tencent/minimax-m3",
     "together-ai/deepseek-v4.1-flash",
+    "together-ai/deepseek-v4.1-flash-1017",
     "together-ai/glm-5.3-flash",
     "together-ai/kimi-k3",
+    "together-ai/minimax-m3.1-flash",
     "together-ai/muse-glimmer-30b",
     "vertex-anthropic/claude-haiku-4-5",
     "vertex-anthropic/claude-opus-4-5-20251101",
@@ -251,6 +262,7 @@
     "vertex-openai/grok-4-20-non-reasoning",
     "vertex-openai/grok-4-20-reasoning",
     "vertex-openai/grok-4-6",
+    "vertex-openai/grok-4-7",
     "xai/grok-4",
     "xai/grok-4-20-beta-0309-non-reasoning",
     "xai/grok-4-20-beta-0309-reasoning",
@@ -270,6 +282,7 @@
     "alibaba/deepseek-v4-flash",
     "alibaba/deepseek-v4-pro",
     "alibaba/deepseek-v4.1-flash",
+    "alibaba/deepseek-v4.1-flash-1017",
     "alibaba/glm-5",
     "alibaba/glm-5.2",
     "alibaba/glm-5.3",
@@ -288,6 +301,7 @@
     "alibaba/qwen3.7-flash",
     "alibaba/qwen3.7-max",
     "alibaba/qwen3.7-plus",
+    "alibaba/qwen3.8-flash",
     "alibaba/qwen3.8-max",
     "alibaba/qwen35-397b-a17b",
     "anthropic/claude-haiku-4-5",
@@ -299,7 +313,6 @@
     "anthropic/claude-sonnet-4-6",
     "aws-bedrock/claude-haiku-4-5",
     "aws-bedrock/claude-haiku-4-5-20251001",
-    "aws-bedrock/claude-opus-4-1-20250805",
     "aws-bedrock/claude-opus-4-5-20251101",
     "aws-bedrock/claude-opus-4-6",
     "aws-bedrock/claude-sonnet-4-5",
@@ -328,7 +341,6 @@
     "baidu/deepseek-v4-flash",
     "baidu/deepseek-v4-pro",
     "baidu/deepseek-v4.1-flash",
-    "baidu/glm-5",
     "baidu/glm-5.1",
     "baidu/glm-5.2",
     "baidu/glm-5.3",
@@ -368,10 +380,10 @@
     "deepinfra/deepseek-v4-flash",
     "deepinfra/deepseek-v4-pro",
     "deepinfra/deepseek-v4.1-flash",
+    "deepinfra/deepseek-v4.1-flash-1017",
     "deepinfra/gemma-4-26b-a4b-it",
     "deepinfra/gemma-4-31b-it",
     "deepinfra/granite-4.2-8b",
-    "deepinfra/inkling",
     "deepinfra/ling-3.0-flash",
     "deepinfra/ling-3.0-flash-vl",
     "deepinfra/mimo-v2.6-flash",
@@ -382,7 +394,6 @@
     "deepinfra/qwen3-vl-30b-a3b-instruct",
     "deepinfra/qwen3.5-9b",
     "deepseek/deepseek-v4-pro",
-    "deepseek/deepseek-v4.1-flash",
     "deepseek/deepseek-v4.1-flash-1017",
     "embercloud/glm-4.5",
     "embercloud/glm-4.5-air",
@@ -393,9 +404,9 @@
     "embercloud/glm-5.2",
     "embercloud/qwen3-coder-next",
     "entrim/deepseek-v4.1-flash",
+    "entrim/deepseek-v4.1-flash-1017",
     "entrim/glm-5.3",
     "entrim/glm-5.3-flash",
-    "fireworks/deepseek-v4-flash",
     "fireworks/deepseek-v4.1-flash",
     "fireworks/glm-5.3",
     "fireworks/glm-5.3-flash",
@@ -415,12 +426,17 @@
     "google-vertex/gemini-3.6-flash",
     "google-vertex/gemini-3.7-flash",
     "google-vertex/gemini-3.8-flash",
+    "greenference/glm-5.3-flash",
+    "greenference/qwen3-14b",
+    "greenference/qwen3-30b-a3b",
+    "greenference/qwen3.6-27b",
     "groq/gpt-oss-120b",
     "groq/gpt-oss-20b",
     "inference.net/deepseek-v4.1-flash-1017",
     "inference.net/glm-5.3",
     "inference.net/glm-5.3-flash",
     "inference.net/llama-3.2-11b-instruct",
+    "inference.net/minimax-m3.1-flash",
     "luminal/deepseek-v4.1-flash",
     "meta-contributor/muse-spark-1.2-contributor",
     "meta-contributor/muse-spark-1.3-contributor",
@@ -436,6 +452,7 @@
     "minimax/minimax-m2.7",
     "minimax/minimax-m2.7-highspeed",
     "minimax/minimax-m3",
+    "minimax/minimax-m3.1-flash",
     "minimax/minimax-text-01",
     "mistral/codestral-2508",
     "mistral/devstral-2512",
@@ -450,9 +467,11 @@
     "mistral/mistral-small-2506",
     "mistral/mistral-small-2603",
     "moonshot/kimi-k2.6",
+    "nebius/minimax-m3.1-flash",
     "novita/deepseek-v3.2",
     "novita/deepseek-v4-flash",
     "novita/deepseek-v4.1-flash",
+    "novita/deepseek-v4.1-flash-1017",
     "novita/ernie-4.5-vl-424b-a47b",
     "novita/gemma-4-26b-a4b-it",
     "novita/gemma-4-31b-it",
@@ -474,11 +493,10 @@
     "novita/llama-3.3-70b-instruct",
     "novita/llama-4-maverick-17b-instruct",
     "novita/llama-4-scout-17b-instruct",
-    "novita/mimo-v2.5",
-    "novita/mimo-v2.5-pro",
     "novita/minimax-m2.1",
     "novita/minimax-m2.5",
     "novita/minimax-m2.7",
+    "novita/minimax-m3.1-flash",
     "novita/qwen3-235b-a22b-fp8",
     "novita/qwen3-235b-a22b-instruct-2507",
     "novita/qwen3-235b-a22b-thinking-2507",
@@ -494,15 +512,12 @@
     "novita/qwen3.7-max",
     "novita/qwen3.8-2.4t-a95b",
     "novita/qwen3.8-27b",
+    "novita/qwen3.8-flash",
     "novita/qwen3.8-max",
     "novita/qwen35-397b-a17b",
     "novita/step-3.7-flash",
-    "openai/gpt-3.5-turbo",
-    "openai/gpt-4",
-    "openai/gpt-4-turbo",
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",
-    "openai/gpt-4.1-nano",
     "openai/gpt-4o",
     "openai/gpt-4o-mini",
     "openai/gpt-4o-mini-transcribe",
@@ -513,15 +528,20 @@
     "openai/gpt-5.4",
     "openai/gpt-5.4-mini",
     "openai/gpt-5.4-nano",
+    "openai/gpt-transcribe",
     "perplexity/sonar",
     "quartz/gemini-3.1-pro-preview",
     "ranoai/deepseek-v4-flash",
     "reka-ai/deepseek-v4-pro",
+    "reka-ai/deepseek-v4.1-flash",
+    "reka-ai/deepseek-v4.1-flash-1017",
     "reka-ai/glm-5.3",
+    "reka-ai/glm-5.3-flash",
     "reka-ai/reka-edge-2603",
     "runware/deepseek-v4-flash",
     "runware/deepseek-v4-pro",
     "runware/deepseek-v4.1-flash",
+    "runware/deepseek-v4.1-flash-1017",
     "runware/gemma-4-31b-it",
     "runware/glm-5.2",
     "runware/glm-5.3",
@@ -530,7 +550,6 @@
     "runware/kimi-k2.6",
     "sakana/fugu-max",
     "sakana/fugu-ultra-v2.0",
-    "sciforium/deepseek-v4.1-flash",
     "scx-ai-gp/deepseek-v4.1-flash",
     "scx-ai-gp/glm-5.2",
     "scx-ai-gp/glm-5.2-fast",
@@ -552,17 +571,17 @@
     "tencent/hy3",
     "tencent/hy4-preview",
     "tencent/kimi-k2.6",
-    "tencent/mimo-v2.5-pro",
     "tencent/minimax-m2.7",
     "tencent/minimax-m3",
-    "together-ai/deepseek-v4-flash",
     "together-ai/deepseek-v4-pro",
     "together-ai/deepseek-v4.1-flash",
+    "together-ai/deepseek-v4.1-flash-1017",
     "together-ai/glm-4.7",
     "together-ai/glm-5.3",
     "together-ai/glm-5.3-flash",
     "together-ai/gpt-oss-120b",
     "together-ai/minimax-m3",
+    "together-ai/minimax-m3.1-flash",
     "together-ai/muse-glimmer-30b",
     "together-ai/qwen3.8-2.4t-a95b",
     "vertex-anthropic/claude-haiku-4-5",
@@ -570,17 +589,10 @@
     "vertex-anthropic/claude-opus-4-6",
     "vertex-anthropic/claude-sonnet-4-5",
     "vertex-anthropic/claude-sonnet-4-6",
-    "vertex-openai/deepseek-v3.2",
-    "vertex-openai/glm-4.7",
-    "vertex-openai/glm-5",
     "vertex-openai/grok-4-20-non-reasoning",
     "vertex-openai/grok-4-20-reasoning",
     "vertex-openai/grok-4-6",
-    "vertex-openai/kimi-k2-thinking",
-    "vertex-openai/qwen3-235b-a22b-instruct-2507",
-    "vertex-openai/qwen3-coder-480b-a35b-instruct",
-    "vertex-openai/qwen3-next-80b-a3b-instruct",
-    "vertex-openai/qwen3-next-80b-a3b-thinking",
+    "vertex-openai/grok-4-7",
     "xai/grok-4",
     "xai/grok-4-20-beta-0309-non-reasoning",
     "xai/grok-4-20-beta-0309-reasoning",
@@ -629,7 +641,6 @@
     "anthropic/claude-sonnet-5-5",
     "aws-bedrock/claude-haiku-4-5",
     "aws-bedrock/claude-haiku-4-5-20251001",
-    "aws-bedrock/claude-opus-4-1-20250805",
     "aws-bedrock/claude-opus-4-5-20251101",
     "aws-bedrock/claude-opus-4-6",
     "aws-bedrock/claude-sonnet-4-5",
@@ -677,15 +688,16 @@
     "consensusprotocol/mimo-v2.6-flash",
     "consensusprotocol/minimax-m3",
     "deepinfra/deepseek-v4.1-flash",
+    "deepinfra/deepseek-v4.1-flash-1017",
     "deepinfra/ling-3.0-flash-vl",
     "deepinfra/mimo-v2.6-flash",
     "deepinfra/mimo-v2.6-pro",
     "deepinfra/muse-glimmer-30b",
     "deepinfra/qwen3.5-9b",
     "entrim/deepseek-v4.1-flash",
+    "entrim/deepseek-v4.1-flash-1017",
     "entrim/glm-5.3",
     "entrim/glm-5.3-flash",
-    "fireworks/deepseek-v4-flash",
     "fireworks/deepseek-v4.1-flash",
     "google-ai-studio/gemini-3-flash-preview",
     "google-ai-studio/gemini-3.1-flash-lite",
@@ -704,6 +716,9 @@
     "google-vertex/gemini-3.7-flash",
     "google-vertex/gemini-3.8-flash",
     "google-vertex/gemini-4-argon",
+    "greenference/qwen3-14b",
+    "greenference/qwen3-30b-a3b",
+    "greenference/qwen3.6-27b",
     "inference.net/deepseek-v4.1-flash-1017",
     "inference.net/glm-5.3",
     "inference.net/glm-5.3-flash",
@@ -717,15 +732,15 @@
     "mistral/mistral-large-4",
     "mistral/mistral-medium-3-5",
     "mistral/mistral-small-2603",
+    "moonshot/kimi-k3.1-pro",
+    "moonshot/kimi-k3.1-pro-highspeed",
     "novita/hy3",
     "novita/kimi-k2.7-code",
     "novita/qwen3.8-2.4t-a95b",
     "novita/qwen3.8-flash",
     "novita/qwen3.8-max",
-    "openai/gpt-4-turbo",
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",
-    "openai/gpt-4.1-nano",
     "openai/gpt-4o",
     "openai/gpt-4o-mini",
     "openai/gpt-5",
@@ -745,26 +760,26 @@
     "openai/gpt-6-luna",
     "openai/gpt-6-sol",
     "openai/gpt-6.1-sol",
-    "openai/o1",
     "openai/o3",
-    "openai/o3-mini",
-    "openai/o4-mini",
     "perplexity/sonar",
     "quartz/gemini-3.1-pro-preview",
     "ranoai/deepseek-v4-flash",
     "reka-ai/deepseek-v4-pro",
+    "reka-ai/deepseek-v4.1-flash",
+    "reka-ai/deepseek-v4.1-flash-1017",
     "reka-ai/glm-5.3",
+    "reka-ai/glm-5.3-flash",
     "reka-ai/reka-edge-2603",
     "runpod/kimi-k3",
     "runware/deepseek-v4-flash",
     "runware/deepseek-v4-pro",
     "runware/deepseek-v4.1-flash",
+    "runware/deepseek-v4.1-flash-1017",
     "runware/glm-5.3",
     "runware/glm-5.3-flash",
     "runware/kimi-k3",
     "sakana/fugu-max",
     "sakana/fugu-ultra-v2.0",
-    "sciforium/deepseek-v4.1-flash",
     "scx-ai-gp/kimi-k3",
     "tencent/hy3",
     "tencent/hy4-preview",
@@ -772,9 +787,9 @@
     "tencent/kimi-k2.7-code",
     "tencent/kimi-k2.7-code-highspeed",
     "tencent/kimi-k3",
-    "together-ai/deepseek-v4-flash",
     "together-ai/deepseek-v4-pro",
     "together-ai/deepseek-v4.1-flash",
+    "together-ai/deepseek-v4.1-flash-1017",
     "together-ai/glm-5.3",
     "together-ai/glm-5.3-flash",
     "together-ai/minimax-m3",
@@ -787,173 +802,44 @@
     "vertex-anthropic/claude-sonnet-4-5",
     "vertex-anthropic/claude-sonnet-4-6",
     "vertex-anthropic/claude-sonnet-5",
-    "vertex-openai/grok-4-6"
+    "vertex-openai/grok-4-6",
+    "vertex-openai/grok-4-7"
   ],
   "reasoning": {
-    "entrim/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "entrim/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "entrim/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "consensusprotocol/gemma-4-31b-it": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh", "max"]
-      }
-    ],
-    "consensusprotocol/Qwen3.8-27B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "consensusprotocol/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "consensusprotocol/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "xhigh", "max"]
-      }
-    ],
-    "consensusprotocol/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "consensusprotocol/mimo-v2.6-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "consensusprotocol/minimax-m3": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "consensusprotocol/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepinfra/mimo-v2.6-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepinfra/gemma-4-31b-it": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepinfra/muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepinfra/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepinfra/ling-3.0-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepinfra/ling-3.0-flash-vl": [
+    "azure-ai-foundry/grok-4-3": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "deepinfra/granite-4.2-8b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "deepinfra/inkling": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepinfra/mimo-v2.6-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepinfra/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "deepinfra/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "cerebras/gemma-4-31b-it": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "cerebras/glm-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "cerebras/gpt-oss-120b": [
+    "azure-ai-foundry/grok-4-1-fast-reasoning": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "groq/gpt-oss-20b": [
+    "scx-ai-gp/glm-5.2": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "groq/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "scx-ai-gp/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "scx-ai-gp/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "scx-ai-gp/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "scx-ai-gp/qwen3.8-max": [
@@ -965,98 +851,10 @@
         "type": "budget_tokens"
       }
     ],
-    "scx-ai-gp/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "scx-ai-gp/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "scx-ai-gp/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "scx-ai-gp/kimi-k2.7-code": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "zai/glm-4.6v": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai/glm-4.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai/glm-4.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai/glm-4.5-x": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai/glm-5": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "zai/glm-4.5v": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai/glm-4.6v-flashx": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai/glm-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "zai/glm-5.1": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "zai/glm-4.7-flashx": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "luminal/deepseek-v4.1-flash": [
@@ -1065,1267 +863,58 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "aws-bedrock/claude-haiku-4-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/kimi-k3": [
+    "vertex-anthropic/claude-sonnet-5": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "aws-bedrock/claude-sonnet-4-5": [
+    "vertex-anthropic/claude-haiku-4-5": [
       {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "vertex-anthropic/claude-opus-4-5-20251101": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/claude-opus-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/claude-fable-5-1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/claude-opus-4-1-20250805": [
       {
         "type": "budget_tokens",
         "min": 1024,
         "max": 31999
+      }
+    ],
+    "vertex-anthropic/claude-sonnet-4-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/claude-opus-4-5-20251101": [
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 31999
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/claude-opus-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/claude-fable-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/claude-opus-4-8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/claude-sonnet-4-5-20250929": [
       {
         "type": "budget_tokens",
         "min": 1024,
         "max": 63999
+      }
+    ],
+    "vertex-anthropic/claude-opus-4-7": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "vertex-anthropic/claude-sonnet-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/claude-sonnet-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/claude-opus-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/grok-4-3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "aws-bedrock/claude-haiku-4-5-20251001": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/grok-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "aws-bedrock/claude-haiku-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/claude-sonnet-4-6": [
       {
         "type": "budget_tokens",
         "min": 1024,
         "max": 63999
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "aws-bedrock/claude-sonnet-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "aws-bedrock/grok-4-7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "aws-bedrock/claude-opus-4-7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "google-ai-studio/gemini-3.6-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google-ai-studio/gemini-3.5-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google-ai-studio/gemini-3.1-pro-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google-ai-studio/gemini-3-flash-preview": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google-ai-studio/gemini-pro-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google-ai-studio/gemini-3.8-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google-ai-studio/gemini-4-argon": [
-      {
-        "type": "effort",
-        "values": ["high"]
-      }
-    ],
-    "google-ai-studio/gemini-3.1-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "anthropic/claude-haiku-4-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-sonnet-4-5": [
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-opus-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-fable-5-1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-opus-4-5-20251101": [
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 31999
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-opus-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-fable-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-opus-4-8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-sonnet-4-5-20250929": [
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-sonnet-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-opus-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-haiku-4-5-20251001": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-haiku-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-sonnet-4-6": [
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-sonnet-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-opus-4-7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4.1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "runpod/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "runware/gemma-4-31b-it": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh", "max"]
-      }
-    ],
-    "runware/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "runware/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "runware/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      }
-    ],
-    "runware/kimi-k2.6": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "runware/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "runware/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh", "max"]
-      }
-    ],
-    "runware/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "runware/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "runware/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/glm-5v-turbo": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/glm-5": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/kimi-k2.7-code-highspeed": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/kimi-k2.6": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/minimax-m2.7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/mimo-v2.5-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "tencent/minimax-m3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/hy3": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "tencent/glm-5.1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/glm-5-turbo": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/kimi-k2.7-code": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "tencent/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "meta-contributor/muse-spark-1.2-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "meta-contributor/muse-spark-1.3-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "novita/glm-4.6v": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "novita/qwen3.7-max": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/mimo-v2.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "novita/qwen3.8-2.4t-a95b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "novita/glm-4.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "novita/qwen3.8-max": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "novita/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/glm-5": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/minimax-m2.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/kimi-k2.6": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/glm-4.5v": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "novita/ling-3.0-flash": [
-      {
-        "type": "effort",
-        "values": ["none"]
-      }
-    ],
-    "novita/ling-3.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "novita/qwen3.5-122b-a10b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/qwen3.6-35b-a3b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/minimax-m2.7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/mimo-v2.5-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "novita/glm-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "novita/qwen3.8-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/qwen35-397b-a17b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/hy3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "novita/glm-5.1": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/step-3.7-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/deepseek-v3.2": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "novita/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "novita/kimi-k2.7-code": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/minimax-m2.1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "novita/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "embercloud/glm-5": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "embercloud/glm-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "embercloud/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "embercloud/glm-5.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "azure-ai-foundry/grok-4-1-fast-reasoning": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "azure-ai-foundry/grok-4-3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "meta/muse-spark-1.3": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "meta/muse-spark-1.1": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "meta/muse-spark-1.2": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "meta/muse-wonder-1.0": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "azure/gpt-5.4": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "azure/gpt-5.4-pro": [
-      {
-        "type": "effort",
-        "values": ["medium", "high", "xhigh"]
-      }
-    ],
-    "azure/gpt-5.4-nano": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "azure/gpt-5.2-codex": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "azure/gpt-5.1-codex": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "azure/gpt-5-mini": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "azure/gpt-5.3-codex": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "azure/gpt-5-nano": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "azure/gpt-6.1-sol": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "azure/gpt-6-astra": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "azure/gpt-5.1": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "azure/gpt-5.4-mini": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "azure/gpt-5.6-luna": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "azure/gpt-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "azure/gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "azure/gpt-6-luna": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "azure/gpt-5.6-terra": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "azure/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "azure/gpt-5.1-codex-mini": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "azure/gpt-5": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "azure/gpt-5.6-sol": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "azure/gpt-6-sol": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/qwen3.7-max": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/qwen3.5-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/qwen3.8-max": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "alibaba/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/glm-5": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "alibaba/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/qwen3.7-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/qwen3.5-122b-a10b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/kimi-k2.5": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/qwen3.6-35b-a3b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/qwen3.6-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/qwen3.8-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/qwen35-397b-a17b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/qwen3.5-35b-a3b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/qwen3.6-plus": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "alibaba/qwen3.7-plus": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "alibaba/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "baidu/glm-5": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "baidu/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "baidu/kimi-k2.6": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "baidu/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "baidu/glm-5.1": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "baidu/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "baidu/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "baidu/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gonka24/minimax-m2.7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "reka-ai/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "reka-ai/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "bytedance/seed-1-6-flash-250715": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "bytedance/seed-2-0-code-preview-260328": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "bytedance/seed-1-6-250915": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "bytedance/seed-2-0-mini-260428": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "bytedance/seed-2-0-pro-260328": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "bytedance/seed-1-8-251228": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "bytedance/glm-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "bytedance/seed-1-6-250615": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "bytedance/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "bytedance/seed-2-0-lite-260428": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "bytedance/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "bytedance/deepseek-v3.2": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "bytedance/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "bytedance/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "sciforium/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      }
-    ],
-    "xai/grok-4-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "xai/grok-build-0-1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "xai/grok-4-3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "xai/grok-4-20-beta-0309-reasoning": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "xai/grok-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "xai/grok-4-7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "ranoai/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "canopywave/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "canopywave/kimi-k2.6": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "canopywave/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "canopywave/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "canopywave/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "fireworks/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["xhigh", "max"]
-      }
-    ],
-    "fireworks/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "fireworks/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "fireworks/kimi-k3-fast": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "fireworks/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["xhigh", "max"]
-      }
-    ],
-    "fireworks/deepseek-v4-flash": [
+    "vertex-anthropic/claude-opus-4-6": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
@@ -2349,105 +938,117 @@
         "values": ["high", "xhigh", "max"]
       }
     ],
-    "scx-ai/qwen3-32b": [
+    "anthropic/claude-haiku-5-5": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "scx-ai/minimax-m2.7": [
+    "anthropic/claude-sonnet-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-haiku-4-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "scx-ai/gpt-oss-120b": [
+    "anthropic/claude-opus-4-8": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "together-ai/qwen3.8-2.4t-a95b": [
+    "anthropic/claude-sonnet-5-5": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "together-ai/glm-5.3-flash": [
+    "anthropic/claude-fable-5": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "together-ai/muse-glimmer-30b": [
+    "anthropic/claude-opus-4-5-20251101": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "together-ai/kimi-k3": [
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      },
       {
-        "type": "toggle"
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 31999
       }
     ],
-    "together-ai/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      }
-    ],
-    "together-ai/glm-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "together-ai/minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "together-ai/deepseek-v4-pro": [
+    "anthropic/claude-fable-5-1": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "together-ai/gpt-oss-120b": [
+    "anthropic/claude-sonnet-4-5": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
       }
     ],
-    "together-ai/glm-5.3": [
+    "anthropic/claude-opus-5-5": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "together-ai/deepseek-v4-flash": [
+    "anthropic/claude-opus-5": [
       {
         "type": "effort",
-        "values": ["none", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "xiaomi/mimo-v2.6-pro": [
+    "anthropic/claude-opus-4-7": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "xiaomi/mimo-v2.6-flash": [
+    "anthropic/claude-sonnet-4-6": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
       }
     ],
-    "quartz/gemini-3.1-pro-preview": [
+    "anthropic/claude-opus-4-6": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "minimax/minimax-m2.5": [
+    "anthropic/claude-sonnet-4-5-20250929": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
+      }
+    ],
+    "anthropic/claude-haiku-4-5-20251001": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -2459,19 +1060,13 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "minimax/minimax-m2.7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "minimax/minimax-m3": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "minimax/minimax-m2.7-highspeed": [
+    "minimax/minimax-m2.1": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -2483,7 +1078,25 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "minimax/minimax-m2.1": [
+    "minimax/minimax-m2.7-highspeed": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "minimax/minimax-m2.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "minimax/minimax-m2.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "minimax/minimax-m3.1-flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -2493,6 +1106,803 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "meta/muse-spark-1.2": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "meta/muse-wonder-1.0": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "meta/muse-spark-1.3": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "meta/muse-spark-1.1": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "zai/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "zai/glm-5": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "zai/glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai/glm-5.1": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "zai/glm-4.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai/glm-4.7-flashx": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai/glm-4.6v-flashx": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai/glm-4.5-x": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai/glm-4.5v": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai/glm-4.6v": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai/glm-4.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "greenference/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "aws-mantle/gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-mantle/gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-mantle/gpt-5.6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-mantle/gpt-5.6-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "nebius/minimax-m3.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/glm-5": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/minimax-m2.1": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/qwen3.6-35b-a3b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/qwen3.8-2.4t-a95b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/ling-3.0-flash": [
+      {
+        "type": "effort",
+        "values": ["none"]
+      }
+    ],
+    "novita/glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "novita/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "novita/qwen3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/qwen3.5-122b-a10b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "novita/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/qwen3.8-max": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "novita/glm-5.1": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/kimi-k2.7-code": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/deepseek-v3.2": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "novita/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/hy3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "novita/minimax-m2.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/minimax-m2.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/qwen3.7-max": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/glm-4.5v": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "novita/glm-4.6v": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "novita/qwen35-397b-a17b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/kimi-k2.6": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/glm-4.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "novita/minimax-m3.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "novita/step-3.7-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "fireworks/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "fireworks/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["xhigh", "max"]
+      }
+    ],
+    "fireworks/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["xhigh", "max"]
+      }
+    ],
+    "fireworks/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "fireworks/kimi-k3-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "runpod/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-bedrock/grok-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "aws-bedrock/claude-haiku-5-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-bedrock/claude-sonnet-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-bedrock/claude-haiku-4-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-bedrock/grok-4-7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "aws-bedrock/grok-4-3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "aws-bedrock/claude-opus-4-8": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-bedrock/claude-sonnet-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-bedrock/claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-bedrock/claude-opus-4-5-20251101": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 31999
+      }
+    ],
+    "aws-bedrock/claude-fable-5-1": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-bedrock/claude-sonnet-4-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
+      }
+    ],
+    "aws-bedrock/claude-opus-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-bedrock/claude-opus-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-bedrock/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-bedrock/claude-opus-4-7": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-bedrock/claude-sonnet-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
+      }
+    ],
+    "aws-bedrock/claude-opus-4-6": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "aws-bedrock/claude-sonnet-4-5-20250929": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
+      }
+    ],
+    "aws-bedrock/claude-haiku-4-5-20251001": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "groq/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "groq/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepinfra/muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepinfra/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepinfra/gemma-4-31b-it": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepinfra/mimo-v2.6-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepinfra/ling-3.0-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepinfra/mimo-v2.6-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepinfra/ling-3.0-flash-vl": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "deepinfra/granite-4.2-8b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "deepinfra/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "deepinfra/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepinfra/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "xai/grok-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "xai/grok-4-7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "xai/grok-4-3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "xai/grok-4-20-beta-0309-reasoning": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "xai/grok-4-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "xai/grok-build-0-1": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "canopywave/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "canopywave/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "canopywave/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "canopywave/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "canopywave/kimi-k2.6": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "bytedance/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "bytedance/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "bytedance/seed-2-0-lite-260428": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "bytedance/glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "bytedance/seed-1-6-250615": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "bytedance/seed-2-0-pro-260328": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "bytedance/seed-1-6-250915": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "bytedance/seed-2-0-mini-260428": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "bytedance/seed-1-8-251228": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "bytedance/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "bytedance/seed-2-0-code-preview-260328": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "bytedance/seed-1-6-flash-250715": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "bytedance/deepseek-v3.2": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "bytedance/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "embercloud/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "embercloud/glm-5": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "embercloud/glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "embercloud/glm-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "vertex-openai/grok-4-6": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex-openai/grok-4-7": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex-openai/grok-4-20-reasoning": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google-ai-studio/gemini-3.5-flash-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "google-ai-studio/gemini-pro-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google-ai-studio/gemini-3.1-pro-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google-ai-studio/gemini-3.1-flash-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "google-ai-studio/gemini-3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google-ai-studio/gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["high"]
+      }
+    ],
+    "google-ai-studio/gemini-3.6-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "google-ai-studio/gemini-3-flash-preview": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "inference.net/glm-5.3-flash": [
@@ -2513,55 +1923,7 @@
         "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
-    "azure-anthropic/claude-opus-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "azure-anthropic/claude-fable-5-1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "azure-anthropic/claude-opus-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "azure-anthropic/claude-fable-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "azure-anthropic/claude-opus-4-8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "azure-anthropic/claude-sonnet-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "azure-anthropic/claude-opus-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "azure-anthropic/claude-sonnet-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "azure-anthropic/claude-opus-4-7": [
+    "inference.net/minimax-m3.1-flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -2573,96 +1935,431 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "vertex-anthropic/claude-haiku-4-5": [
+    "consensusprotocol/deepseek-v4.1-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "xhigh", "max"]
       }
     ],
-    "vertex-anthropic/claude-sonnet-4-5": [
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
-      },
+    "consensusprotocol/gemma-4-31b-it": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "high", "xhigh", "max"]
       }
     ],
-    "vertex-anthropic/claude-opus-4-5-20251101": [
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 31999
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "vertex-anthropic/claude-sonnet-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "vertex-anthropic/claude-opus-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "vertex-anthropic/claude-sonnet-4-6": [
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "vertex-anthropic/claude-opus-4-7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "vertex-openai/qwen3-next-80b-a3b-thinking": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "vertex-openai/glm-5": [
+    "consensusprotocol/minimax-m3": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "vertex-openai/glm-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "vertex-openai/grok-4-6": [
+    "consensusprotocol/mimo-v2.6-flash": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "vertex-openai/grok-4-20-reasoning": [
+    "consensusprotocol/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "consensusprotocol/gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "google-vertex/gemini-3.6-flash": [
+    "consensusprotocol/Qwen3.8-27B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "consensusprotocol/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "quartz/gemini-3.1-pro-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "cerebras/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "cerebras/gemma-4-31b-it": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "cerebras/glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "together-ai/muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "together-ai/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "together-ai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "together-ai/minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "together-ai/qwen3.8-2.4t-a95b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "together-ai/glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "together-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "together-ai/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "together-ai/kimi-k3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "together-ai/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "together-ai/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "together-ai/minimax-m3.1-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "meta-contributor/muse-spark-1.3-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "meta-contributor/muse-spark-1.2-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "entrim/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "entrim/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "entrim/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "entrim/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "ranoai/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "baidu/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "baidu/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "baidu/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "baidu/glm-5.1": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "baidu/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "baidu/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "baidu/kimi-k2.6": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure/gpt-5.4-mini": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "azure/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "azure/gpt-6.1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure/gpt-5.1-codex-mini": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "azure/gpt-5.3-codex": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "azure/gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "azure/gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure/gpt-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "azure/gpt-5-nano": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "azure/gpt-5.4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "azure/gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure/gpt-5.6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure/gpt-5.1-codex": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "azure/gpt-5-mini": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "azure/gpt-5": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "azure/gpt-6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure/gpt-5.4-nano": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "azure/gpt-5.2-codex": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "azure/gpt-5.1": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "azure/gpt-5.4-pro": [
+      {
+        "type": "effort",
+        "values": ["medium", "high", "xhigh"]
+      }
+    ],
+    "azure/gpt-6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure/gpt-5.6-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure-anthropic/claude-sonnet-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure-anthropic/claude-opus-4-8": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure-anthropic/claude-sonnet-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure-anthropic/claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure-anthropic/claude-fable-5-1": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure-anthropic/claude-opus-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure-anthropic/claude-opus-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure-anthropic/claude-opus-4-7": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "azure-anthropic/claude-opus-4-6": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "google-vertex/gemini-3.7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "google-vertex/gemini-3.5-flash-lite": [
@@ -2677,19 +2374,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "google-vertex/gemini-3.5-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google-vertex/gemini-3.7-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google-vertex/gemini-3-flash-preview": [
+    "google-vertex/gemini-3.1-flash-lite": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
@@ -2707,46 +2392,141 @@
         "values": ["high"]
       }
     ],
-    "google-vertex/gemini-3.1-flash-lite": [
+    "google-vertex/gemini-3.6-flash": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "aws-mantle/gpt-6-astra": [
+    "google-vertex/gemini-3-flash-preview": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "google-vertex/gemini-3.5-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "xiaomi/mimo-v2.6-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "xiaomi/mimo-v2.6-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "tencent/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "tencent/glm-5-turbo": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "aws-mantle/gpt-5.6-luna": [
+    "tencent/glm-5": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "aws-mantle/gpt-5.6-terra": [
+    "tencent/glm-5v-turbo": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "aws-mantle/gpt-5.6-sol": [
+    "tencent/hy4-preview": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "openai/gpt-5.4": [
+    "tencent/minimax-m3": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "openai/gpt-5.4-pro": [
+    "tencent/kimi-k3": [
       {
         "type": "effort",
-        "values": ["medium", "high", "xhigh"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "tencent/glm-5.1": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "tencent/kimi-k2.7-code": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "tencent/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "tencent/hy3": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "tencent/minimax-m2.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "tencent/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "tencent/kimi-k2.6": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "tencent/kimi-k2.7-code-highspeed": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "scx-ai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "scx-ai/qwen3-32b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "scx-ai/minimax-m2.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai/gpt-5.5-pro": [
@@ -2755,52 +2535,10 @@
         "values": ["medium", "high", "xhigh"]
       }
     ],
-    "openai/gpt-5.4-nano": [
+    "openai/gpt-5.4-mini": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-5-mini": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-5.2-pro": [
-      {
-        "type": "effort",
-        "values": ["medium", "high", "xhigh"]
-      }
-    ],
-    "openai/o4-mini": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-5.3-codex": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-5-nano": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "openai/o1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-5-pro": [
-      {
-        "type": "effort",
-        "values": ["high"]
       }
     ],
     "openai/gpt-6.1-sol": [
@@ -2809,34 +2547,22 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "openai/gpt-6-astra": [
+    "openai/gpt-5.2-pro": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["medium", "high", "xhigh"]
       }
     ],
-    "openai/gpt-5.1": [
+    "openai/gpt-5-pro": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["high"]
       }
     ],
-    "openai/gpt-5.4-mini": [
+    "openai/gpt-5.3-codex": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-5.6-luna": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-5.5": [
@@ -2845,7 +2571,79 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
+    "openai/gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-5-nano": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-5.4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-5.6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-5-mini": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-5": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
     "openai/gpt-6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-5.4-nano": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-5.1": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-5.4-pro": [
+      {
+        "type": "effort",
+        "values": ["medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-6-sol": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
@@ -2857,22 +2655,112 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "openai/gpt-5": [
+    "reka-ai/deepseek-v4.1-flash": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "openai/gpt-5.6-sol": [
+    "reka-ai/glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "openai/gpt-6-sol": [
+    "reka-ai/glm-5.3": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "reka-ai/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "reka-ai/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "runware/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "runware/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "runware/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "runware/gemma-4-31b-it": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "xhigh", "max"]
+      }
+    ],
+    "runware/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "runware/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "runware/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "runware/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "xhigh", "max"]
+      }
+    ],
+    "runware/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "runware/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "xhigh", "max"]
+      }
+    ],
+    "runware/kimi-k2.6": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "moonshot/kimi-k3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "moonshot/kimi-k3.1-pro-highspeed": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "moonshot/kimi-k3": [
@@ -2881,16 +2769,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "moonshot/kimi-k2.7-code-highspeed": [
+    "moonshot/kimi-k2.7-code": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "moonshot/kimi-k2.6": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "moonshot/kimi-k2.5": [
@@ -2899,7 +2781,148 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "moonshot/kimi-k2.7-code": [
+    "moonshot/kimi-k2.6": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "moonshot/kimi-k2.7-code-highspeed": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/glm-5": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "alibaba/qwen3.6-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/qwen3.6-35b-a3b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/qwen3.5-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/qwen3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/qwen3.5-122b-a10b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "alibaba/qwen3.7-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/qwen3.8-max": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "alibaba/qwen3.6-plus": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/kimi-k2.5": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/qwen3.5-35b-a3b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/qwen3.7-plus": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/qwen3.7-max": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/qwen35-397b-a17b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "alibaba/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gonka24/minimax-m2.7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]

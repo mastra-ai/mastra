@@ -110,7 +110,7 @@ async function openEditPage(page: Page) {
   const menu = page.getByRole('button', { name: 'Scorer actions menu' });
   await expect(menu).toBeVisible({ timeout: 10000 });
   await menu.click();
-  await page.getByRole('menuitem', { name: 'Edit Scorer' }).click();
+  await page.getByRole('menuitem', { name: 'Edit scorer' }).click();
 }
 
 test.describe('CMS create scorer page', () => {

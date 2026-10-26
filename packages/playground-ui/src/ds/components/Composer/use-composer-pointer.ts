@@ -1,4 +1,5 @@
-import { useState, type PointerEvent } from 'react';
+import { useState } from 'react';
+import type { PointerEvent } from 'react';
 
 export function useComposerPointer(enabled: boolean) {
   const [pointer, setPointer] = useState<{ x: number; y: number; angle: number }>();

@@ -7,7 +7,7 @@ description: "Browse Novita AI model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/novita-ai.svg" alt="Novita AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Novita AI
 
-Access 85 Novita AI models through Mastra's model router. Authentication is handled automatically using the `NOVITA_API_KEY` environment variable.
+Access 89 Novita AI models through Mastra's model router. Authentication is handled automatically using the `NOVITA_API_KEY` environment variable.
 
 Learn more in the [Novita AI documentation](https://novita.ai/docs/guides/introduction).
 
@@ -226,11 +226,23 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "novita-ai/google/gemma-3-12b-it",
+    "model": "novita-ai/deepseek/deepseek-v4.1-flash-1017",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 393216,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "novita-ai/google/gemma-3-12b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 8192,
@@ -242,7 +254,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": false,
     "contextWindow": 98304,
     "maxOutput": 16384,
@@ -350,7 +362,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": false,
     "contextWindow": 16384,
     "maxOutput": 16384,
@@ -362,7 +374,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": false,
     "contextWindow": 131000,
     "maxOutput": 32000,
@@ -386,7 +398,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": false,
     "contextWindow": 1048576,
     "maxOutput": 8192,
@@ -398,7 +410,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 131072,
@@ -488,6 +500,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "novita-ai/minimax/minimax-m3.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 524288,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "novita-ai/minimaxai/minimax-m1-80k",
@@ -586,11 +610,35 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
+    "model": "novita-ai/moonshotai/kimi-k3.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "novita-ai/moonshotai/kimi-k3.1-pro-highspeed",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 4,
+    "outputCost": 20
+  },
+  {
     "model": "novita-ai/nousresearch/hermes-2-pro-llama-3-8b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": false,
     "contextWindow": 8192,
     "maxOutput": 8192,
@@ -1075,6 +1123,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -1092,6 +1142,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

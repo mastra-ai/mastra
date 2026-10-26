@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastify",
-  "version": "1.5.23-alpha.3",
+  "version": "1.5.24-alpha.3",
   "description": "Mastra Fastify adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -27,15 +27,14 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@fastify/busboy": "^3.2.2",
+    "@fastify/busboy": "^3.2.4",
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.115",
-    "@fastify/swagger": "^9.7.0",
-    "@fastify/swagger-ui": "^6.1.1",
+    "@ai-sdk/openai": "^2.0.136",
+    "@fastify/swagger": "^9.9.2",
+    "@fastify/swagger-ui": "^6.1.2",
     "@internal/lint": "workspace:*",
-    "@mastra/server-adapters-test-suite": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -43,9 +42,10 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
-    "@types/node": "22.20.1",
-    "fastify": "^5.12.5",
-    "tsdown": "0.22.9",
+    "@mastra/server-adapters-test-suite": "workspace:*",
+    "@types/node": "22.19.15",
+    "fastify": "^5.12.7",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

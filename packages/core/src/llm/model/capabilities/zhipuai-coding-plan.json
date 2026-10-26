@@ -9,13 +9,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3-highspeed": [
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "glm-5.3-highspeed": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

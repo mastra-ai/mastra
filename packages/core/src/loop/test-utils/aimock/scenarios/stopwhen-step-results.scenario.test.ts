@@ -1,12 +1,7 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import {
-  describeForAllEngines,
-  isDurableEngineVariant,
-  runLoopScenario,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Regression class: what a custom `stopWhen` predicate sees.
@@ -18,10 +13,6 @@ import {
  *
  * Script: turn 1 calls `weather`, turn 2 calls `plan_activities` (optionally
  * with explanatory text in the same step), turn 3 answers with text.
- *
- * Known gap: durable engines hand stopWhen a reduced step record
- * (text/toolCalls/toolResults/usage/finishReason) with no `content`, so the
- * content-parity cases are `it.fails` there (#27496).
  */
 type StopWhenArgs = { steps: Array<{ content: Array<{ type: string }>; toolCalls: unknown[] }> };
 
@@ -58,7 +49,6 @@ function scriptThreeTurns(
 
 describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
   const getMock = useLoopScenarioAimock();
-  const itFailsOnDurable = isDurableEngineVariant(engine) ? it.fails : it;
 
   it('stops after the first tool step when the predicate sees a tool call', async () => {
     const { output, requests, chunks } = await runLoopScenario({
@@ -109,6 +99,11 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
     const variant = withText ? ' (text and tool call in one step)' : '';
     const step2Types = withText ? ['text', 'tool-call', 'tool-result'] : ['tool-call', 'tool-result'];
     const types = (content: Array<{ type: string }>) => content.map(part => part.type);
+    const withoutProviderFields = (content: unknown[]) =>
+      content.map(part => {
+        const { providerOptions: _o, providerMetadata: _m, ...rest } = part as Record<string, unknown>;
+        return rest;
+      });
 
     const runRecordingLastContent = async () => {
       const seenLastContent: Array<Array<{ type: string }>> = [];
@@ -132,10 +127,12 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
       expect(steps.map(step => types(step.content))).toEqual([['tool-call', 'tool-result'], step2Types, ['text']]);
     });
 
-    // #27496: durable engines hand stopWhen step records without `content`.
-    itFailsOnDurable(`passes stopWhen the same last-step content stream.steps reports${variant}`, async () => {
-      const { seenLastContent } = await runRecordingLastContent();
+    it(`passes stopWhen the same last-step content stream.steps reports${variant}`, async () => {
+      const { seenLastContent, steps } = await runRecordingLastContent();
       expect(seenLastContent.map(types)).toEqual([['tool-call', 'tool-result'], step2Types]);
+      expect(seenLastContent.map(withoutProviderFields)).toEqual(
+        steps.slice(0, 2).map(step => withoutProviderFields(step.content)),
+      );
     });
   }
 });

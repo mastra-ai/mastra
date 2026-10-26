@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { SidebarSearchTrigger } from '../header/sidebar-search-trigger';
 import { SidebarProvider } from './sidebar-provider';
 import { SidebarTrigger } from './sidebar-trigger';
 import { TooltipProvider } from '@/ds/components/Tooltip';
@@ -43,7 +44,26 @@ describe('SidebarTrigger tooltip', () => {
     fireEvent.focus(screen.getByRole('button', { name: 'Toggle sidebar' }));
 
     const tooltip = await screen.findByRole('tooltip');
-    expect(tooltip.textContent).toContain('Toggle Sidebar');
+    expect(tooltip.textContent).toContain('Toggle sidebar');
     expect(tooltip.querySelector('kbd')?.textContent).toBe('[');
+  });
+});
+
+describe('SidebarSearchTrigger tooltip', () => {
+  it('shows the shortcut in the tooltip instead of beside the icon', async () => {
+    render(
+      <TooltipProvider delay={0}>
+        <SidebarSearchTrigger shortcut="⌘ K" />
+      </TooltipProvider>,
+    );
+
+    const button = screen.getByRole('button', { name: 'Search' });
+    expect(button.querySelector('kbd')).toBeNull();
+
+    fireEvent.focus(button);
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip.textContent).toContain('Search');
+    expect(tooltip.querySelector('kbd')?.textContent).toBe('⌘ K');
   });
 });

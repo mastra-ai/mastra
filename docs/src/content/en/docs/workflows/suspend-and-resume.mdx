@@ -28,7 +28,10 @@ flowchart LR
   class snapshot pending
 ```
 
-```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts"
+```typescript {12-14,19-21} title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow, createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
 const step1 = createStep({
   id: 'step-1',
   inputSchema: z.object({
@@ -143,7 +146,10 @@ setTimeout(async () => {
 
 When a step is suspended, you may want to access the data that was provided to `suspend()` when the step is later resumed. Use the `suspendData` parameter in your step's execute function to access this data.
 
-```typescript {22-25,29-30} title="src/mastra/workflows/user-approval.ts"
+```typescript {25-28,32-33} title="src/mastra/workflows/user-approval.ts"
+import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
 const approvalStep = createStep({
   id: 'user-approval',
   inputSchema: z.object({

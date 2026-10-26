@@ -469,7 +469,7 @@ describe('ThreadViewByTrace', () => {
       if (!toolBadge) throw new Error('expected a tool badge for the tool part');
       await screen.findByLabelText('View details for span Recipe lookup');
 
-      fireEvent.click(within(toolBadge).getAllByRole('button')[0] as HTMLElement);
+      fireEvent.click(within(toolBadge).getAllByRole('button')[0]);
 
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
       expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();
@@ -884,11 +884,11 @@ describe('ThreadViewByTrace', () => {
       expect(rowIds()).toEqual(['trace-a', 'trace-b']);
     });
 
-    it('loads 10 turns per page by default, or the given pageSize', async () => {
+    it('loads 3 turns per page by default, or the given pageSize', async () => {
       const requests = installPagedHandlers();
       const { unmount } = renderView({ withQueryTrace });
       await screen.findByText('Chef agent follow-up');
-      expect(requests[0]?.size).toBe(10);
+      expect(requests[0]?.size).toBe(3);
       unmount();
 
       renderView({ withQueryTrace, pageSize: 4 });
