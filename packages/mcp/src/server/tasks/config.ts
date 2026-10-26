@@ -24,6 +24,8 @@ export interface MCPServerToolTaskConfig {
   syncWindowMs?: number;
   /** Overrides `tasks.ttlMs` for this tool's tasks. */
   ttlMs?: number | null;
+  /** Overrides `tasks.recover` for this tool's tasks. */
+  recover?: boolean;
 }
 
 /**
@@ -60,6 +62,12 @@ export interface MCPServerTasksOptions {
   required?: string[];
   /** How long a task is kept from creation, in ms; `null` keeps it until the server closes. Default 24 hours. */
   ttlMs?: number | null;
+  /**
+   * Whether a task whose server crashed or restarted mid-attempt runs the tool again from the start.
+   * Only applies to stores that outlive a process (Mastra background tasks). Only turn this on for
+   * idempotent tools: `execute` may run twice. When off, such a task fails as lost. Default `false`.
+   */
+  recover?: boolean;
   /** Where tasks are kept. Default an {@link InMemoryMCPTaskStore}, which serves a single instance. */
   store?: MCPTaskStore;
   /**
@@ -74,6 +82,7 @@ export interface ResolvedToolTaskMode {
   mode: MCPServerTaskMode;
   syncWindowMs: number;
   ttlMs: number | null;
+  recover: boolean;
 }
 
 export interface ResolvedTasksConfig {
@@ -112,6 +121,12 @@ function assertDuration(owner: string, value: number | null | undefined): void {
   }
 }
 
+function assertBoolean(owner: string, value: unknown): void {
+  if (value !== undefined && typeof value !== 'boolean') {
+    throw invalid(`${owner} must be a boolean, got ${String(value)}.`);
+  }
+}
+
 /** Validates `tasks` against the configured tools. Throws on anything a server could not serve. */
 export function resolveTasksConfig(
   options: MCPServerTasksOptions | undefined,
@@ -127,6 +142,8 @@ export function resolveTasksConfig(
   assertMode('tasks.default', defaultMode);
   assertDuration('tasks.ttlMs', config.ttlMs);
   const ttlMs = config.ttlMs === undefined ? DEFAULT_TASK_TTL_MS : config.ttlMs;
+  assertBoolean('tasks.recover', config.recover);
+  const recover = config.recover ?? false;
 
   const known = new Set(toolNames);
   const perTool = new Map<string, ResolvedToolTaskMode>();
@@ -136,13 +153,20 @@ export function resolveTasksConfig(
     assertMode(`tasks.tools.${name}`, tool.mode);
     assertDuration(`tasks.tools.${name}.syncWindowMs`, tool.syncWindowMs);
     assertDuration(`tasks.tools.${name}.ttlMs`, tool.ttlMs);
+    assertBoolean(`tasks.tools.${name}.recover`, tool.recover);
     perTool.set(name, {
       mode: tool.mode,
       syncWindowMs: tool.syncWindowMs ?? DEFAULT_SYNC_WINDOW_MS,
       ttlMs: tool.ttlMs === undefined ? ttlMs : tool.ttlMs,
+      recover: tool.recover ?? recover,
     });
   }
-  const fallback: ResolvedToolTaskMode = { mode: defaultMode, syncWindowMs: DEFAULT_SYNC_WINDOW_MS, ttlMs };
+  const fallback: ResolvedToolTaskMode = {
+    mode: defaultMode,
+    syncWindowMs: DEFAULT_SYNC_WINDOW_MS,
+    ttlMs,
+    recover,
+  };
   const off: ResolvedToolTaskMode = { ...fallback, mode: 'off' };
   const modeFor = (name: string, toolType: MCPToolType | undefined) =>
     // Agent and workflow tools stay synchronous until they are served as tasks of their own.

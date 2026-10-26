@@ -12,6 +12,7 @@ import { connectClient, rawRequest, serveHTTP } from './__tests__/harness.mock';
 import type { ServedHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
 import type { MCPServerConfig } from './server';
+import { resolveTasksConfig } from './tasks/config';
 import { InMemoryMCPTaskStore } from './tasks/in-memory-store';
 import type { MCPTaskStore } from './tasks/store';
 
@@ -492,5 +493,23 @@ describe('MCPServer tasks', () => {
     expect(make({ tools: { echo: 'off' }, required: ['echo'] })).toThrow(/not served as a task/);
     expect(make({ tools: { echo: 'sometimes' } })).toThrow(/unknown task mode/);
     expect(make({ tools: { echo: { mode: 'auto', syncWindowMs: -1 } } })).toThrow(/non-negative integer/);
+    expect(make({ recover: 'yes' })).toThrow(/tasks.recover must be a boolean/);
+    expect(make({ tools: { echo: { mode: 'always', recover: 1 } } })).toThrow(
+      /tasks.tools.echo.recover must be a boolean/,
+    );
+  });
+
+  it('resolves recover per tool, falling back to tasks.recover and then false', () => {
+    const tools = Object.keys(makeTools({ runs: [], aborted: [], authInfos: [], contexts: [] }));
+    const plain = resolveTasksConfig({ default: 'always' }, tools);
+    expect(plain.modeFor('echo', undefined).recover).toBe(false);
+
+    const config = resolveTasksConfig(
+      { default: 'always', recover: true, tools: { echo: { mode: 'always', recover: false }, quick: 'auto' } },
+      tools,
+    );
+    expect(config.modeFor('echo', undefined).recover).toBe(false);
+    expect(config.modeFor('quick', undefined).recover).toBe(true);
+    expect(config.modeFor('approve', undefined).recover).toBe(true);
   });
 });
