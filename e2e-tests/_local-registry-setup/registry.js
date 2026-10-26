@@ -24,7 +24,7 @@ export function resolveVerdaccioPathFrom(requireFrom) {
   return resolve(dirname(manifestPath), binPath);
 }
 
-function resolveVerdaccioPath() {
+export function resolveVerdaccioPath() {
   try {
     return resolveVerdaccioPathFrom(require);
   } catch (primaryError) {

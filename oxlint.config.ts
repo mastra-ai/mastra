@@ -41,6 +41,11 @@ export default defineConfig({
     'ee/**',
   ],
   rules: {
+    'no-dupe-keys': 'error',
+    'no-extra-boolean-cast': 'error',
+    'no-useless-catch': 'error',
+    'no-unneeded-ternary': 'error',
+    'no-useless-concat': 'error',
     'no-restricted-globals': ['error', 'global'],
     'no-unexpected-multiline': 'error',
     'no-warning-comments': [
@@ -130,6 +135,7 @@ export default defineConfig({
           },
         ],
         'typescript/no-require-imports': 'off',
+        'typescript/prefer-as-const': 'error',
         'typescript/ban-ts-comment': [
           'off',
           {
@@ -151,6 +157,8 @@ export default defineConfig({
     {
       files: ['**/*.{ts,tsx}'],
       rules: {
+        'typescript/no-meaningless-void-operator': 'error',
+        'typescript/prefer-reduce-type-parameter': 'error',
         'typescript/no-floating-promises': 'error',
         'typescript/no-misused-promises': ['error', { checksVoidReturn: false }],
       },
@@ -178,7 +186,6 @@ export default defineConfig({
         'typescript/no-floating-promises': 'off',
         'typescript/no-for-in-array': 'off',
         'typescript/no-implied-eval': 'off',
-        'typescript/no-meaningless-void-operator': 'off',
         'typescript/no-misused-promises': 'off',
         'typescript/no-misused-spread': 'off',
         'typescript/no-mixed-enums': 'off',
@@ -205,7 +212,6 @@ export default defineConfig({
         'typescript/prefer-promise-reject-errors': 'off',
         'typescript/prefer-readonly': 'off',
         'typescript/prefer-readonly-parameter-types': 'off',
-        'typescript/prefer-reduce-type-parameter': 'off',
         'typescript/prefer-regexp-exec': 'off',
         'typescript/prefer-return-this-type': 'off',
         'typescript/prefer-string-starts-ends-with': 'off',

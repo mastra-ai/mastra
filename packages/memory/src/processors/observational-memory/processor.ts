@@ -17,13 +17,15 @@ import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { isContextOverflowError } from './context-overflow';
 import { omDebug } from './debug';
-import { getObservableMessages } from './message-utils';
+import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
+import { getPartKeys } from './observation-turn/step';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
+import type { ObservationModelContext } from './types';
 
 /**
  * Coerce a shared `state.__omTurn` value to a usable live turn.
@@ -51,6 +53,7 @@ export interface MemoryContextProvider {
   }>;
   /** Raw message upsert — persist sealed messages to storage without embedding or working memory processing. */
   persistMessages(messages: MastraDBMessage[]): Promise<void>;
+  getPersistedMessages?(threadId: string, ids: string[]): Promise<MastraDBMessage[]>;
 }
 
 /**
@@ -296,12 +299,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         state.__omTurn = undefined;
       }
 
+      let responseMessageId = messageId;
       if (!this.turn || !state.__omTurn) {
         // End previous turn if state was reset mid-flow
         if (this.turn && !state.__omTurn) {
           await this.turn.end().catch(() => {});
         }
         this.turn = this.engine.beginTurn({
+          abortSignal,
           threadId,
           resourceId,
           messageList,
@@ -318,6 +323,66 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.agent = args.agent;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory, runState);
+        if (stepNumber > 0) {
+          // A background result may have landed in storage after the durable snapshot was saved.
+          // Reconcile those response messages before the unread-part scan; the snapshot's part
+          // keys represent what was seen.
+          if (this.memory?.getPersistedMessages) {
+            const responseIds = messageList.getPersisted.response.db().map(message => message.id);
+            const snapshotMessages = new Map(messageList.get.all.db().map(message => [message.id, message]));
+            const storedMessages = await this.memory.getPersistedMessages(threadId, responseIds);
+            for (const stored of storedMessages) {
+              const snapshot = snapshotMessages.get(stored.id);
+              if (!snapshot) continue;
+              const snapshotTools = snapshot.content.parts.filter(part => part.type === 'tool-invocation');
+              const storedHasNewResult = stored.content.parts.some(part => {
+                if (part.type !== 'tool-invocation' || part.toolInvocation.state !== 'result') return false;
+                const previous = snapshotTools.find(
+                  candidate => candidate.toolInvocation.toolCallId === part.toolInvocation.toolCallId,
+                );
+                if (!previous || previous.toolInvocation.state !== 'result') return true;
+                const previousTask = previous.providerMetadata?.mastra?.backgroundTask as
+                  | { status?: string }
+                  | undefined;
+                const storedTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
+                return (
+                  previousTask?.status === 'running' &&
+                  (storedTask?.status === 'completed' || storedTask?.status === 'failed')
+                );
+              });
+              if (storedHasNewResult) {
+                this.turn.drainedPartKeys.set(stored.id, new Set(getPartKeys(snapshot)));
+                messageList.add(stored, 'memory');
+              }
+            }
+          }
+        }
+        // A run recovered by another worker can continue a response message that the dead
+        // worker already observed. That worker rotated the id in memory, but the rotation was
+        // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
+        // observedMessageIds alone misses responses observed before an activation or a reflection,
+        // neither of which keeps their ids. What survives is on the message itself: buffering
+        // persists OM's seal before the Observer runs, and sync observation persists its end
+        // marker on the observed message before it may reflect.
+        // When only the ids say so, persist the seal too: a later reflection drops the ids, and
+        // the message would otherwise look unobserved if this worker also dies.
+        const observedIds = this.turn.record.observedMessageIds;
+        const response = messageId ? messageList.get.all.db().find(message => message.id === messageId) : undefined;
+        const responseSealed =
+          (response?.content?.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed === true;
+        const responseObserved =
+          responseSealed ||
+          (!!response && findLastCompletedObservationBoundary(response) >= 0) ||
+          (!!messageId && Array.isArray(observedIds) && observedIds.includes(messageId));
+        if (messageId && responseObserved) {
+          if (response && !responseSealed) {
+            // Persist first, and fail the step rather than continue: without the stored seal, a later
+            // reflection erases the only evidence, and the next recovery would merge into this message.
+            await this.engine.persistMessageSeal(response);
+            this.engine.sealMessagesForBuffering([response]);
+          }
+          responseMessageId = rotateResponseMessageId?.() ?? messageId;
+        }
         if (stepNumber === 0 && this.temporalMarkers) {
           await insertTemporalGapMarkers({ messageList, sendSignal: args.sendSignal });
         }
@@ -333,7 +398,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       state.__omObservabilityContext = observabilityContext;
       this.turn.observabilityContext = observabilityContext;
       this.turn.actorModelContext = actorModelContext;
-      this.turn.responseMessageId = messageId;
+      this.turn.responseMessageId = responseMessageId;
 
       // ── Run step preparation (activation, threshold, observation, filtering) ──
       {
@@ -388,8 +453,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // prepare() already counted the current unobserved window and resource context.
         const finalTotalPending = ctx.status.pendingTokens;
         try {
-          await runOMCommit(this.engine.buffering.getLockKey(threadId, resourceId), () =>
-            this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+          await runOMCommit(
+            this.engine.buffering.getLockKey(threadId, resourceId),
+            () => this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+            { abortSignal },
           );
           this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
         } catch {
@@ -499,9 +566,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     // threshold. Activate buffered observations and observe what's left regardless of it; the
     // retry's input step then drops the observed messages from the prompt.
     const { threadId, resourceId } = context;
-    await this.engine.waitForBuffering(threadId, resourceId);
+    await this.engine.waitForBuffering(threadId, resourceId, undefined, args.abortSignal);
     const messages = getObservableMessages(messageList);
     const { activated } = await this.engine.activate({
+      abortSignal: args.abortSignal,
       threadId,
       resourceId,
       messages,
@@ -512,6 +580,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       .getTokenCounter()
       .runWithModelContext(state.__omActorModelContext as TokenCounterModelContext | undefined, () =>
         this.engine.observe({
+          abortSignal: args.abortSignal,
           threadId,
           resourceId,
           messages: getObservableMessages(messageList),
@@ -521,10 +590,15 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           sendSignal: args.sendSignal,
           sendStateSignal: args.sendStateSignal,
           requestContext,
+          currentModel: state.__omActorModelContext as ObservationModelContext | undefined,
           writer: args.writer,
           observabilityContext: getOmObservabilityContext(args),
         }),
       );
+
+    // The run goes on writing its response after the retry. Under the id just observed, the rest of the
+    // run would count as observed and never be observed or dropped, so the next overflow could not recover.
+    if (observed) args.rotateResponseMessageId?.();
 
     return { retry: activated || observed };
   }

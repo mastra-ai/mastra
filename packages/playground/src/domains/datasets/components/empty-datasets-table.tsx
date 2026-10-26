@@ -15,7 +15,7 @@ export function EmptyDatasetsTable({ onCreateClick }: EmptyDatasetsTableProps) {
         <div className="flex flex-col gap-2 sm:flex-row">
           {onCreateClick && (
             <Button size="lg" variant="default" onClick={onCreateClick} icon={<Plus />}>
-              Create Dataset
+              Create dataset
             </Button>
           )}
           <Button

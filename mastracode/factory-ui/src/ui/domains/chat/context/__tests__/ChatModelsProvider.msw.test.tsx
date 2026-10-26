@@ -12,13 +12,13 @@ import type { ChatSessionContextApi } from '../ChatSessionContext';
 import { useChatModels } from '../useChatModels';
 
 const draftSession: ChatSessionContextApi = {
-  resourceId: 'draft-1',
+  sessionId: 'draft-1',
+  resourceId: 'user-1',
   sessionEnabled: false,
   resourceReady: false,
   sandboxReady: false,
   sandboxPreparing: false,
   resourceEnabled: false,
-  projectPath: undefined,
   baseUrl: TEST_BASE_URL,
   kind: 'user',
   draftSessionId: 'draft-1',
@@ -63,7 +63,9 @@ describe('ChatModelsProvider', () => {
         http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
           HttpResponse.json({ project: { id: 'factory-1', modelScope, defaultModelId: 'deepseek/deepseek-flash' } }),
         ),
-        http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-5.5' })),
+        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+          HttpResponse.json({ modelId: 'openai/gpt-5.5', thinkingLevel: null }),
+        ),
       );
 
       server.use(
@@ -95,6 +97,7 @@ describe('ChatModelsProvider', () => {
               status: 'ready',
               state: {
                 controllerId: AGENT_CONTROLLER_ID,
+                sessionId: 'session-1',
                 resourceId: 'session-1',
                 modeId: 'build',
                 modelId: 'openai/gpt-5',
@@ -120,7 +123,7 @@ describe('ChatModelsProvider', () => {
         HttpResponse.json({ project: { id: 'factory-1', defaultModelId: 'openrouter/fable-5' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1' }),
+        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1', thinkingLevel: null }),
       ),
     );
 
@@ -146,7 +149,7 @@ describe('ChatModelsProvider', () => {
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
         await defaultPending;
-        return HttpResponse.json({ modelId: null });
+        return HttpResponse.json({ modelId: null, thinkingLevel: null });
       }),
     );
 
@@ -193,7 +196,7 @@ describe('ChatModelsProvider', () => {
         HttpResponse.json({ project: { id: 'factory-1', modelScope: 'user' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1' }),
+        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1', thinkingLevel: null }),
       ),
     );
     const liveSession: ChatSessionContextApi = {
@@ -212,6 +215,7 @@ describe('ChatModelsProvider', () => {
             status: 'ready',
             state: {
               controllerId: AGENT_CONTROLLER_ID,
+              sessionId: 'session-1',
               resourceId: 'session-1',
               modeId: 'build',
               modelId: 'openai/gpt-5',

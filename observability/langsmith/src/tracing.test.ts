@@ -203,6 +203,7 @@ describe('TestLangSmithExporter', () => {
           instructions: 'Test agent',
           userId: 'user-456',
           sessionId: 'session-789',
+          session_id: 'session-789',
         },
       });
 
@@ -1593,6 +1594,102 @@ describe('TestLangSmithExporter', () => {
       // Verify langsmith key is omitted
       const call = MockRunTreeClass.mock.calls[0][0];
       expect(call.metadata.langsmith).toBeUndefined();
+    });
+  });
+
+  // LangSmith builds Threads only from `session_id` / `thread_id` metadata, so a memory-backed
+  // conversation showed up as unrelated root runs and the Threads tab stayed empty.
+  describe('Conversation threads', () => {
+    const agentRun = (id: string, metadata: Record<string, any>) =>
+      createMockSpan({ id, name: `agent run`, type: SpanType.AGENT_RUN, isRoot: true, attributes: {}, metadata });
+
+    it('groups turns on one memory thread into a LangSmith Thread', async () => {
+      for (const id of ['turn-1', 'turn-2']) {
+        await exporter.exportTracingEvent({
+          type: TracingEventType.SPAN_STARTED,
+          exportedSpan: agentRun(id, { runId: id, resourceId: 'user-1', threadId: 'thread-123' }),
+        });
+      }
+
+      expect(MockRunTreeClass).toHaveBeenCalledTimes(2);
+      for (const [payload] of MockRunTreeClass.mock.calls) {
+        expect(payload.metadata).toMatchObject({ session_id: 'thread-123', threadId: 'thread-123' });
+      }
+    });
+
+    it('puts the thread session on child runs so thread filters and token counts include them', async () => {
+      // The real RunTree keeps the metadata it was built with; the parent lookup reads it back.
+      MockRunTreeClass.mockImplementation(function (cfg: any) {
+        return { ...mockRunTree, metadata: cfg.metadata };
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentRun('parent-id', { runId: 'r1', threadId: 'thread-123' }),
+      });
+      const generation = createMockSpan({
+        id: 'llm-1',
+        name: 'llm',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: { model: 'gpt-4o' },
+        traceId: 'parent-id',
+      });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: generation });
+
+      expect(mockRunTree.createChild).toHaveBeenCalledWith(
+        expect.objectContaining({ metadata: expect.objectContaining({ session_id: 'thread-123' }) }),
+      );
+    });
+
+    it('keeps a delegated sub-agent, which runs on a derived thread, in the conversation Thread', async () => {
+      // Sub-agents get `${threadId}-${uuid}` as their own thread; the chain must still
+      // carry the root session. Real RunTrees keep the metadata they were built with.
+      const keepMetadata = function (cfg: any) {
+        return { ...mockRunTree, metadata: cfg.metadata };
+      };
+      MockRunTreeClass.mockImplementation(keepMetadata);
+      mockRunTree.createChild.mockImplementation(keepMetadata);
+
+      const child = (id: string, parentSpanId: string, type: SpanType, metadata?: Record<string, any>) => ({
+        ...createMockSpan({ id, name: id, type, isRoot: false, attributes: {}, metadata, traceId: 'supervisor' }),
+        parentSpanId,
+      });
+      const chain = [
+        agentRun('supervisor', { runId: 'r1', threadId: 'thread-123' }),
+        child('delegate', 'supervisor', SpanType.TOOL_CALL),
+        child('sub-agent', 'delegate', SpanType.AGENT_RUN, { runId: 'r2', threadId: 'thread-123-6f1c' }),
+        child('sub-llm', 'sub-agent', SpanType.MODEL_GENERATION),
+      ];
+      for (const exportedSpan of chain) {
+        await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan });
+      }
+
+      const sessions = mockRunTree.createChild.mock.calls.map(([cfg]: any[]) => cfg.metadata.session_id);
+      expect(sessions).toEqual(['thread-123', 'thread-123', 'thread-123']);
+    });
+
+    it('lets an explicit withLangsmithMetadata sessionId win over the memory thread', async () => {
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentRun('turn-1', { threadId: 'thread-123', langsmith: { sessionId: 'session-abc' } }),
+      });
+
+      expect(MockRunTreeClass.mock.calls[0][0].metadata.session_id).toBe('session-abc');
+    });
+
+    it('prefers a plain sessionId over threadId and sends no session when neither is a string', async () => {
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentRun('turn-1', { sessionId: 'session-xyz', threadId: 'thread-123' }),
+      });
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentRun('turn-2', { runId: 'r2', threadId: undefined }),
+      });
+
+      expect(MockRunTreeClass.mock.calls[0][0].metadata.session_id).toBe('session-xyz');
+      expect(MockRunTreeClass.mock.calls[1][0].metadata).not.toHaveProperty('session_id');
     });
   });
 

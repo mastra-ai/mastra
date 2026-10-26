@@ -45,7 +45,7 @@ function textStep(n: number, text: string) {
 }
 
 // toolA + toolB -> askUser (suspends) -> askUser (suspends again) -> toolC -> final text
-function createActorModel() {
+function createActorModel(actorPrompts: unknown[][]) {
   const steps = [
     (n: number) =>
       toolCallStep(n, [
@@ -59,8 +59,9 @@ function createActorModel() {
   ];
   let call = 0;
   return new MockLanguageModelV2({
-    doStream: async () => {
+    doStream: async options => {
       const n = call++;
+      actorPrompts.push(options.prompt);
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
@@ -141,6 +142,7 @@ async function drain(output: { fullStream: AsyncIterable<unknown> }) {
 
 describe('live scorers across suspend/resume with Observational Memory (#26258)', () => {
   it('scores tool calls made before suspend() after OM observes them', async () => {
+    const actorPrompts: unknown[][] = [];
     const store = new InMemoryStore();
     const scorerRuns: Array<{ runId?: string; output: any[]; input: any }> = [];
 
@@ -177,7 +179,7 @@ describe('live scorers across suspend/resume with Observational Memory (#26258)'
       id: 'om-resume-agent',
       name: 'OM Resume Agent',
       instructions: 'Use tools.',
-      model: createActorModel() as any,
+      model: createActorModel(actorPrompts) as any,
       tools: createTools(),
       memory,
       scorers: { resumeScorer: { scorer } },
@@ -200,6 +202,23 @@ describe('live scorers across suspend/resume with Observational Memory (#26258)'
     const third = await registered.resumeStream({ answer: 'second' }, { runId: first.runId, ...memoryOptions });
     await drain(third);
 
+    for (const [index, toolCallId] of [
+      [2, 'call-ask-1'],
+      [3, 'call-ask-2'],
+    ] as const) {
+      expect(actorPrompts[index]).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'assistant',
+            content: expect.arrayContaining([expect.objectContaining({ type: 'tool-call', toolCallId })]),
+          }),
+          expect.objectContaining({
+            role: 'tool',
+            content: expect.arrayContaining([expect.objectContaining({ type: 'tool-result', toolCallId })]),
+          }),
+        ]),
+      );
+    }
     await vi.waitFor(() => expect(scorerRuns).toHaveLength(1), { timeout: 5000 });
     expect(scorerRuns[0]!.runId).toBe(first.runId);
     expect(toolNamesIn(scorerRuns[0]!.output)).toEqual(['toolA', 'toolB', 'askUser', 'askUser', 'toolC']);

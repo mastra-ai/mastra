@@ -279,6 +279,26 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     } catch {}
   });
 
+  it('preserves project names and missing-manifest errors in the installed deployer', async () => {
+    const appDir = join(fixturePath, 'apps', 'custom');
+    const missingProject = join(fixturePath, 'missing-project');
+    await execa(
+      'node',
+      [
+        '--input-type=module',
+        '-e',
+        `import assert from 'node:assert/strict';
+import { DepsService } from '@mastra/deployer/services';
+assert.equal(await new DepsService(${JSON.stringify(appDir)}).getProjectName(), '@inner/app');
+await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProjectName(), {
+  code: 'ENOENT',
+  path: ${JSON.stringify(join(missingProject, 'package.json'))},
+});`,
+      ],
+      { cwd: appDir },
+    );
+  });
+
   function runApiTests(port: number) {
     it('should resolve api routes', async () => {
       const res = await fetch(`http://localhost:${port}/test`);
@@ -736,6 +756,16 @@ export const environmentRoute = registerApiRoute('/environment', {
       const sourceLockfile = await readFile(sourceLockfilePath, 'utf-8');
       const mastraConfigPath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
       const originalMastraConfig = await readFile(mastraConfigPath, 'utf-8');
+      const transitiveOnlyRoutePath = join(
+        fixturePath,
+        'apps',
+        'custom',
+        'src',
+        'mastra',
+        'api',
+        'route',
+        'transitive-only.ts',
+      );
 
       try {
         // Keep the lockfile probe external so optimization cannot remove it from the output manifest.
@@ -753,6 +783,34 @@ export const versionlessRoute = registerApiRoute('/versionless', {
 });
 `,
         );
+        // The app depends on both packages but only imports the dependent, so the leaf is reached only
+        // through the dependent (#27134).
+        await writeFile(
+          transitiveOnlyRoutePath,
+          `import { registerApiRoute } from '@mastra/core/server';
+import { dependent } from '@inner/transitive-only-dependent';
+
+export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
+  method: 'GET',
+  handler: async c => c.json({ value: dependent }),
+});
+`,
+        );
+        await writeFile(
+          join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'optimized-dependencies.ts'),
+          `import { registerApiRoute } from '@mastra/core/server';
+import { camelCase } from 'lodash';
+import { getDaysInMonth } from 'date-fns';
+
+export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependencies', {
+  method: 'GET',
+  handler: async c => c.json({
+    label: camelCase('virtual dependency entries'),
+    days: getDaysInMonth(new Date('2026-02-10T12:00:00Z')),
+  }),
+});
+`,
+        );
         await writeFile(
           mastraConfigPath,
           originalMastraConfig
@@ -762,9 +820,12 @@ export const versionlessRoute = registerApiRoute('/versionless', {
             )
             .replace(
               "import { testRoute } from '@/api/route/test';",
-              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';",
+              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';\nimport { transitiveOnlyRoute } from '@/api/route/transitive-only';\nimport { optimizedDependenciesRoute } from '@/api/route/optimized-dependencies';",
             )
-            .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, versionlessRoute,'),
+            .replace(
+              /apiRoutes: \[\s*testRoute,/,
+              'apiRoutes: [testRoute, versionlessRoute, transitiveOnlyRoute, optimizedDependenciesRoute,',
+            ),
         );
         for (const [index, packageJsonPath] of packageJsonPaths.entries()) {
           const packageJson = JSON.parse(originalPackageJsons[index]!);
@@ -827,13 +888,16 @@ export const versionlessRoute = registerApiRoute('/versionless', {
       });
     }, timeout);
 
-    it('should resolve tsconfig paths', async () => {
-      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
+    it('should resolve tsconfig paths with TypeScript 7 installed', async () => {
+      const appDir = join(fixturePath, 'apps', 'custom');
+      const typescriptPackage = JSON.parse(
+        await readFile(join(appDir, 'node_modules', 'typescript', 'package.json'), 'utf-8'),
+      );
+      const inputFile = join(appDir, '.mastra', 'output', 'index.mjs');
       const content = await readFile(inputFile, 'utf-8');
 
-      const hasMappedPkg = content.includes('@/agents');
-
-      expect(hasMappedPkg).toBeFalsy();
+      expect(typescriptPackage.version).toBe('7.0.2');
+      expect(content).not.toContain('@/agents');
     });
 
     it('should resolve workspace package tsconfig paths', async () => {
@@ -844,6 +908,12 @@ export const versionlessRoute = registerApiRoute('/versionless', {
       const hasWorkspaceMappedPath = content.includes('~/utils');
 
       expect(hasWorkspaceMappedPath).toBeFalsy();
+    });
+
+    it('should preserve exports from multiple optimized dependency entries', async () => {
+      const response = await fetch(`http://localhost:${port}/optimized-dependencies`);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ label: 'virtualDependencyEntries', days: 28 });
     });
 
     it('should keep deprecated externals out of optimized dependency bundles', async () => {
@@ -898,6 +968,13 @@ export const versionlessRoute = registerApiRoute('/versionless', {
       const output = (await Promise.all(bundleFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join('\n');
 
       expect(output).not.toMatch(/import\(["']date-fns["']\)/);
+    });
+
+    it('should apply explicit custom pnpm settings to the generated deployment workspace', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const workspace = await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8');
+      expect(workspace).toMatch(/^blockExoticSubdeps: false$/m);
+      expect(workspace).toContain("packages:\n  - '.'");
     });
 
     it('should update the source pnpm lockfile while installing output dependencies', async () => {
@@ -1016,6 +1093,12 @@ export const mastra = new Mastra({
         value: 'versionless-workspace-package',
         dependent: 'versionless-workspace-package-dependent',
       });
+    });
+
+    it('should bundle a workspace package reached only through another workspace package (#27134)', async () => {
+      const res = await fetch(`http://localhost:${port}/transitive-only`);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ value: 'dependent:leaf' });
     });
   });
 
@@ -1511,10 +1594,19 @@ class AliasDeployer extends Deployer {
           );
           expect(await readFile(join(outputDir, 'workspace-module', 'inner-subpath-only-1.0.0.tgz'))).toBeTruthy();
 
-          const importResult = await execa('node', ['--input-type=module', '-e', "import('@inner/subpath-only')"], {
-            cwd: outputDir,
-            reject: false,
-          });
+          const importResult = await execa(
+            'node',
+            [
+              '--input-type=module',
+              '-e',
+              `import assert from 'node:assert/strict';
+import { rootValue } from '@inner/subpath-only';
+import { subpathOnlyValue } from '@inner/subpath-only/value';
+assert.equal(rootValue, 'external-workspace-root-implementation-marker');
+assert.equal(subpathOnlyValue, 'c');`,
+            ],
+            { cwd: outputDir, reject: false },
+          );
           expect(importResult.exitCode, `${importResult.stdout}\n${importResult.stderr}`).toBe(0);
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });

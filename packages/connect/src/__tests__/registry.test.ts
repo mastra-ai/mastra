@@ -28,6 +28,7 @@ describe('shipped provider registry', () => {
       'microsoft-powerpoint',
       'microsoft-teams',
       'notion',
+      'one-drive',
       'openai',
       'posthog',
       'resend',

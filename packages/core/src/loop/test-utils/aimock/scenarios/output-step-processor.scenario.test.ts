@@ -545,8 +545,8 @@ describeForAllEngines(
       expect(JSON.stringify(finishMessages)).not.toContain('SECRET');
     });
 
-    // Technical: when onIterationComplete asks for a feedback continuation, a processOutputResult
-    // rewrite of each assistant message shows up per step, not collapsed onto the last step.
+    // #26346: feedback continuation must not duplicate earlier text during result processing.
+    // Technical: processOutputResult rewrites appear on their own steps, not only the last step.
     // Known gap: durable and evented engines report the raw step text ('firstmore') because the
     // processOutputResult rewrite is not reconciled back onto steps after a feedback continuation.
     const itFailsOnDurable = engine === 'durable' || engine === 'evented' ? it.fails : it;
@@ -580,6 +580,7 @@ describeForAllEngines(
 
       const full = await output.getFullOutput();
       expect(await output.text).toBe('FIRSTMORE');
+      expect(full.text).toBe('FIRSTMORE');
       expect(full.steps.map(step => step.text)).toEqual(['FIRST', 'MORE']);
     });
   },

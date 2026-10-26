@@ -142,7 +142,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                 </>
               ) : (
                 <Txt as="p" variant="body" tone="muted">
-                  No working memory content yet. Click "Edit Working Memory" to add content.
+                  No working memory content yet. Click "Edit working memory" to add content.
                 </Txt>
               )}
             </>
@@ -172,7 +172,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                         onClick={event => event.preventDefault()}
                         className="cursor-not-allowed opacity-50"
                       >
-                        Edit Working Memory
+                        Edit working memory
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -181,7 +181,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   </Tooltip>
                 ) : (
                   <Button icon={<Pencil />} onClick={() => setIsEditing(true)} disabled={isUpdating}>
-                    Edit Working Memory
+                    Edit working memory
                   </Button>
                 )}
               </>
@@ -199,7 +199,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   }}
                   disabled={isUpdating}
                 >
-                  {isUpdating ? <RefreshCcwIcon className="h-3 w-3 animate-spin" /> : 'Save Changes'}
+                  {isUpdating ? <RefreshCcwIcon className="h-3 w-3 animate-spin" /> : 'Save changes'}
                 </Button>
                 <Button
                   icon={<X />}

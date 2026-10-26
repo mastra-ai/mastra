@@ -1,4 +1,5 @@
 import type { ModelReasoningOption } from '@mastra/core/llm';
+import type { ModelCatalogEntry } from '@mastra/factory/routes/config';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
@@ -8,13 +9,7 @@ import { fetchSessionModelCatalog, sessionModelCatalogQueryOptions } from './use
 import type { SessionModelCatalog, SessionModelCatalogTarget } from './useSessionModelCatalog';
 
 /** One selectable model from `GET /web/config/models` (credentialed providers only). */
-export interface AvailableModelOption {
-  id: string;
-  provider: string;
-  modelName: string;
-  hasApiKey: boolean;
-  reasoningOptions?: ModelReasoningOption[];
-}
+export type AvailableModelOption = ModelCatalogEntry;
 
 export interface AvailableModelsTarget extends AvailableModelsFilter {
   enabled?: boolean;
@@ -48,8 +43,8 @@ export function availableModelsQueryOptions(baseUrl: string, target?: AvailableM
 export function useAvailableModelsQuery(target?: AvailableModelsTarget) {
   const { baseUrl, client } = useApiConfig();
   const session: SessionModelCatalogTarget | undefined =
-    target?.resourceId && target.threadId
-      ? { ...target, resourceId: target.resourceId, threadId: target.threadId }
+    target?.sessionId && target.resourceId && target.threadId
+      ? { ...target, sessionId: target.sessionId, resourceId: target.resourceId, threadId: target.threadId }
       : undefined;
   const queryKey = session
     ? sessionModelCatalogQueryOptions(client, session).queryKey

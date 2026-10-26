@@ -173,7 +173,9 @@ describe('thread stream subscriber acknowledgements', () => {
       expect(observerNotifications).toBe(0);
       expect(pubsub.pending.size).toBe(0);
       expect(pubsub.nacked).toEqual([]);
-      expect(pubsub.acked).toHaveLength(18); // Owner control, observer control and observer fan-out.
+      // Six published signal events plus the owner's pending-message presentation for the two
+      // admitted signals, each acked by owner control, observer control and observer fan-out.
+      expect(pubsub.acked).toHaveLength(24);
       unsubscribe();
       await publishSignal('unsubscribed');
       expect(notifications).toBe(2);

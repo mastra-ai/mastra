@@ -1,6 +1,6 @@
 {
   "name": "@mastra/libsql",
-  "version": "1.27.0-alpha.3",
+  "version": "1.27.0",
   "description": "Libsql provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -32,16 +32,17 @@
     "@libsql/client": "^0.18.0"
   },
   "devDependencies": {
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/core": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@mastra/memory": "workspace:*",
-    "@types/node": "22.20.1",
+    "@mastra/pg": "workspace:*",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

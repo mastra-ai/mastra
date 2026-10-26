@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
+import { LocalFilesystem } from '@mastra/core/workspace';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import type { SandboxCommandResult, SandboxExec } from './sandbox-filesystem';
@@ -91,6 +92,36 @@ createFilesystemTestSuite({
   testTimeout: 20000,
 });
 
+/**
+ * Same suite with the sandbox exposing a native filesystem (the host disk,
+ * unconfined, standing in for a provider's file API). Proves the delegation
+ * wiring — absolute paths, workspace-relative `stat` paths, which operations
+ * delegate and which stay on the shell — against the shared contract.
+ */
+createFilesystemTestSuite({
+  suiteName: 'SandboxFilesystem Conformance (native filesystem)',
+  createFilesystem: () => {
+    const workdir = realpathSync(mkdtempSync(join(tmpdir(), 'mastra-sandbox-native-fs-')));
+    tmpDirs.push(workdir);
+    const sandbox = { ...createLocalShellExec(), filesystem: new LocalFilesystem({ basePath: '/', contained: false }) };
+    return new SandboxFilesystem({ sandbox, workdir });
+  },
+  capabilities: {
+    supportsAppend: true,
+    supportsBinaryFiles: true,
+    supportsForceDelete: true,
+    supportsOverwrite: true,
+    supportsEmptyDirectories: true,
+    deleteThrowsOnMissing: true,
+    supportsConcurrency: true,
+    supportsPermissions: false,
+    supportsMounting: false,
+    // appendFile and no-overwrite writes still travel as one base64 argument.
+    maxTestFileSize: 64 * 1024,
+  },
+  testTimeout: 20000,
+});
+
 describe('SandboxFilesystem.walk ignore options (local shell)', () => {
   it('keeps .gitignore files and prunes skipped directories', async () => {
     const filesystem = createSandboxFilesystem();
@@ -130,6 +161,25 @@ const hostHasGnuGrepAndGit = (() => {
       execFileSync('grep', ['--version'], { encoding: 'utf8' }).includes('GNU grep') &&
       execFileSync('git', ['--version'], { encoding: 'utf8' }).startsWith('git version')
     );
+  } catch {
+    return false;
+  }
+})();
+
+/** Whether host grep and git both run PCRE (`-P`); git can be built without it. */
+const hostHasPcre = (() => {
+  try {
+    execFileSync('sh', ['-c', "printf 'a1\\n' | grep -qP '\\d(?=)'"]);
+    const repo = mkdtempSync(join(tmpdir(), 'mastra-pcre-probe-'));
+    try {
+      execFileSync('sh', ['-c', "git init -q && printf 'a1\\n' >f && git grep -q --untracked -P -e '\\d(?=)'"], {
+        cwd: repo,
+        stdio: 'ignore',
+      });
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+    return true;
   } catch {
     return false;
   }
@@ -192,5 +242,18 @@ describe.skipIf(!hostHasGnuGrepAndGit)('SandboxFilesystem.grep with GNU grep and
 
     expect((await grep(fs, 'app/node_modules')).map(result => result.path)).toEqual(['dep/i.js']);
     expect((await grep(fs, 'app/dist')).map(result => result.path)).toEqual(['d.js']);
+  });
+
+  it.skipIf(!hostHasPcre)('runs \\b, \\s, \\w, and lookarounds natively when grep and git support -P', async () => {
+    const root = createWorkspace();
+    const results = await createGnuFilesystem(root).grep({
+      pattern: '\\bisBot:\\s(?=[a-z])\\w+',
+      path: '.',
+      caseSensitive: true,
+      includeHidden: false,
+    });
+
+    expect(results.map(result => result.path).sort()).toEqual(['app/src/a.ts', 'app/src/new.ts', 'loose/l.txt']);
+    expect(results.find(result => result.path === 'app/src/a.ts')!.matches[0]).toMatchObject({ line: 2, column: 6 });
   });
 });

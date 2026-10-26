@@ -17,6 +17,7 @@ import { linearScenario } from './linear.js';
 import { microsoftPowerpointScenario } from './microsoft-powerpoint.js';
 import { microsoftTeamsScenario } from './microsoft-teams.js';
 import { notionScenario } from './notion.js';
+import { oneDriveScenario } from './one-drive.js';
 import { openaiScenario } from './openai.js';
 import { posthogScenario } from './posthog.js';
 import { resendScenario } from './resend.js';
@@ -51,6 +52,7 @@ export const scenarios: Scenario[] = [
   microsoftPowerpointScenario,
   microsoftTeamsScenario,
   notionScenario,
+  oneDriveScenario,
   openaiScenario,
   posthogScenario,
   resendScenario,
