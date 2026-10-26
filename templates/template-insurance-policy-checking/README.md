@@ -6,6 +6,10 @@ Insurance proposals, contracts and issued policies can disagree on coverage, lim
 
 Checking an issued policy against the agreed terms means more than spotting different wording. Brokers need to trace each difference to the original documents, account for accepted changes and decide what needs correction. This template keeps that evidence and review history together so the broker can make and explain the final decision.
 
+## Demo
+
+<video controls width="640" height="360" src="https://res.cloudinary.com/mastra-assets/video/upload/v1793040444/insurance_policy_checking_cjqfpt.mp4"></video>
+
 ## Prerequisites
 
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` for document comparison. Local intake, evidence retrieval and report review do not require model calls.
@@ -27,7 +31,7 @@ Optionally run `npm run prepare:use-cases` in your terminal to generate sample P
 
 - Attach a proposal and an issued policy, then say `Show status` to see their filenames and physical page counts.
 - Say `Show page 2 of "property-issued.pdf"` to inspect saved source text.
-- Follow the [usage guide](./docs/usage.md) to identify your accepted baseline and issued policy by filename, then say `Compare the documents` and `Show the report`.
+- Follow the [usage guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-insurance-policy-checking/docs/usage.md) to identify your accepted baseline and issued policy by filename, then say `Compare the documents` and `Show the report`.
 - Read the draft, record finding decisions and approve its exact version with `Approve report version 1`. Confirmed actionable discrepancies in agreed-term checking produce a proposed correction request for manual delivery.
 
 ## Customization
