@@ -175,8 +175,13 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
           ),
         ],
       };
-    case 'mergeWindow':
-      return mergeServerWindow(state, action.messages);
+    case 'mergeWindow': {
+      const merged = mergeServerWindow(state, action.messages);
+      // `pending` is otherwise cleared only by live stream events. When the
+      // stream missed the run (dropped, or the tab was hidden), the refetched
+      // window is what brings the reply in, so it has to clear `pending` too.
+      return merged.pending && answeredLatestUser(merged.entries) ? { ...merged, pending: false } : merged;
+    }
     case 'clearPending':
       return { ...state, pending: false };
     case 'failLocalUser':
@@ -955,6 +960,16 @@ function latestAssistantIndex(entries: TimelineEntry[]): number {
     if (entry.kind === 'message' && entry.message.role === 'assistant') return i;
   }
   return -1;
+}
+
+function answeredLatestUser(entries: TimelineEntry[]): boolean {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i];
+    if (entry.kind !== 'message') continue;
+    if (entry.message.role === 'assistant') return true;
+    if (entry.message.role === 'user') return false;
+  }
+  return false;
 }
 
 function withTool(

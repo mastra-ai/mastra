@@ -886,6 +886,43 @@ describe('transcript reducer mergeWindow', () => {
     expect(ids).toEqual(['history-1', 'history-2', 'live-1']);
   });
 
+  it('clears pending when the refetched window brings in the reply the stream missed', () => {
+    const sent = transcriptReducer(initialTranscript, { type: 'localUser', id: 'user-1', text: 'question' });
+    expect(sent.pending).toBe(true);
+
+    const next = transcriptReducer(sent, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('user-1', 'user', [{ type: 'text', text: 'question' }]),
+        dbMessage('reply-1', 'assistant', [{ type: 'text', text: 'answer' }]),
+      ],
+    });
+
+    expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['user-1', 'reply-1']);
+    expect(next.pending).toBe(false);
+  });
+
+  it('keeps pending when the refetched window has no reply to the latest prompt yet', () => {
+    let state = createInitialTranscript({
+      messages: [
+        dbMessage('user-0', 'user', [{ type: 'text', text: 'earlier' }]),
+        dbMessage('reply-0', 'assistant', [{ type: 'text', text: 'earlier answer' }]),
+      ],
+    });
+    state = transcriptReducer(state, { type: 'localUser', id: 'user-1', text: 'question' });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('user-0', 'user', [{ type: 'text', text: 'earlier' }]),
+        dbMessage('reply-0', 'assistant', [{ type: 'text', text: 'earlier answer' }]),
+        dbMessage('user-1', 'user', [{ type: 'text', text: 'question' }]),
+      ],
+    });
+
+    expect(next.pending).toBe(true);
+  });
+
   it('is a no-op for an empty older window', () => {
     const onScreen = createInitialTranscript({
       messages: [dbMessage('msg-1', 'user', [{ type: 'text', text: 'only' }])],
