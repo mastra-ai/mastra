@@ -935,27 +935,6 @@ describe('trailing assistant message protection', () => {
     expect((result![1].content as any[]).map(p => p.type)).toEqual(['tool-call']);
   });
 
-  it('empty-signed strip skips the trailing assistant of a tool continuation', () => {
-    const prompt = toolContinuationPrompt();
-    // Give the historical assistant an empty signed block so the rule has
-    // something to strip outside the protected message.
-    (prompt[1].content as any[]).unshift({
-      type: 'reasoning',
-      text: '',
-      providerOptions: { anthropic: { signature: 'sig-legacy' } },
-    });
-
-    const result = anthropicStripEmptySignedReasoningContent.applyToPrompt!({
-      prompt,
-      model: anthropicModel,
-    });
-
-    expect(result).toBeDefined();
-    expect((result![1].content as any[]).map(p => p.type)).toEqual(['reasoning', 'text']);
-    // Trailing assistant keeps its empty signed block untouched
-    expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'reasoning', 'tool-call']);
-  });
-
   it('still strips the last assistant message when a new user turn follows it', () => {
     const prompt = toolContinuationPrompt();
     prompt.push({ role: 'user', content: [{ type: 'text', text: 'next question' }] });
@@ -1191,6 +1170,46 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     expect(result).toEqual({ prompt: expect.any(Array) });
     const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
+  });
+
+  it('keeps Claude 5.x signed thinking blocks with omitted (empty) text on every request (#28309)', async () => {
+    const handler = new ProviderHistoryCompat();
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'roll' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: '', providerOptions: { anthropic: { signature: 'sig-1' } } },
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'roll', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-1', toolName: 'roll', output: { type: 'text', value: '4' } },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: '', providerOptions: { anthropic: { signature: 'sig-2' } } },
+          { type: 'tool-call', toolCallId: 'call-2', toolName: 'roll', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-2', toolName: 'roll', output: { type: 'text', value: '5' } },
+        ],
+      },
+    ];
+
+    const result = await handler.processLLMRequest(
+      makeRequestArgs(prompt, { provider: 'anthropic.messages', modelId: 'claude-sonnet-5-5' }),
+    );
+
+    // Any rewrite would change the cached prefix; the prompt must go out untouched.
+    expect(result).toBeUndefined();
   });
 
   it('strips foreign reasoning parts from the prompt on Anthropic', async () => {
@@ -2574,5 +2593,117 @@ describe('anthropicToolIdFormat is prompt-scoped, not persisted', () => {
       .filter(part => part.type === 'tool-invocation')
       .map(part => (part as any).toolInvocation.toolCallId);
     expect(persistedIds).toEqual(['call.abc:1']);
+  });
+});
+
+describe('anthropicStripEmptySignedReasoningContent (reactive)', () => {
+  const thinkingModifiedError = () => {
+    const message =
+      'messages.1.content.0: `thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified. These blocks must remain as they were in the original response.';
+    return new APICallError({
+      message,
+      url: 'https://api.anthropic.com/v1/messages',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message } }),
+      isRetryable: false,
+    });
+  };
+
+  const reasoning = (signature: string, text: string) => ({
+    type: 'reasoning' as const,
+    reasoning: text,
+    details: text ? [{ type: 'text' as const, text, signature }] : [],
+    providerMetadata: { anthropic: { signature } },
+  });
+
+  const assistant = (id: string, parts: MastraDBMessage['content']['parts']) => ({
+    id,
+    role: 'assistant' as const,
+    createdAt: new Date(),
+    content: { format: 2 as const, parts },
+  });
+
+  const signatures = (list: MessageList) =>
+    list.get.all
+      .db()
+      .flatMap(m =>
+        m.role === 'assistant'
+          ? [
+              m.content.parts
+                .filter(p => p.type === 'reasoning')
+                .map(p => (p as any).providerMetadata.anthropic.signature),
+            ]
+          : [],
+      );
+
+  function argsFor(build: (list: MessageList) => void) {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    build(messageList);
+    return {
+      error: thinkingModifiedError(),
+      messages: messageList.get.all.db(),
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('abort');
+      }) as any,
+    } satisfies ProcessAPIErrorArgs;
+  }
+
+  it('drops legacy empty signed blocks from earlier messages after the 400, keeping valid ones and the trailing assistant', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('q1')], 'input');
+      list.add(
+        [
+          assistant('a1', [
+            { type: 'step-start' },
+            reasoning('LEGACY', ''),
+            reasoning('VALID', 'real thinking'),
+            { type: 'text', text: 'one' },
+          ]),
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('q2')], 'input');
+      list.add(
+        [assistant('a2', [{ type: 'step-start' }, reasoning('TRAILING', ''), { type: 'text', text: 'two' }])],
+        'memory',
+      );
+    });
+
+    const result = await new ProviderHistoryCompat().processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    expect(signatures(args.messageList)).toEqual([['VALID'], ['TRAILING']]);
+  });
+
+  it('does nothing when the history has no empty signed blocks', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('q1')], 'input');
+      list.add(
+        [assistant('a1', [{ type: 'step-start' }, reasoning('VALID', 'thinking'), { type: 'text', text: 'one' }])],
+        'memory',
+      );
+    });
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+  });
+
+  it('is not triggered by unrelated errors', async () => {
+    const args = {
+      ...argsFor(list => {
+        list.add([createUserMessage('q1')], 'input');
+        list.add([assistant('a1', [reasoning('LEGACY', ''), { type: 'text', text: 'one' }])], 'memory');
+        list.add([createUserMessage('q2')], 'input');
+      }),
+      error: new Error('rate limited'),
+    };
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+    expect(signatures(args.messageList)).toEqual([['LEGACY']]);
   });
 });

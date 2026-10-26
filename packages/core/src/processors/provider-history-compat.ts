@@ -687,20 +687,14 @@ function getProviderMetadataForProvider(metadata: unknown, provider: string): Re
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
 }
 
-function hasAnthropicSignatureWithoutText(part: {
-  text?: unknown;
-  providerOptions?: unknown;
-  providerMetadata?: unknown;
-}): boolean {
-  const anthropic =
-    getProviderMetadataForProvider(part.providerOptions, 'anthropic') ??
-    getProviderMetadataForProvider(part.providerMetadata, 'anthropic');
-
-  return (
-    typeof anthropic?.signature === 'string' &&
-    anthropic.signature.length > 0 &&
-    (typeof part.text !== 'string' || part.text.length === 0)
-  );
+function isEmptySignedReasoning(part: MastraDBMessage['content']['parts'][number]): boolean {
+  if (part.type !== 'reasoning') return false;
+  const signature = getProviderMetadataForProvider(part.providerMetadata, 'anthropic')?.signature;
+  if (typeof signature !== 'string' || signature.length === 0) return false;
+  const hasText =
+    (typeof part.reasoning === 'string' && part.reasoning.length > 0) ||
+    (part.details ?? []).some(detail => detail.type === 'text' && detail.text.length > 0);
+  return !hasText;
 }
 
 /**
@@ -739,15 +733,39 @@ export const cerebrasStripReasoningContent: CompatRule = {
 
 /**
  * Legacy records could contain Anthropic signed thinking metadata with an
- * empty reasoning text. Anthropic signs the exact thinking text, so forwarding
- * that mismatched pair is worse than dropping the invalid block at the provider
- * boundary.
+ * empty reasoning text. Anthropic signs the exact thinking text, so replaying
+ * that mismatched pair is rejected with the "thinking blocks cannot be
+ * modified" 400.
+ *
+ * Reactive, because an empty text with a signature is not by itself a sign of
+ * corruption: Claude 5.x returns exactly that for every thinking block when
+ * `display` is left at its default (`omitted`). Stripping those up front would
+ * change the prompt prefix on every step and break prompt caching, so the
+ * blocks are only dropped, from earlier assistant messages, once Anthropic has
+ * actually rejected the history.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/28309
  */
 export const anthropicStripEmptySignedReasoningContent: CompatRule = {
   name: 'anthropic-strip-empty-signed-reasoning-content',
-  applyToPrompt({ prompt, model }) {
-    if (!isMaybeAnthropic(model)) return undefined;
-    return stripReasoningFromPrompt(prompt, hasAnthropicSignatureWithoutText, getProtectedAssistantIndex(prompt));
+  errorPatterns: [/thinking`? or `?redacted_thinking`? blocks in the latest assistant message cannot be modified/i],
+  fix(messages) {
+    let mutated = false;
+    // The trailing assistant message of an active tool continuation is the one
+    // Anthropic requires unmodified, so it is never touched.
+    const protectedIndex = messages.at(-1)?.role === 'assistant' ? messages.length - 1 : -1;
+
+    messages.forEach((message, index) => {
+      const parts = message.content?.parts;
+      if (message.role !== 'assistant' || index === protectedIndex || !parts?.length) return;
+
+      const kept = parts.filter(part => !isEmptySignedReasoning(part));
+      if (kept.length === parts.length) return;
+      parts.splice(0, parts.length, ...kept);
+      mutated = true;
+    });
+
+    return mutated;
   },
 };
 
@@ -1253,9 +1271,10 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   rejects). Preemptive; runs in `processLLMRequest` so the persisted
  *   message list keeps the reasoning trace.
  * - **anthropic-strip-empty-signed-reasoning-content** — strips legacy
- *   Anthropic signed reasoning blocks whose text was already lost before
- *   replay, preventing an empty thinking block with a non-empty signature from
- *   reaching Anthropic.
+ *   Anthropic signed reasoning blocks whose text was lost before replay.
+ *   Reactive (matches the "thinking blocks cannot be modified" 400), because
+ *   Claude 5.x returns empty-text signed blocks as normal output and they must
+ *   be replayed untouched to keep the prompt cache.
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
