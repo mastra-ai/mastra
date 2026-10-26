@@ -94,7 +94,6 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
             state: executionContext.state,
             setState: async (state: any) => {
               executionContext.state = state;
-              engine.getRunJournal(runId)?.markStateChanged();
             },
             retryCount: -1,
             ...createObservabilityContext({ currentSpan: sleepSpan }),
@@ -234,7 +233,6 @@ export async function executeSleepUntil(
             state: executionContext.state,
             setState: async (state: any) => {
               executionContext.state = state;
-              engine.getRunJournal(runId)?.markStateChanged();
             },
             retryCount: -1,
             ...createObservabilityContext({ currentSpan: sleepUntilSpan }),

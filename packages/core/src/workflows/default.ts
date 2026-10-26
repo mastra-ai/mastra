@@ -732,9 +732,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    */
   applyMutableContext(executionContext: ExecutionContext, mutableContext: MutableContext): void {
     Object.assign(executionContext.state, mutableContext.state);
-    if (mutableContext.stateUpdated) {
-      this.#journals.get(executionContext.runId)?.markStateChanged();
-    }
     Object.assign(executionContext.suspendedPaths, mutableContext.suspendedPaths);
     Object.assign(executionContext.resumeLabels, mutableContext.resumeLabels);
   }
@@ -784,6 +781,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     perStep?: boolean;
     /** @experimental */
     storageVersion?: 1 | 2;
+    /** @internal */
+    statePatchBytes?: number;
     /** Trace IDs for creating child spans in durable execution */
     tracingIds?: {
       traceId: string;
@@ -836,6 +835,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         workflowName: workflowId,
         runId,
         seed,
+        // The loaded state, which the run continues from.
+        state: resume ? initialState : restart?.state,
+        statePatchBytes: params.statePatchBytes,
       });
       this.#journals.set(runId, journal);
     }

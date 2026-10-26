@@ -5379,6 +5379,7 @@ export class Run<
         outputWriter: params.outputWriter,
         perStep: params.perStep,
         storageVersion: this.storageVersion,
+        statePatchBytes: this.runStorage.statePatchBytes(snapshot),
       })
       .then(async result => {
         if (!params.isVNext && result.status !== 'suspended') {
@@ -5562,6 +5563,7 @@ export class Run<
       outputOptions,
       workflowSpan,
       storageVersion: this.storageVersion,
+      statePatchBytes: this.runStorage.statePatchBytes(snapshot),
     });
 
     this.workflowRunStatus = result.status;

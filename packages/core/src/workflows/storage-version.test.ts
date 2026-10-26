@@ -478,6 +478,7 @@ describe('storageVersion per run', () => {
 
 const num = z.object({ n: z.number() });
 const marks = z.object({ marked: z.number().optional() });
+const items = z.object({ items: z.array(z.string()) });
 
 function addOne(id: string, onRun?: (ctx: { setState: (state: z.infer<typeof marks>) => Promise<void> }) => unknown) {
   return createStep({
@@ -505,7 +506,7 @@ function recordV2Writes(storage: InstanceType<typeof MockStore>) {
   store.appendWorkflowRunEntries = async args => {
     writes.push({
       status: args.header.status,
-      changes: { stepIds: Object.keys(args.steps), state: args.state !== undefined },
+      changes: { stepIds: Object.keys(args.steps), state: args.state !== undefined || args.statePatch !== undefined },
     });
     return append(args);
   };
@@ -517,7 +518,7 @@ function recordV2Writes(storage: InstanceType<typeof MockStore>) {
 describe('storage v2 write volume', () => {
   const STEPS = 20;
 
-  it('appends only the changed step per write, and state only after setState', async () => {
+  it('appends only the changed step per write, and state only when it changed', async () => {
     const storage = new MockStore();
     const { writes, entries } = recordV2Writes(storage);
     let workflow: any = createWorkflow({
@@ -545,15 +546,15 @@ describe('storage v2 write volume', () => {
     for (const { status, changes } of appends) {
       expect(changes!.stepIds).toHaveLength(status === 'running' ? 1 : 0);
     }
+    // The run ends with the state s10 set, so the end sends no state.
     expect(appends.filter(w => w.changes!.state)).toEqual([
       { status: 'running', changes: { stepIds: ['s10'], state: true } },
-      { status: 'success', changes: { stepIds: [], state: true } },
     ]);
 
-    // One entry per step start and finish, plus the input, plus state at the checkpoint, after setState, and at the end.
+    // One entry per step start and finish, plus the input, plus state at the checkpoint and after setState.
     const stored = entries('sequential', run.runId);
     expect(stored.filter(e => e.kind === 'step')).toHaveLength(2 * STEPS + 1);
-    expect(stored.filter(e => e.kind === 'state')).toHaveLength(3);
+    expect(stored.filter(e => e.kind === 'state' || e.kind === 'state-patch')).toHaveLength(2);
   });
 
   it('appends one entry per dowhile iteration', async () => {
@@ -575,10 +576,166 @@ describe('storage v2 write volume', () => {
       Array.from({ length: STEPS + 1 }, () => ({ stepIds: ['count'], state: false })),
     );
 
-    // The checkpoint holds the input and the state; then one entry per append above, and the state at the end.
+    // The checkpoint holds the input and the state; then one entry per append above. The state never changes.
     const stored = entries('loop', run.runId);
     expect(stored.filter(e => e.kind === 'step')).toHaveLength(STEPS + 2);
-    expect(stored.filter(e => e.kind === 'state')).toHaveLength(2);
+    expect(stored.filter(e => e.kind === 'state' || e.kind === 'state-patch')).toHaveLength(1);
+  });
+
+  it('stores state bytes linear in the final state when every loop iteration appends to it', async () => {
+    /** The JSON size of every state and state patch the run sent, and of its final state. */
+    async function stateBytes(iterations: number) {
+      const storage = new MockStore();
+      const store = storage.stores.workflows!;
+      let sent = 0;
+      const count = (args: { state?: unknown; statePatch?: unknown }) => {
+        if (args.state) sent += JSON.stringify(args.state).length;
+        if (args.statePatch) sent += JSON.stringify(args.statePatch).length;
+      };
+      const checkpoint = store.writeWorkflowRunCheckpoint.bind(store);
+      store.writeWorkflowRunCheckpoint = async args => (count(args), checkpoint(args));
+      const append = store.appendWorkflowRunEntries.bind(store);
+      store.appendWorkflowRunEntries = async args => (count(args), append(args));
+
+      const appendItem = createStep({
+        id: 'append',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        execute: async ({ inputData, state, setState }) => {
+          await setState({ items: [...state.items, String(inputData.n % 10).repeat(1024)] });
+          return { n: inputData.n + 1 };
+        },
+      });
+      const workflow = createWorkflow({
+        id: 'growing',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        options: { storageVersion: 2 },
+      })
+        .dowhile(appendItem, async ({ inputData }) => inputData.n < iterations)
+        .commit();
+      new Mastra({ logger: false, storage, workflows: { growing: workflow } });
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: { n: 0 }, initialState: { items: [] } });
+      expect(result.status).toBe('success');
+      const stored = await store.loadWorkflowRun({
+        workflowName: 'growing',
+        runId: run.runId,
+        successfulSteps: 'full',
+      });
+      expect(stored!.state.items).toHaveLength(iterations);
+      return { sent, final: JSON.stringify(stored!.state).length };
+    }
+
+    const runs = [4, 8, 16].map(stateBytes);
+    for (const { sent, final } of await Promise.all(runs)) {
+      // Writing the whole state on every write would send about iterations / 2 times the final state.
+      expect(sent).toBeLessThanOrEqual(2 * final);
+    }
+  });
+
+  it('keeps the patches after the latest full state within the state size across suspend and resume cycles', async () => {
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    const kb = (i: number) => String(i % 10).repeat(1024);
+    const quarters = z.object({ a: z.string(), b: z.string(), c: z.string(), d: z.string() });
+    const edit = createStep({
+      id: 'edit',
+      inputSchema: num,
+      outputSchema: num,
+      stateSchema: quarters,
+      execute: async ({ inputData, state, setState, resumeData, suspend }) => {
+        if (resumeData === undefined) return suspend({});
+        await setState({ ...state, a: kb(inputData.n + 1) });
+        return { n: inputData.n + 1 };
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'cycles',
+      inputSchema: num,
+      outputSchema: num,
+      stateSchema: quarters,
+      options: { storageVersion: 2 },
+    })
+      .dowhile(edit, async ({ inputData }) => inputData.n < 12)
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { cycles: workflow } });
+
+    const initialState = { a: kb(0), b: kb(0), c: kb(0), d: kb(0) };
+    const size = JSON.stringify(initialState).length;
+    const run = await workflow.createRun();
+    let result = await run.start({ inputData: { n: 0 }, initialState });
+    for (let i = 1; i <= 12; i++) {
+      expect(result.status).toBe('suspended');
+      // Each cycle is a new journal, which continues from the patch bytes the store reported.
+      result = await (await workflow.createRun({ runId: run.runId })).resume({ step: 'edit', resumeData: true });
+      const stored = await store.loadWorkflowRun({ workflowName: 'cycles', runId: run.runId, successfulSteps: 'full' });
+      expect(stored!.state.a).toBe(kb(i));
+      expect(stored!.statePatchBytes).toBeLessThanOrEqual(size);
+    }
+    expect(result.status).toBe('success');
+  });
+
+  it('keeps the patches after the latest full state within the state size across restarts', async () => {
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    const kb = (i: number) => String(i % 10).repeat(1024);
+    const quarters = z.object({ a: z.string(), b: z.string(), c: z.string(), d: z.string() });
+    const build = (hang?: { at: number; reached: () => void }) =>
+      createWorkflow({
+        id: 'restarted',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: quarters,
+        options: { storageVersion: 2 },
+      })
+        .dowhile(
+          createStep({
+            id: 'edit',
+            inputSchema: num,
+            outputSchema: num,
+            stateSchema: quarters,
+            execute: async ({ inputData, state, setState }) => {
+              if (inputData.n === hang?.at) {
+                hang.reached();
+                await new Promise(() => {});
+              }
+              await setState({ ...state, a: kb(inputData.n + 1) });
+              return { n: inputData.n + 1 };
+            },
+          }),
+          async ({ inputData }) => inputData.n < 8,
+        )
+        .commit();
+
+    const initialState = { a: kb(0), b: kb(0), c: kb(0), d: kb(0) };
+    const size = JSON.stringify(initialState).length;
+    let runId: string | undefined;
+    // Each process dies in the next iteration, once its start is stored; the next process restarts the run.
+    for (let life = 1; life < 8; life++) {
+      let died = false;
+      const workflow = build({ at: life, reached: () => (died = true) });
+      new Mastra({ logger: false, storage, workflows: { restarted: workflow } });
+      if (runId === undefined) {
+        const run = await workflow.createRun();
+        runId = run.runId;
+        void run.start({ inputData: { n: 0 }, initialState });
+      } else {
+        void (await workflow.createRun({ runId })).restart();
+      }
+      await vi.waitFor(() => expect(died).toBe(true));
+      const stored = await store.loadWorkflowRun({ workflowName: 'restarted', runId, successfulSteps: 'full' });
+      expect(stored!.state.a).toBe(kb(life));
+      expect(stored!.statePatchBytes).toBeLessThanOrEqual(size);
+    }
+
+    const last = build();
+    new Mastra({ logger: false, storage, workflows: { restarted: last } });
+    const result = await (await last.createRun({ runId })).restart();
+    expect(result.status).toBe('success');
   });
 });
 
@@ -697,6 +854,37 @@ const scenarios: Record<string, Scenario> = {
     drive: async (workflow, runId) => {
       await (await workflow.createRun({ runId })).start({ inputData: {} });
       return (await workflow.createRun({ runId })).resume({ step: 'gate', resumeData: true });
+    },
+  },
+  'in-place state edits around a suspend': {
+    build: storageVersion => {
+      const push = (id: string, edit: (state: { items: string[] }, resumed: boolean) => void, suspends = false) =>
+        createStep({
+          id,
+          inputSchema: z.any(),
+          outputSchema: z.any(),
+          stateSchema: items,
+          execute: async ({ state, resumeData, suspend }) => {
+            edit(state, resumeData !== undefined);
+            if (suspends && resumeData === undefined) return suspend({});
+            return {};
+          },
+        });
+      return createWorkflow({
+        id: 'editing',
+        inputSchema: z.any(),
+        outputSchema: z.any(),
+        stateSchema: items,
+        options: { storageVersion },
+      })
+        .then(push('first', state => state.items.push('first')))
+        .then(push('wait', (state, resumed) => state.items.push(resumed ? 'resumed' : 'waiting'), true))
+        .then(push('last', state => (state.items[0] = 'edited')))
+        .commit();
+    },
+    drive: async (workflow, runId) => {
+      await (await workflow.createRun({ runId })).start({ inputData: {}, initialState: { items: [] } });
+      return (await workflow.createRun({ runId })).resume({ step: 'wait', resumeData: true });
     },
   },
   bail: {

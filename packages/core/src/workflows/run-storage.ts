@@ -23,6 +23,8 @@ export interface RunStorage {
   writeInitial(snapshot: WorkflowRunState, resourceId?: string): Promise<void>;
   /** After a claim: has nothing been written to the run since `claimed` was loaded? */
   isClaimUnused(claimed: WorkflowRunState, resumedStepId: string): Promise<boolean>;
+  /** What the store reported for the state of a snapshot loaded by `loadForResume` or `loadFull`. */
+  statePatchBytes(snapshot: WorkflowRunState): number | undefined;
 }
 
 type RunStorageArgs = {
@@ -119,11 +121,16 @@ class RunStorageV1 implements RunStorage {
       resumedStepResult?.status === 'suspended'
     );
   }
+
+  statePatchBytes(): undefined {
+    return undefined;
+  }
 }
 
 // Keyed by the loaded snapshot, not the RunStorage: the parent-claim path loads a parent's
 // snapshot through a throwaway RunStorage, and the parent Run's own RunStorage releases it.
 const claimedSeqs = new WeakMap<WorkflowRunState, number>();
+const loadedStatePatchBytes = new WeakMap<WorkflowRunState, number>();
 
 class RunStorageV2 implements RunStorage {
   readonly #workflowName: string;
@@ -149,6 +156,7 @@ class RunStorageV2 implements RunStorage {
     }
     const snapshot = { ...run.header, context, value: run.state } as WorkflowRunState;
     claimedSeqs.set(snapshot, run.lastSeq);
+    loadedStatePatchBytes.set(snapshot, run.statePatchBytes);
     return snapshot;
   }
 
@@ -187,7 +195,9 @@ class RunStorageV2 implements RunStorage {
       successfulSteps: 'full',
     });
     if (!run) return null;
-    return { ...run.header, context: run.steps, value: run.state } as WorkflowRunState;
+    const snapshot = { ...run.header, context: run.steps, value: run.state } as WorkflowRunState;
+    loadedStatePatchBytes.set(snapshot, run.statePatchBytes);
+    return snapshot;
   }
 
   async writeInitial(snapshot: WorkflowRunState, resourceId?: string): Promise<void> {
@@ -201,6 +211,10 @@ class RunStorageV2 implements RunStorage {
       steps: context,
       state: value,
     });
+  }
+
+  statePatchBytes(snapshot: WorkflowRunState): number | undefined {
+    return loadedStatePatchBytes.get(snapshot);
   }
 
   async isClaimUnused(claimed: WorkflowRunState, resumedStepId: string): Promise<boolean> {

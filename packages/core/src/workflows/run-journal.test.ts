@@ -1,6 +1,8 @@
 import { fork } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
+import { InMemoryDB } from '../storage/domains/inmemory-db';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
+import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
 import { buildStepResultAccessors, isStepResultStub, RunJournal, stubStepResult } from './run-journal';
 import type { WorkflowRunState } from './types';
 
@@ -26,19 +28,24 @@ function fakeStore() {
   return { store, stored, writeWorkflowRunCheckpoint, appendWorkflowRunEntries, loadWorkflowRunSteps };
 }
 
-function journalFor(store: WorkflowsStorage | undefined, seed?: Record<string, unknown>) {
-  return new RunJournal({ store, workflowName: 'wf', runId: 'r', seed });
+/** A seeded journal continues a run whose stored state is `{}`, unless `state` says otherwise. */
+function journalFor(store: WorkflowsStorage | undefined, seed?: Record<string, unknown>, state = seed && {}) {
+  return new RunJournal({ store, workflowName: 'wf', runId: 'r', seed, state });
 }
 
-function snapshot(context: Record<string, unknown>, status: WorkflowRunState['status'] = 'running') {
-  return { runId: 'r', status, value: {}, context } as unknown as WorkflowRunState;
+function snapshot(
+  context: Record<string, unknown>,
+  status: WorkflowRunState['status'] = 'running',
+  value: Record<string, unknown> = {},
+) {
+  return { runId: 'r', status, value, context } as unknown as WorkflowRunState;
 }
 
 const ok = (output: unknown) => ({ status: 'success', output, startedAt: 1, endedAt: 2 }) as any;
 
 const appended = (mock: ReturnType<typeof fakeStore>['appendWorkflowRunEntries'], call: number) => {
   const args = mock.mock.calls[call]![0];
-  return { stepIds: Object.keys(args.steps), state: args.state !== undefined };
+  return { stepIds: Object.keys(args.steps), state: args.state !== undefined || args.statePatch !== undefined };
 };
 
 describe('RunJournal writes', () => {
@@ -86,17 +93,17 @@ describe('RunJournal writes', () => {
     const { store, appendWorkflowRunEntries } = fakeStore();
     const journal = journalFor(store, {});
     const context: Record<string, unknown> = { a: ok(1), b: ok(2) };
+    const state = { x: 1 };
 
-    journal.markStateChanged();
-    await journal.write({ snapshot: snapshot(context), stepIds: ['a'] });
+    await journal.write({ snapshot: snapshot(context, 'running', state), stepIds: ['a'] });
     expect(appended(appendWorkflowRunEntries, 0)).toEqual({ stepIds: ['a'], state: false });
 
     // Nothing named changed: no call at all.
-    await journal.write({ snapshot: snapshot(context), stepIds: ['a'] });
-    await journal.write({ snapshot: snapshot(context), stepIds: [] });
+    await journal.write({ snapshot: snapshot(context, 'running', state), stepIds: ['a'] });
+    await journal.write({ snapshot: snapshot(context, 'running', state), stepIds: [] });
     expect(appendWorkflowRunEntries).toHaveBeenCalledTimes(1);
 
-    await journal.write({ snapshot: snapshot(context) });
+    await journal.write({ snapshot: snapshot(context, 'running', state) });
     expect(appended(appendWorkflowRunEntries, 1)).toEqual({ stepIds: ['b'], state: true });
   });
 
@@ -117,46 +124,23 @@ describe('RunJournal writes', () => {
     expect(appended(appendWorkflowRunEntries, 0)).toEqual({ stepIds: ['b'], state: false });
   });
 
-  it('writes state only after it was marked, and clears the mark', async () => {
-    const { store, appendWorkflowRunEntries } = fakeStore();
-    const journal = journalFor(store, {});
-
-    journal.markStateChanged();
-    await journal.write({ snapshot: snapshot({}) });
-    await journal.write({ snapshot: snapshot({}) });
-
-    expect([appended(appendWorkflowRunEntries, 0).state, appended(appendWorkflowRunEntries, 1).state]).toEqual([
-      true,
-      false,
-    ]);
-  });
-
-  it.each(['suspended', 'success', 'failed', 'canceled', 'waiting', 'paused'] as const)(
-    'always writes state when the run is %s',
-    async status => {
-      const { store, appendWorkflowRunEntries } = fakeStore();
-      const journal = journalFor(store, {});
-
-      await journal.write({ snapshot: snapshot({}, status) });
-      expect(appended(appendWorkflowRunEntries, 0).state).toBe(true);
-    },
-  );
-
   it('sends the same changes again after a failed write', async () => {
     const { store, writeWorkflowRunCheckpoint, appendWorkflowRunEntries } = fakeStore();
     const journal = journalFor(store);
+    const state: Record<string, unknown> = { big: 'x'.repeat(100) };
     writeWorkflowRunCheckpoint.mockRejectedValueOnce(new Error('down'));
 
-    await expect(journal.write({ snapshot: snapshot({ a: ok(1) }) })).rejects.toThrow('down');
-    await journal.write({ snapshot: snapshot({ a: ok(1) }) });
+    await expect(journal.write({ snapshot: snapshot({ a: ok(1) }, 'running', state) })).rejects.toThrow('down');
+    await journal.write({ snapshot: snapshot({ a: ok(1) }, 'running', state) });
     expect(writeWorkflowRunCheckpoint).toHaveBeenCalledTimes(2);
 
     const a = ok(2);
-    journal.markStateChanged();
+    state.n = 1;
     appendWorkflowRunEntries.mockRejectedValueOnce(new Error('down'));
-    await expect(journal.write({ snapshot: snapshot({ a }) })).rejects.toThrow('down');
-    await journal.write({ snapshot: snapshot({ a }) });
+    await expect(journal.write({ snapshot: snapshot({ a }, 'running', state) })).rejects.toThrow('down');
+    await journal.write({ snapshot: snapshot({ a }, 'running', state) });
     expect(appended(appendWorkflowRunEntries, 1)).toEqual({ stepIds: ['a'], state: true });
+    expect(appendWorkflowRunEntries.mock.calls[1]![0].statePatch).toEqual([{ op: 'set', path: ['n'], value: 1 }]);
   });
 
   it('does nothing without a store', async () => {
@@ -212,6 +196,105 @@ describe('RunJournal writes', () => {
     appendWorkflowRunEntries.mockImplementation(async () => {});
     await journal.write({ snapshot: snapshot(context) });
     expect(appended(appendWorkflowRunEntries, 4)).toEqual({ stepIds: ['d'], state: false });
+  });
+});
+
+describe('RunJournal state writes', () => {
+  const run = { workflowName: 'wf', runId: 'r' };
+  const kb = (i: number) => String(i % 10).repeat(1024);
+  const stateArgs = (mock: ReturnType<typeof fakeStore>['appendWorkflowRunEntries']) =>
+    mock.mock.calls.map(([args]) => (args.state ? 'state' : args.statePatch ? 'patch' : 'none'));
+
+  /** The run as the in-memory store holds it, and the JSON size of its patches after the latest full state. */
+  async function stored(store: WorkflowsInMemory) {
+    const loaded = (await store.loadWorkflowRun({ ...run, successfulSteps: 'full' }))!;
+    return { state: loaded.state, statePatchBytes: loaded.statePatchBytes };
+  }
+
+  it.each(['running', 'suspended', 'success', 'failed', 'canceled', 'waiting', 'paused'] as const)(
+    'sends nothing for an unchanged state when the run is %s',
+    async status => {
+      const { store, appendWorkflowRunEntries } = fakeStore();
+      const journal = journalFor(store, {}, { a: 1 });
+
+      await journal.write({ snapshot: snapshot({}, status, { a: 1 }) });
+      expect(appended(appendWorkflowRunEntries, 0).state).toBe(false);
+    },
+  );
+
+  it('writes an in-place edit made without setState with the next boundary write', async () => {
+    const { store, appendWorkflowRunEntries } = fakeStore();
+    const state = { items: ['x'.repeat(100)] };
+    const journal = journalFor(store, {}, structuredClone(state));
+
+    state.items.push('b');
+    await journal.write({ snapshot: snapshot({}, 'running', state), stepIds: [] });
+    expect(appendWorkflowRunEntries).not.toHaveBeenCalled();
+    await journal.write({ snapshot: snapshot({}, 'running', state) });
+    expect(appendWorkflowRunEntries.mock.calls[0]![0].statePatch).toEqual([
+      { op: 'set', path: ['items', 1], value: 'b' },
+    ]);
+
+    // The diff is against what was written, not the live object.
+    state.items[1] = 'c';
+    await journal.write({ snapshot: snapshot({}, 'running', state) });
+    expect(appendWorkflowRunEntries.mock.calls[1]![0].statePatch).toEqual([
+      { op: 'set', path: ['items', 1], value: 'c' },
+    ]);
+  });
+
+  it('writes the state as a store keeps JSON, so a Date becomes its ISO string', async () => {
+    const { store, writeWorkflowRunCheckpoint } = fakeStore();
+    const journal = journalFor(store);
+    const at = new Date(0);
+
+    await journal.write({ snapshot: snapshot({}, 'running', { at, gone: undefined }) });
+    expect(writeWorkflowRunCheckpoint.mock.calls[0]![0].state).toStrictEqual({ at: at.toISOString() });
+  });
+
+  it('writes a full state once the patches since the latest full state outgrow it', async () => {
+    const { store, appendWorkflowRunEntries } = fakeStore();
+    const state: Record<string, unknown> = { a: kb(0), b: kb(0), c: kb(0) };
+    const journal = journalFor(store, {}, structuredClone(state));
+
+    for (let i = 1; i <= 20; i++) {
+      state.a = kb(i);
+      await journal.write({ snapshot: snapshot({}, 'running', state) });
+    }
+    // Each overwrite is about a third of the state, so every third write starts over.
+    expect(stateArgs(appendWorkflowRunEntries)).toEqual(
+      Array.from({ length: 20 }, (_, i) => (i % 3 === 2 ? 'state' : 'patch')),
+    );
+  });
+
+  it('keeps the patches after the latest full state within the state size, over runs of overwrites', async () => {
+    const memory = new WorkflowsInMemory({ db: new InMemoryDB() });
+    const state: Record<string, unknown> = { a: kb(0), b: kb(0), c: kb(0), d: kb(0) };
+    const size = JSON.stringify(state).length;
+    let journal = new RunJournal({ store: memory, ...run });
+    await journal.write({ snapshot: snapshot({}, 'running', state) });
+
+    for (let i = 1; i <= 40; i++) {
+      state.a = kb(i);
+      await journal.write({ snapshot: snapshot({}, 'running', state) });
+      const now = await stored(memory);
+      expect(now.state).toEqual(state);
+      expect(now.statePatchBytes).toBeLessThanOrEqual(size);
+      // A resume or restart every other write continues from what the store reports.
+      if (i % 2 === 0) journal = new RunJournal({ store: memory, ...run, seed: {}, ...now });
+    }
+  });
+
+  it('does not double the state when replaying patches onto a state that has them', async () => {
+    const memory = new WorkflowsInMemory({ db: new InMemoryDB() });
+    const state = { items: [] as string[] };
+    const journal = new RunJournal({ store: memory, ...run });
+    await journal.write({ snapshot: snapshot({}, 'running', state) });
+    for (let i = 0; i < 5; i++) {
+      state.items.push(kb(i));
+      await journal.write({ snapshot: snapshot({}, 'running', state) });
+    }
+    expect((await stored(memory)).state).toEqual(state);
   });
 });
 

@@ -252,5 +252,7 @@ export abstract class ExecutionEngine extends MastraBase {
     perStep?: boolean;
     /** How the run is stored. Engines that don't support version 2 ignore it. @experimental */
     storageVersion?: 1 | 2;
+    /** For a storage v2 resume or restart, what the store reported for the loaded state. @internal */
+    statePatchBytes?: number;
   }): Promise<TOutput>;
 }

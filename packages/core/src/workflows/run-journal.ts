@@ -2,6 +2,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { summarizeStepResult } from '../storage/domains/workflows/journal';
 import type { StepResultSummary } from '../storage/domains/workflows/journal';
+import { diffState } from '../storage/domains/workflows/state-patch';
+import type { StatePatchOp } from '../storage/domains/workflows/state-patch';
 import { getStepResult, getStepResultAsync } from './step';
 import { stepRefId } from './step-refs';
 import type { StepResult, WorkflowRunState } from './types';
@@ -34,13 +36,16 @@ export function isStepResultStub(value: unknown): boolean {
 
 /**
  * Tracks what a storage-v2 run has written, so each engine write sends only the
- * step results that changed (and the state, when it changed) instead of the whole snapshot.
+ * step results that changed (and the state's changes) instead of the whole snapshot.
  * It also lets the engine drop stored results from memory (`evict`) and read them back
  * (`hydrate`, `getStepResultAsync`).
  *
  * Step results are replaced, never edited in place, so a step changed when its object
- * differs from the one last written. State is edited in place, so changes are marked
- * through `markStateChanged()` where they are merged into the run.
+ * differs from the one last written. State can be edited in place, so the journal keeps a
+ * JSON copy of the state it last wrote and diffs the live state against it. A change is written
+ * as a patch, unless the patches written since the latest full state would outgrow the state:
+ * then the full state is written again, so reading the state back never replays more than
+ * about twice its size.
  *
  * The start writes of a parallel or branch block's steps are in flight at the same time, and
  * the store can commit them in any order. If two of them carried the same step, the older value
@@ -60,7 +65,10 @@ export class RunJournal {
   readonly runId: string;
   /** stepId -> the object last written for it (a stub once evicted) */
   #written: Map<string, unknown>;
-  #stateDirty = false;
+  /** A JSON copy of the stored state. Replaced on each write, never edited. */
+  #writtenState: Record<string, unknown> | undefined;
+  /** JSON size of the patches stored after the latest full state. */
+  #patchBytes: number;
   #needsCheckpoint: boolean;
   /** Store writes sent and not yet settled, and whether one of them is a boundary write. */
   #inFlight = 0;
@@ -70,27 +78,31 @@ export class RunJournal {
   /**
    * @param seed The step results already in storage (a resumed or restarted run's loaded snapshot
    * context). Without it, the first boundary write is a checkpoint that replaces whatever is stored.
+   * @param state The state already in storage, with `seed`.
+   * @param statePatchBytes What the store reported for `state` (`StoredWorkflowRun.statePatchBytes`).
    */
   constructor({
     store,
     workflowName,
     runId,
     seed,
+    state,
+    statePatchBytes,
   }: {
     store: WorkflowsStorage | undefined;
     workflowName: string;
     runId: string;
     seed?: Record<string, unknown>;
+    state?: unknown;
+    statePatchBytes?: number;
   }) {
     this.store = store;
     this.workflowName = workflowName;
     this.runId = runId;
     this.#needsCheckpoint = !seed;
     this.#written = new Map(seed ? Object.entries(seed) : []);
-  }
-
-  markStateChanged(): void {
-    this.#stateDirty = true;
+    this.#writtenState = state === undefined ? undefined : normalizeState(state).state;
+    this.#patchBytes = statePatchBytes ?? 0;
   }
 
   /**
@@ -106,8 +118,8 @@ export class RunJournal {
    * step's start write): only these steps are sent, never the state, and no other write in flight
    * may name them. Leave it unset for a boundary write, made when no other write of the run is in
    * flight (an entry's end, a loop iteration's start, sleeps, the run stopping): it sends every step
-   * result that changed since it was last written, the state when it changed or the run stops, and
-   * the checkpoint when that is still to do.
+   * result that changed since it was last written, the state's changes, and the checkpoint when
+   * that is still to do.
    */
   async write({
     resourceId,
@@ -129,7 +141,6 @@ export class RunJournal {
     const { context, value, ...header } = snapshot;
     const results = context as Record<string, unknown>;
     const checkpoint = this.#needsCheckpoint;
-    const stateDirty = this.#stateDirty;
 
     let sent: string[];
     if (checkpoint) {
@@ -169,23 +180,42 @@ export class RunJournal {
       });
     }
 
+    let writtenState = this.#writtenState;
+    let patchBytes = this.#patchBytes;
+    let state: Record<string, unknown> | undefined;
+    let statePatch: StatePatchOp[] | undefined;
+    if (boundary) {
+      const next = normalizeState(value);
+      if (checkpoint || writtenState === undefined) {
+        state = next.state;
+      } else {
+        const ops = diffState(writtenState, next.state);
+        if (ops.length) {
+          const opsBytes = JSON.stringify(ops).length;
+          if (patchBytes + opsBytes > next.bytes) {
+            state = next.state;
+          } else {
+            statePatch = ops;
+            patchBytes += opsBytes;
+          }
+        }
+      }
+      if (state) patchBytes = 0;
+      if (state || statePatch) writtenState = next.state;
+    }
+
     this.#needsCheckpoint = false;
-    if (boundary) this.#stateDirty = false;
     this.#inFlight++;
     if (boundary) this.#boundaryInFlight = true;
     try {
-      const run = { workflowName: this.workflowName, runId: this.runId, resourceId, header, steps };
+      const run = { workflowName: this.workflowName, runId: this.runId, resourceId, header, steps, state, statePatch };
       if (checkpoint) {
-        await store.writeWorkflowRunCheckpoint({ ...run, state: value });
+        await store.writeWorkflowRunCheckpoint(run);
       } else {
-        // Writing the state whenever the run stops (suspend, terminal, waiting, paused) keeps
-        // storage matching memory where the state is read back.
-        const writeState = boundary && (stateDirty || snapshot.status !== 'running');
-        await store.appendWorkflowRunEntries({ ...run, state: writeState ? value : undefined });
+        await store.appendWorkflowRunEntries(run);
       }
     } catch (error) {
       if (checkpoint) this.#needsCheckpoint = true;
-      if (stateDirty) this.#stateDirty = true;
       throw error;
     } finally {
       this.#inFlight--;
@@ -194,6 +224,8 @@ export class RunJournal {
     for (const stepId of sent) {
       this.#written.set(stepId, steps[stepId]);
     }
+    this.#writtenState = writtenState;
+    this.#patchBytes = patchBytes;
   }
 
   /**
@@ -299,4 +331,16 @@ export function buildStepResultAccessors(
     },
     getStepResultAsync: (step: unknown) => journal.getStepResultAsync(stepResults, step),
   };
+}
+
+/**
+ * The state as a JSON store keeps it (a `Date` becomes its ISO string, `undefined` keys drop), and
+ * its JSON size.
+ */
+function normalizeState(state: unknown): {
+  state: Record<string, unknown>;
+  bytes: number;
+} {
+  const json = JSON.stringify(state ?? {});
+  return { state: JSON.parse(json), bytes: json.length };
 }

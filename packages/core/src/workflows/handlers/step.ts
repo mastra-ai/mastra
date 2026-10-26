@@ -634,15 +634,15 @@ export async function executeStep(
     ...execResults,
   } as StepResult<any, any, any, any>;
 
-  const stateUpdate = stepRetryResult.ok ? stepRetryResult.result.contextMutations.stateUpdate : null;
-
   return {
     result: stepResult,
     stepResults: { [step.id]: stepResult },
-    mutableContext: {
-      ...engine.buildMutableContext({ ...executionContext, state: stateUpdate ?? executionContext.state }),
-      ...(stateUpdate != null ? { stateUpdated: true } : {}),
-    },
+    mutableContext: engine.buildMutableContext({
+      ...executionContext,
+      state: stepRetryResult.ok
+        ? (stepRetryResult.result.contextMutations.stateUpdate ?? executionContext.state)
+        : executionContext.state,
+    }),
     // Serialize requestContext only for engines that restore it from
     // serialized results (Inngest memoization); the default engine keeps
     // the original reference and never reads this field, so serializing
