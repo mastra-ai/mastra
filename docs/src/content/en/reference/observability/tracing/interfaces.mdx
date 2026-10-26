@@ -690,6 +690,16 @@ interface AgentRunAttributes {
   /** Maximum steps allowed */
   maxSteps?: number
 
+  /**
+   * Model the run was configured with, resolved at run preparation (call-time
+   * override, then agent config). The first enabled candidate of a fallback list.
+   * Never updated by later steps; see MODEL_STEP `model` for what each step ran.
+   */
+  model?: string
+
+  /** Provider of `model`, taken from the same model object */
+  provider?: string
+
   /** When the run's model streamed its first chunk, copied from the agent's own first generation */
   completionStartTime?: Date
 }
@@ -777,6 +787,16 @@ Model Step attributes - for a single model execution within a generation.
 interface ModelStepAttributes {
   /** Index of this step in the generation (0, 1, 2, ...) */
   stepIndex?: number
+
+  /**
+   * Model actually invoked for this step, after per-step overrides (input
+   * processors, fallback). Recorded at invocation, so a failed provider call
+   * still carries it. Absent when no model was invoked, e.g. a cached response.
+   */
+  model?: string
+
+  /** Provider of `model`, taken from the same model object */
+  provider?: string
 
   /** Token usage statistics */
   usage?: UsageStats
