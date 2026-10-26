@@ -1960,7 +1960,7 @@ Tasks implement SEP-2663, the `io.modelcontextprotocol/tasks` MCP extension. Thi
 
 :::
 
-The `tasks` option lets a tool answer `tools/call` with a task instead of a result. The client gets a task handle at once and polls `tasks/get` until the task finishes, so the result outlives the request and isn't limited by HTTP timeouts. When at least one tool can answer with a task, the server advertises the extension and answers `tasks/get`, `tasks/update` and `tasks/cancel` over both stdio and Streamable HTTP. Without a `tasks` option, it does neither.
+The `tasks` option lets a tool answer `tools/call` with a task instead of a result. The client gets a task handle at once and polls `tasks/get` until the task finishes. The result outlives the request and isn't limited by HTTP timeouts. When at least one tool can answer with a task, the server advertises the extension and answers `tasks/get`, `tasks/update` and `tasks/cancel` over both stdio and Streamable HTTP. Without a `tasks` option, it does neither.
 
 Only clients that declare the extension on a request get a task. Every other client gets a synchronous answer, unless the tool is listed in `required`.
 
@@ -2056,7 +2056,7 @@ The server creates the task before it answers, so a `tasks/get` sent right after
 
 ### Access to tasks
 
-A task id is an unguessable bearer token, and each task is bound to the caller that created it. The caller is identified the same way as for [continuation state](#continuation-state): by the OAuth subject, the mapped `user`, or a hash of the bearer token. Another caller asking for the task, and a caller `authorize` refuses, both get error `-32602`, the same answer as for an id that doesn't exist. There is no way to list tasks.
+A task id is an unguessable bearer token, and each task is bound to the caller that created it. The caller is identified the same way as for [continuation state](#continuation-state): by the OAuth subject, the mapped `user`, or a hash of the bearer token. Another caller asking for the task, and a caller `authorize` refuses, both get error `-32602`, the same answer as for an id that doesn't exist. Tasks can't be listed.
 
 ### Asking for input inside a task
 
@@ -2068,13 +2068,13 @@ The resumed run receives the request context of the call that created the task, 
 
 ### Cancellation and errors
 
-- `tasks/cancel` aborts the tool's `abortSignal` and the task ends `cancelled`. Stopping is up to the tool; a result it returns afterwards is discarded.
+- `tasks/cancel` aborts the tool's `abortSignal` and the task ends `cancelled`. Stopping is up to the tool. A result it returns afterwards is discarded.
 - A tool that throws completes the task with `isError: true` and the serialized error, as a synchronous call answers.
 - A task ends `failed` only when the server can't run it, for example when its TTL expires.
 
 ### Limits
 
-- The default store keeps tasks in memory. They are lost when the process restarts, and a multi-instance deployment needs every `tasks/*` request for a task to reach the instance that created it. Streamable HTTP requests carry the task id in the `Mcp-Name` header, so a load balancer can route on it.
+- The default store keeps tasks in memory. They're lost when the process restarts, and a multi-instance deployment needs every `tasks/*` request for a task to reach the instance that created it. Streamable HTTP requests carry the task id in the `Mcp-Name` header, so a load balancer can route on it.
 - Progress and log notifications sent after the task handle is answered are dropped.
 
 ## Related information
