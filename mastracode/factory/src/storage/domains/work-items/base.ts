@@ -193,6 +193,9 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'repository_cli_missing',
   'repository_pr_failed',
   'run_configuration_invalid',
+  'run_credentials_unavailable',
+  'run_user_unauthenticated',
+  'run_failed',
   'unknown',
 ] as const;
 
@@ -368,9 +371,11 @@ export interface RevokeFactoryRunBindingInput {
 }
 
 export interface RevokeStaleFactoryRunBindingsInput {
-  /** Active bindings created before this instant are revoked regardless of item state. */
+  /** Active bindings created before this instant are revoked regardless of item state, unless `keep` exempts them. */
   olderThan: Date;
   now: Date;
+  /** Exempts an over-age binding from the age test only; the item-state checks still apply. */
+  keep?: (binding: FactoryRunBindingRecord) => Promise<boolean>;
 }
 
 export interface RevokeFactoryRunBindingsForWorkItemInput {
@@ -1455,6 +1460,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 attempts: Number(current.attempts) + 1,
                 lease_owner: input.ownerId,
                 lease_expires_at: input.leaseExpiresAt,
+                // A new attempt starts clean: the previous attempt's cause no longer describes this one.
+                last_error: null,
+                failure_code: null,
                 updated_at: input.now,
               };
             });
@@ -2926,17 +2934,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Revoke leaked/legacy active bindings: older than `olderThan`, or whose
-   * work item is gone, malformed, or already terminal. Terminal-stage cleanup
-   * handles bindings go-forward; this sweep drains anything that slipped past
-   * it. Returns the number of bindings revoked.
+   * Revoke leaked/legacy active bindings: older than `olderThan` (unless
+   * `keep` vouches for them), or whose work item is gone, malformed, or
+   * already terminal. Terminal-stage cleanup handles bindings go-forward; this
+   * sweep drains anything that slipped past it. Returns the number of bindings revoked.
    */
   async revokeStaleRunBindings(input: RevokeStaleFactoryRunBindingsInput): Promise<number> {
     const bindings = await this.listActiveRunBindings();
     const itemCache = new Map<string, WorkItemRow | null>();
     let revoked = 0;
     for (const binding of bindings) {
-      let stale = binding.createdAt.getTime() < input.olderThan.getTime();
+      let stale = binding.createdAt.getTime() < input.olderThan.getTime() && !(await input.keep?.(binding));
       if (!stale) {
         const key = `${binding.orgId}:${binding.workItemId}`;
         let item = itemCache.get(key);
@@ -2967,6 +2975,31 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   /** Enumerate active bindings for the server-owned restart reconciler. */
   async listActiveRunBindings(): Promise<FactoryRunBindingRecord[]> {
     return (await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', { status: 'active' })).map(toBinding);
+  }
+
+  /**
+   * The work items a session was ever bound to run, revoked bindings included.
+   * `null` stands for a bound item that no longer loads. Empty when the session
+   * never ran a work item.
+   */
+  async listRunBoundItems(sessionId: string): Promise<(WorkItemRow | null)[]> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', { session_id: sessionId });
+    const keys = new Map(rows.map(row => [`${row.org_id}:${row.work_item_id}`, row]));
+    return Promise.all(
+      [...keys.values()].map(row => this.get({ orgId: String(row.org_id), id: String(row.work_item_id) })),
+    );
+  }
+
+  /**
+   * Move a session's bindings from the legacy `resourceId = sessionId` onto
+   * `resourceId`. Only rows still on the session id change, so a rerun is a no-op.
+   */
+  async moveRunBindingsToResource(input: { sessionId: string; resourceId: string }): Promise<number> {
+    return this.#db.updateMany(
+      'factory_run_bindings',
+      { session_id: input.sessionId, resource_id: input.sessionId },
+      { resource_id: input.resourceId },
+    );
   }
 
   /** List binding history, optionally narrowed to one work item. */

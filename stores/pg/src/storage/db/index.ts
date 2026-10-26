@@ -22,6 +22,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
 import { buildConnectionStringPoolConfig } from '../../shared/pool-config';
+import { guardCheckedOutClientErrors } from '../../shared/pool-error-guard';
 import { parseSchemaName, schemaNamePrefix } from '../../shared/schema-name';
 import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
@@ -171,6 +172,8 @@ export function resolvePgConfig(config: PgDomainConfig): {
       `resolvePgConfig: idle pool client error (pool discards the client and reconnects on next checkout): ${err instanceof Error ? err.message : String(err)}`,
     );
   });
+
+  guardCheckedOutClientErrors(pool);
 
   const client = new PoolAdapter(pool);
   return {
@@ -638,8 +641,6 @@ export class PgDB extends MastraBase {
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
-    const schema = this.schemaName || 'public';
-
     const snapshot = this.schemaSnapshot;
     if (snapshot) {
       const columns = snapshot.columns.get(table);
@@ -647,12 +648,9 @@ export class PgDB extends MastraBase {
       return columns.has(column) || columns.has(column.toLowerCase());
     }
 
-    const result = await this.client.oneOrNone(
-      `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
-      [schema, table, column, column.toLowerCase()],
-    );
-
-    return !!result;
+    // Outside init, reuse getColumnType's per-instance cache so hot paths
+    // (e.g. listWorkflowRuns with resourceId) don't probe the catalog per call.
+    return (await this.getColumnType(table, column)) !== null;
   }
 
   /**
@@ -679,8 +677,9 @@ export class PgDB extends MastraBase {
     if (cached !== undefined) return cached;
 
     const schema = this.schemaName || 'public';
+    // Prefer the exact-case column when both "resourceId" and "resourceid" exist.
     const result = await this.client.oneOrNone<{ data_type: string }>(
-      `SELECT data_type FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
+      `SELECT data_type FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4) ORDER BY (column_name = $3) DESC LIMIT 1`,
       [schema, table, column, column.toLowerCase()],
     );
 

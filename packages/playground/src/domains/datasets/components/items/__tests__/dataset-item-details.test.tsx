@@ -6,6 +6,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DatasetItemDetails } from '../dataset-item-details';
 import {
   baseItem,
+  itemWithEmptyObjectGroundTruth,
+  itemWithEmptyStringGroundTruth,
+  itemWithEmptyToolMocks,
   itemWithMocks,
   itemWithPreviousTextInput,
   itemWithTextPayload,
@@ -70,7 +73,7 @@ describe('DatasetItemDetails', () => {
     it('copies the full item id', () => {
       render(<DatasetItemDetails item={itemWithUuid} />);
 
-      expect(screen.getByLabelText('Copy Item Id to clipboard')).not.toBeNull();
+      expect(screen.getByLabelText('Copy item ID to clipboard')).not.toBeNull();
     });
   });
 
@@ -108,12 +111,36 @@ describe('DatasetItemDetails', () => {
     });
   });
 
+  describe('when the ground truth is an empty string', () => {
+    it('omits the Ground Truth section', () => {
+      render(<DatasetItemDetails item={itemWithEmptyStringGroundTruth} />);
+
+      expect(screen.queryByText('Ground Truth')).toBeNull();
+    });
+  });
+
+  describe('when the ground truth is an empty object', () => {
+    it('omits the Ground Truth section', () => {
+      render(<DatasetItemDetails item={itemWithEmptyObjectGroundTruth} />);
+
+      expect(screen.queryByText('Ground Truth')).toBeNull();
+    });
+  });
+
+  describe('when diffing two items that both lack a ground truth', () => {
+    it('omits the Ground Truth section', () => {
+      render(<DatasetItemDetails item={itemWithEmptyObjectGroundTruth} diff={{ against: baseItem, side: 'b' }} />);
+
+      expect(screen.queryByText('Ground Truth')).toBeNull();
+    });
+  });
+
   describe('when the item is minimal', () => {
-    it('shows n/a for Updated', () => {
+    it('omits the Updated row because the item was never updated', () => {
       render(<DatasetItemDetails item={baseItem} />);
 
-      expect(screen.getByText('Updated')).not.toBeNull();
-      expect(screen.getByText('n/a')).not.toBeNull();
+      expect(screen.queryByText('Updated')).toBeNull();
+      expect(screen.queryByText('n/a')).toBeNull();
     });
 
     it('omits the optional sections', () => {
@@ -123,10 +150,26 @@ describe('DatasetItemDetails', () => {
       expect(screen.queryByText('Request Context')).toBeNull();
     });
 
-    it('keeps the tool mocks section with its fallback', () => {
+    it('omits the Tool Mocks section', () => {
       render(<DatasetItemDetails item={baseItem} />);
 
-      expect(screen.getByText('Tool Mocks')).not.toBeNull();
+      expect(screen.queryByText('Tool Mocks')).toBeNull();
+    });
+  });
+
+  describe('when the tool mocks are an empty list', () => {
+    it('omits the Tool Mocks section', () => {
+      render(<DatasetItemDetails item={itemWithEmptyToolMocks} />);
+
+      expect(screen.queryByText('Tool Mocks')).toBeNull();
+    });
+  });
+
+  describe('when diffing two items that both lack tool mocks', () => {
+    it('omits the Tool Mocks section', () => {
+      render(<DatasetItemDetails item={itemWithEmptyToolMocks} diff={{ against: baseItem, side: 'b' }} />);
+
+      expect(screen.queryByText('Tool Mocks')).toBeNull();
     });
   });
 });

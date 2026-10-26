@@ -17,14 +17,14 @@ type ExecutableTool = {
 };
 
 function requestContext(
-  overrides: Partial<{ orgId: string; projectId: string; threadId: string; resourceId: string; scope: string }> = {},
+  overrides: Partial<{ orgId: string; projectId: string; threadId: string; resourceId: string }> = {},
 ) {
   const context = new RequestContext();
   context.set('user', { workosId: 'user-1', organizationId: overrides.orgId ?? 'org-1' });
   context.set('controller', {
     resourceId: overrides.resourceId ?? 'resource-1',
     threadId: overrides.threadId ?? 'thread-1',
-    scope: overrides.scope ?? '/worktree',
+    sessionId: overrides.resourceId ?? 'resource-1',
     session: { id: 'session-1', ownerId: 'code', modeId: 'build' },
     getState: () => ({ factoryProjectId: overrides.projectId ?? PROJECT_ID }),
   });
@@ -41,7 +41,7 @@ function crashResumedContext(
   context.set('controller', {
     resourceId: overrides.resourceId ?? 'resource-1',
     threadId: overrides.threadId ?? 'thread-1',
-    scope: '/worktree',
+    sessionId: overrides.resourceId ?? 'resource-1',
     session: { id: 'session-1', ownerId: 'code', modeId: 'build' },
     getState: () => ({}),
     setState,

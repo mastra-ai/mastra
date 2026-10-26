@@ -373,7 +373,7 @@ jobs:
       - name: Setup Node.js 22.x
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24.18.0
+          node-version: 24.22.1
           package-manager-cache: false
 
       - name: Run package.json validator

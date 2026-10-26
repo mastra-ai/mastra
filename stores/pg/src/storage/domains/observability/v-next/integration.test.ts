@@ -91,6 +91,7 @@ interface ExplainPlanNode {
   'Relation Name'?: string;
   Alias?: string;
   'Index Name'?: string;
+  'Index Cond'?: string;
   'Actual Rows'?: number;
   'Actual Loops'?: number;
   Plans?: ExplainPlanNode[];
@@ -741,6 +742,57 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       } finally {
         await client.none(`DROP SCHEMA IF EXISTS ${quotedIdentifier(schema)} CASCADE`);
         await pool.end();
+      }
+    });
+
+    it('init() succeeds for a role that can create tables in an existing schema but cannot create schemas', async () => {
+      // Postgres checks the database-level CREATE privilege before the
+      // IF NOT EXISTS clause of CREATE SCHEMA. A least-privilege app role
+      // (USAGE + CREATE on the schema only) must not be asked to run it when
+      // the schema already exists, or init() fails with 42501.
+      const schema = schemaName('obs_vnext_restricted_role');
+      const role = `${schema}_app`;
+      const adminPool = new Pool({ connectionString, max: 2 });
+      const admin = new PoolAdapter(adminPool);
+
+      await admin.none(`CREATE SCHEMA IF NOT EXISTS ${quotedIdentifier(schema)}`);
+      await admin.none(`CREATE ROLE ${quotedIdentifier(role)} LOGIN PASSWORD 'app'`);
+      await admin.none(`GRANT USAGE, CREATE ON SCHEMA ${quotedIdentifier(schema)} TO ${quotedIdentifier(role)}`);
+
+      const restrictedPool = new Pool({
+        host: defaultConnection.host,
+        port: defaultConnection.port,
+        database: defaultConnection.database,
+        user: role,
+        password: 'app',
+        max: 2,
+      });
+      const restricted = new PoolAdapter(restrictedPool);
+      const domain = new ObservabilityStoragePostgresVNext({ client: restricted, schemaName: schema });
+
+      try {
+        const privileges = await admin.one<{ db_create: boolean; schema_create: boolean }>(
+          `SELECT has_database_privilege($1, current_database(), 'CREATE') AS db_create,
+                  has_schema_privilege($1, $2, 'CREATE') AS schema_create`,
+          [role, schema],
+        );
+        expect(privileges).toEqual({ db_create: false, schema_create: true });
+
+        await expect(domain.init()).resolves.toBeUndefined();
+
+        const tables = await admin.many<{ table_name: string }>(
+          `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_type = 'BASE TABLE'`,
+          [schema],
+        );
+        for (const table of ALL_SIGNAL_TABLES) {
+          expect(tables.map(row => row.table_name)).toContain(table);
+        }
+      } finally {
+        await restrictedPool.end();
+        await admin.none(`DROP SCHEMA IF EXISTS ${quotedIdentifier(schema)} CASCADE`);
+        await admin.none(`DROP OWNED BY ${quotedIdentifier(role)}`);
+        await admin.none(`DROP ROLE IF EXISTS ${quotedIdentifier(role)}`);
+        await adminPool.end();
       }
     });
 
@@ -2128,6 +2180,48 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
             filters: { timestamp: { start: dayAt(0, 0), end: dayAt(1, 0) } },
           }),
         ).resolves.toEqual({ value: selectedRows });
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
+  describe('trace-query equality filter plans', () => {
+    it('serves a root eq filter from the column index', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_eq_plan' });
+      const table = qualifiedTable(harness.schema, TABLE_SPAN_EVENTS);
+      const startedAt = dayAt(0, 10);
+
+      try {
+        // 20k agent roots and 20 workflow roots in one time window, so only the spanType index is selective.
+        await harness.client.none(
+          `INSERT INTO ${table} ("traceId", "spanId", "name", "spanType", "isEvent", "startedAt", "endedAt")
+           SELECT 'eq-plan-' || value, 'eq-plan-' || value, 'root-span',
+                  CASE WHEN value <= 20 THEN $1 ELSE $2 END, false,
+                  $3::timestamptz + value * interval '1 millisecond', $3::timestamptz + interval '1 minute'
+           FROM generate_series(1, 20000) AS value`,
+          [SpanType.WORKFLOW_RUN, SpanType.AGENT_RUN, startedAt],
+        );
+        await harness.client.none(`ANALYZE ${table}`);
+
+        const plan = planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: { from: dayAt(0, 0).toISOString(), to: dayAt(1, 0).toISOString() },
+            where: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.WORKFLOW_RUN } },
+            page: { limit: 50 },
+          }),
+        );
+        const compiled = compilePostgresTraceQuery(harness.schema, plan);
+        const explained = await harness.client.one<{ 'QUERY PLAN': Array<{ Plan: ExplainPlanNode }> }>(
+          `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${compiled.text}`,
+          compiled.values,
+        );
+        const nodes = collectPlanNodes(explained['QUERY PLAN'][0]!.Plan);
+        expect(nodes.some(node => node['Index Cond']?.includes('"spanType" = '))).toBe(true);
+        expect(nodes.find(node => node['Subplan Name'] === 'CTE root_scope')?.['Actual Rows']).toBe(20);
+        await expect(harness.domain.queryTraces(plan)).resolves.toMatchObject({
+          traces: expect.arrayContaining([expect.objectContaining({ traceId: 'eq-plan-1' })]),
+        });
       } finally {
         await harness.close();
       }

@@ -4679,7 +4679,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeStepExecutionPath || !ctx.resume)(
       'should not duplicate step IDs in stepExecutionPath after suspend/resume',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['basic-resume-workflow']!;
+        const { workflow, resetMocks } = registry!['basic-resume-workflow']!;
         resetMocks?.();
 
         const runId = `step-exec-path-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;

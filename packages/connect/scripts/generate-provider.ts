@@ -20,16 +20,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  Node,
-  Project,
-  SyntaxKind,
-  type CallExpression,
-  type ImportDeclaration,
-  type ObjectLiteralExpression,
-  type SourceFile,
-  type Statement,
-} from 'ts-morph';
+import { Node, Project, SyntaxKind } from 'ts-morph';
+import type { CallExpression, ImportDeclaration, ObjectLiteralExpression, SourceFile, Statement } from 'ts-morph';
 import { format, resolveConfig } from 'prettier';
 
 import {
@@ -42,13 +34,14 @@ import {
   providersDir,
   templatesDir,
   validateProviderId,
-  type ProviderManifest,
 } from './provider-utils.js';
-import { templatePinFor, type TemplatePin } from './templates-config.js';
+import type { ProviderManifest } from './provider-utils.js';
+import { templatePinFor } from './templates-config.js';
+import type { TemplatePin } from './templates-config.js';
 
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
-const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
+const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'proxy']);
 const PROXY_CONTEXT_METHODS = new Set([
   ...PROXY_REQUEST_METHODS,
   'getConnection',
@@ -70,6 +63,7 @@ const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set(['createAction', 'ProxyConfiguratio
 
 interface ActionCandidate {
   providerId: string;
+  localId: string;
   file: string;
   actionSlug: string;
   toolKey: string;
@@ -120,6 +114,17 @@ function findCreateActionCall(source: SourceFile): CallExpression | undefined {
   return undefined;
 }
 
+function callsTemplateContextMethod(source: SourceFile, methods: ReadonlySet<string>): boolean {
+  return source.getDescendantsOfKind(SyntaxKind.CallExpression).some(call => {
+    const expression = call.getExpression();
+    return (
+      Node.isPropertyAccessExpression(expression) &&
+      expression.getExpression().getText() === 'nango' &&
+      methods.has(expression.getName())
+    );
+  });
+}
+
 function readStringProperty(obj: ObjectLiteralExpression, name: string): string | undefined {
   const property = obj.getProperty(name);
   if (!property || !Node.isPropertyAssignment(property)) return undefined;
@@ -132,6 +137,26 @@ function readIdentifierPropertyInitializer(obj: ObjectLiteralExpression, name: s
   if (!property || !Node.isPropertyAssignment(property)) return undefined;
   const initializer = property.getInitializer();
   return initializer && Node.isIdentifier(initializer) ? initializer.getText() : undefined;
+}
+
+function normalizeSupportedRuntimeImports(source: SourceFile): void {
+  for (const declaration of source.getImportDeclarations()) {
+    const moduleName = declaration.getModuleSpecifierValue();
+    if (moduleName !== 'crypto' && moduleName !== 'node:crypto') continue;
+
+    const namedImports = declaration.getNamedImports();
+    if (
+      declaration.getDefaultImport() ||
+      declaration.getNamespaceImport() ||
+      namedImports.length !== 1 ||
+      namedImports[0]!.getName() !== 'randomUUID' ||
+      namedImports[0]!.getAliasNode()
+    ) {
+      continue;
+    }
+
+    declaration.replaceWithText('const randomUUID = () => globalThis.crypto.randomUUID();');
+  }
 }
 
 function unsupportedImportReason(source: SourceFile): string | undefined {
@@ -457,6 +482,7 @@ function extractAction(
   candidate: ActionCandidate,
 ): { kind: 'ok'; value: ExtractedAction } | { kind: 'skip'; reason: string } {
   const source = project.addSourceFileAtPath(candidate.file);
+  normalizeSupportedRuntimeImports(source);
   const importReason = unsupportedImportReason(source);
   if (importReason) return { kind: 'skip', reason: importReason };
 
@@ -511,9 +537,7 @@ function extractAction(
   // binding-aware: `.credentials` reads on unrelated values (for example a
   // `credentials` input field) don't trigger the rewrite.
   const readsCredentials = execReadsConnectionCredentials(execInitializer);
-  const usesProviderProxy = [...PROXY_REQUEST_METHODS].some(method =>
-    new RegExp(`\\bnango\\.${method}\\s*\\(`).test(source.getFullText()),
-  );
+  const usesProviderProxy = callsTemplateContextMethod(source, PROXY_REQUEST_METHODS);
   if (!usesProviderProxy) {
     return { kind: 'skip', reason: 'exec does not call the provider proxy' };
   }
@@ -617,6 +641,47 @@ function extractAction(
       execBody,
       usesProxyRequestType,
     },
+  };
+}
+
+const DELEGATED_OFFICE_PROVIDER_IDS = new Set(['microsoft-excel', 'microsoft-powerpoint', 'microsoft-word']);
+
+// Nango shares these actions with client-credentials templates. Adapt only the
+// customer-facing delegated providers; keep the explicit -oauth2-cc variants unchanged.
+function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
+  if (
+    !DELEGATED_OFFICE_PROVIDER_IDS.has(action.candidate.localId) ||
+    action.candidate.actionSlug !== 'get-user-drive'
+  ) {
+    return action;
+  }
+
+  let inputSchemaUpdated = false;
+  const moduleStatements = action.moduleStatements.map(statement => {
+    if (!statement.includes(`const ${action.inputSchemaName}`)) return statement;
+
+    const updated = statement.replace('userId: z.string().describe(', 'userId: z.string().optional().describe(');
+    inputSchemaUpdated ||= updated !== statement;
+    return updated;
+  });
+
+  const endpointPattern = /endpoint:\s*`\/v1\.0\/users\/\$\{encodeURIComponent\(input\.userId\)\}\/drive`/;
+  const execBody = action.execBody.replace(
+    endpointPattern,
+    "endpoint: input.userId ? `/v1.0/users/${encodeURIComponent(input.userId)}/drive` : '/v1.0/me/drive'",
+  );
+
+  if (!inputSchemaUpdated || execBody === action.execBody) {
+    throw new Error(
+      `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} for delegated OAuth; the upstream template shape changed.`,
+    );
+  }
+
+  return {
+    ...action,
+    description: "Get the connected user's OneDrive, or another user's drive when userId is provided.",
+    moduleStatements,
+    execBody,
   };
 }
 
@@ -800,12 +865,13 @@ export async function generateProvider({
     const actionSlug = filename.replace(/\.ts$/, '');
     const candidate: ActionCandidate = {
       providerId,
+      localId,
       file: resolve(actionDir, filename),
       actionSlug,
       toolKey: `${localId.replace(/-/g, '_')}_${toSnake(actionSlug)}`,
     };
     const result = extractAction(project, candidate);
-    if (result.kind === 'ok') extracted.push(result.value);
+    if (result.kind === 'ok') extracted.push(applyProviderActionOverrides(result.value));
     else skipped.push({ candidate, reason: result.reason });
   }
 

@@ -23,9 +23,8 @@ import {
   materializeKnowledgeScopePlan,
   validateKnowledgeScopeTypes,
   validateKnowledgeStructurePlan,
-  type KnowledgeScopeTypesConfig,
-  type MaterializeKnowledgeScopeInput,
 } from './reconcile';
+import type { KnowledgeScopeTypesConfig, MaterializeKnowledgeScopeInput } from './reconcile';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export class Knowledge extends MastraBase {

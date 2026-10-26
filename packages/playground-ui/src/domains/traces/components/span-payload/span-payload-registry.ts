@@ -1,6 +1,7 @@
-import type { describeSpanInput } from '@mastra/core/observability';
+import { describeSpanInput } from '@mastra/core/observability';
 import type { ComponentType } from 'react';
 import type { SpanRecord } from '../../types';
+import { getSpanSignal } from '@/domains/traces/utils/span-signal';
 
 type CoreSpanRecord = Parameters<typeof describeSpanInput>[0];
 
@@ -29,7 +30,13 @@ export function pickRenderer<D extends Described>(
  * and `error`, which are identical in both, so this is the one place the two types meet.
  */
 export function asCoreSpan(span: SpanRecord): CoreSpanRecord {
+  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Generated SDK and core span types differ once workspace declarations are built.
   return span as unknown as CoreSpanRecord;
 }
 
 export const hasItems = (value: unknown): value is unknown[] => Array.isArray(value) && value.length > 0;
+
+/** Whether a span's input has a rendered preview, rather than only its raw JSON. */
+export function hasSpanInputPreview(span: SpanRecord): boolean {
+  return getSpanSignal(span) !== undefined || describeSpanInput(asCoreSpan(span))?.type !== 'json';
+}

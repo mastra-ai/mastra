@@ -1,4 +1,5 @@
-import { request as createHttpRequest, type Server } from 'node:http';
+import { request as createHttpRequest } from 'node:http';
+import type { Server } from 'node:http';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
 import { createRoute } from '@mastra/server/server-adapter';
@@ -1340,6 +1341,8 @@ describe('Express Server Adapter', () => {
 
   createBodyLimitTestSuite({
     suiteName: 'Body Size Limit',
+    // The Express adapter never reads text/plain or octet-stream bodies; they are left to host-level parsers.
+    skipNonJsonStreamedBody: true,
 
     createApp: () => {
       const app = express();

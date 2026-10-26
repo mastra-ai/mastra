@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MastraError } from '@mastra/core/error';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { parse } from 'yaml';
 import { copyPnpmWorkspaceSettings, DepsService, getPnpmIgnoredBuildPackages, withPlaceholderVersions } from './deps';
 
 const { runChildProcess } = vi.hoisted(() => ({
@@ -132,6 +133,181 @@ describe('copyPnpmWorkspaceSettings', () => {
 
   it('omits patch configuration when no patches were resolved', () => {
     expect(copyPnpmWorkspaceSettings('', { patchedDependencies: {} })).toBe(`packages:\n  - '.'\n`);
+  });
+});
+
+describe('DepsService custom pnpm workspace settings', () => {
+  let sourceRoot: string;
+  let outputDir: string;
+
+  beforeEach(async () => {
+    sourceRoot = await mkdtemp(join(tmpdir(), 'mastra-pnpm-settings-'));
+    tempDirs.push(sourceRoot);
+    outputDir = join(sourceRoot, 'output');
+    await mkdir(outputDir);
+    await writeFile(join(sourceRoot, 'package.json'), '{"name":"source"}');
+    await writeFile(join(outputDir, 'package.json'), '{"name":"output"}');
+    await writeFile(join(sourceRoot, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n');
+    await writeFile(
+      join(sourceRoot, 'pnpm-workspace.yaml'),
+      'packages: ["apps/*"]\nminimumReleaseAge: 1440\nblockExoticSubdeps: true\n//registry.example/:_authToken: secret\n',
+    );
+  });
+
+  it('writes explicitly supplied settings into the install workspace without copying unrelated source settings', async () => {
+    await new DepsService(sourceRoot).install({
+      dir: outputDir,
+      pnpmWorkspaceSettings: {
+        blockExoticSubdeps: false,
+        minimumReleaseAge: 0,
+        minimumReleaseAgeExclude: ['@internal/*'],
+      },
+      pnpmOverrides: { '@internal/package': 'file:./workspace-module/package.tgz' },
+      pnpmNodeLinker: 'hoisted',
+    });
+
+    const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+    expect(workspace).toEqual({
+      packages: ['.'],
+      blockExoticSubdeps: false,
+      minimumReleaseAge: 0,
+      minimumReleaseAgeExclude: ['@internal/*'],
+      overrides: { '@internal/package': 'file:./workspace-module/package.tgz' },
+      nodeLinker: 'hoisted',
+    });
+  });
+
+  it('accepts every supported install-policy setting', async () => {
+    const settings = {
+      allowBuilds: { esbuild: true, bcrypt: false },
+      onlyBuiltDependencies: ['esbuild'],
+      ignoredBuiltDependencies: ['core-js'],
+      minimumReleaseAge: 60,
+      minimumReleaseAgeExclude: ['@internal/*'],
+      trustPolicy: 'no-downgrade',
+      trustPolicyExclude: ['legacy-package'],
+      trustPolicyIgnoreAfter: 525600,
+      blockExoticSubdeps: false,
+    };
+    await new DepsService(sourceRoot).install({ dir: outputDir, pnpmWorkspaceSettings: settings });
+    expect(parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'))).toEqual({
+      packages: ['.'],
+      ...settings,
+    });
+    expect(runChildProcess).toHaveBeenCalled();
+  });
+
+  it('writes explicit settings even when the source has no workspace file', async () => {
+    await rm(join(sourceRoot, 'pnpm-workspace.yaml'));
+    await new DepsService(sourceRoot).install({
+      dir: outputDir,
+      pnpmWorkspaceSettings: { blockExoticSubdeps: false },
+    });
+    expect(parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'))).toEqual({
+      packages: ['.'],
+      blockExoticSubdeps: false,
+    });
+  });
+
+  it('keeps the copied source setting when an explicit setting is undefined', async () => {
+    // JS configs aren't type-checked by `mastra build`, so `isCI ? 0 : undefined` can reach the deployer.
+    const pnpmWorkspaceSettings = { minimumReleaseAge: undefined, blockExoticSubdeps: false } as unknown as Record<
+      string,
+      boolean
+    >;
+    await new DepsService(sourceRoot).install({ dir: outputDir, pnpmWorkspaceSettings });
+    expect(parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'))).toEqual({
+      packages: ['.'],
+      minimumReleaseAge: 1440,
+      blockExoticSubdeps: false,
+    });
+  });
+
+  it('preserves existing behavior when custom settings are omitted', async () => {
+    await new DepsService(sourceRoot).install({ dir: outputDir });
+    expect(parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'))).toEqual({
+      packages: ['.'],
+      minimumReleaseAge: 1440,
+    });
+  });
+
+  it.each<[string, unknown]>([
+    ['packages', ['../outside']],
+    ['overrides', { lodash: '4.17.21' }],
+    ['patchedDependencies', { lodash: '../lodash.patch' }],
+    ['allowUnusedPatches', true],
+    ['supportedArchitectures', { os: ['darwin'] }],
+    ['nodeLinker', 'isolated'],
+    ['//registry.example/:_authToken', 'secret'],
+    ['registry', 'https://registry.example'],
+    ['httpsProxy', 'http://proxy.example'],
+    ['strictSsl', false],
+    ['ca', '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----'],
+    ['verifyStoreIntegrity', false],
+    ['packageExtensions', { lodash: { dependencies: { evil: 'https://attacker.example/evil.tgz' } } }],
+    ['strictDepBuilds', false],
+    ['localAddress', '10.0.0.5'],
+    ['gitShallowHosts', ['git.attacker.example']],
+    ['catalog', { react: '19.0.0' }],
+    ['catalogs', { legacy: { react: '17.0.0' } }],
+    ['peerDependencyRules', { allowAny: ['*'] }],
+    ['preferFrozenLockfile', true],
+    ['scriptShell', '/bin/sh'],
+    ['pnpmfile', '.pnpmfile.cjs'],
+    ['configDependencies', { evil: '1.0.0' }],
+    ['managePackageManagerVersions', true],
+    ['useNodeVersion', '18.0.0'],
+    ['modulesDir', '../node_modules'],
+    ['dangerouslyAllowAllBuilds', true],
+    // pnpm 10 treats any neverBuiltDependencies list as deny-list mode and runs every unlisted build script.
+    ['neverBuiltDependencies', []],
+    ['neverBuiltDependencies', ['core-js']],
+    ['--offline', true],
+    ['blockExoticSubdeps:\npackages', 'unsupported'],
+  ])('rejects setting %s outside the install-policy allowlist before running pnpm', async (key, value) => {
+    await expect(
+      new DepsService(sourceRoot).install({
+        dir: outputDir,
+        pnpmWorkspaceSettings: { [key]: value } as Record<string, never>,
+      }),
+    ).rejects.toMatchObject({
+      id: 'DEPLOYER_INVALID_PNPM_WORKSPACE_SETTING',
+      message: expect.stringContaining('Supported settings: allowBuilds,'),
+    });
+    expect(runChildProcess).not.toHaveBeenCalled();
+    expect(fs.existsSync(join(outputDir, 'pnpm-workspace.yaml'))).toBe(false);
+  });
+
+  it('rejects permissions that could override denied source build approvals before installing', async () => {
+    await writeFile(join(sourceRoot, 'pnpm-workspace.yaml'), 'allowBuilds:\n  bcrypt: false\n');
+    await expect(
+      new DepsService(sourceRoot).install({
+        dir: outputDir,
+        pnpmWorkspaceSettings: { permissions: { bcrypt: { build: true } } },
+      }),
+    ).rejects.toMatchObject({ id: 'DEPLOYER_INVALID_PNPM_WORKSPACE_SETTING' });
+    expect(runChildProcess).not.toHaveBeenCalled();
+    expect(fs.existsSync(join(outputDir, 'pnpm-workspace.yaml'))).toBe(false);
+  });
+
+  it('validates explicitly supplied build approvals', async () => {
+    await expect(
+      new DepsService(sourceRoot).install({
+        dir: outputDir,
+        pnpmWorkspaceSettings: { allowBuilds: { bcrypt: 'yes' } },
+      }),
+    ).rejects.toMatchObject({ id: 'DEPLOYER_INVALID_PNPM_BUILD_APPROVAL_CONFIG' });
+    expect(runChildProcess).not.toHaveBeenCalled();
+  });
+
+  it('quotes multiline values without creating additional workspace keys', async () => {
+    await new DepsService(sourceRoot).install({
+      dir: outputDir,
+      pnpmWorkspaceSettings: { trustPolicy: 'no-downgrade\npackages: ["../outside"]' },
+    });
+    const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+    expect(workspace.packages).toEqual(['.']);
+    expect(workspace.trustPolicy).toBe('no-downgrade\npackages: ["../outside"]');
   });
 });
 
@@ -432,6 +608,52 @@ describe('DepsService lockfile installation', () => {
     expect(fs.existsSync(join(outputDir, 'bun.lock'))).toBe(false);
     expect(await readFile(join(root, 'bun.lock'), 'utf-8')).toBe(sourceLock);
     expect(runChildProcess.mock.calls[0]?.[0].cmd).toBe('bun install');
+  });
+
+  it('drops workspace links for packed workspace tarballs from a copied pnpm lockfile', async () => {
+    // The app is the workspace root, so the lockfile's root importer is the app and links its
+    // workspace dependency. pnpm keeps a `link:` version even when an override points elsewhere.
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pnpm-root-app-'));
+    tempDirs.push(root);
+    const outputDir = join(root, '.mastra', 'output');
+    await mkdir(outputDir, { recursive: true });
+    const sourceLock = `lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    dependencies:
+      '@inner/shared':
+        specifier: workspace:*
+        version: link:packages/shared
+      zod:
+        specifier: ^4.0.0
+        version: 4.1.0
+
+  packages/shared:
+    devDependencies:
+      '@inner/shared':
+        specifier: workspace:*
+        version: link:.
+
+packages:
+
+  zod@4.1.0:
+    resolution: {integrity: sha512-abc}
+`;
+    await writeFile(join(root, 'pnpm-lock.yaml'), sourceLock);
+    await writeFile(join(outputDir, 'package.json'), '{"dependencies":{}}');
+
+    await new DepsService(root).install({
+      dir: outputDir,
+      pnpmOverrides: { '@inner/shared': 'file:./workspace-module/inner-shared-1.0.0.tgz' },
+    });
+
+    const outputLock = parse(await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8'));
+    expect(outputLock.importers['.'].dependencies).toEqual({ zod: { specifier: '^4.0.0', version: '4.1.0' } });
+    expect(outputLock.importers['packages/shared'].devDependencies).toEqual({});
+    expect(outputLock.packages).toEqual({ 'zod@4.1.0': { resolution: { integrity: 'sha512-abc' } } });
+    expect(await readFile(join(root, 'pnpm-lock.yaml'), 'utf-8')).toBe(sourceLock);
   });
 
   it('updates Yarn Classic lockfiles while installing without a Berry-only flag', async () => {

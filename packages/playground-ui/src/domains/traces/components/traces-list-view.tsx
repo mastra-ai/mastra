@@ -11,6 +11,7 @@ import {
 } from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceCustomColumn, TraceUsageSummary } from '../trace-list-columns';
 import { getInputPreview, getSpanDurationMs } from '../utils/span-utils';
+import { TraceErrorCell } from './trace-error-cell';
 import { DataList, DataListSkeletonRows, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
 import type { DataListSort } from '@/ds/components/DataList';
 import { splitColumns } from '@/ds/components/DataList/shared';
@@ -72,6 +73,13 @@ function sumTokens(usage: TraceUsageSummary | undefined): number | undefined {
   return (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0);
 }
 
+type FailedTrace = TracesListViewTrace & { spanId: string; errorPreview: string };
+
+/** A failed row whose error preview can open the full error from its span. */
+function isFailedTrace(trace: TracesListViewTrace): trace is FailedTrace {
+  return trace.status === 'error' && !!trace.errorPreview && !!trace.spanId;
+}
+
 export type TracesListViewProps = {
   traces: TracesListViewTrace[];
   isLoading?: boolean;
@@ -79,6 +87,8 @@ export type TracesListViewProps = {
   hasNextPage?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   filtersApplied?: boolean;
+  /** What the rows hold, named in the empty messages. Defaults to `traces`. */
+  resource?: 'traces' | 'spans' | 'threads';
   /** Currently featured/selected trace — its row gets the highlighted background. */
   featuredTraceId?: string | null;
   /**
@@ -119,6 +129,7 @@ export function TracesListView({
   hasNextPage,
   setEndOfListElement,
   filtersApplied,
+  resource = 'traces',
   featuredTraceId,
   featuredSpanId,
   isBranchesMode,
@@ -242,7 +253,7 @@ export function TracesListView({
         <DataListSkeletonRows columnCount={splitColumns(columns).length} />
       ) : traces.length === 0 ? (
         <TracesDataList.NoMatch
-          message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
+          message={filtersApplied ? `No ${resource} found for applied filters` : `No ${resource} found yet`}
         />
       ) : (
         <>
@@ -278,13 +289,16 @@ export function TracesListView({
                 {hasTraceColumn(columnPreferences, 'input') && (
                   <TracesDataList.InputCell input={trace.inputPreview ?? getInputPreview(trace.input)} />
                 )}
-                {hasTraceColumn(columnPreferences, 'output') && (
-                  <TracesDataList.OutputCell
-                    output={trace.outputPreview}
-                    error={trace.errorPreview}
-                    status={trace.status}
-                  />
-                )}
+                {hasTraceColumn(columnPreferences, 'output') &&
+                  (isFailedTrace(trace) ? (
+                    <TraceErrorCell traceId={trace.traceId} spanId={trace.spanId} errorPreview={trace.errorPreview} />
+                  ) : (
+                    <TracesDataList.OutputCell
+                      output={trace.outputPreview}
+                      error={trace.errorPreview}
+                      status={trace.status}
+                    />
+                  ))}
                 <TracesDataList.StatusCell status={trace.status} />
                 {hasTraceColumn(columnPreferences, 'duration') && (
                   <DataList.NumberCell font="mono">

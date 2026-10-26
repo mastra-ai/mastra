@@ -136,10 +136,13 @@ export function buildCommandExamples(descriptor: ApiCommandDescriptor): ApiComma
 
 function buildGenericExamples(descriptor: ApiCommandDescriptor, command: string): ApiCommandExample[] {
   if (descriptor.list) {
+    const positionalSamples = samplePositionals(descriptor);
     return [
       {
         description: descriptor.description,
-        command: descriptor.acceptsInput ? `${command} '{"page":0,"perPage":50}'` : command,
+        command: [command, ...positionalSamples, descriptor.acceptsInput ? `'{"page":0,"perPage":50}'` : undefined]
+          .filter(Boolean)
+          .join(' '),
       },
     ];
   }

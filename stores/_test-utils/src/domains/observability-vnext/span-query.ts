@@ -1,5 +1,6 @@
-import { SpanType } from '@mastra/core/observability';
-import { planSpanQuery, PREVIEW_MAX_LENGTH } from '@mastra/core/storage';
+import { EntityType, SpanType } from '@mastra/core/observability';
+import type { AnyExportedSpan } from '@mastra/core/observability';
+import { buildCreateSpanRecord, planSpanQuery, PREVIEW_MAX_LENGTH, TraceQueryCursorError } from '@mastra/core/storage';
 import type { ObservabilityStorage, SpanQueryRequest, SpanQueryRow } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { makeSpan } from './data';
@@ -192,6 +193,100 @@ export function createSpanQueryTests(
       expect(result.spans[0]).toMatchObject({ model: 'test-model', provider: 'test-provider' });
     });
 
+    describe('time to first chunk', () => {
+      const ids = async (where: SpanQueryRequest['where']) =>
+        (await query({ where })).spans.map(row => row.spanId).sort();
+
+      describe('sort', () => {
+        // Ties break by identity; empty values sort last in both directions.
+        const expected = {
+          asc: ['zero', 'fast', 'fraction', 'tie-a', 'tie-b', 'empty', 'missing'],
+          desc: ['tie-a', 'tie-b', 'fraction', 'fast', 'zero', 'empty', 'missing'],
+        };
+        const orderBy = (direction: 'asc' | 'desc') => [{ field: 'timeToFirstChunkMs' as const, direction }];
+
+        beforeEach(async () => {
+          await getStorage().batchCreateSpans({
+            records: [
+              span('tie-b', { timeToFirstChunkMs: 300 }),
+              span('empty', { timeToFirstChunkMs: null }),
+              span('fraction', { timeToFirstChunkMs: 120.5 }),
+              span('tie-a', { timeToFirstChunkMs: 300 }),
+              span('zero', { timeToFirstChunkMs: 0 }),
+              span('missing'),
+              span('fast', { timeToFirstChunkMs: 50 }),
+            ],
+          });
+        });
+
+        it('advertises the sort', () => {
+          expect(getStorage().getFeatures()).toContain('trace-query-time-to-first-chunk-sort');
+        });
+
+        it.each(['asc', 'desc'] as const)('pages %s with empty values last at every page size', async direction => {
+          for (const limit of [1, 2, 3, 7]) {
+            const rows: SpanQueryRow[] = [];
+            let after: string | undefined;
+            do {
+              const page = await query({ orderBy: orderBy(direction), page: { limit, after } });
+              rows.push(...page.spans);
+              after = page.page.next ?? undefined;
+              expect(rows.length).toBeLessThanOrEqual(expected[direction].length);
+            } while (after);
+            expect(
+              rows.map(row => row.spanId),
+              `limit ${limit}`,
+            ).toEqual(expected[direction]);
+          }
+        });
+
+        it('resumes after an empty value and rejects the cursor once the sort changes', async () => {
+          const first = await query({ orderBy: orderBy('desc'), page: { limit: 6 } });
+          expect(first.spans.at(-1)).toMatchObject({ spanId: 'empty', timeToFirstChunkMs: null });
+          const after = first.page.next!;
+          const rest = await query({ orderBy: orderBy('desc'), page: { limit: 6, after } });
+          expect(rest.spans.map(row => row.spanId)).toEqual(['missing']);
+          for (const changed of [orderBy('asc'), [{ field: 'startedAt' as const, direction: 'desc' as const }]]) {
+            expect(() => query({ orderBy: changed, page: { limit: 6, after } })).toThrowError(TraceQueryCursorError);
+          }
+        });
+      });
+
+      it('returns the stored value, keeping zero and leaving missing values empty', async () => {
+        await getStorage().batchCreateSpans({
+          records: [
+            span('present', { timeToFirstChunkMs: 250 }),
+            span('zero', { timeToFirstChunkMs: 0 }),
+            span('empty', { timeToFirstChunkMs: null }),
+            span('missing'),
+          ],
+        });
+        const values = Object.fromEntries((await query()).spans.map(row => [row.spanId, row.timeToFirstChunkMs]));
+        expect(values).toEqual({ present: 250, zero: 0, empty: null, missing: null });
+      });
+
+      it('reads the value from the ended record when the span started before its first chunk', async () => {
+        await getStorage().createSpan({ span: span('lifecycle', { endedAt: null }) });
+        await getStorage().batchCreateSpans({ records: [span('lifecycle', { timeToFirstChunkMs: 400 })] });
+        expect((await query()).spans.map(row => row.timeToFirstChunkMs)).toEqual([400]);
+      });
+
+      it('filters by the value, counting zero as a value and missing as empty', async () => {
+        await getStorage().batchCreateSpans({
+          records: [
+            span('present', { timeToFirstChunkMs: 250 }),
+            span('zero', { timeToFirstChunkMs: 0 }),
+            span('missing'),
+          ],
+        });
+        const field = { path: 'timeToFirstChunkMs' } as const;
+        expect(await ids({ op: 'gt', left: field, right: { literal: 100 } })).toEqual(['present']);
+        expect(await ids({ op: 'eq', left: field, right: { literal: 0 } })).toEqual(['zero']);
+        expect(await ids({ op: 'exists', path: 'timeToFirstChunkMs' })).toEqual(['present', 'zero']);
+        expect(await ids({ op: 'notExists', path: 'timeToFirstChunkMs' })).toEqual(['missing']);
+      });
+    });
+
     it('preserves error presence through current-record selection and boolean filters', async () => {
       await getStorage().batchCreateSpans({ records: [span('failed', { error: { message: 'failure' } }), span('ok')] });
       const result = await query({
@@ -231,12 +326,53 @@ export function createSpanQueryTests(
       await getStorage().batchCreateSpans({
         records: [span('context', { ...scope, ...context, ...lineage }), span('other')],
       });
-      const expected = options.eventSourced ? context : { ...context, ...lineage };
+      const expected = { ...context, ...lineage };
       for (const [field, value] of Object.entries(expected)) {
         const result = await query({ where: { op: 'eq', left: { path: field }, right: { literal: value } } });
         expect(result.spans.map(row => row.spanId)).toEqual(['context']);
         expect(result.spans[0]).toMatchObject(expected);
       }
+    });
+
+    it('persists parent and root entity carried on an exported span through buildCreateSpanRecord', async () => {
+      const exported: AnyExportedSpan = {
+        id: 'exported-tool',
+        traceId: 'trace-exported',
+        parentSpanId: 'exported-workflow',
+        name: 'tool: lookup',
+        type: SpanType.TOOL_CALL,
+        entityType: EntityType.TOOL,
+        entityId: 'lookup',
+        entityName: 'lookup',
+        startTime: start,
+        endTime: end,
+        isEvent: false,
+        isRootSpan: false,
+        parentEntityType: EntityType.WORKFLOW_RUN,
+        parentEntityId: 'triage',
+        parentEntityName: 'Triage',
+        parentEntityVersionId: 'triage-v1',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'support',
+        rootEntityName: 'Support',
+        rootEntityVersionId: 'support-v1',
+      };
+      await getStorage().batchCreateSpans({ records: [buildCreateSpanRecord(exported)] });
+
+      const result = await query({
+        where: { op: 'eq', left: { path: 'rootEntityName' }, right: { literal: 'Support' } },
+      });
+      expect(result.spans.map(row => row.spanId)).toEqual(['exported-tool']);
+      expect(result.spans[0]).toMatchObject({
+        parentEntityType: EntityType.WORKFLOW_RUN,
+        parentEntityId: 'triage',
+        parentEntityName: 'Triage',
+        parentEntityVersionId: 'triage-v1',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'support',
+        rootEntityName: 'Support',
+        rootEntityVersionId: 'support-v1',
+      });
     });
 
     it('filters trace and parent span identities independently', async () => {
@@ -256,19 +392,17 @@ export function createSpanQueryTests(
       ]);
     });
 
-    it('maps span source to executionSource or applies documented null semantics', async () => {
+    it('maps span source to executionSource', async () => {
       await getStorage().batchCreateSpans({
         records: [span('agent', { source: 'agent' }), span('workflow', { source: 'workflow' }), span('absent')],
       });
       const result = await query({
         where: { op: 'eq', left: { path: 'executionSource' }, right: { literal: 'agent' } },
       });
-      expect(result.spans.map(row => row.spanId)).toEqual(options.eventSourced ? [] : ['agent']);
-      if (!options.eventSourced) expect(result.spans[0]).toMatchObject({ executionSource: 'agent' });
+      expect(result.spans.map(row => row.spanId)).toEqual(['agent']);
+      expect(result.spans[0]).toMatchObject({ executionSource: 'agent' });
       const absent = await query({ where: { op: 'notExists', path: 'executionSource' } });
-      expect(absent.spans.map(row => row.spanId).sort()).toEqual(
-        options.eventSourced ? ['absent', 'agent', 'workflow'] : ['absent'],
-      );
+      expect(absent.spans.map(row => row.spanId)).toEqual(['absent']);
       for (const row of absent.spans) expect(row.executionSource).toBeNull();
     });
 

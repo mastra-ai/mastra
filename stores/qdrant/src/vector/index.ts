@@ -289,16 +289,15 @@ export class QdrantVector extends MastraVector {
     try {
       // Build vectors configuration
       if (namedVectors) {
-        const namedVectorsConfig = Object.entries(namedVectors).reduce(
-          (acc, [name, config]) => {
-            acc[name] = {
-              size: config.size,
-              distance: DISTANCE_MAPPING[config.distance]!,
-            };
-            return acc;
-          },
-          {} as Record<string, { size: number; distance: Schemas['Distance'] }>,
-        );
+        const namedVectorsConfig = Object.entries(namedVectors).reduce<
+          Record<string, { size: number; distance: Schemas['Distance'] }>
+        >((acc, [name, config]) => {
+          acc[name] = {
+            size: config.size,
+            distance: DISTANCE_MAPPING[config.distance]!,
+          };
+          return acc;
+        }, {});
 
         await this.client.createCollection(indexName, {
           vectors: namedVectorsConfig,
@@ -610,7 +609,7 @@ export class QdrantVector extends MastraVector {
             limit: 100,
             offset,
             with_payload: false,
-            with_vector: update.vector ? false : true, // Only fetch vectors if not updating them
+            with_vector: !update.vector, // Only fetch vectors if not updating them
           });
 
           matchingPoints.push(

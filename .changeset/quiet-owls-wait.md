@@ -1,5 +1,6 @@
 ---
-'@mastra/code-sdk': patch
+'@mastra/e2b': patch
+'@mastra/platform-workspace': patch
 ---
 
-Fixed headless runs reporting success while a tool was still waiting for an answer. When a tool such as `request_access` paused the run, `runMC` stopped with `status: 'completed'` and exit code `0`, so the answer from the permission policy was never applied. Headless runs now wait for the paused run to stop, send the policy's answer, and keep running until the resumed run finishes. If a paused tool can't be resumed, the run ends with `status: 'error'` and exit code `1` instead of reporting success.
+Fixed background processes losing output, and `wait()` failing, when a command wrote output as soon as it started. Output that arrived before the process handle was ready was dropped with an error; it now reaches `stdout`, `stderr` and the `onStdout`/`onStderr` callbacks like any other output. This applies to `sandbox.processes.spawn()` and to attaching with `sandbox.processes.get(pid)`.
