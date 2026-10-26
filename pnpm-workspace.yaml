@@ -383,7 +383,7 @@ overrides:
   launch-editor@<2.14.2: 2.14.2
   mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
   websocket-driver@<0.7.5: 0.7.5
-  '@babel/core@>=7.0.0 <7.29.6': 8.0.1
+  '@babel/core@>=7.0.0 <7.29.6': 8.0.7
   '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
   # Vanta 2026-10-21: AIKIDO-2026-580831/-760928/-864217 fixed in 3.4.17 (mermaid/posthog-js)
   dompurify@>=3.0.0 <3.4.17: 3.4.17
