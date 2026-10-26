@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed processors receiving `agent: undefined` in every hook that runs inside the agentic loop. `processInputStep`, `processLLMRequest`, `processLLMResponse`, `processOutputStream`, `processOutputStep`, `processToolResult` and `processOutputResult` now get the running agent as `args.agent`, on regular, durable and evented agents. Previously only `processInput` received it.
+Fixed processor hooks receiving `args.agent` as `undefined` during regular, durable and evented agent runs. Hooks such as `processInputStep`, `processOutputStream` and `processToolResult` now receive the running agent, like `processInput` already did.

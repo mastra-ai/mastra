@@ -5527,6 +5527,7 @@ export class DurableAgent<
     let structuredOutput = observedEntry?.structuredOutput;
     let outputProcessors = observedEntry?.outputProcessors;
     const processorStates = observedEntry?.processorStates;
+    let streamAgent: Agent<any, any, any, any> = observedEntry?.agent ?? this.#wrappedAgent;
     let returnScorerData = observedEntry?.returnScorerData;
     let requestContext = observedEntry?.requestContext;
     let messageList = observedEntry?.messageList ?? this.#runRegistry.getMessageList(runId);
@@ -5663,6 +5664,7 @@ export class DurableAgent<
         }
       }
 
+      streamAgent = observedEntry?.agent ?? processorAgent;
       try {
         outputProcessors = (await processorAgent.listOutputProcessors(requestContext)) ?? [];
       } catch (error) {
@@ -5774,6 +5776,7 @@ export class DurableAgent<
       },
       onSuspended: options?.onSuspended,
       structuredOutput: structuredOutput as any,
+      agent: streamAgent,
       outputProcessors,
       processorStates,
       returnScorerData,
