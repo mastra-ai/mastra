@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest';
-import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  describeForAllEngines,
+  isDurableEngineVariant,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 
 /**
  * The stream result's properties and methods must keep working after being
@@ -11,11 +16,11 @@ import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from 
 describeForAllEngines('AIMock loop scenario: stream result destructuring', engine => {
   const getMock = useLoopScenarioAimock();
 
-  // Known gap: the durable/evented `result.output` is a plain MastraModelOutput,
+  // Known gap: the durable (durable/evented/inngest) `result.output` is a plain MastraModelOutput,
   // not wrapped by `createDestructurableOutput` like the direct loop's result,
   // so a destructured `consumeStream()` loses `this` and throws.
   // Only that call is expected to fail; everything else is asserted normally.
-  const isDurableEngine = engine === 'durable' || engine === 'evented';
+  const isDurableEngine = isDurableEngineVariant(engine);
 
   it('resolves destructured stream properties and methods', async () => {
     const llm = getMock();
