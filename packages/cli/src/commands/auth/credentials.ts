@@ -108,9 +108,13 @@ export function openBrowser(url: string) {
     execFileSync('cmd', ['/c', 'start', '', url]);
   } else if (isWSL()) {
     // Pass the URL through the environment so it is never parsed as PowerShell code.
-    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Start-Process -FilePath $env:MASTRA_OPEN_URL'], {
-      env: { ...process.env, MASTRA_OPEN_URL: url },
-    });
+    execFileSync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', 'Start-Process -FilePath $env:MASTRA_OPEN_URL'],
+      {
+        env: { ...process.env, MASTRA_OPEN_URL: url },
+      },
+    );
   } else {
     execFileSync('xdg-open', [url]);
   }
