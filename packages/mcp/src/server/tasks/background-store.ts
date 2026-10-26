@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { BackgroundTask, BackgroundTaskManager, TaskContext, ToolExecutor } from '@mastra/core/background-tasks';
 import type { IMastraLogger } from '@mastra/core/logger';
+import type { BackgroundTasksStorage } from '@mastra/core/storage';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { createTaskId, suggestedPollIntervalMs, TASKS_ERROR_CODES } from '../../shared/tasks';
 import type { MCPDetailedTask, MCPTask, MCPTaskInputRequests, MCPTaskInputResponses } from '../../shared/tasks';
@@ -176,6 +177,10 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   readonly #logger?: IMastraLogger;
   readonly #gates = new Map<string, Gate>();
   readonly #executors = new Set<string>();
+  /** Rows this instance reclaimed for another attempt but could not dispatch yet. */
+  readonly #reclaimed = new Set<string>();
+  #sweepTimer?: ReturnType<typeof setInterval>;
+  #sweeping?: Promise<void>;
 
   constructor(options: BackgroundTaskMCPTaskStoreOptions) {
     this.#manager = options.manager;
@@ -203,6 +208,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       },
     });
     this.#executors.add(key);
+    this.#startSweeping();
   }
 
   async create(params: MCPTaskCreateParams): Promise<MCPTask> {
@@ -341,6 +347,125 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   close(): void {
     for (const key of this.#executors) this.#manager.unregisterStaticExecutor(key);
     this.#executors.clear();
+    clearInterval(this.#sweepTimer);
+    this.#sweepTimer = undefined;
+  }
+
+  /**
+   * Repairs what no request would: expires rows past their TTL, resumes answered rows whose
+   * process-local resume was lost, and settles rows whose worker died while this manager was
+   * already running (the manager itself only recovers rows when it starts).
+   */
+  sweep(): Promise<void> {
+    this.#sweeping ??= this.#sweep().finally(() => (this.#sweeping = undefined));
+    return this.#sweeping;
+  }
+
+  #startSweeping(): void {
+    if (this.#sweepTimer) return;
+    // Once per lease: a dead worker's rows are noticed about a lease after it stops renewing.
+    this.#sweepTimer = setInterval(() => {
+      this.sweep().catch(error => this.#logger?.debug('MCP task sweep failed', { error }));
+    }, this.#manager.config.leaseDurationMs);
+    this.#sweepTimer.unref?.();
+  }
+
+  async #sweep(): Promise<void> {
+    const rows: BackgroundTask[] = [];
+    const perPage = 100;
+    for (let page = 0; ; page++) {
+      const { tasks, total } = await this.#manager.listTasks({
+        agentId: this.#owner,
+        status: ['pending', 'running', 'suspended'],
+        orderBy: 'createdAt',
+        orderDirection: 'asc',
+        page,
+        perPage,
+      });
+      rows.push(...tasks);
+      if (tasks.length < perPage || rows.length >= total) break;
+    }
+    const storage = await this.#manager.getStorage();
+    const now = Date.now();
+    for (const row of rows) {
+      const envelope = envelopeOf(row);
+      if (!envelope) continue;
+      try {
+        if (isExpired(row, now)) await this.#expire(storage, row);
+        else if (isFullyAnswered(row, envelope)) await this.#resume(row, envelope);
+        else if (row.status === 'running' && row.leaseExpiresAt && row.leaseExpiresAt.getTime() <= now) {
+          await this.#reclaim(storage, row, envelope);
+        } else if (row.status === 'pending' && this.#reclaimed.has(row.id)) await this.#restart(row.id);
+      } catch (error) {
+        this.#logger?.debug('Could not sweep MCP task', { error });
+      }
+    }
+  }
+
+  /** Aborts the work, then records the task as failed until its retention ends. */
+  async #expire(storage: BackgroundTasksStorage, row: BackgroundTask): Promise<void> {
+    await this.#manager.cancel(row.id);
+    await storage.updateTask(
+      row.id,
+      {
+        status: 'failed',
+        error: { message: TASK_EXPIRED_MESSAGE },
+        completedAt: new Date(),
+        // Kept as long as a finished task would be, so `tasks/get` can still report the failure.
+        expiresAt: new Date(Date.now() + EXPIRED_RETENTION_MS),
+      },
+      { expectedStatus: 'cancelled' },
+    );
+    this.#reclaimed.delete(row.id);
+  }
+
+  /**
+   * A running row whose lease lapsed: its worker died. Fenced like the manager's own recovery, so
+   * of all instances (and managers) noticing it, exactly one settles it.
+   */
+  async #reclaim(
+    storage: BackgroundTasksStorage,
+    row: BackgroundTask,
+    envelope: BackgroundTaskEnvelope,
+  ): Promise<void> {
+    const fence = {
+      expectedStatus: 'running' as const,
+      expectedOwnerId: row.ownerId ?? null,
+      expectedLeaseExpiresAt: row.leaseExpiresAt ?? null,
+    };
+    if (envelope.recover && row.retryCount < row.maxRetries) {
+      const won = await storage.updateTask(
+        row.id,
+        { status: 'pending', retryCount: row.retryCount + 1, ownerId: undefined, leaseExpiresAt: undefined },
+        fence,
+      );
+      if (!won) return;
+      this.#reclaimed.add(row.id);
+      await this.#restart(row.id);
+      return;
+    }
+    await storage.updateTask(
+      row.id,
+      {
+        status: 'failed',
+        error: { message: TASK_LOST_MESSAGE },
+        completedAt: new Date(),
+        ownerId: undefined,
+        leaseExpiresAt: undefined,
+      },
+      fence,
+    );
+  }
+
+  /** Dispatches a reclaimed row; the dispatch claim is fenced, so it runs once however often this is called. */
+  async #restart(rowId: string): Promise<void> {
+    try {
+      await this.#manager.restart(rowId);
+      this.#reclaimed.delete(rowId);
+    } catch (error) {
+      // No slot yet, or another worker already took it: the next sweep tries again.
+      this.#logger?.debug('Could not restart MCP task', { error });
+    }
   }
 
   async #find(

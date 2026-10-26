@@ -110,4 +110,125 @@ describe('BackgroundTaskMCPTaskStore', () => {
     });
     store.close();
   });
+
+  async function setup(work: MCPTaskWork, recover = false) {
+    mastra = new Mastra({ logger: false, storage: new InMemoryStore(), backgroundTasks: { enabled: true } });
+    const manager = mastra.backgroundTaskManager!;
+    const store = new BackgroundTaskMCPTaskStore({
+      manager,
+      serverId: 's',
+      workFor: () => work,
+      recoverFor: () => recover,
+    });
+    store.registerTool('tool');
+    return { manager, store, storage: await manager.getStorage() };
+  }
+
+  async function rowOf(manager: NonNullable<Mastra['backgroundTaskManager']>) {
+    const { tasks } = await manager.listTasks({ agentId: 'mcp-server:s' });
+    return tasks[0]!;
+  }
+
+  async function until<T>(read: () => Promise<T>, done: (value: T) => boolean): Promise<T> {
+    let value = await read();
+    for (let i = 0; i < 150 && !done(value); i++) {
+      await sleep(20);
+      value = await read();
+    }
+    return value;
+  }
+
+  const access = { principal: 'alice' };
+
+  it('aborts a task still running at its TTL and reports it expired', async () => {
+    const aborted: unknown[] = [];
+    const hang: MCPTaskWork = ({ signal }) =>
+      new Promise((_, reject) =>
+        signal.addEventListener('abort', () => {
+          aborted.push(signal.reason);
+          reject(signal.reason);
+        }),
+      );
+    const { store } = await setup(hang);
+    const task = await store.create({ ttlMs: 150, principal: 'alice', context: { toolName: 'tool' } });
+    store.run(task.taskId, hang);
+    const done = await until(
+      () => store.get(task.taskId, access),
+      t => t?.status !== 'working',
+    );
+    expect(done).toMatchObject({ status: 'failed', error: { code: -32603, message: TASK_EXPIRED_MESSAGE } });
+    expect(aborted).toHaveLength(1);
+    store.close();
+  });
+
+  it('sweeps a task waiting for input past its TTL to failed', async () => {
+    const ask: MCPTaskWork = async () => ({
+      status: 'input_required',
+      inputRequests: { k: { method: 'elicitation/create', params: {} } },
+    });
+    const { store, manager } = await setup(ask);
+    const task = await store.create({ ttlMs: 150, principal: 'alice', context: { toolName: 'tool' } });
+    store.run(task.taskId, ask);
+    await until(
+      () => rowOf(manager),
+      row => row.status === 'suspended',
+    );
+    await sleep(160);
+    expect(await store.get(task.taskId, access)).toMatchObject({ status: 'failed' });
+    expect((await rowOf(manager)).status).toBe('suspended');
+
+    await store.sweep();
+    const row = await rowOf(manager);
+    expect(row).toMatchObject({ status: 'failed', error: { message: TASK_EXPIRED_MESSAGE } });
+    // Kept for a while so the failure stays readable; cleanup deletes it after that.
+    expect(row.expiresAt!.getTime()).toBeGreaterThan(Date.now());
+    expect(await store.get(task.taskId, access)).toMatchObject({
+      status: 'failed',
+      error: { message: TASK_EXPIRED_MESSAGE },
+    });
+    // An answer arriving now is not taken.
+    expect(await store.update(task.taskId, { k: { action: 'accept', content: {} } }, access)).toBe(true);
+    expect((await rowOf(manager)).status).toBe('failed');
+    store.close();
+  });
+
+  it.each([
+    { recover: false, status: 'failed', runs: 1 },
+    { recover: true, status: 'completed', runs: 2 },
+  ])(
+    'settles a running task whose worker stopped renewing its lease (recover: $recover)',
+    async ({ recover, status, runs }) => {
+      let attempts = 0;
+      const release: Array<() => void> = [];
+      const work: MCPTaskWork = async () => {
+        attempts++;
+        // The first attempt stands in for the dead worker's: it never finishes.
+        if (attempts === 1) await new Promise<void>(resolve => release.push(resolve));
+        return { status: 'completed', result: { content: [{ type: 'text', text: `attempt ${attempts}` }] } };
+      };
+      const { store, manager, storage } = await setup(work, recover);
+      const task = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+      store.run(task.taskId, work);
+      const running = await until(
+        () => rowOf(manager),
+        row => row.status === 'running',
+      );
+      // Another worker owned it and stopped renewing.
+      await storage.updateTask(running.id, { ownerId: 'dead-worker', leaseExpiresAt: new Date(Date.now() - 1) });
+
+      await store.sweep();
+      const settled = await until(
+        () => store.get(task.taskId, access),
+        t => t?.status === status,
+      );
+      expect(settled?.status).toBe(status);
+      if (!recover) expect(settled).toMatchObject({ error: { code: -32603, message: TASK_LOST_MESSAGE } });
+      // A second sweep, as another instance would run, settles nothing twice.
+      await store.sweep();
+      await sleep(100);
+      expect(attempts).toBe(runs);
+      release.forEach(resolve => resolve());
+      store.close();
+    },
+  );
 });
