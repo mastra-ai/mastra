@@ -1,12 +1,13 @@
 /* eslint-disable react-refresh/only-export-components */
+import type { AgentEditorConfig } from '@mastra/core/agent';
 import { createContext, useContext } from 'react';
+
+export type { AgentEditorConfig } from '@mastra/core/agent';
 import type { UseFormReturn } from 'react-hook-form';
 
 import type { AgentFormValues } from '../components/agent-edit-page/utils/form-validation';
 
-export type AgentEditorConfig = false | { instructions?: boolean; tools?: boolean | { description?: boolean } };
-
-interface AgentEditFormContextValue {
+export interface AgentEditFormContextValue {
   form: UseFormReturn<AgentFormValues>;
   mode: 'create' | 'edit';
   agentId?: string;

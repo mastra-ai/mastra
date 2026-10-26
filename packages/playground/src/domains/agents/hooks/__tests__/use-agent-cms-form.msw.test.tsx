@@ -521,6 +521,89 @@ describe('useAgentCmsForm — code agent tool ownership', () => {
   });
 });
 
+describe('useAgentCmsForm — model ownership', () => {
+  describe('when an Editor-owned model list is saved', () => {
+    it('persists the complete pending model list in one draft request', async () => {
+      const sink: { body: Record<string, unknown> | null } = { body: null };
+      captureCreateBody(sink);
+      const modelDataSource: AgentDataSource = {
+        ...dataSource,
+        modelList: [
+          {
+            id: 'primary',
+            enabled: true,
+            maxRetries: 0,
+            model: { provider: 'openai', modelId: '__AI_SDK_OPENAI_MODEL_BASE__', modelVersion: '' },
+          },
+          {
+            id: 'fallback',
+            enabled: true,
+            maxRetries: 2,
+            model: { provider: 'openai', modelId: '__AI_SDK_OPENAI_MODEL_BASE__', modelVersion: '' },
+          },
+        ],
+      };
+
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: AGENT_ID,
+            dataSource: modelDataSource,
+            isCodeAgentOverride: true,
+            hasStoredOverride: false,
+            editorConfig: { model: true },
+            onSuccess: () => {},
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      act(() => {
+        result.current.form.setValue(
+          'modelList',
+          [
+            {
+              id: 'fallback',
+              enabled: true,
+              maxRetries: 2,
+              model: { provider: 'openai', modelId: '__AI_SDK_OPENAI_MODEL_BASE__', modelVersion: '' },
+            },
+            {
+              id: 'primary',
+              enabled: false,
+              maxRetries: 0,
+              model: { provider: 'openai', modelId: '__AI_SDK_OPENAI_MODEL_BASE__', modelVersion: '' },
+            },
+          ],
+          { shouldDirty: true },
+        );
+      });
+
+      await act(async () => {
+        await result.current.handleSaveDraft();
+      });
+
+      await waitFor(() => expect(sink.body).not.toBeNull());
+      expect(sink.body!.modelList).toEqual([
+        {
+          id: 'fallback',
+          provider: 'openai',
+          modelId: '__AI_SDK_OPENAI_MODEL_BASE__',
+          enabled: true,
+          maxRetries: 2,
+        },
+        {
+          id: 'primary',
+          provider: 'openai',
+          modelId: '__AI_SDK_OPENAI_MODEL_BASE__',
+          enabled: false,
+          maxRetries: 0,
+        },
+      ]);
+    });
+  });
+});
+
 describe('useAgentCmsForm', () => {
   // Regression coverage: the version list backs the version dropdown and the
   // published/unpublished badges. Skipping its invalidation for code-agent

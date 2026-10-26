@@ -110,11 +110,13 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </PageLayout>
 
-        <RouteSidePanel owner="agent-detail">
-          <ActivatedSkillsProvider key={agentId}>
-            <AgentOverviewPanel agentId={agentId!} />
-          </ActivatedSkillsProvider>
-        </RouteSidePanel>
+        {activeTab !== 'versions' && (
+          <RouteSidePanel owner="agent-detail">
+            <ActivatedSkillsProvider key={agentId}>
+              <AgentOverviewPanel agentId={agentId!} />
+            </ActivatedSkillsProvider>
+          </RouteSidePanel>
+        )}
       </KeyboardScope>
     </PlaygroundModelProvider>
   );

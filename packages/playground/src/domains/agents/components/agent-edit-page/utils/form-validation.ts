@@ -204,6 +204,20 @@ export const agentFormSchema = z.object({
     provider: z.string().min(1, 'Provider is required'),
     name: z.string().min(1, 'Model is required'),
   }),
+  modelList: z
+    .array(
+      z.object({
+        id: z.string(),
+        model: z.object({
+          provider: z.string(),
+          modelId: z.string(),
+          modelVersion: z.string(),
+        }),
+        enabled: z.boolean(),
+        maxRetries: z.number(),
+      }),
+    )
+    .optional(),
   tools: z.record(z.string(), entityConfigSchema).optional(),
   integrationTools: z.record(z.string(), entityConfigSchema).optional(),
   workflows: z.record(z.string(), entityConfigSchema).optional(),

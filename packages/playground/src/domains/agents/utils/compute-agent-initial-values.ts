@@ -39,6 +39,7 @@ export function mapAgentResponseToDataSource(agent: GetAgentResponse): AgentData
     description: agent.description,
     instructions: agent.instructions,
     model: { provider: agent.provider, name: agent.modelId },
+    modelList: agent.modelList,
     tools: agent.tools,
     workflows: agent.workflows,
     agents: agent.agents,
@@ -56,6 +57,7 @@ export interface AgentDataSource {
   description?: string;
   instructions?: unknown;
   model?: unknown;
+  modelList?: unknown;
   tools?: unknown;
   integrationTools?: unknown;
   workflows?: unknown;
@@ -111,6 +113,7 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
       provider: (dataSource.model as { provider?: string; name?: string })?.provider || '',
       name: (dataSource.model as { provider?: string; name?: string })?.name || '',
     },
+    modelList: normalizeModelList(dataSource.modelList),
     tools: toolsRecord,
     integrationTools: normalizeIntegrationToolsToRecord(
       dataSource.integrationTools as Record<string, { tools?: Record<string, EntityConfig> }> | undefined,
@@ -135,6 +138,32 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
     workspace: normalizeWorkspaceFromApi(dataSource.workspace),
     variables: dataSource.requestContextSchema,
   };
+}
+
+function normalizeModelList(modelList: unknown): AgentFormValues['modelList'] {
+  if (!Array.isArray(modelList)) return undefined;
+
+  return modelList.flatMap(entry => {
+    if (!isRecord(entry) || typeof entry.id !== 'string') return [];
+
+    const nestedModel = isRecord(entry.model) ? entry.model : undefined;
+    const provider = typeof nestedModel?.provider === 'string' ? nestedModel.provider : entry.provider;
+    const modelId = typeof nestedModel?.modelId === 'string' ? nestedModel.modelId : entry.modelId;
+    if (typeof provider !== 'string' || typeof modelId !== 'string') return [];
+
+    return [
+      {
+        id: entry.id,
+        model: {
+          provider,
+          modelId,
+          modelVersion: typeof nestedModel?.modelVersion === 'string' ? nestedModel.modelVersion : '',
+        },
+        enabled: entry.enabled !== false,
+        maxRetries: typeof entry.maxRetries === 'number' ? entry.maxRetries : 0,
+      },
+    ];
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
