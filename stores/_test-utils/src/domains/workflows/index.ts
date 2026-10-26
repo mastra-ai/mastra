@@ -563,6 +563,26 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
       await expect(workflowsStorage.loadWorkflowRunStatus({ workflowName, runId })).resolves.toBe(status);
     });
 
+    it('should write every concurrent first guarded write of a run', async () => {
+      if (!workflowsStorage.supportsGuardedSnapshotWrites()) return;
+      const workflowName = 'test-workflow';
+      const { snapshot, runId } = createSampleWorkflowSnapshot('running');
+
+      const results = await Promise.all(
+        Array.from({ length: 3 }, () =>
+          workflowsStorage.persistWorkflowSnapshot({
+            workflowName,
+            runId,
+            snapshot,
+            expectedStatus: ['running', 'success'],
+          }),
+        ),
+      );
+
+      expect(results).toEqual([true, true, true]);
+      await expect(workflowsStorage.loadWorkflowRunStatus({ workflowName, runId })).resolves.toBe('running');
+    });
+
     it('should guard snapshot writes on the stored status', async () => {
       if (!workflowsStorage.supportsGuardedSnapshotWrites()) return;
       const workflowName = 'test-workflow';

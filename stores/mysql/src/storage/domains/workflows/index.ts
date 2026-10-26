@@ -547,21 +547,23 @@ export class WorkflowsMySQL extends WorkflowsStorage {
         resolveRunFence(this, fence, runId),
         'persistWorkflowSnapshot',
         async q => {
-          const [updateResult] = await q.execute<ResultSetHeader>(
-            `UPDATE ${tableName}
+          const update = () =>
+            q.execute<ResultSetHeader>(
+              `UPDATE ${tableName}
            SET ${quoteIdentifier('resourceId', 'column name')} = ?,
                ${quoteIdentifier('snapshot', 'column name')} = ?,
                ${quoteIdentifier('updatedAt', 'column name')} = ?
            WHERE ${quoteIdentifier('workflow_name', 'column name')} = ? AND ${quoteIdentifier('run_id', 'column name')} = ?${guard}`,
-            [
-              resourceId ?? null,
-              JSON.stringify(snapshot),
-              transformToSqlValue(updatedAtValue),
-              workflowName,
-              runId,
-              ...(expectedStatuses ?? []),
-            ],
-          );
+              [
+                resourceId ?? null,
+                JSON.stringify(snapshot),
+                transformToSqlValue(updatedAtValue),
+                workflowName,
+                runId,
+                ...(expectedStatuses ?? []),
+              ],
+            );
+          const [updateResult] = await update();
 
           // mysql2 connects with CLIENT_FOUND_ROWS, so affectedRows counts matched rows.
           if (updateResult.affectedRows > 0) {
@@ -586,8 +588,11 @@ export class WorkflowsMySQL extends WorkflowsStorage {
               );
               return true;
             } catch (error) {
-              if (hasErrorCode(error, DUPLICATE_KEY_ERROR_CODES)) return false;
-              throw error;
+              if (!hasErrorCode(error, DUPLICATE_KEY_ERROR_CODES)) throw error;
+              // A concurrent first write inserted the row between our update and insert. Its status may
+              // still be expected, so apply the guarded update to the row that now exists.
+              const [retryResult] = await update();
+              return retryResult.affectedRows > 0;
             }
           }
 
