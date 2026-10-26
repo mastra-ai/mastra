@@ -37,6 +37,7 @@ import {
   omitPriorCompletionFields,
   resolveForeachConcurrency,
 } from '../utils';
+import { isWorkflowRunCanceled } from './entry';
 import { getForeachProgress, omitForeachProgress } from './foreach-progress';
 import type { ForeachProgress } from './foreach-progress';
 import type { ExecuteStepParams } from './step';
@@ -1271,8 +1272,13 @@ export async function executeForeach(
     const { item, k, resumeToUse } = task;
 
     try {
-      // Honor cancellation before dispatching more work
-      if (abortController?.signal?.aborted) {
+      // Honor cancellation before dispatching more work. Items skip their start write
+      // while progress is checkpointed, so a remote cancel only shows up in storage.
+      const remoteCanceled =
+        !!checkpointChain &&
+        engine.honorsStoredCancellation(runId) &&
+        (await isWorkflowRunCanceled(engine, workflowId, runId));
+      if (abortController?.signal?.aborted || remoteCanceled) {
         if (!canceledResult) {
           canceledResult = {
             ...stepInfo,
