@@ -32,7 +32,7 @@ export function createPubSubTests({ getPubSub, eventPropagationDelay }: DurableA
       await new Promise(resolve => setTimeout(resolve, eventPropagationDelay / 10));
 
       expect(receivedEvents.length).toBe(1);
-      expect(receivedEvents[0].type).toBe(AgentStreamEventTypes.CHUNK);
+      expect(receivedEvents[0]?.type).toBe(AgentStreamEventTypes.CHUNK);
     });
 
     it('should handle multiple event types', async () => {
@@ -105,7 +105,7 @@ export function createPubSubTests({ getPubSub, eventPropagationDelay }: DurableA
       await new Promise(resolve => setTimeout(resolve, eventPropagationDelay / 2));
 
       expect(receivedEvents.length).toBe(1);
-      expect(receivedEvents[0].type).toBe(AgentStreamEventTypes.CHUNK);
+      expect(receivedEvents[0]?.type).toBe(AgentStreamEventTypes.CHUNK);
     });
 
     it('should isolate events between different runs', async () => {
