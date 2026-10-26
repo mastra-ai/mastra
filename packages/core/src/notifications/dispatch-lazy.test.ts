@@ -187,11 +187,22 @@ describe('notification dispatch — lazy scheduler activation (#18864)', () => {
     expect(apiMastra.scheduler).toBeUndefined();
   });
 
-  it('starts the scheduler on boot when a dispatcher schedule row was persisted by a previous process', async () => {
+  it('starts the scheduler on boot when a dispatcher row was left behind and a deferred notification is pending', async () => {
     const storage = new MockStore();
     const schedulesStore = (await storage.getStore('schedules'))!;
-    // Simulate a previous process that lazily created the dispatcher row.
+    // Simulate a previous process that lazily created the dispatcher row and
+    // deferred a notification that has not been delivered yet.
     await schedulesStore.createSchedule(buildNotificationDispatchSchedule());
+    const notifications = (await storage.getStore('notifications'))!;
+    await notifications.createNotification({
+      source: 'calendar',
+      kind: 'event-reminder',
+      summary: 'Planning starts tomorrow',
+      agentId: 'fresh',
+      resourceId: 'user-1',
+      threadId: 'thread-1',
+      deliverAt: new Date(Date.now() + 60_000),
+    });
 
     const mastra = track(
       new Mastra({
@@ -204,6 +215,51 @@ describe('notification dispatch — lazy scheduler activation (#18864)', () => {
 
     await mastra.startWorkers();
     await waitForScheduler(mastra);
+  });
+
+  it('does not start the scheduler on boot for a leftover dispatcher row when nothing is pending', async () => {
+    const storage = new MockStore();
+    const schedulesStore = (await storage.getStore('schedules'))!;
+    // An app that deferred a notification once, on an older version, and
+    // delivered it long ago. The row is all that is left.
+    await schedulesStore.createSchedule(buildNotificationDispatchSchedule());
+    const notifications = (await storage.getStore('notifications'))!;
+    const delivered = await notifications.createNotification({
+      source: 'calendar',
+      kind: 'event-reminder',
+      summary: 'Delivered long ago',
+      agentId: 'fresh',
+      resourceId: 'user-1',
+      threadId: 'thread-1',
+      deliverAt: new Date(Date.now() - 60_000),
+    });
+    await notifications.updateNotification({ id: delivered.id, threadId: 'thread-1', status: 'delivered' });
+    // Pending, but with no due time: no dispatch pass would ever pick it up.
+    await notifications.createNotification({
+      source: 'calendar',
+      kind: 'event-reminder',
+      summary: 'Persisted for the inbox',
+      agentId: 'fresh',
+      resourceId: 'user-1',
+      threadId: 'thread-1',
+    });
+    const listDueSpy = vi.spyOn(schedulesStore, 'listDueSchedules');
+
+    const mastra = track(
+      new Mastra({
+        logger: false,
+        storage,
+        agents: { fresh: makeAgent('fresh') },
+        scheduler: { tickIntervalMs: 50 },
+      }),
+    );
+
+    await mastra.startWorkers();
+    await flushAsyncInit();
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(mastra.scheduler).toBeUndefined();
+    expect(listDueSpy).not.toHaveBeenCalled();
   });
 
   it('does not create the row or start the scheduler when dispatch is disabled, even after a deferred notification', async () => {
@@ -282,5 +338,127 @@ describe('notification dispatch — lazy scheduler activation (#18864)', () => {
     );
     // The user's own declarative row must survive.
     await expect(schedulesStore.getSchedule('wf_user-scheduled-wf')).resolves.not.toBeNull();
+  });
+});
+
+describe('notification dispatch — cron stops once nothing is pending', () => {
+  async function sendDeferred(agent: Agent, summary: string) {
+    const result = await agent.sendNotificationSignal(
+      { source: 'calendar', kind: 'event-reminder', summary },
+      { resourceId: 'user-1', threadId: 'thread-1' },
+    );
+    expect(result.decision.action).toBe('defer');
+    return result.record;
+  }
+
+  async function waitDelivered(storage: MockStore, id: string) {
+    const notifications = (await storage.getStore('notifications'))!;
+    await waitUntil(async () => {
+      const record = await notifications.getNotification({ threadId: 'thread-1', id });
+      return record?.status === 'delivered';
+    }, 10_000);
+  }
+
+  it('deletes the dispatcher row after delivering the last pending notification', async () => {
+    const storage = new MockStore();
+    const agent = makeAgent('drain-agent', { deferBy: 250 });
+    const mastra = track(
+      new Mastra({
+        logger: false,
+        storage,
+        agents: { 'drain-agent': agent },
+        notifications: { dispatch: { cron: '* * * * * *' } },
+        scheduler: { tickIntervalMs: 50 },
+      }),
+    );
+    const schedulesStore = (await storage.getStore('schedules'))!;
+
+    await mastra.startWorkers();
+    const record = await sendDeferred(agent, 'Planning starts tomorrow');
+    await waitForScheduler(mastra);
+    await waitDelivered(storage, record.id);
+
+    await waitUntil(async () => (await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID)) === null);
+  }, 15_000);
+
+  it('re-arms the dispatcher on the next deferral after it stopped', async () => {
+    const storage = new MockStore();
+    const agent = makeAgent('rearm-agent', { deferBy: 250 });
+    const mastra = track(
+      new Mastra({
+        logger: false,
+        storage,
+        agents: { 'rearm-agent': agent },
+        notifications: { dispatch: { cron: '* * * * * *' } },
+        scheduler: { tickIntervalMs: 50 },
+      }),
+    );
+    const schedulesStore = (await storage.getStore('schedules'))!;
+
+    await mastra.startWorkers();
+    const first = await sendDeferred(agent, 'First reminder');
+    await waitDelivered(storage, first.id);
+    await waitUntil(async () => (await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID)) === null);
+
+    const second = await sendDeferred(agent, 'Second reminder');
+    await expect(schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID)).resolves.not.toBeNull();
+    await waitDelivered(storage, second.id);
+  }, 20_000);
+
+  it('keeps the dispatcher row while a deferred notification is still pending', async () => {
+    const storage = new MockStore();
+    const agent = makeAgent('pending-agent', { deferBy: 60 * 60_000 });
+    const mastra = track(
+      new Mastra({
+        logger: false,
+        storage,
+        agents: { 'pending-agent': agent },
+        notifications: { dispatch: { cron: '* * * * * *' } },
+        scheduler: { tickIntervalMs: 50 },
+      }),
+    );
+    const schedulesStore = (await storage.getStore('schedules'))!;
+
+    await mastra.startWorkers();
+    await sendDeferred(agent, 'Due in an hour');
+    const before = (await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID))!;
+
+    // Let at least one dispatch pass run; the record isn't due, so the row stays.
+    await waitUntil(async () => {
+      const row = await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      return row !== null && row.nextFireAt > before.nextFireAt;
+    }, 5_000);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    await expect(schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID)).resolves.not.toBeNull();
+  }, 10_000);
+
+  it('re-creates the row when a deferral lands while the idle dispatcher is deleting it', async () => {
+    const storage = new MockStore();
+    const mastra = track(new Mastra({ logger: false, storage }));
+    const schedulesStore = (await storage.getStore('schedules'))!;
+    const notifications = (await storage.getStore('notifications'))!;
+    await schedulesStore.createSchedule(buildNotificationDispatchSchedule());
+
+    // Another process defers a notification after the dispatcher found
+    // nothing pending, but before its delete lands. That process saw the row,
+    // so it won't re-create it.
+    const deleteSchedule = schedulesStore.deleteSchedule.bind(schedulesStore);
+    vi.spyOn(schedulesStore, 'deleteSchedule').mockImplementation(async id => {
+      await notifications.createNotification({
+        source: 'calendar',
+        kind: 'event-reminder',
+        summary: 'Deferred concurrently',
+        agentId: 'elsewhere',
+        resourceId: 'user-1',
+        threadId: 'thread-1',
+        deliverAt: new Date(Date.now() + 60_000),
+      });
+      await deleteSchedule(id);
+    });
+
+    await mastra.__releaseNotificationDispatchIfIdle();
+
+    expect(schedulesStore.deleteSchedule).toHaveBeenCalledOnce();
+    await expect(schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID)).resolves.not.toBeNull();
   });
 });
