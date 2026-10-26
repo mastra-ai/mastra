@@ -298,7 +298,7 @@ Automatic and manual recovery re-run the agentic loop from the last persisted sn
 
 :::
 
-Delegation hooks passed per call are closures and can't be restored in a new process, so a resumed run falls back to default delegation behaviour. Hooks configured on the supervisor's `defaultOptions.delegation` are merged back in when recovery rebuilds the delegation tools. Put hooks that must survive a restart there instead of passing them to `stream()` or `generate()`.
+Delegation hooks passed per call are closures and can't be restored in a new process. A resumed run falls back to default delegation behavior. Hooks configured on the supervisor's `defaultOptions.delegation` are merged back in when recovery rebuilds the delegation tools. Put hooks that must survive a restart there instead of passing them to `stream()` or `generate()`.
 
 ### Snapshot persistence
 
