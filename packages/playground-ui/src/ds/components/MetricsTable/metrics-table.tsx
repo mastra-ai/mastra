@@ -162,8 +162,12 @@ export function MetricsTable<Row>({
             </div>
           );
         })}
-        {shown.length === 0 && empty ? (
-          <p className="py-8 text-center text-body-sm text-muted-foreground">{empty}</p>
+        {shown.length === 0 && empty !== undefined && empty !== null ? (
+          <div role="row">
+            <p role="cell" className="py-8 text-center text-body-sm text-muted-foreground">
+              {empty}
+            </p>
+          </div>
         ) : null}
       </div>
     </ScrollArea>

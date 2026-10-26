@@ -17,6 +17,13 @@ describe('Sparkline', () => {
     }
   });
 
+  it('leaves out values it cannot place', () => {
+    const { container } = render(<Sparkline values={[Infinity, 1, Number.NaN, 2]} />);
+    const drawn = points(container);
+    expect(drawn).toHaveLength(2);
+    expect(drawn.flat().every(Number.isFinite)).toBe(true);
+  });
+
   it('draws one value as a flat line', () => {
     const { container } = render(<Sparkline values={[5]} />);
     const drawn = points(container);
