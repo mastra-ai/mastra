@@ -102,10 +102,9 @@ function collect(value: unknown, facts: CollectedFacts, depth: number): void {
 
   const statusCode = readField(value, 'statusCode');
   if (typeof statusCode === 'number' && Number.isInteger(statusCode)) facts.statusCode ??= statusCode;
-  // Google puts the HTTP status in a body's `error.code`; a thrown error's numeric `code` and any numeric `status` come from an MCP, GitHub or storage call.
+  // Providers report `statusCode`, or Google's numeric `error.code`; a numeric `status` is GitHub's, a fetch response's or a storage client's.
   const code = readField(value, 'code');
-  if (!(value instanceof Error) && typeof code === 'number' && Number.isInteger(code) && code >= 400 && code < 600)
-    facts.statusCode ??= code;
+  if (typeof code === 'number' && Number.isInteger(code) && code >= 400 && code < 600) facts.statusCode ??= code;
   // Google's symbolic `error.status` names the failure; a lifecycle `status: 'failed'` names nothing.
   const status = readField(value, 'status');
   if (typeof status === 'string' && SYMBOLIC_STATUS.test(status.trim())) facts.codes.push(status.trim());

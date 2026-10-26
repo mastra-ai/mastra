@@ -5,6 +5,7 @@ import { MAX_PERSISTED_RESPONSE_BODY_LENGTH } from '../loop/shared/provider-erro
 import { toPersistedErrorIdentity } from '../loop/shared/record-terminal-error-message';
 import { classifyProviderError, providerErrorFacts, providerErrorReason } from './provider-error';
 import type { ProviderFailureKind } from './provider-error';
+import { getErrorFromUnknown } from './utils';
 
 function apiError(statusCode: number, message: string, responseBody?: string, data?: unknown) {
   return new APICallError({
@@ -418,16 +419,12 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     ),
     'model_rejected',
   ],
+  ['a gateway outage frame with only a numeric code', { code: 502, message: 'Provider returned error' }, 'unavailable'],
   ['400 without a reason', apiError(400, 'Bad Request'), 'invalid_request'],
   ['persisted "Bad Request" without a status', { name: 'AI_APICallError', message: 'Bad Request' }, 'invalid_request'],
   ['persisted "Unauthorized" without a status', { name: 'AI_APICallError', message: 'Unauthorized' }, 'auth'],
   ['persisted "Forbidden" without a status', { name: 'APICallError', message: 'Forbidden' }, 'auth'],
   ['a bare "Unauthorized" outside a provider call', new Error('Unauthorized'), 'unknown'],
-  [
-    'a refused MCP server call',
-    Object.assign(new Error('Error POSTing to endpoint (HTTP 401): invalid_token'), { code: 401 }),
-    'unknown',
-  ],
   [
     'a refused GitHub API call',
     Object.assign(new Error('Bad credentials'), { name: 'HttpError', status: 401 }),
@@ -445,6 +442,13 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
 describe('classifyProviderError', () => {
   it.each(classifications)('%s → %s', (_name, error, kind) => {
     expect(classifyProviderError(error)).toBe(kind);
+  });
+
+  const frames = classifications.filter(
+    ([, error]) => typeof error === 'object' && error !== null && !(error instanceof Error),
+  );
+  it.each(frames)('classifies %s the same once a run turns it into an Error', (_name, frame, kind) => {
+    expect(classifyProviderError(getErrorFromUnknown(frame))).toBe(kind);
   });
 
   it('survives a throwing getter and a cycle', () => {
