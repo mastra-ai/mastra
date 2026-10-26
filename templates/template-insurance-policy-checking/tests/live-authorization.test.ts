@@ -94,19 +94,28 @@ it('binds evaluation identity without relying on hoisted transitive packages', a
       await mkdir(dirname(destination), { recursive: true });
       await copyFile(resolve('node_modules', name, 'package.json'), destination);
     }
-    const { stdout } = await promisify(execFile)(
-      process.execPath,
-      [
-        '--import',
-        resolve('tests/source-loader.mjs'),
-        '--input-type=module',
-        '-e',
-        `import { evaluatedSourceIdentity } from ${JSON.stringify(pathToFileURL(resolve('scripts/evaluation-identity-utils.ts')).href)};
+    // Execute the copied helper and loader using only their local runtime dependencies.
+    for (const name of ['zod', 'typescript'])
+      await cp(resolve('node_modules', name), join(root, 'node_modules', name), { recursive: true, dereference: true });
+    const runIsolated = () =>
+      promisify(execFile)(
+        process.execPath,
+        [
+          '--import',
+          join(root, 'tests/source-loader.mjs'),
+          '--input-type=module',
+          '-e',
+          `import { evaluatedSourceIdentity } from ${JSON.stringify(pathToFileURL(join(root, 'scripts/evaluation-identity-utils.ts')).href)};
        console.log(JSON.stringify(await evaluatedSourceIdentity()));`,
-      ],
-      { cwd: root },
-    );
+        ],
+        { cwd: root },
+      );
+    const { stdout } = await runIsolated();
     expect(JSON.parse(stdout)).toEqual(await evaluatedSourceIdentity());
+    await rm(join(root, 'scripts/evaluation-identity-utils.ts'));
+    await expect(runIsolated()).rejects.toMatchObject({
+      stderr: expect.stringContaining('ERR_MODULE_NOT_FOUND'),
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }
