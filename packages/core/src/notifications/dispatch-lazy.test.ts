@@ -359,7 +359,7 @@ describe('notification dispatch — cron stops once nothing is pending', () => {
     }, 10_000);
   }
 
-  it('deletes the dispatcher row after delivering the last pending notification', async () => {
+  it('deletes the dispatcher row after delivering the last pending notification, and stops polling', async () => {
     const storage = new MockStore();
     const agent = makeAgent('drain-agent', { deferBy: 250 });
     const mastra = track(
@@ -372,6 +372,7 @@ describe('notification dispatch — cron stops once nothing is pending', () => {
       }),
     );
     const schedulesStore = (await storage.getStore('schedules'))!;
+    const listDueSpy = vi.spyOn(schedulesStore, 'listDueSchedules');
 
     await mastra.startWorkers();
     const record = await sendDeferred(agent, 'Planning starts tomorrow');
@@ -379,6 +380,13 @@ describe('notification dispatch — cron stops once nothing is pending', () => {
     await waitDelivered(storage, record.id);
 
     await waitUntil(async () => (await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID)) === null);
+
+    // With no schedule left the scheduler sleeps instead of polling every
+    // tickIntervalMs (50ms here).
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const pollsAfterDrain = listDueSpy.mock.calls.length;
+    await new Promise(resolve => setTimeout(resolve, 600));
+    expect(listDueSpy.mock.calls.length).toBe(pollsAfterDrain);
   }, 15_000);
 
   it('re-arms the dispatcher on the next deferral after it stopped', async () => {

@@ -2431,6 +2431,10 @@ export class Mastra<
     }
 
     await this.#registerFsAgentSchedules(schedulesStore, allRows);
+
+    // A running scheduler sleeps until its earliest fire; re-arm it for rows
+    // registered after it started. No-op before it starts.
+    this.#findSchedulerWorker()?.scheduler?.wake();
   }
 
   /**
@@ -6061,7 +6065,7 @@ export class Mastra<
     }
   }
 
-  /** Subscribe until this process's scheduling workers start. Idempotent. */
+  /** Subscribe for cross-process scheduler wakes. Idempotent. */
   async #wireSchedulerWakeSubscription(): Promise<void> {
     if (this.#schedulerWakeSubscription) return;
     const cb: EventCallback = async (event, ack, nack) => {
@@ -6078,6 +6082,9 @@ export class Mastra<
         // here would race that loop and start the scheduler twice.
         if (this.#workersStarted) {
           await this.#ensureSchedulingWorkersStarted();
+          // A running scheduler sleeps until its earliest fire; the new or
+          // changed schedule may be due sooner.
+          this.#findSchedulerWorker()?.scheduler?.wake();
         }
         await ack?.();
       } catch (err) {
@@ -6091,7 +6098,8 @@ export class Mastra<
     try {
       // Wake events are transient hints; the awaited boot probe below is the
       // durable recovery path. Starting from latest avoids replaying retained
-      // wakes and starting the scheduler when no schedule rows remain.
+      // wakes and starting the scheduler when no schedule rows remain. The
+      // subscription stays wired while the scheduler runs, to re-arm it.
       await this.#pubsub.subscribe(SCHEDULER_WAKE_TOPIC, cb, { startFrom: 'latest' });
     } catch (err) {
       // Allow a later startWorkers() call to retry a transient subscribe error.
@@ -6289,9 +6297,6 @@ export class Mastra<
         await agentScheduleWorker.start();
       }
     }
-
-    // Startup is complete; further wake events have nothing to do.
-    await this.#unwireSchedulerWakeSubscription();
   }
 
   private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
@@ -7151,7 +7156,11 @@ export class Mastra<
     // dedicated scheduler processes.
     if (!name && (this.#shouldEnableScheduler() || schedulerForcedByFilter) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
-        const sw = new SchedulerWorker(this.#schedulerConfig);
+        // A filter-selected scheduler is dedicated: keep it polling like an
+        // explicitly enabled one, since it may share no pubsub with producers.
+        const sw = new SchedulerWorker(
+          schedulerForcedByFilter ? { ...this.#schedulerConfig, enabled: true } : this.#schedulerConfig,
+        );
         sw.__registerMastra(this);
         this.#workers.push(sw);
       }
@@ -7250,11 +7259,6 @@ export class Mastra<
     // workers mid-boot would race the start loop above. Honor it now.
     if (!name && this.#schedulerRequested && !this.#findSchedulerWorker()) {
       await this.#ensureSchedulingWorkersStarted();
-    }
-
-    // The wake subscription is only needed while the scheduler is stopped.
-    if (this.#findSchedulerWorker()?.isRunning) {
-      await this.#unwireSchedulerWakeSubscription();
     }
   }
 
