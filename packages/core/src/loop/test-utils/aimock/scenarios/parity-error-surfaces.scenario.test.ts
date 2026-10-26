@@ -93,6 +93,8 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     async blockSave => {
       const onError = vi.fn();
       let toolStarted = false;
+      const execution = Promise.withResolvers<unknown>();
+      const onOutput = vi.fn();
       const memory = new MockMemory();
       let releaseSave!: () => void;
       const saveGate = new Promise<void>(resolve => {
@@ -122,8 +124,9 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
               inputSchema: z.object({}),
               execute: async () => {
                 toolStarted = true;
-                return new Promise<never>(() => {});
+                return execution.promise;
               },
+              onOutput,
             }),
           },
           modelSettings: { timeout: { totalMs: 500 } },
@@ -150,11 +153,32 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
         expect(result.chunks!.some(chunk => chunk.type === 'finish')).toBe(false);
         expect(result.requests).toHaveLength(1);
+        const workflows = await result.mastra.getStorage()!.getStore('workflows');
+        const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
+        const prefix = engine === 'inngest' ? 'inngest:' : '';
+        for (const name of durable
+          ? ['durable-agentic-loop', 'durable-agentic-execution']
+          : ['agentic-loop', 'executionWorkflow']) {
+          await expect
+            .poll(async () => {
+              const snapshot = await workflows!.loadWorkflowSnapshot({
+                workflowName: `${prefix}${name}`,
+                runId: result.output.runId,
+              });
+              return snapshot?.status;
+            })
+            .not.toBe('running');
+        }
+        execution.reject(new Error('tool failed after the total deadline'));
+        await new Promise<void>(resolve => setImmediate(resolve));
+        expect(onOutput).not.toHaveBeenCalled();
+        expect(onError).toHaveBeenCalledTimes(1);
         if (blockSave && (engine === 'durable' || engine === 'evented')) {
           await new Promise(resolve => setTimeout(resolve, 50));
           expect(saveBlocked).toBe(false);
         }
       } finally {
+        execution.resolve(undefined);
         releaseSave();
         saveSpy.mockRestore();
       }

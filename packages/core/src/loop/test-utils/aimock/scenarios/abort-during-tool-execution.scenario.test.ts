@@ -24,6 +24,101 @@ describeForAllEngines(
   engine => {
     const getMock = useLoopScenarioAimock();
 
+    it.each(['resolve', 'reject'] as const)(
+      'ends an aborted run before an uncooperative tool can %s',
+      async lateOutcome => {
+        const controller = new AbortController();
+        const started = Promise.withResolvers<void>();
+        const execution = Promise.withResolvers<{ done: boolean }>();
+        let toolFinished = false;
+        let outputs = 0;
+        const tool = createTool({
+          id: 'uncooperative',
+          description: 'Waits for external work that ignores cancellation',
+          inputSchema: z.object({}),
+          execute: async () => {
+            started.resolve();
+            try {
+              return await execution.promise;
+            } finally {
+              toolFinished = true;
+            }
+          },
+          onOutput: () => {
+            outputs++;
+          },
+        });
+        const scenario = runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Wait for external work',
+          tools: { uncooperative: tool },
+          abortSignal: controller.signal,
+          collectChunks: true,
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', hasToolResult: false },
+              {
+                toolCalls: [{ id: 'call_uncooperative', name: 'uncooperative', arguments: {} }],
+              },
+            );
+            llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Should not reach here' });
+          },
+        });
+        let settled = false;
+        void scenario.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        try {
+          // Handshake with the real tool; no scheduling delay determines when to abort.
+          await started.promise;
+          controller.abort();
+          await expect.poll(() => settled, { timeout: 5_000 }).toBe(true);
+          const { output, requests, chunks, mastra } = await scenario;
+          expect(toolFinished).toBe(false);
+          expect(requests).toHaveLength(1);
+          expect(await output.finishReason).toBe('aborted');
+          expect(chunks?.filter(chunk => chunk.type === 'abort')).toHaveLength(1);
+          expect(chunks?.filter(chunk => chunk.type === 'tool-result' || chunk.type === 'tool-error')).toHaveLength(0);
+          const store = await mastra.getStorage()!.getStore('workflows');
+          const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
+          const prefix = engine === 'inngest' ? 'inngest:' : '';
+          for (const name of durable
+            ? ['durable-agentic-loop', 'durable-agentic-execution']
+            : ['agentic-loop', 'executionWorkflow']) {
+            await expect
+              .poll(
+                async () => {
+                  const snapshot = await store!.loadWorkflowSnapshot({
+                    workflowName: `${prefix}${name}`,
+                    runId: output.runId,
+                  });
+                  return snapshot?.status;
+                },
+                { timeout: 5_000 },
+              )
+              .not.toBe('running');
+          }
+          const chunkCount = chunks?.length;
+          if (lateOutcome === 'resolve') execution.resolve({ done: true });
+          else execution.reject(new Error('external work failed after abort'));
+          await expect.poll(() => toolFinished).toBe(true);
+          expect(outputs).toBe(0);
+          expect(chunks).toHaveLength(chunkCount!);
+          expect(getMock().getRequests()).toHaveLength(1);
+        } finally {
+          controller.abort();
+          execution.resolve({ done: true });
+          await scenario.catch(() => {});
+        }
+      },
+    );
+
     it('propagates abort signal to tool execution context', async () => {
       const abortController = new AbortController();
       let toolReceivedSignal = false;

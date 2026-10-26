@@ -7,8 +7,8 @@ export type ExecuteToolOutcome =
    * pre-serialization side channels (e.g. the durable engine's in-step
    * `toModelOutput` mapping, which reads symbols the JSON round-trip strips). */
   | { status: 'success'; result: unknown; rawResult: unknown }
-  /** Execution threw while the request abort signal was set — a mid-flight
-   * cancellation, not a genuine failure. Engines leave the call incomplete. */
+  /** Cancellation won the execution wait, even if the tool never settles.
+   * Engines leave the call incomplete rather than publishing a result. */
   | { status: 'aborted' }
   /** Execution threw. Engines own error serialization (their persisted error
    * shapes differ), so the raw error is returned. */
@@ -69,13 +69,35 @@ export async function executeToolCall(deps: {
   logger?: IMastraLogger;
 }): Promise<ExecuteToolOutcome> {
   const { tool, toolCallId, toolName, abortSignal, logger } = deps;
+  const aborted = Symbol('tool execution aborted');
+  let executionError: unknown;
 
   try {
+    if (abortSignal?.aborted) throw aborted;
     const release = deps.acquireExecution?.();
+    let onAbort: (() => void) | undefined;
     let rawResult: unknown;
     try {
-      rawResult = await tool.execute(deps.args, deps.toolOptions);
+      rawResult = abortSignal
+        ? await new Promise<unknown>((resolve, reject) => {
+            // Preserve synchronous authorization/bailout errors from a tool
+            // that aborts itself before throwing, ahead of abort classification.
+            onAbort = () => queueMicrotask(() => reject(aborted));
+            abortSignal.addEventListener('abort', onAbort, { once: true });
+            if (abortSignal.aborted) {
+              onAbort();
+              return;
+            }
+            // Attach both handlers even if cancellation wins. Late tool failures
+            // must be consumed, and late results must never reach output hooks.
+            Promise.resolve(tool.execute(deps.args, deps.toolOptions)).then(resolve, error => {
+              executionError = error;
+              reject(error);
+            });
+          })
+        : await tool.execute(deps.args, deps.toolOptions);
     } finally {
+      if (onAbort) abortSignal?.removeEventListener('abort', onAbort);
       release?.();
     }
     deps.assertNotBailedOut?.();
@@ -95,6 +117,9 @@ export async function executeToolCall(deps: {
 
     return { status: 'success', result, rawResult };
   } catch (error) {
+    // Keep control-flow errors already available when cancellation settles;
+    // failures arriving after this point remain abandoned and handled.
+    if (error === aborted && executionError !== undefined) error = executionError;
     // Re-throw FGA authorization errors instead of swallowing them — an
     // authorization denial must fail the run, not be serialized as a
     // recoverable tool error for the LLM to retry.
