@@ -351,15 +351,24 @@ describe('Datasets Handlers', () => {
         expect(result.success && result.data.agentOverrides).toEqual(agentOverrides);
       });
 
+      it('accepts agentModel and agentOverrides.model when they name the same model', () => {
+        const result = parse({
+          ...agent,
+          agentModel: { provider: 'openai', modelId: 'gpt-5-mini' },
+          agentOverrides: { model: { provider: 'openai', name: 'gpt-5-mini' } },
+        });
+        expect(result.success).toBe(true);
+      });
+
       it.each([
         { condition: 'a non-agent target', body: { targetType: 'workflow', targetId: 'w', agentOverrides: {} } },
         { condition: 'start: false', body: { ...agent, start: false, agentOverrides: { instructions: 'x' } } },
         {
-          condition: 'agentModel + agentOverrides.model',
+          condition: 'agentModel naming a different model than agentOverrides.model',
           body: {
             ...agent,
             agentModel: { provider: 'openai', modelId: 'gpt-5-mini' },
-            agentOverrides: { model: { provider: 'openai', name: 'gpt-5-mini' } },
+            agentOverrides: { model: { provider: 'openai', name: 'gpt-5' } },
           },
         },
         {

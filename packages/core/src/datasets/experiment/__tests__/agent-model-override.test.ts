@@ -184,14 +184,20 @@ describe('experiment agentModel override', () => {
 
   describe('tags each trace with the override so it can be told apart from the agent default', () => {
     it.each([
-      { scenario: 'a model instance', agentModel: () => textModel('x'), expected: 'mock-provider/mock-model-id' },
+      {
+        scenario: 'a model instance',
+        agentModel: () => textModel('x'),
+        expected: 'mock-provider/mock-model-id',
+        model: { provider: 'mock-provider', name: 'mock-model-id' },
+      },
       {
         scenario: 'a labeled model',
         agentModel: () => ({ model: textModel('x'), id: 'anthropic/claude-haiku-5-5' }),
         expected: 'anthropic/claude-haiku-5-5',
+        model: { provider: 'anthropic', name: 'claude-haiku-5-5' },
       },
-      { scenario: 'no override', agentModel: () => undefined, expected: undefined },
-    ])('$scenario', async ({ agentModel, expected }) => {
+      { scenario: 'no override', agentModel: () => undefined, expected: undefined, model: undefined },
+    ])('$scenario', async ({ agentModel, expected, model }) => {
       const { mastra, dataset } = await setup();
       const generate = vi.spyOn(mastra.getAgentById('eval-agent'), 'generate');
 
@@ -205,7 +211,7 @@ describe('experiment agentModel override', () => {
       for (const [, options] of generate.mock.calls) {
         expect(options?.tracingOptions?.metadata).toEqual({
           experimentId: summary.experimentId,
-          ...(expected ? { agentModel: expected } : {}),
+          ...(expected ? { agentModel: expected, agentOverrides: { model } } : {}),
         });
       }
     });
@@ -235,6 +241,7 @@ describe('experiment agentModel override', () => {
       expect((await dataset.getExperiment({ experimentId: withOverride.experimentId }))?.metadata).toEqual({
         owner: 'evals',
         agentModel: 'anthropic/claude-haiku-5-5',
+        agentOverrides: { model: { provider: 'anthropic', name: 'claude-haiku-5-5' } },
       });
       expect((await dataset.getExperiment({ experimentId: withoutOverride.experimentId }))?.metadata).toEqual({
         owner: 'evals',

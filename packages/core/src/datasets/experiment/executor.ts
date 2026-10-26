@@ -344,8 +344,9 @@ async function executeAgent(
           ...(reqCtx ? { requestContext: reqCtx } : {}),
           tracingOptions,
           ...(versions ? { versions } : {}),
-          ...(agentModel ? { model: agentModel } : {}),
           ...(agentOverrides ? toGenerateOptions(agentOverrides) : {}),
+          // After the overrides: agentOverrides.model is agentModel's label, but agentModel may be an instance.
+          ...(agentModel ? { model: agentModel } : {}),
           ...(mockHooks ? { hooks: mockHooks } : {}),
           ...(mockConcurrency ?? {}),
         })

@@ -4,7 +4,7 @@ import type { TrajectoryExpectation } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
 import { assertAgentModelTarget, withAgentModelMetadata } from './agent-model';
-import { assertAgentOverridesTarget, withAgentOverridesMetadata } from './agent-overrides';
+import { assertAgentOverridesTarget, resolveAgentOverrides, withAgentOverridesMetadata } from './agent-overrides';
 import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonValue } from './events';
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
@@ -313,6 +313,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   try {
     assertAgentModelTarget(config);
     assertAgentOverridesTarget(config);
+    const agentOverrides = resolveAgentOverrides(config);
     if (config.task) {
       // Inline task path
       const taskFn = config.task;
@@ -354,7 +355,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           experimentId,
           versions,
           agentModel: config.agentModel,
-          agentOverrides: config.agentOverrides,
+          agentOverrides,
           toolMocks: targetType === 'agent' ? item.toolMocks : undefined,
           unmockedToolPolicy:
             targetType === 'agent' ? (item.unmockedToolPolicy ?? config.unmockedToolPolicy ?? 'allow') : undefined,
@@ -426,7 +427,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         description,
         metadata: withAgentOverridesMetadata(
           withAgentModelMetadata(metadata, config.agentModel),
-          config.agentOverrides,
+          resolveAgentOverrides(config),
         ),
         provenance,
         experimentSetId: grouping?.experimentSetId,

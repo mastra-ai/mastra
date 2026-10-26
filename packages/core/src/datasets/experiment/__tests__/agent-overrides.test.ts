@@ -307,13 +307,63 @@ describe('Feature: tweak an agent per experiment without changing it', () => {
     });
   });
 
+  describe('Scenario: agentModel is shorthand for agentOverrides.model', () => {
+    it('records agentModel as agentOverrides.model on the experiment and on every trace', async () => {
+      // Given a gateway serving "eval-test/fake/override-model"
+      const { mastra, dataset, defaultModel, overrideModel } = await setup();
+      const generate = vi.spyOn(mastra.getAgentById('eval-agent'), 'generate');
+
+      // When I start an experiment with agentModel and tweaked instructions
+      const summary = await dataset.startExperiment({
+        targetType: 'agent',
+        targetId: 'eval-agent',
+        agentModel: 'eval-test/fake/override-model',
+        agentOverrides: { instructions: 'tweaked instructions' },
+      });
+
+      // Then it runs on that model
+      expect(callsOf(overrideModel)).toHaveLength(2);
+      expect(callsOf(defaultModel)).toHaveLength(0);
+      // And the model is recorded in agentOverrides, merged with the other tweaks
+      const expected = {
+        instructions: 'tweaked instructions',
+        model: { provider: 'eval-test', name: 'fake/override-model' },
+      };
+      const experiment = await dataset.getExperiment({ experimentId: summary.experimentId });
+      expect(experiment?.metadata).toEqual({ agentModel: 'eval-test/fake/override-model', agentOverrides: expected });
+      for (const [, options] of generate.mock.calls) {
+        expect(options?.tracingOptions?.metadata).toMatchObject({ agentOverrides: expected });
+      }
+    });
+
+    it('accepts agentModel and agentOverrides.model when they name the same model', async () => {
+      // Given a gateway serving "eval-test/fake/override-model"
+      const { dataset, overrideModel } = await setup();
+      const model = { provider: 'eval-test/fake', name: 'override-model' };
+
+      // When both name the same model
+      const summary = await dataset.startExperiment({
+        targetType: 'agent',
+        targetId: 'eval-agent',
+        agentModel: 'eval-test/fake/override-model',
+        agentOverrides: { model },
+      });
+
+      // Then it runs on that model and keeps the caller's agentOverrides.model as given
+      expect(summary.succeededCount).toBe(2);
+      expect(callsOf(overrideModel)).toHaveLength(2);
+      const experiment = await dataset.getExperiment({ experimentId: summary.experimentId });
+      expect(experiment?.metadata?.agentOverrides).toEqual({ model });
+    });
+  });
+
   describe('Scenario Outline: agentOverrides is rejected where it is meaningless', () => {
     const agentOverrides = { instructions: 'tweaked instructions' };
     const examples = [
       { condition: 'a workflow target', config: { targetType: 'workflow' as const, targetId: 'wf', agentOverrides } },
       { condition: 'an inline task', config: { task: async () => 'out', agentOverrides } },
       {
-        condition: 'agentModel together with agentOverrides.model',
+        condition: 'agentModel naming a different model than agentOverrides.model',
         config: {
           targetType: 'agent' as const,
           targetId: 'eval-agent',

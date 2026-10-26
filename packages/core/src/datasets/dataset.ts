@@ -31,7 +31,11 @@ import type {
   UpdateExperimentResultInput,
 } from '../storage/types.js';
 import { assertAgentModelTarget, withAgentModelMetadata } from './experiment/agent-model.js';
-import { assertAgentOverridesTarget, withAgentOverridesMetadata } from './experiment/agent-overrides.js';
+import {
+  assertAgentOverridesTarget,
+  resolveAgentOverrides,
+  withAgentOverridesMetadata,
+} from './experiment/agent-overrides.js';
 import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
 import { experimentScoreId } from './experiment/scorer.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
@@ -433,7 +437,7 @@ export class Dataset {
         description: config.description,
         metadata: withAgentOverridesMetadata(
           withAgentModelMetadata(config.metadata, config.agentModel),
-          config.agentOverrides,
+          resolveAgentOverrides(config),
         ),
         provenance: config.provenance,
         experimentSetId: config.grouping?.experimentSetId,

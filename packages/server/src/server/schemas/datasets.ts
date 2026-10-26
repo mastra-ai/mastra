@@ -446,7 +446,7 @@ export const triggerExperimentBodySchema = z
       .object({ provider: z.string().min(1), modelId: z.string().min(1) })
       .optional()
       .describe(
-        'Model to run an agent target on for this experiment only, instead of the model the agent is configured with. Passed per call; the agent itself is not changed and the model is not stored on the experiment.',
+        'Model to run an agent target on for this experiment only, instead of the model the agent is configured with. Shorthand for agentOverrides.model and recorded as such on the experiment; the agent itself is not changed.',
       ),
     agentOverrides: z
       .object({
@@ -536,10 +536,17 @@ export const triggerExperimentBodySchema = z
     path: ['agentOverrides'],
     message: 'agentOverrides is not supported for create-only experiments (start: false)',
   })
-  .refine(body => !body.agentModel || !body.agentOverrides?.model, {
-    path: ['agentOverrides', 'model'],
-    message: 'agentOverrides.model cannot be combined with agentModel',
-  });
+  .refine(
+    body =>
+      !body.agentModel ||
+      !body.agentOverrides?.model ||
+      (body.agentModel.provider === body.agentOverrides.model.provider &&
+        body.agentModel.modelId === body.agentOverrides.model.name),
+    {
+      path: ['agentOverrides', 'model'],
+      message: 'agentOverrides.model and agentModel must name the same model',
+    },
+  );
 
 export const runExperimentItemBodySchema = z.object({
   attempt: z.number().int().min(0).optional().describe('Zero-based repetition index. Defaults to 0.'),

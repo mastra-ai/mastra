@@ -16,4 +16,4 @@ await dataset.startExperiment({
 });
 ```
 
-The fields match a stored agent version's config, so a tweak that scores well can later be saved as a new agent version.
+The fields match a stored agent version's config, so a tweak that scores well can later be saved as a new agent version. `agentModel` is shorthand for `agentOverrides.model`: an experiment started with `agentModel` also records the model in `metadata.agentOverrides.model`, and passing both is allowed when they name the same model.
