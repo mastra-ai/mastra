@@ -1154,6 +1154,7 @@ export const mastra = new Mastra({
     try {
       console.info('Installing packages:', JSON.stringify(packages, null, 2));
 
+      // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Package names cross a JavaScript API boundary; preserve runtime string coercion.
       const packageStrings = packages.map(p => `${p.name}`);
 
       await spawnSWPM(projectPath || '', 'add', packageStrings);
@@ -1188,6 +1189,7 @@ export const mastra = new Mastra({
       let packageNames: string[] = [];
 
       if (packages && packages.length > 0) {
+        // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Package names cross a JavaScript API boundary; preserve runtime string coercion.
         packageNames = packages.map(p => `${p.name}`);
       }
       await spawnSWPM(projectPath || '', 'upgrade', packageNames);
