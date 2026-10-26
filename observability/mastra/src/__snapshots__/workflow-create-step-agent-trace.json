@@ -107,6 +107,8 @@
                 "entityId": "workflow-agent",
                 "attributes": {
                   "instructions": "You are an agent in a workflow",
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "completionStartTime": "<date>"
                 },
                 "metadata": {

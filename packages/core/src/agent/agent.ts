@@ -208,6 +208,7 @@ import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
+import { modelSpanAttributes } from './model-span-attributes';
 import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
 import {
@@ -8878,6 +8879,7 @@ export class Agent<
       attributes: {
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
+        ...modelSpanAttributes(resolvedModel),
         ...(startingSignal ? { signal: startingSignal } : {}),
         // @deprecated — use entityVersionId (top-level span context field) instead.
         // Kept for backward compatibility during migration.

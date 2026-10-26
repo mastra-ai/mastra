@@ -30,6 +30,8 @@
         "entityId": "child-span-agent",
         "attributes": {
           "instructions": "You use tools that create child spans",
+          "model": "mock-model-id",
+          "provider": "mock-provider",
           "availableTools": ["childSpanTool"],
           "completionStartTime": "<date>"
         },

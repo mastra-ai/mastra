@@ -29,6 +29,8 @@
         "entityId": "metadata-agent",
         "attributes": {
           "instructions": "You use tools and add metadata",
+          "model": "mock-model-id",
+          "provider": "mock-provider",
           "availableTools": ["metadataTool"],
           "completionStartTime": "<date>"
         },

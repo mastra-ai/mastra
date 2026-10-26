@@ -30,6 +30,8 @@
         "entityId": "multi-step-agent",
         "attributes": {
           "instructions": "You are a helpful calculator assistant that announces what you will do before doing it.",
+          "model": "mock-model-id",
+          "provider": "mock-provider",
           "availableTools": ["calculator"],
           "completionStartTime": "<date>"
         },

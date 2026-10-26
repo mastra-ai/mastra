@@ -78,6 +78,8 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "instructions": "You are a test agent",
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "completionStartTime": "<date>"
                 },
                 "metadata": {

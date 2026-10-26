@@ -38,6 +38,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
+import { modelSpanAttributes } from '../model-span-attributes';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopesSnapshot } from '../scopes';
 import { applyResolvedAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
@@ -1622,6 +1623,7 @@ export class DurableAgent<
           entityType: EntityType.AGENT,
           entityId: wrapped.id,
           entityName: wrapped.name,
+          attributes: modelSpanAttributes(model),
           metadata: {
             runId,
             recovered: true,
@@ -3901,6 +3903,7 @@ export class DurableAgent<
           entityType: EntityType.AGENT,
           entityId: ag.id,
           entityName: ag.name,
+          attributes: modelSpanAttributes(resumeModel),
           metadata: {
             runId,
             resumed: true,

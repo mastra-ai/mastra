@@ -27,6 +27,8 @@
         "entityId": "test-agent",
         "attributes": {
           "instructions": "Return a simple response",
+          "model": "mock-model-id",
+          "provider": "mock-provider",
           "completionStartTime": "<date>"
         },
         "metadata": {
