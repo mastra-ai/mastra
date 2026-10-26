@@ -61,6 +61,18 @@ export interface ChannelAdapterBaseConfig {
   formatError?: (error: Error) => PostableMessage;
 
   /**
+   * Who may answer a tool approval card with the built-in Approve and Deny buttons.
+   * - `'requester'` (default) - only the user whose message triggered the tool call.
+   * - `'anyone'` - any user who can see the card. Use this when a channel acts as a
+   *   single shared identity, for example a channel mapped to one workspace in your app.
+   *
+   * The session resolver still runs for the user who clicks, so it can refuse them.
+   *
+   * @default 'requester'
+   */
+  toolApprovers?: 'requester' | 'anyone';
+
+  /**
    * Dialect for the agent's final reply text.
    * - `'markdown'` (default) - replies post as `{ markdown }`; adapters with native
    *   markdown rendering (Slack `markdown_text`) use it, others convert to their

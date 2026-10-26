@@ -40,6 +40,23 @@ describe('stripTrailingSlash', () => {
 });
 
 describe('resolveSlackAdapterConfig', () => {
+  it('carries toolApprovers through to the resolved adapter config', () => {
+    expect(resolveSlackAdapterConfig({ toolApprovers: 'anyone' }).toolApprovers).toBe('anyone');
+    expect(resolveSlackAdapterConfig({ adapterConfig: { toolApprovers: 'anyone' } }).toolApprovers).toBe('anyone');
+  });
+
+  it('prefers top-level toolApprovers over the deprecated adapterConfig', () => {
+    const resolved = resolveSlackAdapterConfig({
+      toolApprovers: 'requester',
+      adapterConfig: { toolApprovers: 'anyone' },
+    });
+    expect(resolved.toolApprovers).toBe('requester');
+  });
+
+  it('omits toolApprovers when unset so the requester-only default governs', () => {
+    expect('toolApprovers' in resolveSlackAdapterConfig({})).toBe(false);
+  });
+
   it('carries textDisplay through to the resolved adapter config', () => {
     expect(resolveSlackAdapterConfig({ textDisplay: 'hidden' }).textDisplay).toBe('hidden');
     expect(resolveSlackAdapterConfig({ adapterConfig: { textDisplay: 'hidden' } }).textDisplay).toBe('hidden');

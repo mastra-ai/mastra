@@ -792,9 +792,15 @@ describe('AgentChannels', () => {
     });
 
     describe('approval requester check', () => {
-      async function setup(record: Record<string, unknown>, mastra = makeMastra()) {
+      async function setup(
+        record: Record<string, unknown>,
+        mastra = makeMastra(),
+        toolApprovers?: 'requester' | 'anyone',
+      ) {
         const adapter = createMockAdapter('discord');
-        const channels = new AgentChannels({ adapters: { discord: adapter } });
+        const channels = new AgentChannels({
+          adapters: { discord: toolApprovers ? { adapter, toolApprovers } : adapter },
+        });
         channels.__setAgent(mockAgent);
         const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
         channels.__setLogger(logger as any);
@@ -935,6 +941,114 @@ describe('AgentChannels', () => {
         const { dispatchApproval, click } = await setup({});
         await click('tool_approve:tool-call-1', 'mallory');
         expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      describe("with toolApprovers: 'requester'", () => {
+        it('ignores approve and decline clicks from a user other than the requester', async () => {
+          const { adapter, dispatchApproval, dispatchDecline, click } = await setup(
+            { requesterId: 'alice' },
+            makeMastra(),
+            'requester',
+          );
+
+          await click('tool_approve:tool-call-1', 'mallory');
+          await click('tool_deny:tool-call-1', 'mallory');
+
+          expect(dispatchApproval).not.toHaveBeenCalled();
+          expect(dispatchDecline).not.toHaveBeenCalled();
+          expect(adapter.editMessage).not.toHaveBeenCalled();
+        });
+      });
+
+      describe("with toolApprovers: 'anyone'", () => {
+        const storedMessages = (...authorIds: string[]) => ({
+          getStorage: () => ({
+            getStore: async () => ({
+              listMessages: async () => ({
+                messages: [
+                  {
+                    role: 'assistant',
+                    content: {
+                      metadata: {
+                        pendingToolApprovals: {
+                          lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                        },
+                      },
+                    },
+                  },
+                  ...authorIds.map(userId => ({
+                    role: 'user',
+                    content: { providerMetadata: { mastra: { channels: { discord: { author: { userId } } } } } },
+                  })),
+                ],
+              }),
+            }),
+          }),
+          getServer: () => null,
+        });
+
+        it('lets a user other than the requester approve', async () => {
+          const { adapter, dispatchApproval, click } = await setup({ requesterId: 'alice' }, makeMastra(), 'anyone');
+
+          await click('tool_approve:tool-call-1', 'mallory');
+
+          expect(dispatchApproval).toHaveBeenCalledTimes(1);
+          expect(adapter.editMessage).toHaveBeenCalledTimes(1);
+        });
+
+        it('lets a user other than the requester deny', async () => {
+          const { adapter, dispatchDecline, click } = await setup({ requesterId: 'alice' }, makeMastra(), 'anyone');
+
+          await click('tool_deny:tool-call-1', 'mallory');
+
+          expect(dispatchDecline).toHaveBeenCalledTimes(1);
+          expect(adapter.editMessage).toHaveBeenCalledTimes(1);
+        });
+
+        it('lets a user other than the requester answer an approval recovered from stored messages', async () => {
+          const { channels, dispatchApproval, click } = await setup({}, storedMessages('alice') as any, 'anyone');
+          (channels as any).pendingApprovalCards.clear();
+
+          await click('tool_approve:tool-call-1', 'mallory');
+          expect(dispatchApproval).toHaveBeenCalledTimes(1);
+        });
+
+        it('accepts clicks when stored messages cannot identify a single requester', async () => {
+          const { channels, dispatchApproval, click } = await setup(
+            {},
+            storedMessages('bob', 'alice') as any,
+            'anyone',
+          );
+          (channels as any).pendingApprovalCards.clear();
+
+          await click('tool_approve:tool-call-1', 'mallory');
+          expect(dispatchApproval).toHaveBeenCalledTimes(1);
+        });
+
+        it('still ignores clicks with no mapped channel thread', async () => {
+          const { channels, adapter, dispatchApproval, dispatchDecline, click } = await setup(
+            { requesterId: 'alice' },
+            makeMastra(),
+            'anyone',
+          );
+          (channels as any).findThreadMapping = vi.fn().mockResolvedValue({ thread: undefined });
+
+          await click('tool_approve:tool-call-1', 'mallory');
+          await click('tool_deny:tool-call-1', 'mallory');
+
+          expect(dispatchApproval).not.toHaveBeenCalled();
+          expect(dispatchDecline).not.toHaveBeenCalled();
+          expect(adapter.editMessage).not.toHaveBeenCalled();
+        });
+
+        it('still ignores clicks for a tool call with no pending approval', async () => {
+          const { adapter, dispatchApproval, click } = await setup({ requesterId: 'alice' }, makeMastra(), 'anyone');
+
+          await click('tool_approve:unknown-call', 'mallory');
+
+          expect(dispatchApproval).not.toHaveBeenCalled();
+          expect(adapter.editMessage).not.toHaveBeenCalled();
+        });
       });
 
       it('stamps the requester onto approval records posted through the render context', async () => {

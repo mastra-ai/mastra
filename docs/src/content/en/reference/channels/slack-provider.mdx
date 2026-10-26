@@ -117,6 +117,14 @@ await slack.configure({
       "Whether the agent's reply text is posted to Slack. `'hidden'` never posts it, so the agent's own messages reach Slack only through tools you give it. Tool display, approval prompts, errors, and typing status are unaffected.",
   },
   {
+    name: 'toolApprovers',
+    type: "'requester' | 'anyone'",
+    isOptional: true,
+    defaultValue: "'requester'",
+    description:
+      "Who may answer a tool approval card, forwarded to the Slack adapter. `'requester'` (the default) accepts Approve and Deny clicks only from the user whose message triggered the tool call. `'anyone'` accepts clicks from any user in the channel, for channels that act as one shared identity. The session resolver still runs for the user who clicks.",
+  },
+  {
     name: 'toolDisplay',
     type: 'ToolDisplay',
     isOptional: true,

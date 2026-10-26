@@ -237,6 +237,14 @@ const agent = new Agent({
       "Whether the agent's reply text is posted to the channel. `'hidden'` never posts reply text, so the agent's own messages reach the channel only through tools you give it, such as a reply tool. Tool display, approval prompts, error messages, and typing status are unaffected, and the text still reaches the agent's stream and memory.",
   },
   {
+    name: 'toolApprovers',
+    type: "'requester' | 'anyone'",
+    isOptional: true,
+    defaultValue: "'requester'",
+    description:
+      "Who may answer a tool approval card with the built-in Approve and Deny buttons. `'requester'` (the default) accepts clicks only from the user whose message triggered the tool call and ignores everyone else. `'anyone'` accepts clicks from any user who can see the card, for channels that act as one shared identity, such as a channel mapped to a single workspace in your app. In both modes the click must match a pending approval in a known thread, and the session resolver still runs for the user who clicks.",
+  },
+  {
     name: 'toolDisplay',
     type: "'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ToolDisplayFn",
     isOptional: true,

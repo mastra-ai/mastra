@@ -689,6 +689,7 @@ export class AgentChannels {
               }
               const adapter = this.adapters[platform];
               const adapterConfig = this.adapterConfigs[platform];
+              const anyoneMayApprove = adapterConfig?.toolApprovers === 'anyone';
               if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
 
               const externalThreadId = this.resolveExternalThreadId({ platform, chatThread, messageId });
@@ -774,7 +775,7 @@ export class AgentChannels {
                             )
                             .filter((id): id is string => !!id),
                         );
-                        if (!requesterId && authors.size > 1) {
+                        if (!anyoneMayApprove && !requesterId && authors.size > 1) {
                           this.log('info', 'Ignoring tool approval action: requester is ambiguous', actionEventContext);
                           return;
                         }
@@ -792,10 +793,11 @@ export class AgentChannels {
                 return;
               }
 
-              // Only the user whose message triggered the tool call may answer
-              // its approval card. Skip the check when either identity is unknown.
+              // By default only the user whose message triggered the tool call may
+              // answer its approval card. Skip the check when either identity is
+              // unknown, or when the adapter opts in with `toolApprovers: 'anyone'`.
               const actorId = event.user?.userId;
-              if (requesterId && actorId && requesterId !== actorId) {
+              if (!anyoneMayApprove && requesterId && actorId && requesterId !== actorId) {
                 this.log('info', `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer`, {
                   ...actionEventContext,
                   requesterId,

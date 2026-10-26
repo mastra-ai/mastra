@@ -149,6 +149,21 @@ export const deleteFile = createTool({
 
 When the agent calls this tool, users see a card with the tool name, arguments, and Approve and Deny actions. The tool only executes after approval.
 
+By default, only the user whose message triggered the tool call can approve or deny it. Clicks from anyone else are ignored. If a channel represents one shared identity, for example when each channel maps to a workspace in your app, set `toolApprovers: 'anyone'` on the adapter so any user in the channel can answer:
+
+```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
+channels: {
+  adapters: {
+    slack: {
+      adapter: createSlackAdapter(),
+      toolApprovers: 'anyone',
+    },
+  },
+}
+```
+
+With `toolApprovers: 'anyone'`, any user who can see the card can run the tool, so only use it where every channel member should have that authority. The session resolver still runs for the user who clicks, so it can refuse them.
+
 Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode, `autoResumeSuspendedTools` can resume data-bearing `suspend()` flows when a later user message arrives on the same thread. This requires memory. Hidden mode only suppresses approval buttons. It doesn't turn a message into consent. Tools that require approval remain suspended until an explicit approval or decline is submitted through a UI or API action.
 
 ### Custom action handling

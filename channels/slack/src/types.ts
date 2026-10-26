@@ -61,6 +61,16 @@ interface SlackAdapterChannelConfigBase {
    * @default true
    */
   typingStatus?: ChannelAdapterConfig['typingStatus'];
+
+  /**
+   * Who may answer a tool approval card. See `ChannelAdapterConfig['toolApprovers']`.
+   * `'requester'` (default) lets only the user whose message triggered the tool call
+   * approve or deny it; `'anyone'` lets any user in the channel answer, for channels
+   * that act as one shared identity.
+   *
+   * @default 'requester'
+   */
+  toolApprovers?: ChannelAdapterConfig['toolApprovers'];
 }
 
 /**
