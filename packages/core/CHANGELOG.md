@@ -1,5 +1,119 @@
 # @mastra/core
 
+## 1.80.0-alpha.4
+
+### Minor Changes
+
+- `@mastra/core/workspace` now exports `getMimeType`, the extension-based lookup `LocalFilesystem` uses, so custom filesystem providers can fill in `FileStat.mimeType` the same way. ([#28302](https://github.com/mastra-ai/mastra/pull/28302))
+
+  ```ts
+  import { getMimeType } from '@mastra/core/workspace';
+
+  getMimeType('page.png'); // 'image/png'
+  getMimeType('notes.unknown'); // 'application/octet-stream'
+  ```
+
+- Added an opt-in `onMessage` channel handler for messages that do not mention the bot. Call `defaultHandler` to run the agent, post its reply, and subscribe the thread. Unmentioned messages stay ignored when the handler is omitted or `false`. ([#28285](https://github.com/mastra-ai/mastra/pull/28285))
+
+  ```ts
+  import type { ChannelHandlers } from '@mastra/core/channels';
+
+  const handlers: ChannelHandlers = {
+    onMessage: async (thread, message, defaultHandler) => {
+      if (thread.channelId !== 'slack:C_SUPPORT') return;
+      await defaultHandler(thread, message);
+    },
+  };
+  ```
+
+  Runs started through `onMessage` report `channel.eventType` as `message`. Existing event types are unchanged. When a queued batch mixes mentioned and unmentioned senders, unmentioned senders go to `onMessage` only if it is set. Otherwise they still reach `onMention`, as before.
+
+  Fixes https://github.com/mastra-ai/mastra/issues/27060.
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`chat@^4.43.0` ↗︎](https://www.npmjs.com/package/chat/v/4.43.0) (from `^4.37.0`, in `dependencies`)
+  - Updated dependency [`dotenv@^17.4.2` ↗︎](https://www.npmjs.com/package/dotenv/v/17.4.2) (from `^17.3.1`, in `dependencies`)
+  - Updated dependency [`fastq@^1.20.3` ↗︎](https://www.npmjs.com/package/fastq/v/1.20.3) (from `^1.20.1`, in `dependencies`)
+  - Updated dependency [`hono@^4.13.13` ↗︎](https://www.npmjs.com/package/hono/v/4.13.13) (from `^4.13.7`, in `dependencies`)
+  - Updated dependency [`hono-openapi@^1.5.0` ↗︎](https://www.npmjs.com/package/hono-openapi/v/1.5.0) (from `^1.3.1`, in `dependencies`)
+  - Updated dependency [`ignore@^7.0.14` ↗︎](https://www.npmjs.com/package/ignore/v/7.0.14) (from `^7.0.5`, in `dependencies`)
+  - Updated dependency [`lru-cache@^11.5.3` ↗︎](https://www.npmjs.com/package/lru-cache/v/11.5.3) (from `^11.2.7`, in `dependencies`)
+  - Updated dependency [`p-map@^7.1.1` ↗︎](https://www.npmjs.com/package/p-map/v/7.1.1) (from `^7.0.4`, in `dependencies`)
+  - Updated dependency [`picomatch@^4.0.7` ↗︎](https://www.npmjs.com/package/picomatch/v/4.0.7) (from `^4.0.3`, in `dependencies`)
+  - Updated dependency [`posthog-node@^5.57.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.57.1) (from `^5.46.1`, in `dependencies`)
+  - Updated dependency [`re2js@^2.9.0` ↗︎](https://www.npmjs.com/package/re2js/v/2.9.0) (from `^2.8.6`, in `dependencies`)
+  - Updated dependency [`ws@^8.22.0` ↗︎](https://www.npmjs.com/package/ws/v/8.22.0) (from `^8.21.3`, in `dependencies`)
+  - Updated dependency [`yaml@^2.9.1` ↗︎](https://www.npmjs.com/package/yaml/v/2.9.1) (from `^2.9.0`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/azure@^2.0.143` ↗︎](https://www.npmjs.com/package/@ai-sdk/azure/v/2.0.143) (from `^2.0.142`, in `devDependencies`)
+  - Updated dependency [`@babel/core@^8.0.9` ↗︎](https://www.npmjs.com/package/@babel/core/v/8.0.9) (from `^8.0.1`, in `devDependencies`)
+  - Updated dependency [`@copilotkit/aimock@^1.46.0` ↗︎](https://www.npmjs.com/package/@copilotkit/aimock/v/1.46.0) (from `^1.29.0`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`@types/ws@^8.18.2` ↗︎](https://www.npmjs.com/package/@types/ws/v/8.18.2) (from `^8.18.1`, in `devDependencies`)
+  - Updated dependency [`arktype@^2.2.9` ↗︎](https://www.npmjs.com/package/arktype/v/2.2.9) (from `^2.2.0`, in `devDependencies`)
+  - Updated dependency [`rollup@^4.65.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.65.0) (from `^4.64.10`, in `devDependencies`)
+  - Updated dependency [`vscode-languageserver-protocol@^3.18.5` ↗︎](https://www.npmjs.com/package/vscode-languageserver-protocol/v/3.18.5) (from `^3.18.4`, in `devDependencies`)
+
+- Fixed durable and evented agents dropping a background task's result when the task had been dispatched but no worker had picked it up yet. The end-of-step background check counted only `running` tasks. On a pubsub with delivery latency, a just-dispatched task was still `pending`, so the agent stopped waiting and the task's result never reached the stream. Pending tasks now count as outstanding. ([#28228](https://github.com/mastra-ai/mastra/pull/28228))
+
+- Fixed foreground command exceptions to include a failed exit code in the returned output. ([#28406](https://github.com/mastra-ai/mastra/pull/28406))
+
+- Fixed recovery of ToolSearchProcessor-loaded tools after a crash in an evented agent, with either `in-memory` or `context` storage. Recovery now reads the transcript from the active iteration's run, so the interrupted tool call resumes with its original ID instead of failing with `Tool not found`. ([#28295](https://github.com/mastra-ai/mastra/pull/28295))
+
+  Evented `recover()` and `observe()` now restore the latest transcript saved during the iteration instead of the one the iteration started with. Fixes https://github.com/mastra-ai/mastra/issues/28171.
+
+- Fixed `processInput()` receiving `agent: undefined` in every input processor after the first. An agent with two or more input processors now passes the running agent to each of them, as `ProcessInputArgs.agent` documents. This matters most with memory enabled, because memory processors run first and configured processors never received the agent. Fixes #28349. ([#28443](https://github.com/mastra-ai/mastra/pull/28443))
+
+- Exported durable-agent helpers that `@mastra/inngest` reuses instead of copying: `applyReservedMemoryContextKeys`, `emitAbortEvent`, `createDurableIsTaskCompleteStep` and `createDurableGoalStep` from `@mastra/core/agent/durable`, and `createTimeoutAbortSignal` from `@mastra/core/loop`. ([#28232](https://github.com/mastra-ai/mastra/pull/28232))
+
+  Fixed `observe().abort()` on a durable run parked on a tool approval or suspension: it now releases the run like the stream `abort()` does, so a later `approveToolCall()` or `resumeStream()` is rejected instead of continuing the aborted run.
+
+  Fixed an empty step text on durable agents when an output processor holds parts (such as `BatchPartsProcessor`) and the `step-start` event reached the stream after those parts were released. The run that holds the output processors now runs them on `step-start` itself, like every other chunk, so each processor sees it exactly once. A processor that throws on `step-start` now fails the run with an `error` chunk and `finishReason: 'error'`, matching a throw on any other chunk, instead of throwing from `fullStream`.
+
+- Fixed tool hooks passed to `agent.stream()` and `agent.generate()` being ignored in durable and evented agents. Per-call `beforeToolCall` and `afterToolCall` hooks now take priority over agent-level hooks. Hooks in `defaultOptions.hooks` also run in these engines. ([#27459](https://github.com/mastra-ai/mastra/pull/27459))
+
+  Per-call hooks are functions and only live in the process that received the call. If a run resumes in a different process, only constructor hooks and `defaultOptions.hooks` run, so put hooks you always need there.
+
+  ```ts
+  await agent.stream('Look up the order', {
+    hooks: {
+      beforeToolCall: () => ({ proceed: false, output: { status: 'mocked' } }),
+    },
+  });
+  ```
+
+- Fixed evented workflow runs that never finished after being cancelled from another Mastra instance (or after `startAsync()`). The run was marked `canceled` in storage, but the owner's `run.start()` never resolved and watchers never got a finish event. Cancelling now resolves `start()` with a `canceled` result, and the run emits a single `workflow.end`. ([#28434](https://github.com/mastra-ai/mastra/pull/28434))
+
+  `run.cancel()` on an evented run now rejects if the cancel event can't be published. The run is only marked `canceled` once the cancel is published, so you can call `cancel()` again from any instance to retry.
+
+- Fixed `response.id` being lost when a model provider (for example OpenRouter) streams response metadata across several partial events. A later event that omits a field no longer erases the value an earlier event supplied, so `onStepFinish`, `onFinish` and `result.response` keep the provider's response id. Durable and evented agents now also report the provider's response id, model id and timestamp in `onStepFinish` and `onFinish`. ([#26660](https://github.com/mastra-ai/mastra/pull/26660))
+
+- Fixed a call that passes `hooks: { beforeToolCall: null }` (for example from a JSON request body) turning off the agent's own tool hooks. Non-function values in call-time `hooks` are now ignored, so constructor hooks and `defaultOptions.hooks` still run. ([#27459](https://github.com/mastra-ai/mastra/pull/27459))
+
+- Fixed a TypeScript error when passing steps to `.parallel()` whose `inputSchema` only uses part of the previous step's output. `.parallel()` now accepts the same steps as `.then()`: the previous output only has to include the fields each step needs. Steps that need a field the previous output doesn't have are still rejected. Runtime behavior is unchanged. ([#28225](https://github.com/mastra-ai/mastra/pull/28225))
+
+  ```ts
+  const workflow = createWorkflow({ ... })
+    .then(producesValueAndPrompt) // outputs { value: number; prompt: string }
+    .parallel([readsValue, readsPrompt]); // inputs { value: number } and { prompt: string } — now type-checks
+  ```
+
+- Fixed agent runs that reported an API error instead of an abort when the run was cancelled while an error processor was still handling that error. ([#28158](https://github.com/mastra-ai/mastra/pull/28158))
+
+- Fixed `read_file` returning only metadata for `.jsonl`, `.php` and `.dart` files. Their MIME types (`application/jsonl`, `application/x-php`, `application/dart`) are now treated as text, so the file content is returned. ([#28462](https://github.com/mastra-ai/mastra/pull/28462))
+
+- Fixed `run.restart()` re-running work that had already finished when a workflow crashed inside a parallel block or a `.foreach()`. Each finished parallel arm and foreach item is now saved as soon as it completes, so a restart runs only the arms and items that had not completed. An item that finishes while the previous save is still being written can run again if the process dies before that save lands. This also stops a recovered durable agent from re-running parallel tool calls that had already finished. Fixes #26214. ([#27935](https://github.com/mastra-ai/mastra/pull/27935))
+
+- Fixed resumed agent runs disappearing from storage before their final messages are saved. Final message-save failures now report an error instead of a successful completion. Fixes [#27445](https://github.com/mastra-ai/mastra/issues/27445). ([#28157](https://github.com/mastra-ai/mastra/pull/28157))
+
+- Fixed spans, logs, metrics, scores and feedback reporting another entity's version. A tool or model call made by a versioned agent no longer reports the agent's version as its own `entityVersionId`, so grouping or filtering by version only counts that version's own entity. A span still reports a version when it was declared for it or inherited from a span of the same entity. Already-stored spans and signals are unchanged. Fixes #28418. ([#28423](https://github.com/mastra-ai/mastra/pull/28423))
+
+- Fixed agents saying they can't save information when working memory uses `agentManaged: false`. The instructions now say that memory updates automatically after each response. Agents acknowledge new information instead of claiming they can't save it. Only `readOnly: true` tells agents they cannot update working memory. ([#28441](https://github.com/mastra-ai/mastra/pull/28441))
+
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed)]:
+  - @mastra/schema-compat@1.3.17-alpha.0
+
 ## 1.80.0-alpha.3
 
 ### Patch Changes

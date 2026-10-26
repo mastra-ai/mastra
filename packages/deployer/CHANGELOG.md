@@ -1,5 +1,35 @@
 # @mastra/deployer
 
+## 1.80.0-alpha.4
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@babel/core@^8.0.9` ↗︎](https://www.npmjs.com/package/@babel/core/v/8.0.9) (from `^8.0.1`, in `dependencies`)
+  - Updated dependency [`@babel/preset-typescript@^8.0.7` ↗︎](https://www.npmjs.com/package/@babel/preset-typescript/v/8.0.7) (from `^8.0.1`, in `dependencies`)
+  - Updated dependency [`@babel/traverse@^8.0.7` ↗︎](https://www.npmjs.com/package/@babel/traverse/v/8.0.7) (from `^8.0.4`, in `dependencies`)
+  - Updated dependency [`@hono/node-ws@^1.3.1` ↗︎](https://www.npmjs.com/package/@hono/node-ws/v/1.3.1) (from `^1.3.0`, in `dependencies`)
+  - Updated dependency [`empathic@^2.1.0` ↗︎](https://www.npmjs.com/package/empathic/v/2.1.0) (from `^2.0.0`, in `dependencies`)
+  - Updated dependency [`esbuild@^0.28.2` ↗︎](https://www.npmjs.com/package/esbuild/v/0.28.2) (from `^0.28.0`, in `dependencies`)
+  - Updated dependency [`fs-extra@^11.4.1` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.4.1) (from `^11.3.5`, in `dependencies`)
+  - Updated dependency [`get-tsconfig@^4.14.3` ↗︎](https://www.npmjs.com/package/get-tsconfig/v/4.14.3) (from `^4.14.0`, in `dependencies`)
+  - Updated dependency [`hono@^4.13.13` ↗︎](https://www.npmjs.com/package/hono/v/4.13.13) (from `^4.13.7`, in `dependencies`)
+  - Updated dependency [`local-pkg@^1.2.1` ↗︎](https://www.npmjs.com/package/local-pkg/v/1.2.1) (from `^1.1.2`, in `dependencies`)
+  - Updated dependency [`resolve.exports@^2.0.4` ↗︎](https://www.npmjs.com/package/resolve.exports/v/2.0.4) (from `^2.0.3`, in `dependencies`)
+  - Updated dependency [`rollup@^4.65.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.65.0) (from `^4.64.10`, in `dependencies`)
+  - Updated dependency [`ws@^8.22.0` ↗︎](https://www.npmjs.com/package/ws/v/8.22.0) (from `^8.21.3`, in `dependencies`)
+  - Updated dependency [`yaml@^2.9.1` ↗︎](https://www.npmjs.com/package/yaml/v/2.9.1) (from `^2.9.0`, in `dependencies`)
+  - Updated dependency [`@hono/node-server@^2.1.3` ↗︎](https://www.npmjs.com/package/@hono/node-server/v/2.1.3) (from `^2.0.0`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`hono-openapi@^1.5.0` ↗︎](https://www.npmjs.com/package/hono-openapi/v/1.5.0) (from `^1.3.1`, in `devDependencies`)
+  - Updated dependency [`type-fest@^5.10.0` ↗︎](https://www.npmjs.com/package/type-fest/v/5.10.0) (from `^5.4.4`, in `devDependencies`)
+
+- Fixed `mastra build` so tsconfig `paths` imports of files with dots in their names are bundled, such as `import { repo } from 'src/repositories/user-repository.interface'`. Previously the import was left unresolved and the server failed to start with `ERR_MODULE_NOT_FOUND`. The build also no longer adds an unrelated npm package named after the first path segment (for example `src`) to the output dependencies. ([#28439](https://github.com/mastra-ai/mastra/pull/28439))
+
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`0a913e0`](https://github.com/mastra-ai/mastra/commit/0a913e096cb569aea396fa3d9f286cc874179ce8), [`3dfe2eb`](https://github.com/mastra-ai/mastra/commit/3dfe2eb8c3ef3b18d2395a3618b6214488963d05), [`152e380`](https://github.com/mastra-ai/mastra/commit/152e380aca6fcf74f598a158c710c0e755ceb325), [`99e4867`](https://github.com/mastra-ai/mastra/commit/99e486723d3f0063ae70a39c9840daf92a98fa23), [`929a728`](https://github.com/mastra-ai/mastra/commit/929a7281d411ac515e0befb53a5383741b06d484), [`52db47c`](https://github.com/mastra-ai/mastra/commit/52db47cd0d66f891d41a2dbfa36e55b640a30a37), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`f51a29e`](https://github.com/mastra-ai/mastra/commit/f51a29e82b6e2371b5c6aed46141ce20f099c9a9), [`5c0a994`](https://github.com/mastra-ai/mastra/commit/5c0a99438ef82cf5584218f250a023371bab3373), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`823a389`](https://github.com/mastra-ai/mastra/commit/823a3890deb5cf14484fd655c8360df4c41c4aed), [`ff35b8c`](https://github.com/mastra-ai/mastra/commit/ff35b8c3d86136509d31b87fed7f789a572dc1af), [`501b207`](https://github.com/mastra-ai/mastra/commit/501b207b1b6300af44b5b8f40ff33adfe7a9d195), [`d9245dd`](https://github.com/mastra-ai/mastra/commit/d9245dd486349163bfc6468ab45e5600abc6a59e), [`358c711`](https://github.com/mastra-ai/mastra/commit/358c71145d677394ce03a019156bc464afe6cc76), [`dbdfaee`](https://github.com/mastra-ai/mastra/commit/dbdfaee279dab2a5dca31134ca1967eb582e639c), [`fdd2201`](https://github.com/mastra-ai/mastra/commit/fdd22014f6fbfa115eba53cff42063544af2ff41), [`4303017`](https://github.com/mastra-ai/mastra/commit/4303017f393b9c09f692837d8e9e7a19f6539cf4)]:
+  - @mastra/core@1.80.0-alpha.4
+  - @mastra/server@1.80.0-alpha.4
+
 ## 1.80.0-alpha.3
 
 ### Patch Changes

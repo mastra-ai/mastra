@@ -45,6 +45,7 @@ import type { AgentSignalInput } from '../signals';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
+import { isDurableAgentLike } from '../types';
 import { resolveThreadIdFromArgs } from '../utils';
 
 import { publishAbortRequest } from './abort-transport';
@@ -1657,6 +1658,9 @@ export class DurableAgent<
       // caller re-passing the option.
       returnScorerData: workflowInput.options?.returnScorerData,
       mastra: this.#mastra,
+      // The live model below makes resolveRuntimeDependencies skip its rebuild,
+      // so processor hooks only get the agent if it is stored here.
+      agent: wrapped,
       model,
       modelList,
       tools,
@@ -3214,6 +3218,7 @@ export class DurableAgent<
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
       processorStates: registryEntry.processorStates,
+      agent: registryEntry.agent,
       requestContext: registryEntry.requestContext,
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
@@ -3987,6 +3992,7 @@ export class DurableAgent<
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
       processorStates: entry.processorStates,
+      agent: entry.agent,
       requestContext: resolvedOptions.requestContext,
       // Caller option wins, then the flag persisted at prepare time. Only fall
       // back to resolvedOptions (which merges agent defaultOptions) last, so a
@@ -4801,6 +4807,7 @@ export class DurableAgent<
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
       processorStates: registryEntry.processorStates,
+      agent: registryEntry.agent,
       requestContext: registryEntry.requestContext,
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
@@ -5537,6 +5544,7 @@ export class DurableAgent<
     let structuredOutput = observedEntry?.structuredOutput;
     let outputProcessors = observedEntry?.outputProcessors;
     const processorStates = observedEntry?.processorStates;
+    let streamAgent: Agent<any, any, any, any> = observedEntry?.agent ?? this.#wrappedAgent;
     let returnScorerData = observedEntry?.returnScorerData;
     let requestContext = observedEntry?.requestContext;
     let messageList = observedEntry?.messageList ?? this.#runRegistry.getMessageList(runId);
@@ -5673,6 +5681,12 @@ export class DurableAgent<
         }
       }
 
+      // Hooks get the agent the output processors come from, not an entry's agent
+      // (which is the current version). A pinned version is a DurableAgent fork; unwrap it.
+      streamAgent =
+        isDurableAgentLike(processorAgent) && processorAgent.agent !== processorAgent
+          ? processorAgent.agent
+          : processorAgent;
       try {
         outputProcessors = (await processorAgent.listOutputProcessors(requestContext)) ?? [];
       } catch (error) {
@@ -5784,6 +5798,7 @@ export class DurableAgent<
       },
       onSuspended: options?.onSuspended,
       structuredOutput: structuredOutput as any,
+      agent: streamAgent,
       outputProcessors,
       processorStates,
       returnScorerData,

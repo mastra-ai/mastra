@@ -513,12 +513,27 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: auto-triaged"');
     expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
     expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: needs approval"');
-    for (const label of ['effort:low', 'effort:medium', 'effort:high', 'impact:low', 'impact:medium', 'impact:high']) {
+    for (const label of [
+      'effort:low',
+      'effort:medium',
+      'effort:high',
+      'impact:low',
+      'impact:medium',
+      'impact:high',
+      'severity:critical',
+      'severity:high',
+      'severity:medium',
+      'severity:low',
+    ]) {
       expect(triage).toContain(label);
     }
-    expect(triage).toContain('Add the selected `effort:<level>` and `impact:<level>` labels from the handoff.');
+    expect(triage).toContain(
+      'Add the selected `effort:<level>`, `impact:<level>`, and `severity:<level>` labels from the handoff.',
+    );
+    expect(triage).toContain('gh label create "severity:<level>"');
     expect(triage).toContain('Remove only conflicting alternatives from these explicit labels');
     expect(triage).toContain('On every initial run and refresh, keep exactly the selected effort label');
+    expect(triage).toContain('exactly the selected severity label. Confidence is never a label.');
     expect(triage).toContain('Do not add, remove, or derive any `trio-*` labels');
     expect(triage).toContain('gh label create "$LABEL" --repo mastra-ai/mastra');
     expect(triage).toContain(
