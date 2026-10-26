@@ -132,6 +132,29 @@ function listedMergeRequestEvent(
   };
 }
 
+function listedMergeRequestEvents(
+  project: { host: string; projectId: number; projectPath: string },
+  pr: PullRequest,
+): ParsedGitLabWebhook[] {
+  const opened = listedMergeRequestEvent(project, pr);
+  if (!pr.headSha || pr.updatedAt === pr.createdAt) return [opened];
+  return [
+    opened,
+    {
+      ...opened,
+      deliveryId: `poll:merge-request-head:${project.host}:${project.projectId}:${pr.id}:${pr.updatedAt}:${pr.headSha}`,
+      payload: {
+        ...opened.payload,
+        object_attributes: {
+          ...(opened.payload.object_attributes as Record<string, unknown>),
+          action: 'update',
+          last_commit: { id: pr.headSha },
+        },
+      },
+    },
+  ];
+}
+
 function listedIssueEvent(issue: IntakeIssue): ParsedGitLabWebhook | null {
   const source = decodeSourceId(issue.sourceId ?? '');
   const projectId = source && positiveId(source.projectId);
@@ -163,9 +186,14 @@ function listedIssueEvent(issue: IntakeIssue): ParsedGitLabWebhook | null {
 
 async function ingestListedEvents(events: Array<ParsedGitLabWebhook | null>, ingest?: BuildGitLabRoutesOptions['ingestFactoryEvent']) {
   if (!ingest) return;
-  const results = await Promise.allSettled(events.filter((event): event is ParsedGitLabWebhook => event !== null).map(event => ingest(event)));
-  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-  if (rejected) console.warn('[Mastra Factory] Failed to ingest listed GitLab events', { error: rejected.reason });
+  const listed = events.filter((event): event is ParsedGitLabWebhook => event !== null);
+  const openings = listed.filter(event => !event.deliveryId.startsWith('poll:merge-request-head:'));
+  const headUpdates = listed.filter(event => event.deliveryId.startsWith('poll:merge-request-head:'));
+  for (const batch of [openings, headUpdates]) {
+    const results = await Promise.allSettled(batch.map(event => ingest(event)));
+    const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (rejected) console.warn('[Mastra Factory] Failed to ingest listed GitLab events', { error: rejected.reason });
+  }
 }
 
 export async function ingestLinkedGitLabRepositoryBacklog(args: {
@@ -195,7 +223,7 @@ export async function ingestLinkedGitLabRepositoryBacklog(args: {
   });
   for (let page = 1; page <= LINKED_BACKLOG_MAX_PAGES; page += 1) {
     const result = await args.gitlab.versionControl.listPullRequests({ ...target, includeDrafts: false, cursor: String(page) });
-    await ingestListedEvents(result.pullRequests.map(pr => listedMergeRequestEvent(project, pr)), args.ingestFactoryEvent);
+    await ingestListedEvents(result.pullRequests.flatMap(pr => listedMergeRequestEvents(project, pr)), args.ingestFactoryEvent);
     if (result.nextCursor === null) break;
   }
   const sourceId = encodeSourceId({ host: linked.host, projectId: String(projectId) });
@@ -415,8 +443,8 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
               cursor: String(page),
             });
             await ingestListedEvents(
-              result.pullRequests.map(pr =>
-                listedMergeRequestEvent({ host: linked.host, projectId, projectPath: linked.repository.slug }, pr),
+              result.pullRequests.flatMap(pr =>
+                listedMergeRequestEvents({ host: linked.host, projectId, projectPath: linked.repository.slug }, pr),
               ),
               options.ingestFactoryEvent,
             );
