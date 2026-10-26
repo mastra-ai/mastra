@@ -1968,8 +1968,16 @@ export class BackgroundTaskManager {
           // Only the worker whose fenced write won publishes, so replicas
           // sweeping the same task do not report the failure twice.
           if (markedFailed) {
-            const failedTask = await storage.getTask(task.id);
-            if (failedTask?.status === 'failed') await this.publishLifecycleEvent('task.failed', failedTask);
+            // A failed publish must not stop the sweep from reclaiming the
+            // remaining tasks or scheduling the next pass.
+            try {
+              const failedTask = await storage.getTask(task.id);
+              if (failedTask?.status === 'failed') await this.publishLifecycleEvent('task.failed', failedTask);
+            } catch (error) {
+              this.#mastra
+                ?.getLogger()
+                ?.error(`Failed to report recovered background task ${task.id} as failed`, error);
+            }
           }
         }
       }
