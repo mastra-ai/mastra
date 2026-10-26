@@ -2217,6 +2217,47 @@ describe('Tracing Integration Tests', () => {
 
       finalExpectations(testExporter);
     });
+
+    it('reports the agent version only on agent-owned spans and signals', async () => {
+      const testAgent = new Agent({
+        id: 'versioned-agent',
+        name: 'Versioned Agent',
+        instructions: 'You are a test agent',
+        model: mockModelV2,
+        tools: { calculator: calculatorTool },
+      });
+      testAgent.__setRawConfig({ resolvedVersionId: 'v3' });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { testAgent },
+      });
+
+      await mastra.getAgent('testAgent').generate('Calculate 5 + 3');
+
+      const [agentSpan] = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      const [toolSpan] = testExporter.getSpansByType(SpanType.TOOL_CALL);
+      expect(agentSpan).toBeDefined();
+      expect(toolSpan).toBeDefined();
+      // The tool still inherits the agent's metadata
+      expect(toolSpan?.metadata?.entityVersionId).toBe('v3');
+
+      expect(buildCreateSpanRecord(agentSpan!).entityVersionId).toBe('v3');
+      expect(buildCreateSpanRecord(toolSpan!)).toMatchObject({
+        entityId: 'calculator',
+        entityVersionId: null,
+        parentEntityId: 'versioned-agent',
+        parentEntityVersionId: 'v3',
+      });
+
+      const [agentDuration] = testExporter.getMetricsByName('mastra_agent_duration_ms');
+      const [toolDuration] = testExporter.getMetricsByName('mastra_tool_duration_ms');
+      expect(agentDuration?.correlationContext?.entityVersionId).toBe('v3');
+      expect(toolDuration?.correlationContext).toMatchObject({ entityId: 'calculator', parentEntityVersionId: 'v3' });
+      expect(toolDuration?.correlationContext?.entityVersionId).toBeUndefined();
+
+      finalExpectations(testExporter);
+    });
   });
 
   describe('Standalone tool execution tracing (MCP-style)', () => {

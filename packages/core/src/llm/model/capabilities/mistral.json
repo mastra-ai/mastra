@@ -83,13 +83,7 @@
     "zai-glm-5-3-flash"
   ],
   "reasoning": {
-    "zai-glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "mistral-medium-2604": [
+    "mistral-large-4": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -101,28 +95,16 @@
         "values": ["none", "high"]
       }
     ],
-    "glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "mistral-large-4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-small-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "labs-leanstral-1-5-1": [
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
       }
     ],
     "mistral-medium-latest": [
@@ -147,6 +129,24 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "mistral-small-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "zai-glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "mistral-medium-2604": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ]
   }

@@ -62,10 +62,10 @@ export function validateWorkflowRefs(
           path: `${path}.workflowId`,
           message: `Step "${entry.id}" declares workflowId "${entry.workflowId}" which is not a registered workflow.`,
         });
-        return;
+        break;
       }
       default:
-        return;
+        break;
     }
   });
   return issues;

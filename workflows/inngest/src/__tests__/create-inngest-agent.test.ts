@@ -1061,7 +1061,10 @@ describe('InngestAgent parity surface', () => {
         await vi.waitFor(() => expect(sendSpy).toHaveBeenCalled());
         await publishStepAndFinish(durableAgent, runId);
         await vi.waitFor(() => expect(fired).toEqual(['onFinish:acme']));
-        expect(loadWorkflowSnapshot).toHaveBeenCalledTimes(2);
+        const loopReads = loadWorkflowSnapshot.mock.calls.filter(
+          ([args]) => args.workflowName === InngestDurableStepIds.AGENTIC_LOOP,
+        );
+        expect(loopReads).toHaveLength(2);
       } finally {
         result.cleanup();
         sendSpy.mockRestore();
@@ -1764,6 +1767,87 @@ describe('InngestAgent parity surface', () => {
     }
   });
 
+  describe('pre-approval text restore (#27504)', () => {
+    // These tests only control storage write ordering, which a model fixture can't
+    // reach, so no model is involved: the resumed stream is driven over pubsub.
+    const outerSnapshot = {
+      value: {},
+      context: {},
+      status: 'suspended',
+      suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+      resumeLabels: { 'approval-call': { stepId: 'agentic-loop' } },
+    };
+    // The previous iteration's snapshot: written before the approval tool call suspended.
+    const staleIteration = {
+      context: { 'durable-llm-execution': { status: 'running' } },
+      resumeLabels: {},
+    };
+    const suspendedIteration = {
+      context: {
+        input: { accumulatedSteps: [] },
+        'durable-llm-execution': { status: 'success', output: { text: 'Checking. ' } },
+      },
+      resumeLabels: { 'approval-call': { stepId: 'tool-call' } },
+    };
+
+    function setLaggingStore(durableAgent: ReturnType<typeof makeIsolatedAgent>, staleReads: number) {
+      let iterationReads = 0;
+      const load = vi.fn(async ({ workflowName }: { workflowName: string }) => {
+        if (workflowName === InngestDurableStepIds.AGENTIC_LOOP) return outerSnapshot;
+        return iterationReads++ < staleReads ? staleIteration : suspendedIteration;
+      });
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot: load }) }),
+      });
+      return load;
+    }
+
+    it('restores pre-approval text from the suspended iteration snapshot, not an earlier one', async () => {
+      const durableAgent = makeIsolatedAgent('resume-lagging-iteration');
+      const load = setLaggingStore(durableAgent, 3);
+      const runId = 'resume-lagging-iteration-run';
+      const sendSpy = vi.spyOn(inngest as any, 'send').mockImplementation(async () => {
+        for (const data of [
+          { type: 'text-start', payload: { id: 'resumed-text' } },
+          { type: 'text-delta', payload: { id: 'resumed-text', text: 'Done.' } },
+          { type: 'text-end', payload: { id: 'resumed-text' } },
+          {
+            type: 'step-finish',
+            payload: {
+              output: { steps: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+              stepResult: { reason: 'stop', warnings: [] },
+              metadata: {},
+            },
+          },
+        ]) {
+          await publishStreamEvent(durableAgent, runId, { type: AgentStreamEventTypes.CHUNK, data });
+        }
+        await publishStreamEvent(durableAgent, runId, {
+          type: AgentStreamEventTypes.FINISH,
+          data: {
+            output: { text: 'Done.', steps: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            stepResult: { reason: 'stop' },
+          },
+        });
+      });
+
+      try {
+        const result = await durableAgent.resumeGenerate({ approved: true }, {
+          runId,
+          toolCallId: 'approval-call',
+        } as any);
+        expect(result.text).toBe('Checking. Done.');
+        const iterationReads = load.mock.calls.filter(
+          ([args]) => args.workflowName === InngestDurableStepIds.AGENTIC_EXECUTION,
+        );
+        expect(iterationReads).toHaveLength(4);
+      } finally {
+        globalRunRegistry.delete(runId);
+        sendSpy.mockRestore();
+      }
+    });
+  });
+
   it('forwards the per-call actor signal into the workflow trigger event', async () => {
     // `actor` reaches FGA checks and tool execution by riding on the event
     // payload the execution engine reads. The durable-agent wrapper used to
@@ -1912,6 +1996,51 @@ describe('InngestAgent parity surface', () => {
         expect(globalRunRegistry.get('resume-unknown-run')).toBeUndefined();
       } finally {
         vi.useRealTimers();
+        sendSpy.mockRestore();
+      }
+    });
+
+    it("leaves the parked run's tools untouched when the resume rejects on missing suspended history", async () => {
+      // The warm-resume tool rebuild binds tools to this caller's request context.
+      // A resume that rejects must not leave them on the parked run (#25960).
+      vi.useFakeTimers();
+      const durableAgent = makeIsolatedAgent('resume-rejects-before-rebuild');
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({
+          getStore: async () => ({
+            loadWorkflowSnapshot: vi.fn(async ({ workflowName }) =>
+              workflowName === InngestDurableStepIds.AGENTIC_EXECUTION
+                ? null
+                : {
+                    value: {},
+                    context: { 'agentic-loop': nestedSuspension },
+                    status: 'suspended',
+                    suspendedPaths: { 'agentic-loop': [0] },
+                    resumeLabels: { 'tool-call-a': { stepId: 'agentic-loop' } },
+                  },
+            ),
+          }),
+        }),
+      });
+      const runId = 'resume-rejects-before-rebuild-run';
+      const tools = { lookup: { id: 'lookup' } };
+      const requestTools = { lookup: tools.lookup };
+      globalRunRegistry.set(runId, { tools, requestTools, model: undefined } as any);
+      const sendSpy = stubInngestSend();
+
+      try {
+        const assertion = expect(
+          durableAgent.resume(runId, { answer: 'yes' }, { requestContext: new RequestContext([['caller', 'second']]) }),
+        ).rejects.toThrow(/does not contain suspended tool calls tool-call-a/);
+        await vi.advanceTimersByTimeAsync(11_000);
+        await assertion;
+        expect(sendSpy).not.toHaveBeenCalled();
+        const entry = globalRunRegistry.get(runId) as any;
+        expect(entry.tools).toBe(tools);
+        expect(entry.requestTools).toBe(requestTools);
+      } finally {
+        vi.useRealTimers();
+        globalRunRegistry.delete(runId);
         sendSpy.mockRestore();
       }
     });

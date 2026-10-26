@@ -2136,6 +2136,30 @@ describe('MastraModelOutput', () => {
       ];
     }
 
+    it('drops restored prior text at a continuing goal boundary', async () => {
+      const runId = 'resumed-goal-run';
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createTextDeltaChunk(runId, 'first answer'),
+          createStepFinishChunk(runId),
+          createGoalChunk(runId, { shouldContinue: true }),
+          createTextDeltaChunk(runId, 'final answer'),
+          createStepFinishChunk(runId),
+          createGoalChunk(runId, { shouldContinue: false }),
+          createFinishChunk(runId),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+        resumedText: { priorText: 'before approval ', stepText: '' },
+      });
+
+      const fullOutput = await output.getFullOutput();
+      expect(fullOutput.steps).toHaveLength(1);
+      expect(fullOutput.text).toBe('final answer');
+    });
+
     it('bounds buffering across continuing evaluations but preserves the terminal turn in getFullOutput()', async () => {
       const runId = 'test-run';
       const stream = createChunkStream(createGoalLoopChunks(runId));

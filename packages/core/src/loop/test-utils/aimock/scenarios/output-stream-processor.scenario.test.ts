@@ -63,6 +63,34 @@ describeForAllEngines('Support agent output stream processors', engine => {
       .map(p => (p as { text: string }).text)
       .join('');
 
+  // Technical: durable engines run output processors on step-start in the producer and mark
+  // it processed, so consumers must not run them on it again (#28231). The processor sees the
+  // step-start exactly once, and the stream still delivers it.
+  it('an output processor sees the step-start once and the customer still receives it', async () => {
+    let seenStepStarts = 0;
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: CUSTOMER_QUESTION,
+      collectChunks: true,
+      outputProcessors: [
+        {
+          id: 'step-start-counter',
+          processOutputStream: async ({ part }) => {
+            if (part.type === 'step-start') seenStepStarts++;
+            return part;
+          },
+        },
+      ],
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: MASKED_REPLY });
+      },
+    });
+
+    expect(seenStepStarts).toBe(1);
+    expect(chunks!.filter(c => c.type === 'step-start')).toHaveLength(1);
+  });
+
   // Technical: processOutputStream rewrites text-delta chunks. Memory is written from the
   // response messages, which must be built from the processed chunks, not the raw model deltas.
   // Before #26335 durable and evented saved the raw card number while streaming the masked one.
