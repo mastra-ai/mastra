@@ -33,10 +33,19 @@ describe('GitLab listed merge requests through rules ingress', () => {
       orgId: 'org-1', integrationId: 'gitlab', sourceId, factoryProjectId: project.id, board: 'work', userId: 'user-1',
     });
     const sourceKey = `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host: 'gitlab.example.com', projectId: 101, mergeRequestIid: 17 })).toString('base64url')}`;
+    const work = (await seeded.workItems.upsert({
+      orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id,
+      input: {
+        title: 'Authoring work', board: 'work', stages: ['execute'],
+        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:authoring' },
+        sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature' } },
+        metadata: { openPullRequestNumber: 17 },
+      },
+    })).item;
     const card = (await seeded.workItems.upsert({
       orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id,
       input: {
-        title: 'Review MR', board: 'review', stages: ['done'], sessions: {},
+        title: 'Review MR', board: 'review', stages: ['done'], sessions: {}, parentWorkItemId: work.id,
         externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: sourceKey },
         metadata: { authorTrusted: true, reviewedHeadSha: 'aaaa', pullRequestHeadSha: 'aaaa' },
       },
@@ -75,10 +84,17 @@ describe('GitLab listed merge requests through rules ingress', () => {
     const path = `/web/gitlab/projects/${link.id}/prs?factoryProjectId=${project.id}&page=1`;
     expect((await app.request(path)).status).toBe(200);
     expect((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata.pullRequestHeadSha).toBe('aaaa');
+    const priorDecisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
 
     list.mockResolvedValue({ pullRequests: [{ ...listed, headSha: 'bbbb', updatedAt: '2030-01-02T00:00:00Z' }], nextCursor: null });
     expect((await app.request(path)).status).toBe(200);
     expect((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata.pullRequestHeadSha).toBe('bbbb');
+    const newDecisions = (await seeded.workItems.listDeferredDecisions('org-1', project.id)).filter(
+      decision => !priorDecisions.some(previous => previous.id === decision.id),
+    );
+    expect(newDecisions).toEqual(
+      expect.arrayContaining([expect.objectContaining({ decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }) })]),
+    );
 
     list.mockResolvedValue({ pullRequests: [{ ...listed, updatedAt: '2030-01-03T00:00:00Z' }], nextCursor: null });
     expect((await app.request(path)).status).toBe(200);
