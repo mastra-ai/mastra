@@ -22,12 +22,17 @@ const TASKS_CLIENT = { extensions: tasksCapabilityEntry() };
 /** Each test header value is its own OAuth client, so its own principal. */
 const authFor = (user: string): AuthInfo => ({ token: `${user}-token`, clientId: user, scopes: [] });
 
+class User {
+  constructor(readonly id: string) {}
+}
+
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 interface Probe {
   runs: Array<{ tool: string; resumeData: unknown }>;
   aborted: string[];
   authInfos: unknown[];
+  contexts: Array<{ authInfo: unknown; hasMcp: boolean }>;
 }
 
 function makeTools(probe: Probe) {
@@ -108,7 +113,17 @@ function makeTools(probe: Probe) {
       return `approved by ${context.resumeData.approver}`;
     },
   });
+  const inspect = createTool({
+    id: 'inspect',
+    description: 'Reports the context it ran with',
+    inputSchema: z.object({}),
+    execute: async (_input, context) => {
+      probe.contexts.push({ authInfo: context.requestContext?.get('authInfo'), hasMcp: context.mcp !== undefined });
+      return 'inspected';
+    },
+  });
   return {
+    inspect,
     echo,
     quick: delayed('quick', 10),
     slow: delayed('slow', 500),
@@ -133,7 +148,7 @@ describe('MCPServer tasks', () => {
   });
 
   async function start(tasks: MCPServerConfig['tasks'], extra: Partial<MCPServerConfig> = {}) {
-    const probe: Probe = { runs: [], aborted: [], authInfos: [] };
+    const probe: Probe = { runs: [], aborted: [], authInfos: [], contexts: [] };
     const server = new MCPServer({ name: 'Tasks', version: '1.0.0', tools: makeTools(probe), tasks, ...extra });
     served = await serveHTTP(server, { auth: req => authFor(String(req.headers['x-test-user'] ?? 'alice')) });
     return { probe, server, url: served.url };
@@ -276,6 +291,31 @@ describe('MCPServer tasks', () => {
     await vi.waitFor(() => expect(probe.aborted).toEqual(['slowHang']));
   });
 
+  it("runs an 'always' task's first attempt from the persisted context too: no token, no context.mcp", async () => {
+    const { probe } = await start({ tools: { inspect: 'always' } });
+    const { result } = await call('inspect');
+    expect(result).toMatchObject({ resultType: 'task' });
+    await waitFor(await requester(), result.taskId, 'completed');
+    expect(probe.contexts).toEqual([{ authInfo: { clientId: 'alice', scopes: [] }, hasMcp: false }]);
+
+    // The same tool called synchronously runs under the live request.
+    await call('inspect', {}, { tasks: false });
+    expect(probe.contexts[1]).toEqual({
+      authInfo: expect.objectContaining({ token: 'alice-token' }),
+      hasMcp: true,
+    });
+  });
+
+  it('warns when a request context key cannot be persisted with a task', async () => {
+    const cyclic: Record<string, unknown> = { id: 'alice' };
+    cyclic.self = cyclic;
+    const { server } = await start({ tools: { inspect: 'always' } }, { mapAuthInfoToUser: () => cyclic });
+    const warn = vi.spyOn((server as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger, 'warn');
+    const { result } = await call('inspect');
+    expect(result).toMatchObject({ resultType: 'task' });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("can't persist"), { tool: 'inspect', keys: ['user'] });
+  });
+
   it('checks FGA again before a resumed attempt, against the persisted caller', async () => {
     let deny = false;
     // Only the MCP server's own tool resource; core's tool-level check is a separate resource.
@@ -291,7 +331,7 @@ describe('MCPServer tasks', () => {
     };
     const { probe, server } = await start(
       { tools: { approve: 'always' } },
-      { mapAuthInfoToUser: ({ authInfo }) => ({ id: authInfo.clientId }) },
+      { mapAuthInfoToUser: ({ authInfo }) => new User(authInfo.clientId) },
     );
     server.__registerMastra({
       getServer: () => ({ fga }),
@@ -312,7 +352,11 @@ describe('MCPServer tasks', () => {
     expect(JSON.stringify(done.result)).toContain('denied');
     expect(probe.runs).toEqual([{ tool: 'approve', resumeData: undefined }]);
     const serverToolChecks = fga.require.mock.calls.filter(([, params]) => params.resource.id.startsWith('['));
-    expect(serverToolChecks.at(-1)?.[0]).toEqual({ id: 'alice' });
+    // tools/call checked the live `User`; the resume got the plain object a durable store would read back.
+    expect(serverToolChecks[0]?.[0]).toBeInstanceOf(User);
+    const resumedUser = serverToolChecks.at(-1)?.[0];
+    expect(resumedUser).toEqual({ id: 'alice' });
+    expect(Object.getPrototypeOf(resumedUser)).toBe(Object.prototype);
   });
 
   it('asks for input when the tool suspends and re-runs it with the answer', async () => {
@@ -439,7 +483,7 @@ describe('MCPServer tasks', () => {
   });
 
   it('rejects task configs it cannot serve at construction', () => {
-    const tools = makeTools({ runs: [], aborted: [], authInfos: [] });
+    const tools = makeTools({ runs: [], aborted: [], authInfos: [], contexts: [] });
     const make = (tasks: unknown) => () =>
       new MCPServer({ name: 'Bad', version: '1.0.0', tools, tasks: tasks as MCPServerConfig['tasks'] });
     expect(make({ tools: { nope: 'always' } })).toThrow(/not one of this server's tools/);

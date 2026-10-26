@@ -1085,10 +1085,18 @@ export class MCPServer extends MCPServerBase {
     taskMode: ResolvedToolTaskMode,
     { resume, initialAttempt }: { resume?: ToolTaskContext['resume'] } & MCPTaskRunOptions,
   ): Promise<CallToolResult> {
+    const { persisted, dropped } = persistableRequestContext(requestContext);
+    if (dropped.length > 0) {
+      // Later runs only see what was persisted; a missing `user` fails their authorization checks.
+      this.logger.warn(`Tool task '${name}' can't persist request context keys; runs from the task won't see them`, {
+        tool: name,
+        keys: dropped,
+      });
+    }
     const context: ToolTaskContext = {
       toolName: name,
       args,
-      requestContext: persistableRequestContext(requestContext),
+      requestContext: persisted,
       ...(resume && { resume }),
     };
     const task = await this.tasks.store.create({
@@ -1120,6 +1128,7 @@ export class MCPServer extends MCPServerBase {
       }
       let { resumeData, suspendPayload } = context.resume ?? {};
       if (attempt.resume) {
+        // One key is enough: the server emits exactly one input request per suspension (see toTaskOutcome).
         const [key] = Object.keys(attempt.resume.inputResponses);
         const answer = inputResponse(attempt.resume.inputResponses, key!);
         if (answer.kind !== 'elicit') return completed(errorResult(`Unsupported input response for tool '${name}'`));
@@ -1723,11 +1732,28 @@ function clientDeclaredTasks(ctx: ServerContext): boolean {
 }
 
 /** The request context a task keeps. Bearer tokens are dropped so they are never stored with the task. */
-function persistableRequestContext(requestContext: RequestContext): Record<string, unknown> {
+function persistableRequestContext(requestContext: RequestContext): {
+  persisted: Record<string, unknown>;
+  dropped: string[];
+} {
   const { authInfo, [MASTRA_AUTH_TOKEN_KEY]: _authToken, ...rest } = requestContext.toJSON() as Record<string, unknown>;
-  if (!authInfo || typeof authInfo !== 'object') return rest;
-  const { token: _token, ...withoutToken } = authInfo as Record<string, unknown>;
-  return { ...rest, authInfo: withoutToken };
+  let stripped = rest;
+  if (authInfo && typeof authInfo === 'object') {
+    const { token: _token, ...withoutToken } = authInfo as Record<string, unknown>;
+    stripped = { ...rest, authInfo: withoutToken };
+  } else if (authInfo !== undefined) {
+    stripped = { ...rest, authInfo };
+  }
+  // A JSON round trip, so every store sees what a durable one would read back: plain objects, no shared references.
+  const persisted = JSON.parse(JSON.stringify(stripped)) as Record<string, unknown>;
+  const dropped = [...requestContext.keys()].filter(
+    key =>
+      typeof key === 'string' &&
+      key !== MASTRA_AUTH_TOKEN_KEY &&
+      requestContext.get(key) !== undefined &&
+      !(key in persisted),
+  ) as string[];
+  return { persisted, dropped };
 }
 
 /** The tool's MCP App URI; the nested key wins over the flat one, as in ext-apps' `getToolUiResourceUri`. */

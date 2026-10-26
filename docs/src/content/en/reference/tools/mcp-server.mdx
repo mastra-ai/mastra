@@ -2064,7 +2064,15 @@ A tool that calls `suspend()` inside a task moves it to `input_required`. Its in
 
 A declined or cancelled input request completes the task with `isError: true`. Answers to keys the task didn't ask for are ignored.
 
-The resumed run receives the request context of the call that created the task, with the bearer token removed. `context.mcp` isn't available in a resumed run, so read cancellation from `context.abortSignal`.
+### What a task run receives
+
+Task runs are rebuilt from what the task stored when it was created. This keeps a task store free to run them again after a restart. Every run of a task gets the stored request context and no `context.mcp`. The one exception is the first run of an `'auto'` tool, which started under the request before the sync window elapsed.
+
+- The bearer token is removed from `authInfo` before the request context is stored. Everything else is stored as it is, including `authInfo.extra` and the `user` returned by `mapAuthInfoToUser`. Don't put credentials there that the task store shouldn't keep.
+- Values are stored as JSON. A run reads back plain objects, so a `user` class instance arrives as a plain object with the same fields.
+- A key that can't be stored as JSON is left out, and the server logs a warning when it creates the task. If that key is `user`, authorization checks on later runs fail.
+- Read cancellation from `context.abortSignal`, because `context.mcp` isn't available.
+- Each run is authorized again against the stored request context, as each round of a synchronous call is.
 
 ### Cancellation and errors
 
