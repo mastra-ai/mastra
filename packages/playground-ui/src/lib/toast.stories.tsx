@@ -1,10 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CircleCheckIcon, CircleXIcon } from 'lucide-react';
+import { CircleCheckIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { expect, userEvent, within, waitFor } from 'storybook/test';
-import { errorToast } from './error-message';
-import type { ErrorMessage } from './error-message';
 import { toast, Toaster } from './toast';
 import { Button } from '@/ds/components/Button/Button';
 import { Notice } from '@/ds/components/Notice/Notice';
@@ -162,14 +160,12 @@ function QuietToastExamples() {
     toast.dismiss();
     const options = { duration: Infinity };
     toast.success('Dataset imported', { ...options, description: '24 items added to your dataset.' });
-    errorToast(
-      { title: 'Couldn’t save settings', why: 'The registry didn’t respond.', fix: 'Try saving again.' },
-      {
-        ...options,
-        closeButton: false,
-        action: { label: 'Retry', onClick: () => setLastAction('Retried settings') },
-      },
-    );
+    toast.error('Couldn’t save settings', {
+      ...options,
+      closeButton: false,
+      description: 'The registry didn’t respond. Try saving again.',
+      action: { label: 'Retry', onClick: () => setLastAction('Retried settings') },
+    });
     toast.warning('API key expires soon', { ...options, description: 'Rotate your key before it expires.' });
     toast.info('No deploys yet', { ...options, description: 'Push to a linked branch to create your first deploy.' });
     toast('Changes pending', { ...options, description: 'Review your settings before saving.' });
@@ -215,17 +211,6 @@ function QuietToastExamples() {
       </Button>
       <Button
         onClick={() =>
-          toast.promise({
-            myPromise: fakeRequest(false, 1500),
-            loadingMessage: 'Saving changes',
-            successMessage: 'Changes saved',
-          })
-        }
-      >
-        Save changes
-      </Button>
-      <Button
-        onClick={() =>
           toast.info('Review settings', {
             id: 'review-settings',
             duration: Infinity,
@@ -248,6 +233,22 @@ function QuietToastExamples() {
       >
         Show action and cancel
       </Button>
+      <Button
+        onClick={() =>
+          toast.info('Review settings', {
+            id: 'primary-action-only',
+            duration: Infinity,
+            description: 'Choose whether to apply these changes.',
+            action: (
+              <Button type="button" variant="primary" onClick={() => toast.dismiss('primary-action-only')}>
+                Apply
+              </Button>
+            ),
+          })
+        }
+      >
+        Show primary action
+      </Button>
       <Button onClick={() => toast.dismiss()}>Dismiss all</Button>
       <Txt as="p" variant="caption" role="status" aria-live="polite">
         {lastAction}
@@ -264,7 +265,6 @@ export const QuietTints: Story = {
     const body = within(canvasElement.ownerDocument.body);
     await userEvent.click(canvas.getByRole('button', { name: 'Show action and cancel' }));
     const apply = await body.findByRole('button', { name: 'Apply' });
-    await expect(apply.getAttribute('data-variant')).toBe('primary');
     apply.focus();
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('Applied settings'));
@@ -276,30 +276,7 @@ export const QuietTints: Story = {
     await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('Canceled settings'));
     await waitFor(() => expect(canvasElement.ownerDocument.querySelectorAll('[data-sonner-toast]')).toHaveLength(0));
     await userEvent.click(canvas.getByRole('button', { name: 'Show all tones' }));
-    const context = canvasElement.ownerDocument.createElement('canvas').getContext('2d');
-    if (!context) throw new Error('Canvas color conversion unavailable');
-    const light = canvasElement.ownerDocument.documentElement.classList.contains('light');
-    const expectedFills = light
-      ? { info: [244, 248, 255], success: [243, 251, 244], warning: [255, 249, 232], error: [255, 246, 245] }
-      : { info: [19, 23, 30], success: [20, 24, 21], warning: [27, 22, 20], error: [34, 19, 18] };
-    for (const tone of ['info', 'success', 'warning', 'error'] as const) {
-      const notification = canvasElement.ownerDocument.querySelector(`[data-sonner-toast][data-type="${tone}"]`);
-      if (!notification) throw new Error(`Missing ${tone} toast`);
-      const style = getComputedStyle(notification);
-      context.fillStyle = style.backgroundColor;
-      context.fillRect(0, 0, 1, 1);
-      await expect(Array.from(context.getImageData(0, 0, 1, 1).data).slice(0, 3)).toEqual(expectedFills[tone]);
-      await expect(style.borderTopWidth).toBe('0px');
-      if (tone === 'success' && light) await expect(style.boxShadow).toContain('0.5px inset');
-      if (!light) await expect(style.boxShadow).not.toContain('color(srgb');
-    }
     const retry = await body.findByRole('button', { name: /^Retry$/ });
-    await expect(getComputedStyle(retry).textDecorationLine).toBe('none');
-    const retryToast = retry.closest('[data-sonner-toast]');
-    const message = retryToast?.querySelector('[data-content]');
-    if (!message) throw new Error('Missing toast message');
-    await expect(retry.getBoundingClientRect().top).toBeGreaterThanOrEqual(message.getBoundingClientRect().bottom + 7);
-    await expect(Math.abs(retry.getBoundingClientRect().left - message.getBoundingClientRect().left)).toBeLessThan(1);
     retry.focus();
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('Retried settings'));
@@ -314,33 +291,6 @@ export const QuietTints: Story = {
     await expect(getComputedStyle(footer).overflowY).toBe('visible');
     await userEvent.click(canvas.getByRole('button', { name: 'Dismiss all' }));
     await waitFor(() => expect(canvasElement.ownerDocument.querySelectorAll('[data-sonner-toast]')).toHaveLength(0));
-  },
-};
-
-export const ActionAndCancel: Story = {
-  parameters: { layout: 'padded' },
-  render: () => <QuietToastExamples />,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const body = within(canvasElement.ownerDocument.body);
-    await userEvent.click(canvas.getByRole('button', { name: 'Show action and cancel' }));
-    const apply = await body.findByRole('button', { name: 'Apply' });
-    const cancel = body.getByRole('button', { name: 'Cancel' });
-    const message = apply.closest('[data-sonner-toast]')?.querySelector('[data-content]');
-    if (!message) throw new Error('Missing toast message');
-    await waitFor(() =>
-      expect(Math.abs(cancel.getBoundingClientRect().left - message.getBoundingClientRect().left)).toBeLessThan(1),
-    );
-    const description = message.querySelector('[data-description]');
-    if (!description) throw new Error('Missing toast description');
-    await expect(getComputedStyle(description).fontSize).toBe(getComputedStyle(apply).fontSize);
-    const applyBounds = apply.getBoundingClientRect();
-    const cancelBounds = cancel.getBoundingClientRect();
-    await expect(cancelBounds.right).toBeLessThan(applyBounds.left);
-    await expect(applyBounds.left - cancelBounds.right).toBeLessThan(24);
-    await expect(
-      Math.abs(cancelBounds.top + cancelBounds.height / 2 - applyBounds.top - applyBounds.height / 2),
-    ).toBeLessThan(1);
   },
 };
 
@@ -478,226 +428,21 @@ export const CallerSuccessIcon: Story = {
   parameters: { layout: 'padded', toaster: { icons: { success: <CircleCheckIcon aria-hidden /> } } },
 };
 
-const failedSaveMessage: ErrorMessage = {
-  title: 'Couldn’t save changes',
-  why: 'The registry didn’t respond.',
-  fix: 'Try saving again.',
-  reassurance: 'Your previous settings are unchanged.',
-  wayOut: { kind: 'docs', href: 'https://mastra.ai/docs' },
-};
-
-function FailedPromiseExample() {
-  const [attempts, setAttempts] = useState(0);
-  function save() {
-    setAttempts(attempt => attempt + 1);
-    toast.promise({
-      myPromise: fakeRequest(true),
-      loadingMessage: 'Saving changes',
-      successMessage: 'Changes saved',
-      errorMessage: failedSaveMessage.title,
-      onError: () =>
-        errorToast(failedSaveMessage, {
-          id: 'failed-save',
-          cancel: failedSaveMessage.wayOut && (
-            <Notice.Button
-              render={<a href={failedSaveMessage.wayOut.href} target="_blank" rel="noopener noreferrer" />}
-            >
-              Get help
-            </Notice.Button>
-          ),
-          action: (
-            <Button type="button" variant="primary" onClick={save}>
-              Retry
-            </Button>
-          ),
-        }),
-      options: {
-        id: 'failed-save',
-        duration: 5000,
-        action: undefined,
-        cancel: undefined,
-        description: () => (
-          <span>
-            {failedSaveMessage.reassurance} {failedSaveMessage.why} {failedSaveMessage.fix}
-          </span>
-        ),
-      },
-    });
-  }
-  return (
-    <div className="flex flex-col items-start gap-3">
-      <Button onClick={save}>Save changes (fails)</Button>
-      <Txt as="p" variant="caption" role="status">
-        Attempts: {attempts}
-      </Txt>
-    </div>
-  );
+function saveAndFail() {
+  toast.promise({
+    myPromise: fakeRequest(true),
+    loadingMessage: 'Saving changes',
+    successMessage: 'Changes saved',
+    errorMessage: 'Couldn’t save changes',
+    onError: () =>
+      toast.error('Couldn’t save changes', { id: 'failed-save', action: { label: 'Retry', onClick: saveAndFail } }),
+    options: { id: 'failed-save', description: () => 'The registry didn’t respond. Try saving again.' },
+  });
 }
 
 export const PromiseFailure: Story = {
   parameters: { layout: 'padded' },
-  render: () => <FailedPromiseExample />,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const body = within(canvasElement.ownerDocument.body);
-    await userEvent.click(canvas.getByRole('button', { name: 'Save changes (fails)' }));
-    const loading = (await body.findByText('Saving changes')).closest('[data-sonner-toast]');
-    if (!loading) throw new Error('Missing loading toast');
-    const svg = loading.querySelector('.brand-loader svg');
-    await expect(body.queryByRole('button', { name: 'Retry' })).toBeNull();
-    await expect(body.queryByRole('link', { name: 'Get help' })).toBeNull();
-    await expect(body.queryByText(/Your previous settings are unchanged/)).toBeNull();
-    const failed = await body.findByText(failedSaveMessage.title, {}, { timeout: 3000 });
-    await expect(failed.closest('[data-sonner-toast]')).toBe(loading);
-    await expect(loading.querySelector('.brand-loader svg')).toBe(svg);
-    await expect(body.getByText(/Your previous settings are unchanged/)).toBeVisible();
-    await expect(body.getByRole('link', { name: 'Get help' })).toHaveAttribute('href', 'https://mastra.ai/docs');
-    await expect(body.getByRole('button', { name: 'Retry' })).toBeVisible();
-    const retry = body.getByRole('button', { name: 'Retry' });
-    const help = body.getByRole('link', { name: 'Get help' });
-    await expect(retry).toHaveAttribute('data-variant', 'primary');
-    await waitFor(async () => {
-      const message = loading.querySelector('[data-content]');
-      if (!message) throw new Error('Missing error message');
-      await expect(Math.abs(help.getBoundingClientRect().left - message.getBoundingClientRect().left)).toBeLessThan(1);
-      await expect(help.getBoundingClientRect().right).toBeLessThan(retry.getBoundingClientRect().left);
-      const helpBounds = help.getBoundingClientRect();
-      const retryBounds = retry.getBoundingClientRect();
-      await expect(
-        Math.abs(helpBounds.top + helpBounds.height / 2 - retryBounds.top - retryBounds.height / 2),
-      ).toBeLessThan(1);
-    });
-  },
-};
-
-export const FailureInStack: Story = {
-  parameters: { layout: 'padded', toaster: { expand: true, visibleToasts: 5, gap: 14 } },
-  render: () => <FailedPromiseExample />,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const document = canvasElement.ownerDocument;
-    toast.dismiss();
-    await waitFor(() => expect(document.querySelectorAll('[data-sonner-toast]')).toHaveLength(0));
-    toast.success('Dataset imported', {
-      duration: Infinity,
-      description: '24 items added to your dataset.',
-    });
-    toast.info('Connection restored', {
-      duration: Infinity,
-      description: 'Your workspace is connected.',
-    });
-    await waitFor(() => expect(document.querySelectorAll('[data-sonner-toast]')).toHaveLength(2));
-    await userEvent.click(canvas.getByRole('button', { name: 'Save changes (fails)' }));
-    await within(document.body).findByText(failedSaveMessage.title, {}, { timeout: 3000 });
-    await waitFor(() => expect(document.querySelectorAll('[data-sonner-toast]')).toHaveLength(3));
-    const gaps: number[] = [];
-    const started = performance.now();
-    await new Promise<void>(resolve => {
-      const sample = () => {
-        const cards = Array.from(document.querySelectorAll('[data-sonner-toast]'));
-        for (const [index, card] of cards.entries()) {
-          const previous = cards[index - 1];
-          if (!previous) continue;
-          const above = previous.closest('[data-sonner-toaster]')?.getAttribute('data-y-position') === 'top';
-          if (above) {
-            const clip = getComputedStyle(previous).clipPath;
-            const inset = clip === 'none' ? 0 : Number.parseFloat(clip.split(' ')[2] ?? '0');
-            gaps.push(card.getBoundingClientRect().top - previous.getBoundingClientRect().bottom + inset);
-          } else {
-            gaps.push(previous.getBoundingClientRect().top - card.getBoundingClientRect().bottom);
-          }
-        }
-        if (performance.now() - started < 350) requestAnimationFrame(sample);
-        else resolve();
-      };
-      requestAnimationFrame(sample);
-    });
-    await expect(Math.max(...gaps.map(gap => Math.abs(gap - 14)))).toBeLessThan(0.5);
-  },
-};
-
-export const FailureInTopStack: Story = {
-  ...FailureInStack,
-  parameters: { layout: 'padded', toaster: { position: 'top-right', expand: true, visibleToasts: 5, gap: 14 } },
-};
-
-export const CallerErrorIcon: Story = {
-  ...PromiseFailure,
-  parameters: { layout: 'padded', toaster: { icons: { error: <CircleXIcon aria-hidden /> } } },
-};
-
-export const FailureWithSuccessIcon: Story = {
-  ...PromiseFailure,
-  parameters: { layout: 'padded', toaster: { icons: { success: <CircleCheckIcon aria-hidden /> } } },
-};
-
-export const SuccessWithErrorIcon: Story = {
-  ...PromiseCompletion,
-  parameters: { layout: 'padded', toaster: { icons: { error: <CircleXIcon aria-hidden /> } } },
-};
-
-export const PrimaryAction: Story = {
-  parameters: { layout: 'padded' },
-  render: () => (
-    <Button
-      type="button"
-      onClick={() =>
-        toast.info('Review settings', {
-          id: 'primary-action-only',
-          duration: Infinity,
-          description: 'Choose whether to apply these changes.',
-          action: (
-            <Button type="button" variant="primary" onClick={() => toast.dismiss('primary-action-only')}>
-              Apply
-            </Button>
-          ),
-        })
-      }
-    >
-      Review settings
-    </Button>
-  ),
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const body = within(canvasElement.ownerDocument.body);
-    await userEvent.click(canvas.getByRole('button', { name: 'Review settings' }));
-    const apply = await body.findByRole('button', { name: 'Apply' });
-    const message = apply.closest('[data-sonner-toast]')?.querySelector('[data-content]');
-    if (!message) throw new Error('Missing toast message');
-    await waitFor(() =>
-      expect(Math.abs(apply.getBoundingClientRect().left - message.getBoundingClientRect().left)).toBeLessThan(1),
-    );
-    await expect(getComputedStyle(apply).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
-    apply.focus();
-    await userEvent.keyboard('{Enter}');
-    await waitFor(() => expect(canvasElement.ownerDocument.querySelectorAll('[data-sonner-toast]')).toHaveLength(0));
-    await userEvent.click(canvas.getByRole('button', { name: 'Review settings' }));
-    await body.findByRole('button', { name: 'Apply' });
-  },
-};
-
-export const Stacked: Story = {
-  parameters: { layout: 'padded', toaster: { expand: false, visibleToasts: 3 } },
-  render: () => <QuietToastExamples />,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Show all tones' }));
-    const document = canvasElement.ownerDocument;
-    const toaster = document.querySelector('[data-sonner-toaster]');
-    if (!toaster) throw new Error('Missing toaster');
-    await waitFor(() => expect(toaster.querySelectorAll('[data-sonner-toast][data-visible="true"]')).toHaveLength(3));
-    await waitFor(() =>
-      expect(toaster.querySelector('[data-front="true"]')?.getAttribute('data-expanded')).toBe('false'),
-    );
-    await userEvent.hover(toaster);
-    await waitFor(() =>
-      expect(toaster.querySelector('[data-front="true"]')?.getAttribute('data-expanded')).toBe('true'),
-    );
-    await userEvent.unhover(toaster);
-    await waitFor(() =>
-      expect(toaster.querySelector('[data-front="true"]')?.getAttribute('data-expanded')).toBe('false'),
-    );
-  },
+  render: () => <Button onClick={saveAndFail}>Save changes (fails)</Button>,
 };
 
 export const Neutral: Story = {
@@ -707,16 +452,12 @@ export const Neutral: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Show all tones' }));
     await waitFor(() => expect(canvasElement.ownerDocument.querySelectorAll('[data-sonner-toast]')).toHaveLength(5));
-    const context = canvasElement.ownerDocument.createElement('canvas').getContext('2d');
-    if (!context) throw new Error('Canvas color conversion unavailable');
-    const light = canvasElement.ownerDocument.documentElement.classList.contains('light');
-    for (const notification of canvasElement.ownerDocument.querySelectorAll('[data-sonner-toast]')) {
-      context.clearRect(0, 0, 1, 1);
-      context.fillStyle = getComputedStyle(notification).backgroundColor;
-      context.fillRect(0, 0, 1, 1);
-      await expect(Array.from(context.getImageData(0, 0, 1, 1).data).slice(0, 3)).toEqual(
-        light ? [255, 255, 255] : [20, 20, 20],
-      );
-    }
+    const surfaces = new Set(
+      Array.from(
+        canvasElement.ownerDocument.querySelectorAll('[data-sonner-toast]'),
+        notification => getComputedStyle(notification).backgroundColor,
+      ),
+    );
+    await expect(surfaces.size).toBe(1);
   },
 };

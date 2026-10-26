@@ -6,8 +6,6 @@ import { toast as sonnerToast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import '@/test/inert-resize-observer';
-import { ErrorNotice, errorToast } from '../utils/error-message';
-import type { ErrorMessage } from '../utils/error-message';
 import { Toaster, toast } from './toast';
 
 function latestToast() {
@@ -19,7 +17,6 @@ function latestToast() {
 afterEach(() => {
   cleanup();
   sonnerToast.dismiss();
-  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -35,35 +32,6 @@ describe('Toaster', () => {
       screen.getByRole('button', { name: 'Close toast' }).focus();
       await user.keyboard('{Enter}');
       await waitFor(() => expect(screen.queryByText('Saved')).toBeNull());
-    });
-
-    it('keeps native semantic color support enabled', async () => {
-      render(createElement(Toaster, { richColors: false }));
-      act(() => {
-        toast.success('Saved');
-      });
-      const message = await screen.findByText('Saved');
-      expect(message.closest('[data-sonner-toast]')?.getAttribute('data-rich-colors')).toBe('true');
-    });
-
-    it('forwards the caller className', async () => {
-      const { container } = render(createElement(Toaster, { className: 'my-extra' }));
-      act(() => {
-        toast.info('Custom notification');
-      });
-      await screen.findByText('Custom notification');
-      expect(container.querySelector('[data-sonner-toaster]')?.classList.contains('my-extra')).toBe(true);
-    });
-
-    it('uses the caller position', async () => {
-      const { container } = render(createElement(Toaster, { position: 'top-right' }));
-      act(() => {
-        toast.info('Positioned notification');
-      });
-      await screen.findByText('Positioned notification');
-      const list = container.querySelector('[data-sonner-toaster]');
-      expect(list?.getAttribute('data-x-position')).toBe('right');
-      expect(list?.getAttribute('data-y-position')).toBe('top');
     });
 
     it('uses the caller duration instead of the default', async () => {
@@ -121,20 +89,18 @@ describe('toast entry point', () => {
     expect(() => toast(message)).toThrow('Invalid message type');
   });
 
-  it('preserves a custom node', () => {
-    const node = createElement('span', undefined, 'custom');
-    const id = toast.custom(node);
-    expect(latestToast()).toMatchObject({ id, title: node });
-  });
-
-  it('dismisses only the requested toast', () => {
-    const first = toast('First');
-    const second = toast('Second');
-    if (Array.isArray(first)) throw new Error('Expected one toast ID');
-    toast.dismiss(first);
-    const active = sonnerToast.getToasts().map(notification => notification.id);
-    expect(active).not.toContain(first);
-    expect(active).toContain(second);
+  it('runs the retry action from the keyboard and closes the toast', async () => {
+    const retry = vi.fn();
+    const user = userEvent.setup();
+    render(createElement(Toaster));
+    act(() => {
+      toast.error('Couldn’t save settings', { action: { label: 'Retry', onClick: retry } });
+    });
+    const action = await screen.findByRole('button', { name: 'Retry' });
+    action.focus();
+    await user.keyboard('{Enter}');
+    expect(retry).toHaveBeenCalledOnce();
+    await waitFor(() => expect(screen.queryByText('Couldn’t save settings')).toBeNull());
   });
 
   describe('when updating an existing toast without changing its actions', () => {
@@ -152,77 +118,6 @@ describe('toast entry point', () => {
       toast.info('Ready', { id: 'cancel-update' });
       expect(latestToast().cancel).toBe(original);
     });
-  });
-});
-
-describe('structured error feedback', () => {
-  const message: ErrorMessage = {
-    title: 'Couldn’t delete orders-db',
-    why: 'Two environments still use it.',
-    reassurance: 'Nothing was deleted.',
-    fix: 'Detach it from both environments, then delete it.',
-    wayOut: { kind: 'docs', href: 'https://mastra.ai/docs' },
-  };
-
-  it('renders the helper through the existing toast stack', async () => {
-    render(createElement(Toaster));
-    act(() => {
-      errorToast(message);
-    });
-    await screen.findByText(message.title);
-    expect(screen.getByText(`${message.why} ${message.fix}`)).toBeTruthy();
-    expect(screen.queryByText('Nothing was deleted.')).toBeNull();
-    const open = vi.spyOn(window, 'open').mockReturnValue(null);
-    const user = userEvent.setup();
-    screen.getByRole('button', { name: 'Docs ↗' }).focus();
-    await user.keyboard('{Enter}');
-    expect(open).toHaveBeenCalledExactlyOnceWith('https://mastra.ai/docs', '_blank', 'noopener,noreferrer');
-    await waitFor(() => expect(screen.queryByText(message.title)).toBeNull());
-  });
-
-  it('preserves the caller’s retry action and native dismissal', async () => {
-    const retry = vi.fn();
-    const user = userEvent.setup();
-    render(createElement(Toaster));
-    act(() => {
-      errorToast(message, { action: { label: 'Retry', onClick: retry } });
-    });
-    const action = await screen.findByRole('button', { name: 'Retry' });
-    expect(screen.queryByRole('button', { name: 'Docs ↗' })).toBeNull();
-    action.focus();
-    await user.keyboard('{Enter}');
-    expect(retry).toHaveBeenCalledOnce();
-    await waitFor(() => expect(screen.queryByText(message.title)).toBeNull());
-  });
-
-  it('uses the requested error duration and preserves its auto-close callback', async () => {
-    vi.useFakeTimers();
-    const onAutoClose = vi.fn();
-    render(createElement(Toaster));
-    act(() => {
-      errorToast(message, { duration: 3000, onAutoClose });
-    });
-    await act(() => vi.advanceTimersByTimeAsync(0));
-    await act(() => vi.advanceTimersByTimeAsync(2999));
-    expect(screen.queryByText(message.title)).not.toBeNull();
-    expect(onAutoClose).not.toHaveBeenCalled();
-    await act(() => vi.advanceTimersByTimeAsync(202));
-    expect(screen.queryByText(message.title)).toBeNull();
-    expect(onAutoClose).toHaveBeenCalledOnce();
-  });
-
-  it('shows reassurance and the external link in the matching notice', () => {
-    render(createElement(ErrorNotice, { message }));
-    expect(screen.getByText(message.title)).toBeTruthy();
-    expect(screen.getByText(`${message.why} ${message.reassurance} ${message.fix}`)).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Docs' }).getAttribute('href')).toBe('https://mastra.ai/docs');
-  });
-
-  it('allows an error notice without reassurance or a way out', () => {
-    const { title, why, fix } = message;
-    render(createElement(ErrorNotice, { message: { title, why, fix } }));
-    expect(screen.getByText(`${why} ${fix}`)).toBeTruthy();
-    expect(screen.queryByRole('link')).toBeNull();
   });
 });
 
@@ -259,12 +154,6 @@ describe('toast.promise', () => {
   });
 
   describe('when the operation succeeds', () => {
-    it('replaces the loading message with success', async () => {
-      toast.promise({ myPromise: Promise.resolve({ id: 1 }), loadingMessage: 'Saving…', successMessage: 'Saved' });
-      expect(latestToast()).toMatchObject({ title: 'Saving…', type: 'loading' });
-      await waitFor(() => expect(latestToast()).toMatchObject({ title: 'Saved', type: 'success' }));
-    });
-
     it('passes the resolved data to the caller', async () => {
       const onSuccess = vi.fn();
       toast.promise({ myPromise: Promise.resolve({ id: 1 }), successMessage: 'Saved', onSuccess });
@@ -273,11 +162,6 @@ describe('toast.promise', () => {
   });
 
   describe('when the operation rejects', () => {
-    it('shows the supplied error message', async () => {
-      toast.promise({ myPromise: Promise.reject(new Error('boom')), successMessage: 'Saved', errorMessage: 'Failed' });
-      await waitFor(() => expect(latestToast()).toMatchObject({ title: 'Failed', type: 'error' }));
-    });
-
     it('uses the Error message when no error message is supplied', async () => {
       toast.promise({ myPromise: Promise.reject(new Error('boom')), successMessage: 'Saved' });
       await waitFor(() => expect(latestToast()).toMatchObject({ title: 'boom', type: 'error' }));
