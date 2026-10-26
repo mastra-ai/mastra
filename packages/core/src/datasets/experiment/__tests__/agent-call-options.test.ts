@@ -3,6 +3,7 @@
  * experiment's agent target, without editing or versioning the agent. Real Agent + real Mastra +
  * real Dataset.startExperiment; the language models are the only fakes.
  */
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../../agent';
@@ -390,6 +391,39 @@ describe('Feature: tweak how an agent is called per experiment without changing 
       expect(summary.succeededCount).toBe(2);
       expect(callsOf(overrideModel)).toHaveLength(2);
       expect(callsOf(aliasModel)).toHaveLength(0);
+    });
+  });
+
+  describe('Scenario: empty call options leave a legacy-model agent on its legacy path', () => {
+    it('runs every item when agentCallOptions sets nothing', async () => {
+      // Given agent "legacy-agent" on a v1 (legacy) model
+      const legacyModel = new MockLanguageModelV1({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 1, completionTokens: 1 },
+          text: 'from-legacy',
+        }),
+      });
+      const agent = new Agent({ id: 'legacy-agent', name: 'Legacy Agent', instructions: 'code', model: legacyModel });
+      const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+      const dataset = await mastra.datasets.create({ name: 'legacy DS' });
+      await dataset.addItem({ input: 'first' });
+      await dataset.addItem({ input: 'second' });
+
+      // When I start an experiment with agentCallOptions that set no option
+      const summary = await dataset.startExperiment({
+        targetType: 'agent',
+        targetId: 'legacy-agent',
+        agentCallOptions: {},
+      });
+
+      // Then every item succeeds on the legacy model
+      expect(summary.succeededCount).toBe(2);
+      expect(summary.results.map(r => r.output)).toEqual([
+        expect.objectContaining({ text: 'from-legacy' }),
+        expect.objectContaining({ text: 'from-legacy' }),
+      ]);
     });
   });
 

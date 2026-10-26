@@ -18,5 +18,3 @@ await client.triggerDatasetExperiment({
   },
 });
 ```
-
-Agent `defaultOptions.modelSettings` now keeps `maxOutputTokens` instead of silently dropping it.

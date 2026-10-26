@@ -245,8 +245,11 @@ async function executeAgent(
   const reqCtx: RequestContext | undefined = requestContext
     ? new RequestContext(Object.entries(requestContext))
     : undefined;
-  // generateLegacy() has no per-call model or options, so call options always run through generate().
-  const useLegacy = !agentCallOptions && !isSupportedLanguageModel(await agent.getModel({ requestContext: reqCtx }));
+  const generateOptions = agentCallOptions ? toGenerateOptions(agentCallOptions) : {};
+  // generateLegacy() has no per-call model or options, so set call options always run through generate().
+  const useLegacy =
+    Object.keys(generateOptions).length === 0 &&
+    !isSupportedLanguageModel(await agent.getModel({ requestContext: reqCtx }));
 
   // Both generate() and generateLegacy() return different types (FullOutput vs GenerateTextResult)
   // but share the fields we extract. Cast input to MessageListInput at the boundary.
@@ -336,7 +339,7 @@ async function executeAgent(
           ...(reqCtx ? { requestContext: reqCtx } : {}),
           tracingOptions,
           ...(versions ? { versions } : {}),
-          ...(agentCallOptions ? toGenerateOptions(agentCallOptions) : {}),
+          ...generateOptions,
           ...(mockHooks ? { hooks: mockHooks } : {}),
           ...(mockConcurrency ?? {}),
         })
