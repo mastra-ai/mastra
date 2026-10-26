@@ -1985,10 +1985,12 @@ export class EventedRun<
   }
 
   #cancelPublished = false;
+  #cancelPublishFailed = false;
 
   /**
    * Publish the workflow.cancel event that tells the event processor owning this run to stop it.
    * Runs at most once per run handle, whether triggered by cancel() or by abortController.abort().
+   * A failed publish is rethrown and can be retried.
    */
   private async publishCancel(): Promise<void> {
     if (this.#cancelPublished) return;
@@ -2002,8 +2004,11 @@ export class EventedRun<
           runId: this.runId,
         },
       });
+      this.#cancelPublishFailed = false;
     } catch (err) {
-      this.mastra?.getLogger()?.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err);
+      this.#cancelPublished = false;
+      this.#cancelPublishFailed = true;
+      throw err;
     }
   }
 
@@ -2012,7 +2017,14 @@ export class EventedRun<
    * This ensures consistent cancellation behavior whether abort() is called directly or via cancel().
    */
   private setupAbortHandler(): void {
-    this.abortController.signal.addEventListener('abort', () => void this.publishCancel(), { once: true });
+    this.abortController.signal.addEventListener(
+      'abort',
+      () =>
+        void this.publishCancel().catch(err =>
+          this.mastra?.getLogger()?.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err),
+        ),
+      { once: true },
+    );
   }
 
   async start({
@@ -2742,7 +2754,8 @@ export class EventedRun<
   }
 
   async cancel() {
-    if (await this.hasReachedTerminalStatus()) return;
+    // Storage already reads `canceled` after a cancel whose publish failed, so let that retry through.
+    if (!this.#cancelPublishFailed && (await this.hasReachedTerminalStatus())) return;
 
     // Update storage directly for immediate status update (same pattern as Inngest)
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
@@ -2760,7 +2773,10 @@ export class EventedRun<
 
     // Publish directly instead of relying on the abort handler: a handle created on another
     // instance (or via startAsync) never registered one, so abort() alone would reach no processor.
-    await this.publishCancel();
-    this.abortController.abort();
+    try {
+      await this.publishCancel();
+    } finally {
+      this.abortController.abort();
+    }
   }
 }

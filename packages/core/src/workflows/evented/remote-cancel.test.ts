@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
@@ -149,6 +149,7 @@ const cleanups: Array<() => Promise<void> | void> = [];
 
 afterEach(async () => {
   while (cleanups.length) await cleanups.pop()!();
+  vi.restoreAllMocks();
 });
 
 describe('evented workflow cancel from another instance', () => {
@@ -189,6 +190,41 @@ describe('evented workflow cancel from another instance', () => {
       const stored = await otherWorkflow.getWorkflowRunById(run.runId);
       expect(stored?.status).toBe('canceled');
     });
+  });
+
+  it('surfaces a failed workflow.cancel publish and lets the caller retry the cancel', async () => {
+    const storage = new MockStore();
+    const pubsub = new EventEmitterPubSub();
+    const blocker = createBlocker();
+    const ownerWorkflow = buildWorkflow('sequential', blocker);
+    const otherWorkflow = buildWorkflow('sequential', createBlocker());
+    const owner = new Mastra({ logger: false, storage, pubsub, workflows: { [WORKFLOW_ID]: ownerWorkflow } });
+    new Mastra({ logger: false, storage, pubsub, workflows: { [WORKFLOW_ID]: otherWorkflow } });
+    cleanups.push(() => owner.stopWorkers());
+    await owner.startWorkers();
+
+    const publish = pubsub.publish.bind(pubsub);
+    let failNextCancel = true;
+    vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {
+      if (failNextCancel && topic === 'workflows' && event.type === 'workflow.cancel') {
+        failNextCancel = false;
+        throw new Error('pubsub unavailable');
+      }
+      return publish(topic, event);
+    });
+
+    const run = await ownerWorkflow.createRun();
+    const resultPromise = run.start({ inputData: { count: 0 } });
+    await blocker.entered;
+
+    const remoteRun = await otherWorkflow.createRun({ runId: run.runId });
+    await expect(remoteRun.cancel()).rejects.toThrow('pubsub unavailable');
+    // Storage already says canceled; the retry must still publish rather than treat the run as finished.
+    await remoteRun.cancel();
+
+    const result = await withTimeout(resultPromise);
+    expect(result === 'timed out' ? result : result.status).toBe('canceled');
+    expect(blocker.state.aborted).toBe(true);
   });
 
   it('publishes workflow.cancel once and settles watchers when a startAsync run is canceled', async () => {
