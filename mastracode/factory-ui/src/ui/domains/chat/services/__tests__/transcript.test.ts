@@ -923,6 +923,25 @@ describe('transcript reducer mergeWindow', () => {
     expect(next.pending).toBe(true);
   });
 
+  it('keeps pending when only the live, still-empty reply follows the prompt', () => {
+    const sent = transcriptReducer(initialTranscript, { type: 'localUser', id: 'user-1', text: 'question' });
+    const started = transcriptReducer(sent, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: '' }]),
+      },
+    });
+    expect(started.pending).toBe(true);
+
+    const next = transcriptReducer(started, {
+      type: 'mergeWindow',
+      messages: [dbMessage('user-1', 'user', [{ type: 'text', text: 'question' }])],
+    });
+
+    expect(next.pending).toBe(true);
+  });
+
   it('is a no-op for an empty older window', () => {
     const onScreen = createInitialTranscript({
       messages: [dbMessage('msg-1', 'user', [{ type: 'text', text: 'only' }])],

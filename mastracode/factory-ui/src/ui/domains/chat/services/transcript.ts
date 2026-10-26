@@ -180,7 +180,10 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
       // `pending` is otherwise cleared only by live stream events. When the
       // stream missed the run (dropped, or the tab was hidden), the refetched
       // window is what brings the reply in, so it has to clear `pending` too.
-      return merged.pending && answeredLatestUser(merged.entries) ? { ...merged, pending: false } : merged;
+      // Only a stored reply counts: a live, still-empty placeholder is not one.
+      if (!merged.pending) return merged;
+      const stored = new Set(claimOnScreenEntries(merged.entries, action.messages).values());
+      return answeredLatestUser(merged.entries, stored) ? { ...merged, pending: false } : merged;
     }
     case 'clearPending':
       return { ...state, pending: false };
@@ -962,11 +965,11 @@ function latestAssistantIndex(entries: TimelineEntry[]): number {
   return -1;
 }
 
-function answeredLatestUser(entries: TimelineEntry[]): boolean {
+function answeredLatestUser(entries: TimelineEntry[], stored: Set<number>): boolean {
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i];
     if (entry.kind !== 'message') continue;
-    if (entry.message.role === 'assistant') return true;
+    if (entry.message.role === 'assistant' && stored.has(i)) return true;
     if (entry.message.role === 'user') return false;
   }
   return false;
