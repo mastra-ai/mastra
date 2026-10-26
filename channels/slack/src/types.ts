@@ -574,6 +574,16 @@ export interface SlackAppManifest {
         message: string;
       }>;
     };
+    /**
+     * @deprecated Slack is replacing the Assistant messaging experience with
+     * the Agent messaging experience. Use `agent_view` instead. Slack rejects
+     * a manifest that declares both.
+     * @see https://docs.slack.dev/ai/migrating-to-agent-messaging
+     */
+    assistant_view?: {
+      assistant_description: string;
+      suggested_prompts?: Array<{ title: string; message: string }>;
+    };
   };
   oauth_config?: {
     redirect_urls?: string[];

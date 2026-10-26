@@ -81,8 +81,41 @@ describe('agent_view migration', () => {
     .digest('hex')
     .slice(0, 16);
 
-  async function restart(configHash: string, config: { agentSessions?: boolean } = {}) {
+  /** Manifest of an app created with assistant_view and customized via connect({ manifest }). */
+  const customizedLegacyManifest = {
+    display_information: { name: 'Helper', description: 'Helps', background_color: '#123456' },
+    features: {
+      app_home: { home_tab_enabled: true, messages_tab_enabled: true, messages_tab_read_only_enabled: false },
+      bot_user: { display_name: 'Helper', always_online: true },
+      assistant_view: {
+        assistant_description: 'Helps',
+        suggested_prompts: [{ title: 'Status', message: 'What is the status?' }],
+      },
+    },
+    oauth_config: {
+      redirect_urls: ['https://old.example.com/slack/oauth/callback'],
+      scopes: { bot: ['chat:write', 'channels:join'] },
+    },
+    settings: {
+      event_subscriptions: {
+        request_url: 'https://old.example.com/slack/events/hook-1',
+        bot_events: ['app_mention', 'reaction_added'],
+      },
+      interactivity: { is_enabled: true, request_url: 'https://old.example.com/slack/events/hook-1' },
+      org_deploy_enabled: false,
+      socket_mode_enabled: false,
+      token_rotation_enabled: false,
+    },
+  };
+
+  async function restart(
+    configHash: string,
+    { exportError, ...config }: { exportError?: Error; agentSessions?: boolean } = {},
+  ) {
     const updateApp = vi.spyOn(SlackManifestClient.prototype, 'updateApp').mockResolvedValue(undefined as never);
+    const exportManifest = vi.spyOn(SlackManifestClient.prototype, 'exportManifest');
+    if (exportError) exportManifest.mockRejectedValue(exportError);
+    else exportManifest.mockResolvedValue(structuredClone(customizedLegacyManifest) as never);
     const store = new InMemoryStore();
     const channels = (await store.getStore('channels'))!;
     const provider = new SlackProvider({
@@ -130,10 +163,37 @@ describe('agent_view migration', () => {
     expect(updateApp).toHaveBeenCalledTimes(1);
     const [appId, manifest] = updateApp.mock.calls[0]!;
     expect(appId).toBe('A1');
-    expect(manifest.features?.agent_view).toEqual({ agent_description: 'Helps' });
+    expect(manifest.features?.agent_view).toEqual({
+      agent_description: 'Helps',
+      suggested_prompts: [{ title: 'Status', message: 'What is the status?' }],
+    });
     expect(manifest.features).not.toHaveProperty('assistant_view');
     const [record] = (await channels.listInstallations('slack')) as Array<{ configHash?: string }>;
     expect(record?.configHash).toBe(hashConfig({}, 'https://example.com', 'Helper', 'Helps'));
+  });
+
+  it('keeps connect-time manifest customizations when migrating', async () => {
+    const { updateApp } = await restart(legacyHash);
+
+    const [, manifest] = updateApp.mock.calls[0]!;
+    expect(manifest.display_information.background_color).toBe('#123456');
+    expect(manifest.features?.app_home?.home_tab_enabled).toBe(true);
+    expect(manifest.oauth_config?.scopes?.bot).toEqual(expect.arrayContaining(['channels:join', 'assistant:write']));
+    expect(manifest.settings?.event_subscriptions?.bot_events).toEqual(
+      expect.arrayContaining(['reaction_added', 'message.im']),
+    );
+    expect(manifest.settings?.event_subscriptions?.request_url).toBe('https://example.com/slack/events/hook-1');
+    expect(manifest.oauth_config?.redirect_urls).toEqual(['https://example.com/slack/oauth/callback']);
+  });
+
+  it('keeps the installation when Slack denies the manifest export', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { updateApp, channels } = await restart(legacyHash, {
+      exportError: new Error('App manifest export failed: no_permission'),
+    });
+
+    expect(updateApp).not.toHaveBeenCalled();
+    expect(await channels.listInstallations('slack')).toHaveLength(1);
   });
 
   it('leaves apps already on agent_view alone', async () => {
