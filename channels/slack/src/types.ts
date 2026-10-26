@@ -188,6 +188,18 @@ interface SlackProviderConfigBase extends SlackAdapterChannelConfigBase {
   logger?: SlackAdapterConfig['logger'];
 
   /**
+   * Run each agent turn as a Slack Agent Session, so Slack shows its native
+   * Stop button and clicking it aborts the run. Slack also titles new DM
+   * sessions after the first message.
+   *
+   * While a session is `processing`, Slack shows its own "Working…" in place
+   * of custom typing statuses, so this is off by default. Apps this provider
+   * manages subscribe to the `agent_session_stopped` bot event when it is on:
+   * new apps on creation, existing apps on the next startup.
+   */
+  agentSessions?: boolean;
+
+  /**
    * Base URL for webhook callbacks.
    * Required when calling connect() to create apps.
    * Can also be set later via setBaseUrl() or auto-detected from server config.

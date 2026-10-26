@@ -71,16 +71,28 @@ export interface BuildManifestOptions {
 
   /** Slash commands to register */
   slashCommands?: SlashCommand[];
+
+  /** Subscribe to `agent_session_stopped` so the native Stop button reaches the agent */
+  agentSessions?: boolean;
 }
 
 /**
  * Build a Slack app manifest for an agent.
  */
 export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
-  const { name, description, webhookUrl, oauthRedirectUrl, commandsUrl = webhookUrl, slashCommands = [] } = options;
+  const {
+    name,
+    description,
+    webhookUrl,
+    oauthRedirectUrl,
+    commandsUrl = webhookUrl,
+    slashCommands = [],
+    agentSessions,
+  } = options;
 
   const scopes: string[] = [...DEFAULT_BOT_SCOPES];
   const events: string[] = [...DEFAULT_BOT_EVENTS];
+  if (agentSessions) events.push('agent_session_stopped');
 
   // Add commands scope if we have slash commands
   if (slashCommands.length > 0) {
