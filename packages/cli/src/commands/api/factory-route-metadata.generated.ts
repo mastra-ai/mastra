@@ -116,8 +116,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "hasQuery": false,
     "hasBody": false,
     "responseShape": {
-      "kind": "object-property",
-      "listProperty": "runners"
+      "kind": "single"
     }
   },
   "GET /web/factory/projects/:id/decisions": {
@@ -1272,11 +1271,30 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "role"
             ]
           }
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          }
         }
       },
       "required": [
         "config",
-        "runners"
+        "runners",
+        "agents"
       ],
       "$defs": {
         "__schema0": {

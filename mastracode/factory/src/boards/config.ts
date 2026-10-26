@@ -1,5 +1,6 @@
 import { projectBoardConfigInputSchema } from '../storage/domains/boards/validation.js';
 import type { ProjectBoardConfigInput } from '../storage/domains/boards/validation.js';
+import { FACTORY_AGENT_IDS } from './agents.js';
 import { builtInRunners } from './runners.js';
 import type { BoardRunner, BoardRunnerRegistry } from './runners.js';
 
@@ -14,17 +15,35 @@ export function createRunnerRegistry(runners: readonly BoardRunner[] = []): Boar
           : `MastraFactory: duplicate runner id '${runner.id}' in 'runners'.`,
       );
     }
+    const sameSkill = runner.skill && runnerForSkill(registry, runner.skill);
+    if (sameSkill) {
+      throw new Error(
+        `MastraFactory: runner '${runner.id}' runs skill '${runner.skill}', which '${sameSkill.id}' already runs.`,
+      );
+    }
     registry.set(runner.id, runner);
   }
   return registry;
 }
 
-/** Workflow runner ids the config names that no runner provides, as `board.phase: message` lines. */
+/** The code runner behind a skill: a phase that activates the skill runs that code. */
+export function runnerForSkill(runners: BoardRunnerRegistry, skill: string): BoardRunner | undefined {
+  for (const runner of runners.values()) if (runner.skill === skill) return runner;
+  return undefined;
+}
+
+/** Agents and workflow runners the config names that do not exist, as `board.phase: message` lines. */
 export function unknownRunnerIssues(config: ProjectBoardConfigInput, runners: BoardRunnerRegistry): string[] {
   const issues: string[] = [];
   for (const board of config.boards ?? []) {
     for (const phase of board.phases ?? []) {
       const runner = phase.runner;
+      if (runner?.type === 'agent' && !FACTORY_AGENT_IDS.has(runner.agentId)) {
+        const known = [...FACTORY_AGENT_IDS].map(id => `'${id}'`).join(', ');
+        issues.push(
+          `${board.key}.${phase.key}: No agent is called '${runner.agentId}'; Factory's agents are ${known}.`,
+        );
+      }
       if (runner?.type === 'workflow' && !runners.has(runner.workflowId)) {
         issues.push(`${board.key}.${phase.key}: No runner is called '${runner.workflowId}'.`);
       }

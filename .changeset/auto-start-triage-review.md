@@ -11,7 +11,7 @@ New issues now land in Work › Triage, and a phase's start rule decides which c
   kind: 'working',
   autoStart: true,
   autoStartWhen: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort: low' }] },
-  runner: { type: 'agent', agentId: 'factory-plan', skill: 'factory-plan' },
+  runner: { type: 'agent', agentId: 'code-agent', skill: 'factory-plan' },
 }
 ```
 

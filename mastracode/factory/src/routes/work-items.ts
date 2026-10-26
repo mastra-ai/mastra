@@ -11,6 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { FACTORY_AGENTS } from '../boards/agents.js';
 import { unknownRunnerIssues } from '../boards/config.js';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
@@ -389,9 +390,14 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 updatedAt: null,
               },
               runners,
+              agents: FACTORY_AGENTS,
             });
           }
-          return c.json({ config: { ...config, updatedAt: config.updatedAt?.toISOString() ?? null }, runners });
+          return c.json({
+            config: { ...config, updatedAt: config.updatedAt?.toISOString() ?? null },
+            runners,
+            agents: FACTORY_AGENTS,
+          });
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardConfigUpdate.path, {

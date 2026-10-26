@@ -1,11 +1,12 @@
 import type { RuleGroup } from '../../rules/rule-group.js';
 import type { ProjectBoardConfigInput, StoredBoardInput } from '../../storage/domains/boards/validation.js';
+import { CODE_AGENT_ID } from '../agents.js';
 
-const TRIAGE = { type: 'agent', agentId: 'factory-triage', skill: 'factory-triage', context: 'triage' } as const;
-const REVIEW = { type: 'agent', agentId: 'factory-review', skill: 'factory-review', context: null } as const;
+const TRIAGE = { type: 'agent', agentId: CODE_AGENT_ID, skill: 'factory-triage', context: 'triage' } as const;
+const REVIEW = { type: 'agent', agentId: CODE_AGENT_ID, skill: 'factory-review', context: null } as const;
 const COMPLETE = {
   type: 'agent',
-  agentId: 'factory-complete',
+  agentId: CODE_AGENT_ID,
   skill: 'factory-complete-issue',
   context: 'triage',
 } as const;
@@ -18,8 +19,8 @@ const LOW_EFFORT: RuleGroup = {
 /**
  * Stored form of the built-in Work board, seeded into each project. Phase keys
  * and names match the code board in `boards/work.ts` so existing cards keep
- * their `board`/`stages` values. Each phase's agent activates the skill it always has; the agent id
- * names the built-in runner that decides when (PR auto-review, self-review, source fetch hints).
+ * their `board`/`stages` values. Every phase runs on Factory's code agent; each phase's built-in
+ * skill brings the code that decides each run (PR auto-review, self-review, source fetch hints).
  * Building and Review work in the card's main context, so the builder answers feedback on its own change.
  * Building's session continues Planning's when the card has one, so the builder implements the plan it holds.
  * Building is a status: entering it sets a goal on that session, so it keeps working until the change is handed
@@ -40,7 +41,7 @@ export const workBoardTemplate = {
       key: 'planning',
       name: 'Planning',
       kind: 'working',
-      runner: { type: 'agent', agentId: 'factory-plan', skill: 'factory-plan', context: 'plan' },
+      runner: { type: 'agent', agentId: CODE_AGENT_ID, skill: 'factory-plan', context: 'plan' },
       exitTool: 'submit_plan',
       autoStart: true,
       autoStartWhen: LOW_EFFORT,
@@ -49,7 +50,7 @@ export const workBoardTemplate = {
       key: 'execute',
       name: 'Building',
       kind: 'working',
-      runner: { type: 'agent', agentId: 'factory-build', skill: 'factory-build', context: null },
+      runner: { type: 'agent', agentId: CODE_AGENT_ID, skill: 'factory-build', context: null },
     },
     { key: 'review', name: 'Review', kind: 'working', runner: REVIEW, autoStart: true },
     { key: 'done', name: 'Done', kind: 'terminal', runner: COMPLETE },

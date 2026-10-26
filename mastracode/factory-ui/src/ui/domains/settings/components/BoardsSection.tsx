@@ -16,6 +16,7 @@ import type {
 } from '../../../../api/types';
 import {
   useBoardConfigQuery,
+  useBoardAgentsQuery,
   useBoardRunnersQuery,
   useSaveBoardConfigMutation,
 } from '../../../../hooks/useBoardConfig';
@@ -48,6 +49,9 @@ const MAX_DEPTH = 3;
 /** Runner ids the server can run, as returned beside the board config. */
 const RunnersContext = createContext<readonly string[]>([]);
 
+/** Agents a phase may run on, as returned beside the board config. */
+const AgentsContext = createContext<readonly { id: string; name: string }[]>([]);
+
 function toUpdateBody(config: StoredBoardConfig): BoardConfigUpdateBody {
   return {
     expectedRevision: config.revision,
@@ -63,6 +67,7 @@ export function BoardsSection({ factoryId }: { factoryId: string | undefined }) 
   const query = useBoardConfigQuery(factoryId);
   const runners = useBoardRunnersQuery(factoryId).data;
   const runnerIds = useMemo(() => runners?.map(runner => runner.id) ?? [], [runners]);
+  const agents = useBoardAgentsQuery(factoryId).data;
   const [draft, setDraft] = useState<StoredBoardConfig | null>(null);
 
   useEffect(() => {
@@ -83,7 +88,9 @@ export function BoardsSection({ factoryId }: { factoryId: string | undefined }) 
 
   return (
     <RunnersContext.Provider value={runnerIds}>
-      <BoardsEditor factoryId={factoryId} saved={query.data ?? draft} draft={draft} setDraft={setDraft} />
+      <AgentsContext.Provider value={agents ?? []}>
+        <BoardsEditor factoryId={factoryId} saved={query.data ?? draft} draft={draft} setDraft={setDraft} />
+      </AgentsContext.Provider>
     </RunnersContext.Provider>
   );
 }
@@ -367,6 +374,7 @@ function PhaseEditor({
 }) {
   const runnerType = phase.runner?.type ?? NONE;
   const runnerIds = useContext(RunnersContext);
+  const agents = useContext(AgentsContext);
   return (
     <SettingsFieldsetRow label={`${index + 1}. ${phase.name}`} description={`${phase.kind} · key ${phase.key}`}>
       <div className="flex flex-col gap-3">
@@ -437,7 +445,7 @@ function PhaseEditor({
                     value === 'workflow'
                       ? { type: 'workflow', workflowId: runnerIds[0] }
                       : value === 'agent'
-                        ? { type: 'agent', agentId: 'factory', instructions: '' }
+                        ? { type: 'agent', agentId: agents[0]?.id ?? 'code-agent', instructions: '' }
                         : null,
                 })
               }
@@ -541,6 +549,7 @@ function AgentRunnerEditor({
   onChange: (patch: Partial<StoredPhase>) => void;
 }) {
   const runner = phase.runner as Extract<NonNullable<StoredPhase['runner']>, { type: 'agent' }>;
+  const agents = useContext(AgentsContext);
   const set = (patch: Partial<typeof runner>) => {
     const next = { ...runner, ...patch };
     // `context` replaces the earlier `seat`; saving writes the new name only.
@@ -554,11 +563,17 @@ function AgentRunnerEditor({
   return (
     <div className="flex flex-col gap-2">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <LabeledInput
-          label="Agent name"
+        <LabeledSelect
+          label="Agent"
           value={runner.agentId}
           disabled={disabled}
-          onCommit={agentId => set({ agentId: agentId.trim() || runner.agentId })}
+          options={[
+            ...agents.map(agent => ({ value: agent.id, title: agent.name })),
+            ...(agents.some(agent => agent.id === runner.agentId)
+              ? []
+              : [{ value: runner.agentId, title: `${runner.agentId} (unknown)` }]),
+          ]}
+          onChange={agentId => set({ agentId })}
         />
         <LabeledInput
           label="Skill (optional)"

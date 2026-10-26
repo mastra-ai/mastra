@@ -27,13 +27,28 @@ export function useBoardRunnersQuery(factoryProjectId: string | undefined) {
   });
 }
 
+/** The agents a phase may run on, for the phase agent picker. Shares the config request. */
+export function useBoardAgentsQuery(factoryProjectId: string | undefined) {
+  const { client } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.boardConfig(factoryProjectId),
+    enabled: !!factoryProjectId,
+    queryFn: () => client.get<BoardConfigResponse>(path(factoryProjectId!)),
+    select: data => data.agents,
+  });
+}
+
 export function useSaveBoardConfigMutation(factoryProjectId: string) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: BoardConfigUpdateBody) => client.put<BoardConfigResponse>(path(factoryProjectId), body),
+    mutationFn: (body: BoardConfigUpdateBody) =>
+      client.put<Pick<BoardConfigResponse, 'config'>>(path(factoryProjectId), body),
     onSuccess: data => {
-      queryClient.setQueryData(queryKeys.boardConfig(factoryProjectId), data);
+      // The save answers with the config only; keep the runners and agents the read returned.
+      queryClient.setQueryData<BoardConfigResponse>(queryKeys.boardConfig(factoryProjectId), current =>
+        current ? { ...current, ...data } : undefined,
+      );
       void queryClient.invalidateQueries({ queryKey: queryKeys.boardCatalog(factoryProjectId) });
     },
   });

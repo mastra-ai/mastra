@@ -218,6 +218,21 @@ describe('stored board config', () => {
     expect(await seed.boardDefinitions.getRevision(scope())).toBe(0);
   });
 
+  it("lists Factory's agents and refuses a phase that names another", async () => {
+    const { config, agents } = await (await json('GET', path())).json();
+    expect(agents).toEqual([{ id: 'code-agent', name: 'Code Agent' }]);
+    const boards = config.boards.map(({ id: _id, ...board }: { id: string }) => board);
+    const triage = boards[0].phases.find((phase: { key: string }) => phase.key === 'triage');
+    expect(triage.runner.agentId).toBe('code-agent');
+    triage.runner = { ...triage.runner, agentId: 'factory-triage' };
+    const rejected = await json('PUT', path(), { expectedRevision: 0, config: { boards, intakeRoutes: [] } });
+    expect(rejected.status).toBe(422);
+    expect((await rejected.json()).error).toBe(
+      "work.triage: No agent is called 'factory-triage'; Factory's agents are 'code-agent'.",
+    );
+    expect(await seed.boardDefinitions.getRevision(scope())).toBe(0);
+  });
+
   it('saves what it serves, so a settings screen can edit and write it back', async () => {
     await seed.boardDefinitions.seedDefaults({ ...scope(), userId: 'u1' });
     const { config } = await (await json('GET', path())).json();

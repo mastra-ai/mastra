@@ -676,6 +676,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
     responseSchema: z.object({
       config: storedBoardConfigSchema,
       runners: z.array(z.object({ id: z.string(), role: z.string().nullable() })),
+      /** The agents a phase's `runner.agentId` may name. */
+      agents: z.array(z.object({ id: z.string(), name: z.string() })),
     }),
   },
   boardConfigUpdate: {

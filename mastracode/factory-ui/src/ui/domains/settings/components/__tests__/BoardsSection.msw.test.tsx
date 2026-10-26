@@ -53,12 +53,13 @@ function stub() {
   const saved: BoardConfigUpdateBody[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards/config`, () =>
-      HttpResponse.json({ config: stored, runners }),
+      HttpResponse.json({ config: stored, runners, agents }),
     ),
     http.put(`${TEST_BASE_URL}/web/factory/projects/:id/boards/config`, async ({ request }) => {
       const body = (await request.json()) as BoardConfigUpdateBody;
       saved.push(body);
-      return HttpResponse.json({ config: { ...stored, ...body.config, revision: 4 }, runners });
+      // Like the server, the save answers with the config only.
+      return HttpResponse.json({ config: { ...stored, ...body.config, revision: 4 } });
     }),
   );
   return saved;
@@ -69,6 +70,8 @@ const runners = [
   { id: 'factory-build', role: 'work' },
   { id: 'ops-check', role: 'work' },
 ];
+
+const agents = [{ id: 'code-agent', name: 'Code Agent' }];
 
 const phaseGroup = (name: RegExp) => screen.getByRole('group', { name });
 
@@ -110,7 +113,7 @@ describe('BoardsSection', () => {
     expect(saved[0].config.boards[0]).not.toHaveProperty('id');
   });
 
-  it('turns a phase into an agent run with a skill, instructions and its own context', async () => {
+  it("turns a phase into a run on Factory's agent with a skill, instructions and its own context", async () => {
     const saved = stub();
     const user = userEvent.setup();
     const { client } = renderWithProviders(<BoardsSection factoryId="fp-1" />);
@@ -118,6 +121,7 @@ describe('BoardsSection', () => {
     const building = await screen.findByRole('group', { name: /Building/ });
     await user.click(within(building).getByRole('combobox', { name: 'Runner' }));
     await user.click(await screen.findByRole('option', { name: 'Agent with skill or instructions' }));
+    expect(within(phaseGroup(/Building/)).getByRole('combobox', { name: 'Agent' })).toHaveTextContent('Code Agent');
 
     await user.type(within(phaseGroup(/Building/)).getByRole('textbox', { name: 'Skill (optional)' }), 'write-docs');
     await user.tab();
@@ -134,11 +138,14 @@ describe('BoardsSection', () => {
 
     expect(saved[0].config.boards[0].phases[2].runner).toEqual({
       type: 'agent',
-      agentId: 'factory',
+      agentId: 'code-agent',
       skill: 'write-docs',
       instructions: 'Update the docs for this change.',
       context: 'docs',
     });
+    // The save answers with the config only; the picker keeps the agents it loaded.
+    await user.click(within(phaseGroup(/Building/)).getByRole('combobox', { name: 'Agent' }));
+    expect((await screen.findAllByRole('option')).map(option => option.textContent)).toEqual(['Code Agent']);
   });
 
   it('lets a working phase start on its own', async () => {

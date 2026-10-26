@@ -1,5 +1,8 @@
 import * as path from 'node:path';
 
+/** Id of the coding agent that backs every Mastra Code controller mode. */
+export const CODE_AGENT_ID = 'code-agent';
+
 // Default config directory name used for all project-level and global config paths.
 export const DEFAULT_CONFIG_DIR = '.mastracode';
 

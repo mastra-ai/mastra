@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { CODE_AGENT_ID } from './agents.js';
 import { compileStoredBoard } from './compile.js';
+import { unknownRunnerIssues } from './config.js';
 import { defineBoard } from './define-board.js';
 import type { BoardPhaseDefinition, ReadonlyBoardPhaseHandlers } from './define-board.js';
 import type { InstalledBoard } from './registry.js';
@@ -113,7 +115,12 @@ describe('compileStoredBoard', () => {
         name: 'Flow',
         phases: [
           { key: 'open', name: 'Open', kind: 'resting', nextPhases: ['doing'] },
-          { key: 'doing', name: 'Doing', kind: 'working', runner: { type: 'agent', agentId: 'factory-build' } },
+          {
+            key: 'doing',
+            name: 'Doing',
+            kind: 'working',
+            runner: { type: 'agent', agentId: CODE_AGENT_ID, skill: 'factory-build' },
+          },
           { key: 'closed', name: 'Closed', kind: 'terminal' },
         ],
       },
@@ -160,7 +167,7 @@ describe('compileStoredBoard', () => {
             kind: 'working',
             runner: {
               type: 'agent',
-              agentId: 'writer',
+              agentId: CODE_AGENT_ID,
               skill: 'write-docs',
               instructions: 'Keep it short.',
               context: 'release-notes',
@@ -170,7 +177,7 @@ describe('compileStoredBoard', () => {
             key: 'notes',
             name: 'Notes',
             kind: 'working',
-            runner: { type: 'agent', agentId: 'writer', instructions: 'Add notes.' },
+            runner: { type: 'agent', agentId: CODE_AGENT_ID, instructions: 'Add notes.' },
           },
           { key: 'closed', name: 'Closed', kind: 'terminal' },
         ],
@@ -194,37 +201,69 @@ describe('compileStoredBoard', () => {
     });
   });
 
-  it('runs a default phase agent with the skill stored on it, keeping its built-in gating', async () => {
+  it("runs a Factory skill's built-in code, and any other skill on its own", async () => {
     const edited = {
       ...workBoardTemplate,
       phases: workBoardTemplate.phases.map(phase =>
-        phase.key === 'planning' || phase.key === 'triage'
-          ? { ...phase, runner: { ...phase.runner!, skill: 'our-planner' } }
-          : phase,
+        phase.key === 'triage' ? { ...phase, runner: { ...phase.runner!, skill: 'our-triage' } } : phase,
       ),
     };
-    const board = compileStoredBoard(edited, builtInRunners);
     const card = { ingress: { id: 'in-1' }, board: 'work', item: { title: 'Fix login', url: 'https://x/1' } };
-    expect(await board.rules.planning?.issue?.onEnter?.(card as never)).toMatchObject({
-      type: 'invokeSkill',
-      role: 'plan',
-      skillName: 'our-planner',
-      arguments: 'Work item (https://x/1)',
-    });
-    // Triage still decides on its own when a pull request goes straight to Review.
     const pullRequest = { ...card, item: { ...card.item, metadata: { autoStartCandidate: true } } };
-    expect(await board.rules.triage?.pullRequest?.onEnter?.(pullRequest as never)).toEqual({
+    // factory-triage brings its code: a trusted pull request goes straight to Review, with the triage tool.
+    const builtIn = compileStoredBoard(workBoardTemplate, builtInRunners);
+    expect(await builtIn.rules.triage?.pullRequest?.onEnter?.(pullRequest as never)).toEqual({
       type: 'transition',
       idempotencyKey: 'in-1:start-review',
       board: 'work',
       stage: 'review',
     });
-    expect(
-      await board.rules.triage?.pullRequest?.onEnter?.({ ...card, item: { ...card.item, metadata: {} } } as never),
-    ).toBeUndefined();
+    expect(builtIn.toolsForPhase('triage')).toEqual(['triage']);
+    // Another skill just runs in the phase's context, without Triage's code or tools.
+    const own = compileStoredBoard(edited, builtInRunners);
+    expect(await own.rules.triage?.pullRequest?.onEnter?.(pullRequest as never)).toEqual({
+      type: 'invokeSkill',
+      idempotencyKey: 'in-1:phase-triage',
+      role: 'triage',
+      skillName: 'our-triage',
+      arguments: 'Work item: Fix login (https://x/1)',
+    });
+    expect(own.toolsForPhase('triage')).toEqual([]);
   });
 
-  it('starts Building as a goal, and sends review findings back with the skill stored on Building', async () => {
+  it("runs a phase only on one of Factory's agents", () => {
+    const config = {
+      boards: [
+        {
+          key: 'flow',
+          name: 'Flow',
+          phases: [
+            { key: 'open', name: 'Open', kind: 'resting' as const },
+            {
+              key: 'doing',
+              name: 'Doing',
+              kind: 'working' as const,
+              runner: { type: 'agent' as const, agentId: 'factory-triage', skill: 'factory-triage' },
+            },
+            { key: 'closed', name: 'Closed', kind: 'terminal' as const },
+          ],
+        },
+      ],
+    };
+    // Saving refuses it…
+    expect(unknownRunnerIssues(config, builtInRunners)).toEqual([
+      "flow.doing: No agent is called 'factory-triage'; Factory's agents are 'code-agent'.",
+    ]);
+    // …and one already stored runs nothing, so its cards wait for a person.
+    const warnings: string[] = [];
+    const board = compileStoredBoard(config.boards[0]!, builtInRunners, { warn: message => warnings.push(message) });
+    expect(board.phaseKind('doing')).toBe('resting');
+    expect(board.toolsForPhase('doing')).toEqual([]);
+    expect(warnings).toEqual(["Board 'flow' phase 'doing' names unknown agent 'factory-triage'; it runs nothing."]);
+    expect(unknownRunnerIssues({ boards: [workBoardTemplate] }, builtInRunners)).toEqual([]);
+  });
+
+  it('starts Building as a goal, and sends review findings back with factory-build', async () => {
     const card = {
       ingress: { id: 'in-1' },
       board: 'work',
@@ -236,30 +275,31 @@ describe('compileStoredBoard', () => {
       fromStage: 'review',
       item: { ...card.item, metadata: { selfReviewVerdict: 'request changes', selfReviewFindings: '1. Fix the test' } },
     };
-    const edited = {
-      ...workBoardTemplate,
-      phases: workBoardTemplate.phases.map(phase =>
-        phase.key === 'execute' ? { ...phase, runner: { ...phase.runner!, skill: 'our-builder' } } : phase,
-      ),
-    };
-    for (const board of [
-      compileStoredBoard(workBoardTemplate, builtInRunners),
-      compileStoredBoard(edited, builtInRunners),
-    ]) {
-      const build = await board.rules.execute?.manual?.onEnter?.(card as never);
-      expect(build).toMatchObject({
-        type: 'invokeSkill',
-        role: 'work',
-        goal: expect.stringContaining('approved plan'),
-      });
-      expect(build).not.toHaveProperty('skillName');
-    }
-    expect(
-      await compileStoredBoard(workBoardTemplate, builtInRunners).rules.execute?.manual?.onEnter?.(returned as never),
-    ).toMatchObject({ skillName: 'factory-build', arguments: expect.stringContaining('1. Fix the test') });
-    expect(
-      await compileStoredBoard(edited, builtInRunners).rules.execute?.manual?.onEnter?.(returned as never),
-    ).toMatchObject({ skillName: 'our-builder', arguments: expect.stringContaining('1. Fix the test') });
+    const board = compileStoredBoard(
+      {
+        ...workBoardTemplate,
+        phases: workBoardTemplate.phases.map(phase =>
+          phase.key === 'execute'
+            ? { ...phase, runner: { ...phase.runner!, instructions: 'Also test the retry path.' } }
+            : phase,
+        ),
+      },
+      builtInRunners,
+    );
+    const build = await board.rules.execute?.manual?.onEnter?.(card as never);
+    expect(build).toMatchObject({
+      type: 'invokeSkill',
+      role: 'work',
+      goal: expect.stringContaining('approved plan'),
+    });
+    expect(build).not.toHaveProperty('skillName');
+    expect(build).toMatchObject({ goal: expect.stringContaining('Also test the retry path.') });
+    const rework = await board.rules.execute?.manual?.onEnter?.(returned as never);
+    expect(rework).toMatchObject({
+      skillName: 'factory-build',
+      arguments: expect.stringContaining('1. Fix the test'),
+    });
+    expect(rework).toMatchObject({ arguments: expect.stringContaining('Also test the retry path.') });
   });
 
   it("moves a default phase into another context while Review's reviewer keeps its own", async () => {
@@ -301,7 +341,7 @@ describe('compileStoredBoard', () => {
             key: 'qa',
             name: 'QA',
             kind: 'working',
-            runner: { type: 'agent', agentId: 'qa', skill: 'qa', context: 'review' },
+            runner: { type: 'agent', agentId: CODE_AGENT_ID, skill: 'qa', context: 'review' },
           },
         ],
       },

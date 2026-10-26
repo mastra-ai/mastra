@@ -59,7 +59,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('BoardsStorage o
     expect(work!.phases.map(phase => phase.key)).toEqual(workBoardTemplate.phases.map(phase => phase.key));
     expect(work!.phases.find(phase => phase.key === 'triage')!.runner).toEqual({
       type: 'agent',
-      agentId: 'factory-triage',
+      agentId: 'code-agent',
       skill: 'factory-triage',
       context: 'triage',
     });

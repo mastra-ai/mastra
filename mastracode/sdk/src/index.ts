@@ -94,7 +94,7 @@ import {
 } from './auth/account-rotation-processor.js';
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
-import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
+import { CODE_AGENT_ID, DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 import { resolveExperimentalAgent, validateExperimentalAgent, wrapExperimentalAgent } from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
@@ -158,8 +158,6 @@ import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 import { FOREIGN_THREAD, findWakeSession, sessionLeaseScopes } from './utils/wake-session.js';
 import type { WakeSession } from './utils/wake-session.js';
 import { registerWorkflowBuilderPrimitives } from './workflows/register-primitives.js';
-
-const CODE_AGENT_ID = 'code-agent';
 
 // Global retry policy for transient provider failures (e.g. dropped sockets and server errors).
 // Applied centrally to every model call via StreamErrorRetryProcessor, independent of model-pack

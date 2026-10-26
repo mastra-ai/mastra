@@ -1,6 +1,8 @@
 import type { RuleGroup } from '../rules/rule-group.js';
 import type { FactoryRuleSource, FactoryStageRuleContext } from '../rules/types.js';
 import type { StoredPhaseKind, StoredPhaseRunner } from '../storage/domains/boards/validation.js';
+import { FACTORY_AGENT_IDS } from './agents.js';
+import { runnerForSkill } from './config.js';
 import { defineBoard } from './define-board.js';
 import type { BoardPhaseDefinition, BoardSourceClosed, BoardToolRule } from './define-board.js';
 import type { InstalledBoard } from './registry.js';
@@ -35,10 +37,6 @@ const BOARD_KINDS: Readonly<
 > = {
   work: { transitionPolicy: workTransitionPolicy, sourceClosed: { completed: 'done', canceled: 'canceled' } },
 };
-
-export function runnerId(runner: StoredPhaseRunner): string {
-  return runner.type === 'workflow' ? runner.workflowId : runner.agentId;
-}
 
 const ALL_SOURCES = [
   'issue',
@@ -93,25 +91,24 @@ function agentRunner(phaseKey: string, runner: StoredAgentRunner): BoardRunner {
   };
 }
 
-/**
- * A stored agent runner that names a code runner runs that code, activating the stored skill
- * wherever the code would activate its own.
- */
-function withSkill(runner: BoardRunner, skill: string | undefined): BoardRunner {
-  if (!skill || !runner.skill || skill === runner.skill || !runner.onEnter) return runner;
-  const own = runner.skill;
-  const onEnter = Object.fromEntries(
-    Object.entries(runner.onEnter).map(([source, handler]) => [
-      source,
-      async (context: FactoryStageRuleContext) => {
-        const decision = await handler?.(context);
-        return decision?.type === 'invokeSkill' && decision.skillName === own
-          ? { ...decision, skillName: skill }
-          : decision;
-      },
-    ]),
-  );
-  return { ...runner, skill, onEnter };
+function withInstructions(runner: BoardRunner, instructions: string | undefined): BoardRunner {
+  const text = instructions?.trim();
+  if (!text || !runner.onEnter) return runner;
+  return {
+    ...runner,
+    onEnter: Object.fromEntries(
+      Object.entries(runner.onEnter).map(([source, handler]) => [
+        source,
+        async (context: FactoryStageRuleContext) => {
+          const decision = await handler?.(context);
+          if (decision?.type !== 'invokeSkill') return decision;
+          if (decision.goal !== undefined) return { ...decision, goal: `${decision.goal}\n\n${text}` };
+          if (decision.prompt !== undefined) return { ...decision, prompt: `${decision.prompt}\n\n${text}` };
+          return { ...decision, arguments: [decision.arguments, text].filter(Boolean).join('\n\n') };
+        },
+      ]),
+    ),
+  };
 }
 
 /**
@@ -139,8 +136,11 @@ function inContext(runner: BoardRunner, context: string | undefined): BoardRunne
 /**
  * Turns a stored board into the `BoardDefinition` the runtime runs. A phase
  * without `nextPhases` may move to any phase; one with it may move only there.
- * A working phase whose runner is not registered (or has no context) runs
- * nothing and compiles as resting, so its cards wait for a person.
+ * An agent phase runs on one of Factory's agents; its skill picks the code that
+ * decides each run (the built-in Factory skills have some), else the skill or
+ * instructions just run. A working phase naming an unknown agent or workflow
+ * (or with no context) runs nothing and compiles as resting, so its cards wait
+ * for a person.
  */
 export function compileStoredBoard(
   board: CompilableBoard,
@@ -154,12 +154,19 @@ export function compileStoredBoard(
   for (const [index, phase] of board.phases.entries()) {
     let runner: BoardRunner | undefined;
     if (phase.runner?.type === 'agent') {
-      const code = runners.get(phase.runner.agentId);
-      runner = code
-        ? inContext(withSkill(code, phase.runner.skill), phaseContext(phase.runner))
-        : agentRunner(phase.key, phase.runner);
+      if (!FACTORY_AGENT_IDS.has(phase.runner.agentId)) {
+        options.warn?.(
+          `Board '${board.key}' phase '${phase.key}' names unknown agent '${phase.runner.agentId}'; it runs nothing.`,
+        );
+      } else {
+        // A skill with code behind it (the built-in Factory skills, an app's runners) runs that code.
+        const code = phase.runner.skill ? runnerForSkill(runners, phase.runner.skill) : undefined;
+        runner = code
+          ? inContext(withInstructions(code, phase.runner.instructions), phaseContext(phase.runner))
+          : agentRunner(phase.key, phase.runner);
+      }
     } else if (phase.runner) {
-      const id = runnerId(phase.runner);
+      const id = phase.runner.workflowId;
       runner = runners.get(id);
       if (!runner)
         options.warn?.(`Board '${board.key}' phase '${phase.key}' names unknown runner '${id}'; it runs nothing.`);

@@ -59,6 +59,21 @@ describe('board config option', () => {
     expect(() => checkBoardConfigOption(opsConfig, runners, new Set(['ops']))).toThrow(
       "ops: A board in 'boards' already uses this id.",
     );
+    const unknownAgent: ProjectBoardConfigInput = {
+      boards: [
+        {
+          ...opsConfig.boards![0]!,
+          phases: opsConfig.boards![0]!.phases.map(phase =>
+            phase.key === 'checking'
+              ? { ...phase, runner: { type: 'agent', agentId: 'not-an-agent', skill: 'ops-check' } }
+              : phase,
+          ),
+        },
+      ],
+    };
+    expect(() => checkBoardConfigOption(unknownAgent, runners, new Set())).toThrow(
+      "ops.checking: No agent is called 'not-an-agent'; Factory's agents are 'code-agent'.",
+    );
     const terminalFirst = {
       boards: [{ ...opsConfig.boards![0]!, phases: [{ key: 'x', name: 'X', kind: 'terminal' }] }],
     };

@@ -272,7 +272,7 @@ function completeIssue(context: FactoryStageRuleContext) {
 export interface BoardRunner {
   readonly id: string;
   readonly role?: string;
-  /** The skill the runner activates; a stored agent runner naming this runner can swap it for another. */
+  /** The skill this runner activates; an agent phase naming that skill runs this code. */
   readonly skill?: string;
   /** Factory tools a phase running this runner grants. */
   readonly factoryTools?: readonly FactoryPhaseTool[];
