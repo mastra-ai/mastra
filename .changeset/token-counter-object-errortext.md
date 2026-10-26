@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Fixed token counting crashing with `TypeError: invocation.errorText?.trim is not a function` when stored conversation history contains a failed tool call whose `errorText` is an object instead of a string. The error is now serialized and counted, so one such message no longer stops Observational Memory from running on later turns. Fixes #28407.
+Fixed a crash in token counting when stored conversation history contains a failed tool call with a structured error instead of a text message. Observational Memory now keeps working on later turns instead of stopping. Fixes #28407.
