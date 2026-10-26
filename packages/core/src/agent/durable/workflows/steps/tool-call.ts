@@ -41,6 +41,7 @@ import { defineLazyWriter } from '../../../../workflows/utils';
 import { createStep } from '../../../../workflows/workflow';
 import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
+import type { MastraDBMessage } from '../../../message-list/state/types';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
@@ -79,7 +80,7 @@ import { readMessageListState } from '../shared/message-list-state';
 const durableToolCallInputSchema = z.object({
   toolCallId: z.string(),
   toolName: z.string(),
-  args: z.record(z.string(), z.any()),
+  args: z.record(z.string(), z.any()).optional(),
   providerMetadata: z.record(z.string(), z.any()).optional(),
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
@@ -649,6 +650,24 @@ export function createDurableToolCallStep() {
         };
       }
 
+      // Preserve parse failure as a tool error, before approval hooks or argument spreading.
+      if (args === null || args === undefined) {
+        const error = serializeError(
+          new Error(
+            `Tool "${toolName}" received invalid arguments — the provided JSON could not be parsed. Please provide valid JSON arguments.`,
+          ),
+        );
+        if (pubsub) {
+          await emitChunkEvent(pubsub, runId, {
+            type: 'tool-error',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { toolCallId, toolName, args, error },
+          });
+        }
+        return { ...typedInput, error };
+      }
+
       // Get memory-related state for message persistence. Fall back to the
       // values rebuilt from Mastra above (cross-process worker), so workspace
       // tools receive their `workspace` and message flushing still works.
@@ -685,16 +704,28 @@ export function createDurableToolCallStep() {
         else await clearAndPublish();
       };
       let resumeMessageList = messageList;
-      // A durable engine can replay the completed LLM step on a cold resume,
-      // so its runtime rehydration never runs before this suspended tool step.
-      // The suspension metadata was flushed to memory before suspending.
-      if (!resumeMessageList && workflowResumeData !== undefined && memory && state?.threadId) {
+      // Observational memory loads history in the LLM step, which a cold resume skips.
+      // Recover the persisted invocation before clearing or replacing its metadata.
+      const hasInvocation = (msg: MastraDBMessage) =>
+        msg.role === 'assistant' &&
+        (msg.content?.parts ?? []).some(
+          part => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
+        );
+      if (
+        workflowResumeData !== undefined &&
+        memory &&
+        state?.threadId &&
+        !messageList?.get.all.db().some(hasInvocation)
+      ) {
         const { messages } = await memory.recall({
           threadId: state.threadId,
           resourceId: state.resourceId,
           perPage: false,
         });
-        if (messages.length) {
+        if (messageList) {
+          const invocation = [...messages].reverse().find(hasInvocation);
+          if (invocation) messageList.add(invocation, 'memory');
+        } else if (messages.length) {
           resumeMessageList = createRunMessageList({
             mastra,
             threadId: state.threadId,
@@ -726,7 +757,8 @@ export function createDurableToolCallStep() {
       const assertNotSuperseded = () =>
         assertExecutionNotSuperseded({ runId, agentId: initData.agentId, requestContext, mastra: mastra as Mastra });
 
-      const doFlush = async (messagesToFlush = messageList) => {
+      // Remote workers have no registry message list; persist updates through the recovered resume list.
+      const doFlush = async (messagesToFlush = messageList ?? resumeMessageList) => {
         if (
           saveQueueManager &&
           messagesToFlush &&
@@ -802,7 +834,8 @@ export function createDurableToolCallStep() {
         approvalToolName?: string;
         approvalArgs?: unknown;
       }) => {
-        if (!messageList) return;
+        const metadataMessageList = messageList ?? resumeMessageList;
+        if (!metadataMessageList) return;
         const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         const entry = {
           toolCallId,
@@ -826,7 +859,7 @@ export function createDurableToolCallStep() {
             (part: any) => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
           );
 
-        const responseMessages = messageList.get.response.db();
+        const responseMessages = metadataMessageList.get.response.db();
         const lastAssistantMessage = [...responseMessages].reverse().find(carriesToolCall);
         if (lastAssistantMessage?.content) {
           let metadata: Record<string, any>;
@@ -851,7 +884,7 @@ export function createDurableToolCallStep() {
         // the entry into the assistant message that carries this tool call via
         // updateMessageMetadataByToolCallId, which also re-marks the message
         // unsaved so the following flush persists this write too.
-        const allMessages = messageList.get.all.db();
+        const allMessages = metadataMessageList.get.all.db();
         const target = [...allMessages].reverse().find(carriesToolCall);
         if (!target?.content) {
           logger?.warn?.(
@@ -864,7 +897,7 @@ export function createDurableToolCallStep() {
             ? (target.content.metadata as Record<string, any>)
             : {};
         const existingEntries = (existingMeta[metadataKey] ?? {}) as Record<string, any>;
-        messageList.updateMessageMetadataByToolCallId(toolCallId, {
+        metadataMessageList.updateMessageMetadataByToolCallId(toolCallId, {
           [metadataKey]: { ...existingEntries, [toolCallId]: entry },
         });
       };
@@ -1025,6 +1058,12 @@ export function createDurableToolCallStep() {
         // Persist active goal time before exposing the approval wait.
         await stopGoalActivity({ agentId: initData.agentId, runId });
 
+        // Add approval metadata to message before persisting
+        addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema });
+
+        // Flush messages before suspension
+        await doFlush();
+
         // Emit approval chunk via PubSub (mirrors base agent's controller.enqueue).
         // Apply the tool payload transform first so display targets never see raw
         // args on the approval prompt (parity with the main loop's approval chunk).
@@ -1064,12 +1103,6 @@ export function createDurableToolCallStep() {
             }),
           );
         }
-
-        // Add approval metadata to message before persisting
-        addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema });
-
-        // Flush messages before suspension
-        await doFlush();
 
         // End the trace's open spans as suspended before pausing.
         endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
@@ -1376,6 +1409,16 @@ export function createDurableToolCallStep() {
             // Tool is requesting approval during execution
             await stopGoalActivity({ agentId: initData.agentId, runId });
 
+            // Add approval metadata to message before persisting
+            addToolMetadata({
+              type: 'approval',
+              resumeSchema: approvalResumeSchema,
+              delegatedRunId,
+              ...(innerApproval ? { approvalToolName, approvalArgs } : {}),
+            });
+
+            await doFlush();
+
             if (pubsub) {
               const approvalChunk = await applyToolPayloadTransformToChunk(
                 {
@@ -1412,16 +1455,6 @@ export function createDurableToolCallStep() {
               );
             }
 
-            // Add approval metadata to message before persisting
-            addToolMetadata({
-              type: 'approval',
-              resumeSchema: approvalResumeSchema,
-              delegatedRunId,
-              ...(innerApproval ? { approvalToolName, approvalArgs } : {}),
-            });
-
-            await doFlush();
-
             endSpansAsSuspended({ toolCallId, toolName: approvalToolName, reason: 'approval' });
 
             return suspend(
@@ -1445,6 +1478,16 @@ export function createDurableToolCallStep() {
               type: 'suspension',
               resumeSchema: suspendOptions?.resumeSchema,
             };
+
+            // Add suspension metadata to message before persisting
+            addToolMetadata({
+              type: 'suspension',
+              suspendPayload,
+              resumeSchema: suspendOptions?.resumeSchema,
+              delegatedRunId,
+            });
+
+            await doFlush();
 
             if (pubsub) {
               const suspensionChunk = await applyToolPayloadTransformToChunk(
@@ -1470,16 +1513,6 @@ export function createDurableToolCallStep() {
               await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
               await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
             }
-
-            // Add suspension metadata to message before persisting
-            addToolMetadata({
-              type: 'suspension',
-              suspendPayload,
-              resumeSchema: suspendOptions?.resumeSchema,
-              delegatedRunId,
-            });
-
-            await doFlush();
 
             endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
 
@@ -2066,9 +2099,10 @@ export function createDurableToolCallStep() {
                 type: 'tool-result' as const,
                 runId,
                 from: ChunkFrom.AGENT,
-                payload: { toolCallId, toolName, args, result, providerExecuted },
+                payload: { toolCallId, toolName, args, result, providerMetadata, providerExecuted },
               },
               {
+                transformInput: { args, providerMetadata: typedInput.providerMetadata },
                 policy: toolPayloadTransform,
                 toolTransform: (tool as { transform?: any })?.transform,
                 tools: toolsForTransform,

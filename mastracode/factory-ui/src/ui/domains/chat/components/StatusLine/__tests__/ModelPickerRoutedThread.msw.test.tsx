@@ -76,7 +76,9 @@ function renderRoute(initialThreadId: string) {
         },
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-5' })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: 'openai/gpt-5', thinkingLevel: null }),
+    ),
     // The server resolves the thread's owner and billing scope; a work-item thread is Factory-billed.
     http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
       const params = new URL(request.url).searchParams;

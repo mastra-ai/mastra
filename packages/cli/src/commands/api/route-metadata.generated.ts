@@ -242,6 +242,21 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/runs/:runId/abort": {
+    "method": "POST",
+    "path": "/agents/:agentId/runs/:runId/abort",
+    "pathParams": [
+      "agentId",
+      "runId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/threads/abort": {
     "method": "POST",
     "path": "/agents/:agentId/threads/abort",
@@ -2094,6 +2109,28 @@ export const API_ROUTE_METADATA = {
   "POST /observability/traces/aggregate": {
     "method": "POST",
     "path": "/observability/traces/aggregate",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "groupBy",
+      "having",
+      "interval",
+      "limit",
+      "measures",
+      "orderBy",
+      "timeRange",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "rows"
+    }
+  },
+  "POST /observability/spans/aggregate": {
+    "method": "POST",
+    "path": "/observability/spans/aggregate",
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
@@ -5606,6 +5643,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "agentModel",
       "agentVersion",
       "description",
       "grouping",

@@ -104,7 +104,7 @@ export class FilesystemAgentsStorage extends AgentsStorage {
     const getCodeAgent = (entityId: string) => {
       try {
         const agent = this.storageMastra?.getAgentById?.(entityId);
-        return agent?.source === 'code' ? agent : undefined;
+        return agent?.source === 'code' || agent?.source === 'fs' ? agent : undefined;
       } catch (error) {
         if (isAgentNotFoundError(error, entityId)) {
           return undefined;
@@ -122,7 +122,7 @@ export class FilesystemAgentsStorage extends AgentsStorage {
       versionMetadataFields: ['id', 'agentId', 'versionNumber', 'changedFields', 'changeMessage', 'createdAt'],
       perEntityFilesDir: 'agents',
       // Per-entity layout is used only for code-mode agents — i.e. agents
-      // that are declared in code (`source === 'code'`). For db-mode and
+      // declared in code or in an agent folder (`source` is `'code'` or `'fs'`). For db-mode and
       // user-created stored agents we keep the shared `agents.json` layout.
       shouldPersistToPerEntityFile: entity => isCodeAgent(entity.id),
       perEntitySnapshotFilter: (snapshot, entity) => {

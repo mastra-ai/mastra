@@ -1,6 +1,5 @@
 import { coreFeatures } from '@mastra/core/features';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import {
@@ -12,8 +11,8 @@ import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useAgent } from '@mastra/react/hooks/agents';
 import { matchPath, useParams, useLocation, useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { AgentConfigPanel } from '@/domains/agents/components/agent-config-panel';
 import { AgentDetailHeaderActions } from '@/domains/agents/components/agent-detail-header-actions';
-import { AgentOverviewPanel } from '@/domains/agents/components/agent-overview-panel/agent-overview-panel';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { OverviewPanelShortcuts } from '@/domains/agents/components/overview-panel-shortcuts';
@@ -23,7 +22,6 @@ import { useHasObservability } from '@/domains/configuration/hooks/use-has-obser
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
 import { AgentToolDrawerBody } from '@/domains/tools/components/tool-drawer/agent-tool-drawer-body';
 import { ToolDrawer } from '@/domains/tools/components/tool-drawer/tool-drawer';
-import { RouteSidePanel } from '@/lib/route-side-panel';
 
 const crumbs = [navCrumb('/agents'), agentCrumb];
 
@@ -92,31 +90,25 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           <AgentToolDrawerBody agentId={agentId!} />
         </ToolDrawer>
 
-        <PageLayout
-          variant="fit"
-          breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-          headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
-        >
-          <h1 className="sr-only">{agentId}</h1>
-          <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]">
-            <AgentPageTabs
-              agentId={agentId!}
-              activeTab={activeTab}
-              threadId={threadId}
-              showPlayground={showPlayground}
-              showObservability={showObservability}
-            />
-            {children}
-          </div>
-        </PageLayout>
-
-        {activeTab !== 'versions' && (
-          <RouteSidePanel owner="agent-detail">
-            <ActivatedSkillsProvider key={agentId}>
-              <AgentOverviewPanel agentId={agentId!} />
-            </ActivatedSkillsProvider>
-          </RouteSidePanel>
-        )}
+        <AgentConfigPanel agentId={agentId!} disabled={activeTab === 'versions'}>
+          <PageLayout
+            variant="fit"
+            breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+            headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
+          >
+            <h1 className="sr-only">{agentId}</h1>
+            <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]">
+              <AgentPageTabs
+                agentId={agentId!}
+                activeTab={activeTab}
+                threadId={threadId}
+                showPlayground={showPlayground}
+                showObservability={showObservability}
+              />
+              {children}
+            </div>
+          </PageLayout>
+        </AgentConfigPanel>
       </KeyboardScope>
     </PlaygroundModelProvider>
   );

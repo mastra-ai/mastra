@@ -219,6 +219,7 @@ const resultRow = (experimentId: string, itemId: string): DatasetExperimentResul
   id: `res-${experimentId}-${itemId}`,
   experimentId,
   itemId,
+  targetType: null,
   itemDatasetVersion: 1,
   input: {},
   output: { answer: itemId },

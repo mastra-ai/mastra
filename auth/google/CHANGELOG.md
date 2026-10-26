@@ -1,5 +1,11 @@
 # @mastra/auth-google
 
+## 0.1.6
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 0.1.6-alpha.0
 
 ### Patch Changes

@@ -346,7 +346,7 @@ export class SourceAgentsSourceControl extends AgentsStorage {
     const agents = this.storageMastra?.listAgents?.();
     if (!agents) return;
     for (const agent of Object.values(agents)) {
-      if (agent.source === 'code') {
+      if (agent.source === 'code' || agent.source === 'fs') {
         this.knownAgentIds.add(agent.id);
       }
     }
@@ -407,7 +407,7 @@ export class SourceAgentsSourceControl extends AgentsStorage {
       const agent = this.storageMastra?.getAgentById?.(agentId) as
         | { source?: string; __getEditorConfig?: () => unknown }
         | undefined;
-      return agent?.source === 'code' ? agent : undefined;
+      return agent?.source === 'code' || agent?.source === 'fs' ? agent : undefined;
     } catch {
       return undefined;
     }

@@ -624,18 +624,17 @@ describe('Agent signals: idle and active behaviors', () => {
 
     finishOldRun();
     await transferStarted;
-    const reservedRunId = runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)!;
     const followUp = runtime.sendSignal(
       agent,
       { type: 'user-message', contents: 'attach during transfer' },
       { resourceId, threadId },
       pubsub,
     );
-    await expect(followUp.accepted).resolves.toMatchObject({ action: 'deliver', runId: reservedRunId });
 
     const winnerRunId = 'drained-reservation-winner';
     pubsub.owners.set(key, winnerRunId);
     releaseTransfer();
+    await expect(followUp.accepted).resolves.toMatchObject({ action: 'deliver', runId: winnerRunId });
     await waitForCondition(() => runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub) === undefined);
 
     const recoveryRunId = 'drained-reservation-recovery';
@@ -792,12 +791,12 @@ describe('Agent signals: idle and active behaviors', () => {
       { resourceId, threadId },
       pubsub,
     );
+    releaseTransfer();
     await expect(followUp.accepted).resolves.toMatchObject({ action: 'deliver', runId: continuation.runId });
     expect(runtime.drainPendingSignals(continuation.runId, pubsub, 'pre-run')).toEqual([
       expect.objectContaining({ contents: 'attach to continuation' }),
     ]);
 
-    releaseTransfer();
     await waitForCondition(() => vi.mocked(agent.stream).mock.calls.length === 1);
     await pubsub.releaseLease(key, continuation.runId);
   });

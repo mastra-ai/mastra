@@ -55,7 +55,7 @@ describe('MastraVersionNavLink', () => {
 
       renderVersionNavLink();
 
-      const row = await screen.findByRole('button', { name: /v1\.0\.0/ });
+      const row = await screen.findByRole('button', { name: /Version 1\.0\.0/ });
       expect(await screen.findByText('Update')).toBeTruthy();
 
       fireEvent.click(row);
@@ -77,7 +77,7 @@ describe('MastraVersionNavLink', () => {
 
       renderVersionNavLink();
 
-      fireEvent.click(await screen.findByRole('button', { name: /v1\.0\.0/ }));
+      fireEvent.click(await screen.findByRole('button', { name: /Version 1\.0\.0/ }));
 
       expect(await screen.findByText('Up to date')).toBeTruthy();
       expect(screen.queryByText('Update')).toBeNull();

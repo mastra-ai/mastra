@@ -275,7 +275,7 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
 
             icon={<ExternalLinkIcon />}
           >
-            Datasets Documentation
+            Datasets documentation
           </Button>
         </div>
       }

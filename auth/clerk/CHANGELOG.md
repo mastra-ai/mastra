@@ -1,5 +1,14 @@
 # @mastra/auth-clerk
 
+## 1.3.1
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/auth@1.1.4
+
 ## 1.3.1-alpha.0
 
 ### Patch Changes

@@ -139,7 +139,7 @@ export function AgentPlaygroundVersionBar({
           </Txt>
         )}
 
-        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />}
+        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" />}
 
         <InfoTooltip aria-label="Version information" side="bottom" align="start" contentClassName="max-w-56">
           {versionInfoText}
@@ -205,14 +205,14 @@ export function AgentPlaygroundVersionBar({
                     <Icon size="xs">
                       <Save />
                     </Icon>
-                    Save New Version
+                    Save new version
                   </>
                 )}
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="default" disabled={saveDisabled} aria-label="More save options">
-                    <ChevronDown className="size-3.5" />
+                  <Button size="icon-md" variant="default" disabled={saveDisabled} aria-label="More save options">
+                    <ChevronDown />
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
@@ -246,7 +246,7 @@ export function AgentPlaygroundVersionBar({
                   <Icon size="xs">
                     <Check />
                   </Icon>
-                  {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
+                  {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
                 </>
               )}
             </Button>
@@ -278,7 +278,7 @@ export function AgentPlaygroundVersionBar({
             </DialogBody>
             <DialogFooter>
               <DialogCancel>Cancel</DialogCancel>
-              <DialogAction onConfirm={handleSaveWithMessage}>Save Version</DialogAction>
+              <DialogAction onConfirm={handleSaveWithMessage}>Save version</DialogAction>
             </DialogFooter>
           </DialogContent>
         </Dialog>

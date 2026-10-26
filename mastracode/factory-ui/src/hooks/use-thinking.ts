@@ -9,8 +9,9 @@ import type { FactoryProjectPayload } from '../ui/domains/workspaces/services/gi
 const DEFAULT_THINKING_LEVEL: ThinkingLevelSetting = 'medium';
 
 /**
- * The Factory's thinking default — what every session and run in it uses until
- * it picks its own level. Read off the Factory project, sharing its cache entry.
+ * The Factory's thinking default — what sessions and runs on the Factory defaults use until they
+ * pick their own level, and what personal defaults without a level fall back to. Read off the
+ * Factory project, sharing its cache entry.
  */
 export function useFactoryThinkingDefaultQuery(
   factoryProjectId: string | undefined,

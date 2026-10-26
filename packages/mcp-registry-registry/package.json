@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-registry-registry",
-  "version": "1.1.6-alpha.0",
+  "version": "1.1.6",
   "description": "MCP server for registry registry services.",
   "type": "module",
   "main": "dist/index.js",
@@ -40,13 +40,13 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "@wong2/mcp-cli": "^2.0.0",
     "cross-env": "^10.1.0",
     "hono": "^4.13.7",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

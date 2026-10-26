@@ -289,16 +289,15 @@ export class QdrantVector extends MastraVector {
     try {
       // Build vectors configuration
       if (namedVectors) {
-        const namedVectorsConfig = Object.entries(namedVectors).reduce(
-          (acc, [name, config]) => {
-            acc[name] = {
-              size: config.size,
-              distance: DISTANCE_MAPPING[config.distance]!,
-            };
-            return acc;
-          },
-          {} as Record<string, { size: number; distance: Schemas['Distance'] }>,
-        );
+        const namedVectorsConfig = Object.entries(namedVectors).reduce<
+          Record<string, { size: number; distance: Schemas['Distance'] }>
+        >((acc, [name, config]) => {
+          acc[name] = {
+            size: config.size,
+            distance: DISTANCE_MAPPING[config.distance]!,
+          };
+          return acc;
+        }, {});
 
         await this.client.createCollection(indexName, {
           vectors: namedVectorsConfig,

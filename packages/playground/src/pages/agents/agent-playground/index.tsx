@@ -13,6 +13,7 @@ import { AgentOverviewPanel } from '@/domains/agents/components/agent-overview-p
 import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';
 import { AgentEditFormProvider } from '@/domains/agents/context/agent-edit-form-context';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import { isCodeBackedAgent } from '@/domains/agents/utils/agent-source';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
@@ -56,7 +57,7 @@ function AgentPlayground() {
     queryOptions: { enabled: Boolean(agentId) && hasVersions },
   });
 
-  const isCodeAgentOverride = codeAgent?.source === 'code';
+  const isCodeAgentOverride = isCodeBackedAgent(codeAgent);
   const isCodeSourceAgent = isCodeAgentOverride && editorSource === 'code';
   const isCodeAgentEditable = !getEditorOwnership(isCodeAgentOverride, codeAgent?.editor).isFullyLocked;
   const showCodeModeActions = isCodeSourceAgent && isCodeAgentEditable;

@@ -7,7 +7,7 @@ description: "Browse Nebius Token Factory model IDs, capabilities, context windo
 
 # <img src="https://models.dev/logos/nebius.svg" alt="Nebius Token Factory logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nebius Token Factory
 
-Access 24 Nebius Token Factory models through Mastra's model router. Authentication is handled automatically using the `NEBIUS_API_KEY` environment variable.
+Access 26 Nebius Token Factory models through Mastra's model router. Authentication is handled automatically using the `NEBIUS_API_KEY` environment variable.
 
 Learn more in the [Nebius Token Factory documentation](https://docs.tokenfactory.nebius.com/).
 
@@ -94,6 +94,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "nebius/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
     "model": "nebius/google/gemma-3-27b-it",
     "imageInput": true,
     "audioInput": false,
@@ -128,6 +140,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "nebius/MiniMaxAI/MiniMax-M3.1-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "nebius/moonshotai/Kimi-K2.7-Code",

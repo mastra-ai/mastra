@@ -7,7 +7,7 @@ description: "Browse Deep Infra model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 
-Access 76 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
+Access 77 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
 
 Learn more in the [Deep Infra documentation](https://deepinfra.com/models).
 
@@ -302,6 +302,18 @@ for await (const chunk of stream) {
     "maxOutput": 16384,
     "inputCost": 0.1,
     "outputCost": 0.3
+  },
+  {
+    "model": "deepinfra/meta-llama/Llama-Guard-4-12B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.18,
+    "outputCost": 0.18
   },
   {
     "model": "deepinfra/MiniMaxAI/MiniMax-M3",
@@ -602,18 +614,6 @@ for await (const chunk of stream) {
     "maxOutput": 64000,
     "inputCost": 0.834,
     "outputCost": 2.501
-  },
-  {
-    "model": "deepinfra/thinkingmachines/Inkling",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 524288,
-    "maxOutput": 1048576,
-    "inputCost": 0.95,
-    "outputCost": 4.05
   },
   {
     "model": "deepinfra/thinkingmachines/Inkling-Small",
