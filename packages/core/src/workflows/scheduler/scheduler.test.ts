@@ -742,6 +742,39 @@ describe('Scheduler', () => {
       }
     });
 
+    it('re-arms the timer when a tick throws', async () => {
+      const { store } = makeStore();
+      const past = Date.now() - 5_000;
+      await store.createSchedule({
+        id: 'sched-throws',
+        target: { type: 'workflow', workflowId: 'wf' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: past,
+        createdAt: past,
+        updatedAt: past,
+      });
+      const timers = spyTimerDelays();
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub: new EventEmitterPubSub(),
+        config: {
+          isTargetReady: () => {
+            throw new Error('predicate blew up');
+          },
+        },
+      });
+
+      try {
+        await expect(scheduler.start()).rejects.toThrow('predicate blew up');
+        // The due row is still there, so the loop retries after 10s.
+        expect(timers.delays()).toEqual([10_000]);
+      } finally {
+        await scheduler.stop();
+        timers.restore();
+      }
+    });
+
     it('stops listening for wake events after stop()', async () => {
       const { store } = makeStore();
       const pubsub = new EventEmitterPubSub();

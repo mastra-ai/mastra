@@ -174,11 +174,17 @@ export class Scheduler extends MastraBase {
       return;
     }
     this.#clearTimer();
-    const promise = this.#processTick()
-      .then(() => this.#armNextTick())
-      .finally(() => {
-        this.#inflightTick = undefined;
-      });
+    // Re-arm even if the tick throws (e.g. a throwing isTargetReady), or the
+    // loop would stay dead until the next wake.
+    const promise = (async () => {
+      try {
+        await this.#processTick();
+      } finally {
+        await this.#armNextTick();
+      }
+    })().finally(() => {
+      this.#inflightTick = undefined;
+    });
     this.#inflightTick = promise;
     await promise;
   }
