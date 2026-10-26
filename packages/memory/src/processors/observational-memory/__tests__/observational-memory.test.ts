@@ -407,14 +407,16 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
     expect(messageList.getSystemMessages('observational-memory')).toEqual([]);
     expect(memoryProvider.persistMessages).not.toHaveBeenCalled();
   });
+});
 
-  it('does not add the continuation hint on threads with no observations when retrieval is enabled', async () => {
+describe('ObservationalMemoryProcessor continuation hint with retrieval', () => {
+  async function runInputStep({ readOnly, observations }: { readOnly: boolean; observations?: string }) {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
     const storage = createInMemoryStorage();
-    const threadId = 'retrieval-no-observations-thread';
-    const resourceId = 'retrieval-no-observations-resource';
+    const threadId = `retrieval-hint-${readOnly ? 'read-only' : 'live'}-thread`;
+    const resourceId = `retrieval-hint-${readOnly ? 'read-only' : 'live'}-resource`;
     const mockModel = new MockLanguageModelV2({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
@@ -430,16 +432,29 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
       scope: 'thread',
       retrieval: true,
       model: mockModel as any,
-      // High thresholds: nothing gets observed in this test.
+      // High thresholds: nothing gets observed during the step.
       observation: { messageTokens: 100_000, bufferTokens: false },
       reflection: { observationTokens: 100_000 },
     });
+
+    const record = await om.getOrCreateRecord(threadId, resourceId);
+    if (observations) {
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations,
+        tokenCount: 8,
+        lastObservedAt: new Date('2025-01-01T08:30:00Z'),
+      });
+    }
+
+    // No explicit continuation message: this is what getContext returns when the turn starts before
+    // the first observation, so the processor's fallback hint is the only source of om-continuation.
     const memoryProvider: MemoryContextProvider = {
       getContext: vi.fn(async () => ({
         systemMessage: undefined,
         messages: [],
-        hasObservations: false,
-        omRecord: await om.getOrCreateRecord(threadId, resourceId),
+        hasObservations: !!observations,
+        omRecord: await om.getRecord(threadId, resourceId),
         continuationMessage: undefined,
         otherThreadsContext: undefined,
       })),
@@ -453,7 +468,7 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
     requestContext.set('MastraMemory', {
       thread: { id: threadId },
       resourceId,
-      memoryConfig: {},
+      memoryConfig: readOnly ? { readOnly: true } : {},
     });
 
     await processor.processInputStep({
@@ -471,15 +486,35 @@ describe('ObservationalMemoryProcessor read-only mode', () => {
       }) as any,
     });
 
-    // Retrieval guidance still applies before the first observation…
-    expect(
-      messageList
+    return {
+      messageIds: messageList.get.all.db().map(m => m.id),
+      omSystemText: messageList
         .getSystemMessages('observational-memory')
         .map(m => m.content)
         .join('\n'),
-    ).not.toEqual('');
+    };
+  }
+
+  it.each([
+    ['live', false],
+    ['read-only', true],
+  ])('does not add the hint on a thread with no observations (%s path)', async (_path, readOnly) => {
+    const { messageIds, omSystemText } = await runInputStep({ readOnly });
+
+    // Retrieval guidance still applies before the first observation…
+    expect(omSystemText).not.toEqual('');
     // …but the continuation hint only makes sense once observations replaced messages.
-    expect(messageList.get.all.db().map(m => m.id)).not.toContain('om-continuation');
+    expect(messageIds).not.toContain('om-continuation');
+  });
+
+  it('adds the fallback hint on the live path once the record has observations', async () => {
+    const { messageIds, omSystemText } = await runInputStep({
+      readOnly: false,
+      observations: '- 🔴 User prefers concise answers',
+    });
+
+    expect(omSystemText).toContain('User prefers concise answers');
+    expect(messageIds).toContain('om-continuation');
   });
 });
 
