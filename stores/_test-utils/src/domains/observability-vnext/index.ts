@@ -2531,10 +2531,13 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         stopReason: 'max_steps',
       };
       const unset = Object.fromEntries(Object.keys(fields).map(key => [key, null]));
+      // Read through getTrace: it collapses a span's start and end rows the same
+      // way on every store, where getSpan may return either row before they merge.
       const readSpan = async (spanId: string) => {
-        const result = await storage.getSpan({ traceId: 'native-fields', spanId });
-        if (!result) throw new Error(`span ${spanId} was not stored`);
-        return result.span;
+        const trace = await storage.getTrace({ traceId: 'native-fields' });
+        const span = trace?.spans.find(candidate => candidate.spanId === spanId);
+        if (!span) throw new Error(`span ${spanId} was not stored`);
+        return span;
       };
 
       it('round-trips supplied values and reads unset ones as null', async () => {
