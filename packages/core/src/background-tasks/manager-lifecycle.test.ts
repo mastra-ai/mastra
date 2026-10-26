@@ -70,6 +70,49 @@ class SilentPublishPubSub extends EventEmitterPubSub {
   override async publish(): Promise<void> {}
 }
 
+/**
+ * In-memory store whose workflows domain rejects every call once `close()` has
+ * run, like LibSQL's client does with CLIENT_CLOSED. `failDeletes` makes run
+ * deletes reject regardless.
+ */
+class ClosableWorkflowsStore extends InMemoryStore {
+  closed = false;
+  failDeletes = false;
+
+  constructor() {
+    super();
+    const workflows = this.stores.workflows!;
+    this.stores.workflows = new Proxy(workflows, {
+      get: (target, prop, receiver) => {
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value !== 'function') return value;
+        return (...args: unknown[]) => {
+          if (this.closed) return Promise.reject(new Error('CLIENT_CLOSED: The client is closed'));
+          if (this.failDeletes && prop === 'deleteWorkflowRunById') {
+            return Promise.reject(new Error('delete failed'));
+          }
+          return value.apply(target, args);
+        };
+      },
+    });
+  }
+
+  override async close(): Promise<void> {
+    this.closed = true;
+  }
+}
+
+function recordUnhandledRejections() {
+  const rejections: unknown[] = [];
+  const onRejection = (reason: unknown) => rejections.push(reason);
+  process.on('unhandledRejection', onRejection);
+  return { rejections, stop: () => process.off('unhandledRejection', onRejection) };
+}
+
+function waitUntilAborted(_args: unknown, { abortSignal }: { abortSignal?: AbortSignal } = {}) {
+  return new Promise(resolve => abortSignal?.addEventListener('abort', () => resolve('stopped'), { once: true }));
+}
+
 function makeRunningTask(overrides: Partial<BackgroundTask> = {}): BackgroundTask {
   return {
     id: 'task-1',
@@ -249,6 +292,73 @@ describe('BackgroundTaskManager lifecycle', () => {
       expect(warn).toHaveBeenCalledWith('Failed to cancel background task task-1 during shutdown:', error);
     } finally {
       mastra.__unregisterHooks();
+    }
+  });
+
+  it('finishes deleting a running task workflow run before Mastra closes storage on shutdown', async () => {
+    // A task aborted by shutdown settles after manager.shutdown() used to return,
+    // so its fire-and-forget run delete hit the already-closed store and became
+    // an unhandled rejection, which crashes Node mid-shutdown.
+    const store = new ClosableWorkflowsStore();
+    const mastra = new Mastra({ logger: false, storage: store, backgroundTasks: { enabled: true } });
+    const manager = mastra.backgroundTaskManager!;
+    manager.registerStaticExecutor('wait', { execute: waitUntilAborted });
+    const unhandled = recordUnhandledRejections();
+
+    try {
+      const { task } = await manager.enqueue({
+        runId: 'run-1',
+        toolName: 'wait',
+        toolCallId: 'call-1',
+        args: {},
+        agentId: 'agent-1',
+      });
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('running'));
+      const workflowsStore = await store.getStore('workflows');
+      const backgroundTaskRun = () =>
+        workflowsStore!.getWorkflowRunById({ runId: task.id, workflowName: BACKGROUND_TASK_WORKFLOW_ID });
+      await vi.waitFor(async () => expect(await backgroundTaskRun()).not.toBeNull());
+
+      await mastra.shutdown();
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      expect(unhandled.rejections).toEqual([]);
+      store.closed = false;
+      expect(await backgroundTaskRun()).toBeNull();
+    } finally {
+      unhandled.stop();
+    }
+  });
+
+  it('logs a failed workflow run delete instead of rejecting unhandled', async () => {
+    const store = new ClosableWorkflowsStore();
+    store.failDeletes = true;
+    const mastra = new Mastra({ logger: false, storage: store, backgroundTasks: { enabled: true } });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    const manager = mastra.backgroundTaskManager!;
+    manager.registerStaticExecutor('quick', { execute: async () => 'done' });
+    const unhandled = recordUnhandledRejections();
+
+    try {
+      const { task } = await manager.enqueue({
+        runId: 'run-1',
+        toolName: 'quick',
+        toolCallId: 'call-1',
+        args: {},
+        agentId: 'agent-1',
+      });
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('completed'));
+      await vi.waitFor(() =>
+        expect(warn).toHaveBeenCalledWith(
+          `Failed to delete workflow run for background task ${task.id}:`,
+          expect.objectContaining({ message: 'delete failed' }),
+        ),
+      );
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(unhandled.rejections).toEqual([]);
+    } finally {
+      unhandled.stop();
+      await mastra.shutdown();
     }
   });
 
