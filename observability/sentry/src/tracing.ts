@@ -292,7 +292,6 @@ export class SentryExporter extends BaseExporter {
     const spanData = this.spanMap.get(span.id);
     if (!spanData) {
       this.logMissingSpan(span, 'span update');
-      return;
     }
     // Attributes are set on SPAN_STARTED and finalized on SPAN_ENDED.
     // If dynamic updates become necessary, add spanData.span.setAttributes() here.
