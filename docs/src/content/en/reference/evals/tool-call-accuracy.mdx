@@ -42,7 +42,7 @@ The `createToolCallAccuracyScorerCode()` function from `@mastra/evals/scorers/pr
     name: 'expectedTool',
     type: 'string',
     description:
-      'The name of the tool that should be called for the given task. Ignored when a non-empty expectedToolOrder is provided.',
+      'The name of the tool that should be called for the given task. Determines the score when expectedToolOrder is omitted or empty. With a non-empty expectedToolOrder it does not affect the score, but still populates correctToolCalled.',
     required: false,
   },
   {
@@ -57,7 +57,7 @@ The `createToolCallAccuracyScorerCode()` function from `@mastra/evals/scorers/pr
     name: 'expectedToolOrder',
     type: 'string[]',
     description:
-      'Array of tool names in the expected calling order. When a non-empty array is provided, enables order checking mode and ignores expectedTool parameter. An empty array falls back to single tool mode.',
+      'Array of tool names in the expected calling order. A non-empty array enables order checking mode, which determines the score. An empty array scores in single tool mode using expectedTool, but still populates correctOrderCalled.',
     required: false,
   },
 ]}
@@ -71,14 +71,14 @@ The code-based scorer operates in two distinct modes:
 
 #### Single Tool Mode
 
-When `expectedToolOrder` isn't provided or is empty, the scorer evaluates single tool selection:
+When `expectedToolOrder` isn't provided or is empty, the score reflects single tool selection:
 
 - **Standard Mode (strictMode: false)**: Returns `1` if the expected tool is called, regardless of other tools
 - **Strict Mode (strictMode: true)**: Returns `1` only if exactly one tool is called and it matches the expected tool
 
 #### Order Checking Mode
 
-When a non-empty `expectedToolOrder` is provided, the scorer validates tool calling sequence:
+When a non-empty `expectedToolOrder` is provided, the score reflects the tool calling sequence:
 
 - **Strict Order (strictMode: true)**: Tools must be called in exactly the specified order with no extra tools
 - **Flexible Order (strictMode: false)**: Expected tools must appear in correct relative order (extra tools allowed)
