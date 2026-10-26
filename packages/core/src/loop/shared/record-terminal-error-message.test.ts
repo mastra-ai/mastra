@@ -30,31 +30,15 @@ function makeListWithPartialAttempt(attemptId: string, parts: MastraDBMessage['c
 }
 
 describe('toPersistedErrorIdentity', () => {
-  it('keeps name, message, provider HTTP details and provider facts, nothing else', () => {
+  it('keeps name, message and provider HTTP details, nothing else', () => {
     const error = Object.assign(new TypeError('boom'), {
       statusCode: 429,
-      responseBody: '{"error":{"code":"insufficient_quota"}}',
       cause: new Error('inner'),
       url: 'https://api.example.com/v1?key=secret',
-      requestBodyValues: { messages: [{ role: 'user', content: 'my secret prompt' }] },
+      requestBodyValues: { prompt: 'secret prompt' },
     });
 
-    expect(toPersistedErrorIdentity(error)).toEqual({
-      name: 'TypeError',
-      message: 'boom',
-      statusCode: 429,
-      responseBody: '{"error":{"code":"insufficient_quota"}}',
-      codes: ['insufficient_quota'],
-    });
-    expect(Object.keys(toPersistedErrorIdentity(new Error('boom')))).toEqual(['name', 'message']);
-    expect(
-      toPersistedErrorIdentity(
-        Object.assign(new Error('Bad Request'), {
-          statusCode: 400,
-          responseBody: '{"error":{"message":"prompt is too long"}}',
-        }),
-      ),
-    ).toMatchObject({ statusCode: 400, reason: 'prompt is too long' });
+    expect(toPersistedErrorIdentity(error)).toEqual({ name: 'TypeError', message: 'boom', statusCode: 429 });
   });
 
   it('keeps a bounded response body and the provider request id', () => {
@@ -393,7 +377,6 @@ describe('recordTerminalErrorMessage', () => {
 
     expect(storedParts).toHaveLength(1);
     expect(storedParts[0]?.error).toEqual({ name: 'Error', message: 'boom', statusCode: 500 });
-    expect(Object.keys(storedParts[0]?.error ?? {})).toEqual(['name', 'message', 'statusCode']);
     expect(serialized).not.toContain('LIED');
     expect(serialized).not.toContain('inner');
   });

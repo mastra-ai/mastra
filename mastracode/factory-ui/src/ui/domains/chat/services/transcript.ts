@@ -4,7 +4,6 @@ import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
-import { providerErrorFacts } from '@mastra/core/error';
 
 import { sentByOther } from './message-author';
 
@@ -406,13 +405,13 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
 }
 
 interface RunErrorEvent {
-  error: { name?: string; message?: string } | string;
+  error: Partial<MastraErrorPart['error']> | string;
   errorType?: string;
 }
 
 function errorEventIdentity(event: RunErrorEvent): MastraErrorPart['error'] {
-  const name = typeof event.error === 'object' && typeof event.error.name === 'string' ? event.error.name : 'Error';
-  return { name, message: describeErrorEvent(event), ...providerErrorFacts(event.error) };
+  const wire = typeof event.error === 'object' ? event.error : {};
+  return { ...wire, name: wire.name ?? 'Error', message: describeErrorEvent(event) };
 }
 
 function describeErrorEvent(event: RunErrorEvent): string {

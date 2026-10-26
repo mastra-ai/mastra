@@ -1,5 +1,6 @@
 import { PROVIDER_AUTH_REQUIRED_ERROR } from '@mastra/code-sdk/auth/provider-auth-error';
-import { classifyProviderError, providerErrorReason } from '@mastra/core/error';
+
+import { classifyProviderError, providerErrorReason } from './provider-error.js';
 
 export type RunErrorRecovery = 'credentials' | 'model';
 

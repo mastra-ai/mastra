@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { classifyProviderError } from '../../error/provider-error';
 import { ChunkFrom } from '../../stream/types';
 import {
   ToolTracker,
@@ -330,7 +329,7 @@ describe('postStreamError', () => {
 
   it('hands a custom formatter the provider frame behind a plain stream error, so it can name the failure', async () => {
     const frame = { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } };
-    const formatError = vi.fn((error: Error) => classifyProviderError(error));
+    const formatError = vi.fn((error: Error) => JSON.stringify(error.cause));
     const post = vi.fn(async () => undefined);
 
     await postStreamError({
@@ -340,6 +339,6 @@ describe('postStreamError', () => {
       formatError,
     });
 
-    expect(post).toHaveBeenCalledWith('unavailable');
+    expect(post).toHaveBeenCalledWith(JSON.stringify(frame));
   });
 });

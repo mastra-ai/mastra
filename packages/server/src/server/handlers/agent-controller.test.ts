@@ -1287,7 +1287,7 @@ describe('agent-controller routes', () => {
       expect(received.errorType).toBe('provider');
     });
 
-    it('carries the provider status, code and body reason on a flattened error', async () => {
+    it('carries the provider status, body and request id a saved error keeps', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
       const session = await controller.createSession({
@@ -1303,10 +1303,13 @@ describe('agent-controller routes', () => {
       } as any)) as ReadableStream<unknown>;
 
       const reader = stream.getReader();
+      const responseBody = '{"error":{"type":"permission_error","message":"Your API key does not have permission."}}';
       const providerError = Object.assign(new Error('Bad Request'), {
         name: 'AI_APICallError',
         statusCode: 403,
-        responseBody: '{"error":{"type":"permission_error","message":"Your API key does not have permission."}}',
+        responseBody,
+        responseHeaders: { 'x-request-id': 'req_123' },
+        requestBodyValues: { messages: [{ role: 'user', content: 'secret prompt' }] },
       });
       session.emit({ type: 'error', error: providerError, errorType: 'provider' } as any);
 
@@ -1321,8 +1324,8 @@ describe('agent-controller routes', () => {
         name: 'AI_APICallError',
         message: 'Bad Request',
         statusCode: 403,
-        codes: ['permission_error'],
-        reason: 'Your API key does not have permission.',
+        responseBody,
+        requestId: 'req_123',
       });
     });
 

@@ -8,5 +8,3 @@ export {
   safeParseErrorObject,
 } from '@internal/core/error';
 export type { IErrorDefinition, MastraErrorJSON, SerializableError, SerializedError } from '@internal/core/error';
-export { classifyProviderError, providerErrorFacts, providerErrorReason } from './provider-error';
-export type { ProviderErrorFacts, ProviderFailureKind } from './provider-error';

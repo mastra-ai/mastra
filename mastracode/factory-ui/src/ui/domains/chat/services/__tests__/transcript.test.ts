@@ -1447,12 +1447,15 @@ describe('transcript reducer error notices', () => {
     });
   });
 
-  it('keeps the provider facts a wire error carries so the notice classifies like a reload', () => {
-    expect(
-      errorNotice({
-        error: { name: 'AI_APICallError', message: 'Bad Request', statusCode: 403, codes: ['permission_error'] },
-      }).error,
-    ).toEqual({ name: 'AI_APICallError', message: 'Bad Request', statusCode: 403, codes: ['permission_error'] });
+  it('keeps the provider details a wire error carries so the notice classifies like a reload', () => {
+    const error = {
+      name: 'AI_APICallError',
+      message: 'Bad Request',
+      statusCode: 403,
+      responseBody: '{"error":{"type":"permission_error"}}',
+      requestId: 'req_123',
+    };
+    expect(errorNotice({ error }).error).toEqual(error);
   });
 
   it('names a bare error payload Error', () => {
