@@ -39,6 +39,8 @@ export const mastra = new Mastra({
 Enable scheduled notification dispatch when deferred notification records and notification summaries should be delivered automatically through the workflow scheduler:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   agents: { supportAgent },
   storage,
@@ -428,13 +430,13 @@ Re-drives every orphaned `running` durable-agent run across all registered durab
 
 Requires persistent storage. With an in-memory store, there's nothing to recover after a process restart.
 
-Agents and their runs are attempted serially. Each built-in `recoverActiveRuns()` attempt waits up to 30 seconds in total for `recover()` setup and settlement of the whole recovered workflow, then traversal can continue to later runs and agents. This isn't an overall recovery deadline: discovery and overridden custom recovery methods aren't bounded by this budget.
+Recovery processes up to five agents concurrently, with up to five run waits per agent, independently of `recovery.workflowConcurrency`. Each built-in `recoverActiveRuns()` attempt waits up to 30 seconds in total for `recover()` setup and settlement of the whole recovered workflow, then frees its slot for another run. These limits bound waiting, not live executions. This isn't an overall recovery deadline: discovery and overridden custom recovery methods aren't bounded by this budget.
 
-A timed-out attempt continues in the background. Its outcome is `status: 'skipped'` with `reason: 'recovery-timeout'` and no `retryAt`. It contributes only to `skipped`, not `recovered`, `succeeded`, or `failed`, and Mastra doesn't automatically retry it. Late settlement doesn't change the returned counts.
+A timed-out attempt continues in the background. Its outcome is `status: 'skipped'` with `reason: 'recovery-timeout'` and a future `retryAt`. It contributes only to `skipped`, not `recovered`, `succeeded`, or `failed`. Mastra schedules re-checks automatically, deferring them until the original attempt settles to avoid starting another execution. Recovery then checks the persisted snapshot and ownership before retrying and skips finished or suspended runs. The returned counts remain unchanged by late settlement.
 
 When shutdown begins, recovery stops dispatching new agents and runs. The recovery traversal and original attempts, including timed-out setup or execution, participate in the same shared shutdown drain as active executions. A recovery wait timeout doesn't cancel the attempt or give it a separate shutdown drain window.
 
-A run that another execution still drives isn't taken over. It's counted in `skipped` and checked again once that execution's claim could have lapsed, so a run whose process crashed is recovered without another call. `shutdown()` cancels pending re-checks. See [run ownership](/docs/harness/durable-agents#run-ownership).
+Mastra leaves a run under its current execution's control and counts it in `skipped`. Automatic re-checks begin once that execution's claim could have lapsed, allowing recovery after a process crash without another call. `shutdown()` cancels pending re-checks. See [run ownership](/docs/harness/durable-agents#run-ownership).
 
 ```typescript
 const result = await mastra.recoverAllDurableAgents()
@@ -469,7 +471,7 @@ Returns:
     name: 'skipped',
     type: 'number',
     description:
-      'Runs skipped because they are already active, recovery is already in progress, or the recovery wait timed out. Only ownership skips eligible for re-checks are checked again; recovery timeouts are not automatically retried.',
+      'Runs skipped because they are already active, recovery is already in progress, or the recovery wait timed out. Skips with a future `retryAt`, including recovery timeouts, are automatically re-checked. Timeout re-checks wait for the original attempt to settle before deciding whether to retry.',
   },
 ]}
 />

@@ -41,7 +41,7 @@ import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
-import type { CreatedAgentSignal } from '../signals';
+import type { AgentSignalInput, CreatedAgentSignal } from '../signals';
 import { mastraDBMessageToSignal, signalSpanAttributes } from '../signals';
 import { TripWire } from '../trip-wire';
 import type {
@@ -60,6 +60,7 @@ import {
 import { MASTRA_DURABLE_EXECUTIONS_KEY } from './execution-fence';
 import { authorizeDurableMemory } from './memory-fga';
 import { recordRunSavedMessages } from './run-message-refs';
+import { setRunScorerInstances } from './run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import {
   createWorkflowInput,
@@ -196,6 +197,10 @@ interface DurablePreparationAgent {
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   __getSubscribePendingSignals(): (runId: string, listener: () => void) => () => void;
+  __getEnqueuePendingSignal(): (
+    target: { runId: string; resourceId?: string; threadId?: string },
+    signalInput: AgentSignalInput,
+  ) => Promise<CreatedAgentSignal>;
   __getGoalConfig(): GoalConfig | undefined;
   __hasFixedMemory(): boolean;
   __getMaxRetriesConfigured?(): boolean;
@@ -751,6 +756,19 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       logger?.debug?.(`[DurableAgent] Error getting scorers: ${error}`);
     }
   }
+  if (scorers) {
+    // Workflow input carries scorers by name only; keep the instances so a
+    // scorer Mastra has never registered still runs in this process (#27579).
+    setRunScorerInstances(
+      runId,
+      Object.fromEntries(
+        Object.entries(scorers).flatMap(([key, entry]) =>
+          entry?.scorer && typeof entry.scorer === 'object' ? [[key, entry.scorer]] : [],
+        ),
+      ),
+      mastra,
+    );
+  }
 
   // 9. Create SaveQueueManager (memory + memoryConfig were resolved in step 6)
   const saveQueueManager = memory
@@ -904,9 +922,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       fixedMemory: typedAgent.__hasFixedMemory(),
     },
     messageId,
-    agentSpanData: agentSpan?.exportSpan(),
-    modelSpanData: modelSpan?.exportSpan(),
+    agentSpanData: agentSpan?.snapshot?.() ?? agentSpan?.exportSpan(),
+    modelSpanData: modelSpan?.snapshot?.() ?? modelSpan?.exportSpan(),
     requestContextEntries: requestContextEntriesSnapshot,
+    inputTripwire: tripwireData,
   });
 
   // 14. Create registry entry for non-serializable state
@@ -957,6 +976,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // Non-serializable; cross-process engines lose it and signals go undelivered.
     drainPendingSignals: scope => typedAgent.__getDrainPendingSignals()(runId, scope),
     subscribePendingSignals: listener => typedAgent.__getSubscribePendingSignals()(runId, listener),
+    enqueuePendingSignal: signalInput =>
+      typedAgent.__getEnqueuePendingSignal()({ runId, resourceId, threadId }, signalInput),
     // Thread title generation — mirrors the non-durable `#executeOnFinish` branch,
     // which was never ported to the durable finish step (so `generateTitle` never
     // fired for durable/evented agents). Parked here because the agent instance is

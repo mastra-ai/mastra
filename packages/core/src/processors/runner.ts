@@ -30,7 +30,8 @@ import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import type { OutputWriter } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace/workspace';
 import { isProcessorWorkflow } from './is-processor-workflow';
-import { createProcessorSendSignal } from './send-signal';
+import { createProcessorSendSignal, PROCESSOR_LATE_SIGNAL_SINK } from './send-signal';
+import type { ProcessorLateSignalSink } from './send-signal';
 import { resolveProcessorSpanAttributes, resolveProcessorSpanName } from './span-declaration';
 import {
   summarizeActiveToolsForSpan,
@@ -403,6 +404,7 @@ export class ProcessorRunner {
    * Keyed by processor ID.
    */
   private readonly processorStates: Map<string, ProcessorState>;
+  private readonly lateSignalSink?: ProcessorLateSignalSink;
 
   constructor({
     inputProcessors,
@@ -412,6 +414,7 @@ export class ProcessorRunner {
     agentName,
     agent,
     processorStates,
+    lateSignalSink,
   }: {
     inputProcessors?: ProcessorOrWorkflow[];
     outputProcessors?: ProcessorOrWorkflow[];
@@ -420,6 +423,8 @@ export class ProcessorRunner {
     agentName: string;
     agent?: Agent<any, any, any, any>;
     processorStates?: Map<string, ProcessorState>;
+    /** Receives `sendSignal` calls made after the creating step returned (durable engines). */
+    lateSignalSink?: ProcessorLateSignalSink;
   }) {
     this.inputProcessors = inputProcessors ?? [];
     this.outputProcessors = outputProcessors ?? [];
@@ -428,6 +433,7 @@ export class ProcessorRunner {
     this.agentName = agentName;
     this.agent = agent;
     this.processorStates = processorStates ?? new Map();
+    this.lateSignalSink = lateSignalSink;
   }
 
   /**
@@ -680,6 +686,7 @@ export class ProcessorRunner {
       processorStates: this.processorStates,
       abortSignal,
       agent: this.agent,
+      lateSignalSink: this.lateSignalSink,
     };
     const outputWriter: OutputWriter | undefined = writer
       ? (chunk, options) => writer.custom(chunk, options)
@@ -707,12 +714,17 @@ export class ProcessorRunner {
           }
         : undefined,
     );
-    const result = await run.start({
-      inputData,
-      ...observabilityContext,
-      requestContext,
-      outputWriter,
-    });
+    // Workflow schemas strip unknown fields. Keep the live callback off
+    // step payloads so chained processors can recover it from their run.
+    const scope = this.lateSignalSink ? workflow.mastra?.__createRunScope(run.runId) : undefined;
+    if (this.lateSignalSink) scope?.set(PROCESSOR_LATE_SIGNAL_SINK, this.lateSignalSink);
+    const result = await (async () => {
+      try {
+        return await run.start({ inputData, ...observabilityContext, requestContext, outputWriter });
+      } finally {
+        if (scope) workflow.mastra?.__releaseRunScope(run.runId);
+      }
+    })();
 
     // Check for tripwire status - this means a processor in the workflow called abort()
     if (result.status === 'tripwire') {
@@ -866,7 +878,7 @@ export class ProcessorRunner {
           requestContext,
           retryCount,
           writer,
-          sendSignal: createProcessorSendSignal({ messageList, writer }),
+          sendSignal: createProcessorSendSignal({ messageList, writer, lateSink: this.lateSignalSink }),
         });
 
         // Stop recording and get mutations for this processor
@@ -1478,7 +1490,7 @@ export class ProcessorRunner {
             );
 
             const enqueueTripwire = (r?: string, opts?: TripWireOptions<unknown>, pid?: string) => {
-              void this.logger.debug('Stream part blocked by output processor', {
+              this.logger.debug('Stream part blocked by output processor', {
                 agent: this.agentName,
                 reason: r,
                 originalPart: value,
@@ -1622,7 +1634,7 @@ export class ProcessorRunner {
           messageList,
           requestContext,
           retryCount,
-          sendSignal: createProcessorSendSignal({ messageList }),
+          sendSignal: createProcessorSendSignal({ messageList, lateSink: this.lateSignalSink }),
         });
 
         // Handle MessageList, MastraDBMessage[], or { messages, systemMessages } return types
@@ -1965,7 +1977,12 @@ export class ProcessorRunner {
           writer,
           abortSignal: args.abortSignal,
           agent: this.agent,
-          sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
+          sendSignal: createProcessorSendSignal({
+            messageList,
+            writer,
+            rotateResponseMessageId,
+            lateSink: this.lateSignalSink,
+          }),
           sendStateSignal: async (
             stateSignal: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string }),
           ) => {
@@ -2108,6 +2125,7 @@ export class ProcessorRunner {
   async runProcessLLMRequest(args: {
     prompt: LanguageModelV2Prompt;
     model: unknown;
+    apiProviderId?: string;
     messageList?: MessageList;
     workspace?: AnyWorkspace;
     stepNumber: number;
@@ -2164,6 +2182,7 @@ export class ProcessorRunner {
           // the runner accepts the looser `unknown` to match other call paths
           // (e.g. unresolved string ids or function-typed dynamic models).
           model: args.model as never,
+          apiProviderId: args.apiProviderId,
           messageList: args.messageList,
           workspace: args.workspace,
           stepNumber: args.stepNumber,
@@ -2492,7 +2511,7 @@ export class ProcessorRunner {
           agent: this.agent,
           retryCount,
           writer,
-          sendSignal: createProcessorSendSignal({ messageList, writer }),
+          sendSignal: createProcessorSendSignal({ messageList, writer, lateSink: this.lateSignalSink }),
         });
 
         // Stop recording and get mutations for this processor
@@ -2878,7 +2897,12 @@ export class ProcessorRunner {
           abortSignal,
           messageId: args.messageId,
           ...(rotateResponseMessageId ? { rotateResponseMessageId } : {}),
-          sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
+          sendSignal: createProcessorSendSignal({
+            messageList,
+            writer,
+            rotateResponseMessageId,
+            lateSink: this.lateSignalSink,
+          }),
         });
 
         // Stop recording and get mutations for this processor

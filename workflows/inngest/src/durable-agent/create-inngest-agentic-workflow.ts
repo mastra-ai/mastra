@@ -19,6 +19,7 @@ import {
   executeDurableAgentScorers,
   getRunRegistryEntry,
   loadRunStoredMessages,
+  takeRunScorerInstances,
   pruneAgentLoopSnapshot,
 } from '@mastra/core/agent/durable';
 import type {
@@ -73,6 +74,7 @@ const durableAgenticInputSchema = z.object({
   // steps on a separate worker process, so this snapshot is the only way the
   // rebuild path can recover request-scoped configuration.
   requestContextEntries: z.record(z.string(), z.any()).optional(),
+  inputTripwire: baseIterationStateSchema.shape.inputTripwire,
   // Observability fields (Inngest-specific)
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),
@@ -193,6 +195,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // Pass the request context snapshot so dynamic model/tool resolvers
           // see the caller's context on every iteration, not just the first.
           requestContextEntries: state.requestContextEntries,
+          inputTripwire: state.inputTripwire,
           // Pass agent span data so model spans can use it as parent
           agentSpanData: state.agentSpanData,
           // Pass model span data (ONE span for entire agent run)
@@ -216,6 +219,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           ...toolCall,
           stepSpanData: llmOutput.stepSpanData,
           completionStartTime: llmOutput.completionStartTime,
+          stepUsage: llmOutput.stepResult?.totalUsage,
         })) as DurableToolCallInput[];
       },
       { id: 'extract-tool-calls' },
@@ -554,13 +558,17 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       .map(
         async params => {
           const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
+          const initData = getInitData() as DurableAgenticWorkflowInput;
           void executeDurableAgentScorers({
-            initData: getInitData() as DurableAgenticWorkflowInput,
+            initData,
             finalOutput: inputData,
             mastra,
             requestContext,
             tracingContext,
             loadStoredMessages: loadRunStoredMessages(params),
+            // Call-time and defaultOptions scorers are parked in-process by instance; name
+            // resolution alone misses any scorer Mastra never registered (#27579).
+            scorerInstances: takeRunScorerInstances(initData.runId, mastra),
           }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));
 
           return inputData;

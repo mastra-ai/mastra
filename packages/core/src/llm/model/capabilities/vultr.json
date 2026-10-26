@@ -39,7 +39,33 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "mimo-v2.6-flash-rl": [
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "mimo-v2.6-pro-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "laguna-s-2.1": [
       {
         "type": "toggle"
       }
@@ -58,16 +84,29 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
     "qwen3.8-flash-next": [
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "mimo-v2.6-flash-rl": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -78,7 +117,7 @@
         "type": "toggle"
       }
     ],
-    "laguna-s-2.1": [
+    "nemotron-3.5-content-safety": [
       {
         "type": "toggle"
       }
@@ -90,45 +129,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "nemotron-3.5-content-safety": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mimo-v2.6-pro-rl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

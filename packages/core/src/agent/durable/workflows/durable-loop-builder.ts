@@ -16,12 +16,13 @@ import { calculateObservedUsage, isUsageIncomplete } from '../../../observabilit
 import { ChunkFrom } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
+import { markNonRedeliverable } from '../../../workflows/evented/helpers';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
 import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
-import { getRunRegistryEntry, globalRunRegistry } from '../run-registry';
+import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -164,6 +165,7 @@ const durableAgenticInputSchema = z.object({
   // JSON-safe snapshot of requestContext.entries() so durable steps can read
   // it (e.g. is-task-complete scorers pass it as customContext).
   requestContextEntries: z.record(z.string(), z.any()).optional(),
+  inputTripwire: baseIterationStateSchema.shape.inputTripwire,
 });
 
 /**
@@ -530,6 +532,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               state: state.state,
               messageId: state.messageId,
               requestContextEntries: state.requestContextEntries,
+              inputTripwire: state.inputTripwire,
               stepIndex: state.iterationCount,
               signalPreempted: state.lastStepResult?.signalPreempted,
               // Processor hooks receive the running step list (#24293) — the
@@ -589,7 +592,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               toolResults,
               runId: initData.runId,
               agentId: initData.agentId,
-              messageId: initData.messageId,
+              messageId: llmOutput?.stepResult?.messageId ?? initData.messageId,
               state: llmOutput?.state ?? initData.state,
             };
           },
@@ -796,15 +799,18 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               return await (condition as (context: any) => boolean | PromiseLike<boolean>)(context);
             } catch (error) {
               const originalError = getErrorFromUnknown(error);
-              throw new MastraError(
-                {
-                  id: DURABLE_STOP_WHEN_ERROR_ID,
-                  domain: ErrorDomain.AGENT,
-                  category: ErrorCategory.USER,
-                  text: originalError.message,
-                  details: { name: originalError.name, message: originalError.message },
-                },
-                originalError,
+              // A throwing predicate is deterministic; redelivering the event would only rerun it.
+              throw markNonRedeliverable(
+                new MastraError(
+                  {
+                    id: DURABLE_STOP_WHEN_ERROR_ID,
+                    domain: ErrorDomain.AGENT,
+                    category: ErrorCategory.USER,
+                    text: originalError.message,
+                    details: { name: originalError.name, message: originalError.message },
+                  },
+                  originalError,
+                ),
               );
             }
           })
@@ -941,6 +947,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // policy may exclude `running`, in which case resume claims cannot
           // be de-duplicated.
           allowUnclaimedResumes: true,
+          // listSuspendedRuns() reads this row's status, so a resume must flip it
+          // off `suspended` even when `running` checkpoints are skipped (#27619).
+          persistResumeClaim: true,
           isOwnershipLostError: isExecutionFenceError,
           isForeignExecution: isForeignExecutionContext,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
@@ -1019,6 +1028,15 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
 
             const messageListState = await readMessageListState(params, state);
 
+            // Read before the finish side effects: saving moves messages out of the input/response
+            // sets, and plain builds its finish envelope before saving too.
+            const finalMessageList = createRunMessageList({}).deserialize(messageListState);
+            const finishMessages = {
+              all: finalMessageList.get.all.aiV5.model(),
+              user: finalMessageList.get.input.aiV5.model(),
+              nonUser: finalMessageList.get.response.aiV5.model(),
+            };
+
             const finishResult = await runDurableFinishSideEffects({
               runId: state.runId,
               initData,
@@ -1092,6 +1110,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               await emitFinishEvent(pubsub, state.runId, {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
+                messages: finishMessages,
               });
             }
 
@@ -1173,6 +1192,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   requestContext,
                   tracingContext,
                   loadStoredMessages: loadRunStoredMessages(params),
+                  scorerInstances: takeRunScorerInstances(initData.runId, mastra as Mastra | undefined),
                 }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));
               } catch (error) {
                 mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`);

@@ -9,7 +9,7 @@ import type {
   TrustedSpanQueryPlan,
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
-import { TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import { BRANCH_SPAN_TYPE_VALUES, TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS, TABLE_TRACE_BRANCHES } from './ddl';
 import { buildSpanQueryResponse } from './preview-compat';
 import { needsPreviewPayloads, PREVIEW_COLUMNS, resolveStoredPreviews } from './previews';
 import {
@@ -17,6 +17,7 @@ import {
   runWithClickHouseTraceQueryTimeout,
   timeToFirstChunkSupported,
 } from './trace-query';
+import type { ClickHouseParameterType, ParameterBuilder } from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
 const identities = identityFields.join(', ');
@@ -59,10 +60,11 @@ const displayFields = [
 
 class Parameters {
   values: Record<string, string | number> = {};
-  add(value: string | number, timestamp = false) {
+  add(value: string | number, type: ClickHouseParameterType = typeof value === 'number' ? 'UInt64' : 'String') {
     const name = `span_${Object.keys(this.values).length}`;
-    this.values[name] = timestamp ? new Date(value).toISOString().replace('T', ' ').replace(/Z$/, '') : value;
-    return `{${name}:${timestamp ? "DateTime64(3, 'UTC')" : typeof value === 'number' ? 'UInt64' : 'String'}}`;
+    this.values[name] =
+      type === "DateTime64(3, 'UTC')" ? new Date(value).toISOString().replace('T', ' ').replace(/Z$/, '') : value;
+    return `{${name}:${type}}`;
   }
 }
 
@@ -80,10 +82,19 @@ function identityValues(row: SpanQueryIdentity): Array<string | number> {
 function afterCursor(plan: TrustedSpanQueryPlan, parameters: Parameters): string {
   if (!plan.cursor) return '1';
   const cursor = plan.cursor;
-  const timestamp = parameters.add(cursor.sortValue, true);
   const field = `s.${plan.orderBy.field}`;
-  const terms = [`${field} ${plan.orderBy.direction === 'asc' ? '>' : '<'} ${timestamp}`];
-  const equal = [`${field} = ${timestamp}`];
+  const terms: string[] = [];
+  const equal: string[] = [];
+  // Empty values sort last in both directions: they follow every value, and after an empty value
+  // only empty values remain.
+  if (cursor.sortValue === null) equal.push(`isNull(${field})`);
+  else {
+    const numeric = plan.orderBy.field === 'timeToFirstChunkMs';
+    const value = parameters.add(cursor.sortValue, numeric ? 'Float64' : "DateTime64(3, 'UTC')");
+    terms.push(`${field} ${plan.orderBy.direction === 'asc' ? '>' : '<'} ${value}`);
+    if (numeric) terms.push(`isNull(${field})`);
+    equal.push(`${field} = ${value}`);
+  }
   for (const key of identityFields) {
     const value = cursor[key];
     if (value === null) equal.push(`isNull(s.${key})`);
@@ -118,17 +129,17 @@ function fieldExpression(field: string): string {
 
 export function compileClickHouseSpanQuery(plan: TrustedSpanQueryPlan) {
   const parameters = new Parameters();
-  const from = parameters.add(plan.timeRange.from, true);
-  const to = parameters.add(plan.timeRange.to, true);
+  const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
+  const to = parameters.add(plan.timeRange.to, "DateTime64(3, 'UTC')");
   const scope: string[] = [];
   if (plan.scope) {
     scope.push(`organizationId = ${parameters.add(plan.scope.organizationId)}`);
     if (plan.scope.resourceId !== undefined) scope.push(`resourceId = ${parameters.add(plan.scope.resourceId)}`);
   }
   const predicate = plan.where ? compileSpanQueryPredicate(plan.where) : { sql: '1', params: {} };
-  const selectionFields = [...new Set(['startedAt', 'endedAt', ...predicateFields(plan.where)])].filter(
-    field => !new Set<string>(identityFields).has(field),
-  );
+  const selectionFields = [
+    ...new Set(['startedAt', 'endedAt', plan.orderBy.field, ...predicateFields(plan.where)]),
+  ].filter(field => !new Set<string>(identityFields).has(field));
   const expressions = selectionFields.map(fieldExpression);
   // Completed insert-only records: latest endedAt wins. Equal-version retries must be identical.
   // Copies of a span share startedAt, so the time range can be applied before selecting the latest copy.
@@ -142,11 +153,171 @@ export function compileClickHouseSpanQuery(plan: TrustedSpanQueryPlan) {
     ORDER BY ${identities}, e.endedAt DESC
     LIMIT 1 BY ${identities}
   )
-  SELECT ${[...identityFields, 'startedAt', 'endedAt'].map(field => `s.${field}`).join(', ')}
+  SELECT ${[...new Set([...identityFields, 'startedAt', 'endedAt', plan.orderBy.field])].map(field => `s.${field}`).join(', ')}
   FROM candidates s WHERE s.startedAt >= ${from} AND s.startedAt < ${to} AND (${predicate.sql}) AND ${after}
-  ORDER BY s.${plan.orderBy.field} ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'}, ${identityFields.map(field => `s.${field} ASC NULLS LAST`).join(', ')}
+  ORDER BY s.${plan.orderBy.field} ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${identityFields.map(field => `s.${field} ASC NULLS LAST`).join(', ')}
   LIMIT ${parameters.add(plan.limit + 1)}`;
   return { query, query_params: { ...parameters.values, ...predicate.params } };
+}
+
+const branchSpanTypes = new Set<string>(BRANCH_SPAN_TYPE_VALUES);
+
+const sameColumn = (field: string) => [field] as const;
+/**
+ * Span fields `trace_branches` can serve, as the `trace_branches` columns each one reads. The two
+ * tables are expected to diverge, so this list is explicit: a selection whose fields are not all
+ * listed reads `span_events`. A new span-query field has to be classified here deliberately, and a
+ * missing column then costs speed, not correctness.
+ */
+export const TRACE_BRANCHES_SPAN_FIELD_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  ...Object.fromEntries(
+    [
+      'organizationId',
+      'resourceId',
+      'traceId',
+      'spanId',
+      'parentSpanId',
+      'name',
+      'spanType',
+      'startedAt',
+      'endedAt',
+      'timeToFirstChunkMs',
+      'threadId',
+      'runId',
+      'sessionId',
+      'userId',
+      'requestId',
+      'serviceName',
+      'experimentId',
+      'environment',
+      'executionSource',
+      'entityType',
+      'entityId',
+      'entityName',
+      'entityVersionId',
+      'parentEntityType',
+      'parentEntityId',
+      'parentEntityName',
+      'parentEntityVersionId',
+      'rootEntityType',
+      'rootEntityId',
+      'rootEntityName',
+      'rootEntityVersionId',
+    ].map(field => [field, sameColumn(field)]),
+  ),
+  status: ['error'],
+  error: ['error'],
+  durationMs: ['startedAt', 'endedAt'],
+};
+
+/**
+ * Whether a span selection reads `trace_branches`: `where` must restrict `spanType` to branch
+ * types, and `trace_branches` must serve every selected field (`served`, for tests).
+ */
+export function readsTraceBranches(
+  where: TrustedTraceQueryScalarPredicate | undefined,
+  fields: Iterable<string>,
+  served: Readonly<Record<string, readonly string[]>> = TRACE_BRANCHES_SPAN_FIELD_COLUMNS,
+): boolean {
+  const branchOnly = positiveSpanConjuncts(where).some(
+    ({ field, values }) =>
+      field === 'spanType' && values.length > 0 && values.every(value => branchSpanTypes.has(String(value))),
+  );
+  return branchOnly && [...fields].every(field => Object.hasOwn(served, field));
+}
+
+/**
+ * Top-level `spanType` / `name` equality or `in` conditions. Every span the predicate can match
+ * satisfies them, and copies of a span never differ in either field, so they can be applied
+ * before collapsing copies.
+ */
+function positiveSpanConjuncts(where: TrustedTraceQueryScalarPredicate | undefined) {
+  const conjuncts = where?.type === 'boolean' && where.operator === 'and' ? where.args : where ? [where] : [];
+  return conjuncts.flatMap(conjunct => {
+    if (conjunct.type !== 'comparison' && conjunct.type !== 'membership') return [];
+    if (conjunct.field !== 'spanType' && conjunct.field !== 'name') return [];
+    if (conjunct.type === 'comparison' && conjunct.operator === 'eq')
+      return [{ field: conjunct.field, values: [conjunct.value] }];
+    if (conjunct.type === 'membership' && conjunct.operator === 'in')
+      return [{ field: conjunct.field, values: conjunct.values }];
+    return [];
+  });
+}
+
+/**
+ * The spans `querySpans()` selects, as CTEs ending in `selected` (alias each row as you like):
+ * one row per current completed span with `startedAt` in the window, matching `where`, carrying
+ * the identity, `startedAt`, `endedAt`, `status`, and `fields`.
+ *
+ * Copies of a span collapse to the copy with the latest `endedAt`. When `where` requires branch
+ * span types (agent and workflow runs, tool calls, …) and `trace_branches` serves every selected
+ * field, the spans are read from `trace_branches`, whose sort key starts with `spanType`, instead of
+ * every span in the window. That path can differ from `querySpans()` in two ways:
+ * - `trace_branches` is filled only by its materialized view, with no backfill, so an install that
+ *   upgraded from @mastra/clickhouse 1.4–1.6 has no branch rows for spans written before then.
+ * - It is a `ReplacingMergeTree` without a version column, so once a background merge collapses a
+ *   retried span's copies it keeps the last-inserted copy, not the one with the latest `endedAt`.
+ *   Counts are unaffected; `status` and duration of an out-of-order retry can differ.
+ *
+ * Like `querySpans()`, the read has no upper bound on `endedAt` (`PREWHERE endedAt >= from` only,
+ * since a span that starts in the window can end any time later), so a historical window reads
+ * every span that ended since `from`.
+ */
+export function compileClickHouseSpanSelection(
+  plan: Pick<TrustedSpanQueryPlan, 'timeRange' | 'scope' | 'where'>,
+  fields: readonly string[],
+  parameters: ParameterBuilder,
+): string[] {
+  const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
+  const to = parameters.add(plan.timeRange.to, "DateTime64(3, 'UTC')");
+  const conjuncts = positiveSpanConjuncts(plan.where);
+  const prefilter = conjuncts
+    .map(({ field, values }) =>
+      values.length
+        ? `\n      AND e.${field} IN (${values.map(value => parameters.add(String(value), 'String')).join(', ')})`
+        : '\n      AND 0',
+    )
+    .join('');
+  const predicate = plan.where ? compileSpanQueryPredicate(plan.where, parameters).sql : '1';
+  let tenant = '';
+  if (plan.scope) {
+    tenant += `\n      AND e.organizationId = ${parameters.add(plan.scope.organizationId, 'String')}`;
+    if (plan.scope.resourceId !== undefined)
+      tenant += `\n      AND e.resourceId = ${parameters.add(plan.scope.resourceId, 'String')}`;
+  }
+  const selectionFields = [
+    ...new Set(['startedAt', 'endedAt', 'status', ...fields, ...predicateFields(plan.where)]),
+  ].filter(field => !new Set<string>(identityFields).has(field));
+  const branches = readsTraceBranches(plan.where, selectionFields);
+  const scan = `FROM ${branches ? TABLE_TRACE_BRANCHES : TABLE_SPAN_EVENTS} e
+    PREWHERE e.endedAt >= ${from}
+    WHERE e.startedAt >= ${from} AND e.startedAt < ${to}${tenant}${prefilter}`;
+  // Branch rows are few: collapse them with one hash aggregation (X50). Elsewhere keep
+  // `querySpans()`'s sort, which X46 measured within budget per project.
+  const candidates = branches
+    ? `SELECT ${identityFields.map(field => `e.${field} AS ${field}`).join(', ')}, ${selectionFields
+        .map(field =>
+          field === 'endedAt'
+            ? 'max(e.endedAt) AS endedAt'
+            : // Tuple-wrapped so a NULL in the latest copy wins (argMax skips NULL arguments).
+              `argMax(tuple(${fieldExpression(field)}), e.endedAt).1 AS ${field}`,
+        )
+        .join(', ')}
+    ${scan}
+    GROUP BY ${identityFields.map(field => `e.${field}`).join(', ')}`
+    : `SELECT ${identities}, ${selectionFields.map(field => `${fieldExpression(field)} AS ${field}`).join(', ')}
+    ${scan}
+    ORDER BY ${identities}, e.endedAt DESC
+    LIMIT 1 BY ${identities}`;
+  return [
+    `span_candidates AS (
+    ${candidates}
+  )`,
+    `selected AS (
+    SELECT * FROM span_candidates s
+    WHERE s.startedAt >= ${from} AND s.startedAt < ${to} AND (${predicate})
+  )`,
+  ];
 }
 
 type StoredPreviewRow = Record<(typeof PREVIEW_COLUMNS)[number], string | null>;
@@ -170,7 +341,9 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
       compiled,
     )) as T[];
   };
-  const rows = await run<SpanQueryIdentity & { startedAt: string; endedAt: string }>(compileClickHouseSpanQuery(plan));
+  const rows = await run<
+    SpanQueryIdentity & { startedAt: string; endedAt: string; timeToFirstChunkMs?: number | null }
+  >(compileClickHouseSpanQuery(plan));
   const selected = rows.map(row => ({
     ...row,
     startedAt: iso(row.startedAt),
@@ -250,7 +423,7 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
           resourceId: last.resourceId,
           traceId: last.traceId,
           spanId: last.spanId,
-          sortValue: last[plan.orderBy.field],
+          sortValue: last[plan.orderBy.field] ?? null,
         })
       : null;
   return result;

@@ -17,6 +17,15 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
+    "GLM-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "GLM-5.1": [
       {
         "type": "toggle"
@@ -29,15 +38,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "GLM-5.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

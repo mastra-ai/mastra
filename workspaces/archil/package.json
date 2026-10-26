@@ -1,6 +1,6 @@
 {
   "name": "@mastra/archil",
-  "version": "0.3.1-alpha.0",
+  "version": "0.3.1",
   "description": "Archil filesystem provider for Mastra workspaces — elastic, serverless file systems for AI agents",
   "type": "module",
   "main": "dist/index.js",
@@ -37,10 +37,10 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

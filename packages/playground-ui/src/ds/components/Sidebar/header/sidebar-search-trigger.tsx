@@ -1,39 +1,38 @@
+import { SearchIcon } from 'lucide-react';
 import { forwardRef } from 'react';
-import type { ComponentPropsWithoutRef, ReactNode } from 'react';
-import { Kbd } from '@/ds/components/Kbd';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
-import { quietTextHover, quietTextHoverInGroup } from '@/ds/primitives/typography';
-import { cn } from '@/lib/utils';
+import type { ReactNode } from 'react';
+import { SidebarButtonHint } from './sidebar-button-hint';
+import { Button } from '@/ds/components/Button';
+import type { ButtonProps } from '@/ds/components/Button';
 
-export type SidebarSearchTriggerProps = ComponentPropsWithoutRef<'button'> & {
+export type SidebarSearchTriggerProps = Omit<ButtonProps, 'variant' | 'size' | 'tooltip' | 'children'> & {
+  /** Tooltip label, and the accessible name unless `aria-label` is set. Defaults to `Search`. */
+  label?: string;
+  /** Shortcut shown in the tooltip next to the label, e.g. `⌘ K`. */
   shortcut?: ReactNode;
+  /** The icon. Defaults to a search glyph. */
+  children?: ReactNode;
 };
 
 export const SidebarSearchTrigger = forwardRef<HTMLButtonElement, SidebarSearchTriggerProps>(
-  function SidebarSearchTrigger({ className, children, shortcut, type = 'button', ...props }, ref) {
+  function SidebarSearchTrigger(
+    { label = 'Search', shortcut, children, 'aria-label': ariaLabel, type = 'button', ...props },
+    ref,
+  ) {
     return (
-      <button
+      <Button
         ref={ref}
         data-slot="sidebar-search-trigger"
         type={type}
-        className={cn(
-          'group inline-flex size-control-md shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent hover:bg-fill-subtle',
-          quietTextHover,
-          controlStateColorTransition,
-          focusRing,
-          '[&_svg]:size-4 [&_svg]:shrink-0',
-          shortcut && 'w-auto px-2',
-          className,
-        )}
+        variant="ghost"
+        size="icon-sm"
+        aria-label={ariaLabel ?? label}
+        tooltip={<SidebarButtonHint label={label} shortcut={shortcut} />}
+        tooltipPosition="bottom"
         {...props}
       >
-        {children}
-        {shortcut ? (
-          <Kbd size="xs" className={cn('bg-surface-overlay-soft active:scale-100', quietTextHoverInGroup)}>
-            {shortcut}
-          </Kbd>
-        ) : null}
-      </button>
+        {children ?? <SearchIcon />}
+      </Button>
     );
   },
 );

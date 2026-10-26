@@ -30,6 +30,7 @@ const TRACE_DIMENSIONS = [
   'entityName',
   'name',
   'spanType',
+  'entityId',
   'environment',
   'status',
   'serviceName',

@@ -1,7 +1,8 @@
 {
   "name": "@mastra/dynamodb",
-  "version": "1.4.4-alpha.0",
+  "version": "1.4.5-alpha.0",
   "description": "DynamoDB storage adapter for Mastra",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -37,9 +38,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1095.0",
-    "@aws-sdk/lib-dynamodb": "^3.1095.0",
-    "electrodb": "^3.9.1"
+    "@aws-sdk/client-dynamodb": "^3.1156.0",
+    "@aws-sdk/lib-dynamodb": "^3.1156.0",
+    "electrodb": "^3.9.3"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.76.0-0 <2.0.0-0"
@@ -49,10 +50,10 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

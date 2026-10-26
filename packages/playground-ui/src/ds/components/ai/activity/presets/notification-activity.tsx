@@ -16,6 +16,10 @@ export interface NotificationActivityProps {
   pending?: string;
   link?: { href: string; label: string };
   defaultOpen?: boolean;
+  /** Badges rendered after the priority, status and pending badges. */
+  extraBadges?: ReactNode;
+  /** A label shown above the message once opened, e.g. to flag it as untrusted. */
+  messageLabel?: string;
 }
 
 const priorityBadgeVariants: Partial<Record<string, BadgeVariant>> = {
@@ -34,9 +38,11 @@ export function NotificationActivity({
   pending,
   link,
   defaultOpen,
+  extraBadges,
+  messageLabel,
 }: NotificationActivityProps) {
-  const lineHoldsMessage = messagePreviewShowsAll(message);
-  const hasBadges = Boolean(priority || status || pending);
+  const lineHoldsMessage = messagePreviewShowsAll(message) && !messageLabel;
+  const hasBadges = Boolean(priority || status || pending || extraBadges);
 
   return (
     <ActivityItem
@@ -54,6 +60,7 @@ export function NotificationActivity({
             )}
             {status && <Badge size="xs">{status}</Badge>}
             {pending && <Badge size="xs">{pending} pending</Badge>}
+            {extraBadges}
           </>
         )
       }
@@ -63,6 +70,11 @@ export function NotificationActivity({
     >
       {(!lineHoldsMessage || link) && (
         <div className="flex flex-col gap-2">
+          {messageLabel && (
+            <Txt variant="caption" tone="muted">
+              {messageLabel}
+            </Txt>
+          )}
           {message && (
             <Txt variant="caption" className="break-words whitespace-pre-wrap">
               {message}

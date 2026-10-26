@@ -19,6 +19,7 @@ export const TRACE_AGGREGATE_DIMENSION_REGISTRY = {
   entityName: stringDimension(),
   name: stringDimension(),
   spanType: stringDimension(),
+  entityId: stringDimension(),
   environment: stringDimension(),
   status: stringDimension(),
   serviceName: stringDimension(),

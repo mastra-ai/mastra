@@ -28,8 +28,7 @@ function isNotFound(error: unknown): boolean {
 
 interface UseAgentControllerThreadMessagesArgs {
   agentControllerId: string;
-  resourceId: string;
-  scope?: string;
+  sessionId: string;
   threadId?: string;
   baseUrl?: string;
   enabled?: boolean;
@@ -47,8 +46,7 @@ interface UseAgentControllerThreadMessagesArgs {
 
 export function useAgentControllerThreadMessages({
   agentControllerId,
-  resourceId,
-  scope,
+  sessionId,
   threadId,
   baseUrl = '',
   enabled = true,
@@ -58,8 +56,7 @@ export function useAgentControllerThreadMessages({
 }: UseAgentControllerThreadMessagesArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
-    resourceId,
-    scope,
+    sessionId,
     baseUrl,
     enabled,
   });
@@ -82,13 +79,13 @@ export function useAgentControllerThreadMessages({
   }
 
   // Prefix without the limit — used to detect "same thread" for placeholder data.
-  const threadKey = queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId);
+  const threadKey = queryKeys.agentControllerThreadMessages(agentControllerId, sessionId, threadId);
 
   // The thread id whose last read was a 404 that `isSessionThread` turned into an empty history.
   const missingThreadRef = useRef<string | undefined>(undefined);
 
   const query = useQuery({
-    queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId, limit),
+    queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, sessionId, threadId, limit),
     queryFn: async () => {
       try {
         const messages = await session!.listMessages(threadId!, limit);

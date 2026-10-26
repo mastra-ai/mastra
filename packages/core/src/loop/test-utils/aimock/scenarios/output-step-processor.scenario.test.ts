@@ -19,7 +19,7 @@ import { MockMemory } from '../../../../memory/mock';
 import type { Processor } from '../../../../processors';
 import { TaskSignalProvider } from '../../../../signals';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines, anyToolResult } from '../aimock-scenario';
 
 describeForAllEngines(
   'AIMock loop scenario: output step processor (per-step)',
@@ -57,13 +57,16 @@ describeForAllEngines(
         fixtures: llm => {
           // Turn 1: emit a tool call
           llm.on(
-            { endpoint: 'chat', hasToolResult: false },
+            { endpoint: 'chat', predicate: req => !anyToolResult(req) },
             {
               toolCalls: [{ id: 'call_lookup', name: 'lookup', arguments: { key: 'alpha' } }],
             },
           );
           // Turn 2: final text
-          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'The value for alpha is VALUE_FOR_alpha.' });
+          llm.on(
+            { endpoint: 'chat', predicate: anyToolResult },
+            { content: 'The value for alpha is VALUE_FOR_alpha.' },
+          );
         },
       });
 
@@ -138,14 +141,14 @@ describeForAllEngines(
         },
         fixtures: llm => {
           llm.on(
-            { endpoint: 'chat', hasToolResult: false },
+            { endpoint: 'chat', predicate: req => !anyToolResult(req) },
             {
               toolCalls: [
                 { id: 'call_lookup_memory_regression', name: 'lookup_memory_regression', arguments: { key: 'beta' } },
               ],
             },
           );
-          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'VALUE_FOR_beta' });
+          llm.on({ endpoint: 'chat', predicate: anyToolResult }, { content: 'VALUE_FOR_beta' });
         },
       });
 
@@ -222,7 +225,7 @@ describeForAllEngines(
         },
         fixtures: llm => {
           llm.on(
-            { endpoint: 'chat', hasToolResult: false },
+            { endpoint: 'chat', predicate: req => !anyToolResult(req) },
             {
               toolCalls: [
                 {
@@ -347,7 +350,7 @@ describeForAllEngines(
         },
         fixtures: llm => {
           llm.on(
-            { endpoint: 'chat', hasToolResult: false },
+            { endpoint: 'chat', predicate: req => !anyToolResult(req) },
             {
               content: 'TEXT_BEFORE_TASK_WRITE',
               toolCalls: [
@@ -458,13 +461,13 @@ describeForAllEngines(
           ...(withProcessor ? { outputProcessors: [passThrough] } : {}),
           fixtures: llm => {
             llm.on(
-              { endpoint: 'chat', hasToolResult: false },
+              { endpoint: 'chat', predicate: req => !anyToolResult(req) },
               {
                 content: 'Let me check.',
                 toolCalls: [{ id: 'call_note', name: 'note', arguments: { question: 'x' } }],
               },
             );
-            llm.on({ endpoint: 'chat', hasToolResult: true }, { toolCalls: [askCall] });
+            llm.on({ endpoint: 'chat', predicate: anyToolResult }, { toolCalls: [askCall] });
           },
         });
 
@@ -534,10 +537,10 @@ describeForAllEngines(
         },
         fixtures: llm => {
           llm.on(
-            { endpoint: 'chat', hasToolResult: false },
+            { endpoint: 'chat', predicate: req => !anyToolResult(req) },
             { content: 'SECRET ', toolCalls: [{ id: 'call_note', name: 'note', arguments: { question: 'x' } }] },
           );
-          llm.on({ endpoint: 'chat', hasToolResult: true }, { toolCalls: [askCall] });
+          llm.on({ endpoint: 'chat', predicate: anyToolResult }, { toolCalls: [askCall] });
         },
       });
 
@@ -545,8 +548,8 @@ describeForAllEngines(
       expect(JSON.stringify(finishMessages)).not.toContain('SECRET');
     });
 
-    // Technical: when onIterationComplete asks for a feedback continuation, a processOutputResult
-    // rewrite of each assistant message shows up per step, not collapsed onto the last step.
+    // #26346: feedback continuation must not duplicate earlier text during result processing.
+    // Technical: processOutputResult rewrites appear on their own steps, not only the last step.
     // Known gap: durable and evented engines report the raw step text ('firstmore') because the
     // processOutputResult rewrite is not reconciled back onto steps after a feedback continuation.
     const itFailsOnDurable = engine === 'durable' || engine === 'evented' ? it.fails : it;
@@ -580,6 +583,7 @@ describeForAllEngines(
 
       const full = await output.getFullOutput();
       expect(await output.text).toBe('FIRSTMORE');
+      expect(full.text).toBe('FIRSTMORE');
       expect(full.steps.map(step => step.text)).toEqual(['FIRST', 'MORE']);
     });
   },

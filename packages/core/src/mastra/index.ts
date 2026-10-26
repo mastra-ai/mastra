@@ -1099,8 +1099,8 @@ export class Mastra<
                 // for workflow ids only known to this instance's public registry
                 // (e.g. background scheduler runs like the notification
                 // dispatcher) — they have no cross-instance consumer.
-                const isOwnedHere = (() => {
-                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId, topic)) return true;
+                const isOwnedHere = (guarded = false) => {
+                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId, topic, guarded)) return true;
                   let parent = data?.parentWorkflow as
                     | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
                     | undefined;
@@ -1108,7 +1108,7 @@ export class Mastra<
                   while (parent && depth < 16) {
                     const pwfId = parent.workflowId;
                     const prId = parent.runId;
-                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId, topic)) return true;
+                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId, topic, guarded)) return true;
                     parent = parent.parentWorkflow as typeof parent;
                     depth++;
                   }
@@ -1121,8 +1121,13 @@ export class Mastra<
                   if (rId && rId.startsWith('sched_wf_')) return true;
                   if (rId && rId.startsWith(`sched_${NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID}_`)) return true;
                   return false;
-                })();
-                if (isOwnedHere) {
+                };
+                if (isOwnedHere()) {
+                  if (topic === 'workflows' && !isOwnedHere(true)) {
+                    return Promise.resolve(self.getStorage()?.getStore('workflows')).then(store =>
+                      target.publish(topic, event, { localOnly: !store?.supportsWorkflowStepGuards() }),
+                    );
+                  }
                   // A local-only start in a process that consumes no workflow
                   // events (e.g. `MASTRA_WORKERS=false`) is dropped by the
                   // transport. Say so instead of hanging silently.
@@ -3987,16 +3992,16 @@ export class Mastra<
    * Whether this internal workflow event must stay in this process. A
    * run-scoped registration always qualifies; an unscoped one does unless it
    * was registered `distributed`. A distributed workflow's `workflows` events
-   * stay local while this process runs workflow workers (so runs stay pinned
-   * to the process that started them) and only cross processes when it
-   * can't run them itself. Its `workflows-finish` events always cross, since
+   * stay local on stores without atomic occurrence guards. Guarded stores
+   * allow workers to publish reclaimable continuations through the broker.
+   * Its `workflows-finish` events always cross, since
    * the process waiting for the result may not be the one that ran it.
    */
-  #isProcessLocalInternalWorkflow(id: string, runId: string, topic: string): boolean {
+  #isProcessLocalInternalWorkflow(id: string, runId: string, topic: string, guarded: boolean): boolean {
     if (!this.__hasInternalWorkflow(id, runId)) return false;
     if (this.#internalMastraWorkflows[`${id}:${runId}`]) return true;
     if (!this.#distributedInternalWorkflowIds.has(id)) return true;
-    return topic === 'workflows' && this.__hasLocalWorkflowExecution();
+    return topic === 'workflows' && !guarded && this.__hasLocalWorkflowExecution();
   }
 
   /**
@@ -4376,8 +4381,8 @@ export class Mastra<
         let failed = 0;
         let skipped = 0;
 
-        for (const agent of durableAgents) {
-          if (this.#shuttingDown) break;
+        await runWithConcurrency(durableAgents, DEFAULT_RESTART_CONCURRENCY, async agent => {
+          if (this.#shuttingDown) return;
           try {
             const result = await agent.recoverActiveRuns();
             for (const run of result.recovered) {
@@ -4396,7 +4401,7 @@ export class Mastra<
               error,
             });
           }
-        }
+        });
 
         return { agents: durableAgents.length, recovered, succeeded, failed, skipped };
       })(),
@@ -4421,10 +4426,11 @@ export class Mastra<
   }
 
   /**
-   * Re-check a run another execution drove when it was skipped, once that
-   * execution's claim could have lapsed. Runs this process drives carry no
-   * `retryAt` and are not re-checked. A re-check that throws is retried with
-   * backoff; `failures` counts the consecutive ones.
+   * Re-check skipped runs after a foreign claim could have lapsed or a
+   * recovery wait timed out. Timed-out originals keep their ownership and
+   * defer rechecks until settlement without starting duplicate executions.
+   * A re-check that throws is retried with backoff; `failures` counts the
+   * consecutive ones.
    */
   #scheduleDurableRecoveryRecheck(
     agent: DurableAgentLike,

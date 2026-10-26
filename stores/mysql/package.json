@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mysql",
-  "version": "0.14.0-alpha.1",
+  "version": "0.14.0",
   "description": "MySQL provider for Mastra - db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "mysql2": "^3.24.4"
+    "mysql2": "^3.24.6"
   },
   "devDependencies": {
     "@internal/core": "workspace:*",
@@ -40,10 +40,10 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

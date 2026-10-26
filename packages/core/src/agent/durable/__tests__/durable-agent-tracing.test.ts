@@ -84,6 +84,7 @@ describe('DurableAgent observability tracing', () => {
       }),
       update: vi.fn(),
       exportSpan: vi.fn(() => ({ id: span.id, type })),
+      snapshot: vi.fn(() => ({ id: span.id, type })),
       getParentSpanId: vi.fn(() => parentSpan?.id),
       findParent: vi.fn(function (this: any, spanType: string) {
         let current: any = this.parent;
@@ -343,6 +344,38 @@ describe('DurableAgent observability tracing', () => {
       const agentSpan = agentSpans[0];
       const childSpanTypes = agentSpan.createChildSpan.mock.calls.map((call: any[]) => call[0]?.type);
       expect(childSpanTypes).toContain('model_generation');
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('falls back to exportSpan() when the span has no snapshot() (older @mastra/observability)', async () => {
+    const { spy, agentSpans } = await spyOnSpans();
+    const original = spy.getMockImplementation()!;
+    const stripSnapshot = (span: any) => {
+      delete span.snapshot;
+      const createChildSpan = span.createChildSpan;
+      span.createChildSpan = vi.fn((opts: any) => stripSnapshot(createChildSpan(opts)));
+      return span;
+    };
+    spy.mockImplementation((opts: any) => stripSnapshot(original(opts)));
+
+    try {
+      const baseAgent = new Agent({
+        id: 'trace-agent',
+        name: 'Trace Agent',
+        instructions: 'You are a test assistant',
+        model: createTextStreamModel('Hello') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, cleanup } = await durableAgent.stream('Hi');
+      await output.consumeStream();
+
+      expect(agentSpans.length).toBe(1);
+      expect(agentSpans[0].exportSpan).toHaveBeenCalled();
 
       cleanup();
     } finally {

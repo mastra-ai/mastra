@@ -96,9 +96,11 @@ export {
   runResumeDurableStreamUntilIdle,
   type DurableStreamUntilIdleDeps,
 } from './durable-stream-until-idle';
+export { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
+export { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 
 // Run registry for non-serializable state
 export {
@@ -108,6 +110,7 @@ export {
   getRunRegistryEntry,
   setRunRegistryEntry,
   deleteRunRegistryEntry,
+  takeRunScorerInstances,
   type ExtendedRunRegistryEntry,
 } from './run-registry';
 

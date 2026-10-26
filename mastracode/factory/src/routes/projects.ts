@@ -163,7 +163,7 @@ interface ModelApplySession {
 }
 
 interface ModelApplyController {
-  getSessionByResource: (resourceId: string) => Promise<ModelApplySession | undefined>;
+  getSession: (sessionId: string) => Promise<ModelApplySession | undefined>;
 }
 
 export interface ProjectRoutesDeps extends RouteDependencies {
@@ -659,7 +659,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               skipped.push({ threadId: binding.threadId, reason: 'stage-inactive' });
               continue;
             }
-            const session = await controller.getSessionByResource(binding.resourceId);
+            const session = await controller.getSession(binding.sessionId);
             if (!session) {
               skipped.push({ threadId: binding.threadId, reason: 'not-running' });
               continue;

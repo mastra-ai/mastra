@@ -157,6 +157,10 @@ export const toolIdPathParams = z.object({
   toolId: z.string().describe('Unique identifier for the tool'),
 });
 
+export const agentRunPathParams = agentIdPathParams.extend({
+  runId: z.string().min(1).describe('Unique identifier for the agent run'),
+});
+
 export const agentToolPathParams = agentIdPathParams.extend({
   toolId: z.string().describe('Unique identifier for the tool'),
 });
@@ -313,6 +317,7 @@ export const providerSchema = z.object({
   connected: z.boolean(),
   docUrl: z.string().optional(),
   models: z.array(z.string()),
+  modelReleaseDates: z.record(z.string(), z.string()).optional(),
 });
 
 /**
@@ -524,6 +529,8 @@ const toolCallActionBodySchema = z.object({
   format: z.string().optional(),
   providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
   modelSettings: typedPermissive<ModelSettings>(z.unknown()).optional(),
+  // Client tools must be re-sent on resume so the model can call them after the approval decision.
+  clientTools: typedPermissive<ToolsInput>(z.record(z.string(), z.unknown())).optional(),
 });
 const networkToolCallActionBodySchema = z.object({
   runId: z.string(),

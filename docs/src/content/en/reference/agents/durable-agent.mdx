@@ -146,7 +146,7 @@ Returns: `DurableAgent`
 
 ## `createEventedAgent(options)`
 
-Wraps an `Agent` with fire-and-forget durable execution on the built-in evented workflow engine. Like `createDurableAgent`, it returns a result you stream from, but the run is started without being awaited: execution is driven by events on the Mastra instance's PubSub, so the run progresses independently of the caller. Register the agent on a `Mastra` instance with storage to get evented execution; without one, the agent falls back to the default in-process engine and logs a warning. It doesn't accept `id` or `name` overrides.
+Wraps an `Agent` with fire-and-forget durable execution on the built-in evented workflow engine. Like `createDurableAgent`, it returns a result you stream from, but the run is started without being awaited: events on the Mastra instance's PubSub drive execution independently of the caller. Register the agent on a `Mastra` instance with storage to get evented execution; without one, the agent falls back to the default in-process engine and logs a warning. It doesn't accept `id` or `name` overrides.
 
 ```typescript
 import { createEventedAgent } from '@mastra/core/agent/durable'
@@ -313,7 +313,9 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 
 Reconnects to an existing run. Use this after a network disconnection. For the supported general reconnect flow, omit `offset` to replay all available cached events before receiving live events.
 
-When observing from another process, the observing agent must have the same `id` as the agent that started the run. If the persisted run belongs to an agent with a different ID, `observe()` throws `DURABLE_AGENT_OBSERVE_AGENT_MISMATCH`, matching the ownership checks in `resume()` and `recover()`.
+The observing agent must have the same effective `id` as the agent that started the run, both for live observations in the same process and for persisted observations from another process. The effective ID is the DurableAgent's `id`, including any ID override, rather than the wrapped agent's original ID. Different DurableAgent instances with the same effective ID can observe the same run.
+
+If the live or persisted run identifies a different owner agent ID, `observe()` throws `DURABLE_AGENT_OBSERVE_AGENT_MISMATCH`. Legacy live entries without owner metadata retain their existing behavior.
 
 For runs configured with `structuredOutput`, an observer in another process reconstructs `output.object` from the persisted schema and replayed text.
 
@@ -325,7 +327,7 @@ const { output } = await durableAgent.observe(runId, {
 await output.text
 ```
 
-The `offset` option is an inclusive, zero-based PubSub event index. It counts every cached event published to the run topic, including lifecycle events, so it isn't a chunk count. Public stream chunks and callbacks don't expose the PubSub index. Only pass an offset when another integration already tracks the transport position.
+The `offset` option is an inclusive, zero-based PubSub event index. It counts every cached event published to the run topic, including lifecycle events, rather than counting chunks. This transport index is unavailable through public stream chunks and callbacks. Only pass an offset when another integration already tracks the transport position.
 
 A non-zero offset can skip earlier events. Aggregated values are built only from chunks delivered to that observer. If the offset skips earlier text deltas, `output.text` is partial and structured output may be incomplete or fail validation or parsing.
 
@@ -389,7 +391,7 @@ const { runId } = await durableAgent.stream('Summarize the document')
 durableAgent.abortRunStream(runId)
 ```
 
-The abort request is published over PubSub, so a multi-process deployment needs a shared backend such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams). The default `EventEmitterPubSub` only reaches runs in the same process. `InngestAgent` doesn't implement this method. Cancel an Inngest run with the `abort()` returned by its `stream()`.
+Publishing the abort request over PubSub requires a shared backend in a multi-process deployment, such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams). The default `EventEmitterPubSub` only reaches runs in the same process. `InngestAgent` doesn't implement this method. Cancel an Inngest run with the `abort()` returned by its `stream()`.
 
 Stopping a durable run through `abortRunStream()` or `abortThreadStream()` requires `@mastra/core@1.62.0` or later. Earlier versions record the abort without stopping the run.
 
@@ -497,7 +499,9 @@ interface DurableAgentListActiveRunsResult {
 
 Discovers runs stuck in `running` status for this agent and re-drives them from the last persisted snapshot. Accepts the same filters and pagination as `listActiveRuns()`, plus `runId`. Returns the outcome for each run.
 
-Attempts run serially. Each attempt has a single 30-second wait budget covering both `recover()` setup and settlement of the whole recovered workflow. When the budget expires, recovery moves to the next run and returns `status: 'skipped'` with `reason: 'recovery-timeout'` and no `retryAt`. The timeout doesn't cancel setup or execution, release a live claim, or count as success or failure. The attempt continues in the background, and its eventual outcome doesn't change the returned results. Mastra doesn't automatically retry a timed-out attempt.
+Up to five run waits proceed concurrently, with results returned in discovery order. Each attempt has a single 30-second wait budget covering both `recover()` setup and settlement of the whole recovered workflow. When the budget expires, another run can use the slot. The timeout returns `status: 'skipped'` with `reason: 'recovery-timeout'` and `retryAt` set 30 seconds ahead, without canceling setup or execution, releasing a live claim, or counting as success or failure. The attempt continues in the background, and its eventual outcome doesn't change the returned results. The concurrency limit bounds waiting, not live executions.
+
+[`mastra.recoverAllDurableAgents()`](/reference/core/mastra-class#recoveralldurableagents) schedules timeout re-checks automatically. Direct callers of `recoverActiveRuns()` must schedule their own calls after `retryAt`. While the original bulk attempt remains pending, re-checks defer with another `recovery-timeout` and a future `retryAt`, without invoking `recover()` again. Once it settles, recovery checks the persisted snapshot and ownership before retrying. Finished or suspended runs aren't restarted.
 
 The budget applies only to each run attempt in `recoverActiveRuns()`, not to discovery, a direct `recover()` call, or overridden custom recovery methods. When shutdown begins, recovery stops dispatching new runs. The original attempt remains tracked for Mastra's shared shutdown drain even after the wait times out.
 
@@ -519,14 +523,14 @@ Pass a `runId` to recover a single known run:
 await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 ```
 
-A run that another execution still drives isn't taken over. Its entry has `status: 'skipped'` and a `reason`, and `recoverActiveRuns()` doesn't check it again. For a run held by another process, `retryAt` is the time after which that claim lapses unless renewed. Call `recoverActiveRuns({ runId })` after it to recover the run if its process crashed. [`mastra.recoverAllDurableAgents()`](/reference/core/mastra-class#recoveralldurableagents) schedules these re-checks itself.
+For a run that another execution still drives, `recoverActiveRuns()` returns `status: 'skipped'` and a `reason`, leaving that execution in control. Checking the run again requires a separate call. For a run held by another process, `retryAt` is the time after which that claim lapses unless renewed. Call `recoverActiveRuns({ runId })` after it to recover the run if its process crashed. [`mastra.recoverAllDurableAgents()`](/reference/core/mastra-class#recoveralldurableagents) schedules these re-checks itself.
 
 | `reason` | Meaning |
 | - | - |
 | `run-active` | Another execution, possibly in another process, holds the run. Sets `retryAt`. |
 | `run-active-locally` | This process is executing the run. |
 | `already-in-progress` | This process is already recovering the run. |
-| `recovery-timeout` | The 30-second wait budget expired. The attempt continues in the background, with no `retryAt` or automatic retry. |
+| `recovery-timeout` | The wait expired or an earlier bulk recovery attempt is still pending. Sets `retryAt` without duplicating the pending attempt on re-checks. |
 
 Returns:
 
@@ -781,7 +785,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     type: "AgentExecutionOptions['delegation']",
     isOptional: true,
     description:
-      'Sub-agent delegation hooks (`onDelegationStart`, `onDelegationComplete`, `messageFilter`). Callbacks are baked into the sub-agent tool wrappers at prepare time. Cross-process resumes lose the callbacks.',
+      "Sub-agent delegation hooks (`onDelegationStart`, `onDelegationComplete`, `messageFilter`). Callbacks passed per call are baked into the sub-agent tool wrappers at prepare time, and cross-process resumes lose them, so a fresh worker falls back to default delegation behavior. Hooks configured in the agent's `defaultOptions.delegation` are merged back in when recovery rebuilds tools, so put hooks that must survive a restart there.",
   },
   {
     name: 'versions',

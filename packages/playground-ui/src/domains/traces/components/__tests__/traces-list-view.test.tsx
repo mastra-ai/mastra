@@ -44,6 +44,9 @@ beforeAll(() => {
   }
   globalThis.ResizeObserver = ResizeObserverStub;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600));
+  // The virtualizer sizes its scroll container from clientWidth/clientHeight.
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
   // Base UI waits for the menu's exit animations; jsdom has no Web Animations API.
   Element.prototype.getAnimations ??= () => [];
 });
@@ -414,6 +417,26 @@ describe('TracesListView — empty and loading', () => {
 
     render(<TracesListView traces={[]} filtersApplied onTraceClick={vi.fn()} />);
     expect(screen.getByText('No traces found for applied filters')).toBeTruthy();
+  });
+
+  it('names spans in the empty messages of a span list', () => {
+    render(<TracesListView traces={[]} resource="spans" onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No spans found yet')).toBeTruthy();
+
+    cleanup();
+
+    render(<TracesListView traces={[]} resource="spans" filtersApplied onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No spans found for applied filters')).toBeTruthy();
+  });
+
+  it('names threads in the empty messages of a thread list', () => {
+    render(<TracesListView traces={[]} resource="threads" onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No threads found yet')).toBeTruthy();
+
+    cleanup();
+
+    render(<TracesListView traces={[]} resource="threads" filtersApplied onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No threads found for applied filters')).toBeTruthy();
   });
 });
 
