@@ -5270,10 +5270,16 @@ export class DurableAgent<
       if (typeof stepIndex !== 'number') return;
       const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
       const starts = history.filter(
-        event => event.type === AgentStreamEventTypes.STEP_START && event.stepIndex === stepIndex,
+        event =>
+          (event.type === AgentStreamEventTypes.ITERATION_START || event.type === AgentStreamEventTypes.STEP_START) &&
+          event.stepIndex === stepIndex,
       );
       const latestGeneration = starts.at(-1)?.generation;
-      return starts.find(event => event.generation === latestGeneration)?.index;
+      return (
+        starts.find(
+          event => event.type === AgentStreamEventTypes.ITERATION_START && event.generation === latestGeneration,
+        ) ?? starts.find(event => event.generation === latestGeneration)
+      )?.index;
     } catch (error) {
       this.logger.warn(`[DurableAgent] recover(${runId}) couldn't locate the uncheckpointed stream tail`, { error });
     }
@@ -5297,7 +5303,17 @@ export class DurableAgent<
   ): Promise<Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent'>> {
     try {
       const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
-      const keepReplayEvent = createSupersededEventFilter(history);
+      const initialFilter = createSupersededEventFilter(history);
+      let refreshedFilter: Promise<typeof initialFilter> | undefined;
+      // Subscription can replay a newer claim than the snapshot above. Read the
+      // log again before delivering its first event, while deliveries are ordered.
+      const keepReplayEvent = async (event: AgentStreamEvent) => {
+        refreshedFilter ??= this.pubsub
+          .getHistory(AGENT_STREAM_TOPIC(runId), 0)
+          .then(entries => createSupersededEventFilter(entries as AgentStreamEvent[]))
+          .catch(() => initialFilter);
+        return (await refreshedFilter)(event);
+      };
       if (!offset) return { keepReplayEvent };
       const skipped = history.slice(0, offset);
       if (skipped.length === offset) {
@@ -5424,7 +5440,12 @@ export class DurableAgent<
 
     const deliver = (event: AgentStreamEvent) => {
       activityVersion++;
-      if (!subscribed || event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
+      if (
+        !subscribed ||
+        event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED ||
+        event.type === AgentStreamEventTypes.ITERATION_START
+      )
+        return;
       // `index` is log bookkeeping, not part of the client payload: the observe
       // route forwards events verbatim, so keep the payload exactly what
       // pre-#27352 clients already receive.
@@ -5437,17 +5458,10 @@ export class DurableAgent<
     };
     // Acks every delivery, dropped ones included, so a durable backend doesn't
     // keep them pending.
-    const callback = withAck(event => {
+    const callback = withAck(async event => {
       const streamEvent = event as unknown as AgentStreamEvent;
-      if (replayFloor.keepReplayEvent && !replayFloor.keepReplayEvent(streamEvent)) return;
-      const keep = keepGeneration(streamEvent);
-      if (typeof keep === 'boolean') {
-        if (keep) deliver(streamEvent);
-        return;
-      }
-      return keep.then(kept => {
-        if (kept) deliver(streamEvent);
-      });
+      if (replayFloor.keepReplayEvent && !(await replayFloor.keepReplayEvent(streamEvent))) return;
+      if (await keepGeneration(streamEvent)) deliver(streamEvent);
     });
 
     await (options.offset !== undefined

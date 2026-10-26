@@ -675,9 +675,11 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
         expect(originalGeneration).toEqual(expect.any(Number));
+        // The real LLM execution boundary precedes any model or processor output.
+        const history = await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        const abandonedStartAt = history.findLast(event => event.type === AgentStreamEventTypes.ITERATION_START)?.index;
+        expect(abandonedStartAt).toEqual(expect.any(Number));
         // Simulate a model step published before its result was checkpointed.
-        const abandonedStartAt = (await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0))
-          .length;
         await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
           type: AgentStreamEventTypes.STEP_START,
           runId,

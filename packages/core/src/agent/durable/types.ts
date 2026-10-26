@@ -600,6 +600,7 @@ export interface DurableAgenticLoopOutput {
  */
 export type AgentStreamEventType =
   | 'chunk'
+  | 'iteration-start'
   | 'step-start'
   | 'step-finish'
   | 'finish'
@@ -623,7 +624,7 @@ export interface AgentStreamEvent<T = unknown> {
   producedAt?: number;
   /** Claim generation of the execution that published the event. See {@link Event.generation}. */
   generation?: number;
-  /** Persisted model iteration number for a step-start event, used to identify a recovery's replay boundary. */
+  /** Persisted model iteration number for an iteration-start or step-start event. */
   stepIndex?: number;
   /**
    * Position of this event in its run topic's log. Only present on events read

@@ -210,7 +210,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    */
   rereadMinGeneration?: () => Promise<number | undefined>;
   /** Reject events in uncheckpointed tails superseded before this reader attached. */
-  keepReplayEvent?: (event: AgentStreamEvent) => boolean;
+  keepReplayEvent?: (event: AgentStreamEvent) => boolean | Promise<boolean>;
   /**
    * If set, terminate the stream when no pubsub event arrives for this many ms
    * AND the run is not alive (see `isAlive`). A durable run whose driving process
@@ -552,7 +552,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
     // Parse the event data as AgentStreamEvent
     const streamEvent = event as unknown as AgentStreamEvent;
-    if (keepReplayEvent && !keepReplayEvent(streamEvent)) return;
+    if (keepReplayEvent && !(await keepReplayEvent(streamEvent))) return;
 
     // Another execution took the run over: what the superseded one still
     // publishes is stale, and doesn't prove the run's producer is alive.
@@ -1114,6 +1114,17 @@ export async function emitOwnershipClaimedEvent(
     runId,
     data: supersededFrom === undefined ? {} : { supersededFrom },
     generation,
+  });
+}
+
+/** Mark the start of an execution attempt before it can publish any chunks. */
+export async function emitIterationStartEvent(pubsub: PubSub, runId: string, stepIndex: number): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+    type: AgentStreamEventTypes.ITERATION_START,
+    runId,
+    data: {},
+    stepIndex,
+    ...generationTag(runId),
   });
 }
 
