@@ -10,6 +10,7 @@ import type {
   TokenUsage,
   WireDisplayState,
 } from '@mastra/core/agent-controller';
+import { toPersistedErrorIdentity } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
@@ -627,47 +628,18 @@ function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentC
 
 /**
  * An `Error`'s `message`/`name` are non-enumerable, so flatten it before JSON
- * serialization. Compact message updates and ends are already JSON-safe and
- * pass through unchanged; only `message_start` carries a message snapshot.
+ * serialization, into the same identity a saved error part keeps. Compact
+ * message updates and ends are already JSON-safe and pass through unchanged;
+ * only `message_start` carries a message snapshot.
  */
 function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
   if ('displayState' in event) {
     return { ...event, displayState: toWireDisplayState(event.displayState) };
   }
   if (carriesError(event)) {
-    return { ...event, error: toWireError(event.error) };
+    return { ...event, error: toPersistedErrorIdentity(event.error) };
   }
   return event;
-}
-
-type WireError = Extract<JsonReadyAgentControllerEvent, { type: 'error' }>['error'];
-type ProviderCallError = Error & { statusCode?: unknown; responseBody?: unknown; responseHeaders?: unknown };
-
-const MAX_WIRE_RESPONSE_BODY_LENGTH = 2000;
-const REQUEST_ID_HEADERS = ['request-id', 'x-request-id'];
-
-/** Keeps what core saves on an error part, so a live error reads the same as a reloaded one. */
-function toWireError(error: ProviderCallError): WireError {
-  const wire: WireError = { name: error.name, message: error.message };
-  if (typeof error.statusCode === 'number' && Number.isInteger(error.statusCode)) wire.statusCode = error.statusCode;
-  if (typeof error.responseBody === 'string' && error.responseBody.trim()) {
-    wire.responseBody =
-      error.responseBody.length > MAX_WIRE_RESPONSE_BODY_LENGTH
-        ? `${error.responseBody.slice(0, MAX_WIRE_RESPONSE_BODY_LENGTH)}…`
-        : error.responseBody;
-  }
-  const requestId = readRequestId(error.responseHeaders);
-  if (requestId) wire.requestId = requestId;
-  return wire;
-}
-
-function readRequestId(headers: unknown): string | undefined {
-  if (!headers || typeof headers !== 'object') return undefined;
-  for (const header of REQUEST_ID_HEADERS) {
-    const value = (headers as Record<string, unknown>)[header];
-    if (typeof value === 'string' && value.trim()) return value.trim();
-  }
-  return undefined;
 }
 
 export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({

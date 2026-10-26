@@ -1287,7 +1287,7 @@ describe('agent-controller routes', () => {
       expect(received.errorType).toBe('provider');
     });
 
-    it('carries the provider status, body and request id a saved error keeps', async () => {
+    it('carries the same provider details, codes and reason a saved error keeps', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
       const session = await controller.createSession({
@@ -1326,6 +1326,8 @@ describe('agent-controller routes', () => {
         statusCode: 403,
         responseBody,
         requestId: 'req_123',
+        codes: ['permission_error'],
+        reason: 'Your API key does not have permission.',
       });
     });
 

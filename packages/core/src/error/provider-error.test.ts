@@ -1,11 +1,21 @@
-import { getErrorFromUnknown } from '@mastra/core/error';
+import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 
-import { classifyProviderError, providerErrorReason } from './provider-error';
+import { MAX_PERSISTED_RESPONSE_BODY_LENGTH } from '../loop/shared/provider-error-details';
+import { toPersistedErrorIdentity } from '../loop/shared/record-terminal-error-message';
+import { classifyProviderError, providerErrorFacts, providerErrorReason } from './provider-error';
 import type { ProviderFailureKind } from './provider-error';
+import { getErrorFromUnknown } from './utils';
 
 function apiError(statusCode: number, message: string, responseBody?: string, data?: unknown) {
-  return Object.assign(new Error(message), { name: 'AI_APICallError', statusCode, responseBody, data });
+  return new APICallError({
+    message,
+    url: 'https://api.example.com/v1/chat',
+    requestBodyValues: {},
+    statusCode,
+    responseBody,
+    data,
+  });
 }
 
 const responsesServerErrorFrame = {
@@ -192,14 +202,13 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     'quota',
   ],
   [
-    'saved identity whose sentence sits in the body',
+    'persisted identity whose reason came from the body',
     {
       name: 'AI_APICallError',
       message: 'Bad Request',
       statusCode: 400,
-      responseBody: JSON.stringify({
-        error: { type: 'invalid_request_error', message: 'prompt is too long: 210345 tokens > 200000 maximum' },
-      }),
+      code: 'invalid_request_error',
+      reason: 'prompt is too long: 210345 tokens > 200000 maximum',
     },
     'context_overflow',
   ],
@@ -315,14 +324,12 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     'quota',
   ],
   [
-    'saved identity whose body names the model',
+    'saved facts that kept every code',
     {
       name: 'AI_APICallError',
       message: 'Bad Request',
       statusCode: 404,
-      responseBody: JSON.stringify({
-        error: { type: 'invalid_request_error', code: 'model_not_found', message: 'Request rejected.' },
-      }),
+      codes: ['model_not_found', 'invalid_request_error'],
     },
     'model_rejected',
   ],
@@ -457,6 +464,122 @@ describe('classifyProviderError', () => {
   });
 });
 
+describe('toPersistedErrorIdentity', () => {
+  it.each(classifications)('classifies %s like the live error, as %s', (_name, error, kind) => {
+    expect(classifyProviderError(toPersistedErrorIdentity(error))).toBe(kind);
+  });
+
+  it('keeps the ordinary identity of an error whose reason points back at itself', () => {
+    const circular: Error & { statusCode: number; reason?: unknown } = Object.assign(
+      new Error('Provider rejected the request'),
+      { statusCode: 400 },
+    );
+    circular.reason = circular;
+    expect(toPersistedErrorIdentity(circular)).toEqual({
+      name: 'Error',
+      message: 'Provider rejected the request',
+      statusCode: 400,
+    });
+    expect(classifyProviderError(circular)).toBe('invalid_request');
+  });
+
+  it('keeps the provider sentence that sits behind a wrapping cause', () => {
+    const wrapped = new Error('Model call failed', { cause: apiError(400, 'prompt is too long: 1 > 0 maximum') });
+
+    expect(toPersistedErrorIdentity(wrapped)).toEqual({
+      name: 'Error',
+      message: 'Model call failed',
+      statusCode: 400,
+      reason: 'prompt is too long: 1 > 0 maximum',
+    });
+  });
+
+  it('leaves a cause that holds no provider response out of history', () => {
+    const wrapped = new Error('Tool failed', { cause: new Error('ENOENT: open /Users/me/.config/acme/token.json') });
+
+    expect(toPersistedErrorIdentity(wrapped)).toEqual({ name: 'Error', message: 'Tool failed' });
+  });
+});
+
+describe('providerErrorFacts', () => {
+  it('keeps the status and every provider code, once each, in the order found', () => {
+    const error = apiError(429, 'quota', undefined, {
+      error: { type: 'insufficient_quota', code: 'insufficient_quota' },
+    });
+    expect(providerErrorFacts(error)).toEqual({ statusCode: 429, codes: ['insufficient_quota'] });
+    expect(providerErrorFacts({ type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } })).toEqual({
+      codes: ['rate_limit_error'],
+      reason: 'slow down',
+    });
+    expect(providerErrorFacts({ error: { code: 429, status: 'RESOURCE_EXHAUSTED' } })).toEqual({
+      statusCode: 429,
+      codes: ['RESOURCE_EXHAUSTED'],
+    });
+    expect(
+      providerErrorFacts({
+        type: 'response.failed',
+        response: { status: 'failed', error: { code: 'server_error', message: 'An internal error occurred.' } },
+      }),
+    ).toEqual({ codes: ['server_error'], reason: 'An internal error occurred.' });
+    expect(
+      providerErrorFacts({ code: 'bad_request', type: 'invalid_request_error', message: 'Invalid timeout' }),
+    ).toEqual({ codes: ['bad_request', 'invalid_request_error'] });
+    expect(
+      providerErrorFacts({ type: 'invalid_request_error', code: 'model_not_found', message: 'Request rejected.' }),
+    ).toEqual({ codes: ['model_not_found', 'invalid_request_error'] });
+    expect(
+      providerErrorFacts(
+        Object.assign(new Error('Upstream call failed'), {
+          code: 'upstream_failure',
+          cause: responsesServerErrorFrame,
+        }),
+      ),
+    ).toEqual({ codes: ['upstream_failure', 'internal_error', 'server_error'] });
+  });
+
+  it('keeps the body sentence as the reason when the message is only an HTTP phrase', () => {
+    const bodyOnly = apiError(
+      400,
+      'Bad Request',
+      JSON.stringify({ error: { type: 'invalid_request_error', message: 'prompt is too long: 1 > 0 maximum' } }),
+    );
+    expect(providerErrorFacts(bodyOnly)).toEqual({
+      statusCode: 400,
+      codes: ['invalid_request_error'],
+      reason: 'prompt is too long: 1 > 0 maximum',
+    });
+    expect(providerErrorFacts(apiError(400, 'prompt is too long: 1 > 0 maximum'))).toEqual({ statusCode: 400 });
+  });
+
+  it('keeps a detail sentence as the reason and a non-JSON body out of history', () => {
+    expect(
+      providerErrorFacts(apiError(400, 'Bad Request', '{"detail":"You have exceeded your usage limit for Codex"}')),
+    ).toEqual({ statusCode: 400, reason: 'You have exceeded your usage limit for Codex' });
+    expect(
+      providerErrorFacts(apiError(400, 'Bad Request', 'prompt is too long: 210345 tokens > 200000 maximum')),
+    ).toEqual({ statusCode: 400 });
+  });
+
+  it('never persists a bare HTTP phrase as the reason, wherever it sits', () => {
+    for (const phrase of ['Internal Server Error', 'Unauthorized', 'Not Implemented', 'HTTP Version Not Supported']) {
+      expect(providerErrorFacts({ name: 'AI_APICallError', message: 'Request failed', data: phrase })).toEqual({});
+      expect(providerErrorFacts(Object.assign(new Error('Request failed'), { cause: new Error(phrase) }))).toEqual({});
+    }
+  });
+
+  it('caps a long provider reason before it reaches history', () => {
+    const essay = 'x'.repeat(MAX_PERSISTED_RESPONSE_BODY_LENGTH + 500);
+    const { reason } = providerErrorFacts(apiError(400, 'Bad Request', JSON.stringify({ error: { message: essay } })));
+
+    expect(reason).toBe(`${essay.slice(0, MAX_PERSISTED_RESPONSE_BODY_LENGTH)}…`);
+  });
+
+  it('returns no keys for an error without provider facts', () => {
+    expect(providerErrorFacts(new Error('boom'))).toEqual({});
+    expect(providerErrorFacts('boom')).toEqual({});
+  });
+});
+
 describe('providerErrorReason', () => {
   it('unwraps envelopes and stringified layers down to the provider sentence', () => {
     const nested = JSON.stringify({
@@ -477,20 +600,5 @@ describe('providerErrorReason', () => {
         message: '{"error":{"type":"invalid_request_error","message":"Bad Request"}}',
       }),
     ).toBeUndefined();
-  });
-
-  it('reads the provider sentence behind a wrapping cause, and no other cause', () => {
-    const modelCall = new Error('Model call failed', { cause: apiError(400, 'prompt is too long: 1 > 0 maximum') });
-    const toolCall = new Error('Tool failed', { cause: new Error('ENOENT: open /Users/me/.config/acme/token.json') });
-
-    expect(providerErrorReason(modelCall)).toBe('prompt is too long: 1 > 0 maximum');
-    expect(providerErrorReason(toolCall)).toBe('Tool failed');
-  });
-
-  it('caps a long provider sentence', () => {
-    const essay = 'x'.repeat(2500);
-    const error = apiError(400, 'Bad Request', JSON.stringify({ error: { message: essay } }));
-
-    expect(providerErrorReason(error)).toBe(`${essay.slice(0, 2000)}…`);
   });
 });

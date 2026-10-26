@@ -1,5 +1,7 @@
-// Reads an APICallError, a raw stream error frame, a cause chain or the saved
-// `{ name, message, statusCode?, responseBody? }` identity. The status and symbolic codes are the provider's
+import { capPersistedText } from '../loop/shared/provider-error-details';
+
+// Reads an APICallError, a raw stream error frame, a cause chain or the persisted
+// `{ name, message, statusCode?, code? }` identity. The status and symbolic codes are the provider's
 // verdict; wording only narrows an invalid request, or speaks when the provider named nothing.
 export type ProviderFailureKind =
   | 'auth'
@@ -13,7 +15,13 @@ export type ProviderFailureKind =
   | 'invalid_request'
   | 'unknown';
 
-const MAX_REASON_LENGTH = 2000;
+export interface ProviderErrorFacts {
+  statusCode?: number;
+  codes?: string[];
+  /** The innermost sentence behind HTTP phrases, envelopes, stringified layers and a wrapped provider response, when it differs from the message. */
+  reason?: string;
+}
+
 const MAX_OBJECT_DEPTH = 4;
 const ENVELOPE_TYPES = new Set(['error', 'response.failed']);
 const SYMBOLIC_STATUS = /^[A-Z][A-Z0-9_]+$/;
@@ -100,7 +108,9 @@ function collect(value: unknown, facts: CollectedFacts, depth: number): void {
   // Google's symbolic `error.status` names the failure; a lifecycle `status: 'failed'` names nothing.
   const status = readField(value, 'status');
   if (typeof status === 'string' && SYMBOLIC_STATUS.test(status.trim())) facts.codes.push(status.trim());
-  for (const candidate of [code, readField(value, 'type')]) {
+  const saved = readField(value, 'codes');
+  const savedCodes = Array.isArray(saved) ? saved : [];
+  for (const candidate of [code, readField(value, 'type'), ...savedCodes]) {
     if (typeof candidate === 'string' && candidate.trim() && !ENVELOPE_TYPES.has(candidate))
       facts.codes.push(candidate);
   }
@@ -183,10 +193,24 @@ function transientKindFromWording(evidence: string): ProviderFailureKind | undef
   return undefined;
 }
 
+/** The JSON-safe facts worth carrying next to a failure's name and message, on the wire and in history. */
+export function providerErrorFacts(error: unknown): ProviderErrorFacts {
+  const facts = collectFacts(error);
+  const result: ProviderErrorFacts = {};
+  if (facts.statusCode !== undefined) result.statusCode = facts.statusCode;
+  const codes = [...new Set(facts.codes)];
+  if (codes.length > 0) result.codes = codes;
+  const message = typeof error === 'object' && error !== null ? readField(error, 'message') : error;
+  const reason = innermostReason(error, 0);
+  if (reason !== undefined && reason !== (typeof message === 'string' ? message.trim() : undefined))
+    result.reason = capPersistedText(reason);
+  return result;
+}
+
 /** The innermost sentence a provider wrote for a person, unwrapped from envelopes, stringified layers and a wrapped provider response. */
 export function providerErrorReason(error: unknown): string | undefined {
   const reason = innermostReason(error, 0);
-  return reason === undefined || reason.length <= MAX_REASON_LENGTH ? reason : `${reason.slice(0, MAX_REASON_LENGTH)}…`;
+  return reason === undefined ? undefined : capPersistedText(reason);
 }
 
 function innermostReason(error: unknown, depth: number): string | undefined {
