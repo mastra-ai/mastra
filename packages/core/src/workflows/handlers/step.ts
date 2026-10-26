@@ -39,6 +39,7 @@ import {
   validateStepStateData,
   validateStepRequestContext,
 } from '../utils';
+import { omitForeachProgress } from './foreach-progress';
 
 export interface ExecuteStepParams extends ObservabilityContext {
   workflowId: string;
@@ -186,7 +187,7 @@ export async function executeStep(
   const stepInfo = {
     // Drop prior completion/suspend fields so they cannot linger across re-entry
     // (e.g. suspendPayload/suspendedAt after resume, or startedAt > suspendedAt on loops).
-    ...omitPriorCompletionFields((stepResults[step.id] ?? {}) as Record<string, unknown>),
+    ...omitForeachProgress(omitPriorCompletionFields((stepResults[step.id] ?? {}) as Record<string, unknown>)),
     ...(hasResumeData ? { resumePayload: resumeDataToUse } : { payload: inputData, resumePayload: undefined }),
     // Keep the suspend payload while the resumed step runs so a restart after a crash still sees it.
     ...(hasResumeData && stepResults[step.id]?.suspendPayload !== undefined
@@ -234,21 +235,28 @@ export async function executeStep(
     skipEmits,
   });
 
-  await engine.persistStepUpdate({
-    workflowId,
-    runId,
-    resourceId,
-    serializedStepGraph,
-    stepResults: {
-      ...stepResults,
-      [step.id]: stepInfo,
-    } as Record<string, StepResult<any, any, any, any>>,
-    executionContext,
-    workflowStatus: 'running',
-    requestContext,
-    phase: 'start',
-    recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
-  });
+  // Foreach items do not write their own start snapshot when the foreach checkpoints its
+  // progress: the foreach writes it once, throttled, instead of one growing full snapshot
+  // per item (#26214). Engines that replay durable operations (Inngest) keep the write.
+  const skipStartWrite = executionContext.foreachIndex !== undefined && !engine.requiresDurableContextSerialization();
+
+  if (!skipStartWrite) {
+    await engine.persistStepUpdate({
+      workflowId,
+      runId,
+      resourceId,
+      serializedStepGraph,
+      stepResults: {
+        ...stepResults,
+        [step.id]: stepInfo,
+      } as Record<string, StepResult<any, any, any, any>>,
+      executionContext,
+      workflowStatus: 'running',
+      requestContext,
+      phase: 'start',
+      recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
+    });
+  }
 
   // The store refused the start write because another process canceled the run.
   // Stop here so loop and foreach iterations don't keep running the step body.

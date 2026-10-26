@@ -1,3 +1,4 @@
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -71,7 +72,13 @@ export function SandboxBlock({
   onSave: SaveEnvironment;
 }) {
   const saveSetting = (key: string, value: unknown | null) => onSave({ settings: { [key]: value } });
-  return schemaProperties(environment.sandbox.settingsSchema).map(([key, schema]) => (
+  const properties = schemaProperties(environment.sandbox.settingsSchema);
+  const effective = (key: string) =>
+    environment.settings[key] ?? properties.find(([name]) => name === key)?.[1].default;
+  const memoryMb = effective('memoryMb');
+  const dockerLowMemory =
+    effective('docker') === true && typeof memoryMb === 'number' && memoryMb < DOCKER_MIN_MEMORY_MB;
+  const rows = properties.map(([key, schema]) => (
     <SettingRow
       key={key}
       name={key}
@@ -81,7 +88,21 @@ export function SandboxBlock({
       onCommit={value => saveSetting(key, value)}
     />
   ));
+  return (
+    <>
+      {rows}
+      {dockerLowMemory && (
+        <Notice variant="warning">
+          Docker is on with {memoryMb} MB of memory. E2B recommends at least 2 GB for Docker; containers may run out of
+          memory.
+        </Notice>
+      )}
+    </>
+  );
 }
+
+/** E2B's recommended minimum memory for sandboxes that run Docker. */
+const DOCKER_MIN_MEMORY_MB = 2048;
 
 function SettingRow({
   name,

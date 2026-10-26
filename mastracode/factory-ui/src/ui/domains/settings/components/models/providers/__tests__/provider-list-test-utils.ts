@@ -43,8 +43,15 @@ export async function saveKey(user: UserEvent, key: string) {
   await user.click(screen.getByRole('button', { name: 'Save' }));
 }
 
-export async function pickRowAction(user: UserEvent, provider: string, action: string) {
-  const trigger = within(rowFor(provider)).getByRole('button', { name: `${providerDisplayName(provider)} actions` });
+export async function pickRowAction(
+  user: UserEvent,
+  provider: string,
+  action: string,
+  container: HTMLElement = document.body,
+) {
+  const trigger = within(rowFor(provider, container)).getByRole('button', {
+    name: `${providerDisplayName(provider)} actions`,
+  });
   await waitFor(() => expect(trigger).toBeEnabled());
   await user.click(trigger);
   await user.click(await screen.findByRole('menuitem', { name: action }));

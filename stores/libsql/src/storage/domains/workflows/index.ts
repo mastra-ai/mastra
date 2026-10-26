@@ -17,7 +17,6 @@ import type {
   RunOwnershipRecord,
 } from '@mastra/core/storage';
 import {
-  isWorkflowRunStatus,
   createStorageErrorId,
   isRunFenceConflictError,
   mergeWorkflowStepResult,
@@ -511,7 +510,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       args: [workflowName, runId],
     });
     const status = result.rows?.[0]?.status;
-    return isWorkflowRunStatus(status) ? status : null;
+    return (status ?? null) as WorkflowRunStatus | null;
   }
 
   async loadWorkflowSnapshot({

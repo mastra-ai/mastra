@@ -129,6 +129,20 @@ async function initializeStorage(dbPath: string): Promise<void> {
 async function startAimock({ fixturePath }: { fixturePath?: string }): Promise<AimockHandle> {
   const mock = new LLMock({ port: 0 });
   if (fixturePath) mock.loadFixtureFile(fixturePath);
+  // Fixtures were written for aimock's original matching. Since 1.37.3
+  // `hasToolResult` only looks after the last user message (Mastra Code injects
+  // user-role context after tool results), and replay treats `turnIndex` as a
+  // tiebreaker rather than a gate. Restore both as whole-conversation predicates.
+  for (const fixture of mock.getFixtures()) {
+    const { hasToolResult, turnIndex, ...match } = fixture.match;
+    if (hasToolResult === undefined && turnIndex === undefined) continue;
+    fixture.match = {
+      ...match,
+      predicate: req =>
+        (hasToolResult === undefined || req.messages.some(message => message.role === 'tool') === hasToolResult) &&
+        (turnIndex === undefined || req.messages.filter(message => message.role === 'assistant').length === turnIndex),
+    };
+  }
   const seen = new Set<object>();
   mock.prependFixture({
     match: {

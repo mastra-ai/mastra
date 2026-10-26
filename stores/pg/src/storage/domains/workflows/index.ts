@@ -1,6 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  isWorkflowRunStatus,
   mergeWorkflowStepResult,
   assertWorkflowStepGuard,
   isWorkflowStepConflictError,
@@ -770,7 +769,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         [workflowName, runId],
       );
       const status = row?.status;
-      return isWorkflowRunStatus(status) ? status : null;
+      return (status ?? null) as WorkflowRunStatus | null;
     } catch (error) {
       throw new MastraError(
         {

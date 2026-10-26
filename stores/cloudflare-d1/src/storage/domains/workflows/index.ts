@@ -17,7 +17,6 @@ import type {
   TableRetentionPolicy,
 } from '@mastra/core/storage';
 import {
-  isWorkflowRunStatus,
   createStorageErrorId,
   ensureDate,
   isRunFenceConflictError,
@@ -390,7 +389,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
         first: true,
       });
       const status: unknown = row && !Array.isArray(row) ? row.status : undefined;
-      return isWorkflowRunStatus(status) ? status : null;
+      return (status ?? null) as WorkflowRunStatus | null;
     } catch (error) {
       throw new MastraError(
         {

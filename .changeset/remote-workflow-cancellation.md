@@ -17,5 +17,3 @@ const written = await store.persistWorkflowSnapshot({
 ```
 
 Added `loadWorkflowRunStatus()`, which reads only a run's status. Stores that don't override it fall back to loading the snapshot.
-
-Added `WORKFLOW_RUN_STATUSES` and `isWorkflowRunStatus()` to `@mastra/core/storage` so custom stores can validate stored run statuses against the same list the engine uses.

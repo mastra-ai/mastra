@@ -131,6 +131,29 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     return attemptedStatus !== 'canceled' && this.getLastPersistedStatus(runId) === 'canceled';
   }
 
+  /** Tail of each run's snapshot-write chain; see `serializeSnapshotWrite`. */
+  #snapshotWriteTails = new Map<string, Promise<void>>();
+
+  /**
+   * Runs one snapshot write for `runId` after every write already queued for that run
+   * has settled. Snapshot writes are full upserts, so concurrent writes from parallel
+   * arms or foreach items could otherwise land out of order and replace a newer
+   * checkpoint with an older one (#26214).
+   */
+  async serializeSnapshotWrite(runId: string, write: () => Promise<void>): Promise<void> {
+    const previous = this.#snapshotWriteTails.get(runId) ?? Promise.resolve();
+    const current = previous.then(write);
+    const tail = current.catch(() => {});
+    this.#snapshotWriteTails.set(runId, tail);
+    try {
+      await current;
+    } finally {
+      if (this.#snapshotWriteTails.get(runId) === tail) {
+        this.#snapshotWriteTails.delete(runId);
+      }
+    }
+  }
+
   /** Returns the current step's zero-based retry attempt, or zero outside an attempt. */
   getOrGenerateRetryCount(_stepId: Step['id']) {
     return retryCountStorage.getStore() ?? 0;

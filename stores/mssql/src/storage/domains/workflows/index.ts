@@ -1,6 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  isWorkflowRunStatus,
   createStorageErrorId,
   isRunFenceConflictError,
   matchesExpectedWorkflowStatus,
@@ -116,6 +115,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.skipDefaultIndexes) {
+      // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
       return;
     }
     // No default indexes for workflows domain
@@ -617,7 +617,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         `SELECT TOP 1 JSON_VALUE([snapshot], '$.status') AS status FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) })} WHERE workflow_name = @workflow_name AND run_id = @run_id`,
       );
       const status: unknown = result.recordset?.[0]?.status;
-      return isWorkflowRunStatus(status) ? status : null;
+      return (status ?? null) as WorkflowRunStatus | null;
     } catch (error) {
       throw new MastraError(
         {

@@ -36,10 +36,9 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-oss-20b": [
+    "gemma4-31b": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
       }
     ],
     "glm5.2": [
@@ -53,9 +52,10 @@
         "type": "toggle"
       }
     ],
-    "gemma4-31b": [
+    "gpt-oss-20b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

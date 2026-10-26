@@ -4,7 +4,7 @@ import type { SerializedError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
 import { resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
-import { WORKFLOW_RUN_STATUSES } from '../../storage/domains/workflows/base';
+import { WORKFLOW_RUN_STATUSES } from '../../storage/domains/workflows/run-statuses';
 import { WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type {
@@ -221,7 +221,7 @@ export async function persistStepUpdate(
     return;
   }
 
-  await engine.wrapDurableOperation(operationId, async () => {
+  const write = async () => {
     if (!evaluateBeforeDurableOperation && !persistencePredicate?.({ stepResults, workflowStatus })) {
       return;
     }
@@ -284,7 +284,13 @@ export async function persistStepUpdate(
       return;
     }
     engine.setLastPersistedStatus(runId, workflowStatus);
-  });
+  };
+
+  await engine.wrapDurableOperation(operationId, () =>
+    // Engines that replay memoized durable operations (Inngest) record each write as its own
+    // durable step, so only the in-process engine needs writes kept in call order.
+    engine.requiresDurableContextSerialization() ? write() : engine.serializeSnapshotWrite(runId, write),
+  );
 }
 
 export interface ExecuteEntryParams extends ObservabilityContext {

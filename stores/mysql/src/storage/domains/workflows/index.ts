@@ -1,6 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  isWorkflowRunStatus,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   TABLE_WORKFLOW_RUN_OWNERS,
@@ -183,6 +182,7 @@ export class WorkflowsMySQL extends WorkflowsStorage {
    * Currently no default indexes are defined for workflows.
    */
   async createDefaultIndexes(): Promise<void> {
+    // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
     if (this.#skipDefaultIndexes) return;
     // No default indexes for workflows domain
   }
@@ -639,7 +639,7 @@ export class WorkflowsMySQL extends WorkflowsStorage {
         [workflowName, runId],
       );
       const status: unknown = rows[0]?.status;
-      return isWorkflowRunStatus(status) ? status : null;
+      return (status ?? null) as WorkflowRunStatus | null;
     } catch (error) {
       throw new MastraError(
         {

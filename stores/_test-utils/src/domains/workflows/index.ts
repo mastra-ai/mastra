@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { WORKFLOW_RUN_STATUSES } from '@mastra/core/storage';
 import type { MastraStorage, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { beforeAll, describe, it, expect, beforeEach } from 'vitest';
@@ -551,16 +550,6 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
       await expect(
         workflowsStorage.loadWorkflowRunStatus({ workflowName, runId: `run-${randomUUID()}` }),
       ).resolves.toBeNull();
-    });
-
-    // A status the adapter fails to recognise reads back as null, which the engine treats as "not canceled".
-    it.each(WORKFLOW_RUN_STATUSES)('should load the %s run status', async status => {
-      const workflowName = 'test-workflow';
-      const { snapshot, runId } = createSampleWorkflowSnapshot(status);
-
-      await workflowsStorage.persistWorkflowSnapshot({ workflowName, runId, snapshot });
-
-      await expect(workflowsStorage.loadWorkflowRunStatus({ workflowName, runId })).resolves.toBe(status);
     });
 
     it('should write every concurrent first guarded write of a run', async () => {
