@@ -193,6 +193,27 @@ await agent.generate('hi', { memory })
 await agent.generate('and again', { memory })
 ```
 
+## Scores and feedback
+
+Scores sent through `mastra.observability.addScore()` show up in LangSmith as feedback on the matching run. A score with only a `traceId` is attached to the trace's root run; a score with a `spanId` is attached to that span's run.
+
+```typescript title="src/feedback.ts"
+await mastra.observability.addScore({
+  traceId,
+  correlationContext: { traceId },
+  score: { scorerId: 'user-feedback', scoreSource: 'user', score: 1, reason: 'Helpful answer' },
+})
+```
+
+Run ids are derived from Mastra trace and span ids, so scoring works from any process, after a restart, and long after the trace was exported. The same derivation is exported as `langsmithRunIdFor()` if you need to link to a run from your own UI:
+
+```typescript
+import { langsmithRunIdFor } from '@mastra/langsmith'
+
+const rootRunId = langsmithRunIdFor(traceId) // the trace's root run
+const runId = langsmithRunIdFor(spanId) // any other span
+```
+
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)

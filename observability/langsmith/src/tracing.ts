@@ -6,7 +6,14 @@
  * Events are handled as zero-duration RunTrees with matching start/end times.
  */
 
-import type { AnyExportedSpan, ModelGenerationAttributes, ScoreEvent, SpanErrorInfo } from '@mastra/core/observability';
+import { createHash } from 'node:crypto';
+import type {
+  AnyExportedSpan,
+  ExportedScore,
+  ModelGenerationAttributes,
+  ScoreEvent,
+  SpanErrorInfo,
+} from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { TrackingExporter } from '@mastra/observability';
@@ -27,15 +34,34 @@ export interface LangSmithExporterConfig extends ClientConfig, TrackingExporterC
    */
   projectName?: string;
   /**
-   * Maximum number of `spanId → langsmithRunId` mappings to retain for resolving
-   * `onScoreEvent` lookups. Older entries are evicted in LRU order when the cap
-   * is exceeded so long-running processes do not grow unbounded.
+   * Maximum number of `spanId → langsmithRunId` mappings to keep in memory. The
+   * cache lets `onScoreEvent` skip the LangSmith lookup for spans this process
+   * exported; scores for spans outside the cache are still delivered. Older
+   * entries are evicted in LRU order when the cap is exceeded.
    * Defaults to 10000.
    */
   runIdCacheMaxEntries?: number;
 }
 
 const DEFAULT_RUN_ID_CACHE_MAX_ENTRIES = 10_000;
+/** Waits between LangSmith lookups for a span another process exported (ingestion takes ~5-8 s). */
+const SCORE_LOOKUP_RETRY_DELAYS_MS = [2_000, 3_000, 5_000];
+
+/** UUID v5 namespace for Mastra → LangSmith run ids. Changing it orphans existing runs from future scores. */
+const RUN_ID_NAMESPACE = Buffer.from('a6f3c3f06b0e4a1e9f4c7e1b2d3c4f5a', 'hex');
+
+/**
+ * LangSmith run id for a Mastra id (UUID v5). Root runs use the Mastra trace id, every
+ * other run uses its Mastra span id, so a score can be routed from any process without
+ * remembering the ids LangSmith would otherwise allocate.
+ */
+export function langsmithRunIdFor(mastraId: string): string {
+  const hash = createHash('sha1').update(RUN_ID_NAMESPACE).update(mastraId).digest();
+  hash[6] = (hash[6]! & 0x0f) | 0x50;
+  hash[8] = (hash[8]! & 0x3f) | 0x80;
+  const hex = hash.subarray(0, 16).toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 type LangSmithRoot = undefined;
 type LangSmithSpan = RunTree;
@@ -76,10 +102,9 @@ export class LangSmithExporter extends TrackingExporter<
   #client: Client | undefined;
 
   /**
-   * Maps Mastra `span.id` to the runId LangSmith allocated when the corresponding
-   * RunTree was created. LangSmith's `createFeedback` requires the LangSmith runId,
-   * not the Mastra span id, so scores submitted via `onScoreEvent` look up the
-   * LangSmith runId here before calling the API.
+   * Maps Mastra `span.id` to the run id this process gave its RunTree. Only a fast
+   * path for `onScoreEvent`: ids are deterministic (see `langsmithRunIdFor`), so a
+   * miss falls back to asking LangSmith which run exists.
    *
    * Bounded LRU keyed by Mastra span id — entries are evicted oldest-first when
    * size exceeds `#runIdCacheMaxEntries` so the cache cannot grow without bound.
@@ -88,6 +113,8 @@ export class LangSmithExporter extends TrackingExporter<
   /** Manual-mode client flushes, chained so an overlapping flush waits for the earlier upload */
   #manualFlushChain: Promise<void> = Promise.resolve();
   #runIdCacheMaxEntries: number;
+  /** LangSmith project (session) id, which `createFeedback` now requires alongside the run id. */
+  #feedbackSessionId?: Promise<string | undefined>;
 
   constructor(config: LangSmithExporterConfig = {}) {
     // Resolve env vars BEFORE calling super (config is readonly in base class)
@@ -176,18 +203,11 @@ export class LangSmithExporter extends TrackingExporter<
     if (!this.#client) return;
 
     const { score } = event;
-    if (!score.spanId) {
-      this.logger.warn('LangSmith exporter: dropping score with no spanId; trace-level scoring is not yet supported', {
-        scorerId: score.scorerId,
-      });
-      return;
-    }
-
-    const langsmithRunId = this.#getLangsmithRunId(score.spanId);
+    const langsmithRunId = await this.#resolveLangsmithRunId(score);
     if (!langsmithRunId) {
       this.logger.warn(
-        'LangSmith exporter: dropping score for a span that was not previously emitted to LangSmith ' +
-          '(span_started must be processed before submitting a score for it)',
+        'LangSmith exporter: dropping score; no LangSmith run found for the target ' +
+          '(score has neither traceId nor spanId, the span is not ingested yet, or it was exported by an older @mastra/langsmith)',
         {
           traceId: score.traceId,
           spanId: score.spanId,
@@ -198,9 +218,11 @@ export class LangSmithExporter extends TrackingExporter<
     }
 
     const key = score.scorerName ?? score.scorerId;
+    const sessionId = await this.#getFeedbackSessionId();
 
     try {
       await this.#client.createFeedback(langsmithRunId, key, {
+        ...(sessionId ? { sessionId } : {}),
         score: score.score,
         ...(score.reason ? { comment: score.reason } : {}),
         feedbackId: score.scoreId,
@@ -224,6 +246,61 @@ export class LangSmithExporter extends TrackingExporter<
     }
   }
 
+  /**
+   * Trace-level scores go to the root run (`langsmithRunIdFor(traceId)`). A span-level
+   * score needs to know whether its span is that root: this process remembers the ids
+   * it assigned; otherwise LangSmith is asked which of the two candidate runs exists.
+   */
+  async #resolveLangsmithRunId(score: ExportedScore): Promise<string | undefined> {
+    const { traceId, spanId } = score;
+    if (!spanId) return traceId ? langsmithRunIdFor(traceId) : undefined;
+
+    const known = this.#getLangsmithRunId(spanId);
+    if (known) return known;
+
+    const asChild = langsmithRunIdFor(spanId);
+    const asRoot = traceId ? langsmithRunIdFor(traceId) : undefined;
+    // LangSmith makes posted runs readable a few seconds later, so a score that
+    // arrives right after another process exported the span has to wait for it.
+    for (let attempt = 0; ; attempt++) {
+      if (await this.#readRun(asChild)) return asChild;
+      if (asRoot) {
+        const root = await this.#readRun(asRoot);
+        if (root?.extra?.metadata?.mastra_span_id === spanId) return asRoot;
+      }
+      const delay = SCORE_LOOKUP_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined) return undefined;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  async #readRun(runId: string): Promise<{ extra?: KVMap } | undefined> {
+    try {
+      return await this.#client!.readRun(runId);
+    } catch {
+      return undefined;
+    }
+  }
+
+  #getFeedbackSessionId(): Promise<string | undefined> {
+    if (!this.#feedbackSessionId) {
+      const projectName =
+        this.config.projectName ?? process.env.LANGSMITH_PROJECT ?? process.env.LANGCHAIN_PROJECT ?? 'default';
+      this.#feedbackSessionId = Promise.resolve()
+        .then(() => this.#client!.readProject({ projectName }))
+        .then(project => project.id)
+        .catch(err => {
+          this.logger.debug('LangSmith exporter: could not resolve the project id for feedback', {
+            projectName,
+            error: err,
+          });
+          this.#feedbackSessionId = undefined;
+          return undefined;
+        });
+    }
+    return this.#feedbackSessionId;
+  }
+
   protected override skipBuildRootTask = true;
   protected override async _buildRoot(_args: {
     span: AnyExportedSpan;
@@ -245,16 +322,19 @@ export class LangSmithExporter extends TrackingExporter<
       return;
     }
 
+    // The first root of a trace takes the trace id so trace-level scores find it;
+    // any further root in the same Mastra trace keeps its own span id.
+    const runId =
+      span.isRootSpan && !traceData.isRootProcessed() ? langsmithRunIdFor(span.traceId) : langsmithRunIdFor(span.id);
+
     const payload = {
       name: span.name,
+      id: runId,
       ...this.buildRunTreePayload(span, traceData, true),
     };
 
     const langSmithSpan = span.isRootSpan ? new RunTree(payload) : parent!.createChild(payload);
-
-    if (langSmithSpan.id) {
-      this.#rememberLangsmithRunId(span.id, langSmithSpan.id);
-    }
+    this.#rememberLangsmithRunId(span.id, runId);
 
     await langSmithSpan.postRun();
     return langSmithSpan;
@@ -428,6 +508,8 @@ export class LangSmithExporter extends TrackingExporter<
       client: this.#client,
       metadata: {
         mastra_span_type: span.type,
+        mastra_span_id: span.id,
+        mastra_trace_id: span.traceId,
         ...spanMetadata,
       },
     };
