@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Fixed the Factory triage comment rendering a blank row above its summary table on GitHub. The table now has a `Field | Assessment` header.
+Redesigned the Factory triage comment for GitHub. It now opens with a severity-coloured callout showing the issue type and route, then a one-row Severity / Confidence / Effort / Impact scorecard, one-line reasons, and the next step. This replaces the two-column table that rendered with a blank header row.

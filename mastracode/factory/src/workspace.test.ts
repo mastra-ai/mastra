@@ -467,15 +467,16 @@ describe('bundled Factory skill assets', () => {
     // present only in the pending table cannot satisfy them.
     const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('### Understanding'));
     const handoff = triage.slice(markerIndex);
-    // The verdict is a markdown table, so each field is a bolded cell label
-    // rather than a `**Field:**` prose lead-in.
-    const typeIndex = handoff.indexOf('**Type**');
-    const routeIndex = handoff.indexOf('**Route**');
+    // The verdict leads with a severity-coloured alert carrying type and route,
+    // then a Severity/Confidence/Effort/Impact scorecard, one-line reasons, and
+    // the next step.
+    const typeIndex = handoff.indexOf('<Type>');
+    const routeIndex = handoff.indexOf('<Route>');
     const severityIndex = handoff.indexOf('**Severity**');
     const confidenceIndex = handoff.indexOf('**Confidence**');
     const effortIndex = handoff.indexOf('**Effort**');
     const impactIndex = handoff.indexOf('**Impact**');
-    const nextStepIndex = handoff.indexOf('**Next step**');
+    const nextStepIndex = handoff.indexOf('**Next step:**');
     const understandingIndex = handoff.indexOf('### Understanding');
     const assumptionsIndex = handoff.indexOf('### Assumptions');
     const questionsIndex = handoff.indexOf('### Open questions');

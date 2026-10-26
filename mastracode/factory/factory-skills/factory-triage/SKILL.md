@@ -31,13 +31,13 @@ At the end of this phase, publish a small summary to the source issue as stated 
 ```markdown
 <!-- mastra-factory-triage -->
 
-| Field          | Assessment                                                                                                                                           |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Type**       | <bug\|feature request\|docs\|question/support\|maintenance\|duplicate\|resolved\|invalid\|spam\|out-of-scope\|other> — <one-sentence classification> |
-| **Route**      | Pending                                                                                                                                              |
-| **Severity**   | Pending                                                                                                                                              |
-| **Confidence** | Pending                                                                                                                                              |
-| **Next step**  | Pending                                                                                                                                              |
+> [!NOTE]
+> **<type emoji> <Type>** → **Triage in progress**
+> <one-sentence classification>
+
+| Severity | Confidence | Effort | Impact |
+| :------: | :--------: | :----: | :----: |
+|    ⏳    |     ⏳     |   ⏳   |   ⏳   |
 ```
 
 For GitHub issues, add `status: needs triage` only if no `status:` label is present, using `gh issue edit "$ISSUE" --add-label "status: needs triage"`. For Linear issues, skip this GitHub-only label mutation.
@@ -100,15 +100,20 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 ```markdown
 <!-- mastra-factory-triage -->
 
-| Field          | Assessment                                                                                                                                                      |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Type**       | <bug\|feature request\|docs\|question/support\|maintenance\|duplicate\|resolved\|invalid\|spam\|out-of-scope\|other> — <one-sentence classification>            |
-| **Route**      | <Plan fix\|Await approval\|Ask author for info\|Close as duplicate/resolved/invalid/spam/out-of-scope\|Answer provided / close\|No transition / refresh\|Other> |
-| **Severity**   | <critical\|high\|medium\|low> — <short reason>                                                                                                                  |
-| **Confidence** | <high\|medium\|low> — <short reason>                                                                                                                            |
-| **Effort**     | <low\|medium\|high> — <short implementation-scope reason>                                                                                                       |
-| **Impact**     | <low\|medium\|high> — <short user/business-consequence reason>                                                                                                  |
-| **Next step**  | <concise maintainer-facing next action>                                                                                                                         |
+> [!<CAUTION|WARNING|NOTE>]
+> **<type emoji> <Type>** → **<Route>**
+> <one-sentence classification>
+
+|   Severity    |   Confidence   |     Effort     |     Impact     |
+| :-----------: | :------------: | :------------: | :------------: |
+| <dot> <level> | <bars> <level> | <bars> <level> | <bars> <level> |
+
+- **Severity** — <short reason>
+- **Confidence** — <short reason>
+- **Effort** — <short implementation-scope reason>
+- **Impact** — <short user/business-consequence reason>
+
+**Next step:** <concise maintainer-facing next action>
 
 ### Understanding
 
@@ -126,6 +131,16 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 
 <for reproduced bugs: exact successful steps. Otherwise: attempted steps, environment, and result, or `Not applicable` / `Not reproduced` with a reason.>
 ```
+
+Fill the header placeholders exactly as follows. Both templates use the same placeholders; the pending summary also uses `Type` and the type emoji.
+
+- `Type` is one of: bug, feature request, docs, question/support, maintenance, duplicate, resolved, invalid, spam, out-of-scope, other. Capitalize it in the headline.
+- `<type emoji>`: 🐛 bug, ✨ feature request, 📝 docs, ❓ question/support, 🧹 maintenance, 🗂️ duplicate/resolved/invalid/spam/out-of-scope, 📌 other.
+- `Route` is one of: Plan fix, Await approval, Ask author for info, Close as duplicate/resolved/invalid/spam/out-of-scope, Answer provided / close, No transition / refresh, Other.
+- The alert follows severity: `[!CAUTION]` for critical or high, `[!WARNING]` for medium, `[!NOTE]` for low.
+- `<dot>` for severity: 🔴 critical, 🟠 high, 🟡 medium, 🟢 low.
+- `<bars>` for confidence, effort, and impact show magnitude, not good or bad: `▰▱▱` low, `▰▰▱` medium, `▰▰▰` high.
+- Keep each reason to one short line. Put detail in Understanding.
 
 Severity guide:
 
