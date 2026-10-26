@@ -97,4 +97,77 @@ describe.each(['durable', 'evented'] as const)('%s signal interruption tracing',
     expect(inferenceUnder(answeredStep!.id).map(span => span.attributes?.finishReason)).toEqual(['stop']);
     expect(exporter.getIncompleteSpans()).toEqual([]);
   }, 30_000);
+
+  it('a request cancelled by a signal during its input processors names no model on its step', async () => {
+    const exporter = new TestExporter();
+    // Set once the run is live; the first step's input processor queues the
+    // follow-up from inside the step, before any model call.
+    let interruptFromProcessor: (() => Promise<void>) | undefined;
+    const agent = new Agent({
+      id: `signal-before-model-${variant}`,
+      name: 'Signal Before Model Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        provider: 'acme',
+        modelId: 'acme-large',
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'replacement answer' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 } },
+          ]),
+        }),
+      }),
+      memory: new MockMemory(),
+      inputProcessors: [
+        {
+          id: 'interrupt-first-step',
+          processInputStep: async () => {
+            const interrupt = interruptFromProcessor;
+            interruptFromProcessor = undefined;
+            await interrupt?.();
+          },
+        },
+      ],
+    });
+    const wrapped = variant === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
+    const mastra = new Mastra({
+      logger: false,
+      agents: { wrapped } as any,
+      storage: new InMemoryStore(),
+      observability: new Observability({
+        configs: { default: { serviceName: 'durable-signal-interruption', exporters: [exporter] } },
+      }),
+    });
+    const registered = mastra.getAgent('wrapped') as any;
+    const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
+    interruptFromProcessor = async () => {
+      const signal = await registered.sendSignal({ type: 'user-message', contents: 'follow-up' }, scope);
+      await signal.accepted;
+    };
+
+    const res = await registered.stream('question', { memory: { thread: scope.threadId, resource: scope.resourceId } });
+    try {
+      expect(await res.output.text).toBe('replacement answer');
+      await new Promise(resolve => setTimeout(resolve, 300));
+    } finally {
+      res.cleanup?.();
+    }
+
+    const identity = (span: { attributes?: { model?: string; provider?: string } } | undefined) => ({
+      model: span?.attributes?.model,
+      provider: span?.attributes?.provider,
+    });
+    const steps = exporter.getSpansByType(SpanType.MODEL_STEP);
+    const interruptedStep = steps.find(span => span.attributes?.finishReason === 'interrupted');
+    const answeredStep = steps.find(span => span.attributes?.finishReason === 'stop');
+    expect(steps).toHaveLength(2);
+    expect(identity(interruptedStep)).toEqual({ model: undefined, provider: undefined });
+    expect(identity(answeredStep)).toEqual({ model: 'acme-large', provider: 'acme' });
+    expect(exporter.getIncompleteSpans()).toEqual([]);
+  }, 30_000);
 });

@@ -1454,7 +1454,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               toolChoice: currentToolChoice,
               responseFormat: structuredOutput ? 'json_schema' : undefined,
             });
-            // A cached response replays without invoking the model, so it records no model.
+            // A queued signal that arrived during the processors cancels this request
+            // before the model is called, so the step must not name a model (same
+            // order as the in-process loop). A cached response replays without
+            // invoking the model, so it records no model either.
+            throwIfInterrupted();
             modelSpanTracker?.startInference?.({
               request: {},
               inputMessages,
