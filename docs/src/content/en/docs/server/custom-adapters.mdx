@@ -134,12 +134,15 @@ registerHttpLoggingMiddleware(): void {
     }
 
     const start = Date.now();
+    const method = req.method;
+    const path = req.path;
+
     res.on('finish', () => {
       const duration = Date.now() - start;
       const level = this.httpLoggingConfig?.level || 'info';
       const logData: Record<string, unknown> = {
-        method: req.method,
-        path: req.path,
+        method,
+        path,
         status: res.statusCode,
         duration: `${duration}ms`,
       };
@@ -157,7 +160,7 @@ registerHttpLoggingMiddleware(): void {
         logData.headers = headers;
       }
 
-      this.logger[level](`${req.method} ${req.path} ${res.statusCode} ${duration}ms`, logData);
+      this.logger[level](`${method} ${path} ${res.statusCode} ${duration}ms`, logData);
     });
     next();
   });
