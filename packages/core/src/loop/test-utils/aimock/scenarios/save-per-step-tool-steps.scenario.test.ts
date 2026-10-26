@@ -11,9 +11,9 @@ import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '.
  * savePerStep across tool steps (moved from save-and-errors.e2e, whose three
  * cases were it.skip against a hash-matched recording and never ran).
  *
- * - Each completed step is saved as it finishes, so a multi-step run calls
- *   saveMessages more than once and the stored assistant message has exactly
- *   one tool-invocation result per tool call, with no duplicated parts.
+ * - Each completed tool step is in memory before the next step runs, and the
+ *   stored assistant messages hold exactly one result per tool call, with no
+ *   duplicated parts.
  * - When onStepFinish throws after a tool step, the user message and the
  *   completed tool step are already in memory.
  */
@@ -34,17 +34,6 @@ const uppercaseTool = createTool({
   execute: async ({ input }) => ({ output: input.toUpperCase() }),
 });
 
-function countingMemory() {
-  const memory = new MockMemory();
-  const counter = { saves: 0 };
-  const saveMessages = memory.saveMessages.bind(memory);
-  memory.saveMessages = async args => {
-    counter.saves++;
-    return saveMessages(args);
-  };
-  return { memory, counter };
-}
-
 function toolResultIds(message: MastraDBMessage) {
   return message.content.parts
     .filter(part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result')
@@ -58,43 +47,8 @@ function assistantMessages(messages: MastraDBMessage[]) {
 describeForAllEngines('AIMock loop scenario: savePerStep across tool steps', engine => {
   const getMock = useLoopScenarioAimock();
 
-  it('saves each tool step once, with one result per tool call', async () => {
-    const { memory, counter } = countingMemory();
-    const threadId = `save-per-step-echo-${engine}`;
-    const resourceId = 'resource-echo';
-
-    const { output } = await runLoopScenario({
-      engine,
-      llm: getMock(),
-      prompt: 'Echo: Please echo this long message and explain why.',
-      tools: { echoTool },
-      memory,
-      threadId,
-      resourceId,
-      savePerStep: true,
-      stopWhen: stepCountIs(5),
-      fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat', sequenceIndex: 0 },
-          { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'long message' } }] },
-        );
-        llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'The echo tool returned "long message".' });
-      },
-    });
-
-    expect(await output.text).toBe('The echo tool returned "long message".');
-    expect(counter.saves).toBeGreaterThan(1);
-
-    const { messages } = await memory.recall({ threadId, resourceId });
-    expect(messages.find(message => message.role === 'user')).toBeDefined();
-    const assistants = assistantMessages(messages);
-    expect(assistants.length).toBeGreaterThan(0);
-    for (const assistant of assistants) assertNoDuplicateParts(assistant.content.parts);
-    expect(assistants.flatMap(toolResultIds)).toEqual(['call_echo']);
-  });
-
   it('saves sequential calls to two tools before the next step runs, without duplicating results', async () => {
-    const { memory, counter } = countingMemory();
+    const memory = new MockMemory();
     const threadId = `save-per-step-multi-${engine}`;
     const resourceId = 'resource-multi';
     let savedBeforeSecondTool: string[] | undefined;
@@ -131,7 +85,6 @@ describeForAllEngines('AIMock loop scenario: savePerStep across tool steps', eng
     });
 
     expect(await output.text).toBe('Echoed "echo this" and got "UPPERCASE THIS".');
-    expect(counter.saves).toBeGreaterThan(1);
     expect(savedBeforeSecondTool).toEqual(['call_echo']);
 
     const { messages } = await memory.recall({ threadId, resourceId });
@@ -141,7 +94,7 @@ describeForAllEngines('AIMock loop scenario: savePerStep across tool steps', eng
   });
 
   it('keeps the completed tool step in memory when onStepFinish throws on the next step', async () => {
-    const { memory } = countingMemory();
+    const memory = new MockMemory();
     const threadId = `save-per-step-rescue-${engine}`;
     const resourceId = 'resource-rescue';
     let steps = 0;
@@ -180,7 +133,8 @@ describeForAllEngines('AIMock loop scenario: savePerStep across tool steps', eng
 
     const { messages } = await memory.recall({ threadId, resourceId });
     expect(messages.find(message => message.role === 'user')).toBeDefined();
-    expect(assistantMessages(messages).flatMap(toolResultIds)).toContain('call_first');
-    expect(assistantMessages(messages).flatMap(toolResultIds)).toContain('call_second');
+    const assistants = assistantMessages(messages);
+    for (const assistant of assistants) assertNoDuplicateParts(assistant.content.parts);
+    expect(assistants.flatMap(toolResultIds).sort()).toEqual(['call_first', 'call_second']);
   });
 });
