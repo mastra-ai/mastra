@@ -45,6 +45,7 @@ import type { AgentSignalInput } from '../signals';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
+import { isDurableAgentLike } from '../types';
 import { resolveThreadIdFromArgs } from '../utils';
 
 import { publishAbortRequest } from './abort-transport';
@@ -5664,7 +5665,12 @@ export class DurableAgent<
         }
       }
 
-      streamAgent = observedEntry?.agent ?? processorAgent;
+      // A pinned version comes back as a DurableAgent fork; hooks get the inner Agent.
+      streamAgent =
+        observedEntry?.agent ??
+        (isDurableAgentLike(processorAgent) && processorAgent.agent !== processorAgent
+          ? processorAgent.agent
+          : processorAgent);
       try {
         outputProcessors = (await processorAgent.listOutputProcessors(requestContext)) ?? [];
       } catch (error) {
