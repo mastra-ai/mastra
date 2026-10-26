@@ -1,7 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
-import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
 import {
   MODEL_DEFAULTS_TONES,
@@ -14,13 +13,10 @@ import {
 import type { ModelDefaults, ModelLane } from './models/routing/model-routes';
 
 export function MemoryUsedBy({ factoryId, defaults }: { factoryId: string; defaults: ModelDefaults }) {
-  const authQuery = useFactoryAuth();
   const projectQuery = useFactoryProjectQuery(factoryId);
-  if (!authQuery.data || !projectQuery.data) return null;
+  if (!projectQuery.data) return null;
 
-  // Sign-in off: one process-wide credential set pays for every thread, so all read the Factory's row.
-  const memoryScope = authQuery.data.authEnabled ? savedModelScope(projectQuery.data) : 'factory';
-  const lanes = lanesUsing(memoryScope, defaults);
+  const lanes = lanesUsing(savedModelScope(projectQuery.data), defaults);
   if (lanes.length === 0) {
     return (
       <Txt as="span" variant="meta" tone="muted">

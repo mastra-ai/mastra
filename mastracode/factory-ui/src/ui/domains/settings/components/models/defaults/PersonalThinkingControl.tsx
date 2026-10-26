@@ -7,8 +7,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useSetDefaultThinkingLevel } from '../../../../../../hooks/use-default-model';
 import {
   ALL_THINKING_LEVEL_OPTIONS,
+  DEFAULT_SOURCE_LABELS,
   personalThinkingDefault,
-  THINKING_DEFAULT_SOURCE_LABELS,
 } from '../../../../chat/services/thinkingLevels';
 
 interface PersonalThinkingControlProps {
@@ -39,7 +39,7 @@ export function PersonalThinkingControl({ savedModelId, savedThinkingLevel, savi
       options={ALL_THINKING_LEVEL_OPTIONS}
       value={thinkingDefault.level}
       label="Thinking"
-      origin={followsBuiltIn ? THINKING_DEFAULT_SOURCE_LABELS['built-in'] : undefined}
+      origin={followsBuiltIn ? DEFAULT_SOURCE_LABELS['built-in'] : undefined}
       footer={<PersonalThinkingOriginNote followsBuiltIn={followsBuiltIn} onUseDefault={() => saveLevel(null)} />}
       onChange={saveLevel}
     />
@@ -55,7 +55,7 @@ function PersonalThinkingOriginNote({ followsBuiltIn, onUseDefault }: PersonalTh
   if (followsBuiltIn) {
     return (
       <Txt as="p" variant="caption" tone="muted">
-        Follows the {THINKING_DEFAULT_SOURCE_LABELS['built-in']}.
+        Follows the {DEFAULT_SOURCE_LABELS['built-in']}.
       </Txt>
     );
   }

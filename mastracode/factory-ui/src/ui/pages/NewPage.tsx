@@ -9,6 +9,7 @@ import { FolderIcon } from '../ui/icons';
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
 import { useDefaultModelQuery } from '../../hooks/use-default-model';
+import { useFallbackModelQuery } from '../../hooks/useAvailableModels';
 import { useProvidersQuery } from '../../hooks/use-providers';
 import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
@@ -24,7 +25,7 @@ import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
 import { TranscriptEntries } from '../domains/chat/components/Transcript';
-import { routedDefaultModelId } from '../domains/chat/context/chatDefaultModel';
+import { newChatCatalogTarget, routedDefaultModelId } from '../domains/chat/context/chatDefaultModel';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
@@ -40,13 +41,21 @@ export function NewPage() {
   const personalDefaultQuery = useDefaultModelQuery();
   const providersQuery = useProvidersQuery();
   const routedToFactory = projectQuery.data?.modelScope === 'factory';
-  const chatModelId = routedDefaultModelId(projectQuery.data?.modelScope, {
+  const chosenModelId = routedDefaultModelId(projectQuery.data?.modelScope, {
     factory: projectQuery.data?.defaultModelId,
     personal: personalDefaultQuery.data?.modelId,
   });
+  const fallbackModelQuery = useFallbackModelQuery({
+    ...newChatCatalogTarget(routedToFactory ? 'factory' : 'user', activeFactory?.id),
+    enabled: projectQuery.isSuccess,
+  });
+  const chatModelId = chosenModelId ?? fallbackModelQuery.data;
   const chatModelSettled =
-    Boolean(activeFactory) && projectQuery.isSuccess && (routedToFactory || personalDefaultQuery.isSuccess);
-  const missingDefaultModel = chatModelSettled && !chatModelId;
+    Boolean(activeFactory) &&
+    projectQuery.isSuccess &&
+    (routedToFactory || personalDefaultQuery.isSuccess) &&
+    (Boolean(chosenModelId) || fallbackModelQuery.isSuccess);
+  const missingModel = chatModelSettled && !chatModelId;
   const chatModelProvider = chatModelId
     ? providersQuery.data?.find(entry => entry.provider === chatModelId.split('/')[0])
     : undefined;
@@ -56,7 +65,11 @@ export function NewPage() {
       ? { modelId: chatModelId, provider: chatModelProvider.provider }
       : undefined;
   const configurationError =
-    projectQuery.error ?? (routedToFactory ? null : personalDefaultQuery.error) ?? providersQuery.error ?? undefined;
+    projectQuery.error ??
+    (routedToFactory ? null : personalDefaultQuery.error) ??
+    (chosenModelId ? null : fallbackModelQuery.error) ??
+    providersQuery.error ??
+    undefined;
 
   return (
     <ChatPageLayout
@@ -73,7 +86,7 @@ export function NewPage() {
       <ChatSessionBoundary key={draftSessionId}>
         <NewPageContent
           activeFactory={activeFactory}
-          missingDefaultModel={missingDefaultModel}
+          missingModel={missingModel}
           missingCredential={missingCredential}
           configurationError={configurationError}
         />
@@ -95,12 +108,12 @@ function readRouteErrorNotice(state: unknown): string | undefined {
 
 function NewPageContent({
   activeFactory,
-  missingDefaultModel,
+  missingModel,
   missingCredential,
   configurationError,
 }: {
   activeFactory: FactoryProject | undefined;
-  missingDefaultModel: boolean;
+  missingModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
   configurationError: Error | undefined;
 }) {
@@ -117,7 +130,7 @@ function NewPageContent({
         <DraftStart
           activeFactory={activeFactory}
           configurationError={configurationError}
-          missingDefaultModel={missingDefaultModel}
+          missingModel={missingModel}
           missingCredential={missingCredential}
         />
         {hasNotices && (
@@ -134,18 +147,18 @@ function NewPageContent({
 function DraftStart({
   activeFactory,
   configurationError,
-  missingDefaultModel,
+  missingModel,
   missingCredential,
 }: {
   activeFactory: FactoryProject | undefined;
   configurationError: Error | undefined;
-  missingDefaultModel: boolean;
+  missingModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
 }) {
-  if (activeFactory && missingDefaultModel) {
+  if (activeFactory && missingModel) {
     return (
       <section className={draftStartClass} aria-label="Model setup required">
-        <MissingDefaultModelState factoryId={activeFactory.id} />
+        <MissingModelState factoryId={activeFactory.id} />
       </section>
     );
   }
@@ -202,21 +215,18 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
   );
 }
 
-function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
+function MissingModelState({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
   const anchor = sessionDefaultsAnchor(projectQuery.data?.modelScope);
-  const factoryRouted = anchor === MODEL_DEFAULTS_ANCHORS.factory;
   return (
     <EmptyState
       as="h2"
       iconSlot={<Bot />}
-      titleSlot={
-        factoryRouted ? 'No default model configured for this Factory' : 'No personal default model configured'
-      }
+      titleSlot="No model available"
       descriptionSlot={
-        factoryRouted
-          ? 'Connect a model provider and choose a default model in Models settings before starting a chat.'
-          : `Chats in this Factory run on your own keys. Connect a provider and choose a model under ${MODEL_DEFAULTS_LABELS.personal} in Models settings.`
+        anchor === MODEL_DEFAULTS_ANCHORS.factory
+          ? `Chats in this Factory run on the organization's keys. Ask an org admin to connect a provider or choose a model under ${MODEL_DEFAULTS_LABELS.factory} in Models settings.`
+          : `Chats in this Factory run on your own keys. Connect a provider or choose a model under ${MODEL_DEFAULTS_LABELS.personal} in Models settings.`
       }
       actionSlot={
         <Link to={settingsSectionPath(factoryId, 'models', anchor)} className={buttonVariants({ variant: 'primary' })}>

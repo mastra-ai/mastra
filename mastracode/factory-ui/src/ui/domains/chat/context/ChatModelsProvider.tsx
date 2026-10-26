@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
+import { useFallbackModelQuery } from '../../../../hooks/useAvailableModels';
 import { useChatModelScope } from './useChatModelScope';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -25,18 +26,28 @@ export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
 }
 
 function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { projectQuery: factoryProjectQuery, modelScope } = useChatModelScope();
+  const { projectQuery: factoryProjectQuery, modelScope, catalogTarget } = useChatModelScope();
   const defaultModelQuery = useDefaultModelQuery();
+  const fallbackModelQuery = useFallbackModelQuery(catalogTarget);
   const [draftModelId, setDraftModelId] = useState<string>();
   const defaultModelId = routedDefaultModelId(modelScope, {
     factory: factoryProjectQuery.data?.defaultModelId,
     personal: defaultModelQuery.data?.modelId,
   });
+  const personalDefaultUsed = modelScope !== 'factory';
+  const usesFallback = !defaultModelId;
   const value: ChatModelsApi = {
-    activeModelId: draftModelId ?? defaultModelId,
+    activeModelId: draftModelId ?? defaultModelId ?? fallbackModelQuery.data,
     defaultModelId,
-    isLoading: factoryProjectQuery.isPending || defaultModelQuery.isPending,
-    error: defaultModelQuery.error ?? factoryProjectQuery.error ?? undefined,
+    isLoading:
+      factoryProjectQuery.isPending ||
+      (personalDefaultUsed && defaultModelQuery.isPending) ||
+      (usesFallback && fallbackModelQuery.isPending),
+    error:
+      factoryProjectQuery.error ??
+      (personalDefaultUsed ? defaultModelQuery.error : null) ??
+      (usesFallback ? fallbackModelQuery.error : null) ??
+      undefined,
     setModel: modelId => {
       setDraftModelId(modelId);
       return Promise.resolve();

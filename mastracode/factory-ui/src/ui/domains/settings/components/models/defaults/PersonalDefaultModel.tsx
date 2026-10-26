@@ -1,13 +1,14 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useDefaultModelQuery } from '../../../../../../hooks/use-default-model';
-import { usePersonalAvailableModelsQuery } from '../../../../../../hooks/useAvailableModels';
+import { useFallbackModelQuery, usePersonalAvailableModelsQuery } from '../../../../../../hooks/useAvailableModels';
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
 import { PersonalDefaultModelPicker } from './PersonalDefaultModelPicker';
 
 export function PersonalDefaultModel() {
   const defaultModelQuery = useDefaultModelQuery();
   const modelsQuery = usePersonalAvailableModelsQuery();
+  const fallbackModelQuery = useFallbackModelQuery({ scope: 'user' });
 
   if (defaultModelQuery.isPending) {
     return <SkeletonRows label="Loading your default model" rows={1} rowClassName="h-7 w-full" />;
@@ -25,6 +26,7 @@ export function PersonalDefaultModel() {
       savedModelId={defaultModelQuery.data.modelId ?? undefined}
       savedThinkingLevel={defaultModelQuery.data.thinkingLevel}
       models={modelsQuery.data}
+      fallbackModelId={fallbackModelQuery.data}
     />
   );
 }

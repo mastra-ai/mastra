@@ -7,8 +7,8 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
-function renderNewPage() {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: ['/factories/fp-1/new'] });
+function renderNewPage(path = '/factories/fp-1/new') {
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [path] });
   renderWithProviders(<RouterProvider router={router} />);
   return router;
 }
@@ -42,15 +42,29 @@ function stubFactory(project: Record<string, unknown> | null) {
   );
 }
 
+function stubFallbackModel(catalogQuery: string, provider: Record<string, unknown>) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) =>
+      HttpResponse.json(
+        new URL(request.url).search === `?${catalogQuery}`
+          ? {
+              models: [{ id: 'openai/gpt-5.5', provider: 'openai', modelName: 'gpt-5.5', hasApiKey: true }],
+              fallbackModelId: 'openai/gpt-5.5',
+            }
+          : { models: [], fallbackModelId: null },
+      ),
+    ),
+    http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [provider] })),
+  );
+}
+
 describe('NewPage default-model guard', () => {
-  it('replaces the composer with an empty state linking to Model settings when no default model is set', async () => {
+  it('replaces the composer with an empty state linking to Model settings when no key can run a model', async () => {
     stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: null });
 
     renderNewPage();
 
-    expect(
-      await screen.findByRole('heading', { name: 'No default model configured for this Factory' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No model available' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/models#factory-defaults',
@@ -59,18 +73,43 @@ describe('NewPage default-model guard', () => {
     expect(screen.queryByRole('heading', { name: 'What do you want to work on?' })).not.toBeInTheDocument();
   });
 
-  it("asks for a personal default instead of starting on the Factory's model when chats run on personal defaults", async () => {
+  it("points personal-routed chats at Personal defaults instead of starting on the Factory's model", async () => {
     stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'user', defaultModelId: 'anthropic/claude-sonnet-4-5' });
 
     renderNewPage();
 
-    expect(await screen.findByRole('heading', { name: 'No personal default model configured' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No model available' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/models#personal-defaults',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
   });
+
+  it.each([
+    {
+      routing: 'user',
+      catalogQuery: 'scope=user',
+      provider: { provider: 'openai', source: 'stored-user', userCredential: 'api_key' },
+    },
+    {
+      routing: 'factory',
+      catalogQuery: 'factoryId=fp-1',
+      provider: { provider: 'openai', source: 'stored-org', orgKey: true, orgCredential: 'api_key' },
+    },
+  ])(
+    'starts a $routing-routed chat without a chosen model on the built-in model its keys can run',
+    async ({ routing, catalogQuery, provider }) => {
+      stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: routing, defaultModelId: null });
+      stubFallbackModel(catalogQuery, provider);
+
+      renderNewPage('/factories/fp-1/user/new/draft-1');
+
+      expect(await screen.findByLabelText('Message')).toBeInTheDocument();
+      expect(await screen.findByLabelText('Session model')).toHaveTextContent(/gpt-5\.5/i);
+      expect(screen.queryByRole('heading', { name: 'No model available' })).not.toBeInTheDocument();
+    },
+  );
 
   it("fails open with a visible error when a personal-routed chat can't read the personal default", async () => {
     stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'user', defaultModelId: null });
@@ -84,7 +123,7 @@ describe('NewPage default-model guard', () => {
 
     expect(await screen.findByText(/Failed to load session configuration/)).toBeInTheDocument();
     expect(screen.getByLabelText('Message')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'No personal default model configured' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'No model available' })).not.toBeInTheDocument();
   });
 
   it('renders a usable composer while the guard resolves, then swaps in the guard', async () => {
@@ -109,9 +148,7 @@ describe('NewPage default-model guard', () => {
 
     releaseProject();
 
-    expect(
-      await screen.findByRole('heading', { name: 'No default model configured for this Factory' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No model available' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
   });
 
@@ -121,9 +158,7 @@ describe('NewPage default-model guard', () => {
     renderNewPage();
 
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();
-    expect(
-      screen.queryByRole('heading', { name: 'No default model configured for this Factory' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'No model available' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
   });
 

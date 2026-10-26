@@ -36,11 +36,11 @@ const models: AvailableModelOption[] = [
   { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
 ];
 
-function stubPersonalCatalog(catalog: AvailableModelOption[]) {
+function stubPersonalCatalog(catalog: AvailableModelOption[], fallbackModelId: string | null = null) {
   server.use(
     http.get(MODELS_URL, ({ request }) => {
       expect(new URL(request.url).searchParams.get('scope')).toBe('user');
-      return HttpResponse.json({ models: catalog });
+      return HttpResponse.json({ models: catalog, fallbackModelId });
     }),
   );
 }
@@ -168,6 +168,15 @@ describe('PersonalDefaultModel', () => {
     expect(
       await screen.findByRole('button', { name: 'Thinking: unavailable. Pick a personal default model first.' }),
     ).toBeInTheDocument();
+  });
+
+  it('names the built-in model new chats start on until a personal model is chosen', async () => {
+    stubPersonalCatalog(models, 'openai/gpt-5');
+    server.use(http.get(DEFAULT_MODEL_URL, () => HttpResponse.json({ modelId: null, thinkingLevel: null })));
+
+    renderInField();
+
+    expect(await screen.findByPlaceholderText('GPT-5 · Built-in default')).toBeInTheDocument();
   });
 
   it('follows the built-in level, never the Factory level, until a personal level is saved, and hands back to it', async () => {

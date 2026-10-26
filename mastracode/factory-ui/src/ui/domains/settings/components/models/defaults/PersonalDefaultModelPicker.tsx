@@ -18,10 +18,12 @@ export function PersonalDefaultModelPicker({
   savedModelId,
   savedThinkingLevel,
   models,
+  fallbackModelId,
 }: {
   savedModelId: string | undefined;
   savedThinkingLevel: ThinkingLevelSetting | null;
   models: AvailableModelOption[] | undefined;
+  fallbackModelId: string | undefined;
 }) {
   const setDefaultModel = useSetDefaultModel();
   const clearDefaultModel = useClearDefaultModel();
@@ -50,6 +52,7 @@ export function PersonalDefaultModelPicker({
           models={models ?? []}
           value={savedModelId ?? ''}
           onValueChange={saveDefaultModel}
+          fallbackModelId={fallbackModelId}
           placeholder="Select a model"
           aria-label="Personal default model"
           size="sm"

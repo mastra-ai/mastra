@@ -122,18 +122,6 @@ describe('MemorySettings', () => {
     },
   );
 
-  it('labels Factory memory as used by every thread while sign-in is off, whatever the routing', async () => {
-    stubProviders([{ provider: 'openai', source: 'stored' }]);
-    server.use(http.get(OM_URL, () => HttpResponse.json({ config: omConfig(30_000) })));
-    renderMemory('hybrid');
-
-    const personal = screen.getByRole('region', { name: 'Personal memory' });
-    const factory = screen.getByRole('region', { name: 'Factory memory' });
-    expect(await within(personal).findByText('Not used in this scope')).toBeInTheDocument();
-    expect(within(factory).getByText('Chats')).toBeInTheDocument();
-    expect(within(factory).getByText('Work-item runs')).toBeInTheDocument();
-  });
-
   it('points to Models settings while no provider is connected', async () => {
     stubProviders([{ provider: 'openai', source: 'none' }]);
     renderMemory();

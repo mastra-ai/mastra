@@ -41,7 +41,7 @@ export function thinkingLevelOptionsForModel(
 export type ThinkingDefaultOrigin = 'personal' | 'factory' | 'built-in';
 export type ThinkingLevelOrigin = 'session' | ThinkingDefaultOrigin;
 
-export const THINKING_DEFAULT_SOURCE_LABELS: Record<ThinkingDefaultOrigin, string> = {
+export const DEFAULT_SOURCE_LABELS: Record<ThinkingDefaultOrigin, string> = {
   personal: 'Personal default',
   factory: 'Factory default',
   'built-in': 'Built-in default',
