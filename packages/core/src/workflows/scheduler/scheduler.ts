@@ -37,6 +37,16 @@ export class Scheduler extends MastraBase {
   #stopping = false;
 
   /**
+   * Interval ticks before this time skip the storage query. With
+   * `maxIdleIntervalMs` set, a tick that finds nothing due sets it from the
+   * earliest active `nextFireAt`, so an idle deployment lets scale-to-zero
+   * databases suspend (#26944). Cleared by `wake()`.
+   */
+  #idleUntil = 0;
+  /** Bumped by `wake()` so an in-flight tick doesn't overwrite the reset with a stale idle window. */
+  #wakeGeneration = 0;
+
+  /**
    * Per-schedule count of consecutive ticks where the target workflow was
    * not registered with the host Mastra instance. Reset when the workflow
    * resolves or the schedule is deleted. Used to ride out deploy/startup
@@ -87,6 +97,7 @@ export class Scheduler extends MastraBase {
     // different.
     this.#missingWorkflowCounts.clear();
     this.#staleDefinitionCounts.clear();
+    this.#idleUntil = 0;
 
     try {
       // Run one tick immediately so newly-due schedules don't wait the full interval.
@@ -97,6 +108,7 @@ export class Scheduler extends MastraBase {
       if (this.#stopping || !this.#started) return;
 
       this.#intervalHandle = setInterval(() => {
+        if (Date.now() < this.#idleUntil) return;
         // Swallow rejections here so a tick failure can't surface as an
         // unhandled promise rejection and crash the host process. #processTick
         // already logs its own errors and notifies onError, so we only need a
@@ -155,6 +167,15 @@ export class Scheduler extends MastraBase {
     await this.#runTick();
   }
 
+  /**
+   * End an idle sleep so the next interval tick queries storage again. Call
+   * when a schedule was created or changed outside this scheduler.
+   */
+  wake(): void {
+    this.#idleUntil = 0;
+    this.#wakeGeneration++;
+  }
+
   // -------- Internals --------
 
   async #runTick(): Promise<void> {
@@ -167,11 +188,20 @@ export class Scheduler extends MastraBase {
   }
 
   async #processTick(): Promise<void> {
+    const wakeGeneration = this.#wakeGeneration;
+    const now = Date.now();
     let due: Schedule[];
     try {
-      due = await this.#schedulesStore.listDueSchedules(Date.now(), this.#config.batchSize);
+      due = await this.#schedulesStore.listDueSchedules(now, this.#config.batchSize);
     } catch (err) {
       this.logger.error('Failed to list due schedules', { error: err });
+      return;
+    }
+
+    const { maxIdleIntervalMs, tickIntervalMs } = this.#config;
+    if (due.length === 0 && maxIdleIntervalMs !== undefined && maxIdleIntervalMs > tickIntervalMs) {
+      const idleUntil = await this.#computeIdleUntil(now, maxIdleIntervalMs);
+      if (wakeGeneration === this.#wakeGeneration) this.#idleUntil = idleUntil;
       return;
     }
 
@@ -179,6 +209,22 @@ export class Scheduler extends MastraBase {
       if (this.#stopping) break;
       await this.#fireSchedule(schedule);
     }
+  }
+
+  /** Earliest active `nextFireAt`, capped at `maxIdleIntervalMs`. Returns 0 (keep polling) on error. */
+  async #computeIdleUntil(now: number, maxIdleIntervalMs: number): Promise<number> {
+    let active: Schedule[];
+    try {
+      active = await this.#schedulesStore.listSchedules({ status: 'active' });
+    } catch (err) {
+      this.logger.warn('Failed to look up the next scheduled fire; polling every tick', { error: err });
+      return 0;
+    }
+    let idleUntil = now + maxIdleIntervalMs;
+    for (const schedule of active) {
+      idleUntil = Math.min(idleUntil, schedule.nextFireAt);
+    }
+    return idleUntil;
   }
 
   /**

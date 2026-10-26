@@ -6062,7 +6062,7 @@ export class Mastra<
     }
   }
 
-  /** Subscribe until this process's scheduling workers start. Idempotent. */
+  /** Subscribe to wake events: start the scheduler on demand, or end its idle sleep. Idempotent. */
   async #wireSchedulerWakeSubscription(): Promise<void> {
     if (this.#schedulerWakeSubscription) return;
     const cb: EventCallback = async (event, ack, nack) => {
@@ -6080,6 +6080,9 @@ export class Mastra<
         if (this.#workersStarted) {
           await this.#ensureSchedulingWorkersStarted();
         }
+        // A running scheduler may be sleeping through an idle window (#26944);
+        // end it so the new or changed schedule is picked up on the next tick.
+        this.#findSchedulerWorker()?.scheduler?.wake();
         await ack?.();
       } catch (err) {
         await nack?.();
@@ -6245,9 +6248,6 @@ export class Mastra<
         await agentScheduleWorker.start();
       }
     }
-
-    // Startup is complete; further wake events have nothing to do.
-    await this.#unwireSchedulerWakeSubscription();
   }
 
   private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
@@ -7206,11 +7206,6 @@ export class Mastra<
     // workers mid-boot would race the start loop above. Honor it now.
     if (!name && this.#schedulerRequested && !this.#findSchedulerWorker()) {
       await this.#ensureSchedulingWorkersStarted();
-    }
-
-    // The wake subscription is only needed while the scheduler is stopped.
-    if (this.#findSchedulerWorker()?.isRunning) {
-      await this.#unwireSchedulerWakeSubscription();
     }
   }
 

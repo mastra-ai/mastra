@@ -97,6 +97,37 @@ describe('Agent schedules — scheduler integration', () => {
     expect(triggers[0]!.outcome).toBe('succeeded');
   }, 10_000);
 
+  it('wakes an idle-sleeping scheduler when a schedule is created or resumed (#26944)', async () => {
+    const agent = makeAgent('beat-idle');
+    const storage = new MockStore();
+    const mastra = track(
+      new Mastra({
+        logger: false,
+        storage,
+        agents: { 'beat-idle': agent },
+        notifications: { dispatch: { enabled: false } },
+        // Without a wake, nothing would be queried again for an hour.
+        scheduler: { enabled: true, tickIntervalMs: 50, maxIdleIntervalMs: 60 * 60_000 },
+      }),
+    );
+    await mastra.startWorkers();
+    await waitForScheduler(mastra);
+    const schedulesStore = (await storage.getStore('schedules'))!;
+    const listDue = vi.spyOn(schedulesStore, 'listDueSchedules');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(listDue).not.toHaveBeenCalled();
+
+    const hb = await mastra.schedules.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
+    await waitUntil(async () => (await schedulesStore.listTriggers(hb.id)).length > 0);
+
+    await mastra.schedules.pause(hb.id);
+    // Past the paused row's old fire time, so the scheduler falls back asleep with nothing active.
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    const triggersBeforeResume = (await schedulesStore.listTriggers(hb.id)).length;
+    await mastra.schedules.resume(hb.id);
+    await waitUntil(async () => (await schedulesStore.listTriggers(hb.id)).length > triggersBeforeResume);
+  }, 10_000);
+
   it('lazily injects + starts the scheduler when create() is called after startWorkers()', async () => {
     const agent = makeAgent('beat-late');
     const storage = new MockStore();
@@ -209,7 +240,7 @@ describe('Agent schedules — scheduler integration', () => {
       expect(triggers[0]!.outcome).toBe('succeeded');
     }, 10_000);
 
-    it('drops the wake subscription once the scheduler is running and on stopWorkers()', async () => {
+    it('keeps the wake subscription while the scheduler runs and drops it on stopWorkers()', async () => {
       const pubsub = new EventEmitterPubSub();
       const subscribe = vi.spyOn(pubsub, 'subscribe');
       const unsubscribe = vi.spyOn(pubsub, 'unsubscribe');
@@ -244,9 +275,16 @@ describe('Agent schedules — scheduler integration', () => {
       );
       await waitForScheduler(mastra);
       expect(ack).toHaveBeenCalledOnce();
-      expect(unsubscribe).toHaveBeenCalledWith(SCHEDULER_WAKE_TOPIC, wakeCb);
 
       const wakeCalls = (spy: typeof subscribe) => spy.mock.calls.filter(([topic]) => topic === SCHEDULER_WAKE_TOPIC);
+      // The running scheduler still listens, so wakes can end its idle sleep (#26944).
+      expect(wakeCalls(unsubscribe)).toHaveLength(0);
+      const wake = vi.spyOn(mastra.scheduler!, 'wake');
+      await wakeCb(
+        { id: 'wake-2', type: SCHEDULER_WAKE_EVENT, runId: 'remote-schedule', data: {}, createdAt: new Date() },
+        ack,
+      );
+      expect(wake).toHaveBeenCalledOnce();
 
       // A second startWorkers() with the scheduler already running must not
       // re-subscribe, and stopWorkers() must not unsubscribe twice.
@@ -254,14 +292,16 @@ describe('Agent schedules — scheduler integration', () => {
       expect(wakeCalls(subscribe)).toHaveLength(1);
       await mastra.stopWorkers();
       expect(wakeCalls(unsubscribe)).toHaveLength(1);
+      expect(unsubscribe).toHaveBeenCalledWith(SCHEDULER_WAKE_TOPIC, wakeCb);
 
       // stop → start: the scheduler worker object survives and is restarted by
-      // the regular start loop. Boot re-subscribes (scheduler not running yet)
-      // and must unwire again once it is, leaving no dangling subscription.
+      // the regular start loop. Boot re-subscribes and stays subscribed.
       await mastra.startWorkers();
       await waitForScheduler(mastra);
       expect(mastra.workers.filter(w => w.name === 'scheduler')).toHaveLength(1);
       expect(wakeCalls(subscribe)).toHaveLength(2);
+      expect(wakeCalls(unsubscribe)).toHaveLength(1);
+      await mastra.stopWorkers();
       expect(wakeCalls(unsubscribe)).toHaveLength(2);
     }, 10_000);
 

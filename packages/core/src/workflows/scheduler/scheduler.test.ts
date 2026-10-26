@@ -537,6 +537,114 @@ describe('Scheduler', () => {
     }
   });
 
+  describe('idle polling (#26944)', () => {
+    it('queries storage every tick by default', async () => {
+      vi.useFakeTimers();
+      const { store } = makeStore();
+      const listDue = vi.spyOn(store, 'listDueSchedules');
+      const listAll = vi.spyOn(store, 'listSchedules');
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub: new EventEmitterPubSub() });
+
+      await scheduler.start();
+      const queriesAfterStart = listDue.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(listDue.mock.calls.length).toBe(queriesAfterStart + 6);
+      expect(listAll).not.toHaveBeenCalled();
+      await scheduler.stop();
+    });
+
+    it('with maxIdleIntervalMs set, does not query storage on every tick when nothing is scheduled', async () => {
+      vi.useFakeTimers();
+      const { store } = makeStore();
+      const listDue = vi.spyOn(store, 'listDueSchedules');
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub: new EventEmitterPubSub(),
+        config: { maxIdleIntervalMs: 30 * 60_000 },
+      });
+
+      await scheduler.start();
+      const queriesAfterStart = listDue.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+
+      expect(listDue.mock.calls.length).toBe(queriesAfterStart);
+      await scheduler.stop();
+    });
+
+    it('sleeps until the next active schedule is due, then fires it', async () => {
+      vi.useFakeTimers();
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      const listDue = vi.spyOn(store, 'listDueSchedules');
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub, config: { maxIdleIntervalMs: 30 * 60_000 } });
+
+      const now = Date.now();
+      await store.createSchedule({
+        id: 'sched-later',
+        target: { type: 'workflow', workflowId: 'wf-test' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: now + 3 * 60_000,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await scheduler.start();
+      const queriesAfterStart = listDue.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(2 * 60_000);
+      expect(listDue.mock.calls.length).toBe(queriesAfterStart);
+      expect(events).toHaveLength(0);
+
+      await vi.advanceTimersByTimeAsync(60_000 + 10_000);
+      expect(events).toHaveLength(1);
+      await scheduler.stop();
+    });
+
+    it('keeps polling while idle at most every maxIdleIntervalMs', async () => {
+      vi.useFakeTimers();
+      const { store } = makeStore();
+      const listDue = vi.spyOn(store, 'listDueSchedules');
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub: new EventEmitterPubSub(),
+        config: { maxIdleIntervalMs: 60_000 },
+      });
+
+      await scheduler.start();
+      const queriesAfterStart = listDue.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(listDue.mock.calls.length).toBe(queriesAfterStart + 1);
+      await scheduler.stop();
+    });
+
+    it('wake() picks up a schedule created while idle on the next tick', async () => {
+      vi.useFakeTimers();
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub, config: { maxIdleIntervalMs: 30 * 60_000 } });
+
+      await scheduler.start();
+      const now = Date.now();
+      await store.createSchedule({
+        id: 'sched-new',
+        target: { type: 'workflow', workflowId: 'wf-test' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+      scheduler.wake();
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(events).toHaveLength(1);
+      await scheduler.stop();
+    });
+  });
+
   it('skips firing when the target workflow is not registered', async () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();

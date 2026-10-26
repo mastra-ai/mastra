@@ -567,6 +567,8 @@ export class Schedules {
       ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
       ...(nextStatus !== existing.status ? { status: nextStatus } : {}),
     });
+    // The next fire time may have moved earlier than an idle scheduler expects.
+    await this.#mastra.__publishSchedulerWake(updated.id);
     return toScheduleView(updated)!;
   }
 
@@ -684,6 +686,7 @@ export class Schedules {
       return toScheduleView(completed)!;
     }
     const updated = await store.updateSchedule(existing.id, { status: 'active', nextFireAt });
+    await this.#mastra.__publishSchedulerWake(updated.id);
     return toScheduleView(updated)!;
   }
 
