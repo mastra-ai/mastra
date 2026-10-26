@@ -9101,9 +9101,9 @@ importers:
 
   voice/speechify:
     dependencies:
-      '@speechify/api-sdk':
-        specifier: ^2.5.4
-        version: 2.5.4
+      '@speechify/api':
+        specifier: ^4.0.1
+        version: 4.0.1
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -19827,9 +19827,9 @@ packages:
     resolution: {integrity: sha512-f8AqJMH1+BL15G6bHDzb1jyY+wW4gOYQs5JumSxmnE/H/+KgqbIZgaPwDdRwoeciDGojoSVrRHiTZjbe7n7dJA==}
     engines: {node: '>=18'}
 
-  '@speechify/api-sdk@2.5.4':
-    resolution: {integrity: sha512-3oe844uNpR/XLy306xMoOkeURvlo5fYKtAtOVJpYq4BrSImLNjvR+Vf5gmahrk3WzZ6wW//bhXRPjxOmjjQdpQ==}
-    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+  '@speechify/api@4.0.1':
+    resolution: {integrity: sha512-OsfZbx4o47kIZ29OmntUj/9J2LYrlntRHfAwZ8uRLCw2gsu5zgQf46yasDgGe9fNgC5XI1+JfJwCweYVs5w+4w==}
+    engines: {node: '>=18.0.0'}
 
   '@speed-highlight/core@1.2.24':
     resolution: {integrity: sha512-qeW2e1l78afw8VhRPfPQ1Gjj+KU5XFQ/OFV5ti6eTa9bruO7mJyZtA4vw0ofqmA3tKCkROE9xLk3VZoeRc98nw==}
@@ -43527,7 +43527,7 @@ snapshots:
     dependencies:
       yoctocolors-cjs: 2.1.3
 
-  '@speechify/api-sdk@2.5.4': {}
+  '@speechify/api@4.0.1': {}
 
   '@speed-highlight/core@1.2.24': {}
 
