@@ -562,7 +562,7 @@ This issue doesn't occur during development with `mastra dev` since it doesn't r
 Add the `@copilotkit/runtime` package to your bundler externals configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
+import { Mastra } from '@mastra/core/mastra'
 
 export const mastra = new Mastra({
   bundler: {
