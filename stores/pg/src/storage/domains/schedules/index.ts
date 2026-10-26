@@ -360,6 +360,17 @@ export class SchedulesPG extends SchedulesStorage {
     return rows.map(rowToSchedule);
   }
 
+  async getNextFireAt(): Promise<number | null> {
+    const row = await this.#client.oneOrNone<Record<string, any>>(
+      `SELECT next_fire_at FROM ${this.#table(TABLE_SCHEDULES)}
+       WHERE status = $1
+       ORDER BY next_fire_at ASC
+       LIMIT 1`,
+      ['active'],
+    );
+    return row ? toNumber(row.next_fire_at) : null;
+  }
+
   async updateSchedule(id: string, patch: ScheduleUpdate): Promise<Schedule> {
     const setClauses: string[] = [];
     const params: unknown[] = [];

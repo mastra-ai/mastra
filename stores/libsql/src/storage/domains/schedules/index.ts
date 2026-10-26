@@ -289,6 +289,18 @@ export class SchedulesLibSQL extends SchedulesStorage {
     return result.rows.map(r => rowToSchedule(r as Record<string, any>));
   }
 
+  async getNextFireAt(): Promise<number | null> {
+    const result = await this.#client.execute({
+      sql: `SELECT next_fire_at FROM ${TABLE_SCHEDULES}
+            WHERE status = ?
+            ORDER BY next_fire_at ASC
+            LIMIT 1`,
+      args: ['active'],
+    });
+    const row = result.rows[0];
+    return row ? toNumber(row.next_fire_at) : null;
+  }
+
   async updateSchedule(id: string, patch: ScheduleUpdate): Promise<Schedule> {
     const setClauses: string[] = [];
     const params: InValue[] = [];

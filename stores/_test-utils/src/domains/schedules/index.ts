@@ -125,6 +125,23 @@ export function createSchedulesTests({ storage }: SchedulesTestOptions) {
       });
     });
 
+    describe('getNextFireAt', () => {
+      it('returns null when there are no active schedules', async () => {
+        if (!scheduleStore) return;
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 's1', status: 'paused', nextFireAt: 1_000 }));
+        expect(await scheduleStore.getNextFireAt()).toBeNull();
+      });
+
+      it('returns the earliest nextFireAt across active schedules', async () => {
+        if (!scheduleStore) return;
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 's1', nextFireAt: 9_000 }));
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 's2', status: 'paused', nextFireAt: 1_000 }));
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 's3', nextFireAt: 4_000 }));
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 's4', nextFireAt: 7_000 }));
+        expect(await scheduleStore.getNextFireAt()).toBe(4_000);
+      });
+    });
+
     describe('updateSchedule', () => {
       it('patches provided fields and bumps updatedAt', async () => {
         if (!scheduleStore) return;

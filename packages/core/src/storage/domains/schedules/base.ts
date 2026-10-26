@@ -284,8 +284,11 @@ export abstract class SchedulesStorage extends StorageDomain {
    */
   async getNextFireAt(): Promise<number | null> {
     const active = await this.listSchedules({ status: 'active' });
-    if (active.length === 0) return null;
-    return Math.min(...active.map(s => s.nextFireAt));
+    let earliest: number | null = null;
+    for (const schedule of active) {
+      if (earliest === null || schedule.nextFireAt < earliest) earliest = schedule.nextFireAt;
+    }
+    return earliest;
   }
 
   /** Partial update of a schedule row. */
