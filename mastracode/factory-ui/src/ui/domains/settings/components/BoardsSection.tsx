@@ -401,7 +401,13 @@ function PhaseEditor({
               onChange(
                 kind === 'working'
                   ? { kind }
-                  : { kind, ...(kind === 'resting' ? { runner: null } : {}), exitTool: null, autoApproveWhen: null },
+                  : {
+                      kind,
+                      ...(kind === 'resting' ? { runner: null } : {}),
+                      exitTool: null,
+                      autoApproveWhen: null,
+                      autoStart: false,
+                    },
               );
             }}
           />
@@ -488,6 +494,19 @@ function PhaseEditor({
             Only people move cards here; agents leave the card where it is
           </Txt>
         </label>
+        {phase.kind === 'working' && (
+          <label className="flex items-center gap-2">
+            <Switch
+              aria-label={`${phase.name} starts on its own`}
+              checked={phase.autoStart === true}
+              disabled={disabled}
+              onCheckedChange={autoStart => onChange({ autoStart })}
+            />
+            <Txt as="span" variant="caption" className="text-muted-foreground">
+              Starts on its own, without anyone approving the run
+            </Txt>
+          </label>
+        )}
 
         {phase.kind === 'working' && phase.exitTool && (
           <div className="flex flex-col gap-1">

@@ -20,6 +20,7 @@ export interface CompilableBoard {
     readonly nextPhases?: readonly string[] | null;
     readonly exitTool?: string | null;
     readonly manualEntry?: boolean;
+    readonly autoStart?: boolean;
   }[];
 }
 
@@ -168,6 +169,7 @@ export function compileStoredBoard(
       // A phase grants the Factory tools its runner works with; a context name grants none.
       factoryTools: runner?.factoryTools ?? [],
       ...(phase.manualEntry ? { manualEntry: true } : {}),
+      ...(phase.autoStart ? { autoStart: true } : {}),
       outcomes: Object.fromEntries(targets.map(target => [target, target])),
       ...(runner?.onEnter ? { onEnter: runner.onEnter } : {}),
       ...(runner?.onExit ? { onExit: runner.onExit } : {}),

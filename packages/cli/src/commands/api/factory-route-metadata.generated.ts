@@ -1105,6 +1105,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         },
                         "manualEntry": {
                           "type": "boolean"
+                        },
+                        "autoStart": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -3757,7 +3760,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "$ref": "#/$defs/__schema0"
             },
             "intakeRoutes": {
-              "$ref": "#/$defs/__schema37"
+              "$ref": "#/$defs/__schema38"
             }
           },
           "required": [
@@ -3795,7 +3798,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "$ref": "#/$defs/__schema5"
             },
             "eventRoutes": {
-              "$ref": "#/$defs/__schema29"
+              "$ref": "#/$defs/__schema30"
             }
           },
           "required": [
@@ -3864,6 +3867,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             },
             "manualEntry": {
               "$ref": "#/$defs/__schema28"
+            },
+            "autoStart": {
+              "$ref": "#/$defs/__schema29"
             }
           },
           "required": [
@@ -4186,13 +4192,16 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "boolean"
         },
         "__schema29": {
+          "type": "boolean"
+        },
+        "__schema30": {
           "maxItems": 100,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema30"
+            "$ref": "#/$defs/__schema31"
           }
         },
-        "__schema30": {
+        "__schema31": {
           "type": "object",
           "properties": {
             "event": {
@@ -4238,7 +4247,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "maxItems": 20,
                       "type": "array",
                       "items": {
-                        "$ref": "#/$defs/__schema31"
+                        "$ref": "#/$defs/__schema32"
                       }
                     }
                   },
@@ -4266,10 +4275,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ],
           "additionalProperties": false
         },
-        "__schema31": {
+        "__schema32": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema32"
+              "$ref": "#/$defs/__schema33"
             },
             {
               "type": "object",
@@ -4286,7 +4295,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "maxItems": 20,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema36"
+                    "$ref": "#/$defs/__schema37"
                   }
                 }
               },
@@ -4298,17 +4307,17 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
-        "__schema32": {
+        "__schema33": {
           "type": "object",
           "properties": {
             "field": {
-              "$ref": "#/$defs/__schema33"
-            },
-            "operator": {
               "$ref": "#/$defs/__schema34"
             },
-            "value": {
+            "operator": {
               "$ref": "#/$defs/__schema35"
+            },
+            "value": {
+              "$ref": "#/$defs/__schema36"
             }
           },
           "required": [
@@ -4317,7 +4326,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ],
           "additionalProperties": false
         },
-        "__schema33": {
+        "__schema34": {
           "type": "string",
           "enum": [
             "pullRequest.merged",
@@ -4329,7 +4338,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.sourceKind"
           ]
         },
-        "__schema34": {
+        "__schema35": {
           "type": "string",
           "enum": [
             "equals",
@@ -4346,13 +4355,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "less_than_or_equal"
           ]
         },
-        "__schema35": {
+        "__schema36": {
           "$ref": "#/$defs/__schema25"
         },
-        "__schema36": {
+        "__schema37": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema32"
+              "$ref": "#/$defs/__schema33"
             },
             {
               "type": "object",
@@ -4369,7 +4378,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "maxItems": 20,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema32"
+                    "$ref": "#/$defs/__schema33"
                   }
                 }
               },
@@ -4381,15 +4390,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
-        "__schema37": {
+        "__schema38": {
           "default": [],
           "maxItems": 100,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema38"
+            "$ref": "#/$defs/__schema39"
           }
         },
-        "__schema38": {
+        "__schema39": {
           "type": "object",
           "properties": {
             "when": {
@@ -4574,6 +4583,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                           ]
                         },
                         "manualEntry": {
+                          "type": "boolean"
+                        },
+                        "autoStart": {
                           "type": "boolean"
                         }
                       },

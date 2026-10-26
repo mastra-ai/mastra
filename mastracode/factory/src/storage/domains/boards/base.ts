@@ -32,6 +32,8 @@ export interface StoredPhase {
   autoApproveWhen: RuleGroup | null;
   /** Only people move cards into this phase; agents leave them where they are. */
   manualEntry: boolean;
+  /** The phase's runner starts without anyone approving it, even with the project's auto-run off. */
+  autoStart: boolean;
 }
 
 export interface StoredEventRoute {
@@ -115,6 +117,7 @@ interface PhaseRow extends Record<string, unknown> {
   exit_tool?: string | null;
   auto_approve_when?: RuleGroup | null;
   manual_entry?: boolean | null;
+  auto_start?: boolean | null;
 }
 
 interface IntakeRouteRow extends Record<string, unknown> {
@@ -226,6 +229,7 @@ export class BoardsStorage extends FactoryStorageDomain {
                 exitTool: phase.exit_tool ?? null,
                 autoApproveWhen: phase.auto_approve_when ?? null,
                 manualEntry: phase.manual_entry === true,
+                autoStart: phase.auto_start === true,
               })),
             eventRoutes: eventRoutes
               .filter(route => route.board_key === board.key)
@@ -338,6 +342,7 @@ export class BoardsStorage extends FactoryStorageDomain {
               exit_tool: phase.exitTool ?? null,
               auto_approve_when: phase.autoApproveWhen ?? null,
               manual_entry: phase.manualEntry ?? false,
+              auto_start: phase.autoStart ?? false,
             });
           }
           for (const [position, route] of (board.eventRoutes ?? []).entries()) {

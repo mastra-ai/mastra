@@ -261,18 +261,19 @@ function createSession(
 async function queueDecision(
   storage: WorkItemsStorage,
   decision: FactoryCommitDecision,
-  options?: { sourceKey?: string; ingress?: string },
+  options?: { sourceKey?: string; ingress?: string; stage?: string },
 ) {
   const item = await createItem(storage, options?.sourceKey);
   const configVersion = 'rules-v1';
-  const boards = createLifecycleTestRegistry({ execute: { issue: { onEnter: () => decision } } });
+  const stage = options?.stage ?? 'execute';
+  const boards = createLifecycleTestRegistry({ [stage]: { issue: { onEnter: () => decision } } });
   const transitionService = new FactoryTransitionService({ storage, configVersion, boards });
   const result = await transitionService.transition({
     orgId: 'org-1',
     factoryProjectId: PROJECT_ID,
     workItemId: item.id,
     board: 'work',
-    stage: 'execute',
+    stage,
     expectedRevision: item.revision,
     actor: { type: 'system', id: 'factory-rule-dispatcher' },
     ingress: { type: 'rule', identity: options?.ingress ?? 'move-1' },
@@ -3355,6 +3356,68 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
+  it('starts Triage and Review on their own with automatic runs off, and asks before Planning', async () => {
+    const outcomes: Record<string, string | undefined> = {};
+    for (const [stage, skillName] of [
+      ['triage', 'factory-triage'],
+      ['review', 'factory-self-review'],
+      ['planning', 'factory-plan'],
+    ] as const) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(
+        storage,
+        { type: 'invokeSkill', role: 'work', skillName, idempotencyKey: `auto-${stage}` },
+        { stage },
+      );
+      await bindWorkRun(storage, item.id);
+      const { controller } = createSession();
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => false,
+      });
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      outcomes[stage] = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(
+        row => row.idempotencyKey === `auto-${stage}`,
+      )?.status;
+    }
+    expect(outcomes).toEqual({ triage: 'succeeded', review: 'succeeded', planning: 'proposed' });
+  });
+
+  it('still asks before reviewing a card an outsider wrote, even in Review', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const outsider = await createPullRequestItem(storage, false);
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: outsider.id,
+      ingress: { identity: 'outsider-push', triggerType: 'github' },
+      configVersion: 'rules-v1',
+      expectedRevision: outsider.revision,
+      actor: { type: 'github', login: 'maintainer', trusted: true, factoryAuthored: false },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'transition', board: 'work', stage: 'review', idempotencyKey: 'outsider-review' }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'proposed' });
+    expect((await storage.get({ orgId: 'org-1', id: outsider.id }))?.stages).toEqual(['intake']);
+  });
+
   async function createPullRequestItem(storage: WorkItemsStorage, authorTrusted = true) {
     return (
       await storage.upsert({
@@ -3372,7 +3435,7 @@ describe('FactoryDecisionDispatcher', () => {
     ).item;
   }
 
-  it('parks an external push that would pull a rested card back into a working lane', async () => {
+  it('moves a rested card to Review on a trusted push without asking, since Review starts on its own', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createPullRequestItem(storage);
     const transitionService = new FactoryTransitionService({
@@ -3403,8 +3466,47 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
 
-    const [parked] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(parked).toMatchObject({ status: 'proposed' });
+    const rows = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(rows.find(row => row.idempotencyKey === 're-review-1')?.status).toBe('succeeded');
+    // Entering Review queued its review run.
+    expect(rows.find(row => row.idempotencyKey !== 're-review-1')?.decision).toMatchObject({
+      type: 'invokeSkill',
+      role: 'review',
+      skillName: 'factory-review',
+    });
+    expect(session.sendSignal).not.toHaveBeenCalled();
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+  });
+
+  it('parks an external push that would pull a rested card into a working lane that waits for consent', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createPullRequestItem(storage);
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'push-2', triggerType: 'github' },
+      configVersion: 'rules-v1',
+      expectedRevision: item.revision,
+      actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'transition', board: 'work', stage: 'execute', idempotencyKey: 'build-1' }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'proposed' });
     expect(session.sendSignal).not.toHaveBeenCalled();
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
   });

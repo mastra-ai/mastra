@@ -507,6 +507,7 @@ const storedBoardConfigSchema = z.object({
           exitTool: z.string().nullable(),
           autoApproveWhen: ruleGroupSchema.nullable(),
           manualEntry: z.boolean().optional(),
+          autoStart: z.boolean().optional(),
         }),
       ),
       eventRoutes: z.array(

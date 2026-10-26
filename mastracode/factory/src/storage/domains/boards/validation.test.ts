@@ -95,6 +95,12 @@ describe('stored board validation', () => {
     expect(messages(result)).toContain('A resting phase runs nothing.');
   });
 
+  it('lets only a working phase start on its own', () => {
+    expect(messages(storedBoardInputSchema.safeParse(board([{ ...open, autoStart: true }, closed])))).toContain(
+      'Only a working phase starts a runner.',
+    );
+  });
+
   it('rejects keys that are not lowercase slugs and names that are blank once trimmed', () => {
     expect(storedBoardInputSchema.safeParse({ ...board([open, closed]), key: 'Work' }).success).toBe(false);
     expect(storedBoardInputSchema.safeParse({ ...board([open, closed]), key: 'my board' }).success).toBe(false);

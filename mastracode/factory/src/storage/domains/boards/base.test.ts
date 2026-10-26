@@ -68,6 +68,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('BoardsStorage o
     expect(work!.phases.every(phase => phase.nextPhases === null)).toBe(true);
     // Planning is people-only; every other phase takes agents.
     expect(work!.phases.filter(phase => phase.manualEntry).map(phase => phase.key)).toEqual(['planning']);
+    // Triage and Review start on their own.
+    expect(work!.phases.filter(phase => phase.autoStart).map(phase => phase.key)).toEqual(['triage', 'review']);
     expect(work!.eventRoutes.map(route => [route.event, route.toPhaseKey])).toEqual(
       workBoardTemplate.eventRoutes.map(route => [route.event, route.toPhaseKey]),
     );

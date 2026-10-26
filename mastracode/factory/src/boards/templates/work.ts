@@ -25,18 +25,19 @@ export const workBoardTemplate = {
   description: 'Issues and pull requests from intake to done.',
   phases: [
     { key: 'intake', name: 'Intake', kind: 'resting' },
-    { key: 'triage', name: 'Triage', kind: 'working', runner: TRIAGE },
+    // Triage and Review start on their own; Planning waits for a person to move a card there.
+    { key: 'triage', name: 'Triage', kind: 'working', runner: TRIAGE, autoStart: true },
     {
       key: 'planning',
       name: 'Planning',
       kind: 'working',
       runner: { type: 'agent', agentId: 'factory-plan', skill: 'factory-plan', context: 'plan' },
       exitTool: 'submit_plan',
-      // Triage runs on its own; a person decides what gets planned.
+      // A person decides what gets planned.
       manualEntry: true,
     },
     { key: 'execute', name: 'Building', kind: 'working', runner: { type: 'workflow', workflowId: 'factory-build' } },
-    { key: 'review', name: 'Review', kind: 'working', runner: REVIEW },
+    { key: 'review', name: 'Review', kind: 'working', runner: REVIEW, autoStart: true },
     { key: 'done', name: 'Done', kind: 'terminal', runner: COMPLETE },
     { key: 'canceled', name: 'Canceled', kind: 'terminal' },
   ],

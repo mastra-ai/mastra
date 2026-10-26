@@ -539,6 +539,20 @@ function reviewsFactoryAuthoredCode(
   return decision.type === 'invokeSkill' && decision.role === 'review';
 }
 
+// A phase that starts on its own needs no one's go-ahead for its runs, whether the card
+// just moved there (a transition) or its runner was invoked there (a skill run).
+function startsInAutoPhase(
+  boards: BoardRegistry,
+  item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
+  decision: FactoryCommitDecision,
+): boolean {
+  if (decision.type === 'transition') {
+    return boards.get(currentBoardId(decision.board))?.startsAutomatically(decision.stage) === true;
+  }
+  if (decision.type !== 'invokeSkill' || item.stages.length !== 1) return false;
+  return boards.get(boardForWorkItem(item))?.startsAutomatically(item.stages[0]!) === true;
+}
+
 function leaseIdentity(
   record: Pick<FactoryDeferredDecisionRecord | FactoryPendingStartRecord, 'id' | 'orgId' | 'factoryProjectId'>,
   ownerId: string,
@@ -904,7 +918,8 @@ export class FactoryDecisionDispatcher {
   // Effects a person owns: starting a run (compute + code execution), and an
   // external event pulling a card back into a working lane.
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
-    if (record.approvedAt !== null || !requestsConsent(await this.#boardsFor(record), record, decision)) return false;
+    const boards = await this.#boardsFor(record);
+    if (record.approvedAt !== null || !requestsConsent(boards, record, decision)) return false;
     // Withholding auto-run decides what the Factory may pick up on its own, not
     // whether it may finish work a person already handed it. Once someone starts
     // an item, the runs that carry it to review are that same request continuing.
@@ -914,6 +929,7 @@ export class FactoryDecisionDispatcher {
     if (item && externallyAuthoredWorkItem(item)) return true;
     if (item?.autonomyArmedAt != null) return false;
     if (item && reviewsFactoryAuthoredCode(item, decision)) return false;
+    if (item && startsInAutoPhase(boards, item, decision)) return false;
     return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
 
