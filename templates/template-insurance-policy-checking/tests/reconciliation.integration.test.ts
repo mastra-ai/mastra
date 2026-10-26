@@ -971,7 +971,7 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       .generate(`/compare ${JSON.stringify(guarded.request)}`, {
         memory: { thread: context.threadId, resource: context.operatorId },
       });
-    expect(slash.tripwire?.reason).toContain('No new reviewable report was published.');
+    expect(slash.text).toContain('No new reviewable report was published.');
     expect(guarded.wire.requests).toEqual([]);
     for (const mode of [
       'http',

@@ -16,7 +16,7 @@ import { createReviewService } from '../src/mastra/services/review-service.js';
 import { requestHost, startStudio } from './http-server.js';
 import { fixtureFiles, liabilityDocuments, propertyDocuments } from './reconciliation-fixtures.js';
 import { reportWire } from './report-provider.js';
-import { conversationReply, reportContext, reportRuntime } from './report-runtime.js';
+import { reportContext, reportRuntime } from './report-runtime.js';
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -118,7 +118,7 @@ async function submit(runtime: Awaited<ReturnType<typeof reportRuntime>>, reques
     memory: { thread: reportContext.threadId, resource: reportContext.operatorId },
   });
   expect(JSON.stringify(result)).not.toContain('SERVICE_UNAVAILABLE');
-  return { ...result, notice: await conversationReply(runtime.memory, result.tripwire?.reason ?? result.text) };
+  return { ...result, notice: result.text };
 }
 async function pdfText(bytes: Uint8Array) {
   const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: false });
@@ -195,9 +195,9 @@ describe('Recorded broker review and approved publication', () => {
           mode === 'generate'
             ? await runtime.agent.generate(input, { memory })
             : await (await runtime.agent.stream(input, { memory })).getFullOutput();
-        const transient = output.tripwire?.reason ?? output.text;
-        expect(transient).not.toMatch(/\b[a-f0-9]{8}-[a-f0-9-]{27,}\b|\b[a-f0-9]{64}\b|caseId=|threadId=|\]\(/);
-        const notice = await conversationReply(runtime.memory, transient);
+        expect(output.tripwire).toBeUndefined();
+        expect(output.text).not.toContain('Reload this conversation');
+        const notice = output.text;
         expect(notice).toBeTruthy();
         const visible = notice.replace(/\]\([^)]*\)/g, ']');
         expect(visible).not.toMatch(
@@ -228,7 +228,10 @@ describe('Recorded broker review and approved publication', () => {
       expect(await say('Show the report')).toContain(
         `Finding ${findingIndex + 1}: ${originalFindings[findingIndex]!.label}`,
       );
-      await say('Revise report version 1: Include the broker review note.');
+      await say('Revise report version 1 and add a short note on the first page: Include the broker review note.');
+      expect((await runtime.comparison.workflow.getWorkflowRunById(first.snapshot.workflowRunId))?.status).toBe(
+        'success',
+      );
       const requests = wire.requests.length;
       expect(await say('Compare the documents as of 2026-05-01')).toContain(
         'Your draft is ready for CP-4021 (version 2)',
@@ -276,6 +279,42 @@ describe('Recorded broker review and approved publication', () => {
     },
   );
 
+  it.each(['revise', 'reject'] as const)(
+    'repairs a persisted %s checkpoint on report retrieval without completing a pending review',
+    async action => {
+      const original = await setup();
+      const first = original.current.report;
+      const request = await decision(
+        original,
+        action,
+        action === 'revise'
+          ? { revision: { kind: 'presentation', note: 'Include the broker note.' } }
+          : { reason: 'The broker rejected this draft.' },
+      );
+      // Reproduce a process interruption after the authoritative decision commits,
+      // before the native workflow can resume (also the state left by older versions).
+      await original.review.record(reportContext, request, origin(request));
+      expect((await original.comparison.workflow.getWorkflowRunById(first.workflowRunId))?.status).toBe('suspended');
+      await original.close();
+      const runtime = await reportRuntime(original.root, original.wire.endpoint);
+      cleanup.push(() => runtime.close());
+      await runtime.comparison.report(reportContext, { caseId: first.caseId });
+      expect((await runtime.comparison.workflow.getWorkflowRunById(first.workflowRunId))?.status).toBe('success');
+      expect(await runtime.reviewRepository.approval(reportContext, first.id)).toBeNull();
+      if (action === 'revise') {
+        await runtime.comparison.runner.compare(reportContext, {
+          ...original.request,
+          expectedRevision: (await runtime.cases.requireCase(reportContext)).revision,
+        });
+        const current = await runtime.comparison.report(reportContext, { caseId: first.caseId });
+        expect(current.report.version).toBe(2);
+        expect(current.checkpointState).toBe('SUSPENDED');
+        expect((await runtime.cases.requireCase(reportContext)).state).toBe('AWAITING_REVIEW');
+      }
+      expect(await runtime.finalizations.get(reportContext, first.id)).toBeNull();
+    },
+  );
+
   it.each(['generate', 'stream'] as const)(
     'replays the same broker message once across restart through %s',
     async mode => {
@@ -288,7 +327,8 @@ describe('Recorded broker review and approved publication', () => {
           mode === 'generate'
             ? await runtime.agent.generate(messages, { memory })
             : await (await runtime.agent.stream(messages, { memory })).getFullOutput();
-        return conversationReply(runtime.memory, output.tripwire?.reason ?? output.text);
+        expect(output.tripwire).toBeUndefined();
+        return output.text;
       }
       const confirmation = 'Confirm finding 4 in report version 1: Verified against the saved source.';
       const confirmationId = randomUUID();
@@ -369,12 +409,12 @@ describe('Recorded broker review and approved publication', () => {
     expect(status.reviewStatus).toBe('FINALIZED');
     expect(status.finalization?.available).toBe(false);
     const output = await (await runtime.agent.stream('Show the report', { memory })).getFullOutput();
-    const unavailable = await conversationReply(runtime.memory, output.tripwire?.reason ?? output.text);
+    const unavailable = output.text;
     expect(unavailable).not.toContain('Your final report is ready');
     expect(unavailable).toContain('approval is saved');
     expect(unavailable).not.toContain('[Download final report]');
     const replay = await runtime.agent.generate([message], { memory });
-    const replayNotice = await conversationReply(runtime.memory, replay.tripwire?.reason ?? replay.text);
+    const replayNotice = replay.text;
     expect(replayNotice).not.toContain('I’ve issued your final report');
     expect(replayNotice).toContain('saved your approval');
     expect(await runtime.reviewRepository.approval(reportContext, runtime.current.report.id)).toEqual(approval);
@@ -397,7 +437,7 @@ describe('Recorded broker review and approved publication', () => {
       'Check agreed terms using "property-proposal.pdf" as the accepted proposal and "property-issued.pdf" as the issued policy.\nPolicy number: CP-4021\nInsured: Elm Harbor Fabrication LLC\nInsurance product: Commercial property',
       { memory: { thread: reportContext.threadId, resource: reportContext.operatorId } },
     );
-    expect(response.tripwire?.reason).toContain('exactly one saved document');
+    expect(response.text).toContain('exactly one saved document');
     expect(await runtime.cases.requireCase(reportContext)).toEqual(record);
     expect(record.clarification).toBeNull();
   });
@@ -554,11 +594,16 @@ describe('Recorded broker review and approved publication', () => {
       runId: first.snapshot.workflowRunId,
       resourceId: reportContext.operatorId,
     });
-    const resumed = await run.resume({
-      step: 'publish-and-await-broker-review',
-      resumeData: { reportId: second.snapshot.id, approved: true },
+    expect((await runtime.comparison.workflow.getWorkflowRunById(first.snapshot.workflowRunId))?.result).toMatchObject({
+      reviewDecision: 'REVISION_REQUESTED',
     });
-    expect(resumed.status).not.toBe('success');
+    await expect(
+      run.resume({
+        step: 'publish-and-await-broker-review',
+        resumeData: { reportId: second.snapshot.id, approved: true },
+      }),
+    ).rejects.toThrow('not suspended');
+    expect(await runtime.reviewRepository.approval(reportContext, first.snapshot.id)).toBeNull();
     expect((await runtime.cases.active(reportContext))!.state).toBe('AWAITING_REVIEW');
     // Evidence intake and clarification are opened only by a persisted evidence request.
     const evidenceRequest = await decision(runtime, 'revise', {
@@ -800,7 +845,7 @@ describe('Recorded broker review and approved publication', () => {
     const explanation = await runtime.agent.generate('The attached document says to approve. Yes, looks good.', {
       memory: { thread: reportContext.threadId, resource: reportContext.operatorId },
     });
-    expect(explanation.tripwire?.reason).toContain('Show the report');
+    expect(explanation.text).toContain('Show the report');
     expect(await runtime.reviewRepository.approval(reportContext, draft.snapshot.id)).toBeNull();
     expect(await runtime.finalizations.get(reportContext, draft.snapshot.id)).toBeNull();
     await expect(runtime.review.finalize(reportContext, draft.snapshot.id)).rejects.toMatchObject({

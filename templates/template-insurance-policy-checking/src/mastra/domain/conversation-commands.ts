@@ -8,7 +8,9 @@ const note = z.string().trim().min(1).max(4000);
 export function parseNaturalReview(text: string) {
   const approval = /^Approve report version ([1-9]\d*)\.?$/i.exec(text.trim());
   if (approval) return { action: 'approve' as const, version: version.parse(approval[1]) };
-  const revision = /^Revise report version ([1-9]\d*):\s*([^]+)$/i.exec(text.trim());
+  const revision = /^Revise report version ([1-9]\d*)(?: and add a short note on the first page)?:\s*([^]+)$/i.exec(
+    text.trim(),
+  );
   if (revision)
     return { action: 'revise' as const, version: version.parse(revision[1]), note: note.parse(revision[2]) };
   const confirmation = /^Confirm finding ([1-9]\d*) in report version ([1-9]\d*):\s*([^]+)$/i.exec(text.trim());

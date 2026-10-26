@@ -14,7 +14,7 @@ import type { CaseService } from '../services/case-service.js';
 import type { ReconciliationService } from '../services/reconciliation-service.js';
 import type { ReportService } from '../services/report-service.js';
 import { createReconcileEvidenceStep } from './reconcile-evidence-step.js';
-import { createReviewCheckpointStep } from './review-checkpoint-step.js';
+import { createReviewCheckpointStep, reviewedComparisonResultSchema } from './review-checkpoint-step.js';
 
 export function createPolicyCheckingWorkflow(
   service: ReconciliationService,
@@ -26,7 +26,7 @@ export function createPolicyCheckingWorkflow(
   const definition = createWorkflow({
     id: 'policy-checking-workflow',
     inputSchema: compareRequestSchema,
-    outputSchema,
+    outputSchema: reports ? reviewedComparisonResultSchema : outputSchema,
     options: { shouldPersistSnapshot: () => true, autoRestartActiveRuns: false },
   }).then(createReconcileEvidenceStep(service, cases, operatorId, reports));
   const workflow = (
@@ -76,6 +76,7 @@ export function createPolicyCheckingWorkflow(
       );
     const request = reportRequestSchema.parse(input);
     await cases.repository.requireCase(context, request.caseId);
+    await closeReviewedRuns(context);
     const publication = await reports.repository.get(context, request.reportId);
     const record = await cases.repository.requireCase(context, request.caseId);
     const completed = !publication ? await service.completed(context) : null;
@@ -143,6 +144,30 @@ export function createPolicyCheckingWorkflow(
           }
         : {}),
     };
+  }
+  async function closeReviewedRuns(context: import('../domain/case-contracts.js').OperationContext) {
+    if (!reports?.review) return;
+    const decisions = (await reports.review.repository.events(context)).filter(event =>
+      ['revise', 'reject'].includes(event.action),
+    );
+    for (const reportId of new Set(decisions.map(event => event.reportId))) {
+      const publication = await reports.repository.get(context, reportId);
+      if (!publication) continue;
+      const runId = publication.snapshot.workflowRunId;
+      const state = await workflow.getWorkflowRunById(runId);
+      if (state?.status !== 'suspended') continue;
+      const requestContext = new RequestContext();
+      requestContext.set('insuranceThreadId', context.threadId);
+      const run = await workflow.createRun({ runId, resourceId: operatorId });
+      const result = await run.resume({ step: 'publish-and-await-broker-review', resumeData: {}, requestContext });
+      if (result.status !== 'success')
+        throw new IntakeError(
+          'WORKFLOW_INTERRUPTED',
+          'Your review decision is saved, but its workflow has not closed.',
+          'Say “Show the report” to retry recovery of the same reviewed workflow.',
+          503,
+        );
+    }
   }
   async function resumeApproved(context: import('../domain/case-contracts.js').OperationContext, reportId: string) {
     if (!reports?.review)

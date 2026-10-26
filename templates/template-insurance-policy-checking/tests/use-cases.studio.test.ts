@@ -255,3 +255,113 @@ for (const property of [true, false]) {
     },
   );
 }
+
+// Verify the broker sees live Markdown links and closes each version's native workflow,
+// while every authoritative case and review record crosses real storage/HTTP boundaries.
+test.describe('Broker review in native Studio', () => {
+  test.describe('when the broker revises and approves a named-file report', () => {
+    test('streams usable PDF links without reloading and completes only reviewed versions', async ({ page }, info) => {
+      test.setTimeout(180_000);
+      const root = await mkdtemp(join(tmpdir(), 'insurance-guided-studio-'));
+      const documents = propertyDocuments({ instructions: true });
+      const wire = await reportWire(documents);
+      let studio: Awaited<ReturnType<typeof startStudio>> | undefined;
+      let cases: CaseRepository | undefined;
+      let threadId: string | undefined;
+      page.on('request', request => {
+        if (request.method() !== 'POST') return;
+        try {
+          const body = request.postDataJSON() as { memory?: { thread?: string | { id: string } }; threadId?: string };
+          threadId ??=
+            typeof body.memory?.thread === 'string' ? body.memory.thread : (body.memory?.thread?.id ?? body.threadId);
+        } catch {}
+      });
+      try {
+        studio = await startStudio(root, wire.endpoint, reportTestBudget);
+        await page.goto(studio.url);
+        await page.getByText('Policy Checking', { exact: true }).click();
+        const files = await fixtureFiles(documents);
+        for (const file of files.files) {
+          await page.getByRole('button', { name: 'Add attachment', exact: true }).click();
+          const chooser = page.waitForEvent('filechooser');
+          await page.getByRole('button', { name: 'Add a local file', exact: true }).click();
+          await (
+            await chooser
+          ).setFiles({
+            name: file.name,
+            mimeType: 'application/pdf',
+            buffer: Buffer.from(file.data.split(',')[1]!, 'base64'),
+          });
+        }
+        await send(page, 'Please check these documents.');
+        await expect(page.getByText(/Documents saved for this case/).last()).toBeVisible();
+        expect(threadId).toBeTruthy();
+        const context = { operatorId: 'local-broker', threadId: threadId! };
+        cases = new CaseRepository(root);
+        const reconciliation = new ReconciliationRepository(cases);
+        const reports = new ReportRepository(reconciliation);
+        const reviews = new ReviewRepository(reports);
+        await send(
+          page,
+          'Check agreed terms using "property-proposal.pdf" as the accepted proposal and "property-issued.pdf" as the issued policy.\nPolicy number: CP-4021\nInsured: Elm Harbor Fabrication LLC\nInsurance product: Commercial property\n"property-amendment.pdf" is an amendment.',
+        );
+        await send(page, 'Compare the documents as of 2026-05-01');
+        const first = (await reports.get(context))!;
+        const draftLink = page.getByRole('link', { name: 'Download draft report', exact: true }).last();
+        await expect(draftLink).toBeVisible();
+        const requestCount = wire.requests.length;
+        const note =
+          'The limit is USD150000 below accepted; correct the limit. The USD5000 deductible was approved; no correction.';
+        await send(page, `Revise report version 1 and add a short note on the first page: ${note}`);
+        await send(page, 'Compare the documents as of 2026-05-01');
+        const second = (await reports.get(context))!;
+        expect(second.snapshot.version).toBe(2);
+        expect(second.snapshot.revisionNote).toBe(note);
+        expect(wire.requests).toHaveLength(requestCount);
+        expect((await cases.requireCase(context)).state).toBe('AWAITING_REVIEW');
+        const checkpoint = async (runId: string) => {
+          const response = await fetch(`${studio!.url}/api/workflows/policyCheckingWorkflow/runs/${runId}`);
+          expect(response.ok).toBe(true);
+          return response.json();
+        };
+        expect(await checkpoint(first.snapshot.workflowRunId)).toMatchObject({
+          status: 'success',
+          result: { reviewDecision: 'REVISION_REQUESTED' },
+        });
+        expect(await checkpoint(second.snapshot.workflowRunId)).toMatchObject({ status: 'suspended' });
+        const finding = second.snapshot.comparisons.findIndex(item => item.classification === 'DISCREPANCY') + 1;
+        expect(finding).toBeGreaterThan(0);
+        await send(page, `Confirm finding ${finding} in report version 2: Verified against the saved source page.`);
+        await send(page, 'Approve report version 2');
+        expect((await cases.requireCase(context)).state).toBe('FINALIZED');
+        expect(await reviews.approval(context, first.snapshot.id)).toBeNull();
+        expect(await reviews.approval(context, second.snapshot.id)).toMatchObject({
+          version: 2,
+          snapshotHash: second.hash,
+        });
+        const finalLink = page.getByRole('link', { name: 'Download final report', exact: true }).last();
+        await expect(finalLink).toBeVisible();
+        await expect(page.getByText('Content Blocked', { exact: true })).toHaveCount(0);
+        expect(wire.requests).toHaveLength(requestCount);
+        const download = page.waitForEvent('download');
+        await finalLink.click();
+        const downloaded = await download;
+        const path = info.outputPath('approved-report.pdf');
+        await downloaded.saveAs(path);
+        expect(await pdfText(path)).toContain('Approved by the broker');
+        const finalCheckpoint = await checkpoint(second.snapshot.workflowRunId);
+        expect(finalCheckpoint).toMatchObject({ status: 'success', result: { reviewDecision: 'FINALIZED' } });
+        await info.attach('native-workflows', {
+          body: JSON.stringify(finalCheckpoint),
+          contentType: 'application/json',
+        });
+        await page.screenshot({ path: info.outputPath('live-final-links.png') });
+      } finally {
+        cases?.close();
+        await studio?.close();
+        await wire.close();
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  });
+});

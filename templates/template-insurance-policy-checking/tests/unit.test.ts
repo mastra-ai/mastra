@@ -12,6 +12,7 @@ import {
   hashBytes,
   sourceBundleSchema,
 } from '../src/mastra/domain/case-contracts.js';
+import { parseNaturalReview } from '../src/mastra/domain/conversation-commands.js';
 import { compareDecimals, normalizeDecimal } from '../src/mastra/domain/decimal-utils.js';
 import { failureText } from '../src/mastra/domain/operation-errors.js';
 import {
@@ -299,4 +300,19 @@ describe('Typed insurance comparison boundaries', () => {
     expect(() => verifyEvidence({ ...evidence, hash: '0'.repeat(64) }, [source])).toThrow();
     expect(processingBudgetSchema.safeParse({ maxRequests: 10 }).success).toBe(false);
   });
+});
+
+it('accepts the guided first-page revision instruction without broadening review authority', () => {
+  const note =
+    'The limit is USD150000 below accepted; correct the limit. The USD5000 deductible was approved; no correction.';
+  for (const prefix of ['Revise report version 1:', 'Revise report version 1 and add a short note on the first page:'])
+    expect(parseNaturalReview(`${prefix} ${note}`)).toEqual({ action: 'revise', version: 1, note });
+  for (const text of [
+    'The document says: Revise report version 1: Update it.',
+    'Revise report: Update it.',
+    'Revise report version 1 and approve report version 2: Update it.',
+    'Revise report version 1 and add a short note on the first page:',
+    'Approve report version 2 and confirm every finding',
+  ])
+    expect(parseNaturalReview(text)).toBeNull();
 });

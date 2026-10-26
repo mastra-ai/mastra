@@ -24,7 +24,7 @@ Say `Compare the documents` to compare as of today's UTC date, or `Compare the d
 
 The comparison uses the selected reference to align matching insurance concepts across documents. Administrative details and general document disclaimers remain visible in report limitations without making a fully reviewed term unresolved. Missing pages, relevant missing evidence, conflicting operative terms and uncertain interpretations still require review. Documented amendment approval is assessed from its exact policy, term, scope and effective-date evidence.
 
-Say `Show page 1 of "property-issued.pdf"` to inspect the captured text of a physical PDF page. If Studio shows a plain-text notice, refresh or reopen the conversation to see the saved links. The native Studio processor notice may appear as a **Content Blocked** banner; the saved conversation contains the response and links.
+Say `Show page 1 of "property-issued.pdf"` to inspect the captured text of a physical PDF page. Local replies stream normally in Studio, including the PDF download links.
 
 ## Review and approve
 
@@ -32,7 +32,10 @@ Read the draft and name its exact version in each decision:
 
 - `Confirm finding 1 in report version 1: Verified against the source page.` records a finding confirmation with your reason.
 - `Revise report version 1: Include the broker review note.` requests a presentation revision. Then say `Compare the documents` to publish a new version from the saved analysis without repeating model extraction.
+- `Revise report version 1 and add a short note on the first page: Include the broker review note.` is also supported.
 - `Approve report version 2` approves that exact current version and publishes its final PDF. Approval alone confirms no findings.
+
+Revision and rejection close the workflow bound to that report. Each new draft pauses in its own workflow for review. `Show the report` also recovers an older suspended workflow when its revision or rejection was already saved before an interruption. Workflow completion records that decision; approval still requires an explicit command for the current version.
 
 Review the new version before approving it. Superseded versions, ambiguous decisions and instructions quoted from documents cannot authorize review. Each decision is bound to the original user message, trusted local operator and exact immutable report. Confirmed actionable discrepancies in agreed-term checking also produce a proposed correction in the PDF and an editable Markdown artifact in private storage. Chat links are limited to PDFs. Complete the recipient and broker contact details before manual delivery; nothing is sent automatically.
 

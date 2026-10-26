@@ -1,8 +1,6 @@
-import { TripWire } from '@mastra/core/agent';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { InputProcessor } from '@mastra/core/processors';
 import type { Memory } from '@mastra/memory';
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { defaultInsuranceProfile } from '../config/insurance-config.js';
 import { parseNamedClarification, parseNaturalReview } from '../domain/conversation-commands.js';
@@ -13,6 +11,7 @@ import type { CaseService } from '../services/case-service.js';
 import type { ReportReader } from '../tools/report-tool.js';
 import { conversationFailure, statusNotice } from './conversation-notices.js';
 import { finalReportAvailable, markdown, reportNotice } from './report-notice-formatter.js';
+import { createLocalResponseModel } from './local-response-model.js';
 
 export const workingMemorySchema = z.object({
   activeCaseId: z
@@ -49,7 +48,12 @@ export function createDocumentIntakeProcessor(
 ): InputProcessor {
   return {
     id: 'private-document-intake',
-    async processInput({ messages, messageList, requestContext, abort }) {
+    async processInput({ messages, messageList, requestContext, state }) {
+      // The native agent loop owns streaming and history persistence for local replies too.
+      const sanitized = messages.map(message => ({
+        ...message,
+        content: { ...message.content, parts: message.content.parts.filter(part => part.type !== 'file') },
+      }));
       try {
         const latest = [...messageList.get.input.db()]
           .reverse()
@@ -244,11 +248,6 @@ export function createDocumentIntakeProcessor(
             }),
           });
         }
-        // Remove attachments from model history; preserve the user's exact original text.
-        const sanitized = messages.map(message => ({
-          ...message,
-          content: { ...message.content, parts: message.content.parts.filter(part => part.type !== 'file') },
-        }));
         const handled = Boolean(
           files.length ||
           notice ||
@@ -257,33 +256,17 @@ export function createDocumentIntakeProcessor(
           /^Show status\.?$/i.test(normalized),
         );
         if (reviewCommand || handled || !allowControlledModel) {
-          const response = notice ?? statusNotice(status);
-          const incoming = sanitized.find(message => message.id === latest?.id);
-          // Tripwires exit before framework history persistence. Persist only the actual exchange.
-          await memory.saveMessages({
-            messages: [
-              ...(incoming ? [{ ...incoming, role: 'user' as const, threadId, resourceId }] : []),
-              {
-                id: randomUUID(),
-                role: 'assistant',
-                createdAt: new Date(),
-                threadId,
-                resourceId,
-                content: { format: 2, parts: [{ type: 'text', text: response }] },
-              },
-            ],
-          });
-          const transient = /\[[^\]]+\]\([^)]*\)/.test(response)
-            ? 'Your response is saved. Reload this conversation to open the PDF links.'
-            : response;
-          abort(transient, { metadata: { code: reviewCommand ? 'REVIEW_RECORDED' : 'LOCAL_RESPONSE' } });
+          state.localResponse = notice ?? statusNotice(status);
         }
         return sanitized;
       } catch (error) {
-        // Preserve the framework's deliberate tripwire, which already contains safe public text.
-        if (error instanceof TripWire) throw error;
-        return abort(conversationFailure(error));
+        state.localResponse = conversationFailure(error);
+        return sanitized;
       }
+    },
+    processInputStep({ state }) {
+      if (typeof state.localResponse === 'string')
+        return { model: createLocalResponseModel(state.localResponse), tools: {}, toolChoice: 'none' };
     },
   };
 }

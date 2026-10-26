@@ -7,12 +7,22 @@ import type { CaseService } from '../services/case-service.js';
 import type { ReportService } from '../services/report-service.js';
 import { operationContext } from '../tools/tool-context.js';
 
+export const reviewedComparisonResultSchema = z.union([
+  comparisonResultSchema.extend({
+    reviewDecision: z
+      .enum(['REVISION_REQUESTED', 'REJECTED', 'FINALIZED'])
+      .optional()
+      .describe('Persisted broker decision that closed this report workflow; completion does not imply approval.'),
+  }),
+  failureSchema,
+]);
+
 export function createReviewCheckpointStep(cases: CaseService, operatorId: string, reports: ReportService) {
   const outputSchema = z.union([comparisonResultSchema, failureSchema]);
   return createStep({
     id: 'publish-and-await-broker-review',
     inputSchema: outputSchema,
-    outputSchema,
+    outputSchema: reviewedComparisonResultSchema,
     resumeSchema: z.unknown(),
     suspendSchema: reviewCheckpointSchema,
     execute: async ({ inputData, requestContext, runId, suspend }) => {
@@ -21,6 +31,18 @@ export function createReviewCheckpointStep(cases: CaseService, operatorId: strin
       const context = frozen?.context ?? operationContext(cases, operatorId, requestContext);
       const publication = frozen ?? (await reports.prepare(context, inputData.analysisId, runId));
       const record = await cases.repository.requireCase(context, publication.snapshot.caseId);
+      const decision = reports.review
+        ? (await reports.review.repository.events(context)).find(
+            event => event.reportId === publication.snapshot.id && ['revise', 'reject'].includes(event.action),
+          )
+        : undefined;
+      // Only a committed, version-bound broker decision closes an obsolete draft.
+      // Resume payloads never grant review authority or approve a superseded version.
+      if (decision)
+        return {
+          ...inputData,
+          reviewDecision: decision.action === 'revise' ? ('REVISION_REQUESTED' as const) : ('REJECTED' as const),
+        };
       if (
         record.latestReportId !== publication.snapshot.id ||
         ['REJECTED', 'REVISION_REQUESTED'].includes(record.state)
@@ -34,7 +56,7 @@ export function createReviewCheckpointStep(cases: CaseService, operatorId: strin
       // Resume payloads never establish authority. Every entry re-reads the bound approval.
       if (reports.review && ['APPROVED', 'FINALIZED'].includes(record.state)) {
         await reports.review.finalize(context, publication.snapshot.id);
-        return inputData;
+        return { ...inputData, reviewDecision: 'FINALIZED' as const };
       }
       await safely(() => reports.publish(publication));
       const result = await reports.current(context, {

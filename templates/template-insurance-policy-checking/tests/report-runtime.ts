@@ -118,16 +118,3 @@ export async function reportRuntime(
     },
   };
 }
-
-/** Native Studio displays tripwire reasons as text; linked replies are read from saved history. */
-export async function conversationReply(memory: Memory, transient: string) {
-  if (!transient.includes('Reload this conversation')) return transient;
-  const history = await memory.recall({ threadId: reportContext.threadId, resourceId: reportContext.operatorId });
-  const reply = [...history.messages].reverse().find(message => message.role === 'assistant');
-  return (
-    reply?.content.parts
-      .filter(part => part.type === 'text')
-      .map(part => part.text)
-      .join('\n') ?? ''
-  );
-}
