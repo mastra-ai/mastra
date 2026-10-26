@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
@@ -73,8 +74,9 @@ type ModelListProps = ComponentProps<typeof AgentMetadataModelList>;
 function EditorOwnedModelList({
   modelList,
   editable,
+  readOnly,
   form,
-}: Pick<ModelListProps, 'modelList' | 'editable'> & Pick<AgentEditFormContextValue, 'form'>) {
+}: Pick<ModelListProps, 'modelList' | 'editable' | 'readOnly'> & Pick<AgentEditFormContextValue, 'form'>) {
   const formModelList = useWatch({ control: form.control, name: 'modelList' });
 
   const reorderModelList: NonNullable<ModelListProps['reorderModelList']> = async params => {
@@ -118,6 +120,7 @@ function EditorOwnedModelList({
     <AgentMetadataModelList
       modelList={formModelList ?? modelList}
       editable={editable}
+      readOnly={readOnly}
       updateModelInModelList={updateModelInModelList}
       reorderModelList={reorderModelList}
     />
@@ -199,11 +202,17 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
   return (
     <>
       {agent.modelList && (
-        <AgentMetadataSection title="Models" accent="blue" icon={<Boxes />}>
+        <AgentMetadataSection
+          title="Models"
+          accent="blue"
+          icon={<Boxes />}
+          actions={editFormContext?.readOnly ? <Badge variant="warning">Read-only</Badge> : undefined}
+        >
           {ownsModel && editFormContext ? (
             <EditorOwnedModelList
               modelList={agent.modelList}
               editable={agent.modelListEditable !== false}
+              readOnly={editFormContext.readOnly}
               form={editFormContext.form}
             />
           ) : (

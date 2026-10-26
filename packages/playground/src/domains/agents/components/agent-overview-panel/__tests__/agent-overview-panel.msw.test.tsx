@@ -6,10 +6,13 @@ import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collap
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect, useImperativeHandle } from 'react';
+import { useForm } from 'react-hook-form';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { AgentEditFormProvider } from '../../../context/agent-edit-form-context';
 import { emptyPlatforms, slackPlatform } from '../../__tests__/fixtures/channels';
 import { dynamicFallbackAgent, memoryDisabled, v2Agent } from '../../__tests__/fixtures/composer-model-settings';
+import type { AgentFormValues } from '../../agent-edit-page/utils/form-validation';
 import { semanticRecallConfig } from '../../memory-sidebar/__tests__/fixtures/memory';
 import { AgentOverviewPanel } from '../agent-overview-panel';
 import { RouteSidePanel, RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
@@ -66,6 +69,63 @@ function renderPanel() {
             </ActivatedSkillsProvider>
           </RouteSidePanel>
           <Toaster />
+        </RouteSidePanelProvider>
+      </TooltipProvider>
+    </TestLinkProvider>,
+    { router: true },
+  );
+}
+
+function HistoricalVersionPanel() {
+  const form = useForm<AgentFormValues>({
+    defaultValues: {
+      name: 'Historical agent',
+      instructions: 'Historical instructions',
+      model: { provider: 'openai', name: 'gpt-5.4-mini' },
+      modelList: [
+        {
+          id: 'historical-primary',
+          model: { provider: 'anthropic', modelId: 'claude-sonnet-4-5', modelVersion: '' },
+          enabled: true,
+          maxRetries: 1,
+        },
+        {
+          id: 'historical-fallback',
+          model: { provider: 'google', modelId: 'gemini-2.5-pro', modelVersion: '' },
+          enabled: false,
+          maxRetries: 2,
+        },
+      ],
+    },
+  });
+
+  return (
+    <AgentEditFormProvider
+      form={form}
+      mode="edit"
+      isSubmitting={false}
+      handlePublish={async () => {}}
+      readOnly
+      isCodeAgentOverride
+      editorConfig={{ model: true }}
+    >
+      <AgentOverviewPanel agentId={AGENT_ID} />
+    </AgentEditFormProvider>
+  );
+}
+
+function renderHistoricalVersionPanel() {
+  return renderWithProviders(
+    <TestLinkProvider>
+      <TooltipProvider>
+        <RouteSidePanelProvider>
+          <FakeLayoutPanel />
+          <RouteSidePanelSlot />
+          <RouteSidePanel owner="agent-editor-detail">
+            <ActivatedSkillsProvider>
+              <HistoricalVersionPanel />
+            </ActivatedSkillsProvider>
+          </RouteSidePanel>
         </RouteSidePanelProvider>
       </TooltipProvider>
     </TestLinkProvider>,
@@ -162,12 +222,32 @@ describe('AgentOverviewPanel', () => {
     });
   });
 
+  describe('when viewing an immutable historical version', () => {
+    it('shows its models without edit controls and marks the section read-only', async () => {
+      installHandlers({
+        agent: {
+          ...dynamicFallbackAgent,
+          source: 'code',
+          editor: { model: true },
+          modelListEditable: true,
+        },
+      });
+      renderHistoricalVersionPanel();
+
+      expect(await screen.findByText('anthropic/claude-sonnet-4-5')).not.toBeNull();
+      expect(screen.getByText('google/gemini-2.5-pro')).not.toBeNull();
+      expect(screen.getByRole('heading', { name: 'Models' }).closest('header')?.textContent).toContain('Read-only');
+      expect(screen.queryAllByRole('switch')).toHaveLength(0);
+      expect(screen.queryByText('openai/gpt-5.4-mini')).toBeNull();
+    });
+  });
+
   describe('when an unpublished model-list draft exists', () => {
     it('shows the draft model order after loading the panel', async () => {
       const publishedAgent: GetAgentResponse = { ...dynamicFallbackAgent, modelListEditable: true };
       const draftAgent: GetAgentResponse = {
         ...publishedAgent,
-        modelList: publishedAgent.modelList?.toReversed(),
+        modelList: publishedAgent.modelList ? [...publishedAgent.modelList].reverse() : undefined,
       };
       const requestedStatuses: Array<string | null> = [];
       installHandlers();
