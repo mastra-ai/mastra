@@ -1,6 +1,6 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.15.1-alpha.2",
+  "version": "1.15.1-alpha.4",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
@@ -65,7 +65,6 @@
     "@aws-sdk/credential-providers": "^3.1095.0",
     "@mastra/agent-browser": "workspace:*",
     "@mastra/client-js": "workspace:*",
-    "@mastra/core": "workspace:*",
     "@mastra/duckdb": "workspace:*",
     "@mastra/fastembed": "workspace:*",
     "@mastra/github-signals": "workspace:*",
@@ -95,11 +94,15 @@
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@libsql/client": "^0.18.0",
+    "@mastra/core": "workspace:*",
     "@types/node": "22.20.5",
     "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:ts6",
     "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0"
   },
   "engines": {
     "node": ">=22.19.0"

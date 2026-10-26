@@ -36,6 +36,9 @@ catalogs:
     react-dom:
       specifier: ^19.2.5
       version: 19.2.7
+    sonner:
+      specifier: 2.0.7
+      version: 2.0.7
     tsx:
       specifier: ^4.23.1
       version: 4.23.1
@@ -2412,6 +2415,9 @@ importers:
       '@mastra/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
+      '@mastra/platform-workspace':
+        specifier: workspace:*
+        version: link:../../workspaces/platform-workspace
       '@mastra/slack':
         specifier: workspace:*
         version: link:../../channels/slack
@@ -2649,9 +2655,6 @@ importers:
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../client-sdks/client-js
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@mastra/duckdb':
         specifier: workspace:*
         version: link:../../stores/duckdb
@@ -2734,6 +2737,9 @@ importers:
       '@libsql/client':
         specifier: ^0.18.0
         version: 0.18.0(bufferutil@4.1.0)
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -5672,7 +5678,7 @@ importers:
         specifier: ^7.7.4
         version: 7.8.5
       sonner:
-        specifier: ^2.0.7
+        specifier: 'catalog:'
         version: 2.0.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       superjson:
         specifier: ^2.2.6
@@ -5886,7 +5892,7 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       sonner:
-        specifier: ^2.0.7
+        specifier: 'catalog:'
         version: 2.0.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       superjson:
         specifier: ^2.2.6

@@ -17,10 +17,10 @@
     "kimi-k3"
   ],
   "reasoning": {
-    "kimi-k3": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "deepseek-v4-1-flash": [
@@ -29,22 +29,22 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-oss-120b": [
+    "kimi-k3": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemma4-31b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "glm-5-3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "gemma4-31b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

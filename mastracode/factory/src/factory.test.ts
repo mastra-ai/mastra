@@ -28,7 +28,7 @@ import { createHonoServer } from '@mastra/deployer/server';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
 import { Hono } from 'hono';
-import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
@@ -2332,6 +2332,78 @@ describe('MastraFactory.prepare audit-capable integrations', () => {
       expect(paths.includes('/web/audit/portal-link')).toBe(expectsPortal);
     },
   );
+});
+
+describe('MastraFactory.prepare default sandbox', () => {
+  beforeEach(() => {
+    for (const key of [
+      'MASTRA_PLATFORM_ACCESS_TOKEN',
+      'MASTRA_PLATFORM_SECRET_KEY',
+      'MASTRA_PROJECT_ID',
+      'MASTRA_ENVIRONMENT_ID',
+      'MASTRA_DEV',
+    ]) {
+      vi.stubEnv(key, '');
+    }
+    vi.stubEnv('NODE_ENV', 'production');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function stubPlatformEnv() {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'jwt_platform');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'project-1');
+    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
+  }
+
+  it('leaves sandboxes disabled without Platform credentials', async () => {
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+    expect(ctx.sandbox).toBeUndefined();
+  });
+
+  it('installs a Platform sandbox in built deployments', async () => {
+    stubPlatformEnv();
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+    expect(ctx.sandbox?.provider).toBe('platform');
+    expect(ctx.sandbox!.create({ sessionId: 'session-1', getRepositoryAccess: undefined }, {})).toMatchObject({
+      provider: 'platform',
+      id: 'session-1',
+      _client: { accessToken: 'jwt_platform' },
+    });
+  });
+
+  it.each([
+    ['MASTRA_DEV', 'true'],
+    ['NODE_ENV', 'development'],
+  ])('installs a local sandbox in development (%s=%s)', async (key, value) => {
+    stubPlatformEnv();
+    vi.stubEnv(key, value);
+    vi.stubEnv('MASTRACODE_LOCAL_SANDBOX_ROOT', '/tmp/mc-dev-sandboxes');
+    vi.stubEnv('DATABASE_URL', 'postgres://secret');
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+    expect(ctx.sandbox?.provider).toBe('local');
+    const created = ctx.sandbox!.create({ sessionId: 'session-1', getRepositoryAccess: undefined }, {}) as LocalSandbox;
+    expect(created.workingDirectory).toBe(join('/tmp/mc-dev-sandboxes', 'session-1'));
+    expect(created.env).not.toHaveProperty('DATABASE_URL');
+    expect(created.env).not.toHaveProperty('MASTRA_PLATFORM_ACCESS_TOKEN');
+  });
+
+  it('warns and stays disabled when the Platform environment id is missing', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'project-1');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+    expect(ctx.sandbox).toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('MASTRA_ENVIRONMENT_ID is missing'));
+  });
+
+  it('keeps an explicit sandbox over the Platform default', async () => {
+    stubPlatformEnv();
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: () => ({ id: 'sb' }) as never });
+    expect(ctx.sandbox?.provider).toBe('custom');
+  });
 });
 
 describe('MastraFactory.prepare integrations', () => {

@@ -786,7 +786,10 @@ function latestMessageListState(snapshot: {
   state?: Record<string, any>;
   context?: Record<string, any>;
 }): unknown {
-  // Workflow state (setState) is persisted under `value`.
+  // Evented checkpoints keep the latest setState under context.__state;
+  // value can still contain the transcript from the start of the iteration.
+  if (snapshot.context?.__state?.messageListState) return snapshot.context.__state.messageListState;
+  // The default engine persists workflow state under `value`.
   if (snapshot.value?.messageListState) return snapshot.value.messageListState;
   if (snapshot.state?.messageListState) return snapshot.state.messageListState;
   let latest: { at: number; value: unknown } | undefined;
@@ -1039,7 +1042,12 @@ export class DurableAgent<
   ): Promise<Awaited<ReturnType<typeof hydrateMessageListState>> | undefined> {
     let latest: unknown;
     try {
-      const nested = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_EXECUTION });
+      // Evented iterations have their own run id; the parent records the active one.
+      const nestedRunId = fallbackSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
+      const nested = await workflowsStore.getWorkflowRunById({
+        runId: typeof nestedRunId === 'string' ? nestedRunId : runId,
+        workflowName: DurableStepIds.AGENTIC_EXECUTION,
+      });
       const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
       latest = snapshot && latestMessageListState(snapshot);
     } catch {
