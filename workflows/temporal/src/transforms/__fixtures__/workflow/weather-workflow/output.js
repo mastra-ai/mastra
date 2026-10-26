@@ -125,7 +125,9 @@ class TemporalExecutionEngine {
         }
       case 'parallel':
         {
-          const entryId = parallelEntry => parallelEntry.type === 'childWorkflow' ? parallelEntry.id : parallelEntry.step.id;
+          // The next step keeps reading a nested workflow under its Temporal type name, as before.
+          // Only the step records use the Mastra id.
+          const entryId = parallelEntry => parallelEntry.type === 'childWorkflow' ? parallelEntry.workflowType : parallelEntry.step.id;
           log.info('parallel', {
             steps: entry.steps.map(entryId)
           });

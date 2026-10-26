@@ -243,7 +243,7 @@ describe('temporal workflow runtime helper module', () => {
       status: 'success',
       input: { value: 'parent-input' },
       result: {
-        child: { value: 'child-output' },
+        childWorkflow: { value: 'child-output' },
       },
       state: undefined,
       steps: {
@@ -277,7 +277,7 @@ describe('temporal workflow runtime helper module', () => {
     expect(result).toMatchObject({
       result: {
         activity: { value: 'parent-input-activity' },
-        child: { value: 'child-output' },
+        childWorkflow: { value: 'child-output' },
       },
       steps: {
         activity: { value: 'parent-input-activity' },
@@ -476,7 +476,7 @@ describe('temporal workflow runtime helper module', () => {
     }
   });
 
-  it('keys child workflow records and parallel output by the Mastra workflow id', async () => {
+  it('keys child workflow records by the Mastra workflow id and parallel output by the Temporal type', async () => {
     executeChild.mockResolvedValue({ result: { child: true } });
     proxyActivities.mockReturnValue({});
 
@@ -489,7 +489,7 @@ describe('temporal workflow runtime helper module', () => {
 
     expect(executeChild).toHaveBeenCalledWith('childWorkflow', expect.anything());
     expect(executeChild).toHaveBeenCalledWith('otherWorkflow', expect.anything());
-    expect(result.result).toEqual({ other: { child: true } });
+    expect(result.result).toEqual({ otherWorkflow: { child: true } });
     expect(result.steps).toEqual({ child: { child: true }, other: { child: true } });
     expect(Object.keys(result.stepMeta)).toEqual(['child', 'other']);
   });
