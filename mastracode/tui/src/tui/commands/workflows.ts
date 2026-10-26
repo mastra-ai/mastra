@@ -400,10 +400,10 @@ export async function handleWorkflowsCommand(
                 const status = (evt.payload as { status?: string } | undefined)?.status;
                 const mark = status === 'success' ? '✓' : status === 'failed' ? '✗' : '·';
                 ctx.showInfo(`  ${mark} ${stepId}${ms !== undefined ? ` (${ms}ms)` : ''}`);
-                return;
+                break;
               }
               default:
-                return;
+                break;
             }
           },
         );

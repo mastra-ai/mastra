@@ -20,11 +20,14 @@ import { promisify } from 'node:util';
 
 import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
 import {
+  createWorkspaceTools,
   DirectoryNotFoundError,
   FileExistsError,
   FileNotFoundError,
   IsDirectoryError,
   NotDirectoryError,
+  Workspace,
+  WORKSPACE_TOOLS,
 } from '@mastra/core/workspace';
 import type { EntryInfo, Sandbox } from 'e2b';
 import {
@@ -390,6 +393,49 @@ describe('E2BSandbox.filesystem', () => {
     await expect(sandbox.filesystem.deleteFile('/w/a.txt')).rejects.toBe(boom);
     expect(removes).toBe(1);
     expect(ensureRunning).toHaveBeenCalledTimes(1);
+  });
+});
+
+// envd's getInfo carries no MIME type. read_file picks media, binary or text from
+// stat().mimeType, so without one a PNG or PDF came back as garbled UTF-8 (#28453).
+describe('E2BSandbox.filesystem MIME types for read_file', () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'e2b-sandbox-mime-'));
+    await mkdir(join(root, 'w/album.png'), { recursive: true });
+    await writeFile(join(root, 'w/page.png'), png);
+    await writeFile(join(root, 'w/doc.pdf'), '%PDF-1.4 test');
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('stat reports a MIME type for files and none for directories', async () => {
+    const { filesystem } = runningSandbox(new FakeFiles(root));
+    expect(await filesystem.stat('/w/page.png')).toMatchObject({ type: 'file', mimeType: 'image/png' });
+    expect(await filesystem.stat('/w/doc.pdf')).toMatchObject({ type: 'file', mimeType: 'application/pdf' });
+    const dir = await filesystem.stat('/w/album.png');
+    expect(dir.type).toBe('directory');
+    expect(dir.mimeType).toBeUndefined();
+  });
+
+  it('read_file returns a PNG as native media the model can view', async () => {
+    const { filesystem } = runningSandbox(new FakeFiles(root));
+    const workspace = new Workspace({ filesystem });
+    const tool = (await createWorkspaceTools(workspace))[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
+
+    const result = await tool.execute({ path: '/w/page.png' }, { workspace });
+
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'content',
+      value: [
+        { type: 'text', text: '/w/page.png (12 bytes, image/png)' },
+        { type: 'media', data: png.toString('base64'), mediaType: 'image/png' },
+      ],
+    });
   });
 });
 

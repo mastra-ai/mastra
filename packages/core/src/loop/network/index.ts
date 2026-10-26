@@ -1253,7 +1253,12 @@ export async function createNetworkLoop({
 
       // listen for the network-level abort signal
       const networkAbortCb = async () => {
-        await run.cancel();
+        // run.cancel() rejects when the cancel can't be published; an event listener has no caller to surface it to.
+        try {
+          await run.cancel();
+        } catch (err) {
+          mastra?.getLogger()?.error(`Failed to cancel workflow "${wf.id}" run ${runId} after network abort`, err);
+        }
         await onAbort?.({
           primitiveType: 'workflow',
           primitiveId: inputData.primitiveId,
@@ -1713,68 +1718,66 @@ export async function createNetworkLoop({
               toolCallId,
             },
           });
-        } else {
-          if (rejection || !resumeData?.approved) {
-            const rejectionResult = rejection
-              ? typeof rejection.output === 'string'
-                ? rejection.output
-                : safeStringify(rejection.output)
-              : resolveDeclineReason(resumeData);
-            await saveMessagesWithProcessors(
-              memory,
-              [
-                {
-                  id: generateId(),
-                  type: 'text',
-                  role: 'assistant',
-                  content: {
-                    parts: [
-                      {
-                        type: 'text',
-                        text: JSON.stringify({
-                          isNetwork: true,
-                          selectionReason: inputData.selectionReason,
-                          primitiveType: inputData.primitiveType,
-                          primitiveId: inputData.primitiveId,
-                          finalResult: { result: rejectionResult, toolCallId },
-                          input: inputDataToUse,
-                        }),
-                      },
-                    ],
-                    format: 2,
-                    metadata: {
-                      mode: 'network',
+        } else if (rejection || !resumeData?.approved) {
+          const rejectionResult = rejection
+            ? typeof rejection.output === 'string'
+              ? rejection.output
+              : safeStringify(rejection.output)
+            : resolveDeclineReason(resumeData);
+          await saveMessagesWithProcessors(
+            memory,
+            [
+              {
+                id: generateId(),
+                type: 'text',
+                role: 'assistant',
+                content: {
+                  parts: [
+                    {
+                      type: 'text',
+                      text: JSON.stringify({
+                        isNetwork: true,
+                        selectionReason: inputData.selectionReason,
+                        primitiveType: inputData.primitiveType,
+                        primitiveId: inputData.primitiveId,
+                        finalResult: { result: rejectionResult, toolCallId },
+                        input: inputDataToUse,
+                      }),
                     },
+                  ],
+                  format: 2,
+                  metadata: {
+                    mode: 'network',
                   },
-                  createdAt: new Date(),
-                  threadId: initData.threadId || runId,
-                  resourceId: initData.threadResourceId || networkName,
                 },
-              ] as MastraDBMessage[],
-              processorRunner,
-              { requestContext },
-            );
+                createdAt: new Date(),
+                threadId: initData.threadId || runId,
+                resourceId: initData.threadResourceId || networkName,
+              },
+            ] as MastraDBMessage[],
+            processorRunner,
+            { requestContext },
+          );
 
-            const endPayload = {
-              task: inputData.task,
-              primitiveId: inputData.primitiveId,
-              primitiveType: inputData.primitiveType,
-              result: rejectionResult,
-              isComplete: false,
-              iteration: inputData.iteration,
-              toolCallId,
-              toolName: toolId,
-            };
+          const endPayload = {
+            task: inputData.task,
+            primitiveId: inputData.primitiveId,
+            primitiveType: inputData.primitiveType,
+            result: rejectionResult,
+            isComplete: false,
+            iteration: inputData.iteration,
+            toolCallId,
+            toolName: toolId,
+          };
 
-            await writer?.write({
-              type: 'tool-execution-end',
-              payload: endPayload,
-              from: ChunkFrom.NETWORK,
-              runId,
-            });
+          await writer?.write({
+            type: 'tool-execution-end',
+            payload: endPayload,
+            from: ChunkFrom.NETWORK,
+            runId,
+          });
 
-            return endPayload;
-          }
+          return endPayload;
         }
       }
 
