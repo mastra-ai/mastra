@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
-import { createStep, createWorkflow } from '@mastra/core/workflows/evented';
+import { WorkflowEventProcessor, createStep, createWorkflow } from '@mastra/core/workflows/evented';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { RedisStreamsPubSub } from './index';
@@ -16,7 +16,7 @@ type Label = 'owner' | 'other';
  * Cancelling an evented run must settle the owner's `run.start()` as `canceled` and abort the
  * running step, with each replica on its own Redis connection. `workflow.cancel` is consumed by one
  * processor of the consumer group, so with workers on both replicas it may not be the processor
- * running the step: the abort has to reach that step through the run's control topic.
+ * running the step: the abort has to reach that step through the broadcast control topic.
  */
 describe('evented workflow: remote cancel over RedisStreamsPubSub', () => {
   const pubsubs: RedisStreamsPubSub[] = [];
@@ -94,6 +94,16 @@ describe('evented workflow: remote cancel over RedisStreamsPubSub', () => {
       await owner.startWorkers();
       if (workersOnBoth) await other.startWorkers();
 
+      // Processors that executed a step: each opens the broadcast control subscription once.
+      const stepProcessors = new Set<unknown>();
+      const retain = (WorkflowEventProcessor.prototype as any).retainRunsForStep;
+      vi.spyOn(WorkflowEventProcessor.prototype as any, 'retainRunsForStep').mockImplementation(function (
+        this: unknown,
+        runIds: unknown,
+      ) {
+        stepProcessors.add(this);
+        return retain.call(this, runIds);
+      });
       for (let i = 0; i < RUNS; i++) {
         blocker = createBlocker();
         const runId = randomUUID();
@@ -110,17 +120,14 @@ describe('evented workflow: remote cancel over RedisStreamsPubSub', () => {
         ]);
         expect(result.status).toBe('canceled');
         await vi.waitFor(() => expect(blocker.aborted).toBe(true), { timeout: 5_000 });
-        await vi.waitFor(
-          () => {
-            for (const [topic, count] of controlSubscriptions) expect({ topic, count }).toEqual({ topic, count: 0 });
-          },
-          { timeout: 5_000 },
-        );
         await new Promise(resolve => setTimeout(resolve, 200));
         expect(ends.get(runId)).toBe(1);
       }
 
-      expect(controlSubscriptions.size).toBeGreaterThan(0);
+      // One broadcast subscription per processor, whatever the number of runs and steps.
+      expect([...controlSubscriptions.keys()]).toEqual(['workflow.control']);
+      expect(controlSubscriptions.get('workflow.control')).toBeLessThanOrEqual(stepProcessors.size);
+      for (const processor of stepProcessors) expect([...(processor as any).stepRunRefs.keys()]).toEqual([]);
       if (workersOnBoth) expect(ranOn).toContain('other');
     }, 60_000);
   }
@@ -149,21 +156,14 @@ function createBlocker() {
   return blocker;
 }
 
-/** Counts net control-topic subscriptions and top-level `workflow.end` publishes per run. */
+/** Counts control-topic subscriptions and top-level `workflow.end` publishes per run. */
 function trackPubSub(pubsub: RedisStreamsPubSub, controlSubscriptions: Map<string, number>, ends: Map<string, number>) {
   const subscribe = pubsub.subscribe.bind(pubsub);
-  const unsubscribe = pubsub.unsubscribe.bind(pubsub);
   const publish = pubsub.publish.bind(pubsub);
   vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, cb, options) => {
     await subscribe(topic, cb, options);
-    if (topic.startsWith('workflow.control.')) {
+    if (topic.startsWith('workflow.control')) {
       controlSubscriptions.set(topic, (controlSubscriptions.get(topic) ?? 0) + 1);
-    }
-  });
-  vi.spyOn(pubsub, 'unsubscribe').mockImplementation(async (topic, cb) => {
-    await unsubscribe(topic, cb);
-    if (topic.startsWith('workflow.control.')) {
-      controlSubscriptions.set(topic, (controlSubscriptions.get(topic) ?? 0) - 1);
     }
   });
   vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event, ...rest) => {

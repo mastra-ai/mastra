@@ -330,7 +330,7 @@ describe('evented workflow cancel from another instance', () => {
 /**
  * `workflow.cancel` is consumed by one processor of the consumer group. With workers on several
  * replicas, the step it must abort may be running on another one: the cancelling processor has to
- * reach that step through the run's control topic.
+ * reach that step through the broadcast control topic.
  */
 describe('evented workflow cancel with workers on both replicas', () => {
   const RUNS = 4;
@@ -404,7 +404,7 @@ describe('evented workflow cancel with workers on both replicas', () => {
     expect(stepOnly).toBeDefined();
     await vi.waitFor(
       () => {
-        expect(stepOnly.controlSubscriptions.size).toBe(0);
+        expect([...stepOnly.stepRunRefs.keys()]).toEqual([]);
         expect([...stepOnly.abortControllers.keys()]).toEqual([]);
         expect([...stepOnly.parentChildRelationships.keys()]).toEqual([]);
       },
@@ -451,22 +451,16 @@ describe('evented workflow cancel with workers on both replicas', () => {
           () => other.stopWorkers(),
         );
 
+        // Control subscriptions opened, per topic: one per processor, however many runs and steps.
         const controlSubscriptions = new Map<string, number>();
         const ends = new Map<string, number>();
         for (const pubsub of new Set([ownerPubsub, otherPubsub])) {
           const subscribe = pubsub.subscribe.bind(pubsub);
-          const unsubscribe = pubsub.unsubscribe.bind(pubsub);
           const publish = pubsub.publish.bind(pubsub);
           vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, cb, options) => {
             await subscribe(topic, cb, options);
-            if (topic.startsWith('workflow.control.')) {
+            if (topic.startsWith('workflow.control')) {
               controlSubscriptions.set(topic, (controlSubscriptions.get(topic) ?? 0) + 1);
-            }
-          });
-          vi.spyOn(pubsub, 'unsubscribe').mockImplementation(async (topic, cb) => {
-            await unsubscribe(topic, cb);
-            if (topic.startsWith('workflow.control.')) {
-              controlSubscriptions.set(topic, (controlSubscriptions.get(topic) ?? 0) - 1);
             }
           });
           vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event, ...rest) => {
@@ -491,6 +485,16 @@ describe('evented workflow cancel with workers on both replicas', () => {
         await owner.startWorkers();
         await other.startWorkers();
 
+        const processors = new Set<any>();
+        const retain = WorkflowEventProcessor.prototype['retainRunsForStep'];
+        vi.spyOn(WorkflowEventProcessor.prototype as any, 'retainRunsForStep').mockImplementation(function (
+          this: any,
+          runIds: any,
+        ) {
+          processors.add(this);
+          return retain.call(this, runIds);
+        });
+
         // Several runs let the consumer group route cancels to both replicas. Without grouping, duplicate
         // processing can leave a late step call that would take the next run's blocker, so run once.
         for (let i = 0; i < (groupedDelivery ? RUNS : 1); i++) {
@@ -507,7 +511,7 @@ describe('evented workflow cancel with workers on both replicas', () => {
           await vi.waitFor(() => expect(holder.current.state.aborted).toBe(true), { timeout: SETTLE_TIMEOUT_MS });
           await vi.waitFor(
             () => {
-              for (const [topic, count] of controlSubscriptions) expect({ topic, count }).toEqual({ topic, count: 0 });
+              for (const processor of processors) expect([...processor.stepRunRefs.keys()]).toEqual([]);
             },
             { timeout: SETTLE_TIMEOUT_MS },
           );
@@ -517,7 +521,8 @@ describe('evented workflow cancel with workers on both replicas', () => {
           }
         }
 
-        expect(controlSubscriptions.size).toBeGreaterThan(0);
+        expect([...controlSubscriptions.keys()]).toEqual(['workflow.control']);
+        expect(controlSubscriptions.get('workflow.control')).toBeLessThanOrEqual(processors.size);
         if (groupedDelivery) expect(cancelledOn.some((label, i) => label !== holder.ranOn[i])).toBe(true);
       },
     );
