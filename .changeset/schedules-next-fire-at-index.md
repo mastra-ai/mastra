@@ -3,4 +3,4 @@
 '@mastra/libsql': patch
 ---
 
-Look up the scheduler's next fire time with a single indexed query instead of loading every active schedule.
+The scheduler finds the next due schedule quickly in PostgreSQL and libSQL, even when there are many schedules.
