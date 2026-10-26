@@ -91,6 +91,8 @@ Pass `goal.scorer` to replace the pipeline with your own [scorer](/reference/eva
 Configure the default scorer with `judge`, `maxRuns`, and `prompt`:
 
 ```typescript title="src/mastra/agents/worker.ts"
+import { Agent } from '@mastra/core/agent'
+
 const worker = new Agent({
   id: 'worker',
   name: 'worker',

@@ -39,10 +39,9 @@
         "type": "toggle"
       }
     ],
-    "deepseek/deepseek-v4-flash": [
+    "moonshotai/kimi-k2.5": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "toggle"
       }
     ],
     "deepseek/deepseek-v4-pro": [
@@ -51,9 +50,10 @@
         "values": ["high", "max"]
       }
     ],
-    "moonshotai/kimi-k2.5": [
+    "deepseek/deepseek-v4-flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "openai/gpt-5.5": [

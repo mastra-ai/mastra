@@ -42,22 +42,10 @@
     "qwen3.8-flash"
   ],
   "reasoning": {
-    "dsv4": [
+    "glm-5.2": [
       {
         "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "deepseek-v4-pro-0813": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "claude-fable-5.1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "high"]
       }
     ],
     "deepseek-v4.1-flash": [
@@ -72,33 +60,30 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
     "mimo-v2.6-pro": [
       {
         "type": "toggle"
       }
     ],
-    "gpt-5.6-sol": [
+    "qwen3.6": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "type": "toggle"
       }
     ],
-    "glm-5.3": [
+    "mimo-v2.6-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high"]
-      }
-    ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "nemotron3-super": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium"]
       }
     ],
     "claude-opus-5": [
@@ -107,17 +92,31 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "mimo-v2.6-flash": [
+    "claude-fable-5.1": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
-    "minimax-m3": [
+    "qwen3.8-flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium"]
       }
     ],
-    "gpt-6-sol": [
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "gpt-5.6-sol": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -129,33 +128,34 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
+    "nemotron3-super": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium"]
+      }
+    ],
     "gpt-6-luna": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "qwen3.8-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium"]
-      }
-    ],
-    "qwen3.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "kimi-k3": [
+    "dsv4": [
       {
         "type": "effort",
         "values": ["none", "low", "high"]
       }
     ],
-    "glm-5.3-flash": [
+    "deepseek-v4-pro-0813": [
       {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "gpt-6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ]
   }

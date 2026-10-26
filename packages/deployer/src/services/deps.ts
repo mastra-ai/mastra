@@ -916,13 +916,9 @@ export class Deps extends MastraBase {
   }
 
   public async getProjectName() {
-    try {
-      const packageJsonPath = path.join(this.rootDir, 'package.json');
-      const pkg = await readJSON(packageJsonPath);
-      return pkg.name;
-    } catch (err) {
-      throw err;
-    }
+    const packageJsonPath = path.join(this.rootDir, 'package.json');
+    const pkg = await readJSON(packageJsonPath);
+    return pkg.name;
   }
 
   public async getPackageVersion() {

@@ -32,6 +32,12 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "Qwen/Qwen3.8-2.4T-A95B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
     "zai-org/GLM-5.3": [
       {
         "type": "effort",
@@ -48,12 +54,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "Qwen/Qwen3.8-2.4T-A95B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
       }
     ],
     "meta-models/Muse-Spark-Open-816B-A42B": [

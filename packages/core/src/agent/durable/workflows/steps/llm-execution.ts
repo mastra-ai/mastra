@@ -42,6 +42,7 @@ import type {
   SpanType,
 } from '../../../../observability';
 import { EntityType, createObservabilityContext } from '../../../../observability';
+import { extractUsageMetrics } from '../../../../observability/usage';
 import { executeWithContextSync, getRootExportSpan } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
@@ -188,7 +189,7 @@ const durableLLMOutputSchema = z.object({
     z.object({
       toolCallId: z.string(),
       toolName: z.string(),
-      args: z.record(z.string(), z.any()),
+      args: z.record(z.string(), z.any()).optional(),
       providerMetadata: z.record(z.string(), z.any()).optional(),
       providerExecuted: z.boolean().optional(),
       output: z.any().optional(),
@@ -2123,7 +2124,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     toolCalls.push({
                       toolCallId: payload.toolCallId,
                       toolName: payload.toolName,
-                      args: payload.args || {},
+                      args: payload.args,
                       providerMetadata: payload.providerMetadata,
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
@@ -2802,7 +2803,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       toolCalls: [],
                     },
                     attributes: {
-                      usage: pendingPayload.output?.usage,
+                      usage: extractUsageMetrics(
+                        pendingPayload.output?.usage,
+                        pendingPayload.metadata?.providerMetadata,
+                      ),
                       finishReason: pendingPayload.stepResult?.reason,
                       isContinued: pendingPayload.stepResult?.isContinued,
                     },

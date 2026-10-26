@@ -43,7 +43,6 @@ import {
   createFactoryAuthGate,
   createFactoryInteractiveMarker,
   createFactoryRouteAuth,
-  factoryUserOrgId,
   getFactoryAuthOrgId,
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
@@ -67,11 +66,6 @@ import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
-import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
-import { PlatformGitLabIntegration } from './integrations/platform/gitlab/integration.js';
-import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.js';
-import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
-import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
@@ -82,6 +76,7 @@ import {
   registerCustomProvidersSource,
 } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
+import { tenantOrgId } from './routes/provider-credentials.js';
 import { createSessionAccessGuard } from './routes/session-access.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
@@ -103,12 +98,13 @@ import { FactoryTransitionService } from './rules/transition-service.js';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
 import { isValidGitRef } from './sandbox/git-ref.js';
+import { LocalFactorySandbox } from './sandbox/local-factory-sandbox.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
-import { resolveFactoryCredentialTenant } from './session/credential-policy.js';
+import { resolveFactoryCredentialTenant, resolveFactoryModelPolicy } from './session/credential-policy.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
@@ -117,7 +113,7 @@ import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { LiveSessions } from './session/live-sessions.js';
-import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
+import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
@@ -143,7 +139,6 @@ import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { factoryMemorySettingsUserId, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
-import type { MemorySettingsRecord } from './storage/domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
@@ -241,8 +236,10 @@ export interface MastraFactoryConfig {
    * `new PlatformFactorySandbox({ ... })`, which owns the session sandbox
    * constructor, the repo template and the schema of environment settings.
    * A bare callback is also accepted and wrapped as a `provider: 'custom'`
-   * sandbox with no settings. Omitted → repository sandboxes are
-   * disabled.
+   * sandbox with no settings. Omitted with Platform credentials → the factory
+   * installs a `LocalFactorySandbox` under `mastra dev` and a
+   * `PlatformFactorySandbox` in built deployments. Omitted without Platform
+   * credentials → repository sandboxes are disabled.
    */
   sandbox?: MastraFactorySandboxOption;
   /** Browser automation provider for Factory agent sessions. */
@@ -367,6 +364,29 @@ function hasPlatformCredentials(): boolean {
   // into deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key
   // written by project scaffolding. Either enables the platform integrations.
   return Boolean(process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
+}
+
+/**
+ * The sandbox the factory installs when the host passes none and Platform
+ * credentials are present: a local sandbox under `mastra dev` (or
+ * NODE_ENV=development), so development never boots remote machines, and
+ * a Platform sandbox in built deployments. Without credentials, sandboxes
+ * stay disabled.
+ */
+async function platformDefaultSandbox(): Promise<FactorySandbox | undefined> {
+  if (!hasPlatformCredentials()) return undefined;
+  if (process.env.MASTRA_DEV === 'true' || process.env.NODE_ENV === 'development') {
+    return new LocalFactorySandbox();
+  }
+  const missing = ['MASTRA_PROJECT_ID', 'MASTRA_ENVIRONMENT_ID'].filter(key => !process.env[key]?.trim());
+  if (missing.length > 0) {
+    console.warn(
+      `MastraFactory: Platform credentials are set but ${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} missing, so no Platform sandbox was installed and repository sandboxes are disabled.`,
+    );
+    return undefined;
+  }
+  const { PlatformFactorySandbox } = await import('@mastra/platform-workspace');
+  return new PlatformFactorySandbox();
 }
 
 /**
@@ -534,6 +554,7 @@ export class MastraFactory {
         // itself. `slug` falls back to the sibling `githubAppSlug` so existing
         // deploys keep working; the constructor validates and freezes `rules`,
         // so invalid ones fail boot.
+        const { PlatformGithubIntegration } = await import('./integrations/platform/github/integration.js');
         integrations.push(
           new PlatformGithubIntegration({
             rules: this.#config.platform?.github?.rules,
@@ -543,15 +564,19 @@ export class MastraFactory {
         installedPlatformGithub = true;
       }
       if (!integrations.some(integration => integration.id === 'incidentio')) {
+        const { PlatformIncidentioIntegration } = await import('./integrations/platform/incidentio/integration.js');
         integrations.push(new PlatformIncidentioIntegration());
       }
       if (!integrations.some(integration => integration.id === 'jira')) {
+        const { PlatformJiraIntegration } = await import('./integrations/platform/jira/integration.js');
         integrations.push(new PlatformJiraIntegration());
       }
       if (!integrations.some(integration => integration.id === 'gitlab')) {
+        const { PlatformGitLabIntegration } = await import('./integrations/platform/gitlab/integration.js');
         integrations.push(new PlatformGitLabIntegration());
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
+        const { PlatformLinearIntegration } = await import('./integrations/platform/linear/integration.js');
         integrations.push(new PlatformLinearIntegration());
       }
     }
@@ -641,7 +666,9 @@ export class MastraFactory {
 
     const sandboxOption = this.#config.sandbox;
     let sandboxConfig: FactorySandbox | undefined;
-    if (sandboxOption === undefined || isFactorySandbox(sandboxOption)) {
+    if (sandboxOption === undefined) {
+      sandboxConfig = await platformDefaultSandbox();
+    } else if (isFactorySandbox(sandboxOption)) {
       sandboxConfig = sandboxOption;
     } else if (typeof sandboxOption === 'function') {
       sandboxConfig = new CallbackFactorySandbox(sandboxOption);
@@ -710,13 +737,14 @@ export class MastraFactory {
     ];
     const sourceControlHandles = sourceControlIntegrationIds.map(id => sourceControlStorage.forIntegration(id));
     const sourceControlSessions = createSourceControlSessionLookup(sourceControlHandles);
+    const modelPolicyDependencies = {
+      projects: factoryProjectsStorage,
+      sourceControl: sourceControlSessions,
+      workItems: workItemsStorage,
+    };
     if (auth) {
       registerTenantCredentialResolver(modelCredentialsStorage, deploymentModelProviders, requestContext =>
-        resolveFactoryCredentialTenant(requestContext, {
-          projects: factoryProjectsStorage,
-          sourceControl: sourceControlSessions,
-          workItems: workItemsStorage,
-        }),
+        resolveFactoryCredentialTenant(requestContext, modelPolicyDependencies),
       );
     }
 
@@ -1103,6 +1131,25 @@ export class MastraFactory {
           }
         : {}),
     });
+    // The row follows whoever pays for the request, so its memory model is one their credentials reach.
+    const memorySettingsRowKey = async (requestContext: RequestContext, binding: FactoryRunBindingRecord | null) => {
+      // A wake lends the session owner even with auth off, but credentials stay process-wide there.
+      const policy = auth ? await resolveFactoryModelPolicy(requestContext, modelPolicyDependencies) : undefined;
+      if (policy) {
+        const orgId = tenantOrgId(policy.tenant);
+        return policy.tenant.credentialScope === 'factory' && policy.factoryProjectId
+          ? { orgId, userId: factoryMemorySettingsUserId(policy.factoryProjectId) }
+          : { orgId, userId: policy.tenant.userId };
+      }
+      // No tenant pays: the session's Factory row applies.
+      const scope = readFactorySessionScope(requestContext);
+      const factoryProjectId = binding?.factoryProjectId ?? scope?.factoryProjectId;
+      if (!factoryProjectId) return { orgId: 'local', userId: 'local' };
+      return {
+        orgId: binding?.orgId ?? scope?.factoryOrgId ?? 'local',
+        userId: factoryMemorySettingsUserId(factoryProjectId),
+      };
+    };
     const loadMemorySettings = async ({
       requestContext,
       binding,
@@ -1111,41 +1158,8 @@ export class MastraFactory {
       binding: FactoryRunBindingRecord | null;
     }) => {
       if (!requestContext) return;
-      const scope = readFactorySessionScope(requestContext);
-      const user = getFactoryAuthUserFromContext(requestContext);
-      const callerUserId = getFactoryAuthUserId(user);
-      const callerOrgId = factoryUserOrgId(user);
-      const factoryProjectId = binding?.factoryProjectId ?? scope?.factoryProjectId;
-      // Project-scoped sessions share one row per project, addressed by the
-      // sentinel user id the settings UI picks when it passes a `factoryId`;
-      // unscoped sessions read the caller's own row. Both are rows the
-      // settings UI writes, so intent and the run agree without any session
-      // mutation.
-      const target = factoryProjectId
-        ? {
-            orgId: binding?.orgId ?? scope?.factoryOrgId ?? callerOrgId ?? 'local',
-            userId: factoryMemorySettingsUserId(factoryProjectId),
-          }
-        : callerUserId && callerOrgId
-          ? { orgId: callerOrgId, userId: callerUserId }
-          : { orgId: 'local', userId: 'local' };
-      const record = await memorySettingsStorage.get(target);
-      // A channel sender's own settings beat the project's for every knob they
-      // saved. Best-effort: a failed personal read keeps the project's row.
-      let personal: MemorySettingsRecord | null = null;
-      if (factoryProjectId && requestContext.get('channel') && callerUserId && callerOrgId) {
-        try {
-          personal = await memorySettingsStorage.get({ orgId: callerOrgId, userId: callerUserId });
-        } catch (error) {
-          console.warn("[Factory Memory Settings] Unable to read the sender's memory settings", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-      requestContext.set(
-        'mastra__factoryMemorySettings',
-        layerPersonalMemorySettings(record, personal) satisfies MemorySettingsRecord | null,
-      );
+      const record = await memorySettingsStorage.get(await memorySettingsRowKey(requestContext, binding));
+      requestContext.set('mastra__factoryMemorySettings', record);
     };
     // Thinking defaults come from the session's defaults set, never the host's settings.json.
     const resolveDefaultThinkingLevel = (requestContext: RequestContext | undefined) =>

@@ -10,9 +10,10 @@
   ],
   "structuredOutput": ["DeepSeek-V3.2", "gemma-4-31B-it", "gpt-oss-120b"],
   "reasoning": {
-    "gemma-4-31B-it": [
+    "gpt-oss-120b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "DeepSeek-V3.2": [
@@ -20,18 +21,17 @@
         "type": "toggle"
       }
     ],
-    "DeepSeek-V3.1": [
+    "MiniMax-M3": [
       {
         "type": "toggle"
       }
     ],
-    "gpt-oss-120b": [
+    "gemma-4-31B-it": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
       }
     ],
-    "MiniMax-M3": [
+    "DeepSeek-V3.1": [
       {
         "type": "toggle"
       }

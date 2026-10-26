@@ -279,6 +279,26 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     } catch {}
   });
 
+  it('preserves project names and missing-manifest errors in the installed deployer', async () => {
+    const appDir = join(fixturePath, 'apps', 'custom');
+    const missingProject = join(fixturePath, 'missing-project');
+    await execa(
+      'node',
+      [
+        '--input-type=module',
+        '-e',
+        `import assert from 'node:assert/strict';
+import { DepsService } from '@mastra/deployer/services';
+assert.equal(await new DepsService(${JSON.stringify(appDir)}).getProjectName(), '@inner/app');
+await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProjectName(), {
+  code: 'ENOENT',
+  path: ${JSON.stringify(join(missingProject, 'package.json'))},
+});`,
+      ],
+      { cwd: appDir },
+    );
+  });
+
   function runApiTests(port: number) {
     it('should resolve api routes', async () => {
       const res = await fetch(`http://localhost:${port}/test`);
@@ -1630,10 +1650,19 @@ class AliasDeployer extends Deployer {
           );
           expect(await readFile(join(outputDir, 'workspace-module', 'inner-subpath-only-1.0.0.tgz'))).toBeTruthy();
 
-          const importResult = await execa('node', ['--input-type=module', '-e', "import('@inner/subpath-only')"], {
-            cwd: outputDir,
-            reject: false,
-          });
+          const importResult = await execa(
+            'node',
+            [
+              '--input-type=module',
+              '-e',
+              `import assert from 'node:assert/strict';
+import { rootValue } from '@inner/subpath-only';
+import { subpathOnlyValue } from '@inner/subpath-only/value';
+assert.equal(rootValue, 'external-workspace-root-implementation-marker');
+assert.equal(subpathOnlyValue, 'c');`,
+            ],
+            { cwd: outputDir, reject: false },
+          );
           expect(importResult.exitCode, `${importResult.stdout}\n${importResult.stderr}`).toBe(0);
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });

@@ -551,6 +551,13 @@ export interface ChannelHandlers {
   onMention?: ChannelHandlerConfig;
 
   /**
+   * Handler for messages that neither mention the bot nor belong to a subscribed thread.
+   * Opt-in: registered only when a function is supplied; omitted or false ignores these messages.
+   * Calling defaultHandler runs the agent, posts the response, and subscribes the thread.
+   */
+  onMessage?: ChannelHandlerConfig;
+
+  /**
    * Handler for messages in subscribed threads.
    * Default: Routes to agent.stream and posts the response.
    */
