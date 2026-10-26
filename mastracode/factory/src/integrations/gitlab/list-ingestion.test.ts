@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../boards/index.js';
 import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { recordPullRequestHead } from '../pull-request-head.js';
 import { resolveGitLabRules } from './default-rules.js';
 import { encodeSourceId, GitLabIntegration } from './integration.js';
 import { buildGitLabRoutes } from './routes.js';
@@ -102,10 +103,47 @@ describe('GitLab listed merge requests through rules ingress', () => {
     expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.id)).toEqual(
       decisionsAfterPush.map(decision => decision.id),
     );
+    expect((await app.request(path)).status).toBe(200);
+    expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.id)).toEqual(
+      decisionsAfterPush.map(decision => decision.id),
+    );
 
     list.mockResolvedValue({ pullRequests: [{ ...listed, updatedAt: '2030-01-03T00:00:00Z' }], nextCursor: null });
     expect((await app.request(path)).status).toBe(200);
     expect((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata.pullRequestHeadSha).toBe('aaaa');
     expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).length).toBeGreaterThan(decisionsAfterPush.length);
+
+    const webhookHeadAt = '2030-01-04T00:00:00Z';
+    await recordPullRequestHead(seeded.workItems, {
+      orgId: 'org-1', id: card.id, headSha: 'cccc', headAt: Date.parse(webhookHeadAt),
+    });
+    const decisionsAfterWebhook = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    list.mockResolvedValue({ pullRequests: [{ ...listed, headSha: 'cccc', updatedAt: webhookHeadAt }], nextCursor: null });
+    expect((await app.request(path)).status).toBe(200);
+    expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.id)).toEqual(
+      decisionsAfterWebhook.map(decision => decision.id),
+    );
+    expect((await app.request(path)).status).toBe(200);
+    expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.id)).toEqual(
+      decisionsAfterWebhook.map(decision => decision.id),
+    );
+
+    const commit = seeded.workItems.commitRuleEvaluation.bind(seeded.workItems);
+    let failOnce = true;
+    const commitSpy = vi.spyOn(seeded.workItems, 'commitRuleEvaluation').mockImplementation(async input => {
+      if (failOnce && input.ingress.triggerType === 'gitlab.mergeRequestUpdated') {
+        failOnce = false;
+        throw new Error('transient commit failure');
+      }
+      return commit(input);
+    });
+    list.mockResolvedValue({ pullRequests: [{ ...listed, headSha: 'dddd', updatedAt: '2030-01-05T00:00:00Z' }], nextCursor: null });
+    const decisionsBeforeRetry = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect((await app.request(path)).status).toBe(200);
+    expect((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata.pullRequestHeadSha).toBe('dddd');
+    expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).length).toBe(decisionsBeforeRetry.length);
+    expect((await app.request(path)).status).toBe(200);
+    expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).length).toBeGreaterThan(decisionsBeforeRetry.length);
+    commitSpy.mockRestore();
   });
 });

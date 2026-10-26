@@ -358,7 +358,8 @@ export class GitLabRules {
       parsed.deliveryId.startsWith('poll:merge-request-head:') &&
       headAt !== undefined &&
       reviewItem?.metadata?.pullRequestHeadSha === headSha &&
-      reviewItem?.metadata?.pullRequestHeadAt !== headAt;
+      (reviewItem?.metadata?.pullRequestHeadAt !== headAt ||
+        reviewItem?.metadata?.pullRequestHeadDeliveryId !== parsed.deliveryId);
     let pushedReviewItem = reviewItem;
     if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
       const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
@@ -369,6 +370,7 @@ export class GitLabRules {
         id: reviewItem.id,
         headSha,
         headAt,
+        deliveryId: parsed.deliveryId.startsWith('poll:merge-request-head:') ? parsed.deliveryId : undefined,
       });
       if (parent) {
         await recordPullRequestHead(this.options.storage, {
