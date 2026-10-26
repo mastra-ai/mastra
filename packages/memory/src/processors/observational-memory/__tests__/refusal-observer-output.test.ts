@@ -196,6 +196,39 @@ describe('Observer reply with text but no observations', { timeout: 30_000 }, ()
     });
   });
 
+  it('thread scope: commits a reply whose sections put tag and content on one line', async () => {
+    const { result, record, observerCalls, memoryStore } = await runTurn({
+      scope: 'thread',
+      observerReplies: [
+        {
+          content: `<observations>${OBSERVATION}</observations>\n<current-task>Plan the billing database migration</current-task>`,
+        },
+      ],
+      maxRetries: 1,
+      failurePolicy: 'abort',
+    });
+
+    expect(observerCalls).toHaveLength(1);
+    expect(result.tripwire).toBeUndefined();
+    expect(record?.lastObservedAt).toBeInstanceOf(Date);
+    expect(record?.activeObservations).toContain(OBSERVATION);
+    const thread = await memoryStore.getThreadById({ threadId: THREAD });
+    expect(getThreadOMMetadata(thread?.metadata)?.currentTask).toBe('Plan the billing database migration');
+  });
+
+  it('thread scope: commits a reply carrying only a one-line current-task section', async () => {
+    const { result, record, observerCalls } = await runTurn({
+      scope: 'thread',
+      observerReplies: [{ content: '<current-task>Plan the billing database migration</current-task>' }],
+      maxRetries: 1,
+      failurePolicy: 'abort',
+    });
+
+    expect(observerCalls).toHaveLength(1);
+    expect(result.tripwire).toBeUndefined();
+    expect(record?.lastObservedAt).toBeInstanceOf(Date);
+  });
+
   it('resource scope: keeps the cursor of a thread the reply left out and observes it next cycle', async () => {
     const replyForThreadOnly = goodObserverReply('resource');
     const replyForOtherThread = `<observations>\n<thread id="${OTHER_THREAD}">\n${OTHER_OBSERVATION}\n</thread>\n</observations>`;

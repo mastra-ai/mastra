@@ -1809,9 +1809,11 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
   };
 
   // Extract <observations> content (supports multiple blocks)
-  // Tags must be at the start of a line (with optional leading whitespace) to avoid
-  // capturing inline mentions like "User discussed <observations> tags"
-  const observationsRegex = /^[ \t]*<observations>([\s\S]*?)^[ \t]*<\/observations>/gim;
+  // Opening tags must be at the start of a line (with optional leading whitespace) to avoid
+  // capturing inline mentions like "User discussed <observations> tags". Closing tags must
+  // start or end a line, so one-line sections like `<observations>X</observations>` parse
+  // without truncating content that mentions a closing tag mid-line.
+  const observationsRegex = /^[ \t]*<observations>([\s\S]*?)(?:^[ \t]*<\/observations>|<\/observations>[ \t]*$)/gim;
   const observationsMatches = [...content.matchAll(observationsRegex)];
   if (observationsMatches.length > 0) {
     result.observations = observationsMatches
@@ -1825,15 +1827,19 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
   }
 
   // Extract <current-task> content (first match only)
-  // Tags must be at the start of a line to avoid capturing inline mentions
-  const currentTaskMatch = content.match(/^[ \t]*<current-task>([\s\S]*?)^[ \t]*<\/current-task>/im);
+  // Opening tag must start a line; closing tag must start or end one (see above)
+  const currentTaskMatch = content.match(
+    /^[ \t]*<current-task>([\s\S]*?)(?:^[ \t]*<\/current-task>|<\/current-task>[ \t]*$)/im,
+  );
   if (currentTaskMatch?.[1]) {
     result.currentTask = currentTaskMatch[1].trim();
   }
 
   // Extract <suggested-response> content (first match only)
-  // Tags must be at the start of a line to avoid capturing inline mentions
-  const suggestedResponseMatch = content.match(/^[ \t]*<suggested-response>([\s\S]*?)^[ \t]*<\/suggested-response>/im);
+  // Opening tag must start a line; closing tag must start or end one (see above)
+  const suggestedResponseMatch = content.match(
+    /^[ \t]*<suggested-response>([\s\S]*?)(?:^[ \t]*<\/suggested-response>|<\/suggested-response>[ \t]*$)/im,
+  );
   if (suggestedResponseMatch?.[1]) {
     result.suggestedResponse = suggestedResponseMatch[1].trim();
   }
