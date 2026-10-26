@@ -96,6 +96,7 @@
     "@libsql/client": "^0.18.0",
     "@mastra/core": "workspace:*",
     "@types/node": "22.19.15",
+    "msw": "^2.12.11",
     "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:ts6",
