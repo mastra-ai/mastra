@@ -38,8 +38,6 @@ function expectUnmoved(after: number[], before: number[]) {
 // jsdom has no layout: a preview that resizes the composer moves the suggestions out
 // from under the pointer, which swaps the preview, so hovering never settles.
 test.describe('New session suggestions', () => {
-  test.use({ reducedMotion: 'reduce' });
-
   test.beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
   test.afterAll(() => server.close());
   test.afterEach(() => server.resetHandlers());
