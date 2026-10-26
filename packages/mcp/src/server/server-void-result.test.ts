@@ -1,12 +1,15 @@
 /**
  * A tool whose `execute` returns nothing still answers `tools/call` with a valid
  * result, instead of a -32602 protocol error after the tool already ran (Issue #28240).
+ * A tool with an outputSchema that returns nothing reports an in-band error, since a success
+ * result for such a tool must carry structuredContent.
  */
 import { createTool } from '@mastra/core/tools';
 import type { Client } from '@modelcontextprotocol/client';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { InternalMastraMCPClient } from '../client/client';
+import { MCPClient } from '../client/configuration';
 import { connectClient, serveHTTP } from './__tests__/harness.mock';
 import type { ServedHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
@@ -85,13 +88,24 @@ describe('MCPServer tools/call with a tool that returns no value (Issue #28240)'
     expect(result.content).toEqual([]);
   });
 
-  it('returns an empty successful result for an optional output schema left unset', async () => {
-    const before = calls.optionalOutputTool;
-    const result = await client.callTool({ name: 'optionalOutputTool', arguments: {} });
-    expect(result.isError).toBe(false);
-    expect(result.content).toEqual([]);
-    expect(result.structuredContent).toBeUndefined();
-    expect(calls.optionalOutputTool).toBe(before + 1);
+  it('reports an error, not a success without structuredContent, when an outputSchema tool returns nothing', async () => {
+    const mcp = new MCPClient({
+      id: 'void-result-output-schema',
+      servers: { voidServer: { url: served.url, onToolError: 'return' } },
+    });
+    try {
+      // listTools caches each tool's outputSchema, which makes the SDK client enforce structuredContent.
+      const tools = await mcp.listTools();
+      const before = calls.optionalOutputTool;
+      const result = await tools['voidServer_optionalOutputTool']!.execute!({}, {});
+      expect(result).toMatchObject({
+        isError: true,
+        content: [{ type: 'text', text: expect.stringContaining("'optionalOutputTool'") }],
+      });
+      expect(calls.optionalOutputTool).toBe(before + 1);
+    } finally {
+      await mcp.disconnect();
+    }
   });
 
   it('keeps serializing null as the text "null"', async () => {

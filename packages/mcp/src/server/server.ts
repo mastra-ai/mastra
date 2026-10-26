@@ -974,8 +974,12 @@ export class MCPServer extends MCPServerBase {
       return { isError: false, content: text === undefined ? [] : [{ type: 'text', text }], ...meta };
     }
     // Tools with an output schema already validated `value` against it; an optional schema can let `undefined` through.
+    // A success result must then carry `structuredContent`, so report the missing output in-band instead.
     const text = JSON.stringify(value);
-    if (text === undefined) return { isError: false, content: [], ...meta };
+    if (text === undefined) {
+      this.logger.warn(`Tool '${name}' declares an outputSchema but returned no structured output.`);
+      return { ...errorResult(`Tool '${name}' declares an outputSchema but returned no output.`), ...meta };
+    }
     return {
       isError: false,
       structuredContent: value as Record<string, unknown>,
