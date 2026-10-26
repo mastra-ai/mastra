@@ -11,7 +11,7 @@ import {
   SpanProcessorAttributes,
 } from './span-payload';
 import { asCoreSpan } from './span-payload/span-payload-registry';
-import { SpanSummaryDescription } from './span-summary-description';
+import { SpanRunId, SpanSummaryDescription } from './span-summary-description';
 import { TraceIdButton } from './trace-id-button';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 
@@ -39,7 +39,12 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             Span
             <TraceIdButton id={spanId} />
           </DataDetailsPanel.Heading>
-          {span && <SpanSummaryDescription span={span} />}
+          {span && (
+            <div className="flex min-w-0 items-center gap-1">
+              {span.runId && <SpanRunId runId={span.runId} />}
+              <SpanSummaryDescription span={span} />
+            </div>
+          )}
         </div>
         <DataDetailsPanel.CloseButton onClick={onClose} />
       </DataDetailsPanel.Header>

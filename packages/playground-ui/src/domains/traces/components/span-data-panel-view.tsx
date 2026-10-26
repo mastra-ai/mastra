@@ -13,9 +13,8 @@ import {
   SpanProcessorAttributes,
 } from './span-payload';
 import { asCoreSpan } from './span-payload/span-payload-registry';
-import { SpanSummaryDescription } from './span-summary-description';
-import { SpanTokenUsage } from './span-token-usage';
-import type { TokenUsage } from './span-token-usage';
+import { SpanRunId, SpanSummaryDescription } from './span-summary-description';
+import { SpanModelSummary } from './span-token-usage';
 import { TraceIdButton } from './trace-id-button';
 import { Button } from '@/ds/components/Button';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
@@ -88,6 +87,7 @@ export function SpanDataPanelView({
             Span
             <TraceIdButton id={spanId} maxLength={6} ellipsis={false} />
           </DataPanel.Heading>
+          {span?.runId && <SpanRunId runId={span.runId} />}
           {span && <SpanSummaryDescription span={span} />}
         </DataPanel.HeaderContent>
         <DataPanel.HeaderActions>
@@ -154,8 +154,6 @@ function SpanDataPanelContent({
   feedbackTabBadge?: ReactNode;
   isAnchor?: boolean;
 }) {
-  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built SDK declarations type attributes.usage as unknown.
-  const usage = span.attributes?.usage as TokenUsage | undefined;
   const hasContext =
     (isAnchor ?? span.parentSpanId == null) &&
     Boolean(
@@ -176,7 +174,7 @@ function SpanDataPanelContent({
         <SpanErrorRenderer span={span} />
       </SpanPayloadSection>
 
-      {usage && <SpanTokenUsage usage={usage} className="mb-3" />}
+      <SpanModelSummary span={span} className="mb-4" />
 
       {hasContext && (
         <DataKeysAndValues>
