@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Made the Factory triage comment on GitHub easier to read. It now opens with a short plain-language summary, a one-line type, severity and route, and the next step. Ratings, root cause, reproduction and assumptions are collapsed below, and open questions stay visible. This replaces the two-column table that rendered with a blank header row.
+Made Factory's triage comment on GitHub easier to scan. It now opens with a one-row table of type, severity, confidence, effort, impact, and route, with dot meters for each rating. A plain-language summary and the next step follow, and the detailed findings sit in collapsed sections. This replaces the old table, which had a blank header row.

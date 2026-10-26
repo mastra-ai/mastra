@@ -465,17 +465,18 @@ describe('bundled Factory skill assets', () => {
     // the final handoff contract. Scope the field assertions to the final one
     // (the marked block that introduces the narrative sections) so a field
     // present only in the pending summary cannot satisfy them.
-    const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('### Summary'));
+    const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('| Type'));
     const handoff = triage.slice(markerIndex);
-    // A human-readable summary leads, then a one-line type/severity/route,
-    // the next step, and collapsed ratings, root cause, reproduction and
-    // assumptions; only open questions stay expanded.
-    const summaryIndex = handoff.indexOf('### Summary');
-    const typeIndex = handoff.indexOf('<Type>');
+    // A ratings table with a real header row leads, then the plain summary,
+    // the next step, and collapsed rating reasons, root cause, reproduction
+    // and assumptions; only open questions stay expanded.
+    const headerIndex = handoff.search(/^\| Type +\| Severity +\| Confidence +\| Effort +\| Impact +\| Route +\|$/m);
+    const typeIndex = handoff.indexOf('| <Type>');
     const severityIndex = handoff.indexOf('<Severity>');
     const routeIndex = handoff.indexOf('<Route>');
+    const summaryIndex = handoff.indexOf('### Summary');
     const nextStepIndex = handoff.indexOf('**Next step:**');
-    const ratingsIndex = handoff.indexOf('<strong>Ratings</strong>');
+    const ratingsIndex = handoff.indexOf('<strong>Why these ratings</strong>');
     const confidenceIndex = handoff.indexOf('**Confidence**');
     const effortIndex = handoff.indexOf('**Effort**');
     const impactIndex = handoff.indexOf('**Impact**');
@@ -487,11 +488,12 @@ describe('bundled Factory skill assets', () => {
     // GitHub renders an empty header row as a blank band above the table.
     expect(triage).not.toMatch(/^\|\s+\|\s+\|$/m);
     expect(markerIndex).toBeGreaterThanOrEqual(0);
-    expect(summaryIndex).toBeGreaterThan(0);
-    expect(typeIndex).toBeGreaterThan(summaryIndex);
+    expect(headerIndex).toBeGreaterThan(0);
+    expect(typeIndex).toBeGreaterThan(headerIndex);
     expect(severityIndex).toBeGreaterThan(typeIndex);
     expect(routeIndex).toBeGreaterThan(severityIndex);
-    expect(nextStepIndex).toBeGreaterThan(routeIndex);
+    expect(summaryIndex).toBeGreaterThan(routeIndex);
+    expect(nextStepIndex).toBeGreaterThan(summaryIndex);
     expect(ratingsIndex).toBeGreaterThan(nextStepIndex);
     expect(confidenceIndex).toBeGreaterThan(ratingsIndex);
     expect(effortIndex).toBeGreaterThan(confidenceIndex);
