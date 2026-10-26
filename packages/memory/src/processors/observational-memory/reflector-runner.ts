@@ -995,6 +995,7 @@ export class ReflectorRunner {
       previousModel?: string;
       currentModel?: string;
     },
+    abortSignal?: AbortSignal,
   ): Promise<TryActivateResult> {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -1012,10 +1013,10 @@ export class ReflectorRunner {
         try {
           await waitWithAbort(
             Promise.race([asyncOp, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5_000))]),
-            committedContext?.abortSignal,
+            abortSignal,
           );
         } catch {
-          committedContext?.abortSignal?.throwIfAborted();
+          abortSignal?.throwIfAborted();
           // Timeout or error - proceed with what we have
         }
       }
@@ -1099,14 +1100,14 @@ export class ReflectorRunner {
     const swapped = await runOMCommit(
       lockKey,
       () => {
-        committedContext?.abortSignal?.throwIfAborted();
+        abortSignal?.throwIfAborted();
         return this.storage.swapBufferedReflectionToActive({
           currentRecord: freshRecord,
           tokenCount: combinedTokenCount,
           newRecordId,
         });
       },
-      { priority: 'reflection', abortSignal: committedContext?.abortSignal },
+      { priority: 'reflection', abortSignal },
     );
     if (!isReflectionApplied(swapped, newRecordId, freshRecord.id)) {
       // The record was retired by another reflection, or its observations were rewritten
@@ -1155,7 +1156,7 @@ export class ReflectorRunner {
         messageList,
         freshRecord.threadId ?? '',
         freshRecord.resourceId ?? undefined,
-        committedContext?.abortSignal,
+        abortSignal,
       );
     }
 
@@ -1304,6 +1305,7 @@ export class ReflectorRunner {
         writer,
         messageList,
         activationMetadata,
+        abortSignal,
       );
       if (activationResult.status === 'activated' || activationResult.status === 'not-applied') {
         return;
