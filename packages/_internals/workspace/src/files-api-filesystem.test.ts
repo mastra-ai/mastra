@@ -486,12 +486,14 @@ describe('FilesApiFilesystem', () => {
       await writeFile(join(root, 'w/pic.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
       await writeFile(join(root, 'w/doc.pdf'), '%PDF-1.4');
       await mkdir(join(root, 'w/album.png'));
-      await symlink('pic.png', join(root, 'w/piclink.png'));
+      await writeFile(join(root, 'w/pic.bin'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+      await symlink('pic.bin', join(root, 'w/piclink.png'));
 
       expect((await fs.stat(`${W}/pic.png`)).mimeType).toBe('image/png');
       expect((await fs.stat(`${W}/doc.pdf`)).mimeType).toBe('application/pdf');
       expect((await fs.stat(`${W}/a.txt`)).mimeType).toBe('text/plain');
-      expect((await fs.stat(`${W}/piclink.png`)).mimeType).toBe('image/png');
+      // The type comes from the requested name, not the target's, like LocalFilesystem.
+      expect(await fs.stat(`${W}/piclink.png`)).toMatchObject({ type: 'file', mimeType: 'image/png' });
       const dir = await fs.stat(`${W}/album.png`);
       expect(dir.type).toBe('directory');
       expect(dir).not.toHaveProperty('mimeType');

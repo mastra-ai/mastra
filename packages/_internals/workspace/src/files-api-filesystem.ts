@@ -16,6 +16,7 @@ import {
   DirectoryNotFoundError,
   FileExistsError,
   FileNotFoundError,
+  getMimeType,
   IsDirectoryError,
   MastraFilesystem,
   NotDirectoryError,
@@ -29,7 +30,6 @@ import {
   moveNoClobberCommand,
   siblingTempPath,
 } from './file-commands';
-import { getMimeType } from './mime-type';
 
 /** One entry as E2B's envd files API reports it (`EntryInfo`), reduced to the fields used here. */
 export interface FilesApiEntry {
