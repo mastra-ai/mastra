@@ -23,14 +23,16 @@ import type { ModelDefaultsAnchor } from '../domains/settings/settingsSections';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
+import { StarterPrompts } from '../domains/chat/components/StarterPrompts';
 import { TranscriptEntries } from '../domains/chat/components/Transcript';
 import { chatStartModelId } from '../domains/chat/context/chatDefaultModel';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
+import { InFlight } from '../domains/factory/components/InFlight';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-const draftStartClass = 'flex min-w-0 w-full max-w-xl flex-col items-stretch gap-6';
+const draftStartClass = 'flex min-w-0 w-full flex-col items-stretch gap-6';
 
 export function NewPage() {
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
@@ -70,6 +72,7 @@ export function NewPage() {
       <ChatSessionBoundary key={draftSessionId}>
         <NewPageContent
           activeFactory={activeFactory}
+          userDraft={draftSessionId !== undefined}
           missingDefaultModel={missingDefaultModel}
           missingCredential={missingCredential}
           configurationError={configurationError}
@@ -92,11 +95,13 @@ function readRouteErrorNotice(state: unknown): string | undefined {
 
 function NewPageContent({
   activeFactory,
+  userDraft,
   missingDefaultModel,
   missingCredential,
   configurationError,
 }: {
   activeFactory: FactoryProject | undefined;
+  userDraft: boolean;
   missingDefaultModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
   configurationError: Error | undefined;
@@ -107,10 +112,11 @@ function NewPageContent({
   const routeErrorNotice = readRouteErrorNotice(location.state);
   const noticeEntries = transcript.entries.filter(entry => entry.kind === 'notice');
   const hasNotices = Boolean(routeErrorNotice) || noticeEntries.length > 0;
+  const startsFromPrompt = userDraft && activeFactory && !missingDefaultModel && !missingCredential;
 
   return (
-    <div className="grid min-h-full place-items-center px-4 py-10 md:px-6">
-      <div className="flex w-full max-w-xl min-w-0 flex-col items-center gap-4">
+    <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-10 px-4 pt-[14vh] pb-16 md:px-6">
+      <div className="flex w-full min-w-0 flex-col items-center gap-4">
         <DraftStart
           activeFactory={activeFactory}
           configurationError={configurationError}
@@ -124,6 +130,12 @@ function NewPageContent({
           </div>
         )}
       </div>
+      {startsFromPrompt && (
+        <>
+          <StarterPrompts />
+          <InFlight factoryId={activeFactory.id} />
+        </>
+      )}
     </div>
   );
 }
@@ -157,7 +169,7 @@ function DraftStart({
 
   return (
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
-      <Txt as="h1" variant="title" tone="ink" id="draft-start-heading" className="m-0 text-center">
+      <Txt as="h1" variant="title" tone="ink" id="draft-start-heading" className="m-0">
         What do you want to work on?
       </Txt>
       {configurationError && (

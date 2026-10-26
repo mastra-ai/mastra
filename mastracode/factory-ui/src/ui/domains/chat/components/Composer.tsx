@@ -63,6 +63,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const {
     commands,
     composerDraft: draft,
+    composerPreview: preview,
     composerInputRef: inputRef,
     setComposerDraft,
     runComposerCommand,
@@ -188,7 +189,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const commandMenu = useComposerCommands({
     commands,
-    value: draft,
+    value: preview ?? draft,
     onValueChange: updateDraft,
     inputRef,
     enabled: !planFeedback.pending,
@@ -259,6 +260,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             onPaste={onPaste}
             placeholder={placeholder}
             disabled={textareaDisabled}
+            readOnly={preview !== null}
             variant={variant}
             aria-label="Message"
           />
@@ -286,7 +288,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               </Button>
               <ComposerPrimaryAction
                 showAbort={liveRun && !hasSubmittableDraft}
-                sendDisabled={sendDisabled || !hasSubmittableDraft}
+                sendDisabled={sendDisabled || (!hasSubmittableDraft && preview === null)}
                 sendTitle={sendTitle}
                 onAbort={() => void abortMutation.mutateAsync()}
               />
