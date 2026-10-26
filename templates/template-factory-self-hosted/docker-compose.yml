@@ -2,13 +2,13 @@
 #
 # Usage:
 #   npm run db:up
-#   DATABASE_URL=postgres://factory:factory@localhost:54329/factory
+#   DATABASE_URL=postgres://factory:factory@localhost:54330/factory
 #   npm run db:down
 services:
   db:
     image: pgvector/pgvector:pg18
     ports:
-      - '54329:5432'
+      - '54330:5432'
     environment:
       POSTGRES_USER: factory
       POSTGRES_PASSWORD: factory

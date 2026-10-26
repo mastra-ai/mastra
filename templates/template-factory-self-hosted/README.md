@@ -29,7 +29,7 @@ To change a service, replace its instance in `src/mastra/index.ts`. See [Configu
    openssl rand -base64 32
    ```
 
-1. Start the local PostgreSQL service and set `DATABASE_URL=postgres://factory:factory@localhost:54329/factory`:
+1. Start the local PostgreSQL service and set `DATABASE_URL=postgres://factory:factory@localhost:54330/factory`:
 
    ```bash
    npm run db:up
