@@ -285,7 +285,7 @@ Configuration options specific to Turbopuffer vector store.
 
     :::note
 
-    **Multi-Database Support**: When you configure multiple databases, only the configuration matching the actual vector store being used will be applied.
+    **Multi-Database Support**: Settings from every database block you configure are merged into the query parameters, regardless of which vector store is queried. Configure only the block for the vector store you query.
 
     :::
   </TabItem>
