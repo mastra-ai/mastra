@@ -123,6 +123,7 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     'auth',
   ],
   ['another service’s authentication failure', new Error('GitHub authentication failed: token expired'), 'unknown'],
+  ['a local file permission failure', new Error('EACCES: permission denied, open /x'), 'unknown'],
   [
     'another service’s 403 in free text',
     new Error('MCP tool call failed: 403 Forbidden from mcp.linear.app'),

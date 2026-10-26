@@ -1,5 +1,6 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
+import { classifyProviderError } from '@mastra/core/error';
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
@@ -107,14 +108,21 @@ function causeOf(error: unknown): unknown {
   return error && typeof error === 'object' && 'cause' in error ? error.cause : undefined;
 }
 
+function isProviderCallError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  if ('name' in error && (error.name === 'AI_APICallError' || error.name === 'APICallError')) return true;
+  return 'statusCode' in error || 'responseBody' in error;
+}
+
 function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCode {
   const lower = message.toLowerCase();
   if (lower.includes(CREDENTIAL_RESOLUTION_FAILURE)) {
     return lower.includes(NO_AUTHENTICATED_USER) ? 'run_user_unauthenticated' : 'run_credentials_unavailable';
   }
-  // Model credentials a person can fix: a provider's structured 401/403.
   const status = httpStatus(error) ?? httpStatus(causeOf(error));
-  return status === 401 || status === 403 ? 'run_credentials_unavailable' : 'run_failed';
+  if (status === 401 || status === 403) return 'run_credentials_unavailable';
+  const providerCall = isProviderCallError(error) || isProviderCallError(causeOf(error));
+  return providerCall && classifyProviderError(error) === 'auth' ? 'run_credentials_unavailable' : 'run_failed';
 }
 
 function runErrorFailure(label: string, error: unknown): RunEndedInError {

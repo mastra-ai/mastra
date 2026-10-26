@@ -3,6 +3,8 @@
  * Parses API errors and provides user-friendly messages.
  */
 
+import { classifyProviderError } from '@mastra/core/error';
+
 import { PROVIDER_AUTH_REQUIRED_ERROR } from '../auth/provider-auth-error.js';
 
 export interface ParsedError {
@@ -24,6 +26,7 @@ export interface ParsedError {
 
 export type ErrorType =
   | 'rate_limit'
+  | 'quota'
   | 'auth'
   | 'network'
   | 'timeout'
@@ -113,10 +116,64 @@ function toError(error: unknown): Error {
   return rebuilt;
 }
 
+function errorTypeOf(error: unknown, message: string, status: unknown): ErrorType {
+  const kind = classifyProviderError(error);
+  if (kind === 'quota') return 'quota';
+  if (kind === 'rate_limited' || status === 429 || message.includes('429')) return 'rate_limit';
+  if (
+    kind === 'auth' ||
+    status === 401 ||
+    status === 403 ||
+    message.includes('unauthorized') ||
+    message.includes('authentication') ||
+    message.includes('api key')
+  ) {
+    return 'auth';
+  }
+  if (
+    message.includes('network') ||
+    message.includes('econnrefused') ||
+    message.includes('enotfound') ||
+    message.includes('fetch failed') ||
+    message.includes('connection')
+  ) {
+    return 'network';
+  }
+  if (kind === 'timeout') return 'timeout';
+  if (kind === 'model_rejected' || message.includes('does not exist')) return 'model_not_found';
+  if (
+    kind === 'context_overflow' ||
+    message.includes('context length') ||
+    message.includes('too many tokens') ||
+    message.includes('token limit')
+  ) {
+    return 'context_length';
+  }
+  if (
+    message.includes('content filter') ||
+    message.includes('content_filter') ||
+    message.includes('content policy') ||
+    message.includes('safety') ||
+    message.includes('prohibited')
+  ) {
+    return 'content_filter';
+  }
+  if (kind === 'unavailable' || (typeof status === 'number' && status >= 500 && status < 600)) return 'server_error';
+  if (
+    kind === 'invalid_request' ||
+    kind === 'tool_history_rejected' ||
+    status === 400 ||
+    message.includes('invalid request') ||
+    message.includes('bad request')
+  ) {
+    return 'invalid_request';
+  }
+  return 'unknown';
+}
+
 export function parseError(error: unknown): ParsedError {
   const err = toError(error);
-  const message = err.message.toLowerCase();
-  const errorObj = error as Record<string, unknown>;
+  const errorObj = (typeof error === 'object' && error !== null ? error : {}) as Record<string, unknown>;
   const detail = summarizeErrorDetail(error);
   const requestUrl = extractRequestUrl(error);
 
@@ -125,175 +182,101 @@ export function parseError(error: unknown): ParsedError {
     return { message: err.message, detail, requestUrl, type: 'auth', retryable: false, originalError: err };
   }
 
-  // Check for rate limiting
-  if (
-    message.includes('rate limit') ||
-    message.includes('rate_limit') ||
-    message.includes('429') ||
-    errorObj.statusCode === 429 ||
-    errorObj.status === 429
-  ) {
-    const retryAfter = extractRetryAfter(errorObj);
-    return {
-      message: 'Rate limited. Please wait a moment before trying again.',
-      type: 'rate_limit',
-      retryable: true,
-      retryDelay: retryAfter || 5000,
-      originalError: err,
-    };
-  }
+  const message = err.message.toLowerCase();
+  const type = errorTypeOf(error, message, errorObj.status);
 
-  // Check for authentication errors
-  if (
-    message.includes('unauthorized') ||
-    message.includes('authentication') ||
-    message.includes('invalid api key') ||
-    message.includes('invalid_api_key') ||
-    message.includes('api key') ||
-    errorObj.statusCode === 401 ||
-    errorObj.status === 401
-  ) {
-    return {
-      message: 'Authentication failed. Check the credential configured for this provider.',
-      detail,
-      requestUrl,
-      type: 'auth',
-      retryable: false,
-      originalError: err,
-    };
+  switch (type) {
+    case 'quota':
+      return {
+        message: 'Usage quota exhausted for this provider account.',
+        detail,
+        requestUrl,
+        type,
+        retryable: false,
+        originalError: err,
+      };
+    case 'rate_limit':
+      return {
+        message: 'Rate limited. Please wait a moment before trying again.',
+        type,
+        retryable: true,
+        retryDelay: extractRetryAfter(errorObj) || 5000,
+        originalError: err,
+      };
+    case 'auth':
+      return {
+        message:
+          (errorObj.statusCode ?? errorObj.status) === 403
+            ? 'Access denied. You may not have permission to use this model.'
+            : 'Authentication failed. Check the credential configured for this provider.',
+        detail,
+        requestUrl,
+        type,
+        retryable: false,
+        originalError: err,
+      };
+    case 'network':
+      return {
+        message: 'Network error while contacting the provider or gateway.',
+        detail,
+        requestUrl,
+        type,
+        retryable: true,
+        retryDelay: 2000,
+        originalError: err,
+      };
+    case 'timeout':
+      return {
+        message: 'Request timed out. The server may be overloaded.',
+        type,
+        retryable: true,
+        retryDelay: 3000,
+        originalError: err,
+      };
+    case 'model_not_found':
+      return {
+        message: 'Model not found. Please select a different model with /models.',
+        type,
+        retryable: false,
+        originalError: err,
+      };
+    case 'context_length':
+      return {
+        message: 'Message too long. Try starting a new thread with /new.',
+        type,
+        retryable: false,
+        originalError: err,
+      };
+    case 'content_filter':
+      return {
+        message: "Content was filtered by the model's safety system.",
+        type,
+        retryable: false,
+        originalError: err,
+      };
+    case 'server_error':
+      return {
+        message: 'Server error. The API may be experiencing issues.',
+        type,
+        retryable: true,
+        retryDelay: 5000,
+        originalError: err,
+      };
+    case 'invalid_request':
+      return {
+        message: `Invalid request: ${extractErrorDetail(err)}`,
+        type,
+        retryable: false,
+        originalError: err,
+      };
+    case 'unknown':
+      return {
+        message: extractErrorDetail(err),
+        type,
+        retryable: false,
+        originalError: err,
+      };
   }
-
-  // Check for forbidden/permission errors
-  if (errorObj.statusCode === 403 || errorObj.status === 403) {
-    return {
-      message: 'Access denied. You may not have permission to use this model.',
-      detail,
-      requestUrl,
-      type: 'auth',
-      retryable: false,
-      originalError: err,
-    };
-  }
-
-  // Check for network errors
-  if (
-    message.includes('network') ||
-    message.includes('econnrefused') ||
-    message.includes('enotfound') ||
-    message.includes('fetch failed') ||
-    message.includes('connection')
-  ) {
-    return {
-      message: 'Network error while contacting the provider or gateway.',
-      detail,
-      requestUrl,
-      type: 'network',
-      retryable: true,
-      retryDelay: 2000,
-      originalError: err,
-    };
-  }
-
-  // Check for timeout errors
-  if (message.includes('timeout') || message.includes('timed out') || message.includes('etimedout')) {
-    return {
-      message: 'Request timed out. The server may be overloaded.',
-      type: 'timeout',
-      retryable: true,
-      retryDelay: 3000,
-      originalError: err,
-    };
-  }
-
-  // Check for model not found
-  if (
-    message.includes('model not found') ||
-    message.includes('model_not_found') ||
-    message.includes('does not exist') ||
-    message.includes('invalid model')
-  ) {
-    return {
-      message: 'Model not found. Please select a different model with /models.',
-      type: 'model_not_found',
-      retryable: false,
-      originalError: err,
-    };
-  }
-
-  // Check for context length errors
-  if (
-    message.includes('context length') ||
-    message.includes('context_length') ||
-    message.includes('too many tokens') ||
-    message.includes('maximum context') ||
-    message.includes('token limit')
-  ) {
-    return {
-      message: 'Message too long. Try starting a new thread with /new.',
-      type: 'context_length',
-      retryable: false,
-      originalError: err,
-    };
-  }
-
-  // Check for content filter errors
-  if (
-    message.includes('content filter') ||
-    message.includes('content_filter') ||
-    message.includes('content policy') ||
-    message.includes('safety') ||
-    message.includes('prohibited')
-  ) {
-    return {
-      message: "Content was filtered by the model's safety system.",
-      type: 'content_filter',
-      retryable: false,
-      originalError: err,
-    };
-  }
-
-  // Check for server errors
-  if (
-    message.includes('internal server') ||
-    message.includes('server error') ||
-    errorObj.statusCode === 500 ||
-    errorObj.status === 500 ||
-    errorObj.statusCode === 502 ||
-    errorObj.status === 502 ||
-    errorObj.statusCode === 503 ||
-    errorObj.status === 503
-  ) {
-    return {
-      message: 'Server error. The API may be experiencing issues.',
-      type: 'server_error',
-      retryable: true,
-      retryDelay: 5000,
-      originalError: err,
-    };
-  }
-
-  // Check for invalid request errors
-  if (
-    message.includes('invalid request') ||
-    message.includes('bad request') ||
-    errorObj.statusCode === 400 ||
-    errorObj.status === 400
-  ) {
-    return {
-      message: `Invalid request: ${extractErrorDetail(err)}`,
-      type: 'invalid_request',
-      retryable: false,
-      originalError: err,
-    };
-  }
-
-  // Unknown error - try to extract useful info
-  return {
-    message: extractErrorDetail(err),
-    type: 'unknown',
-    retryable: false,
-    originalError: err,
-  };
 }
 
 /**

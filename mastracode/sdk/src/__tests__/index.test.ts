@@ -1745,7 +1745,10 @@ describe('createMastraCode', () => {
     // Third matcher: provider server failures use the same retry budget and visible status.
     const serverErrorPolicy = options!.matchers![2] as typeof transientConnectionPolicy;
     expect(typeof serverErrorPolicy.match).toBe('function');
-    expect(serverErrorPolicy.match!(new Error('Server error. The API may be experiencing issues.'))).toBe(true);
+    expect(serverErrorPolicy.match!(new Error('Internal Server Error'))).toBe(true);
+    expect(
+      serverErrorPolicy.match!({ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }),
+    ).toBe(true);
     expect(serverErrorPolicy.match!(Object.assign(new Error('Bad gateway'), { status: 502 }))).toBe(true);
     // Gateway timeouts (504) exhaust the transient budget before the
     // account-rotation processor may classify them as a persistent outage.

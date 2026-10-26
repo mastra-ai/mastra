@@ -216,6 +216,43 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
     expect(classifyRotationError(wrapper)).toEqual(expected);
   });
 
+  it.each([
+    [
+      'an authentication error named only in the body',
+      Object.assign(apiError(400, { message: 'Bad Request' }), {
+        responseBody: '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
+      }),
+      { kind: 'rotate', reason: 'auth-failed' },
+    ],
+    [
+      'a usage limit named only in the body detail',
+      Object.assign(apiError(400, { message: 'Bad Request' }), {
+        responseBody: '{"detail":"You have hit your usage limit for this plan."}',
+      }),
+      { kind: 'rotate', reason: 'quota-exhausted' },
+    ],
+    [
+      'a rate-limit stream frame',
+      { type: 'error', error: { type: 'rate_limit_error', message: 'This account has exceeded its rate limit.' } },
+      { kind: 'rotate', reason: 'rate-limit' },
+    ],
+    [
+      'an overloaded stream frame',
+      { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } },
+      { kind: 'hop' },
+    ],
+  ] as const)('reads %s through the shared provider reader', (_label, error, expected) => {
+    expect(classifyRotationError(error)).toEqual(expected);
+  });
+
+  it.each([
+    [429, { kind: 'rotate', reason: 'rate-limit' }],
+    [401, { kind: 'rotate', reason: 'auth-failed' }],
+    [503, { kind: 'hop' }],
+  ] as const)('keeps classifying a numeric status %d', (status, expected) => {
+    expect(classifyRotationError(Object.assign(new Error('request failed'), { status }))).toEqual(expected);
+  });
+
   it('classifies a nested ProviderAuthRequiredError', () => {
     const wrapper = new Error('provider request failed', { cause: new ProviderAuthRequiredError('Login required') });
     expect(classifyRotationError(wrapper)).toEqual({ kind: 'rotate', reason: 'auth-failed' });
