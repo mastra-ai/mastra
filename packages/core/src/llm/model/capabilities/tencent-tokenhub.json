@@ -1,15 +1,6 @@
 {
   "temperature": ["hy3", "hy3-preview", "hy4-preview"],
   "reasoning": {
-    "hy3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "hy3-preview": [
       {
         "type": "toggle"
@@ -20,6 +11,15 @@
       }
     ],
     "hy4-preview": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "hy3": [
       {
         "type": "toggle"
       },

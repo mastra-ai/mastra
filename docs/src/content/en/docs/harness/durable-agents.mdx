@@ -298,6 +298,8 @@ Automatic and manual recovery re-run the agentic loop from the last persisted sn
 
 :::
 
+Delegation hooks passed per call are closures and can't be restored in a new process. A resumed run falls back to default delegation behavior. Hooks configured on the supervisor's `defaultOptions.delegation` are merged back in when recovery rebuilds the delegation tools. Put hooks that must survive a restart there instead of passing them to `stream()` or `generate()`.
+
 ### Snapshot persistence
 
 The `shouldPersistSnapshot` option on `createDurableAgent()` (also accepted in the agent-level `durable` config) controls which workflow snapshots a durable agent writes. The default policy:
@@ -326,7 +328,10 @@ Evented agents always persist the full snapshot set: the evented engine coordina
 
 Set `recovery.durableAgents` to `'auto'` in the Mastra config. The deployer calls `recoverAllDurableAgents()` on boot, alongside the workflow run restarts (the two run concurrently):
 
-```typescript title="src/mastra/index.ts" {4}
+```typescript title="src/mastra/index.ts" {7}
+import { Mastra } from '@mastra/core'
+import { PostgresStore } from '@mastra/pg'
+
 export const mastra = new Mastra({
   agents: { myAgent: durableAgent },
   storage: new PostgresStore({ connectionString: process.env.DATABASE_URL! }),

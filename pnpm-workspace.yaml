@@ -37,20 +37,21 @@ packages:
 enableGlobalVirtualStore: true
 
 catalog:
-  '@microsoft/api-extractor': ^7.57.7
+  '@microsoft/api-extractor': ^7.59.4
   '@stryker-mutator/core': 10.0.0
   '@stryker-mutator/vitest-runner': 10.0.0
   '@vitest/coverage-v8': 4.1.12
   '@vitest/ui': 4.1.12
   date-fns: 4.4.0
-  lucide-react: ^1.37.0
-  react: ^19.2.5
-  react-dom: ^19.2.5
+  lucide-react: ^1.61.0
+  react: ^19.3.1
+  react-dom: ^19.3.1
   typescript: ^7.0.2
   vitest: 4.1.12
   zod: ^4.6.7
-  tsx: ^4.23.1
+  tsx: ^4.23.15
   oxfmt: 0.59.0
+  sonner: 2.0.7
 
 catalogs:
   ts6:
@@ -61,17 +62,21 @@ peerDependencyRules:
     'madge>typescript': ^7.0.2
 
 patchedDependencies:
-  'body-parser@2.3.0': patches/body-parser@2.3.0.patch
+  'body-parser@2.4.0': patches/body-parser@2.4.0.patch
   'co-body@6.2.0': patches/co-body@6.2.0.patch
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
   '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0': patches/@joshwooding__vite-plugin-react-docgen-typescript@0.7.0.patch
-  '@manypkg/tools@2.1.1': patches/@manypkg__tools@2.1.1.patch
   react-docgen-typescript@2.4.0: patches/react-docgen-typescript@2.4.0.patch
   read-yaml-file@1.1.0: patches/read-yaml-file@1.1.0.patch
   zod-to-ts@2.1.0: patches/zod-to-ts@2.1.0.patch
 
 packageExtensions:
+  # platform-express 12.2 imports rxjs (multer utils) without declaring it; the
+  # global virtual store has no hoisted fallback, so the NestJS adapter can't load.
+  '@nestjs/platform-express@12':
+    peerDependencies:
+      rxjs: ^7.1.0
   # server-filesystem imports zod at runtime without declaring it (it relies on
   # npm hoisting). packages/mcp spawns it in tests, so make the dep explicit.
   '@modelcontextprotocol/server-filesystem@2026.8.31':
@@ -297,6 +302,15 @@ minimumReleaseAgeExclude:
   # Renovate security update: storybook@10.6.2
   - storybook@10.6.2
 trustPolicyExclude:
+  # Storybook 9.1.21 fixes the Storybook preview origin-validation advisories. It is
+  # the official `v9` backport (GitHub Actions trusted publisher), but pnpm compares
+  # trust by publish date and 10.x releases published earlier carry stronger evidence.
+  - '@storybook/react-vite@9.1.21'
+  - '@storybook/csf-plugin@9.1.21'
+  - '@storybook/react-dom-shim@9.1.21'
+  - '@storybook/react@9.1.21'
+  - '@storybook/builder-vite@9.1.21'
+  - 'storybook@9.1.21'
   # Vanta 2026-10-02: 7.4.6 fixes GHSA-g84c-rxfj-3j2c; earlier 7.4.x had trusted publisher
   # but 7.4.6 lacks that evidence (pnpm trustPolicy no-downgrade).
   - webpack-dev-middleware@7.4.6
@@ -328,6 +342,12 @@ overrides:
   jsondiffpatch: '>=0.7.6'
   ssri: '>=6.0.2'
   jws: ^4.0.1
+  # Vanta 2026-10-23: GHSA-67mh-4wv8-2f99. drizzle-kit (dev CLI) -> @esbuild-kit/core-utils
+  # pins esbuild ~0.18.20 and has no newer release; core-utils only uses the transform API.
+  '@esbuild-kit/core-utils>esbuild': 0.25.12
+  # Vanta 2026-10-23: AIKIDO-2026-886499 (fixed in 4.1.1). deepeval -> open@9 ->
+  # default-browser@4 pins bundle-name ^3; 4.x keeps the same bundleName() API.
+  'default-browser@4.0.0>bundle-name': 4.1.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
   client-js-e2e-tests-zod-v4>zod: ^4.6.7
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
@@ -337,7 +357,7 @@ overrides:
   '@better-auth/drizzle-adapter@<1.7.7': 1.7.7
   js-yaml@>=5.0.0 <5.4.1: 5.4.1
   glob@<=10.5.0: 10.5.0
-  body-parser@<2.3.0: 2.3.0
+  body-parser@<2.4.0: 2.4.0
   inngest: ^4.2.2
   fast-xml-parser@<5.5.7: ^5.10.1
   langsmith@<0.6.0: ^0.6.0
@@ -353,7 +373,7 @@ overrides:
   ws@>=8.0.0 <8.21.3: 8.22.0
   webpack-dev-server@<5.2.5: 5.2.6
   qs@>=6.7.0 <6.16.0: 6.16.0
-  fast-uri@<3.1.8: 3.1.8
+  fast-uri@>=3.0.0 <3.1.9: 3.1.9
   fast-uri@>=4.0.0 <4.1.5: 4.2.1
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
@@ -367,7 +387,7 @@ overrides:
   joi@>=17.0.0 <17.13.8: 17.13.8
   svgo@>=3.0.0 <3.3.5: 3.3.5
   e2b>undici8: npm:undici@8.12.2
-  multer@<2.3.0: 2.4.0
+  multer@<2.5.0: 2.5.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0
   '@opentelemetry/sdk-node@<0.217.0': 0.221.0
@@ -406,7 +426,7 @@ overrides:
   jose@>=4.14.0 <6.2.12: 6.2.12
   '@noble/hashes@>=1.0.0 <1.8.0': 1.8.0
   '@noble/hashes@>=2.0.0 <2.4.0': 2.4.0
-  katex@<0.16.47: 0.18.2
+  katex@<0.18.2: 0.18.2
   colord@<2.9.4: 2.9.4
   fflate@>=0.4.5 <0.4.9: 0.4.9
   browserslist@<=4.28.6: 4.28.7
@@ -646,3 +666,4 @@ allowBuilds:
   oracledb: false
   isolated-vm: true
   '@types/koa-compose': false
+  '@livekit/blingfire': false

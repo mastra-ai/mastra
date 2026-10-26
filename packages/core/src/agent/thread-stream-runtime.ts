@@ -1287,7 +1287,7 @@ export class AgentThreadStreamRuntime {
     const preparedRun = state.preparedRunsById.get(runId);
     if (preparedRun) preparedRun.abortController.abort(new AgentThreadLeaseLostError(runId));
     // Durable runs own their controller outside the thread runtime.
-    else state.threadRunsById.get(runId)?.agent.abortRunStream(runId);
+    else state.threadRunsById.get(runId)?.agent.abortRunStream?.(runId);
   }
 
   /**
@@ -1519,7 +1519,7 @@ export class AgentThreadStreamRuntime {
             this.abortRun(data.runId, resolvedPubSub);
           } else {
             // Durable runs own their controller outside the thread runtime.
-            state.threadRunsById.get(data.runId)?.agent.abortRunStream(data.runId);
+            state.threadRunsById.get(data.runId)?.agent.abortRunStream?.(data.runId);
           }
           if (clearPendingSignals) this.#notifyThreadEvents(state);
         }

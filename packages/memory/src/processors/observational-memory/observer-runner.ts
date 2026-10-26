@@ -27,7 +27,7 @@ import {
   parseMultiThreadObserverOutput,
   describeDegenerateOutput,
 } from './observer-agent';
-import { assertCompleteModelResponse, RETRY_CONFIG, withRetry } from './retry';
+import { assertCompleteModelResponse, OmEmptyResponseError, RETRY_CONFIG, withRetry } from './retry';
 import { createTemporaryOmMemoryContext } from './temporary-memory';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
@@ -387,7 +387,14 @@ export class ObserverRunner {
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
-                  return assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM observer');
+                  return assertRecognizedObserverOutput(
+                    assertNonEmptyObserverOutput(
+                      assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM observer'),
+                      'OM observer',
+                    ),
+                    'OM observer',
+                    text => hasSingleThreadObserverContent(text, activeExtractors),
+                  );
                 } catch (error) {
                   this.mastra?.getLogger?.().error('OM observer provider call failed', {
                     diagnostic: formatOmError(error),
@@ -549,7 +556,8 @@ export class ObserverRunner {
     for (const threadId of allThreadOrder) {
       const threadResult = output.results.get(threadId);
       if (!threadResult) {
-        output.results.set(threadId, { observations: '' });
+        // A thread the reply left out keeps no result so it is observed in a later cycle.
+        if (!messagesByThread.has(threadId)) output.results.set(threadId, { observations: '' });
         continue;
       }
       threadResult.observations = await applyTextTransform(
@@ -719,7 +727,14 @@ export class ObserverRunner {
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
-                  return assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM multi-thread observer');
+                  return assertRecognizedObserverOutput(
+                    assertNonEmptyObserverOutput(
+                      assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM multi-thread observer'),
+                      'OM multi-thread observer',
+                    ),
+                    'OM multi-thread observer',
+                    text => hasMultiThreadObserverContent(text, activeExtractors, threadOrder),
+                  );
                 } catch (error) {
                   this.mastra?.getLogger?.().error('OM multi-thread observer provider call failed', {
                     diagnostic: formatOmError(error),
@@ -836,15 +851,10 @@ export class ObserverRunner {
       });
     }
 
-    // Add empty results for threads that didn't get output
-    for (const threadId of threadOrder) {
-      if (!results.has(threadId)) {
-        results.set(threadId, { observations: '' });
-      }
-    }
-
-    for (const msgs of messagesByThread.values()) {
-      for (const msg of msgs) {
+    // A thread the reply left out gets no result, so its cursor stays put and its
+    // messages are observed in a later cycle instead of being dropped.
+    for (const threadId of results.keys()) {
+      for (const msg of messagesByThread.get(threadId) ?? []) {
         this.observedMessageIds.add(msg.id);
       }
     }
@@ -859,4 +869,61 @@ export class ObserverRunner {
       providerMetadata: result.providerMetadata,
     };
   }
+}
+
+/**
+ * An empty Observer response must not be committed: that would advance
+ * `lastObservedAt` past messages that were never observed. Throwing a retryable
+ * error lets `withRetry` retry it like a transport error; once retries run out
+ * it surfaces as `OmModelExecutionError`, so `failurePolicy` decides the turn.
+ */
+function assertNonEmptyObserverOutput<T extends { text?: string }>(output: T, label: string): T {
+  if (!output.text?.trim()) {
+    throw new OmEmptyResponseError(label);
+  }
+  return output;
+}
+
+/**
+ * A reply with text but nothing the parser recognises (e.g. a refusal like
+ * "I can't help with that") parses to zero observations. Committing it would drop
+ * the observed messages the same way an empty reply does, so it gets the same retry.
+ * Degenerate replies pass through; the degenerate retry handles them.
+ */
+function assertRecognizedObserverOutput<T extends { text: string }>(
+  output: T,
+  label: string,
+  isRecognized: (text: string) => boolean,
+): T {
+  if (!isRecognized(output.text)) {
+    throw new OmEmptyResponseError(label, 'no observations');
+  }
+  return output;
+}
+
+function hasSingleThreadObserverContent(text: string, extractors: readonly Extractor<any>[]): boolean {
+  if (/^[ \t]*<observations>/im.test(text)) return true;
+  const parsed = parseObserverOutput(text, extractors);
+  return Boolean(
+    parsed.degenerate ||
+    parsed.observations ||
+    parsed.currentTask ||
+    parsed.suggestedContinuation ||
+    parsed.threadTitle ||
+    Object.keys(parsed.extractedValues ?? {}).length ||
+    parsed.extractionFailures?.length,
+  );
+}
+
+/**
+ * Multi-thread replies carry every recognised section inside `<thread>` blocks, so a reply
+ * with no block for any requested thread has nothing to record.
+ */
+function hasMultiThreadObserverContent(
+  text: string,
+  extractors: readonly Extractor<any>[],
+  threadOrder: readonly string[],
+): boolean {
+  const parsed = parseMultiThreadObserverOutput(text, extractors);
+  return Boolean(parsed.degenerate || threadOrder.some(threadId => parsed.threads.has(threadId)));
 }

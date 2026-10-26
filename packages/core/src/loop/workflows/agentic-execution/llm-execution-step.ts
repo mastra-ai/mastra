@@ -3,7 +3,7 @@ import { isAbortError } from '@ai-sdk/provider-utils-v6';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
-import type { StructuredOutputOptions } from '../../../agent';
+import type { Agent, StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { isDownloadAssetsError } from '../../../agent/message-list/prompt/download-assets';
 import { createSignal } from '../../../agent/signals';
@@ -184,6 +184,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   outputProcessors?: OutputProcessorOrWorkflow[];
   processorStates?: Map<string, ProcessorState>;
   agentId?: string;
+  agent?: Agent<any, any, any, any>;
   processorRetryCount?: number;
   outputWriter?: (chunk: ChunkType, options?: { messageId?: string }) => Promise<void> | void;
   requestContext?: RequestContext;
@@ -542,6 +543,7 @@ async function processOutputStream<OUTPUT = undefined>({
   outputProcessors,
   processorStates,
   agentId,
+  agent,
   processorRetryCount,
   outputWriter,
   requestContext,
@@ -568,6 +570,7 @@ async function processOutputStream<OUTPUT = undefined>({
       outputProcessors: outputProcessors ?? [],
       logger: logger || new ConsoleLogger({ level: 'error' }),
       agentName: agentId || 'unknown',
+      agent,
       processorStates,
     });
     return toolResultProcessorRunner;
@@ -840,16 +843,20 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     switch (chunk.type) {
-      case 'response-metadata':
+      case 'response-metadata': {
+        // Providers may split metadata across several chunks (e.g. id first, modelId later),
+        // so keep earlier values for fields a chunk omits.
+        const previous = runState.state.responseMetadata;
         runState.setState({
           responseMetadata: {
-            id: chunk.payload.id,
-            timestamp: chunk.payload.timestamp,
-            modelId: chunk.payload.modelId,
-            headers: chunk.payload.headers,
+            id: chunk.payload.id ?? previous?.id,
+            timestamp: chunk.payload.timestamp ?? previous?.timestamp,
+            modelId: chunk.payload.modelId ?? previous?.modelId,
+            headers: chunk.payload.headers ?? previous?.headers,
           },
         });
         break;
+      }
 
       case 'tool-call-input-streaming-start': {
         const tool = toolInputStartToolDef || resolveDirectOrIdTool(chunk.payload.toolName);
@@ -1245,6 +1252,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   hasConfiguredErrorProcessors,
   logger,
   agentId,
+  agent,
   downloadRetries,
   downloadConcurrency,
   processorStates,
@@ -1685,6 +1693,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             outputProcessors: [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            agent,
             processorStates,
           });
 
@@ -1922,6 +1931,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors: [],
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          agent,
           processorStates,
         });
         const requestStepWriter: ProcessorStreamWriter | undefined = outputWriter
@@ -2182,6 +2192,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // Stream processors run per step, so their spans belong under the step span.
             tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
             processorStates,
+            agent,
             requestContext,
             abortSignal: options?.abortSignal,
           },
@@ -2246,6 +2257,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             outputProcessors,
             processorStates,
             agentId,
+            agent,
             processorRetryCount: inputData.processorRetryCount,
             outputWriter,
             requestContext,
@@ -2625,6 +2637,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               errorProcessors: errorProcessors || [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
               agentName: agentId || 'unknown',
+              agent,
               processorStates,
             });
 
@@ -2906,6 +2919,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           errorProcessors: errorProcessors || [],
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          agent,
           processorStates,
         });
 
@@ -2936,6 +2950,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             return currentMessageId;
           },
         });
+
+        // A processor cancelled by the run's abort rejects, which the runner reports as no retry.
+        if (options?.abortSignal?.aborted) {
+          cleanupProviderToolSpans(true);
+          await options.onAbort?.({
+            steps: inputData?.output?.steps ?? [],
+            text: runState.state.partialText,
+          });
+          await settleEagerWorkOnAbort(controller);
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+          return bailFromExecution('abort');
+        }
 
         if (errorResult.retry && canRetryError) {
           apiErrorRetryResult = errorResult;
@@ -3072,6 +3098,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               errorProcessors: errorProcessors || [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
               agentName: agentId || 'unknown',
+              agent,
               processorStates,
             });
 
@@ -3144,6 +3171,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors,
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          agent,
           processorStates,
         });
 
