@@ -58,7 +58,7 @@ export function SpanPayloadToolCalls({ toolCalls }: { toolCalls: unknown[] }) {
     <ul data-slot="span-payload-tool-calls" className="flex flex-col gap-2">
       {toolCalls.map((call, index) => (
         <li key={index}>
-          <SpanPayloadTool value={call} showLabel={false} />
+          <SpanPayloadTool value={call} />
         </li>
       ))}
     </ul>

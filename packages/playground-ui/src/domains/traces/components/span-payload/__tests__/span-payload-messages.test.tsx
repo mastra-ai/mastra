@@ -41,6 +41,74 @@ describe('SpanPayloadMessages', () => {
       expect(container.textContent).not.toMatch(/\*\*|#/);
     });
   });
+  describe('when an assistant message is recorded as memory stores it', () => {
+    const storedAssistant = (reasoning: Record<string, unknown>) => ({
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'reasoning', ...reasoning },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'call_1',
+              toolName: 'weatherInfo',
+              args: { city: 'Paris' },
+              result: { temperature: 11.9 },
+            },
+          },
+          { type: 'step-start', createdAt: 1793014088036 },
+          { type: 'text', text: 'Current weather in Paris' },
+        ],
+      },
+    });
+    const json = (container: HTMLElement) => container.querySelectorAll('[data-slot="span-payload-json"]');
+
+    it('draws the tool call and the answer, without raw JSON for the step boundary or an empty reasoning', () => {
+      const { container } = render(
+        <SpanPayloadMessages
+          value={[
+            storedAssistant({
+              reasoning: '',
+              details: [{ type: 'text', text: '' }],
+              providerMetadata: { openai: { reasoningEncryptedContent: 'gAAAAB' } },
+            }),
+          ]}
+        />,
+      );
+      expect(json(container)).toHaveLength(0);
+      expect(screen.queryByRole('button', { name: 'Reasoning' })).toBeNull();
+      expect(container.querySelectorAll('[data-slot="span-payload-tool"]')).toHaveLength(1);
+      expect(screen.queryByText('Tool call')).toBeNull();
+      expect(screen.getByText('Current weather in Paris')).toBeTruthy();
+      expect(container.textContent).not.toContain('gAAAAB');
+    });
+
+    it('shows the reasoning the model summarized', () => {
+      const { container } = render(
+        <SpanPayloadMessages
+          value={[
+            storedAssistant({
+              reasoning: 'Look up the weather first.',
+              details: [{ type: 'text', text: 'Look up the weather first.' }],
+            }),
+          ]}
+        />,
+      );
+      expect(json(container)).toHaveLength(0);
+      expect(screen.getByText('Look up the weather first.')).toBeTruthy();
+    });
+
+    it('says when the provider redacted the reasoning', () => {
+      render(
+        <SpanPayloadMessages
+          value={[storedAssistant({ reasoning: '', details: [{ type: 'redacted', data: 'opaque' }] })]}
+        />,
+      );
+      expect(screen.getByText('Reasoning was redacted by the provider.')).toBeTruthy();
+    });
+  });
   describe('when user and assistant messages are recorded', () => {
     it('uses conversation messages in their original order', () => {
       const { container } = render(

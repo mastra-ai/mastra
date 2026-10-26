@@ -1,5 +1,5 @@
 import { SpanPayloadJson } from './span-payload-json';
-import { SpanPayloadField, SpanPayloadLabel } from './span-payload-primitives';
+import { SpanPayloadField } from './span-payload-primitives';
 import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
 import { ActivityHeadline } from '@/ds/components/ai/activity';
 import { presentTool } from '@/ds/components/ai/tool-call/tool-presentation';
@@ -7,7 +7,7 @@ import { presentTool } from '@/ds/components/ai/tool-call/tool-presentation';
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-export function SpanPayloadTool({ value, showLabel = true }: { value: unknown; showLabel?: boolean }) {
+export function SpanPayloadTool({ value }: { value: unknown }) {
   if (!isRecord(value)) return <SpanPayloadJson value={value} />;
   const call = value.type === 'tool-invocation' ? value.toolInvocation : value;
   if (!isRecord(call) || typeof call.toolName !== 'string' || !call.toolName) {
@@ -21,7 +21,6 @@ export function SpanPayloadTool({ value, showLabel = true }: { value: unknown; s
   const hasBody = input !== undefined || output !== undefined || errorText !== undefined;
   return (
     <div data-slot="span-payload-tool" className="flex flex-col gap-2">
-      {showLabel && <SpanPayloadLabel>{value.type === 'tool-result' ? 'Tool result' : 'Tool call'}</SpanPayloadLabel>}
       <BadgeWrapper
         status={error ? 'error' : 'idle'}
         header={

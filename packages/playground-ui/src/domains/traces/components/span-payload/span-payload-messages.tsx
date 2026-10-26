@@ -28,6 +28,24 @@ function MessageText({ text }: { text: string }) {
   return <SpanPayloadMarkdown>{dedent(text)}</SpanPayloadMarkdown>;
 }
 
+/**
+ * Reasoning as the model sends it (`text`) or as memory stores it (`reasoning`, with `details`
+ * that can be redacted by the provider). An empty one (e.g. only encrypted content) shows nothing.
+ */
+function MessageReasoning({ part }: { part: Record<string, unknown> }) {
+  const details = Array.isArray(part.details) ? part.details.filter(isRecord) : [];
+  const text =
+    typeof part.text === 'string'
+      ? part.text
+      : typeof part.reasoning === 'string' && part.reasoning
+        ? part.reasoning
+        : details
+            .map(detail => (detail.type === 'text' && typeof detail.text === 'string' ? detail.text : ''))
+            .join('');
+  const redacted = !text.trim() && details.some(detail => detail.type === 'redacted');
+  return <ReasoningActivity text={text} redacted={redacted} />;
+}
+
 function MessagePart({ part }: { part: unknown }) {
   if (typeof part === 'string') return <MessageText text={part} />;
   if (!isRecord(part)) return <SpanPayloadJson value={part} />;
@@ -36,7 +54,10 @@ function MessagePart({ part }: { part: unknown }) {
     case 'text':
       return typeof part.text === 'string' ? <MessageText text={part.text} /> : <SpanPayloadJson value={part} />;
     case 'reasoning':
-      return typeof part.text === 'string' ? <ReasoningActivity text={part.text} /> : <SpanPayloadJson value={part} />;
+      return <MessageReasoning part={part} />;
+    // Marks where a new model step starts in a stored message; it carries nothing to read.
+    case 'step-start':
+      return null;
     case 'tool-call':
     case 'tool-invocation':
     case 'dynamic-tool':
@@ -157,7 +178,7 @@ function SpanMessage({ message, footer }: { message: unknown; footer?: ReactNode
 
   return (
     <div data-role={role} className="flex min-w-0 flex-col gap-2">
-      {!hasToolResultLabels && <SpanPayloadLabel>{role}</SpanPayloadLabel>}
+      <SpanPayloadLabel>{hasToolResultLabels ? 'Tool result' : role}</SpanPayloadLabel>
       {body}
     </div>
   );
