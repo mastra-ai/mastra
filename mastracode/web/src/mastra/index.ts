@@ -19,6 +19,7 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { AgentBrowser } from '@mastra/agent-browser';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
@@ -406,6 +407,10 @@ const sandbox =
           env: localSandboxEnv(),
         });
 
+// One headless Chromium per session thread, so sessions don't share tabs.
+const browser =
+  process.env.FACTORY_BROWSER?.trim() === 'local' ? new AgentBrowser({ headless: true, scope: 'thread' }) : undefined;
+
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
@@ -415,6 +420,7 @@ export const factory = new MastraFactory({
   // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
   sandbox,
+  browser,
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
   dispatcher: {
