@@ -1257,7 +1257,7 @@ export class AgentThreadStreamRuntime {
   /** Guard the detached lease-loss callback; awaited control events must reject so the backend can retry. */
   #abortAgentRunStream(state: AgentThreadRuntimeState, runId: string): void {
     try {
-      state.threadRunsById.get(runId)?.agent.abortRunStream(runId);
+      state.threadRunsById.get(runId)?.agent.abortRunStream?.(runId);
     } catch {
       // Nothing to recover: the caller has already fenced the run or released its queue.
     }
@@ -1492,7 +1492,7 @@ export class AgentThreadStreamRuntime {
             this.abortRun(data.runId, resolvedPubSub);
           } else {
             // Durable runs own their controller outside the thread runtime.
-            state.threadRunsById.get(data.runId)?.agent.abortRunStream(data.runId);
+            state.threadRunsById.get(data.runId)?.agent.abortRunStream?.(data.runId);
           }
           if (clearPendingSignals) this.#notifyThreadEvents(state);
         }

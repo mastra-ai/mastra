@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.80.0-alpha.2",
+  "version": "1.80.0-alpha.4",
   "description": "",
   "type": "module",
   "files": [
@@ -125,7 +125,7 @@
     "@mastra/agent-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
-    "@types/node": "22.20.5",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "canonicalize": "^1.0.8",
@@ -152,6 +152,6 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "hono": "^4.13.7"
+    "hono": "^4.13.13"
   }
 }

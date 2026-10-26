@@ -54,6 +54,10 @@ vi.mock('../../providers/openai-codex.js', () => ({
   createReasoningEffortMiddleware: vi.fn((providerKey: string, effort?: string) =>
     effort === undefined ? undefined : { __middleware: 'reasoning-effort', providerKey, effort },
   ),
+  createPromptCacheKeyMiddleware: vi.fn((key?: string) =>
+    key === undefined ? undefined : { __middleware: 'prompt-cache-key', key },
+  ),
+  getRequestThreadId: vi.fn((headers?: Record<string, string>) => headers?.['x-thread-id']),
   getEffectiveThinkingLevel: vi.fn((_modelId: string, level: string) => level),
   THINKING_LEVEL_TO_REASONING_EFFORT: {
     off: undefined,

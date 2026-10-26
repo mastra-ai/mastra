@@ -269,16 +269,14 @@ export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login'
             } else {
               await performLogin(ctx, provider.id);
             }
+          } else if (ctx.authStorage) {
+            const removedAccountIds = ctx.authStorage.listAccounts(provider.id).map(account => account.id);
+            ctx.authStorage.logout(provider.id);
+            removeAccountRoutingPreferences(removedAccountIds);
+            ctx.state.controller.invalidateAvailableModelsCache();
+            ctx.showInfo(`Logged out from ${provider.name}`);
           } else {
-            if (ctx.authStorage) {
-              const removedAccountIds = ctx.authStorage.listAccounts(provider.id).map(account => account.id);
-              ctx.authStorage.logout(provider.id);
-              removeAccountRoutingPreferences(removedAccountIds);
-              ctx.state.controller.invalidateAvailableModelsCache();
-              ctx.showInfo(`Logged out from ${provider.name}`);
-            } else {
-              ctx.showError('Auth storage not configured');
-            }
+            ctx.showError('Auth storage not configured');
           }
         }
         resolve();

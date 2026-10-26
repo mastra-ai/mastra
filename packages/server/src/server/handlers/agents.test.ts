@@ -167,6 +167,7 @@ describe('getProvidersHandler', () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
     // Ensure Google is not connected
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
 
     const result = await GET_PROVIDERS_ROUTE.handler({});
 
@@ -187,6 +188,7 @@ describe('getProvidersHandler', () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
 
     const result = await GET_PROVIDERS_ROUTE.handler({});
 
@@ -465,6 +467,7 @@ describe('isProviderConnected', () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
   });
 
   afterEach(() => {
