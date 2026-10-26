@@ -1,0 +1,25 @@
+---
+'@mastra/core': patch
+---
+dependencies updates:
+  - Updated dependency [`chat@^4.43.0` ↗︎](https://www.npmjs.com/package/chat/v/4.43.0) (from `^4.37.0`, in `dependencies`)
+  - Updated dependency [`dotenv@^17.4.2` ↗︎](https://www.npmjs.com/package/dotenv/v/17.4.2) (from `^17.3.1`, in `dependencies`)
+  - Updated dependency [`fastq@^1.20.3` ↗︎](https://www.npmjs.com/package/fastq/v/1.20.3) (from `^1.20.1`, in `dependencies`)
+  - Updated dependency [`hono@^4.13.13` ↗︎](https://www.npmjs.com/package/hono/v/4.13.13) (from `^4.13.7`, in `dependencies`)
+  - Updated dependency [`hono-openapi@^1.5.0` ↗︎](https://www.npmjs.com/package/hono-openapi/v/1.5.0) (from `^1.3.1`, in `dependencies`)
+  - Updated dependency [`ignore@^7.0.14` ↗︎](https://www.npmjs.com/package/ignore/v/7.0.14) (from `^7.0.5`, in `dependencies`)
+  - Updated dependency [`lru-cache@^11.5.3` ↗︎](https://www.npmjs.com/package/lru-cache/v/11.5.3) (from `^11.2.7`, in `dependencies`)
+  - Updated dependency [`p-map@^7.1.1` ↗︎](https://www.npmjs.com/package/p-map/v/7.1.1) (from `^7.0.4`, in `dependencies`)
+  - Updated dependency [`picomatch@^4.0.7` ↗︎](https://www.npmjs.com/package/picomatch/v/4.0.7) (from `^4.0.3`, in `dependencies`)
+  - Updated dependency [`posthog-node@^5.57.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.57.1) (from `^5.46.1`, in `dependencies`)
+  - Updated dependency [`re2js@^2.9.0` ↗︎](https://www.npmjs.com/package/re2js/v/2.9.0) (from `^2.8.6`, in `dependencies`)
+  - Updated dependency [`ws@^8.22.0` ↗︎](https://www.npmjs.com/package/ws/v/8.22.0) (from `^8.21.3`, in `dependencies`)
+  - Updated dependency [`yaml@^2.9.1` ↗︎](https://www.npmjs.com/package/yaml/v/2.9.1) (from `^2.9.0`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/azure@^2.0.143` ↗︎](https://www.npmjs.com/package/@ai-sdk/azure/v/2.0.143) (from `^2.0.142`, in `devDependencies`)
+  - Updated dependency [`@babel/core@^8.0.9` ↗︎](https://www.npmjs.com/package/@babel/core/v/8.0.9) (from `^8.0.1`, in `devDependencies`)
+  - Updated dependency [`@copilotkit/aimock@^1.46.0` ↗︎](https://www.npmjs.com/package/@copilotkit/aimock/v/1.46.0) (from `^1.29.0`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`@types/ws@^8.18.2` ↗︎](https://www.npmjs.com/package/@types/ws/v/8.18.2) (from `^8.18.1`, in `devDependencies`)
+  - Updated dependency [`arktype@^2.2.9` ↗︎](https://www.npmjs.com/package/arktype/v/2.2.9) (from `^2.2.0`, in `devDependencies`)
+  - Updated dependency [`rollup@^4.65.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.65.0) (from `^4.64.10`, in `devDependencies`)
+  - Updated dependency [`vscode-languageserver-protocol@^3.18.5` ↗︎](https://www.npmjs.com/package/vscode-languageserver-protocol/v/3.18.5) (from `^3.18.4`, in `devDependencies`)

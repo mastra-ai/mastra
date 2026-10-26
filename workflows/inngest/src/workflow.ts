@@ -635,11 +635,16 @@ export class InngestWorkflow<
            */
           const finalizeWorkflow = async () => {
             // For durable agent workflows, emit error event on failure so the
-            // client's stream can receive the error and close properly.
-            if (result.status === 'failed' && inputData?.__workflowKind === 'durable-agent' && inputData?.runId) {
+            // client's stream can receive the error and close properly. A resume
+            // event carries the resume payload as `inputData`, so read the agent
+            // input from the restored step results instead.
+            const durableAgentInput = [inputData, resume?.stepResults?.input].find(
+              input => input?.__workflowKind === 'durable-agent' && input.runId,
+            );
+            if (result.status === 'failed' && durableAgentInput) {
               const { error, delivery } = durableAgentWorkflowError(result.error);
               try {
-                await emitErrorEvent(pubsub, inputData.runId, error, undefined, delivery);
+                await emitErrorEvent(pubsub, durableAgentInput.runId, error, undefined, delivery);
               } catch (e) {
                 this.logger.debug?.('Failed to emit error event:', e);
               }

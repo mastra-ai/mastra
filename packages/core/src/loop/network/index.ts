@@ -1253,7 +1253,12 @@ export async function createNetworkLoop({
 
       // listen for the network-level abort signal
       const networkAbortCb = async () => {
-        await run.cancel();
+        // run.cancel() rejects when the cancel can't be published; an event listener has no caller to surface it to.
+        try {
+          await run.cancel();
+        } catch (err) {
+          mastra?.getLogger()?.error(`Failed to cancel workflow "${wf.id}" run ${runId} after network abort`, err);
+        }
         await onAbort?.({
           primitiveType: 'workflow',
           primitiveId: inputData.primitiveId,

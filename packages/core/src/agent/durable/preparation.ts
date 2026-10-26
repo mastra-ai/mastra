@@ -972,6 +972,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // real (toolName, args) on each call. The boolean shadow on the
     // serialized workflow input is the cross-process fallback.
     requireToolApproval: execOptions?.requireToolApproval,
+    // Park the per-call delegation config so a warm resume that rebuilds tools
+    // keeps the original delegation callbacks when the resume supplies none.
+    delegation: execOptions?.delegation,
     // Signal drain — the closure reads from AgentThreadStreamRuntime's queues.
     // Non-serializable; cross-process engines lose it and signals go undelivered.
     drainPendingSignals: scope => typedAgent.__getDrainPendingSignals()(runId, scope),
