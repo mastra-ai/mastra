@@ -12,6 +12,7 @@ import type {
   ExperimentStatus,
   TargetType,
 } from '../../storage/types';
+import type { ExperimentAgentOverrides } from './agent-overrides';
 import type { ExperimentEventObserver } from './events';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 
@@ -281,6 +282,12 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
    * Recorded as a `provider/modelId` label in the experiment's `metadata.agentModel`.
    */
   agentModel?: MastraModelConfig;
+  /**
+   * Per-run agent config tweaks for agent targets (instructions, model, generation options),
+   * passed per call to `agent.generate()`. The registered agent is not changed. The shape is a
+   * subset of a stored agent version snapshot and is recorded in `metadata.agentOverrides`.
+   */
+  agentOverrides?: ExperimentAgentOverrides;
   /** Version overrides for sub-agent delegation during experiment execution */
   versions?: VersionOverrides;
   /**

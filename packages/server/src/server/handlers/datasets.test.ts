@@ -4,6 +4,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
@@ -287,6 +288,93 @@ describe('Datasets Handlers', () => {
           expect(parse({ targetType: 'agent', targetId: 'a', agentModel: partial }).success).toBe(false);
         },
       );
+    });
+
+    describe('Scenario: POST /datasets/:id/experiments forwards agentOverrides', () => {
+      it('runs every item on the tweaked instructions and stores the overrides', async () => {
+        // Given a server with agent "eval-agent" and a dataset
+        const systemPrompts: string[] = [];
+        const capture = (props: any) =>
+          systemPrompts.push(
+            ...props.prompt.filter((m: any) => m.role === 'system').map((m: any) => String(m.content)),
+          );
+        const agent = new Agent({
+          id: 'eval-agent',
+          name: 'eval-agent',
+          instructions: 'code instructions',
+          model: createMockModel({ mockText: 'answer', spyGenerate: capture, spyStream: capture }),
+        });
+        mastra = new Mastra({ logger: false, storage: mockStorage, agents: { 'eval-agent': agent } });
+        const dataset = await mastra.datasets.create({ name: 'Overrides DS' });
+        await dataset.addItem({ input: 'hello' });
+        const agentOverrides = { instructions: 'tweaked', defaultOptions: { maxSteps: 2 } };
+
+        // When I POST an agent experiment with agentOverrides
+        const body = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
+          targetType: 'agent',
+          targetId: 'eval-agent',
+          agentOverrides,
+        });
+        const { experimentId } = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          ...body,
+        } as any)) as any;
+
+        // Then the experiment runs on "tweaked" and stores metadata.agentOverrides
+        await vi.waitFor(async () => {
+          expect((await dataset.getExperiment({ experimentId }))?.status).toBe('completed');
+        });
+        expect(systemPrompts.length).toBeGreaterThan(0);
+        expect(systemPrompts.every(prompt => prompt.includes('tweaked'))).toBe(true);
+        expect(systemPrompts.some(prompt => prompt.includes('code instructions'))).toBe(false);
+        expect((await dataset.getExperiment({ experimentId }))?.metadata).toEqual({ agentOverrides });
+      });
+    });
+
+    describe('Scenario Outline: invalid agentOverrides bodies are rejected', () => {
+      const parse = (body: Record<string, unknown>) => TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse(body);
+      const agent = { targetType: 'agent', targetId: 'a' };
+
+      it('accepts a full agentOverrides for an agent target', () => {
+        const agentOverrides = {
+          instructions: 'tweaked',
+          model: { provider: 'openai', name: 'gpt-5-mini' },
+          defaultOptions: {
+            modelSettings: { temperature: 0.2, topP: 0.9, maxOutputTokens: 512, seed: 1 },
+            maxSteps: 3,
+            toolChoice: { type: 'tool', toolName: 'search' },
+            activeTools: ['search'],
+          },
+        };
+        const result = parse({ ...agent, agentOverrides });
+        expect(result.success && result.data.agentOverrides).toEqual(agentOverrides);
+      });
+
+      it.each([
+        { condition: 'a non-agent target', body: { targetType: 'workflow', targetId: 'w', agentOverrides: {} } },
+        { condition: 'start: false', body: { ...agent, start: false, agentOverrides: { instructions: 'x' } } },
+        {
+          condition: 'agentModel + agentOverrides.model',
+          body: {
+            ...agent,
+            agentModel: { provider: 'openai', modelId: 'gpt-5-mini' },
+            agentOverrides: { model: { provider: 'openai', name: 'gpt-5-mini' } },
+          },
+        },
+        {
+          condition: 'an unknown modelSettings key',
+          body: { ...agent, agentOverrides: { defaultOptions: { modelSettings: { temprature: 0.2 } } } },
+        },
+        { condition: 'maxSteps 0', body: { ...agent, agentOverrides: { defaultOptions: { maxSteps: 0 } } } },
+        { condition: 'empty instructions', body: { ...agent, agentOverrides: { instructions: '' } } },
+        {
+          condition: 'an incomplete model',
+          body: { ...agent, agentOverrides: { model: { provider: 'openai' } } },
+        },
+      ])('rejects $condition', ({ body }) => {
+        expect(parse(body).success).toBe(false);
+      });
     });
   });
 

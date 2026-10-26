@@ -12,6 +12,8 @@ import type { TargetType } from '../../storage/types';
 import type { MastraToolInvocationOptions, ToolHookContext, ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
 import { agentModelLabel } from './agent-model';
+import { toGenerateOptions } from './agent-overrides';
+import type { ExperimentAgentOverrides } from './agent-overrides';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 import { ToolMockMatcher } from './tool-mocks';
 import type { AgentExperimentOutput, ScorerExperimentOutput } from './types';
@@ -133,6 +135,8 @@ export async function executeTarget(
     versions?: VersionOverrides;
     /** Per-call model override (agent targets only). */
     agentModel?: MastraModelConfig;
+    /** Per-call agent config tweaks (agent targets only). */
+    agentOverrides?: ExperimentAgentOverrides;
     /** Item-level static tool mocks (agent targets only). */
     toolMocks?: ItemToolMock[];
     /** Handling for agent tool calls not declared in `toolMocks`. */
@@ -165,6 +169,7 @@ export async function executeTarget(
             traceId = assignedTraceId;
           },
           options?.agentModel,
+          options?.agentOverrides,
         );
         break;
       case 'workflow':
@@ -241,12 +246,14 @@ async function executeAgent(
   unmockedToolPolicy?: UnmockedToolPolicy,
   onTraceIdAssigned?: (traceId: string) => void,
   agentModel?: MastraModelConfig,
+  agentOverrides?: ExperimentAgentOverrides,
 ): Promise<ExecutionResult> {
   const reqCtx: RequestContext | undefined = requestContext
     ? new RequestContext(Object.entries(requestContext))
     : undefined;
-  // generateLegacy() has no per-call model, so an override always runs through generate().
-  const useLegacy = !agentModel && !isSupportedLanguageModel(await agent.getModel({ requestContext: reqCtx }));
+  // generateLegacy() has no per-call model/overrides, so any override always runs through generate().
+  const useLegacy =
+    !agentModel && !agentOverrides && !isSupportedLanguageModel(await agent.getModel({ requestContext: reqCtx }));
 
   // Both generate() and generateLegacy() return different types (FullOutput vs GenerateTextResult)
   // but share the fields we extract. Cast input to MessageListInput at the boundary.
@@ -315,11 +322,12 @@ async function executeAgent(
   onTraceIdAssigned?.(assignedTraceId);
   const tracingOptions = {
     traceId: assignedTraceId,
-    ...(experimentId || agentModel
+    ...(experimentId || agentModel || agentOverrides
       ? {
           metadata: {
             ...(experimentId ? { experimentId } : {}),
             ...(agentModel ? { agentModel: agentModelLabel(agentModel) } : {}),
+            ...(agentOverrides ? { agentOverrides } : {}),
           },
         }
       : {}),
@@ -337,6 +345,7 @@ async function executeAgent(
           tracingOptions,
           ...(versions ? { versions } : {}),
           ...(agentModel ? { model: agentModel } : {}),
+          ...(agentOverrides ? toGenerateOptions(agentOverrides) : {}),
           ...(mockHooks ? { hooks: mockHooks } : {}),
           ...(mockConcurrency ?? {}),
         })

@@ -448,6 +448,42 @@ export const triggerExperimentBodySchema = z
       .describe(
         'Model to run an agent target on for this experiment only, instead of the model the agent is configured with. Passed per call; the agent itself is not changed and the model is not stored on the experiment.',
       ),
+    agentOverrides: z
+      .object({
+        instructions: z.string().min(1).optional().describe("Replaces the agent's instructions"),
+        model: z
+          .object({ provider: z.string().min(1), name: z.string().min(1) })
+          .optional()
+          .describe('Model to run on, resolved as provider/name'),
+        defaultOptions: z
+          .object({
+            modelSettings: z
+              .object({
+                temperature: z.number().optional(),
+                topP: z.number().optional(),
+                topK: z.number().optional(),
+                maxOutputTokens: z.number().int().positive().optional(),
+                frequencyPenalty: z.number().optional(),
+                presencePenalty: z.number().optional(),
+                seed: z.number().int().optional(),
+              })
+              .strict()
+              .optional(),
+            maxSteps: z.number().int().positive().optional(),
+            toolChoice: z
+              .union([
+                z.enum(['auto', 'none', 'required']),
+                z.object({ type: z.literal('tool'), toolName: z.string().min(1) }),
+              ])
+              .optional(),
+            activeTools: z.array(z.string()).optional(),
+          })
+          .optional(),
+      })
+      .optional()
+      .describe(
+        'Agent config tweaks (instructions, model, execution options) for this experiment only. Applied per call; the agent itself is not changed. Recorded on the experiment as metadata.agentOverrides.',
+      ),
     maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
     provenance: z
       .object({
@@ -491,6 +527,18 @@ export const triggerExperimentBodySchema = z
   .refine(body => !body.agentModel || body.start !== false, {
     path: ['agentModel'],
     message: 'agentModel is not supported for create-only experiments (start: false)',
+  })
+  .refine(body => !body.agentOverrides || body.targetType === 'agent', {
+    path: ['agentOverrides'],
+    message: 'agentOverrides is only supported when targetType is "agent"',
+  })
+  .refine(body => !body.agentOverrides || body.start !== false, {
+    path: ['agentOverrides'],
+    message: 'agentOverrides is not supported for create-only experiments (start: false)',
+  })
+  .refine(body => !body.agentModel || !body.agentOverrides?.model, {
+    path: ['agentOverrides', 'model'],
+    message: 'agentOverrides.model cannot be combined with agentModel',
   });
 
 export const runExperimentItemBodySchema = z.object({

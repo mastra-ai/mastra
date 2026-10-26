@@ -31,6 +31,7 @@ import type {
   UpdateExperimentResultInput,
 } from '../storage/types.js';
 import { assertAgentModelTarget, withAgentModelMetadata } from './experiment/agent-model.js';
+import { assertAgentOverridesTarget, withAgentOverridesMetadata } from './experiment/agent-overrides.js';
 import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
 import { experimentScoreId } from './experiment/scorer.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
@@ -388,6 +389,7 @@ export class Dataset {
     config: StartExperimentConfig<I, O, E>,
   ): Promise<{ experimentId: string; status: 'pending'; totalItems: number }> {
     assertAgentModelTarget(config);
+    assertAgentOverridesTarget(config);
     const persistExperiments = config.persistence?.experiments !== 'none';
     const experimentsStore = persistExperiments ? await this.#getExperimentsStore() : undefined;
     const datasetsStore = await this.#getDatasetsStore();
@@ -429,7 +431,10 @@ export class Dataset {
         totalItems: items.length,
         name: config.name,
         description: config.description,
-        metadata: withAgentModelMetadata(config.metadata, config.agentModel),
+        metadata: withAgentOverridesMetadata(
+          withAgentModelMetadata(config.metadata, config.agentModel),
+          config.agentOverrides,
+        ),
         provenance: config.provenance,
         experimentSetId: config.grouping?.experimentSetId,
         comparisonId: config.grouping?.comparisonId,

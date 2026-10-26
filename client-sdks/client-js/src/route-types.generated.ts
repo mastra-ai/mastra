@@ -20869,6 +20869,46 @@ export type PostDatasetsDatasetIdExperiments_Body = {
         modelId: string;
       }
     | undefined;
+  /** Agent config tweaks (instructions, model, execution options) for this experiment only. Applied per call; the agent itself is not changed. Recorded on the experiment as metadata.agentOverrides. */
+  agentOverrides?:
+    | {
+        /** Replaces the agent's instructions */
+        instructions?: string | undefined;
+        /** Model to run on, resolved as provider/name */
+        model?:
+          | {
+              provider: string;
+              name: string;
+            }
+          | undefined;
+        defaultOptions?:
+          | {
+              modelSettings?:
+                | {
+                    temperature?: number | undefined;
+                    topP?: number | undefined;
+                    topK?: number | undefined;
+                    maxOutputTokens?: number | undefined;
+                    frequencyPenalty?: number | undefined;
+                    presencePenalty?: number | undefined;
+                    seed?: number | undefined;
+                  }
+                | undefined;
+              maxSteps?: number | undefined;
+              toolChoice?:
+                | (
+                    | ('auto' | 'none' | 'required')
+                    | {
+                        type: 'tool';
+                        toolName: string;
+                      }
+                  )
+                | undefined;
+              activeTools?: string[] | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
   /** Maximum concurrent executions */
   maxConcurrency?: number | undefined;
   /** Caller-provided provenance claims for the experiment execution */

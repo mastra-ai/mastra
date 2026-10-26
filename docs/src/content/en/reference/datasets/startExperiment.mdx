@@ -71,6 +71,23 @@ const summary = await dataset.startExperiment({
 })
 ```
 
+### Tweak the agent's config for one experiment
+
+Use `agentOverrides` to try different instructions, a different model, or different execution options without editing the agent in code or in the editor. The registered agent is unchanged, and the experiment's `metadata.agentOverrides` records the exact tweak so you can compare runs.
+
+```typescript
+const summary = await dataset.startExperiment({
+  targetType: 'agent',
+  targetId: 'my-agent',
+  agentOverrides: {
+    instructions: 'You are a concise support agent. Answer in two sentences or fewer.',
+    model: { provider: 'anthropic', name: '__AI_SDK_ANTHROPIC_MODEL_SONNET__' },
+    defaultOptions: { modelSettings: { temperature: 0.2 }, maxSteps: 3 },
+  },
+  scorers: ['accuracy'],
+})
+```
+
 ## Parameters
 
 <PropertiesTable
@@ -93,6 +110,13 @@ const summary = await dataset.startExperiment({
     isOptional: true,
     description:
       "Model to run the agent target with, instead of the agent's own model. Accepts a `provider/modelId` string, a model config object (for example `{ id, url, apiKey }`), a model instance, or a `{ model, id }` object. Model functions and fallback arrays aren't supported. Applies only when `targetType` is `'agent'`. The model is passed with each call the experiment makes, so the registered agent and other experiments are unaffected. The agent version is picked the same way as without `agentModel`, and sub-agents keep their own models. The experiment's `metadata` and each run's trace metadata record it as `agentModel` (for example `anthropic/claude-haiku-5-5`).",
+  },
+  {
+    name: 'agentOverrides',
+    type: 'ExperimentAgentOverrides',
+    isOptional: true,
+    description:
+      "Config tweaks for the agent target, applied to each call the experiment makes. The registered agent and other experiments are unaffected. Accepts `instructions` (a string that replaces the agent's instructions), `model` (`{ provider, name }`, resolved as `provider/name`), and `defaultOptions` with `modelSettings`, `maxSteps`, `toolChoice`, and `activeTools`. Applies only when `targetType` is `'agent'`, and `model` can't be combined with `agentModel`. The fields match a stored agent version's config. The experiment's `metadata` and each run's trace metadata record the object as `agentOverrides`.",
   },
   {
     name: 'scorers',
