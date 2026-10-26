@@ -71,12 +71,16 @@ describe('SpanPayloadProcessor', () => {
     expect(screen.getByRole('button', { name: 'Copy to clipboard' })).toBeTruthy();
   });
 
-  it('leaves the step and retry count out of the input, since Attributes shows them', () => {
+  it('leaves the step, retry count and response message id out of the input, since Attributes shows them', () => {
     render(<SpanInputRenderer span={processorToolResultSpan} />);
     expect(screen.queryByText('Step')).toBeNull();
     cleanup();
     render(<SpanInputRenderer span={processorInputSpan} />);
     expect(screen.queryByText('Retries')).toBeNull();
+    cleanup();
+    render(<SpanInputRenderer span={processorInputStepSpan} />);
+    expect(screen.queryByText('Message id')).toBeNull();
+    expect(screen.queryByText('msg-step-0')).toBeNull();
   });
 
   it('keeps a step that is not a number in the input', () => {
@@ -108,7 +112,6 @@ describe('SpanPayloadProcessor', () => {
     render(<SpanInputRenderer span={processorInputStepSpan} />);
     expect(screen.getByText('Active tools (1)')).toBeTruthy();
     expect(screen.queryByText(/^Tools/)).toBeNull();
-    expect(screen.getByText('msg-step-0')).toBeTruthy();
   });
 
   it('keeps an empty output as JSON, as any other span would', () => {
@@ -147,6 +150,15 @@ describe('SpanProcessorAttributes', () => {
     cleanup();
     render(<SpanProcessorAttributes span={processorToolResultSpan} />);
     expect(valueOf('Step')).toBe('3');
+  });
+
+  it('shows the assistant message the step answers with, shortened like the other ids and copied in full', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<SpanProcessorAttributes span={processorInputStepSpan} />);
+    expect(valueOf('Assistant message id')).toBe('msg-st');
+    fireEvent.click(screen.getByRole('button', { name: 'Copy assistant message id' }));
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('msg-step-0'));
   });
 
   it('shows message-list changes as readable actions', () => {

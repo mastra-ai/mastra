@@ -118,7 +118,7 @@ export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) 
 
   const { phaseLabel, executor, processorIndex, hookDurationMs, messageListMutations, tripwireAbort, rest } = pipeline;
   const input = describeSpanInput(asCoreSpan(span));
-  const { stepNumber, retryCount } = input?.type === 'processor' ? getProcessorRunContext(input.value) : {};
+  const { stepNumber, retryCount, messageId } = input?.type === 'processor' ? getProcessorRunContext(input.value) : {};
   const processorName = span.entityName ?? span.entityId;
   const hookDuration = hookDurationMs === undefined ? undefined : formatDuration(hookDurationMs);
   const mutations = groupMutations(messageListMutations ?? []);
@@ -158,6 +158,14 @@ export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) 
           <>
             <DataKeysAndValues.Key>Retries</DataKeysAndValues.Key>
             <DataKeysAndValues.Value>{retryCount}</DataKeysAndValues.Value>
+          </>
+        )}
+        {messageId !== undefined && (
+          <>
+            <DataKeysAndValues.Key>Assistant message id</DataKeysAndValues.Key>
+            <DataKeysAndValues.ValueWithCopyBtn copyValue={messageId} copyTooltip="Copy assistant message id">
+              {messageId.slice(0, 6)}
+            </DataKeysAndValues.ValueWithCopyBtn>
           </>
         )}
         {hookDuration && (
