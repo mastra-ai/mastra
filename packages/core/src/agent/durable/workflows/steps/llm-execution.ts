@@ -1760,9 +1760,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       await processAndEmitChunk(stepStartChunk, {
                         runner: getToolResultRunner(),
                         processorStates: registryEntry.processorStates,
-                        observabilityContext: createObservabilityContext(
-                          modelSpanTracker?.getTracingContext() ?? tracingContext,
-                        ),
+                        // No tracing context: the consumer pipeline owns the
+                        // processor spans. A model-step context here would end the
+                        // consumer's span and open one under the model step.
+                        observabilityContext: createObservabilityContext(),
                         requestContext,
                         messageList,
                         streamWriter: outputStreamWriter,
