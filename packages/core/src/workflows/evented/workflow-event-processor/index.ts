@@ -151,6 +151,9 @@ function readForeachResult(
 const WORKFLOW_CONTROL_TOPIC = 'workflow.control';
 const WORKFLOW_CONTROL_ABORT = 'workflow.control.abort';
 
+/** Control-path state taken by `#dispatch` before its state load for a `workflow.step.run`. */
+type ControlAtDispatch = { ready?: boolean; missedAborts?: number };
+
 export class WorkflowEventProcessor extends EventProcessor {
   private stepExecutor: StepExecutor;
   private stepExecutionStrategy?: StepExecutionStrategy;
@@ -164,20 +167,18 @@ export class WorkflowEventProcessor extends EventProcessor {
   // This processor's single ungrouped subscription to WORKFLOW_CONTROL_TOPIC,
   // opened on its first step and held for the processor's lifetime. See
   // ensureControlSubscription. `isReady` flips once subscribe() resolved;
-  // from then on every abort is either delivered or recorded in
+  // from then on every abort is either delivered or counted in
   // missedControlAborts.
   private controlSubscription?: {
     pubsub: PubSub;
     ready: Promise<boolean>;
     isReady: boolean;
   };
-  // Runs whose broadcast abort arrived while this processor had no step of
-  // them in flight — possibly because a step's event was already past the
-  // dispatch guard's state load but not yet retained. Drained by the next step
-  // of the run, which then re-checks storage. Bounded: most entries are for runs
-  // this processor never executes.
-  private missedControlAborts: Set<string> = new Set();
-  private static readonly MAX_MISSED_CONTROL_ABORTS = 1024;
+  // Count of broadcast aborts that arrived for a run with no step in flight on
+  // this processor — possibly because a step's event was already past the
+  // dispatch guard's state load but not yet retained. A step whose dispatch saw
+  // a different count re-checks storage.
+  private missedControlAborts = 0;
   // Number of in-flight steps on this processor per run (counting a nested
   // step against its ancestor runs too). See retainRunsForStep.
   private stepRunRefs: Map<string, number> = new Map();
@@ -375,11 +376,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // of this run (or of a nested run) has something to abort. Leaving other
     // controllers alone keeps a stale aborted one from outliving the run here.
     if (!this.stepRunRefs.has(runId)) {
-      this.missedControlAborts.delete(runId);
-      this.missedControlAborts.add(runId);
-      if (this.missedControlAborts.size > WorkflowEventProcessor.MAX_MISSED_CONTROL_ABORTS) {
-        this.missedControlAborts.delete(this.missedControlAborts.values().next().value!);
-      }
+      this.missedControlAborts++;
       return;
     }
     const own = this.abortControllers.get(runId);
@@ -444,7 +441,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
   /**
    * Whether an abort broadcast published from now on reaches this processor:
-   * delivered to {@link abortRunFromControl}, which aborts it or records it in
+   * delivered to {@link abortRunFromControl}, which aborts it or counts it in
    * {@link missedControlAborts}. Taken by {@link #dispatch} before its state
    * load, so a step whose event passed the guard while this was false
    * re-checks storage: a cancel landing in between was never delivered.
@@ -457,7 +454,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    * Abort the step's runs if a cancel was persisted for any of them (`runIds`:
    * the step's run and its ancestors) before this processor could hear its
    * broadcast — between the dispatch guard's state load and the step's
-   * controller being registered (recorded in {@link missedControlAborts}), or
+   * controller being registered (counted in {@link missedControlAborts}), or
    * before the control subscription was ready when the step was dispatched.
    * Only called in those windows:
    * each call is a full snapshot read per run.
@@ -1619,10 +1616,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
-  protected async processWorkflowStepRun(
-    args: ProcessorArgs,
-    { controlReadyAtDispatch = false }: { controlReadyAtDispatch?: boolean } = {},
-  ) {
+  protected async processWorkflowStepRun(args: ProcessorArgs, control: ControlAtDispatch = {}) {
     const {
       workflow,
       workflowId,
@@ -1916,7 +1910,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         ...args,
         step: step as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
       },
-      { controlReadyAtDispatch },
+      control,
     );
   }
 
@@ -1983,7 +1977,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     args: ProcessorArgs & {
       step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
     },
-    { controlReadyAtDispatch = false }: { controlReadyAtDispatch?: boolean } = {},
+    control: ControlAtDispatch = {},
   ) {
     const {
       workflow,
@@ -2743,10 +2737,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       releaseControl = this.retainRunsForStep(controlRuns.map(r => r.runId));
       try {
         await this.ensureControlSubscription();
-        let recheck = !controlReadyAtDispatch;
-        for (const { runId: id } of controlRuns) {
-          if (this.missedControlAborts.delete(id)) recheck = true;
-        }
+        const recheck = !control.ready || control.missedAborts !== this.missedControlAborts;
         if (recheck) await this.abortRunsCanceledInStorage(controlRuns);
       } catch (err) {
         releaseControl();
@@ -4438,7 +4429,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     const workflowData = { ...(data as Omit<ProcessorArgs, 'workflow'>), eventId: event.id };
 
     // Taken before the state load below: see isControlSubscriptionReady.
-    const controlReadyAtDispatch = type === 'workflow.step.run' && this.isControlSubscriptionReady();
+    const control: ControlAtDispatch =
+      type === 'workflow.step.run'
+        ? { ready: this.isControlSubscriptionReady(), missedAborts: this.missedControlAborts }
+        : {};
 
     const currentState = await this.loadData({
       workflowId: workflowData.workflowId,
@@ -4581,7 +4575,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             workflow: workflowArg,
             ...workflowData,
           },
-          { controlReadyAtDispatch },
+          control,
         );
         break;
       case 'workflow.suspend':

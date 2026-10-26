@@ -510,6 +510,7 @@ describe('evented workflow cancel with workers on both replicas', () => {
     await other!.startWorkers();
     return {
       workflow: workflows[0]!,
+      pubsub,
       holder,
       ends,
       released,
@@ -539,11 +540,12 @@ describe('evented workflow cancel with workers on both replicas', () => {
   }
 
   // Start a run whose step is held at `gate`, cancel it there, then release the step.
-  async function cancelWhileGated(setup: PinnedCancel, gate: Gate) {
+  async function cancelWhileGated(setup: PinnedCancel, gate: Gate, afterCancel?: () => Promise<void>) {
     const run = await setup.workflow.createRun();
     const resultPromise = run.start({ inputData: { count: 0 } });
     await gate.reached;
     await run.cancel();
+    await afterCancel?.();
     const result = await withTimeout(resultPromise);
     expect(result === 'timed out' ? result : result.status).toBe('canceled');
     await expectStepSkipped(setup, gate, run.runId, createBlocker());
@@ -569,6 +571,22 @@ describe('evented workflow cancel with workers on both replicas', () => {
 
     await cancelWhileGated(setup, setup.gateNextStepRun());
     expect(recheck).toHaveBeenCalledTimes(1);
+  });
+
+  // Aborts for many other runs land in the same window; the held step must still re-check.
+  it('skips a step whose cancel arrived before the step was retained, after aborts for many other runs', async () => {
+    const setup = await setupPinnedCancel();
+    await runPlain(setup);
+    await runPlain(setup);
+    await cancelWhileGated(setup, setup.gateNextStepRun(), async () => {
+      for (let i = 0; i < 2000; i++) {
+        await setup.pubsub.publish('workflow.control', {
+          type: 'workflow.control.abort',
+          runId: `other-run-${i}`,
+          data: {},
+        });
+      }
+    });
   });
 
   // A step dispatched while the subscription is still pending is canceled before the subscription
