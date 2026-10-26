@@ -208,6 +208,28 @@ describe('Memory', () => {
       expect(systemMessage).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
       expect(systemMessage).toContain('Location: Sooke');
       expect(systemMessage).not.toContain('calling the updateWorkingMemory tool');
+      // The app updates the memory, so the agent must not be told it can't (#28367)
+      expect(systemMessage).toContain('This memory is updated automatically after each response');
+      expect(systemMessage).toContain("Never say you can't save or update it");
+      expect(systemMessage).not.toContain('read-only in the current session');
+    });
+
+    it('keeps read-only wording when readOnly is set (#28367)', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true, agentManaged: false } },
+      });
+      const threadId = 'read-only-thread';
+      const resourceId = 'read-only-resource';
+      await memory.createThread({ threadId, resourceId });
+      await memory.updateWorkingMemory({ threadId, resourceId, workingMemory: '# User\n- Location: Sooke' });
+
+      const systemMessage = await memory.getSystemMessage({ threadId, resourceId, memoryConfig: { readOnly: true } });
+
+      expect(systemMessage).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+      expect(systemMessage).toContain('Location: Sooke');
+      expect(systemMessage).toContain('read-only in the current session - you cannot update it');
+      expect(systemMessage).not.toContain('updated automatically');
     });
 
     it('renders update instructions when agentManaged explicitly overrides manageWorkingMemory defaults', async () => {

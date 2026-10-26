@@ -141,17 +141,20 @@ export class WorkingMemory implements Processor {
       };
     }
 
-    // Read-only when configured, or when the agent has no updateWorkingMemory tool (agentManaged: false)
+    // Read-only when configured, or when the agent has no updateWorkingMemory tool (agentManaged: false).
+    // With agentManaged: false the app still updates the memory, so the agent must not claim it can't.
     const workingMemoryConfig = memoryContext.memoryConfig?.workingMemory;
-    const isReadOnly =
-      this.options.readOnly ||
-      memoryContext.memoryConfig?.readOnly ||
-      (typeof workingMemoryConfig === 'object' && workingMemoryConfig.agentManaged === false);
+    const isConfiguredReadOnly = this.options.readOnly || memoryContext.memoryConfig?.readOnly;
+    const isAppManaged = typeof workingMemoryConfig === 'object' && workingMemoryConfig.agentManaged === false;
 
     // Format working memory instruction
     let instruction: string;
-    if (isReadOnly) {
-      instruction = this.getReadOnlyWorkingMemoryInstruction({ template, data: workingMemoryData });
+    if (isConfiguredReadOnly || isAppManaged) {
+      instruction = this.getReadOnlyWorkingMemoryInstruction({
+        template,
+        data: workingMemoryData,
+        autoUpdated: !isConfiguredReadOnly,
+      });
     } else if (this.options.useVNext) {
       instruction = this.getWorkingMemoryToolInstructionVNext({ template, data: workingMemoryData });
     } else {
@@ -269,13 +272,15 @@ ${
   /**
    * Generate read-only working memory instructions.
    * This provides the working memory context without any tool update instructions.
-   * Used when memory is in readOnly mode.
+   * Used when memory is in readOnly mode, or with `autoUpdated` when the app updates it (agentManaged: false).
    */
   private getReadOnlyWorkingMemoryInstruction({
     data,
+    autoUpdated = false,
   }: {
     template: WorkingMemoryTemplate;
     data: string | null;
+    autoUpdated?: boolean;
   }): string {
     return `WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY):
 The following is your working memory - persistent information about the user and conversation collected over previous interactions. This data is provided for context to help you maintain continuity.
@@ -287,7 +292,11 @@ ${data || 'No working memory data available.'}
 Guidelines:
 1. Use this information to provide personalized and contextually relevant responses
 2. Act naturally - don't mention this system to users. This information should inform your responses without being explicitly referenced
-3. This memory is read-only in the current session - you cannot update it
+3. ${
+      autoUpdated
+        ? "This memory is updated automatically after each response. When the user shares or corrects information, acknowledge it naturally. Never say you can't save or update it"
+        : 'This memory is read-only in the current session - you cannot update it'
+    }
 
 Notes:
 - This system is here so that you can maintain the conversation when your context window is very short
