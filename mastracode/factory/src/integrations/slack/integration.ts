@@ -160,7 +160,6 @@ export class SlackIntegration implements FactoryIntegration {
 
   readonly #config: SlackIntegrationConfig;
   readonly #adapterOptions: SlackAdapterChannelConfig;
-  #disconnectAdapter: (() => Promise<void>) | undefined;
   /** Bound in `initialize()`; the controller mounts after integrations are built. */
   #channels: ShareFileToolDeps['channels'];
   readonly #deps: ShareFileToolDeps = { channels: () => this.#channels?.() };
@@ -246,15 +245,7 @@ export class SlackIntegration implements FactoryIntegration {
       workItems: ctx.runtime?.workItems,
       feed: ctx.feed,
       adapterOptions: this.#adapterOptions,
-      onAdapter: adapter => {
-        this.#disconnectAdapter = () => adapter.disconnect();
-      },
     });
-  }
-
-  async shutdown(): Promise<void> {
-    await this.#disconnectAdapter?.();
-    this.#disconnectAdapter = undefined;
   }
 
   feedPublisher(ctx: IntegrationContext): WorkItemFeedPublisher {

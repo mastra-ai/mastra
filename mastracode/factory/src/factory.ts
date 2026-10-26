@@ -455,7 +455,7 @@ export class MastraFactory {
   #dispatcher: FactoryDecisionDispatcher | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
-  #activeIntegrations: FactoryIntegration[] = [];
+  #channelShutdowns: Array<() => Promise<void>> = [];
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
@@ -768,9 +768,6 @@ export class MastraFactory {
         },
       };
     });
-    this.#activeIntegrations = integrationRegistrations
-      .filter(({ ready, integration }) => ready && integration.shutdown)
-      .map(({ integration }) => integration);
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
@@ -1943,6 +1940,7 @@ export class MastraFactory {
           .join(', ')}] all provide channels, but only one may. Remove all but one.`,
       );
     }
+    this.#channelShutdowns = [];
     for (const { integration } of channelRegistrations) {
       const context = buildIntegrationContext(
         {
@@ -1964,8 +1962,13 @@ export class MastraFactory {
         },
         integration.id,
       );
-      // Integrations return a channels CONFIG; the factory owns construction.
-      prepared.base.controller.setChannels(new AgentControllerChannels(integration.channels!(context)));
+      // Integrations return a channels CONFIG; the factory owns construction and teardown.
+      const channels = new AgentControllerChannels(integration.channels!(context));
+      prepared.base.controller.setChannels(channels);
+      for (const adapter of Object.values(channels.adapters)) {
+        const disconnect = (adapter as unknown as { disconnect?: () => Promise<void> }).disconnect;
+        if (disconnect) this.#channelShutdowns.push(() => disconnect.call(adapter));
+      }
     }
 
     // Feed publishers mirror web-feed comments outward (a chat bridge, a
@@ -2071,11 +2074,10 @@ export class MastraFactory {
     this.#dispatcher?.start();
   }
 
-  /** Stop Factory-owned background work and integration transports before the host process shuts down. */
+  /** Stop Factory-owned background work and channel transports before the host process shuts down. */
   async shutdown(): Promise<void> {
-    await Promise.all([
-      this.#dispatcher?.stop(),
-      ...this.#activeIntegrations.map(integration => integration.shutdown!()),
-    ]);
+    const channelShutdowns = this.#channelShutdowns;
+    this.#channelShutdowns = [];
+    await Promise.all([this.#dispatcher?.stop(), ...channelShutdowns.map(shutdown => shutdown())]);
   }
 }

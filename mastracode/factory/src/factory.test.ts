@@ -440,21 +440,6 @@ describe('MastraFactory constructor', () => {
 });
 
 describe('MastraFactory.prepare', () => {
-  it('shuts down transports owned by ready integrations', async () => {
-    const shutdown = vi.fn(async () => {});
-    const factory = new MastraFactory({
-      secretEncryption,
-      storage: fakeStorage(),
-      auth: null,
-      integrations: [fakeIntegration({ id: 'socket-transport', shutdown })],
-    });
-
-    await factory.prepare();
-    await factory.shutdown();
-
-    expect(shutdown).toHaveBeenCalledOnce();
-  });
-
   it('passes the configured MastraBrowser to the agent controller', async () => {
     const browser = { getTools: vi.fn() } as unknown as MastraBrowser;
     const config = await prepareFactory({ storage: fakeStorage(), auth: null, browser });
@@ -2707,8 +2692,8 @@ describe('MastraFactory.prepare integrations', () => {
     }
 
     /** Minimal valid FactoryChannelsConfig (config-form adapter entry). */
-    function fakeChannelsConfig() {
-      return { adapters: { fake: { adapter: { name: 'fake' } as never } } };
+    function fakeChannelsConfig(adapter: object = { name: 'fake' }) {
+      return { adapters: { fake: { adapter: adapter as never } } };
     }
 
     it("constructs an AgentControllerChannels from a ready integration's config and attaches it", async () => {
@@ -2733,6 +2718,23 @@ describe('MastraFactory.prepare integrations', () => {
       // default model, so it reads the same model-defaults handle the web routes use.
       expect(ctx.storage.modelDefaults).toBeDefined();
       expect(ctx.auth).toBeDefined();
+    });
+
+    it('disconnects an attached channel adapter during shutdown', async () => {
+      withController();
+      const disconnect = vi.fn(async () => {});
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig({ name: 'fake', disconnect }));
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+      await factory.shutdown();
+      await factory.shutdown();
+
+      expect(disconnect).toHaveBeenCalledOnce();
     });
 
     it('exposes the source-control owner on the channels context when github is registered', async () => {

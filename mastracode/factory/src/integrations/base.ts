@@ -289,8 +289,6 @@ export interface FactoryIntegration {
    * owning a chat channel.
    */
   feedPublisher?(ctx: IntegrationContext): WorkItemFeedPublisher;
-  /** Stop integration-owned transports or background resources during Factory shutdown. */
-  shutdown?(): Promise<void>;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

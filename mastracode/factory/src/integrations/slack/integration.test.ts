@@ -62,16 +62,6 @@ describe('SlackIntegration transport configuration', () => {
     );
   });
 
-  it('disconnects the adapter during integration shutdown', async () => {
-    const disconnect = vi.fn();
-    createSlackAdapterMock.mockReturnValueOnce({ disconnect } as any);
-    const integration = new SlackIntegration({ mode: 'socket', appToken: 'xapp-test' });
-
-    integration.channels(ctxWith());
-    await integration.shutdown();
-
-    expect(disconnect).toHaveBeenCalledOnce();
-  });
 });
 
 describe('SlackIntegration.channels', () => {
