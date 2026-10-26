@@ -41,3 +41,13 @@ export function findFilterTarget(component: Component): Filterable | undefined {
   }
   return undefined;
 }
+
+/**
+ * Lowercases a title's first letter unless its first word is an acronym or a name, so titles read like
+ * placeholders: "Select thread" → "select thread", "API keys" and "GitHub signals" stay.
+ */
+export function lowerFirst<T extends string | undefined>(text: T): T {
+  return (
+    text && /^[A-Z][a-z]/.test(text) && !/^[A-Z][a-z]+[A-Z]/.test(text) ? text[0]!.toLowerCase() + text.slice(1) : text
+  ) as T;
+}

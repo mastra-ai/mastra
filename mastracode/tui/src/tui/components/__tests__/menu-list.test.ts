@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ListWindow } from '../list-window.js';
+import { lowerFirst } from '../menu-chrome.js';
 import { MenuList } from '../menu-list.js';
 
 const plain = (lines: string[]) => lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
@@ -67,5 +68,14 @@ describe('MenuList', () => {
     expect(plain(list.render(40))).toEqual(['  no matches']);
     list.setFilter('');
     expect(plain(list.render(40))).toHaveLength(5);
+  });
+});
+
+describe('lowerFirst', () => {
+  it('lowercases a sentence-case title but keeps acronyms and names', () => {
+    expect(lowerFirst('Select thread')).toBe('select thread');
+    expect(lowerFirst('Login to Anthropic (Claude Pro/Max)')).toBe('login to Anthropic (Claude Pro/Max)');
+    expect(lowerFirst('API keys')).toBe('API keys');
+    expect(lowerFirst('GitHub signals')).toBe('GitHub signals');
   });
 });

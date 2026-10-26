@@ -234,6 +234,29 @@ describe('PromptSlot', () => {
     expect(plain(mounted().render(60)).some(row => row.includes('switch model pack'))).toBe(true);
   });
 
+  it('cancels a menu that opens after Esc dismissed its loading row', async () => {
+    vi.useFakeTimers();
+    const { slot, mounted, editor } = setup();
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => (finish = resolve));
+    slot.showLoadingWhile('om', pending);
+    vi.advanceTimersByTime(150);
+    mounted().handleInput!('\x1b');
+    expect(mounted()).toBe(editor);
+
+    const onCancel = vi.fn();
+    const menu = list(['Observer model'], onCancel);
+    menu.onCancel = () => {
+      onCancel();
+      slot.closeTop();
+    };
+    slot.open(menu, { title: 'Observational memory settings' });
+    await Promise.resolve();
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(mounted()).toBe(editor);
+    finish();
+  });
+
   it('removes the loading row when the command fails, without an unhandled rejection', async () => {
     vi.useFakeTimers();
     const { slot, mounted, editor } = setup();

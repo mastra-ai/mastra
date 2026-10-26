@@ -11,6 +11,7 @@ import type { NotificationMode } from '../notify.js';
 import { theme } from '../theme.js';
 import { MaskedInput } from './masked-input.js';
 import type { MenuChrome } from './menu-chrome.js';
+import { lowerFirst } from './menu-chrome.js';
 import { MenuList } from './menu-list.js';
 import { SettingsMenu } from './settings-menu.js';
 import { getThinkingLevelsForModel } from './thinking-settings.js';
@@ -611,7 +612,7 @@ export class SettingsComponent extends Container implements Focusable, MenuChrom
   /** "settings › notifications" while a setting's submenu is open. */
   menuTitle(): string | undefined {
     const open = this.settingsList.openSubmenuLabel();
-    return open ? `settings › ${open.toLowerCase()}` : undefined;
+    return open ? `settings › ${lowerFirst(open)}` : undefined;
   }
 
   handleInput(data: string): void {

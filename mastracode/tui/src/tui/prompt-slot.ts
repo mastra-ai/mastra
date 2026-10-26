@@ -10,7 +10,7 @@
 import { CURSOR_MARKER, decodeKittyPrintable, matchesKey, TUI, truncateToWidth } from '@earendil-works/pi-tui';
 import type { Component, Container, Focusable, OverlayHandle } from '@earendil-works/pi-tui';
 
-import { findFilterTarget } from './components/menu-chrome.js';
+import { findFilterTarget, lowerFirst } from './components/menu-chrome.js';
 import type { Filterable, MenuChrome, MenuHint } from './components/menu-chrome.js';
 import { fadePanel, keyHint } from './components/surface.js';
 import { theme } from './theme.js';
@@ -21,7 +21,7 @@ const LOADING_DELAY_MS = 120;
 const PANEL_STEP = 1.5;
 
 export interface PromptSlotChrome {
-  /** Shown (lowercased) as the search row's placeholder, e.g. "select thread". */
+  /** Shown as the search row's placeholder (first letter lowercased), e.g. "select thread". */
   title?: string;
   /** Menu-specific keys shown as keycaps under the menu. */
   hints?: readonly MenuHint[];
@@ -140,7 +140,7 @@ export class MenuFrame implements Component, Focusable {
 
   render(width: number): string[] {
     const chrome = this.component as MenuChrome;
-    const title = (chrome.menuTitle?.() ?? this.chrome.title)?.replace(/:$/, '').toLowerCase();
+    const title = lowerFirst((chrome.menuTitle?.() ?? this.chrome.title)?.replace(/:$/, ''));
     const target = this.filterTarget();
     const head: string[] = [];
     if (target) {
@@ -194,6 +194,8 @@ class LoadingFrame implements Component {
 export class PromptSlot {
   private readonly stack: Component[] = [];
   private loading: LoadingFrame | undefined;
+  /** Set when a key dismissed the loading row: the menu that command opens next is cancelled right away. */
+  private cancelPendingMenu = false;
 
   constructor(
     private readonly ui: TUI,
@@ -212,6 +214,12 @@ export class PromptSlot {
     const before = this.mounted();
     this.stack.push(frame);
     this.swap(before, frame);
+    if (this.cancelPendingMenu) {
+      // The user pressed a key while this menu was loading: cancel it like Esc, once the caller has
+      // finished setting it up.
+      this.cancelPendingMenu = false;
+      queueMicrotask(() => frame.handleInput('\x1b'));
+    }
     let hidden = false;
     return {
       // Closing the top menu goes through hideOverlay, which also hands focus to a waiting plan approval.
@@ -247,6 +255,7 @@ export class PromptSlot {
       if (this.isOpen()) return;
       frame = new LoadingFrame(name, data => {
         if (frame) this.remove(frame);
+        this.cancelPendingMenu = true;
         if (!matchesKey(data, 'escape')) this.editor.handleInput?.(data);
       });
       this.loading = frame;
@@ -257,6 +266,7 @@ export class PromptSlot {
     const done = () => {
       clearTimeout(timer);
       if (frame) this.remove(frame);
+      this.cancelPendingMenu = false;
     };
     pending.then(done, done);
   }

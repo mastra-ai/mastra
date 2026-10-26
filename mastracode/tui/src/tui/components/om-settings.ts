@@ -10,6 +10,7 @@ import type { Focusable, SelectItem, SettingItem, TUI } from '@earendil-works/pi
 import type { OMModel } from '@mastra/core/agent-controller';
 import { theme } from '../theme.js';
 import type { Filterable, MenuChrome } from './menu-chrome.js';
+import { lowerFirst } from './menu-chrome.js';
 import { MenuList } from './menu-list.js';
 import { ModelSelectorComponent } from './model-selector.js';
 import type { ModelItem } from './model-selector.js';
@@ -441,7 +442,7 @@ export class OMSettingsComponent extends Container implements Focusable, MenuChr
   /** "observational memory › observer model" while a setting's submenu is open. */
   menuTitle(): string | undefined {
     const open = this.settingsList.openSubmenuLabel();
-    return open ? `observational memory › ${open.toLowerCase()}` : undefined;
+    return open ? `observational memory › ${lowerFirst(open)}` : undefined;
   }
 
   handleInput(data: string): void {

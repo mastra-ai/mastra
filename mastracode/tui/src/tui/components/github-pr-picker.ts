@@ -1,4 +1,4 @@
-import { Box, Container, fuzzyFilter, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import { Box, Container, fuzzyFilter, getKeybindings, Spacer, Text, TruncatedText } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { displayModeColor, getContrastText, mastra, theme } from '../theme.js';
@@ -272,7 +272,9 @@ export class GithubPRPickerDialog extends Box implements Focusable, Filterable, 
         .join(' · ');
       const subscribedMark = isSubscribed ? theme.fg('success', ' ●') : '';
       const details = `${meta ? theme.fg('muted', `(${meta})`) : ''}${subscribedMark}`;
-      this.listContainer.addChild(new Text(menuRow(isHighlighted, `[${checkMark}] ${id}${title}`, details), 0, 0));
+      this.listContainer.addChild(
+        new TruncatedText(menuRow(isHighlighted, `[${checkMark}] ${id}${title}`, details), 0, 0),
+      );
     }
 
     if (totalItems > maxVisible) {
