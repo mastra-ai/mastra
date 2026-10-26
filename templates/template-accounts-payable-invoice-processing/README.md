@@ -52,7 +52,7 @@ The workflow depends on the provider-neutral `AccountingProvider` interface. Qui
 
 The QuickBooks adapter performs two-way invoice/PO matching. It does not implement receipts or vendor screening. Providers that implement `findReceipts` can use the workflow's three-way matching; providers should implement `screenVendor` before handling real invoices. When screening is unavailable, the workflow routes the invoice to review unless the explicit sandbox-only bypass is enabled.
 
-Posting uses the MCP's `create-bill` tool. It requires reconciled lines, the configured expense account, and a separate expense line for tax using the configured tax account. It includes the PO reference and an idempotency marker. Local locks and `QBO_MCP_SINGLE_WRITER` assume one posting replica sharing its lock directory; they do not provide coordination across independent hosts. Reconcile an interrupted posting before removing a stale lock.
+Posting uses the MCP's `create-bill` tool. It requires reconciled lines, the configured expense account, and a separate expense line for tax using the configured tax account. It includes the PO reference, the actual PO line IDs, and an idempotency marker. Before posting, it rereads the PO; changed accounting data requires reassessment. Local locks and `QBO_MCP_SINGLE_WRITER` assume one posting replica sharing its lock directory; they do not provide coordination across independent hosts. Reconcile an interrupted posting before removing a stale lock.
 
 ## Policy
 

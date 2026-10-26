@@ -47,6 +47,12 @@ lines.on('line', line => {
       result = content(state.bills.filter(bill => !number || bill.DocNumber === number));
     } else if (name === 'create-bill' && process.env.QUICKBOOKS_DISABLE_WRITE !== 'true') {
       const bill = { ...args.params.bill, Id: `bill-${state.bills.length + 1}` };
+      // Observed against the official Intuit sandbox: a header-only PO link
+      // is discarded unless a bill line also identifies its PO TxnLineId.
+      const lineLinks = bill.Line.flatMap(line => line.LinkedTxn ?? []);
+      bill.LinkedTxn = (bill.LinkedTxn ?? []).filter(link =>
+        lineLinks.some(lineLink => lineLink.TxnId === link.TxnId && lineLink.TxnLineId),
+      );
       state.bills.push(bill);
       result = content(bill);
     } else {

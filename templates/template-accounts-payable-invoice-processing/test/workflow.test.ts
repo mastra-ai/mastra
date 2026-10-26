@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { it } from 'node:test';
 import { promisify } from 'node:util';
+import { invoiceInput } from './helpers/invoice.ts';
 import type { InvoiceResult } from '../src/mastra/invoice/schema.ts';
 
 const exec = promisify(execFile);
@@ -15,7 +16,11 @@ type Bill = {
   VendorRef: { value: string };
   CurrencyRef: { value: string };
   TotalAmt: number;
-  Line: Array<{ Amount: number; AccountBasedExpenseLineDetail: { AccountRef: { value: string } } }>;
+  Line: Array<{
+    Amount: number;
+    AccountBasedExpenseLineDetail: { AccountRef: { value: string } };
+    LinkedTxn?: Array<{ TxnLineId: string }>;
+  }>;
   LinkedTxn: Array<{ TxnId: string }>;
 };
 type WireState = {
@@ -44,6 +49,7 @@ async function scenario(options: { state?: Partial<WireState>; env?: Record<stri
           TotalAmt: 100,
           Line: [
             {
+              Id: '1',
               Amount: 100,
               Description: 'Pens',
               ItemBasedExpenseLineDetail: { ItemRef: { value: 'item-1' }, Qty: 10, UnitPrice: 10 },
@@ -91,6 +97,10 @@ async function scenario(options: { state?: Partial<WireState>; env?: Record<stri
     },
     async state(): Promise<WireState> {
       return JSON.parse(await readFile(statePath, 'utf8'));
+    },
+    async updateState(changes: Partial<WireState>) {
+      const current = JSON.parse(await readFile(statePath, 'utf8'));
+      await writeFile(statePath, JSON.stringify({ ...current, ...changes }));
     },
     async close() {
       await rm(directory, { recursive: true, force: true });
@@ -215,6 +225,7 @@ it('posts tax to the configured account and fails closed when the tax account is
             TotalAmt: 108,
             Line: [
               {
+                Id: '1',
                 Amount: 100,
                 Description: 'Pens',
                 ItemBasedExpenseLineDetail: { ItemRef: { value: 'item-1' }, Qty: 10, UnitPrice: 10 },
@@ -260,5 +271,79 @@ it('refuses a forged workflow submission before any accounting operation', async
     assert.deepEqual((await test.state()).calls, []);
   } finally {
     await test.close();
+  }
+});
+
+it('links reordered invoice lines to their actual PO line IDs', async () => {
+  const test = await scenario({
+    state: {
+      orders: [
+        {
+          Id: 'po-1',
+          DocNumber: 'AP-PO-1001',
+          VendorRef: { value: 'vendor-1' },
+          CurrencyRef: { value: 'USD' },
+          TotalAmt: 100,
+          Line: [
+            {
+              Id: '7',
+              Amount: 40,
+              Description: 'Pens',
+              ItemBasedExpenseLineDetail: { ItemRef: { value: 'item-a' }, Qty: 1, UnitPrice: 40 },
+            },
+            {
+              Id: '42',
+              Amount: 60,
+              Description: 'Paper',
+              ItemBasedExpenseLineDetail: { ItemRef: { value: 'item-b' }, Qty: 1, UnitPrice: 60 },
+            },
+          ],
+        },
+      ],
+    },
+  });
+  try {
+    const result = await test.run({
+      invoice: {
+        lines: [
+          { sku: 'item-b', description: 'Paper', qty: 1, unitPrice: 60, lineTotal: 60 },
+          { sku: 'item-a', description: 'Pens', qty: 1, unitPrice: 40, lineTotal: 40 },
+        ],
+        confidence: [...invoiceInput().extractedResult.confidence, { field: 'lines', confidence: 0.99 }],
+      },
+    });
+    assert.equal(result.result?.executionStatus, 'posted');
+    const state = await test.state();
+    assert.deepEqual(
+      state.bills[0]!.Line.map(line => line.LinkedTxn?.[0]?.TxnLineId),
+      ['42', '7'],
+    );
+  } finally {
+    await test.close();
+  }
+});
+
+it('does not post after approval if the external PO changed or lost its line identity', async () => {
+  for (const change of ['changed', 'missing', 'missing-line-id']) {
+    const test = await scenario({ env: { AP_APPROVAL_THRESHOLD_MINOR: '9999' } });
+    try {
+      const pending = await test.run();
+      assert.equal(pending.status, 'suspended');
+      const state = await test.state();
+      const order = state.orders[0] as { TotalAmt: number; Line: Array<{ Id?: string }> };
+      if (change === 'changed') order.TotalAmt = 200;
+      if (change === 'missing-line-id') delete order.Line[0]!.Id;
+      await test.updateState({ orders: change === 'missing' ? [] : state.orders });
+      const resumed = await test.run({ runId: pending.runId, approved: true });
+      assert.equal(resumed.result?.executionStatus, 'posting_failed', change);
+      assert.equal((await test.state()).bills.length, 0, change);
+      assert.equal(
+        (await test.state()).calls.some(call => call.name === 'create-bill'),
+        false,
+        change,
+      );
+    } finally {
+      await test.close();
+    }
   }
 });

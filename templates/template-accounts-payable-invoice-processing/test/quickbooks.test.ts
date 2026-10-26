@@ -88,6 +88,7 @@ describe('QuickBooks provider', () => {
                 TotalAmt: 108,
                 Line: [
                   {
+                    Id: '1',
                     Amount: 100,
                     ItemBasedExpenseLineDetail: {
                       ItemRef: { value: 'item-1', name: 'PEN-01' },
@@ -225,6 +226,7 @@ describe('QuickBooks provider', () => {
               TotalAmt: 100,
               Line: [
                 {
+                  Id: '1',
                   Amount: 100,
                   ItemBasedExpenseLineDetail: {
                     ItemRef: { value: 'item-1', name: 'PEN-01' },
@@ -311,6 +313,7 @@ describe('QuickBooks provider', () => {
         'search_purchase_orders',
         'search_bills',
         'search_bills',
+        'search_purchase_orders',
         'create-bill',
       ]);
 
@@ -329,7 +332,7 @@ describe('QuickBooks provider', () => {
         blocked.result?.decisions.flatMap(({ reasons }) => reasons.map(({ code }) => code)),
         ['VENDOR_SCREENING_MATCH'],
       );
-      assert.deepEqual(calls.slice(5), ['search_vendors']);
+      assert.deepEqual(calls.slice(6), ['search_vendors']);
     } finally {
       await rm(lockDirectory, { recursive: true, force: true });
     }

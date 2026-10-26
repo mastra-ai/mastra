@@ -75,6 +75,7 @@ function createQuickBooksMcpToolClient(options: { enablePosting?: boolean } = {}
 
 type QuickBooksReference = { value?: string; name?: string };
 type QuickBooksLine = {
+  Id?: string;
   Amount?: number;
   Description?: string;
   ItemBasedExpenseLineDetail?: {
@@ -238,6 +239,37 @@ const createQuickBooksConnector = (client: McpToolClient, postingConfig?: QuickB
   const listBills = async () =>
     (await call('search_bills', { fetchAll: true })).map(row => mapBill(row as QuickBooksBill));
 
+  const purchaseOrderLineLinks = async (input: PostingRequest) => {
+    const approvedOrder = input.purchaseOrder;
+    if (!approvedOrder) return undefined;
+    const rows = await call('search_purchase_orders', { limit: 1000 });
+    const current = rows.find(row => row.Id === approvedOrder.id) as QuickBooksPurchaseOrder | undefined;
+    if (!current || JSON.stringify(mapPurchaseOrder(current)) !== JSON.stringify(approvedOrder))
+      throw new Error('QuickBooks purchase order changed or is unavailable; reassess the invoice before posting');
+    const rawLines = (current.Line ?? []).filter(line => line.ItemBasedExpenseLineDetail);
+    const unused = new Set(approvedOrder.lines.map((_, index) => index));
+    return input.invoice.lines.map((line, invoiceIndex) => {
+      const orderIndex = line.sku
+        ? approvedOrder.lines.findIndex(
+            (candidate, index) =>
+              unused.has(index) &&
+              [candidate.sku, candidate.description].some(id => id === line.sku || id === line.description),
+          )
+        : unused.has(invoiceIndex)
+          ? invoiceIndex
+          : -1;
+      if (orderIndex < 0) throw new Error('QuickBooks purchase order line could not be linked safely');
+      unused.delete(orderIndex);
+      return [
+        {
+          TxnId: approvedOrder.id,
+          TxnType: 'PurchaseOrder',
+          TxnLineId: required(rawLines[orderIndex]?.Id, 'PurchaseOrder.Line.Id'),
+        },
+      ];
+    });
+  };
+
   const post = async (input: PostingRequest, config: QuickBooksMcpPostingConfig): Promise<PostingReceipt> => {
     if (input.invoice.invoiceNumber.length > 21)
       throw new Error('QuickBooks bill DocNumber cannot exceed 21 characters');
@@ -280,11 +312,13 @@ const createQuickBooksConnector = (client: McpToolClient, postingConfig?: QuickB
     const expectedSubtotal = input.invoice.subtotalMinor ?? input.invoice.totalMinor - tax;
     if (amounts.reduce((sum, amount) => sum + amount, 0) !== expectedSubtotal)
       throw new Error('Invoice lines do not reconcile to the posting subtotal');
+    const linkedLines = await purchaseOrderLineLinks(input);
     const line = input.invoice.lines.map((item, index) => ({
       Amount: toMajorUnits(amounts[index]!, input.invoice.currency),
       DetailType: 'AccountBasedExpenseLineDetail',
       Description: item.description,
       AccountBasedExpenseLineDetail: { AccountRef: { value: config.expenseAccountId } },
+      ...(linkedLines && { LinkedTxn: linkedLines[index] }),
     }));
     if (tax)
       line.push({
