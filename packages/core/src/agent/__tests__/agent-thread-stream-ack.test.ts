@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { PubSub } from '../../events/pubsub';
 import type { LeaseProvider } from '../../events/pubsub';
 import type { EventCallback } from '../../events/types';
+import type { MastraModelOutput } from '../../stream/base/output';
 import type { Agent } from '../agent';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 
@@ -266,6 +267,73 @@ describe('thread stream subscriber acknowledgements', () => {
 
     runtime.releaseThreadRunReservation('remote-run', pubsub);
     subscription.unsubscribe();
+  });
+
+  it('leaves a failed remote abort unacknowledged so a retry can stop the run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new AckTrackingPubSub();
+    let attempts = 0;
+    let stopped = false;
+    const registeredAgent = {
+      id: 'abort-retry-agent',
+      abortRunStream: () => {
+        if (++attempts === 1) throw new Error('temporary abort failure');
+        stopped = true;
+        return true;
+      },
+    } as unknown as Agent<any, any, any, any>;
+    const finished = Promise.withResolvers<void>();
+    let controller!: ReadableStreamDefaultController;
+    let status = 'running';
+    const output = {
+      runId: 'abort-retry-run',
+      get status() {
+        return status;
+      },
+      fullStream: new ReadableStream({ start: streamController => (controller = streamController) }),
+      _waitUntilFinished: () => finished.promise,
+    } as unknown as MastraModelOutput<unknown>;
+    let streamId = '';
+    const capture: EventCallback = (event, ack) => {
+      if (event.data?.type === 'run-registered') streamId = event.data.streamId;
+      return ack?.();
+    };
+    await pubsub.subscribe(topic, capture);
+    await runtime.registerRun(registeredAgent, output, { memory: { thread: threadId, resource: resourceId } }, pubsub);
+    await nextTick();
+    await pubsub.unsubscribe(topic, capture);
+    const ackedBefore = pubsub.acked.length;
+    const abort = (targetRunId = output.runId, targetStreamId = streamId) =>
+      pubsub.publish(topic, {
+        type: 'run-abort-requested',
+        runId: targetRunId,
+        data: { type: 'run-abort-requested', runId: targetRunId, streamId: targetStreamId },
+      });
+    try {
+      expect(streamId).not.toBe('');
+      await abort();
+      expect(stopped).toBe(false);
+      expect(pubsub.nacked).toHaveLength(1);
+      expect(pubsub.acked).toHaveLength(ackedBefore);
+
+      // A failed delivery must not poison the serial event tail or mark the run aborted.
+      await abort();
+      expect(stopped).toBe(true);
+      expect(attempts).toBe(2);
+      expect(pubsub.acked).toHaveLength(ackedBefore + 1);
+
+      // Stale streams and unknown runs remain acknowledged no-ops, not abort fallbacks.
+      await abort(output.runId, 'old-stream');
+      await abort('unknown-run');
+      expect(attempts).toBe(2);
+      expect(pubsub.acked).toHaveLength(ackedBefore + 3);
+      expect(pubsub.nacked).toHaveLength(1);
+    } finally {
+      status = 'success';
+      controller.close();
+      finished.resolve();
+      await nextTick();
+    }
   });
 
   it('acknowledges cancellation before releasing an observer-free listener holding only pending work', async () => {
