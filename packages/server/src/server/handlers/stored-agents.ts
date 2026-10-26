@@ -568,6 +568,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     description,
     instructions,
     model,
+    modelList,
     tools,
     defaultOptions,
     workflows,
@@ -659,15 +660,12 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         requestContext,
       });
 
-      const input = {
-        id,
-        authorId,
-        visibility,
-        metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
+      const snapshotInput = {
         name,
         description,
         instructions: createInstructions,
         model,
+        modelList,
         tools: createTools,
         defaultOptions,
         workflows,
@@ -684,6 +682,17 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         browser: resolvedBrowser,
         durable,
         requestContextSchema,
+      };
+      const snapshot =
+        codeAgentForCreate?.source === 'code'
+          ? { name, ...buildExportConfig(snapshotInput, codeAgentForCreate) }
+          : snapshotInput;
+      const input = {
+        id,
+        authorId,
+        visibility,
+        metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
+        ...snapshot,
       } as StorageCreateAgentInput;
 
       // Use editor.agent.create() when available to apply builder defaults

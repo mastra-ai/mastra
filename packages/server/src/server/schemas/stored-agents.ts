@@ -110,6 +110,14 @@ const modelConfigSchema = z
   })
   .passthrough();
 
+const modelListEntrySchema = z.object({
+  id: z.string(),
+  provider: z.string(),
+  modelId: z.string(),
+  enabled: z.boolean(),
+  maxRetries: z.number(),
+});
+
 /** Per-tool config schema */
 const toolConfigSchema = z.object({ description: z.string().optional(), rules: ruleGroupSchema.optional() });
 
@@ -273,6 +281,7 @@ const snapshotConfigSchema = z.object({
   model: conditionalFieldSchema(modelConfigSchema).describe(
     'Model configuration — static value or array of conditional variants',
   ),
+  modelList: z.array(modelListEntrySchema).optional().describe('Ordered model fallback list owned by Studio'),
   tools: conditionalFieldSchema(toolsConfigSchema)
     .optional()
     .describe('Tool keys mapped to per-tool config — static or conditional'),
@@ -458,6 +467,7 @@ export const storedAgentSchema = z.object({
   model: conditionalFieldSchema(modelConfigSchema).describe(
     'Model configuration — static value or array of conditional variants',
   ),
+  modelList: z.array(modelListEntrySchema).optional().describe('Ordered model fallback list owned by Studio'),
   tools: conditionalFieldSchema(toolsConfigSchema)
     .optional()
     .describe('Tool keys mapped to per-tool config — static or conditional'),

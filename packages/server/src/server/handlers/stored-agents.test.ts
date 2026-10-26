@@ -1129,9 +1129,57 @@ describe('Stored Agents Handlers', () => {
       expect(mockAgentsStore.create).toHaveBeenCalledWith({
         agent: expect.objectContaining({
           id: 'description-only-agent',
-          instructions: undefined,
         }),
       });
+      expect(mockAgentsStore.create.mock.calls[0]?.[0].agent).not.toHaveProperty('instructions');
+    });
+
+    it('should persist only the owned model list when creating a model-only code agent override', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+      const editor = createMockEditor();
+      editor.agent.create = vi
+        .fn()
+        .mockImplementation(async (input: unknown) => agentsStore.create({ agent: input as never }));
+      const mastra = createMockMastra({
+        storage: storage as unknown as MockStorage,
+        editor,
+        agents: {
+          'model-only-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ model: true }),
+          },
+        },
+      });
+      const modelList = [
+        {
+          id: 'primary',
+          provider: 'openai',
+          modelId: 'gpt-5.4-mini',
+          enabled: true,
+          maxRetries: 0,
+        },
+      ];
+
+      await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mastra),
+        id: 'model-only-agent',
+        name: 'Model Only Agent',
+        instructions: 'Code-owned instructions',
+        model: { name: 'gpt-4', provider: 'openai' },
+        modelList,
+        tools: ['code-owned-tool'],
+        autoPublish: false,
+      });
+
+      const version = await agentsStore.getLatestVersion('model-only-agent');
+      expect(version).toMatchObject({
+        name: 'Model Only Agent',
+        modelList,
+      });
+      expect(version).not.toHaveProperty('instructions');
+      expect(version).not.toHaveProperty('model');
+      expect(version).not.toHaveProperty('tools');
     });
 
     it('should derive id from name via slugify when id is not provided', async () => {

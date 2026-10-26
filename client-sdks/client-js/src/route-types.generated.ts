@@ -182,7 +182,7 @@ type InputShared_Auxiliary_271 =
           };
     };
 
-type InputShared_Auxiliary_703 =
+type InputShared_Auxiliary_711 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,27 +227,27 @@ type InputShared_Auxiliary_703 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_703[];
+      args: InputShared_Auxiliary_711[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_703;
+      arg: InputShared_Auxiliary_711;
     };
 
-type InputShared_Auxiliary_777 = {
+type InputShared_Auxiliary_785 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_777[] | undefined;
+  children?: InputShared_Auxiliary_785[] | undefined;
 };
 
-type Shared_Auxiliary_771 = {
+type Shared_Auxiliary_775 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_771[] | undefined;
+  children?: Shared_Auxiliary_775[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1809,7 +1809,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_703[];
+  predicates: InputShared_Auxiliary_711[];
 };
 
 type InputShared_Type_89 = {
@@ -1823,7 +1823,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_703;
+  predicate: InputShared_Auxiliary_711;
 };
 
 type InputShared_Type_90 =
@@ -2991,6 +2991,16 @@ type Shared_Type_46 = {
         value: Shared_Type_13;
         rules?: Shared_Type_11 | undefined;
       }[];
+  /** Ordered model fallback list owned by Studio */
+  modelList?:
+    | {
+        id: string;
+        provider: string;
+        modelId: string;
+        enabled: boolean;
+        maxRetries: number;
+      }[]
+    | undefined;
   /** Tool keys mapped to per-tool config — static or conditional */
   tools?:
     | (
@@ -4271,7 +4281,7 @@ type Shared_Type_85 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_771[] | undefined;
+  files?: Shared_Auxiliary_775[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -15202,6 +15212,19 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
   instructions?: (string | InputShared_Type_34[]) | undefined;
   /** Model configuration — static value or array of conditional variants */
   model?: InputShared_Type_36 | undefined;
+  /** Ordered model fallback list owned by Studio */
+  modelList?:
+    | (
+        | {
+            id: string;
+            provider: string;
+            modelId: string;
+            enabled: boolean;
+            maxRetries: number;
+          }[]
+        | undefined
+      )
+    | undefined;
   /** Tool keys mapped to per-tool config — static or conditional */
   tools?: (InputShared_Type_38 | undefined) | undefined;
   /** Default options for generate/stream calls — static or conditional */
@@ -15357,6 +15380,19 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
   instructions?: (string | InputShared_Type_34[]) | undefined;
   /** Model configuration — static value or array of conditional variants */
   model?: InputShared_Type_36 | undefined;
+  /** Ordered model fallback list owned by Studio */
+  modelList?:
+    | (
+        | {
+            id: string;
+            provider: string;
+            modelId: string;
+            enabled: boolean;
+            maxRetries: number;
+          }[]
+        | undefined
+      )
+    | undefined;
   /** Tool keys mapped to per-tool config — static or conditional */
   tools?: (InputShared_Type_38 | undefined) | undefined;
   /** Default options for generate/stream calls — static or conditional */
@@ -15568,6 +15604,16 @@ export type PostStoredAgents_Body = {
           }[]
       )
     | undefined;
+  /** Ordered model fallback list owned by Studio */
+  modelList?:
+    | {
+        id: string;
+        provider: string;
+        modelId: string;
+        enabled: boolean;
+        maxRetries: number;
+      }[]
+    | undefined;
   /** Tool keys mapped to per-tool config — static or conditional */
   tools?: InputShared_Type_38 | undefined;
   /** Default options for generate/stream calls — static or conditional */
@@ -15719,6 +15765,19 @@ export type PatchStoredAgentsStoredAgentId_Body = {
   instructions?: (string | InputShared_Type_34[]) | undefined;
   /** Model configuration — static value or array of conditional variants */
   model?: InputShared_Type_36 | undefined;
+  /** Ordered model fallback list owned by Studio */
+  modelList?:
+    | (
+        | {
+            id: string;
+            provider: string;
+            modelId: string;
+            enabled: boolean;
+            maxRetries: number;
+          }[]
+        | undefined
+      )
+    | undefined;
   /** Tool keys mapped to per-tool config — static or conditional */
   tools?: (InputShared_Type_38 | undefined) | undefined;
   /** Default options for generate/stream calls — static or conditional */
@@ -18939,7 +18998,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_777[] | undefined;
+  files?: InputShared_Auxiliary_785[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18997,7 +19056,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_777[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_785[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (

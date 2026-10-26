@@ -56,6 +56,7 @@ import {
   CANCEL_AGENT_PENDING_SIGNALS_ROUTE,
   SUBSCRIBE_AGENT_THREAD_ROUTE,
   OBSERVE_AGENT_STREAM_ROUTE,
+  REORDER_AGENT_MODEL_LIST_ROUTE,
   isProviderConnected,
   extractVersionOptions,
 } from './agents';
@@ -796,6 +797,60 @@ describe('Agent Routes Authorization', () => {
     }
     return requestContext;
   }
+
+  describe('Editor-owned model list persistence', () => {
+    it('creates a sparse initial override when the legacy reorder route persists an Editor-owned model list', async () => {
+      const modelOwnedAgent = new Agent({
+        id: 'model-owned-agent',
+        name: 'Model Owned Agent',
+        instructions: 'Code-owned instructions',
+        model: [
+          { id: 'primary', model: 'openai/gpt-5.1', maxRetries: 0 },
+          { id: 'fallback', model: 'openai/gpt-5.4-pro', maxRetries: 2 },
+        ],
+        editor: { model: true },
+      });
+      const create = vi.fn();
+      const editorAgent = {
+        applyStoredOverrides: vi.fn(async (agent: Agent) => agent),
+        create,
+      };
+      mastra = new Mastra({
+        agents: { 'model-owned-agent': modelOwnedAgent },
+        storage,
+        logger: false,
+      });
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: editorAgent } as any);
+
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+        mastra,
+        agentId: 'model-owned-agent',
+        reorderedModelIds: ['fallback', 'primary'],
+        requestContext: new RequestContext(),
+      });
+
+      expect(create).toHaveBeenCalledWith({
+        id: 'model-owned-agent',
+        name: 'Model Owned Agent',
+        modelList: [
+          {
+            id: 'fallback',
+            provider: 'openai',
+            modelId: 'gpt-5.4-pro',
+            enabled: true,
+            maxRetries: 2,
+          },
+          {
+            id: 'primary',
+            provider: 'openai',
+            modelId: 'gpt-5.1',
+            enabled: true,
+            maxRetries: 0,
+          },
+        ],
+      });
+    });
+  });
 
   describe('agent metadata serialization', () => {
     it('includes metadata in the list agents response', async () => {

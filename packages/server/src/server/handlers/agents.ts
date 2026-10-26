@@ -22,7 +22,7 @@ import type {
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { StorageModelListEntry } from '@mastra/core/storage';
+import type { StorageCreateAgentInput, StorageModelListEntry } from '@mastra/core/storage';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -155,34 +155,14 @@ function toStoredModelList(
   }));
 }
 
-function toStoredInstructions(instructions: unknown): string {
-  if (typeof instructions === 'string') return instructions;
-  if (Array.isArray(instructions)) return instructions.map(toStoredInstructions).join('\n\n');
-  if (!instructions || typeof instructions !== 'object' || !('content' in instructions)) return '';
-
-  const { content } = instructions;
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-
-  return content
-    .map(part => {
-      if (typeof part === 'string') return part;
-      if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') return part.text;
-      return '';
-    })
-    .join('\n\n');
-}
-
 async function persistEditorOwnedModelList({
   mastra,
   agent,
   modelList,
-  requestContext,
 }: {
   mastra: Mastra;
   agent: Agent;
   modelList: NonNullable<Awaited<ReturnType<Agent['getModelList']>>>;
-  requestContext: RequestContext;
 }): Promise<boolean> {
   const editorConfig = agent.__getEditorConfig?.();
   if (!editorConfig || editorConfig.model !== true) return false;
@@ -199,24 +179,11 @@ async function persistEditorOwnedModelList({
   if (storedAgent) {
     await editorAgent.update({ id: agent.id, modelList: storedModelList });
   } else {
-    const [instructions, llm] = await Promise.all([
-      agent.getInstructions({ requestContext }),
-      agent.getLLM({ requestContext }),
-    ]);
-    const { provider, modelId } = getAgentModelRef(agent.model, llm);
-    if (!provider || !modelId) {
-      throw new HTTPException(400, {
-        message: 'Agent model could not be resolved for initial Editor persistence',
-      });
-    }
-
     await editorAgent.create({
       id: agent.id,
       name: agent.name,
-      instructions: toStoredInstructions(instructions),
-      model: { provider, name: modelId },
       modelList: storedModelList,
-    });
+    } as StorageCreateAgentInput);
   }
 
   return true;
@@ -591,8 +558,7 @@ export async function getSerializedAgentTools(
 
         const outputSchema = schemaToJsonSchema(
           resolveLazySchema('outputSchema' in tool ? tool.outputSchema : undefined) as
-            | PublicSchema<unknown>
-            | undefined,
+            PublicSchema<unknown> | undefined,
         );
         if (outputSchema !== undefined) {
           outputSchemaForReturn = stringify(outputSchema);
@@ -600,8 +566,7 @@ export async function getSerializedAgentTools(
 
         const requestContextSchema = schemaToJsonSchema(
           resolveLazySchema('requestContextSchema' in tool ? tool.requestContextSchema : undefined) as
-            | PublicSchema<unknown>
-            | undefined,
+            PublicSchema<unknown> | undefined,
         );
         if (requestContextSchema !== undefined) {
           requestContextSchemaForReturn = stringify(requestContextSchema);
@@ -2261,8 +2226,7 @@ async function handleAgentMessageRoute({
   invoke: (agent: Agent, target: SendAgentSignalOptions) => SendAgentSignalResult;
 }) {
   const idleStreamOptions = ifIdle?.streamOptions as
-    | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
-    | undefined;
+    (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides }) | undefined;
   const bodyRequestContext = idleStreamOptions?.requestContext;
   const normalizedIdleStreamOptions = normalizePublicExecutionOptions(idleStreamOptions, serverRequestContext);
   const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
@@ -3793,7 +3757,6 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
           mastra,
           agent: mutableAgent,
           modelList: reorderedModelList,
-          requestContext,
         });
       }
 
@@ -3852,7 +3815,7 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
 
       const updatedModelList = await mutableAgent.getModelList(requestContext);
       if (updatedModelList) {
-        await persistEditorOwnedModelList({ mastra, agent: mutableAgent, modelList: updatedModelList, requestContext });
+        await persistEditorOwnedModelList({ mastra, agent: mutableAgent, modelList: updatedModelList });
       }
 
       return { message: 'Model updated in model list' };
