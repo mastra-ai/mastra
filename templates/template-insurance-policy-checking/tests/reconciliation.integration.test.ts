@@ -1389,3 +1389,42 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
     });
   });
 });
+
+it('keeps the failed attempt budget when the broker uploads identical PDFs again', async () => {
+  const app = await setup(propertyDocuments(), { ...testBudget, maxAttempts: 1 });
+  app.wire.state.mode = 'http';
+  expect(await app.submit()).toMatchObject({ ok: false, code: 'MODEL_UNAVAILABLE' });
+  const failed = (await app.cases.active(context))!;
+  const before = await app.repository.status(context);
+  const files = await Promise.all(
+    app.sources.map(async source => ({
+      name: source.displayName,
+      data:
+        'data:application/pdf;base64,' +
+        (await readFile(join(app.cases.artifactRoot, `${source.sourceId}.pdf`))).toString('base64'),
+    })),
+  );
+  expect(await app.caseService.capture(context, { files })).toEqual(failed);
+  expect(await app.cases.active(context)).toEqual(failed);
+  expect(await app.submit({ ...app.request, expectedRevision: failed.revision })).toMatchObject({
+    ok: false,
+    code: 'RETRY_REQUIRED',
+  });
+  expect(
+    await app.submit({ ...app.request, expectedRevision: failed.revision, retryAttemptId: before.attempts[0]!.id }),
+  ).toMatchObject({
+    ok: false,
+    code: 'ATTEMPT_LIMIT',
+  });
+  expect(app.wire.requests).toHaveLength(1);
+  expect((await app.repository.status(context)).attempts).toEqual(before.attempts);
+  const updated = await app.caseService.capture(
+    context,
+    await fixtureFiles([
+      { ...propertyDocuments()[0]!, name: 'additional-proposal.pdf', pages: [['Additional evidence for the broker.']] },
+    ]),
+  );
+  expect(updated.revision).toBe(failed.revision + 1);
+  expect(updated.state).toBe('CREATED');
+  expect(updated.clarification).toBeNull();
+});

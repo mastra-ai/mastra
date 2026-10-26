@@ -147,6 +147,7 @@ export class CaseRepository {
         hashes.add(source.hash);
         return true;
       });
+      if (existing && additions.length === 0) return existing;
       const pdfPages =
         oldSources.reduce((sum, source) => sum + (source.kind === 'pdf' ? source.pages.length : 0), 0) +
         additions.reduce((sum, source) => sum + (source.kind === 'pdf' ? source.pages.length : 0), 0);
