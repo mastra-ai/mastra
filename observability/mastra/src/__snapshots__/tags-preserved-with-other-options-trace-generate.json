@@ -116,6 +116,8 @@
                 "entityId": "test-agent-preserve-tags",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
                   "usage": {

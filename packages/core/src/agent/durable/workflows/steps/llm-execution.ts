@@ -1454,7 +1454,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               toolChoice: currentToolChoice,
               responseFormat: structuredOutput ? 'json_schema' : undefined,
             });
-            modelSpanTracker?.startInference?.({ request: {}, inputMessages, messageId: currentMessageId });
+            // A cached response replays without invoking the model, so it records no model.
+            modelSpanTracker?.startInference?.({
+              request: {},
+              inputMessages,
+              messageId: currentMessageId,
+              ...(cachedResponse ? {} : { modelId: currentModel.modelId, provider: currentModel.provider }),
+            });
             let inferenceStartedAt: number | undefined;
 
             // Collect chunks for post-stream message building (via
