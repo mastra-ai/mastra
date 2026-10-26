@@ -17,7 +17,12 @@ import type {
   UpdateWorkflowStateOptions,
 } from '../../types';
 import { matchesExpectedWorkflowStatus } from '../../types';
-import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from '../../workflow-snapshot';
+import {
+  createEmptyWorkflowSnapshot,
+  dedupeWorkflowSnapshotResult,
+  hydrateWorkflowSnapshotResult,
+  mergeWorkflowStepResult,
+} from '../../workflow-snapshot';
 import type { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
 import { getSnapshotMemoryInfo } from './snapshot-memory-info';
@@ -346,7 +351,9 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         snapshot,
       });
     } else {
-      snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+      snapshot = hydrateWorkflowSnapshotResult(
+        typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot,
+      );
     }
 
     if (!snapshot || !snapshot?.context) {
@@ -361,7 +368,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     snapshot = { ...snapshot, ...state };
     this.db.workflows.set(key, {
       ...run,
-      snapshot: snapshot,
+      snapshot: dedupeWorkflowSnapshotResult(snapshot),
     });
 
     return snapshot;
@@ -394,7 +401,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       // A re-persist without a resourceId (e.g. resume) must not erase a
       // previously-set value. Matches the persistent stores' COALESCE upserts.
       resourceId: resourceId ?? existing?.resourceId,
-      snapshot,
+      snapshot: dedupeWorkflowSnapshotResult(snapshot),
       // Preserve the original creation time when re-persisting an existing run; only set it
       // on first insert. Otherwise listWorkflowRuns ordering and date filters drift to the
       // last activity time. Matches the persistent stores (pg/mysql/mongodb/libsql).
@@ -421,7 +428,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
     const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
     // Return a deep copy to prevent mutation
-    return snapshot ? cloneRunData(snapshot) : null;
+    return snapshot ? hydrateWorkflowSnapshotResult(cloneRunData(snapshot)) : null;
   }
 
   async listWorkflowRuns({
@@ -513,7 +520,9 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     // Deserialize snapshot if it's a string
     const parsedRuns = runs.map((run: any) => ({
       ...run,
-      snapshot: typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : cloneRunData(run.snapshot),
+      snapshot: hydrateWorkflowSnapshotResult(
+        typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : cloneRunData(run.snapshot),
+      ),
       createdAt: new Date(run.createdAt),
       updatedAt: new Date(run.updatedAt),
       runId: run.run_id,
@@ -543,7 +552,9 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     // Return a deep copy to prevent mutation
     const parsedRun = {
       ...run,
-      snapshot: typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : cloneRunData(run.snapshot),
+      snapshot: hydrateWorkflowSnapshotResult(
+        typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : cloneRunData(run.snapshot),
+      ),
       createdAt: new Date(run.createdAt),
       updatedAt: new Date(run.updatedAt),
       runId: run.run_id,

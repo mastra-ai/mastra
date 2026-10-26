@@ -139,3 +139,50 @@ export function mergeWorkflowStepResult({
     return { ...snapshot.context };
   }
 }
+
+/**
+ * A successful run's `result` is usually the output of the step that ran last, so writing both
+ * stores that output twice in one snapshot. When `result` is that same value, store the producing
+ * step id in `resultFromStep` instead. `hydrateWorkflowSnapshotResult` restores `result` on read.
+ */
+export function dedupeWorkflowSnapshotResult(snapshot: WorkflowRunState): WorkflowRunState {
+  const { result, context } = snapshot ?? {};
+  if (snapshot?.status !== 'success' || result === undefined || result === null || typeof result !== 'object') {
+    return snapshot;
+  }
+  if (!context || typeof context !== 'object') {
+    return snapshot;
+  }
+
+  for (const [stepId, stepResult] of Object.entries(context)) {
+    if (stepResult?.status === 'success' && 'output' in stepResult && stepResult.output === result) {
+      const { result: _result, ...rest } = snapshot;
+      return { ...rest, resultFromStep: stepId };
+    }
+  }
+  return snapshot;
+}
+
+/**
+ * Restore the `result` that `dedupeWorkflowSnapshotResult` replaced with a step reference.
+ * Snapshots that still carry `result` inline are returned unchanged.
+ */
+export function hydrateWorkflowSnapshotResult<T extends WorkflowRunState | string | null | undefined>(snapshot: T): T {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return snapshot;
+  }
+  const { resultFromStep, result, context } = snapshot as WorkflowRunState;
+  if (resultFromStep === undefined) {
+    return snapshot;
+  }
+
+  const { resultFromStep: _resultFromStep, ...rest } = snapshot as WorkflowRunState;
+  if (result !== undefined) {
+    return rest as T;
+  }
+  const stepResult = context?.[resultFromStep];
+  if (stepResult?.status !== 'success') {
+    return rest as T;
+  }
+  return { ...rest, result: stepResult.output } as T;
+}

@@ -1,5 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  dedupeWorkflowSnapshotResult,
+  hydrateWorkflowSnapshotResult,
   mergeWorkflowStepResult,
   assertWorkflowStepGuard,
   isWorkflowStepConflictError,
@@ -197,7 +199,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     return {
       workflowName: row.workflow_name as string,
       runId: row.run_id as string,
-      snapshot: parsedSnapshot,
+      snapshot: hydrateWorkflowSnapshotResult(parsedSnapshot),
       resourceId: row.resourceId as string,
       createdAt: new Date(row.createdAtZ || (row.createdAt as string)),
       updatedAt: new Date(row.updatedAtZ || (row.updatedAt as string)),
@@ -627,7 +629,9 @@ export class WorkflowsPG extends WorkflowsStorage {
 
         // Parse existing snapshot
         const existingSnapshot = existingSnapshotResult.snapshot;
-        const snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+        const snapshot = hydrateWorkflowSnapshotResult(
+          typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot,
+        );
 
         if (!snapshot || !snapshot?.context) {
           throw new Error(`Snapshot not found for runId ${runId}`);
@@ -644,7 +648,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         const updatedSnapshot = { ...snapshot, ...state };
 
         // Update the snapshot within the same transaction
-        const sanitizedSnapshot = toPgJson(updatedSnapshot);
+        const sanitizedSnapshot = toPgJson(dedupeWorkflowSnapshotResult(updatedSnapshot));
         const now = new Date();
         await t.none(
           `UPDATE ${tableName}
@@ -694,7 +698,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
       // Sanitize the snapshot JSON to remove problematic Unicode sequences
-      const sanitizedSnapshot = toPgJson(snapshot);
+      const sanitizedSnapshot = toPgJson(dedupeWorkflowSnapshotResult(snapshot));
       await withRunFence(
         this.#db.client,
         this.#runOwnersTable(),
@@ -745,7 +749,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         keys: { workflow_name: workflowName, run_id: runId },
       });
 
-      return result ? result.snapshot : null;
+      return result ? hydrateWorkflowSnapshotResult(result.snapshot) : null;
     } catch (error) {
       throw new MastraError(
         {

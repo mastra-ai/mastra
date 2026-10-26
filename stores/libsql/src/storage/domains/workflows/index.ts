@@ -18,6 +18,8 @@ import type {
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
+  dedupeWorkflowSnapshotResult,
+  hydrateWorkflowSnapshotResult,
   isRunFenceConflictError,
   mergeWorkflowStepResult,
   normalizePerPage,
@@ -107,7 +109,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     return {
       workflowName: row.workflow_name as string,
       runId: row.run_id as string,
-      snapshot: parsedSnapshot,
+      snapshot: hydrateWorkflowSnapshotResult(parsedSnapshot),
       resourceId: row.resourceId as string,
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
@@ -394,7 +396,9 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
             // Parse existing snapshot
             const existingSnapshot = existingSnapshotResult.rows[0].snapshot;
-            const snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+            const snapshot = hydrateWorkflowSnapshotResult(
+              typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot,
+            );
 
             if (!snapshot || !snapshot?.context) {
               await tx.rollback();
@@ -413,7 +417,12 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             // Update the snapshot within the same transaction
             await tx.execute({
               sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = jsonb(?), updatedAt = ? WHERE workflow_name = ? AND run_id = ?`,
-              args: [safeStringify(updatedSnapshot), new Date().toISOString(), workflowName, runId],
+              args: [
+                safeStringify(dedupeWorkflowSnapshotResult(updatedSnapshot)),
+                new Date().toISOString(),
+                workflowName,
+                runId,
+              ],
             });
 
             await tx.commit();
@@ -465,7 +474,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
                 VALUES (?, ?, ?, jsonb(?), ?, ?)
                 ON CONFLICT(workflow_name, run_id)
                 DO UPDATE SET resourceId = COALESCE(excluded.resourceId, ${TABLE_WORKFLOW_SNAPSHOT}.resourceId), snapshot = excluded.snapshot, updatedAt = excluded.updatedAt`,
-            args: [workflowName, runId, resourceId ?? null, safeStringify(snapshot), createdAtValue, updatedAtValue],
+            args: [
+              workflowName,
+              runId,
+              resourceId ?? null,
+              safeStringify(dedupeWorkflowSnapshotResult(snapshot)),
+              createdAtValue,
+              updatedAtValue,
+            ],
           }),
         ),
       'persistWorkflowSnapshot',
@@ -485,7 +501,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       keys: { workflow_name: workflowName, run_id: runId },
     });
 
-    return d ? d.snapshot : null;
+    return d ? hydrateWorkflowSnapshotResult(d.snapshot) : null;
   }
 
   async getWorkflowRunById({

@@ -182,3 +182,84 @@ describe('WorkflowsLibSQL — updateWorkflowState', () => {
     expect(run!.updatedAt.getTime()).toBeGreaterThan(createdAt.getTime());
   });
 });
+
+// #28169: a successful run's `result` is the last step's output; the row stores it once.
+describe('WorkflowsLibSQL — completion snapshot result', () => {
+  let client: ReturnType<typeof createClient>;
+  let workflows: WorkflowsLibSQL;
+  const workflowName = 'result-workflow';
+
+  beforeEach(async () => {
+    client = createClient({ url: ':memory:' });
+    const db = new LibSQLDB({ client, maxRetries: 1, initialBackoffMs: 10 });
+    await db.createTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+    });
+    workflows = new WorkflowsLibSQL({ client });
+  });
+
+  function successSnapshot(runId: string, output: unknown, result: unknown): WorkflowRunState {
+    return {
+      runId,
+      status: 'success',
+      result,
+      value: {},
+      context: {
+        input: [0],
+        item: { status: 'success', output, payload: [0], startedAt: 1, endedAt: 2 },
+      },
+      activePaths: [],
+      activeStepsPath: {},
+      serializedStepGraph: [],
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      timestamp: 1,
+    } as unknown as WorkflowRunState;
+  }
+
+  async function rawSnapshot(runId: string) {
+    const row = await client.execute({
+      sql: `SELECT json(snapshot) as snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE run_id = ?`,
+      args: [runId],
+    });
+    return row.rows[0]!.snapshot as string;
+  }
+
+  it('stores the output once and restores result on every read path', async () => {
+    const output = Array.from({ length: 20 }, (_, i) => ({ i, blob: 'x'.repeat(10_000) }));
+    await workflows.persistWorkflowSnapshot({
+      workflowName,
+      runId: 'new-run',
+      snapshot: successSnapshot('new-run', output, output),
+    });
+
+    const raw = await rawSnapshot('new-run');
+    const outputBytes = Buffer.byteLength(JSON.stringify(output), 'utf8');
+    expect(Buffer.byteLength(raw, 'utf8')).toBeLessThan(outputBytes * 1.2);
+    expect(JSON.parse(raw)).not.toHaveProperty('result');
+    expect(JSON.parse(raw).resultFromStep).toBe('item');
+
+    const loaded = await workflows.loadWorkflowSnapshot({ workflowName, runId: 'new-run' });
+    expect(loaded?.result).toEqual(output);
+    expect(loaded).not.toHaveProperty('resultFromStep');
+    const byId = await workflows.getWorkflowRunById({ runId: 'new-run', workflowName });
+    expect((byId!.snapshot as WorkflowRunState).result).toEqual(output);
+    const listed = await workflows.listWorkflowRuns({ workflowName });
+    expect((listed.runs[0]!.snapshot as WorkflowRunState).result).toEqual(output);
+  });
+
+  it('reads rows written with an inline result unchanged', async () => {
+    const legacy = successSnapshot('legacy-run', [{ i: 0 }], [{ i: 0 }]);
+    const now = new Date().toISOString();
+    await client.execute({
+      sql: `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, snapshot, createdAt, updatedAt) VALUES (?, ?, jsonb(?), ?, ?)`,
+      args: [workflowName, 'legacy-run', JSON.stringify(legacy), now, now],
+    });
+
+    expect(await workflows.loadWorkflowSnapshot({ workflowName, runId: 'legacy-run' })).toEqual(legacy);
+    const byId = await workflows.getWorkflowRunById({ runId: 'legacy-run', workflowName });
+    expect(byId!.snapshot).toEqual(legacy);
+  });
+});
