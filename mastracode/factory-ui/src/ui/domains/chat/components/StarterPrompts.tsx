@@ -1,7 +1,17 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRight, Bug, CalendarCheck, GitPullRequestArrow, Inbox, LifeBuoy, MessageSquareText } from 'lucide-react';
+import {
+  ArrowRight,
+  Bug,
+  CalendarCheck,
+  GitPullRequestArrow,
+  GitPullRequestClosed,
+  Inbox,
+  Layers,
+  LifeBuoy,
+  MessageSquareText,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect } from 'react';
 
@@ -17,6 +27,8 @@ const KIND_ICONS: Record<StarterKind, { icon: LucideIcon; className: string }> =
   review: { icon: GitPullRequestArrow, className: 'text-(--green-500) dark:text-(--green-400)' },
   triage: { icon: Inbox, className: 'text-(--orange-500) dark:text-(--orange-400)' },
   bug: { icon: Bug, className: 'text-(--amber-600) dark:text-(--amber-400)' },
+  sweep: { icon: Layers, className: 'text-(--cyan-500) dark:text-(--cyan-400)' },
+  stale: { icon: GitPullRequestClosed, className: 'text-(--red-500) dark:text-(--red-400)' },
   shipped: { icon: CalendarCheck, className: 'text-(--purple-500) dark:text-(--purple-400)' },
 };
 

@@ -106,13 +106,34 @@ describe('starterPrompts', () => {
     ).toEqual([]);
   });
 
-  it('puts failed runs first, then review feedback, open pull requests, intake, bugs and the weekly recap', () => {
+  const memoryCards = ['leak', 'recall', 'threads'].map(id =>
+    card(`memory-${id}`, { stages: ['triage'], triageType: 'feature request', metadata: { labels: ['Memory'] } }),
+  );
+
+  const quietBoard = [
+    done('shipped', 2),
+    card('bug', { stages: ['triage'], triageType: 'bug' }),
+    card('new', { stages: ['intake'] }),
+    pullRequest(1, ['intake'], { sourceCreatedAt: daysAgo(2) }),
+    pullRequest(3, ['intake'], { sourceCreatedAt: daysAgo(45) }),
+    ...memoryCards,
+  ];
+
+  it('orders fresh pull requests, intake, bugs, the area sweep, stale pull requests and the weekly recap', () => {
+    expect(build(quietBoard).map(({ title }) => title)).toEqual([
+      'Review 1 open pull request',
+      'Triage 1 card in Intake',
+      'Plan a fix for the open bug',
+      'Sweep 3 open Memory cards',
+      'Close or revive 1 pull request open over a month',
+      'Recap 1 card done this week',
+    ]);
+  });
+
+  it('puts failed runs and review feedback first and shows six lines at most', () => {
     const prompts = build(
       [
-        done('shipped', 2),
-        card('bug', { stages: ['triage'], triageType: 'bug' }),
-        card('new', { stages: ['intake'] }),
-        pullRequest(1, ['intake']),
+        ...quietBoard,
         pullRequest(2, ['review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
         card('stuck', { stages: ['execute'] }),
       ],
@@ -125,7 +146,7 @@ describe('starterPrompts', () => {
       'Review 1 open pull request',
       'Triage 1 card in Intake',
       'Plan a fix for the open bug',
-      'Recap 1 card done this week',
+      'Sweep 3 open Memory cards',
     ]);
   });
 
@@ -141,6 +162,42 @@ describe('starterPrompts', () => {
 
     expect(review.title).toBe('Review 2 open pull requests');
     expect(listed(review.prompt)).toEqual(['#1 Pull request 1', '#2 Pull request 2']);
+  });
+
+  it('hands pull requests open over a month to close or revive, oldest first, instead of review', () => {
+    const cards = [
+      pullRequest(1, ['intake'], { sourceCreatedAt: daysAgo(31) }),
+      pullRequest(2, ['intake'], { sourceCreatedAt: daysAgo(90) }),
+      pullRequest(3, ['intake'], { sourceCreatedAt: daysAgo(29) }),
+      pullRequest(4, ['intake'], { sourceCreatedAt: daysAgo(60), draft: true }),
+    ];
+
+    const stale = promptFor('stale', cards);
+    const review = promptFor('review', cards);
+
+    expect(stale.title).toBe('Close or revive 2 pull requests open over a month');
+    expect(listed(stale.prompt)).toEqual(['#2 Pull request 2', '#1 Pull request 1']);
+    expect(listed(review.prompt)).toEqual(['#3 Pull request 3']);
+  });
+
+  it('sweeps the area label with the most open cards, ignoring process labels and GitHub type labels', () => {
+    const sweep = promptFor('sweep', [
+      ...memoryCards.map(item => ({ ...item, metadata: { labels: ['Memory', 'enhancement', 'p: high'] } })),
+      card('agents-1', { metadata: { labels: ['Agents', 'enhancement', 'p: high'] } }),
+      card('agents-2', { metadata: { labels: ['Agents', 'enhancement', 'status: needs triage'] } }),
+      card('feature', { metadata: { labels: ['enhancement', 'status: needs triage'] } }),
+      ...['a', 'b', 'c'].map(id => card(`agents-done-${id}`, { stages: ['done'], metadata: { labels: ['Agents'] } })),
+    ]);
+
+    expect(sweep.title).toBe('Sweep 3 open Memory cards');
+    expect(sweep.prompt).toContain('labelled "Memory"');
+    expect(listed(sweep.prompt).toSorted()).toEqual(['Card memory-leak', 'Card memory-recall', 'Card memory-threads']);
+  });
+
+  it('offers no sweep for an area with fewer than three open cards', () => {
+    const kinds = build(memoryCards.slice(0, 2)).map(({ kind }) => kind);
+
+    expect(kinds).not.toContain('sweep');
   });
 
   it('leaves cards triage already classified to a person, out of the triage prompt', () => {

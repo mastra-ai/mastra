@@ -5,7 +5,7 @@ import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem } from './services/workItems';
 import { BOARD_STAGES, isTerminalStage } from './stages';
 
-export type StarterKind = 'unblock' | 'feedback' | 'review' | 'triage' | 'bug' | 'shipped';
+export type StarterKind = 'unblock' | 'feedback' | 'review' | 'triage' | 'bug' | 'sweep' | 'stale' | 'shipped';
 
 export interface StarterPrompt {
   kind: StarterKind;
@@ -14,9 +14,24 @@ export interface StarterPrompt {
   prompt: string;
 }
 
+const SHOWN = 6;
 const LISTED = 5;
 const RECAP_EXAMPLES = 10;
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const SWEEP_MIN = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * DAY_MS;
+const MONTH_MS = 30 * DAY_MS;
+const GITHUB_TYPE_LABELS = new Set([
+  'bug',
+  'documentation',
+  'duplicate',
+  'enhancement',
+  'good first issue',
+  'help wanted',
+  'invalid',
+  'question',
+  'wontfix',
+]);
 
 function count(amount: number, noun: string): string {
   return `${amount} ${noun}${amount === 1 ? '' : 's'}`;
@@ -46,6 +61,26 @@ function arrivedAt(item: WorkItem): number {
 
 function isOpen(item: WorkItem): boolean {
   return !item.stages.some(isTerminalStage);
+}
+
+function notStarted(item: WorkItem): boolean {
+  return (
+    belongsToBoard(item, 'work') && (itemAppearsInStage(item, 'intake', BOARD_STAGES) || item.stages.includes('triage'))
+  );
+}
+
+function waitsForReview(item: WorkItem): boolean {
+  return (
+    belongsToBoard(item, 'review') &&
+    itemAppearsInStage(item, 'intake', boardStages('review')) &&
+    pullRequestStatusForItem(item) === 'open'
+  );
+}
+
+function areaLabels(item: WorkItem): string[] {
+  return metadataLabels(item.metadata).filter(
+    label => !label.includes(':') && !GITHUB_TYPE_LABELS.has(label.toLowerCase()),
+  );
 }
 
 function starter(
@@ -102,19 +137,32 @@ function feedback(cards: readonly WorkItem[]) {
   );
 }
 
-function review(cards: readonly WorkItem[]) {
+function review(cards: readonly WorkItem[], now: Date) {
+  const since = now.getTime() - MONTH_MS;
   const waiting = cards
-    .filter(
-      item =>
-        belongsToBoard(item, 'review') &&
-        itemAppearsInStage(item, 'intake', boardStages('review')) &&
-        pullRequestStatusForItem(item) === 'open',
-    )
+    .filter(item => waitsForReview(item) && openedAt(item) >= since)
     .sort((a, b) => openedAt(a) - openedAt(b));
   if (waiting.length === 0) return undefined;
   return starter('review', `Review ${batch(waiting.length, 'open pull request')}`, waiting.map(label), {
     lead: 'Start a review session for each of these open pull requests, oldest first:',
   });
+}
+
+function stale(cards: readonly WorkItem[], now: Date) {
+  const before = now.getTime() - MONTH_MS;
+  const forgotten = cards
+    .filter(item => waitsForReview(item) && openedAt(item) < before)
+    .sort((a, b) => openedAt(a) - openedAt(b));
+  if (forgotten.length === 0) return undefined;
+  return starter(
+    'stale',
+    `Close or revive ${batch(forgotten.length, 'pull request')} open over a month`,
+    forgotten.map(label),
+    {
+      lead: 'These pull requests have been open for over a month, oldest first:',
+      ask: 'For each one, recommend closing or reviving it and say why. Close nothing until I say so.',
+    },
+  );
 }
 
 function triage(cards: readonly WorkItem[]) {
@@ -135,8 +183,7 @@ function bug(cards: readonly WorkItem[]) {
   const unplanned = cards
     .filter(
       item =>
-        belongsToBoard(item, 'work') &&
-        (itemAppearsInStage(item, 'intake', BOARD_STAGES) || item.stages.includes('triage')) &&
+        notStarted(item) &&
         (item.triageType === 'bug' || hasLabel(metadataLabels(item.metadata), 'bug')) &&
         item.sessions.plan === undefined,
     )
@@ -149,6 +196,25 @@ function bug(cards: readonly WorkItem[]) {
   }
   return starter('bug', `Plan a fix for one of ${unplanned.length} open bugs`, unplanned.map(label), {
     lead: `Pick the highest-impact of the ${unplanned.length} open bugs nobody has planned yet and draft a plan to fix it. The oldest:`,
+    scope: 'examples',
+  });
+}
+
+function sweep(cards: readonly WorkItem[]) {
+  const byArea = new Map<string, WorkItem[]>();
+  for (const item of cards.filter(notStarted)) {
+    for (const area of areaLabels(item)) {
+      const members = byArea.get(area);
+      if (members) members.push(item);
+      else byArea.set(area, [item]);
+    }
+  }
+  const largest = [...byArea].sort(([a, x], [b, y]) => y.length - x.length || a.localeCompare(b))[0];
+  if (largest === undefined || largest[1].length < SWEEP_MIN) return undefined;
+  const [area, members] = largest;
+  const newest = members.toSorted((a, b) => arrivedAt(b) - arrivedAt(a));
+  return starter('sweep', `Sweep ${count(members.length, `open ${area} card`)}`, newest.map(label), {
+    lead: `Group the ${members.length} open Work board cards labelled "${area}" by root cause, flag duplicates, and draft a plan for the biggest group. The newest:`,
     scope: 'examples',
   });
 }
@@ -179,7 +245,7 @@ function shipped(cards: readonly WorkItem[], now: Date) {
   });
 }
 
-/** What the person could start on now, built from the board; a theme with nothing behind it is left out. */
+/** What the person could start on now, most pressing first, built from the board; a theme with nothing behind it is left out. */
 export function starterPrompts({
   cards,
   effectByItem,
@@ -192,9 +258,13 @@ export function starterPrompts({
   return [
     unblock(cards, effectByItem),
     feedback(cards),
-    review(cards),
+    review(cards, now),
     triage(cards),
     bug(cards),
+    sweep(cards),
+    stale(cards, now),
     shipped(cards, now),
-  ].filter(prompt => prompt !== undefined);
+  ]
+    .filter(prompt => prompt !== undefined)
+    .slice(0, SHOWN);
 }
