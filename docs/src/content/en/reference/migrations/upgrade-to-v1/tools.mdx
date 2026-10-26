@@ -85,8 +85,13 @@ For tools that are executed inside a workflow, access workflow-specific properti
   });
 ```
 
-The `suspendPayload` is validated against the `suspendSchema` when the tool is executed. If the `suspendPayload` doesn't match the `suspendSchema`, the validation error is returned as the tool output, but suspension continues. When an agent runs the tool, a warning is also logged. Calling the tool's `execute()` directly, or running it as a workflow step, returns the error without logging a warning.
-Also, when the tool is resumed, the `resumeData` gets validated against the `resumeSchema`. If the resumeData doesn't match the `resumeSchema`, the tool will return a `ValidationError`, preventing the tool resumption.
+The `suspendPayload` is validated against the `suspendSchema` when the tool is executed. What happens when the `suspendPayload` doesn't match the `suspendSchema` depends on how the tool runs:
+
+- **Agent**: The validation error is returned as the tool output and a warning is logged.
+- **Direct `execute()` call**: The validation error is returned as the tool output without logging a warning.
+- **Workflow step**: The step fails with a suspend data validation error, and the workflow run fails.
+
+Also, when the tool is resumed, the `resumeData` gets validated against the `resumeSchema`. If the resumeData doesn't match the `resumeSchema`, the tool will return a `ValidationError`, preventing the tool resumption. the `resumeData` gets validated against the `resumeSchema`. If the resumeData doesn't match the `resumeSchema`, the tool will return a `ValidationError`, preventing the tool resumption.
 
 To skip the `suspendSchema` or `resumeSchema` validation, don't define `suspendSchema` or `resumeSchema` in the tool creation.
 
