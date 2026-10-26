@@ -74,7 +74,8 @@ import type {
   MastraOnFinishCallback,
   ToolCallChunk,
 } from '@mastra/core/stream';
-import { deepMerge } from '@mastra/core/utils';
+import type { CoreTool } from '@mastra/core/tools';
+import { deepMerge, rebindProcessorTools } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
@@ -243,6 +244,12 @@ export interface InngestAgentStreamOptions<OUTPUT = undefined> {
   runId?: string;
   /** Request Context */
   requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
+  /**
+   * Per-call tool lifecycle hooks. They take priority over `defaultOptions.hooks`
+   * and constructor hooks. Function hooks are not serialized, so a run recovered
+   * in a fresh process only runs constructor and `defaultOptions.hooks`.
+   */
+  hooks?: AgentExecutionOptions<OUTPUT>['hooks'];
   /** Maximum number of steps */
   maxSteps?: number;
   /**
@@ -418,6 +425,12 @@ export interface InngestAgentResumeOptions<OUTPUT = undefined> {
    * iterations.
    */
   abortSignal?: AbortSignal;
+  /**
+   * Per-call tool lifecycle hooks for the resumed segment. Applied when the
+   * run's tools are still held in this process; function hooks are not
+   * serialized, so a resume in a fresh process cannot restore them.
+   */
+  hooks?: AgentExecutionOptions<OUTPUT>['hooks'];
   /**
    * When set, keep the resumed segment open after the workflow's initial
    * resume turn finishes and continue streaming follow-up turns until the
@@ -827,6 +840,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   async function loadSuspendedIteration(
     runId: string,
     suspendedSnapshot: { context?: Record<string, any>; resumeLabels?: Record<string, unknown> } | undefined,
+    /** Nested snapshot already read for `suspendedSnapshot`, reused instead of a second read. */
+    preloadedNestedSnapshot?: any,
   ): Promise<{ toolCalls: ToolCallChunk[]; resumedText?: { priorText: string; stepText: string } }> {
     const suspendedToolCallIds = Object.keys(suspendedSnapshot?.resumeLabels ?? {});
     if (suspendedToolCallIds.length === 0) return { toolCalls: [] };
@@ -842,7 +857,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       });
     const isCurrent = (s: Awaited<ReturnType<typeof load>>) =>
       !!s && suspendedToolCallIds.every(id => !!s.resumeLabels?.[id]);
-    let snapshot = await load();
+    let snapshot = preloadedNestedSnapshot ?? (await load());
     const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
     while (!isCurrent(snapshot) && Date.now() < deadline) {
       await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
@@ -1324,20 +1339,36 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // After a resume re-suspends, the stored snapshot is still the previous suspended
       // one until the new suspension is persisted, so a named tool call must also wait
       // for its label to appear rather than failing against the stale labels (#25158).
-      const resumableSnapshot = (async (): Promise<{ hasStore: boolean; snapshot?: any }> => {
+      const resumableSnapshot = (async (): Promise<{ hasStore: boolean; snapshot?: any; nestedSnapshot?: any }> => {
         const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
         if (!workflowsStore) return { hasStore: false };
         const loadSnapshot = async (): Promise<any> =>
           workflowsStore.loadWorkflowSnapshot({ workflowName: InngestDurableStepIds.AGENTIC_LOOP, runId });
         const toolCallId = resumeOptions?.toolCallId;
-        const isReady = (s: any) => s?.status === 'suspended' && (!toolCallId || !!s.resumeLabels?.[toolCallId]);
+        // Kept so loadSuspendedIteration reuses the nested read of the accepted snapshot.
+        let nestedSnapshot: any;
+        // After a second suspension the nested execution snapshot can persist
+        // before the outer one, leaving the outer snapshot `suspended` on the
+        // previous call. Wait until the nested snapshot carries the outer labels.
+        const isReady = async (s: any) => {
+          nestedSnapshot = undefined;
+          if (s?.status !== 'suspended' || (toolCallId && !s.resumeLabels?.[toolCallId])) return false;
+          const labelIds = Object.keys(s.resumeLabels ?? {});
+          if (labelIds.length === 0) return true;
+          nestedSnapshot = await workflowsStore.loadWorkflowSnapshot({
+            workflowName: InngestDurableStepIds.AGENTIC_EXECUTION,
+            runId:
+              s.context?.[InngestDurableStepIds.AGENTIC_EXECUTION]?.suspendPayload?.__workflow_meta?.runId ?? runId,
+          });
+          return !nestedSnapshot || labelIds.every(id => !!nestedSnapshot.resumeLabels?.[id]);
+        };
         let snapshot: any = await loadSnapshot();
         const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
-        while (!isReady(snapshot) && Date.now() < deadline) {
+        while (!(await isReady(snapshot)) && Date.now() < deadline) {
           await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
           snapshot = await loadSnapshot();
         }
-        return { hasStore: true, snapshot };
+        return { hasStore: true, snapshot, nestedSnapshot };
       })();
       // Storage failures surface through dispatch; don't let them go unhandled meanwhile.
       resumableSnapshot.catch(() => {});
@@ -1358,7 +1389,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ]),
       });
       validateModelTimeoutSettings(callbackOptions.modelSettings?.timeout);
-      const { hasStore, snapshot: suspendedSnapshot } = await resumableSnapshot;
+      const { hasStore, snapshot: suspendedSnapshot, nestedSnapshot } = await resumableSnapshot;
       if (hasStore && suspendedSnapshot?.status !== 'suspended') {
         throw new NonRetriableError(
           `Cannot resume run ${runId}: it is not suspended` +
@@ -1402,7 +1433,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const resumeOffset = await getPubsubOffset(runId);
       // The resumed segment only receives new pubsub chunks, so output state from
       // before the suspension is restored from the suspended iteration snapshot.
-      const { toolCalls: initialToolCalls, resumedText } = await loadSuspendedIteration(runId, suspendedSnapshot);
+      const { toolCalls: initialToolCalls, resumedText } = await loadSuspendedIteration(
+        runId,
+        suspendedSnapshot,
+        nestedSnapshot,
+      );
 
       // Install a fresh abort controller scoped to the resumed segment and
       // attach it to the run-registry entry so the durable LLM step (when
@@ -1434,6 +1469,63 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       }
       existingEntry.abortController = abortController;
       existingEntry.abortSignal = abortController.signal;
+
+      // A warm resume reuses the tools built for the first request, which close
+      // over that request's tool hooks. Rebuild them with this call's hooks and
+      // swap in only entries still holding a request-built tool, so tools a
+      // processor added or replaced are kept, and rebuild processor-added tools
+      // for this call's request context (matches core DurableAgent.resume).
+      if (existingRegistryEntry && resumeOptions?.hooks) {
+        try {
+          const snapshotMemoryInfo = (await resumableSnapshot.catch(() => undefined))?.snapshot?.context?.input
+            ?.messageListState?.memoryInfo as { threadId?: string; resourceId?: string } | undefined;
+          const resumeRequestContext = callbackOptions.requestContext;
+          const execOptions = callbackOptions as AgentExecutionOptions<TOutput>;
+          const requestTools = await agent.getToolsForExecution({
+            toolsets: execOptions.toolsets,
+            clientTools: execOptions.clientTools,
+            threadId: resumeOptions.threadId ?? snapshotMemoryInfo?.threadId,
+            resourceId: resumeOptions.resourceId ?? snapshotMemoryInfo?.resourceId,
+            runId,
+            requestContext: resumeRequestContext,
+            memoryConfig: execOptions.memory?.options,
+            autoResumeSuspendedTools: execOptions.autoResumeSuspendedTools,
+            // Resume options carry no delegation, so execOptions.delegation is only the
+            // agent default; the first call parked its own delegation on the entry.
+            delegation: existingRegistryEntry.delegation ?? execOptions.delegation,
+            hooks: resumeOptions.hooks,
+            methodType: resumeOptions.closeOnSuspend ? 'generate' : 'stream',
+            backgroundTaskEnabled: Boolean(existingRegistryEntry.backgroundTaskManager),
+            backgroundTaskPolicy: execOptions.backgroundTaskPolicy,
+            model: existingRegistryEntry.model,
+          });
+          const previous = existingRegistryEntry.requestTools;
+          const refresh = (current: Record<string, CoreTool>) => {
+            const next = { ...current };
+            for (const [name, tool] of Object.entries(requestTools)) {
+              // A name missing from current but present in previous was withheld by a processor.
+              const configured =
+                name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
+              if (configured) next[name] = tool;
+            }
+            return next;
+          };
+          existingRegistryEntry.tools = rebindProcessorTools(
+            refresh(existingRegistryEntry.tools ?? {}),
+            resumeRequestContext,
+          );
+          if (existingRegistryEntry.baseTools)
+            existingRegistryEntry.baseTools = rebindProcessorTools(
+              refresh(existingRegistryEntry.baseTools),
+              resumeRequestContext,
+            );
+          // Tools this rebuild did not produce still hold their earlier build, so
+          // keep that as their baseline; otherwise a later resume can never refresh them.
+          existingRegistryEntry.requestTools = { ...previous, ...requestTools };
+        } catch (error) {
+          mastra?.getLogger?.()?.warn?.(`[InngestAgent] resume(${runId}) tool resolution failed: ${error}`);
+        }
+      }
 
       // Track cleanup state for the resumed segment so terminal events
       // (finish/error/abort/cleanup) always tear down the registry entry.

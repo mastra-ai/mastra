@@ -51,12 +51,10 @@ function spawn(command: string, args: string[] = [], options: SpawnOptions = {})
     childProcess.on('close', code => {
       if (code === 0) {
         resolve();
+      } else if (validationError) {
+        reject(new ValidationError(validationError));
       } else {
-        if (validationError) {
-          reject(new ValidationError(validationError));
-        } else {
-          reject(new Error(stderr));
-        }
+        reject(new Error(stderr));
       }
     });
   });

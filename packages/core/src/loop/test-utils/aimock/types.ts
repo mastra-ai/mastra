@@ -8,6 +8,7 @@ import type { MemoryConfigInternal } from '../../../memory/types';
 import type { RequestContext } from '../../../request-context';
 import type { MastraModelOutput } from '../../../stream/base/output';
 import type { ChunkType } from '../../../stream/types';
+import type { ToolHooks } from '../../../tools/types';
 import type { AnyWorkspace } from '../../../workspace/workspace';
 
 /**
@@ -140,7 +141,10 @@ export interface RunLoopScenarioOptions {
   defaultOptions?: {
     autoResumeSuspendedTools?: boolean;
     inputProcessors?: any;
+    hooks?: ToolHooks;
   };
+  /** Per-call tool hooks forwarded to agent.stream(). */
+  hooks?: ToolHooks;
   /** Tools available to the loop. Tool ids must match the scripted tool-call names. */
   tools?: ToolsInput;
   /** Signal providers registered on the Agent constructor. */
