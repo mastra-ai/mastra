@@ -801,12 +801,16 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
           `import { registerApiRoute } from '@mastra/core/server';
 import { camelCase } from 'lodash';
 import { getDaysInMonth } from 'date-fns';
+import { basename, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { toPath } from 'unicorn-magic';
 
 export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependencies', {
   method: 'GET',
   handler: async c => c.json({
     label: camelCase('virtual dependency entries'),
     days: getDaysInMonth(new Date('2026-02-10T12:00:00Z')),
+    externalFile: basename(toPath(pathToFileURL(join(process.cwd(), 'optimized-entry.txt')))),
   }),
 });
 `,
@@ -913,7 +917,11 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
     it('should preserve exports from multiple optimized dependency entries', async () => {
       const response = await fetch(`http://localhost:${port}/optimized-dependencies`);
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ label: 'virtualDependencyEntries', days: 28 });
+      expect(await response.json()).toEqual({
+        label: 'virtualDependencyEntries',
+        days: 28,
+        externalFile: 'optimized-entry.txt',
+      });
     });
 
     it('should keep deprecated externals out of optimized dependency bundles', async () => {

@@ -255,6 +255,7 @@ function renderWorkflowDefinition(def: StoredWorkflowRow, termWidth: number = ge
         break;
       }
       case 'loop': {
+        // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve string labels for persisted workflow metadata.
         pushContainerBox(containerTitle(i, entry), `${entry.loopType ?? 'loop'}`, [labelInnerStep(entry.step)], last);
         break;
       }

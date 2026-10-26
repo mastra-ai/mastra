@@ -158,6 +158,7 @@ export default defineConfig({
       files: ['**/*.{ts,tsx}'],
       rules: {
         'typescript/no-meaningless-void-operator': 'error',
+        'typescript/no-unnecessary-template-expression': 'error',
         'typescript/prefer-reduce-type-parameter': 'error',
         'typescript/no-floating-promises': 'error',
         'typescript/no-misused-promises': ['error', { checksVoidReturn: false }],
