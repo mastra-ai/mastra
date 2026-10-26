@@ -7,7 +7,7 @@ description: "Browse Morph model IDs, capabilities, context windows, and pricing
 
 # <img src="https://models.dev/logos/morph.svg" alt="Morph logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Morph
 
-Access 3 Morph models through Mastra's model router. Authentication is handled automatically using the `MORPH_API_KEY` environment variable.
+Access 11 Morph models through Mastra's model router. Authentication is handled automatically using the `MORPH_API_KEY` environment variable.
 
 Learn more in the [Morph documentation](https://docs.morphllm.com).
 
@@ -58,14 +58,110 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.55
   },
   {
+    "model": "morph/morph-dsv41flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.12,
+    "outputCost": 0.8
+  },
+  {
+    "model": "morph/morph-dsv41flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.12,
+    "outputCost": 0.8
+  },
+  {
+    "model": "morph/morph-dsv4flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.141953125,
+    "outputCost": 0.399625
+  },
+  {
+    "model": "morph/morph-glm52-744b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 1.19,
+    "outputCost": 6
+  },
+  {
+    "model": "morph/morph-glm53-744b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 1.19,
+    "outputCost": 6
+  },
+  {
+    "model": "morph/morph-glm53flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.2,
+    "outputCost": 0.7
+  },
+  {
+    "model": "morph/morph-kimik3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 2.5,
+    "outputCost": 14
+  },
+  {
+    "model": "morph/morph-kimik3-fast",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 6,
+    "outputCost": 22.5
+  },
+  {
     "model": "morph/morph-v3-fast",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 16000,
-    "maxOutput": 16000,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
     "inputCost": 0.8,
     "outputCost": 1.2
   },
@@ -76,8 +172,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 32000,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
     "inputCost": 0.9,
     "outputCost": 1.9
   }

@@ -43,6 +43,7 @@ const DISPLAY: Record<string, string> = {
   linear: 'Linear',
   'microsoft-teams': 'Microsoft Teams',
   notion: 'Notion',
+  'one-drive': 'OneDrive',
   openai: 'OpenAI',
   posthog: 'PostHog',
   resend: 'Resend',

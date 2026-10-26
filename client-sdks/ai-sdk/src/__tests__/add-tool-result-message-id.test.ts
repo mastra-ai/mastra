@@ -53,7 +53,7 @@ function createClientToolModel() {
               toolCallType: 'function',
               toolCallId: 'call-clipboard-1',
               toolName: 'get_clipboard',
-              args: '{}',
+              input: '{}',
             },
             {
               type: 'finish',
