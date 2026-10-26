@@ -1,12 +1,8 @@
 import { MastraFGAPermissions } from '../../auth/ee';
 import type { MastraServerCache } from '../../cache/base';
-import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
 import { withAck } from '../../events/acking-callback';
-import { CachingPubSub } from '../../events/caching-pubsub';
-import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
-import { isRunLocalTopic } from '../../events/topics';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
@@ -42,6 +38,8 @@ import { SaveQueueManager } from '../save-queue';
 import type { AgentScopesSnapshot } from '../scopes';
 import { applyResolvedAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
 import type { AgentSignalInput } from '../signals';
+import { AgentStreamBus } from '../streams/bus';
+import type { AgentStreamsConfig } from '../streams/types';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
@@ -519,7 +517,7 @@ export interface DurableAgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
-> {
+> extends AgentStreamsConfig {
   /**
    * The Agent to wrap with durable execution capabilities.
    * All agent methods (getModel, listTools, etc.) delegate to this agent.
@@ -537,37 +535,10 @@ export interface DurableAgentConfig<
   name?: string;
 
   /**
-   * PubSub instance for streaming events.
-   * Optional - if not provided, defaults to EventEmitterPubSub.
-   */
-  pubsub?: PubSub;
-
-  /**
-   * Cache instance for storing stream events.
-   * Enables resumable streams - clients can disconnect and reconnect
-   * without missing events.
-   *
-   * - If not provided: Inherits from Mastra instance, or uses InMemoryServerCache
-   * - If provided: Uses the provided cache backend (e.g., Redis)
-   * - If set to `false`: Disables caching (streams are not resumable)
-   */
-  cache?: MastraServerCache | false;
-
-  /**
    * Maximum steps for the agentic loop.
    * Defaults to the workflow default if not specified.
    */
   maxSteps?: number;
-
-  /**
-   * Timeout in milliseconds before automatic cleanup of registry entries
-   * after a stream finishes or errors. This provides a grace period for
-   * late observers to access the stream.
-   *
-   * Defaults to 30000 (30 seconds).
-   * Set to 0 to disable auto-cleanup (manual cleanup() required).
-   */
-  cleanupTimeoutMs?: number;
 
   /**
    * Overrides the snapshot-persistence policy for this agent's durable
@@ -592,18 +563,6 @@ export interface DurableAgentConfig<
    * this option with a warning.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
-
-  /**
-   * Per-topic opt-out of the replay cache.
-   *
-   * Return `false` to publish a topic straight through to the underlying
-   * PubSub without recording it in the cache. Subscribers of that topic then
-   * receive live events only and cannot resume from an offset. Use this to
-   * trade replay for minimum publish latency on hot topics when the cache is
-   * remote (e.g. cross-region Redis). Run-local topics are always excluded,
-   * regardless of this option.
-   */
-  shouldCache?: (topic: string) => boolean;
 }
 
 /**
@@ -831,20 +790,8 @@ export class DurableAgent<
   /** Maximum steps for the agentic loop */
   readonly #maxSteps?: number;
 
-  /** Inner pubsub (before CachingPubSub wrapper) */
-  #innerPubsub: PubSub;
-
-  /** Whether the user explicitly provided a pubsub (don't override with mastra.pubsub) */
-  readonly #hasCustomPubsub: boolean;
-
-  /** User-provided cache (undefined = inherit from mastra, false = disabled) */
-  #cacheConfig: MastraServerCache | false | undefined;
-
-  /** Resolved cache instance (lazily initialized) */
-  #resolvedCache: MastraServerCache | null = null;
-
-  /** CachingPubSub instance (lazily initialized) */
-  #cachingPubsub: PubSub | null = null;
+  /** The resumable stream layer run frames are published on */
+  readonly #streams: AgentStreamBus;
 
   /** Mastra instance (set via __setMastra when registered) */
   #mastra: Mastra | undefined;
@@ -854,12 +801,6 @@ export class DurableAgent<
   /** The stream segment (stream() or resume()) that currently owns each run id's shared state. */
   #segmentOwner = new Map<string, symbol>();
   #timedOutExecutions = new WeakSet<ExecutionFence>();
-
-  /** Timeout for auto-cleanup after stream finishes (0 = disabled) */
-  readonly #cleanupTimeoutMs: number;
-
-  /** User-supplied per-topic cache policy (see DurableAgentConfig.shouldCache) */
-  readonly #shouldCache: ((topic: string) => boolean) | undefined;
 
   /**
    * User-supplied snapshot-persistence policy
@@ -904,11 +845,14 @@ export class DurableAgent<
     this.#wrappedAgent = agent;
     this.#runRegistry = new ExtendedRunRegistry();
     this.#maxSteps = maxSteps;
-    this.#hasCustomPubsub = !!pubsub;
-    this.#innerPubsub = pubsub ?? new EventEmitterPubSub();
-    this.#cacheConfig = cache;
-    this.#cleanupTimeoutMs = cleanupTimeoutMs ?? 30_000;
-    this.#shouldCache = shouldCache;
+    this.#streams = new AgentStreamBus(
+      { pubsub, cache, cleanupTimeoutMs, shouldCache },
+      {
+        getMastra: () => this.#mastra,
+        usesSharedRunLog: () => this.resolveWorkflowEngine() === 'evented',
+        warn: message => this.logger.warn(`[DurableAgent:${this.id}] ${message}`),
+      },
+    );
     this.userShouldPersistSnapshot = shouldPersistSnapshot;
 
     // Keep processor access on the wrapped agent, but dispatch through this wrapper.
@@ -965,8 +909,7 @@ export class DurableAgent<
    * Lazily initialized to allow inheriting from Mastra.
    */
   get cache(): MastraServerCache | null {
-    this.#ensurePubsubInitialized();
-    return this.#resolvedCache;
+    return this.#streams.cache;
   }
 
   /**
@@ -974,8 +917,7 @@ export class DurableAgent<
    * Returns CachingPubSub if caching is enabled, otherwise the inner pubsub.
    */
   get pubsub(): PubSub {
-    this.#ensurePubsubInitialized();
-    return this.#cachingPubsub!;
+    return this.#streams.pubsub;
   }
 
   /**
@@ -1717,100 +1659,6 @@ export class DurableAgent<
     };
   }
 
-  /**
-   * Ensure pubsub and cache are initialized.
-   * Called lazily on first access to allow inheriting cache from Mastra.
-   */
-  #ensurePubsubInitialized(): void {
-    if (this.#cachingPubsub) return;
-
-    if (this.#cacheConfig === false) {
-      // Caching explicitly disabled. Run frames still travel on the run bus
-      // (the Mastra transport on the evented engine, where steps publish from
-      // any worker), so caching off must not also change the route.
-      this.#cachingPubsub = this.#runStreamBus();
-      this.#resolvedCache = null;
-      return;
-    }
-
-    // Which wrapper we may reuse depends on the run bus, not on the agent's own
-    // pubsub: on the evented engine run frames live on the Mastra bus, so an
-    // agent-level CachingPubSub is no longer the wrapper in play there.
-    const runStreamBus = this.#runStreamBus();
-
-    if (runStreamBus instanceof CachingPubSub) {
-      // The bus a run's frames live on is already wrapped. This happens when the
-      // user passes a CachingPubSub to `new Mastra({ pubsub })` (or to the agent
-      // directly, standalone). Wrapping it again in a second CachingPubSub over
-      // the same cache would store every frame twice — once per layer, with
-      // consecutive indices — so observe()/replay would deliver the buffered
-      // prefix doubled (issue #18148). Reuse the instance instead.
-      this.#cachingPubsub = runStreamBus;
-      this.#resolvedCache = runStreamBus.getCache();
-      if (this.#shouldCache) {
-        // The existing wrapper owns the caching policy; a per-agent filter
-        // cannot be applied without double-wrapping, so it is ignored.
-        this.logger.warn(
-          `[DurableAgent:${this.id}] 'shouldCache' is ignored because the configured pubsub is already a CachingPubSub. Pass 'shouldCache' to that CachingPubSub instead.`,
-        );
-      }
-      return;
-    }
-
-    // Resolve cache: user-provided > mastra's cache > default InMemoryServerCache
-    let resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? new InMemoryServerCache();
-
-    // On the evented engine, step frames are appended by the StepExecutor,
-    // which only knows `mastra.serverCache`. A different agent cache would
-    // give the same run two logs with independent indices: an observer
-    // advancing on lifecycle events could then drop step frames whose
-    // indices sit below its cursor. One run means one log, so the shared
-    // cache wins for run frames. `serverCache` is checked first so a no-op
-    // comparison never resolves the engine: resolving before registration
-    // would memoize 'default' while `#mastra` is still undefined.
-    const serverCache = this.#mastra?.serverCache;
-    if (serverCache && resolvedCache !== serverCache && this.resolveWorkflowEngine() === 'evented') {
-      this.logger.warn(
-        `[DurableAgent:${this.id}] 'cache' is not used for evented run frames; they use mastra.serverCache so step frames and observers share one log.`,
-      );
-      resolvedCache = serverCache;
-    }
-
-    this.#resolvedCache = resolvedCache;
-    // Run-local topics must never reach the cache. This wrapper sits *above*
-    // the `mastra.pubsub` proxy that tags publishes `localOnly`, so that flag
-    // is set too late for `CachingPubSub` to observe it — the policy has to be
-    // declared here instead. Without it, per-run `workflow.events.v2.*` watch
-    // events (cumulative step results, often megabytes) are RPUSHed into a
-    // shared store that no other instance can ever read from (issue #20646).
-    const userShouldCache = this.#shouldCache;
-    this.#cachingPubsub = new CachingPubSub(runStreamBus, resolvedCache, {
-      shouldCache: topic => !isRunLocalTopic(topic) && (userShouldCache?.(topic) ?? true),
-    });
-  }
-
-  /**
-   * The bus a run's frames live on.
-   *
-   * On the evented engine a run's frames must be on the Mastra-level bus: each
-   * step executes on whichever worker claims it and publishes there, so an
-   * observer on the agent's own bus would never see them. Using one bus also
-   * means one cache log per run — the property offset replay depends on.
-   *
-   * The default engine runs every step in this process and publishes through
-   * this wrapper, so an agent-level pubsub keeps carrying its run frames.
-   */
-  #runStreamBus(): PubSub {
-    const shared = this.#mastra?.pubsub;
-    if (!shared || this.resolveWorkflowEngine() !== 'evented') return this.#innerPubsub;
-    if (this.#hasCustomPubsub && shared.__rawBus() !== this.#innerPubsub.__rawBus()) {
-      this.logger.warn(
-        `[DurableAgent:${this.id}] Evented run frames use the Mastra pubsub, not the agent-level 'pubsub', because evented steps publish there.`,
-      );
-    }
-    return shared;
-  }
-
   // ===========================================================================
   // Delegate to wrapped agent
   // ===========================================================================
@@ -1860,7 +1708,7 @@ export class DurableAgent<
    * Returns 0 if auto-cleanup is disabled.
    */
   get cleanupTimeoutMs(): number {
-    return this.#cleanupTimeoutMs;
+    return this.#streams.cleanupTimeoutMs;
   }
 
   // ===========================================================================
@@ -2245,11 +2093,8 @@ export class DurableAgent<
       agent: innerFork,
       id: this.id,
       name: this.name,
-      pubsub: this.#hasCustomPubsub ? this.#innerPubsub : undefined,
-      cache: this.#cacheConfig,
+      ...this.#streams.forkConfig,
       maxSteps: this.#maxSteps,
-      cleanupTimeoutMs: this.#cleanupTimeoutMs,
-      shouldCache: this.#shouldCache,
       shouldPersistSnapshot: this.userShouldPersistSnapshot,
     });
 
@@ -2265,7 +2110,7 @@ export class DurableAgent<
     if (this.#mastra) {
       fork.#mastra = this.#mastra;
     }
-    fork.#innerPubsub = this.#innerPubsub;
+    fork.#streams.adoptInnerPubsub(this.#streams);
     fork.source = this.source;
     // `_agentNetworkAppend` is a private base-class flag; copy it via an indexed
     // cast (the same idiom the base uses in `toRawConfig()`) so the fork mirrors
@@ -3161,8 +3006,8 @@ export class DurableAgent<
 
     // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
+      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
     };
 
     // Whether this caller's stream closes at the suspension boundary. Defaults
@@ -3878,8 +3723,8 @@ export class DurableAgent<
     };
 
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
+      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
     };
 
     const globalEntry = getRunRegistryEntry(runId, this.#mastra);
@@ -4398,8 +4243,8 @@ export class DurableAgent<
       cleanupOwnedRegistryState();
     };
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
+      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
     };
 
     let workflow: ReturnType<DurableAgent<TAgentId, TTools, TOutput>['getWorkflow']>;
@@ -4759,13 +4604,13 @@ export class DurableAgent<
 
     // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
+      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
       autoCleanupTimer = setTimeout(() => {
         if (!cleanedUp) {
           releaseRunState();
           cleanedUp = true;
         }
-      }, this.#cleanupTimeoutMs);
+      }, this.#streams.cleanupTimeoutMs);
     };
 
     // 3. Create the durable agent stream (subscribes to pubsub)
@@ -5186,7 +5031,7 @@ export class DurableAgent<
             // terminal event has been delivered; suspended runs never get here.
             let releaseAfterTerminal: (() => void) | undefined;
             const onTerminal = () => {
-              if (this.#cleanupTimeoutMs === 0) setTimeout(() => releaseAfterTerminal?.(), 0);
+              if (this.#streams.cleanupTimeoutMs === 0) setTimeout(() => releaseAfterTerminal?.(), 0);
             };
             const { cleanup } = await this.recover(targetRunId, {
               onError: ({ error }) => {
@@ -5527,8 +5372,8 @@ export class DurableAgent<
     };
 
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
+      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
     };
 
     const completeTerminalLifecycle = () => {
@@ -6133,26 +5978,6 @@ export class DurableAgent<
     // Also set on wrapped agent
     this.#wrappedAgent.__registerMastra(mastra);
 
-    // With caching disabled, a bus resolved before registration is the
-    // pre-registration run bus; drop it so it is re-resolved against Mastra.
-    if (this.#cacheConfig === false && this.#cachingPubsub) {
-      this.#cachingPubsub = null;
-      this.#resolvedCache = null;
-    }
-
-    // Wire mastra.pubsub as the inner pubsub if user didn't provide a custom one.
-    // This must happen before CachingPubSub initialization.
-    if (!this.#hasCustomPubsub && !this.#cachingPubsub) {
-      this.#innerPubsub = mastra.pubsub;
-    }
-
-    // If the caching wrapper was built before registration it is bound to the
-    // pre-registration bus (the default EventEmitterPubSub). Durable run frames
-    // belong on the shared bus, so rebuild the wrapper there. Registration runs
-    // before the agent is used, so nothing is subscribed to the old instance.
-    if (this.#cachingPubsub instanceof CachingPubSub && this.#cachingPubsub.getInner() !== mastra.pubsub) {
-      this.#cachingPubsub = null;
-      this.#resolvedCache = null;
-    }
+    this.#streams.registerMastra(mastra.pubsub);
   }
 }
