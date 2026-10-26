@@ -69,6 +69,7 @@ function makeTools(probe: Probe, counterFile: string) {
       inputSchema: z.object({}),
       execute: async (_input, context) => {
         await new Promise<void>(resolve => context.abortSignal?.addEventListener('abort', () => resolve()));
+        probe.runs.push({ tool: 'hang', resumeData: 'aborted' });
         return 'stopped';
       },
     }),
@@ -273,6 +274,31 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       { tool: 'approve', resumeData: undefined },
       { tool: 'approve', resumeData: { approver: 'bob' } },
     ]);
+  });
+
+  // Fails until core aborts a local run whose row another process cancelled
+  // (daniel/fix-bg-task-cross-process-cancel): B's cancel marks the row cancelled, but the cancel
+  // event never reaches A, and A's lease renewal ignores a cancelled row, so the run goes on.
+  it.fails('stops a run on one instance when another instance cancels its task', async () => {
+    const a = await instance({ tools: { hang: 'always' } });
+    const b = await instance({ tools: { hang: 'always' } });
+    const taskId = await call(a.url, 'hang');
+    const onB = await requester(b.url);
+    await waitFor(onB, taskId, 'working');
+    await sleep(500);
+    await onB.cancel(taskId);
+    try {
+      expect(await onB.get(taskId)).toMatchObject({ status: 'cancelled' });
+      // Within one lease A's run has been aborted.
+      await sleep(LEASE_MS);
+      expect(probe.runs.filter(run => run.tool === 'hang')).toEqual([{ tool: 'hang', resumeData: 'aborted' }]);
+    } finally {
+      // `drain` skips the cancelled row, so stop A's run while storage is still open.
+      const [row] = (await rows(a.mastra)).filter(r => r.toolName === 'hang');
+      await a.mastra.backgroundTaskManager!.shutdown();
+      const workflow = a.mastra.__getInternalWorkflow('__background-task');
+      for (let i = 0; i < 100 && (await workflow.getWorkflowRunById(row!.id)); i++) await sleep(20);
+    }
   });
 
   describe.each([
