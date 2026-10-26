@@ -435,6 +435,11 @@ describe('Datasets Handlers', () => {
           condition: 'an unknown modelSettings key',
           body: { ...agent, agentOverrides: { defaultOptions: { modelSettings: { temprature: 0.2 } } } },
         },
+        { condition: 'an unknown agentOverrides key', body: { ...agent, agentOverrides: { instruction: 'x' } } },
+        {
+          condition: 'an unknown defaultOptions key',
+          body: { ...agent, agentOverrides: { defaultOptions: { max_steps: 2 } } },
+        },
         { condition: 'maxSteps 0', body: { ...agent, agentOverrides: { defaultOptions: { maxSteps: 0 } } } },
         { condition: 'empty instructions', body: { ...agent, agentOverrides: { instructions: '' } } },
         {

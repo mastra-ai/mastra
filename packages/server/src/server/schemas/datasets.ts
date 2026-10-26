@@ -478,8 +478,10 @@ export const triggerExperimentBodySchema = z
               .optional(),
             activeTools: z.array(z.string()).optional(),
           })
+          .strict()
           .optional(),
       })
+      .strict()
       .optional()
       .describe(
         'Agent config tweaks (instructions, model, execution options) for this experiment only. Applied per call; the agent itself is not changed. Recorded on the experiment as metadata.agentOverrides.',
