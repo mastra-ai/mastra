@@ -1314,6 +1314,27 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   /**
+   * The public HTTPS URL for a port inside the sandbox, so a server running
+   * there can be reached from outside. Anyone with the URL can reach that
+   * port, so don't share it with people who shouldn't see what it serves.
+   * The sandbox control port is refused.
+   */
+  async getPortUrl(port: number): Promise<string> {
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+      throw new RangeError(`Port must be an integer from 1 to 65535, got ${port}`);
+    }
+    await this.ensureRunning();
+    const lease = await this._ensureLease();
+    const endpoint = new URL(lease.wsEndpoint);
+    const [controlPort, ...rest] = endpoint.hostname.split('-');
+    if (lease.provider !== 'e2b' || controlPort === undefined || !/^\d+$/.test(controlPort)) {
+      throw new Error(`Port URLs aren't available for ${lease.provider} sandboxes`);
+    }
+    if (String(port) === controlPort) throw new Error(`Port ${port} is the sandbox control port`);
+    return `https://${port}-${rest.join('-')}`;
+  }
+
+  /**
    * `executeCommand`, optionally sent at most once. With `once`, a transport
    * failure after the command may have started is thrown instead of retried
    * (on the lease or over the private network), so a script that changes files

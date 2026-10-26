@@ -106,6 +106,7 @@ import { isValidGitRef } from './sandbox/git-ref.js';
 import { LocalFactorySandbox } from './sandbox/local-factory-sandbox.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
+import { peekSessionSandbox } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
@@ -1683,6 +1684,11 @@ export class MastraFactory {
                     createFactorySandboxTools(scope, {
                       sessions: sourceControlSessions,
                       resetSandbox: input => sessionRetirement.resetSessionSandbox(input),
+                      findSandbox: async ({ sourceControl, orgId, sessionId }) => {
+                        const session = await sourceControl.sessions.getBySessionId(sessionId);
+                        if (!session || session.orgId !== orgId) return undefined;
+                        return peekSessionSandbox(session.id)?.sandbox;
+                      },
                     }),
                   );
                 }

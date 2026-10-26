@@ -10,6 +10,16 @@ export interface FactorySandboxToolDependencies {
   sessions: Pick<SourceControlSessionLookup, 'getSourceControlBySessionId'>;
   /** `SessionRetirementCoordinator.resetSessionSandbox`. */
   resetSandbox: (input: RecreateSessionSandboxInput) => Promise<'reset' | 'not-found' | 'not-here'>;
+  /** The session's running sandbox, if this process has one. */
+  findSandbox: (input: RecreateSessionSandboxInput) => Promise<object | undefined>;
+}
+
+interface PortUrlSandbox {
+  getPortUrl(port: number): Promise<string>;
+}
+
+function hasPortUrl(sandbox: object): sandbox is PortUrlSandbox {
+  return typeof (sandbox as Partial<PortUrlSandbox>).getPortUrl === 'function';
 }
 
 /** Tools a session uses on its own sandbox. Every session with a sandbox gets them. */
@@ -46,5 +56,27 @@ export function createFactorySandboxTools(
       return { recreated: true, next: 'Your next command starts a fresh sandbox.' };
     },
   });
-  return { factory_recreate_sandbox: recreate };
+
+  const portUrl = createTool({
+    id: 'factory_sandbox_port_url',
+    description: [
+      'Get the public URL for a port in your sandbox, so you or the person you are working with can open a server you started there (a dev server, a preview, an API).',
+      'Start the server first and bind it to 0.0.0.0, not 127.0.0.1. Anyone with the URL can reach that port, so only share it with the person you are working with.',
+    ].join(' '),
+    inputSchema: z
+      .object({
+        port: z.number().int().min(1).max(65_535).describe('The port the server listens on inside the sandbox.'),
+      })
+      .strict(),
+    execute: async ({ port }) => {
+      const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
+      const sandbox =
+        sourceControl && (await deps.findSandbox({ sourceControl, orgId: scope.orgId, sessionId: scope.sessionId }));
+      if (!sandbox) throw new Error('This session has no sandbox running yet. Run a command to start one.');
+      if (!hasPortUrl(sandbox)) throw new Error("This session's sandbox can't expose ports.");
+      return { url: await sandbox.getPortUrl(port) };
+    },
+  });
+
+  return { factory_recreate_sandbox: recreate, factory_sandbox_port_url: portUrl };
 }

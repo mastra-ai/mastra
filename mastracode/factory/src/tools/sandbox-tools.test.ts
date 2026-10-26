@@ -23,6 +23,7 @@ function recreateTool(outcome: 'reset' | 'not-found' | 'not-here', found = true)
   const tool = createFactorySandboxTools(scope, {
     sessions: { getSourceControlBySessionId },
     resetSandbox,
+    findSandbox: vi.fn(async () => undefined),
   }).factory_recreate_sandbox!;
   const run = () =>
     (tool.execute as (input: { reason: string }, context: unknown) => Promise<unknown>)(
@@ -56,5 +57,42 @@ describe('factory_recreate_sandbox', () => {
     const { run } = recreateTool(outcome, found);
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     await expect(run()).rejects.toThrow(message);
+  });
+});
+
+function portUrlTool(sandbox: object | undefined, found = true) {
+  const findSandbox = vi.fn(async () => sandbox);
+  const tool = createFactorySandboxTools(scope, {
+    sessions: { getSourceControlBySessionId: vi.fn(async () => (found ? sourceControl : null)) },
+    resetSandbox: vi.fn(async () => 'reset' as const),
+    findSandbox,
+  }).factory_sandbox_port_url!;
+  const run = (port: number) =>
+    (tool.execute as (input: { port: number }, context: unknown) => Promise<unknown>)({ port }, {});
+  return { tool, run, findSandbox };
+}
+
+describe('factory_sandbox_port_url', () => {
+  it("returns the public URL from the calling session's own sandbox", async () => {
+    const getPortUrl = vi.fn(async (port: number) => `https://${port}-e2b-sbx-1.e2b.app`);
+    const { run, findSandbox } = portUrlTool({ getPortUrl });
+
+    await expect(run(3000)).resolves.toEqual({ url: 'https://3000-e2b-sbx-1.e2b.app' });
+    expect(findSandbox).toHaveBeenCalledWith({ sourceControl, orgId: 'org-1', sessionId: 'session-1' });
+    expect(getPortUrl).toHaveBeenCalledWith(3000);
+  });
+
+  it('tells the agent the URL is public', () => {
+    const { tool } = portUrlTool(undefined);
+    expect(tool.description).toContain('Anyone with the URL can reach that port');
+  });
+
+  it.each([
+    ['no session row', undefined, false, 'This session has no sandbox running yet.'],
+    ['no running sandbox', undefined, true, 'This session has no sandbox running yet.'],
+    ["a sandbox that can't expose ports", {}, true, "This session's sandbox can't expose ports."],
+  ])('reports %s as an error', async (_case, sandbox, found, message) => {
+    const { run } = portUrlTool(sandbox, found);
+    await expect(run(3000)).rejects.toThrow(message);
   });
 });

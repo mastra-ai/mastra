@@ -4002,3 +4002,58 @@ describe('PlatformSandbox', () => {
     });
   });
 });
+
+describe('PlatformSandbox.getPortUrl', () => {
+  beforeEach(() => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function startedSandbox(lease: Response) {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(lease);
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+    return { sandbox, fetchMock };
+  }
+
+  it('returns the public URL for a port on an E2B sandbox', async () => {
+    const { sandbox, fetchMock } = startedSandbox(e2bLeaseResponse());
+    await sandbox._start();
+
+    await expect(sandbox.getPortUrl(3000)).resolves.toBe('https://3000-e2b-sbx-1.e2b.app');
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/exec-lease',
+    );
+  });
+
+  it('refuses the sandbox control port', async () => {
+    const { sandbox } = startedSandbox(e2bLeaseResponse());
+    await sandbox._start();
+
+    await expect(sandbox.getPortUrl(49983)).rejects.toThrow('Port 49983 is the sandbox control port');
+  });
+
+  it.each([0, -1, 65_536, 3000.5])('rejects port %s before calling the platform', async port => {
+    const { sandbox, fetchMock } = startedSandbox(e2bLeaseResponse());
+
+    await expect(sandbox.getPortUrl(port)).rejects.toThrow(RangeError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("explains that sandboxes without public hosts can't expose ports", async () => {
+    const { sandbox } = startedSandbox(leaseResponse());
+    await sandbox._start();
+
+    await expect(sandbox.getPortUrl(3000)).rejects.toThrow("Port URLs aren't available for railway sandboxes");
+  });
+});
