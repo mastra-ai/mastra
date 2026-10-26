@@ -37,7 +37,7 @@ describe('FactoryChannelReplyProcessor', () => {
     const text = instruction(channelContext());
     expect(text).toMatch(/reply first with one short line that says what you are about to do/);
     expect(text).not.toContain('↗');
-    expect(text).not.toMatch(/link/i);
+    expect(text).not.toMatch(/session link|Open session/i);
   });
 
   it('points a run with the reply tool at the tool, and says staying quiet means not calling it', () => {
@@ -53,6 +53,19 @@ describe('FactoryChannelReplyProcessor', () => {
     expect(text).toContain('Post to that thread with `reply_in_thread`.');
     expect(text).toContain("don't post an opener or progress there");
     expect(text).not.toContain('Only messages you send with');
+  });
+
+  it('tells every channel run to link the references it mentions', () => {
+    const runs = [
+      instruction(channelContext()),
+      instruction(channelContext(), { reply_in_thread: {} }),
+      instruction(new RequestContext(), { reply_in_thread: {} }),
+    ];
+    for (const text of runs) {
+      expect(text).toContain('as a markdown link to its page');
+      expect(text).toContain('[#28467](https://github.com/<owner>/<repo>/pull/28467)');
+      expect(text).toContain("don't guess one");
+    }
   });
 
   it('adds the instruction once across steps', () => {
