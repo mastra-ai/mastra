@@ -1576,6 +1576,33 @@ describe('DurableAgent.recover(runId) tracing', () => {
     expect(recoveredCall.attributes.provider).toBe('mock-provider');
   });
 
+  it('names the persisted first candidate on the recovered span when the live resolver no longer returns it', async () => {
+    // The recovered step still tries the persisted head first, rebuilt from its
+    // serialized config, so the span must name it rather than the live head.
+    let dropped = false;
+    const baseAgent = new Agent({
+      id: 'agent-traced',
+      name: 'agent-traced',
+      instructions: 'x',
+      model: (() => {
+        const a = { id: 'exp-a', model: makeMockModel('model-a') };
+        const b = { id: 'exp-b', model: makeMockModel('model-b') };
+        return dropped ? [b] : [a, b];
+      }) as any,
+    });
+    const modelList = serializeModelList((await baseAgent.getModelList())!);
+    expect(modelList.map(m => m.id)).toEqual(['exp-a', 'exp-b']);
+
+    dropped = true;
+    const { instance } = await recoverTraced({}, { agent: baseAgent, modelList });
+
+    const recoveredCall = vi
+      .mocked(instance.startSpan)
+      .mock.calls.map(([opts]) => opts as any)
+      .find(opts => opts.name?.includes('(recovered)'));
+    expect(recoveredCall.attributes).toMatchObject({ model: 'model-a', provider: 'mock-provider' });
+  });
+
   // Stores persist only span-end events, so the crashed process's spans must be
   // ended here or the recovered span's parent never lands.
   it('ends the original spans the crashed process left open as interrupted', async () => {
