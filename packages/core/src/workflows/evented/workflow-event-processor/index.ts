@@ -163,14 +163,13 @@ export class WorkflowEventProcessor extends EventProcessor {
   private parentChildRelationships: Map<string, string> = new Map();
   // This processor's single ungrouped subscription to WORKFLOW_CONTROL_TOPIC,
   // opened on its first step and held for the processor's lifetime. See
-  // ensureControlSubscription. `state`: 'pending' while subscribe() is in
-  // flight, 'ready' once it resolved, 'checked' once a step started after it
-  // was ready (from then on every abort is either delivered or recorded in
-  // missedControlAborts).
+  // ensureControlSubscription. `isReady` flips once subscribe() resolved;
+  // from then on every abort is either delivered or recorded in
+  // missedControlAborts.
   private controlSubscription?: {
     pubsub: PubSub;
     ready: Promise<boolean>;
-    state: 'pending' | 'ready' | 'checked';
+    isReady: boolean;
   };
   // Runs whose broadcast abort arrived while this processor had no step of
   // them in flight — possibly because a step's event was already past the
@@ -413,14 +412,8 @@ export class WorkflowEventProcessor extends EventProcessor {
    *
    * A failed subscribe is not fatal — the step falls back to the storage
    * re-check and the next step retries the subscribe.
-   *
-   * @returns Whether the step must re-check storage for a persisted cancel:
-   * a broadcast published while the subscribe was in flight, or before it
-   * failed, is never delivered. Steps that waited on the subscribe and the
-   * first step after it is ready check; later steps rely on the broadcast and
-   * {@link missedControlAborts}.
    */
-  private async ensureControlSubscription(): Promise<boolean> {
+  private async ensureControlSubscription(): Promise<void> {
     const pubsub = this.mastra.pubsub;
     if (this.controlSubscription?.pubsub !== pubsub) {
       const cb: EventCallback = (event, ack) => {
@@ -440,18 +433,24 @@ export class WorkflowEventProcessor extends EventProcessor {
           return false;
         },
       );
-      const subscription = { pubsub, ready, state: 'pending' as 'pending' | 'ready' | 'checked' };
+      const subscription = { pubsub, ready, isReady: false };
       void ready.then(ok => {
-        if (ok && subscription.state === 'pending') subscription.state = 'ready';
+        subscription.isReady = ok;
       });
       this.controlSubscription = subscription;
     }
-    const subscription = this.controlSubscription;
-    if (subscription.state === 'checked') return false;
-    const waited = subscription.state === 'pending';
-    if (!(await subscription.ready)) return true;
-    if (!waited) subscription.state = 'checked';
-    return true;
+    await this.controlSubscription.ready;
+  }
+
+  /**
+   * Whether an abort broadcast published from now on reaches this processor:
+   * delivered to {@link abortRunFromControl}, which aborts it or records it in
+   * {@link missedControlAborts}. Taken by {@link #dispatch} before its state
+   * load, so a step whose event passed the guard while this was false
+   * re-checks storage: a cancel landing in between was never delivered.
+   */
+  private isControlSubscriptionReady(): boolean {
+    return this.controlSubscription?.pubsub === this.mastra.pubsub && this.controlSubscription.isReady;
   }
 
   /**
@@ -459,7 +458,8 @@ export class WorkflowEventProcessor extends EventProcessor {
    * the step's run and its ancestors) before this processor could hear its
    * broadcast — between the dispatch guard's state load and the step's
    * controller being registered (recorded in {@link missedControlAborts}), or
-   * before the control subscription was ready. Only called in those windows:
+   * before the control subscription was ready when the step was dispatched.
+   * Only called in those windows:
    * each call is a full snapshot read per run.
    * `EventedRun.cancel` persists `canceled` before publishing `workflow.cancel`,
    * so the processor handling that event finalizes the run, as with a
@@ -1619,7 +1619,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
-  protected async processWorkflowStepRun(args: ProcessorArgs) {
+  protected async processWorkflowStepRun(
+    args: ProcessorArgs,
+    { controlReadyAtDispatch = false }: { controlReadyAtDispatch?: boolean } = {},
+  ) {
     const {
       workflow,
       workflowId,
@@ -1908,10 +1911,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Control structures (sleep / sleepUntil / parallel / conditional) already
     // returned above; what remains is a leaf: a plain `step`, a declarative
     // `agent` / `tool` / `mapping` entry, or a `loop` / `foreach` body.
-    return this.runLeafStep({
-      ...args,
-      step: step as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
-    });
+    return this.runLeafStep(
+      {
+        ...args,
+        step: step as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
+      },
+      { controlReadyAtDispatch },
+    );
   }
 
   /**
@@ -1977,6 +1983,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     args: ProcessorArgs & {
       step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
     },
+    { controlReadyAtDispatch = false }: { controlReadyAtDispatch?: boolean } = {},
   ) {
     const {
       workflow,
@@ -2735,7 +2742,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
       releaseControl = this.retainRunsForStep(controlRuns.map(r => r.runId));
       try {
-        let recheck = await this.ensureControlSubscription();
+        await this.ensureControlSubscription();
+        let recheck = !controlReadyAtDispatch;
         for (const { runId: id } of controlRuns) {
           if (this.missedControlAborts.delete(id)) recheck = true;
         }
@@ -4429,6 +4437,9 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     const workflowData = { ...(data as Omit<ProcessorArgs, 'workflow'>), eventId: event.id };
 
+    // Taken before the state load below: see isControlSubscriptionReady.
+    const controlReadyAtDispatch = type === 'workflow.step.run' && this.isControlSubscriptionReady();
+
     const currentState = await this.loadData({
       workflowId: workflowData.workflowId,
       runId: workflowData.runId,
@@ -4565,10 +4576,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
         break;
       case 'workflow.step.run':
-        await this.processWorkflowStepRun({
-          workflow: workflowArg,
-          ...workflowData,
-        });
+        await this.processWorkflowStepRun(
+          {
+            workflow: workflowArg,
+            ...workflowData,
+          },
+          { controlReadyAtDispatch },
+        );
         break;
       case 'workflow.suspend':
         await this.processWorkflowSuspend({

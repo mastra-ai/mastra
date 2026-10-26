@@ -412,13 +412,30 @@ describe('evented workflow cancel with workers on both replicas', () => {
     );
   });
 
+  function createGate() {
+    let reach!: () => void;
+    let release!: () => void;
+    const reached = new Promise<void>(resolve => (reach = resolve));
+    const released = new Promise<void>(resolve => (release = resolve));
+    return {
+      reached,
+      release,
+      pass: async () => {
+        reach();
+        await released;
+      },
+    };
+  }
+  type Gate = ReturnType<typeof createGate>;
+
   /**
    * Pinned topology over one EventEmitterPubSub: 'other' runs every step, the owner handles every
-   * other event (so it consumes workflow.cancel and finalizes). `gate` delays the step-run handling
-   * on 'other' after the dispatch guard's state load; `gateControlSubscribe` delays its subscribe to
-   * workflow.control. Both resolve when released.
+   * other event (so it consumes workflow.cancel and finalizes). `gateControlSubscribe` delays the
+   * step replica's subscribe to workflow.control until `subscribeGate` is released;
+   * `gateNextStepRun` delays the next step-run handling on 'other' after the dispatch guard's
+   * state load until the returned gate is released.
    */
-  async function setupPinnedCancel(opts: { gateStepRun?: boolean; gateControlSubscribe?: boolean }) {
+  async function setupPinnedCancel(opts: { gateControlSubscribe?: boolean } = {}) {
     const storage = new MockStore();
     const pubsub = new EventEmitterPubSub();
     const holder: { current?: Blocker } = {};
@@ -450,60 +467,32 @@ describe('evented workflow cancel with workers on both replicas', () => {
       return (publish as any)(topic, event, ...rest);
     });
 
-    const gate = { armed: false, release: () => {}, reached: Promise.resolve() };
-    const arm = () => {
-      let reach!: () => void;
-      gate.reached = new Promise<void>(resolve => (reach = resolve));
-      const released = new Promise<void>(resolve => (gate.release = resolve));
-      gate.armed = true;
-      return async () => {
-        gate.armed = false;
-        reach();
-        await released;
-      };
-    };
+    const subscribeGate = opts.gateControlSubscribe ? createGate() : undefined;
+    let pendingSubscribeGate = subscribeGate;
+    const subscribe = pubsub.subscribe.bind(pubsub);
+    vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, cb, options) => {
+      if (topic === 'workflow.control' && pendingSubscribeGate) {
+        const gate = pendingSubscribeGate;
+        pendingSubscribeGate = undefined;
+        await gate.pass();
+      }
+      return subscribe(topic, cb, options);
+    });
 
-    if (opts.gateControlSubscribe) {
-      const wait = arm();
-      const subscribe = pubsub.subscribe.bind(pubsub);
-      vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, cb, options) => {
-        if (topic === 'workflow.control' && gate.armed) await wait();
-        return subscribe(topic, cb, options);
-      });
-    }
-    const armStepRun = () => arm();
-    let stepRunWait: (() => Promise<void>) | undefined;
-    if (opts.gateStepRun) {
-      const stepRun = WorkflowEventProcessor.prototype['processWorkflowStepRun'];
-      vi.spyOn(WorkflowEventProcessor.prototype as any, 'processWorkflowStepRun').mockImplementation(async function (
-        this: any,
-        args: any,
-      ) {
-        if (stepRunWait) {
-          const wait = stepRunWait;
-          stepRunWait = undefined;
-          await wait();
-        }
-        return stepRun.call(this, args);
-      });
-    }
+    let nextStepRun: Gate | undefined;
+    const stepRun = WorkflowEventProcessor.prototype['processWorkflowStepRun'];
+    vi.spyOn(WorkflowEventProcessor.prototype as any, 'processWorkflowStepRun').mockImplementation(async function (
+      this: any,
+      ...args: any[]
+    ) {
+      if (nextStepRun) {
+        const gate = nextStepRun;
+        nextStepRun = undefined;
+        await gate.pass();
+      }
+      return stepRun.apply(this, args as any);
+    });
 
-    await owner!.startWorkers();
-    await other!.startWorkers();
-    return {
-      workflow: workflows[0]!,
-      holder,
-      ends,
-      gate,
-      gateNextStepRun: () => (stepRunWait = armStepRun()),
-      stepProcessor: () => processors.get(other!),
-    };
-  }
-
-  async function cancelWhileGated(setup: Awaited<ReturnType<typeof setupPinnedCancel>>) {
-    const blocker = createBlocker();
-    setup.holder.current = blocker;
-    const run = await setup.workflow.createRun();
     const released: string[] = [];
     const retain = WorkflowEventProcessor.prototype['retainRunsForStep'];
     vi.spyOn(WorkflowEventProcessor.prototype as any, 'retainRunsForStep').mockImplementation(function (
@@ -516,49 +505,97 @@ describe('evented workflow cancel with workers on both replicas', () => {
         released.push(...runIds);
       };
     });
+
+    await owner!.startWorkers();
+    await other!.startWorkers();
+    return {
+      workflow: workflows[0]!,
+      holder,
+      ends,
+      released,
+      subscribeGate,
+      gateNextStepRun: () => (nextStepRun = createGate()),
+      stepProcessor: () => processors.get(other!),
+    };
+  }
+  type PinnedCancel = Awaited<ReturnType<typeof setupPinnedCancel>>;
+
+  async function runPlain(setup: PinnedCancel) {
+    const result = await withTimeout((await setup.workflow.createRun()).start({ inputData: { count: 0 } }));
+    expect(result === 'timed out' ? result : result.status).toBe('success');
+  }
+
+  // Release the gated step and check its run's own cancel was found before the step body started,
+  // so the step never ran, and the run settled canceled with one workflow.end.
+  async function expectStepSkipped(setup: PinnedCancel, gate: Gate, runId: string, blocker: Blocker) {
+    setup.holder.current = blocker;
+    gate.release();
+    await vi.waitFor(() => expect(setup.released).toContain(runId), { timeout: SETTLE_TIMEOUT_MS });
+    expect([...setup.stepProcessor().stepRunRefs.keys()]).toEqual([]);
+    expect(blocker.state.calls).toBe(0);
+    expect(setup.ends.get(runId)).toBe(1);
+    const stored = await setup.workflow.getWorkflowRunById(runId);
+    expect(stored?.status).toBe('canceled');
+  }
+
+  // Start a run whose step is held at `gate`, cancel it there, then release the step.
+  async function cancelWhileGated(setup: PinnedCancel, gate: Gate) {
+    const run = await setup.workflow.createRun();
     const resultPromise = run.start({ inputData: { count: 0 } });
-    await setup.gate.reached;
+    await gate.reached;
     await run.cancel();
     const result = await withTimeout(resultPromise);
     expect(result === 'timed out' ? result : result.status).toBe('canceled');
-    setup.gate.release();
-    // Wait until the step path for this run has retained and released it.
-    await vi.waitFor(() => expect(released).toContain(run.runId), { timeout: SETTLE_TIMEOUT_MS });
-    expect([...setup.stepProcessor().stepRunRefs.keys()]).toEqual([]);
-    // The run's own cancel is found before the step body starts, so the step never runs.
-    expect(blocker.state.calls).toBe(0);
-    expect(setup.ends.get(run.runId)).toBe(1);
-    const stored = await setup.workflow.getWorkflowRunById(run.runId);
-    expect(stored?.status).toBe('canceled');
+    await expectStepSkipped(setup, gate, run.runId, createBlocker());
   }
 
   // The abort broadcast is published while the step's processor is still subscribing to
   // workflow.control (`startFrom: 'latest'`), so it never reaches it; the storage re-check must.
   it('skips a step whose processor was not yet subscribed to workflow.control when the run was canceled', async () => {
     const setup = await setupPinnedCancel({ gateControlSubscribe: true });
-    await cancelWhileGated(setup);
+    await cancelWhileGated(setup, setup.subscribeGate!);
   });
 
   // The subscription is long established, but the abort lands after the dispatch guard loaded the
   // run's state and before the step retained the run, so the processor had no step of it to abort.
   it('skips a step whose cancel arrived after its dispatch check but before the step was retained', async () => {
-    const setup = await setupPinnedCancel({ gateStepRun: true });
-    // Two plain runs: the first waits on the subscribe, the second is the first after it is ready.
-    for (let i = 0; i < 2; i++) {
-      const result = await withTimeout((await setup.workflow.createRun()).start({ inputData: { count: 0 } }));
-      expect(result === 'timed out' ? result : result.status).toBe('success');
-    }
-    expect(setup.stepProcessor().controlSubscription.state).toBe('checked');
+    const setup = await setupPinnedCancel();
+    await runPlain(setup);
 
     const recheck = vi.spyOn(setup.stepProcessor(), 'abortRunsCanceledInStorage');
-    const plain = await withTimeout((await setup.workflow.createRun()).start({ inputData: { count: 0 } }));
-    expect(plain === 'timed out' ? plain : plain.status).toBe('success');
+    await runPlain(setup);
     // Steady state: no storage re-check for an uncancelled step.
     expect(recheck).not.toHaveBeenCalled();
 
-    setup.gateNextStepRun();
-    await cancelWhileGated(setup);
+    await cancelWhileGated(setup, setup.gateNextStepRun());
     expect(recheck).toHaveBeenCalledTimes(1);
+  });
+
+  // A step dispatched while the subscription is still pending is canceled before the subscription
+  // is ready, so its broadcast is neither delivered nor recorded. Other steps run after the
+  // subscription is ready; the held step must still re-check storage when it resumes.
+  it('skips a step dispatched while workflow.control was still subscribing, even after other steps ran', async () => {
+    const setup = await setupPinnedCancel({ gateControlSubscribe: true });
+    // Run A opens the subscription and waits on it.
+    const runA = (await setup.workflow.createRun()).start({ inputData: { count: 0 } });
+    await setup.subscribeGate!.reached;
+
+    // Run X's step passes the dispatch guard while the subscription is pending, then is held.
+    const stepGate = setup.gateNextStepRun();
+    const runX = await setup.workflow.createRun();
+    const resultX = runX.start({ inputData: { count: 0 } });
+    await stepGate.reached;
+    await runX.cancel();
+    const settledX = await withTimeout(resultX);
+    expect(settledX === 'timed out' ? settledX : settledX.status).toBe('canceled');
+
+    // The subscription becomes ready; A finishes and run C's step starts after it is ready.
+    setup.subscribeGate!.release();
+    const settledA = await withTimeout(runA);
+    expect(settledA === 'timed out' ? settledA : settledA.status).toBe('success');
+    await runPlain(setup);
+
+    await expectStepSkipped(setup, stepGate, runX.runId, createBlocker());
   });
 
   describe.each(PUBSUBS)('$name', pubsubFactory => {
