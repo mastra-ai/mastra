@@ -123,4 +123,52 @@ describe('Agent streams option', () => {
     // The inner agent never publishes on its own; its wrapper does.
     expect(agent.__getStreamBus()).toBeUndefined();
   });
+
+  describe('observe', () => {
+    const collect = async (stream: ReadableStream<any>) => {
+      const types: string[] = [];
+      let text = '';
+      for await (const chunk of stream) {
+        types.push(chunk.type);
+        if (chunk.type === 'text-delta') text += chunk.payload.text;
+      }
+      return { types, text };
+    };
+
+    it('replays a finished run of a plain agent from the cache', async () => {
+      const pubsub = new RecordingPubSub();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub, logger: false });
+      expect(agent.hasResumableStreams()).toBe(true);
+
+      const runId = await run(agent);
+      await waitForFinish(pubsub, runId);
+
+      const observed = await agent.observe(runId);
+      const { types, text } = await collect(observed.fullStream);
+      expect(text).toBe('Hello there.');
+      expect(types.at(-1)).toBe('finish');
+      expect(await observed.output.text).toBe('Hello there.');
+    });
+
+    it('follows a run from an offset', async () => {
+      const pubsub = new RecordingPubSub();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub, logger: false });
+
+      const runId = await run(agent);
+      await waitForFinish(pubsub, runId);
+
+      const all = await collect((await agent.observe(runId)).fullStream);
+      const tail = await collect((await agent.observe(runId, { offset: 3 })).fullStream);
+      expect(tail.types.length).toBeLessThan(all.types.length);
+      expect(tail.types.at(-1)).toBe('finish');
+    });
+
+    it('keeps throwing for a standalone agent without streams', async () => {
+      const agent = makeAgent();
+      expect(agent.hasResumableStreams()).toBe(false);
+      await expect(agent.observe('missing-run')).rejects.toThrow();
+    });
+  });
 });

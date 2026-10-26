@@ -1413,3 +1413,14 @@ export function isDurableAgentLike(obj: any): obj is DurableAgentLike {
     typeof obj.recoverActiveRuns === 'function'
   );
 }
+
+/**
+ * Whether runs of `agent` publish on their stream topic, so another reader can
+ * follow them with `observe()`. True for durable wrappers and for agents with
+ * streams on.
+ */
+export function hasResumableStreams(agent: any): boolean {
+  if (!agent) return false;
+  if (typeof agent.hasResumableStreams === 'function') return agent.hasResumableStreams();
+  return isDurableAgentLike(agent);
+}
