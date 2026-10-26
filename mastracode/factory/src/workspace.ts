@@ -1313,7 +1313,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             dir: entry.dir,
             branch: null,
             defaultBranch: repo.defaultBranch,
-            position: repo.position,
             setupStatus: repo.setupCommand ? 'ok' : 'skipped',
           };
           states.push(state);

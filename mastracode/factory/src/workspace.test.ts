@@ -145,6 +145,7 @@ import {
 } from './sandbox/session-sandbox.js';
 import {
   __clearSessionEnvironmentsForTests,
+  FactoryEnvironmentStateProcessor,
   peekSessionEnvironment,
   peekSessionEnvironmentTeardown,
 } from './session/environment-state-processor.js';
@@ -3709,7 +3710,6 @@ describe('factory environment sandbox context', () => {
             dir: '/home/user/hello',
             branch: 'factory/issue-7',
             defaultBranch: 'main',
-            position: 1,
             setupStatus: 'ok',
           },
           {
@@ -3717,11 +3717,37 @@ describe('factory environment sandbox context', () => {
             dir: '/home/user/docs',
             branch: 'factory/issue-7',
             defaultBranch: 'main',
-            position: 2,
             setupStatus: 'skipped',
           },
         ],
       });
+    });
+
+    it('numbers the environment signal from 1 even when stored link positions have gaps', async () => {
+      // Positions are a sort key over every project link, so a link left out of
+      // the environment still holds position 1 and the booted ones start at 2.
+      const { resolver } = environmentFixture({
+        links: [
+          { id: 'link-0', repositoryId: 'repository-0', slug: 'octocat/legacy', position: 1, inEnvironment: false },
+          { ...twoLinks[0]!, position: 2 },
+          { ...twoLinks[1]!, position: 4 },
+        ],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+      mocks.syncEnvironmentRepository.mockResolvedValueOnce({ outcome: 'resumed', branch: 'factory/issue-7' });
+
+      await boot(resolver);
+
+      const signal = await new FactoryEnvironmentStateProcessor().computeStateSignal({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        contextWindow: { hasSnapshot: false },
+      } as never);
+      const lines = (signal as { contents: string }).contents.split('\n');
+      expect(lines.slice(1, 3)).toEqual([
+        '1. octocat/hello at /home/user/hello on factory/issue-7 (default main, setup ok)',
+        '2. octocat/docs at /home/user/docs on factory/issue-7 (default main, setup skipped)',
+      ]);
     });
 
     it('roots the agent at the workspace root with its skill roots under its own checkout when the environment holds several repositories', async () => {
