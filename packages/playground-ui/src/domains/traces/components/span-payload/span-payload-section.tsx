@@ -1,9 +1,8 @@
-import { Minimize2 } from 'lucide-react';
+import { Braces, Eye, Minimize2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { SpanPayloadJson } from './span-payload-json';
 import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Card, CardContent } from '@/ds/components/Card';
 import { CollapsibleBox, useCollapsibleBox } from '@/ds/components/CollapsibleBox';
 import { CopyButton } from '@/ds/components/CopyButton';
@@ -37,27 +36,38 @@ export interface SpanPayloadSectionProps {
 
 function ViewToggle({ view, onChange }: { view: SpanPayloadView; onChange: (view: SpanPayloadView) => void }) {
   return (
-    <ButtonsGroup size="sm" aria-label="Payload view" data-slot="span-payload-view-toggle">
+    <div
+      role="group"
+      aria-label="Payload view"
+      data-slot="span-payload-view-toggle"
+      className="flex items-center gap-1"
+    >
       <Button
-        variant={view === 'rich' ? 'primary' : 'default'}
+        size="icon-sm"
+        variant={view === 'rich' ? 'subtle' : 'ghost'}
         aria-pressed={view === 'rich'}
+        aria-label="Preview"
+        tooltip="Preview"
         onClick={() => onChange('rich')}
       >
-        Preview
+        <Eye />
       </Button>
       <Button
-        variant={view === 'raw' ? 'primary' : 'default'}
+        size="icon-sm"
+        variant={view === 'raw' ? 'subtle' : 'ghost'}
         aria-pressed={view === 'raw'}
+        aria-label="JSON"
+        tooltip="JSON"
         onClick={() => onChange('raw')}
       >
-        JSON
+        <Braces />
       </Button>
-    </ButtonsGroup>
+    </div>
   );
 }
 
 /**
- * A span payload section with a Preview / JSON button group. All JSON views share
+ * A span payload section with Preview / JSON view toggles. All JSON views share
  * the same syntax highlighting while preserving the stored payload. Long content is
  * clipped with a fade and an Expand button, like the experiment comparison sections.
  */
@@ -90,9 +100,9 @@ export function SpanPayloadSection({
         <DataPanelSectionHeading icon={icon} className={layout === 'details' ? 'text-meta' : undefined}>
           {title}
         </DataPanelSectionHeading>
-        <div className="ml-auto flex items-center gap-2">
-          <CopyButton content={JSON.stringify(raw, null, 2)} variant="ghost" />
+        <div className="ml-auto flex items-center gap-1">
           {hasRich && <ViewToggle view={view} onChange={setView} />}
+          <CopyButton content={JSON.stringify(raw, null, 2)} variant="ghost" />
         </div>
       </div>
       <div className="min-w-0">
