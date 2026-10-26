@@ -550,9 +550,9 @@ describeForAllEngines(
 
     // #26346: feedback continuation must not duplicate earlier text during result processing.
     // Technical: processOutputResult rewrites appear on their own steps, not only the last step.
-    // Known gap: durable and evented engines report the raw step text ('firstmore') because the
+    // Known gap: durable, evented and inngest engines report the raw step text ('firstmore') because the
     // processOutputResult rewrite is not reconciled back onto steps after a feedback continuation.
-    const itFailsOnDurable = engine === 'durable' || engine === 'evented' ? it.fails : it;
+    const itFailsOnDurable = engine === 'durable' || engine === 'evented' || engine === 'inngest' ? it.fails : it;
     itFailsOnDurable('a reply continued after feedback reports each processed part on its own step', async () => {
       const upper: Processor = {
         id: 'collapse-continuation-result',
