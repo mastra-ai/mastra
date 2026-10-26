@@ -273,10 +273,6 @@ async function inheritEarlierSession(
  * browser and no interactive user, so nothing else would catch a regression in
  * what it forwards.
  */
-/**
- * The lane named after a role, when no phase seats it: on Work the review phase runs in the work
- * seat for issues, but a pull request's review runs in the review seat and still belongs there.
- */
 export async function prepareFactoryRuleBinding(
   sourceControlProvider: SourceControlStorageHandle | Pick<GithubIntegration, 'sourceControlStorage'>,
   coordinator: Pick<FactoryStartCoordinator, 'prepare'>,
