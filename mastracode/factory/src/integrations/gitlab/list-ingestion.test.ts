@@ -96,8 +96,16 @@ describe('GitLab listed merge requests through rules ingress', () => {
       expect.arrayContaining([expect.objectContaining({ decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }) })]),
     );
 
+    const decisionsAfterPush = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    list.mockResolvedValue({ pullRequests: [{ ...listed, headSha: 'bbbb', updatedAt: '2030-01-02T06:00:00Z' }], nextCursor: null });
+    expect((await app.request(path)).status).toBe(200);
+    expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.id)).toEqual(
+      decisionsAfterPush.map(decision => decision.id),
+    );
+
     list.mockResolvedValue({ pullRequests: [{ ...listed, updatedAt: '2030-01-03T00:00:00Z' }], nextCursor: null });
     expect((await app.request(path)).status).toBe(200);
     expect((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata.pullRequestHeadSha).toBe('aaaa');
+    expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).length).toBeGreaterThan(decisionsAfterPush.length);
   });
 });
