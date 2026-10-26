@@ -165,6 +165,18 @@ export class Scheduler extends MastraBase {
     await this.#runTick();
   }
 
+  /**
+   * Re-check storage now, as a wake event would. No-op unless running.
+   * Mastra calls this directly when publishing the wake event fails, so an
+   * idle in-process scheduler still picks up the change.
+   */
+  wake(): void {
+    if (!this.#started || this.#stopping) return;
+    void this.#runTick().catch(err => {
+      this.logger.error('Scheduler tick crashed', { error: err });
+    });
+  }
+
   // -------- Internals --------
 
   async #runTick(): Promise<void> {
@@ -284,10 +296,8 @@ export class Scheduler extends MastraBase {
       // Persistent backends require every delivery to be settled. Wakes are
       // hints, so a failed tick isn't a reason to redeliver.
       await ack?.();
-      if (event.type !== SCHEDULER_WAKE_EVENT || !this.#started || this.#stopping) return;
-      void this.#runTick().catch(err => {
-        this.logger.error('Scheduler tick crashed', { error: err });
-      });
+      if (event.type !== SCHEDULER_WAKE_EVENT) return;
+      this.wake();
     };
     try {
       // Wakes are transient: replaying retained ones would only cause

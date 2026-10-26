@@ -6057,6 +6057,9 @@ export class Mastra<
       await this.#pubsub.publish(SCHEDULER_WAKE_TOPIC, { type: SCHEDULER_WAKE_EVENT, runId: scheduleId, data: {} });
     } catch (err) {
       this.#logger?.warn?.('Failed to publish scheduler wake event', err as any);
+      // An idle scheduler arms no timer, so without the event it would never
+      // see the change. Wake this process's scheduler directly.
+      this.#findSchedulerWorker()?.scheduler?.wake();
     }
   }
 

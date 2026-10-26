@@ -465,6 +465,44 @@ describe('Agent schedules — scheduler integration', () => {
       await expect(schedulesStore.getSchedule(created.id)).resolves.not.toBeNull();
     });
 
+    it('fires a new schedule on an idle scheduler when publishing the wake fails', async () => {
+      const pubsub = new EventEmitterPubSub();
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const agent = makeAgent('beat-idle');
+      const mastra = track(
+        new Mastra({
+          logger: false,
+          storage,
+          pubsub,
+          agents: { 'beat-idle': agent },
+          notifications: { dispatch: { enabled: false } },
+          scheduler: { tickIntervalMs: 200 },
+        }),
+      );
+
+      await mastra.startWorkers();
+      const far = await mastra.schedules.create({ cron: '0 0 1 1 *', prompt: 'ping', agentId: agent.id });
+      await waitForScheduler(mastra);
+      await mastra.schedules.delete(far.id);
+      // Let the capped timer fire once and find nothing active, so the
+      // scheduler goes idle with no timer armed.
+      await new Promise(resolve => setTimeout(resolve, 400));
+
+      const publish = pubsub.publish.bind(pubsub);
+      vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {
+        if (topic === SCHEDULER_WAKE_TOPIC) throw new Error('pubsub down');
+        return publish(topic, event);
+      });
+
+      const hb = await mastra.schedules.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
+      const initial = (await schedulesStore.getSchedule(hb.id))!;
+      await waitUntil(async () => {
+        const current = await schedulesStore.getSchedule(hb.id);
+        return !!current && current.nextFireAt !== initial.nextFireAt;
+      }, 4000);
+    }, 10_000);
+
     it('does not start polling when persisting a schedule fails', async () => {
       const storage = new MockStore();
       const schedulesStore = (await storage.getStore('schedules'))!;
