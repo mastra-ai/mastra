@@ -1370,7 +1370,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 // A retried attempt was rolled back, so the last response content belongs to an earlier step.
                 content: isRetriedStep
                   ? []
-                  : ((chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1)),
+                  : ((chunk.payload as any)?._durableStepContent ??
+                    messageList.get.response.aiV5.modelContent(
+                      -1,
+                      self.#bufferedByStep.toolCalls.map(call => call.payload.toolCallId),
+                    )),
                 text: stepText,
                 // Include tripwire data if present
                 tripwire: stepTripwire,

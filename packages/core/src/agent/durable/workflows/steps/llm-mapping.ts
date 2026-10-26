@@ -395,7 +395,13 @@ export function createDurableLLMMappingStep() {
           steps: [], // Steps are accumulated at the loop level
           // Recorded on the step record; stopWhen reads it, and the deferred
           // step-finish chunk returns it as stream.steps content.
-          content: compactDurableStepContent(messageList.get.response.aiV5.modelContent(-1), toolResults),
+          content: compactDurableStepContent(
+            messageList.get.response.aiV5.modelContent(
+              -1,
+              llmOutput.toolCalls.map(call => call.toolCallId),
+            ),
+            toolResults,
+          ),
         },
         state: {
           ...state,
