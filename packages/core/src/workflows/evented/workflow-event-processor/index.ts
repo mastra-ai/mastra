@@ -429,9 +429,8 @@ export class WorkflowEventProcessor extends EventProcessor {
    * broadcast abort.
    */
   private async abortRunsCanceledInStorage(runIds: { workflowId: string; runId: string }[]): Promise<void> {
-    const states = await Promise.all(
-      runIds.map(({ workflowId, runId }) => this.loadData({ workflowId, runId }).catch(() => undefined)),
-    );
+    // A failed read throws so the step event is retried rather than run unchecked.
+    const states = await Promise.all(runIds.map(({ workflowId, runId }) => this.loadData({ workflowId, runId })));
     // Ancestors last, so a cancelled parent's walk sees the nested runs' controllers.
     for (let i = states.length - 1; i >= 0; i--) {
       if (states[i]?.status === 'canceled') {
