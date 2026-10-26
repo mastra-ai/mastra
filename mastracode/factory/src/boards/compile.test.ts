@@ -147,7 +147,7 @@ describe('compileStoredBoard', () => {
     expect(warnings).toEqual(["Board 'flow' phase 'doing' names unknown runner 'not-a-runner'; it runs nothing."]);
   });
 
-  it('runs a stored agent phase in its seat with its skill and instructions', () => {
+  it('runs a stored agent phase in its context with its skill and instructions, else in the main context', () => {
     const board = compileStoredBoard(
       {
         key: 'flow',
@@ -163,7 +163,7 @@ describe('compileStoredBoard', () => {
               agentId: 'writer',
               skill: 'write-docs',
               instructions: 'Keep it short.',
-              seat: 'plan',
+              context: 'release-notes',
             },
           },
           {
@@ -182,7 +182,7 @@ describe('compileStoredBoard', () => {
     expect(board.rules.docs?.issue?.onEnter?.(context)).toEqual({
       type: 'invokeSkill',
       idempotencyKey: 'in-1:phase-docs',
-      role: 'plan',
+      role: 'release-notes',
       skillName: 'write-docs',
       arguments: 'Work item: Fix login (https://x/1)\n\nKeep it short.',
     });
@@ -222,5 +222,34 @@ describe('compileStoredBoard', () => {
     expect(
       await board.rules.triage?.pullRequest?.onEnter?.({ ...card, item: { ...card.item, metadata: {} } } as never),
     ).toBeUndefined();
+  });
+
+  it("moves a default phase into another context while Review's reviewer keeps its own", async () => {
+    const edited = {
+      ...workBoardTemplate,
+      phases: workBoardTemplate.phases.map(phase =>
+        phase.key === 'planning' ? { ...phase, runner: { ...phase.runner!, context: null } } : phase,
+      ),
+    };
+    const board = compileStoredBoard(edited, builtInRunners);
+    const card = {
+      ingress: { id: 'in-1' },
+      board: 'work',
+      item: { id: 'w-1', title: 'Fix login', url: 'https://x/1' },
+    };
+    // Planning now continues the builder's main context.
+    expect(board.roleForPhase('planning')).toBe('work');
+    expect(await board.rules.planning?.issue?.onEnter?.(card as never)).toMatchObject({
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'factory-plan',
+    });
+    // Review sits in the main context, yet a pull request is still reviewed apart from its builder.
+    expect(board.roleForPhase('review')).toBe('work');
+    const pullRequest = {
+      ...card,
+      item: { ...card.item, source: 'github-pr', metadata: { githubPullRequestNumber: 7 } },
+    };
+    expect(await board.rules.review?.pullRequest?.onEnter?.(pullRequest as never)).toMatchObject({ role: 'review' });
   });
 });

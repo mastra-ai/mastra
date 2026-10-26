@@ -110,7 +110,7 @@ describe('BoardsSection', () => {
     expect(saved[0].config.boards[0]).not.toHaveProperty('id');
   });
 
-  it('turns a phase into an agent run with a skill and instructions', async () => {
+  it('turns a phase into an agent run with a skill, instructions and its own context', async () => {
     const saved = stub();
     const user = userEvent.setup();
     const { client } = renderWithProviders(<BoardsSection factoryId="fp-1" />);
@@ -126,6 +126,8 @@ describe('BoardsSection', () => {
       'Update the docs for this change.',
     );
     await user.tab();
+    await user.type(within(phaseGroup(/Building/)).getByRole('textbox', { name: 'Context (optional)' }), 'docs');
+    await user.tab();
 
     await user.click(screen.getAllByRole('button', { name: 'Save' })[0]);
     await waitForMutationsIdle(client);
@@ -135,6 +137,7 @@ describe('BoardsSection', () => {
       agentId: 'factory',
       skill: 'write-docs',
       instructions: 'Update the docs for this change.',
+      context: 'docs',
     });
   });
 

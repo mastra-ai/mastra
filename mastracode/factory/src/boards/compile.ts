@@ -48,13 +48,28 @@ const ALL_SOURCES = [
   'manual',
 ] as const satisfies readonly FactoryRuleSource[];
 
+/** The card's main context, where a phase without one runs. */
+export const MAIN_CONTEXT = 'work';
+
+type StoredAgentRunner = Extract<StoredPhaseRunner, { type: 'agent' }>;
+
 /**
- * A stored agent runner: entering the phase runs the card's agent in the chosen seat,
+ * The session context a stored agent phase names: `undefined` when it names none (a code runner then
+ * keeps its own), the main context for `null`.
+ */
+export function phaseContext(runner: StoredAgentRunner): string | undefined {
+  if (runner.context === null) return MAIN_CONTEXT;
+  return runner.context ?? runner.seat;
+}
+
+/**
+ * A stored agent runner: entering the phase runs the card's agent in the phase's context,
  * activating the skill (when set) with the instructions as its arguments, or sending the
  * instructions as a plain prompt.
  */
-function agentRunner(phaseKey: string, runner: Extract<StoredPhaseRunner, { type: 'agent' }>): BoardRunner {
+function agentRunner(phaseKey: string, runner: StoredAgentRunner): BoardRunner {
   const instructions = runner.instructions?.trim();
+  const role = phaseContext(runner) ?? MAIN_CONTEXT;
   const enter = (context: FactoryStageRuleContext) => {
     const card = context.item.url
       ? `Work item: ${context.item.title} (${context.item.url})`
@@ -62,7 +77,7 @@ function agentRunner(phaseKey: string, runner: Extract<StoredPhaseRunner, { type
     const base = {
       type: 'invokeSkill' as const,
       idempotencyKey: `${context.ingress.id}:phase-${phaseKey}`,
-      role: runner.seat ?? 'work',
+      role,
     };
     return runner.skill
       ? { ...base, skillName: runner.skill, arguments: instructions ? `${card}\n\n${instructions}` : card }
@@ -70,7 +85,7 @@ function agentRunner(phaseKey: string, runner: Extract<StoredPhaseRunner, { type
   };
   return {
     id: runner.agentId,
-    role: runner.seat ?? 'work',
+    role,
     onEnter: Object.fromEntries(ALL_SOURCES.map(source => [source, enter])),
   };
 }
@@ -97,9 +112,31 @@ function withSkill(runner: BoardRunner, skill: string | undefined): BoardRunner 
 }
 
 /**
+ * A code runner moved to another context: the phase works in it, and runs the code would start in its
+ * own context start there instead. Runs the code pins elsewhere keep their context — the independent
+ * reviewer stays in `review`, feedback on a change request still reaches its builder.
+ */
+function inContext(runner: BoardRunner, context: string | undefined): BoardRunner {
+  if (context === undefined || !runner.role || context === runner.role) return runner;
+  const own = runner.role;
+  const onEnter =
+    runner.onEnter &&
+    Object.fromEntries(
+      Object.entries(runner.onEnter).map(([source, handler]) => [
+        source,
+        async (context_: FactoryStageRuleContext) => {
+          const decision = await handler?.(context_);
+          return decision && 'role' in decision && decision.role === own ? { ...decision, role: context } : decision;
+        },
+      ]),
+    );
+  return { ...runner, role: context, ...(onEnter ? { onEnter } : {}) };
+}
+
+/**
  * Turns a stored board into the `BoardDefinition` the runtime runs. A phase
  * without `nextPhases` may move to any phase; one with it may move only there.
- * A working phase whose runner is not registered (or has no seat role) runs
+ * A working phase whose runner is not registered (or has no context) runs
  * nothing and compiles as resting, so its cards wait for a person.
  */
 export function compileStoredBoard(
@@ -115,7 +152,9 @@ export function compileStoredBoard(
     let runner: BoardRunner | undefined;
     if (phase.runner?.type === 'agent') {
       const code = runners.get(phase.runner.agentId);
-      runner = code ? withSkill(code, phase.runner.skill) : agentRunner(phase.key, phase.runner);
+      runner = code
+        ? inContext(withSkill(code, phase.runner.skill), phaseContext(phase.runner))
+        : agentRunner(phase.key, phase.runner);
     } else if (phase.runner) {
       const id = runnerId(phase.runner);
       runner = runners.get(id);
@@ -132,7 +171,7 @@ export function compileStoredBoard(
     if (phase.kind === 'working' && runner?.role) {
       phases[phase.key] = { ...base, kind: 'working', role: runner.role };
     } else if (phase.kind === 'working') {
-      if (runner) options.warn?.(`Board '${board.key}' phase '${phase.key}' runner '${runner.id}' seats no role.`);
+      if (runner) options.warn?.(`Board '${board.key}' phase '${phase.key}' runner '${runner.id}' has no context.`);
       phases[phase.key] = { title: phase.name, outcomes: base.outcomes, kind: 'resting' };
       continue;
     } else {

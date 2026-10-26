@@ -61,8 +61,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('BoardsStorage o
       type: 'agent',
       agentId: 'factory-triage',
       skill: 'factory-triage',
-      seat: 'triage',
+      context: 'triage',
     });
+    // Null is kept: the phase runs in the card's main context.
+    expect(work!.phases.find(phase => phase.key === 'review')!.runner).toMatchObject({ context: null });
     expect(work!.phases.every(phase => phase.nextPhases === null)).toBe(true);
     expect(work!.eventRoutes.map(route => [route.event, route.toPhaseKey])).toEqual(
       workBoardTemplate.eventRoutes.map(route => [route.event, route.toPhaseKey]),

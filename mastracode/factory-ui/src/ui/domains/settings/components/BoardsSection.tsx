@@ -26,7 +26,6 @@ import {
   CARD_FIELDS,
   EVENT_FIELDS,
   INTAKE_FIELDS,
-  SEATS,
   describeCondition,
   isListOperator,
   listText,
@@ -521,8 +520,10 @@ function AgentRunnerEditor({
   const runner = phase.runner as Extract<NonNullable<StoredPhase['runner']>, { type: 'agent' }>;
   const set = (patch: Partial<typeof runner>) => {
     const next = { ...runner, ...patch };
+    // `context` replaces the earlier `seat`; saving writes the new name only.
+    if ('context' in patch) delete next.seat;
     // Drop empty optional fields so the stored runner stays clean.
-    for (const key of ['skill', 'model', 'instructions', 'seat'] as const) {
+    for (const key of ['skill', 'model', 'instructions'] as const) {
       if (next[key] === '' || next[key] === undefined) delete next[key];
     }
     onChange({ runner: next });
@@ -543,14 +544,18 @@ function AgentRunnerEditor({
           disabled={disabled}
           onCommit={skill => set({ skill: skill.trim() })}
         />
-        <LabeledSelect
-          label="Session seat"
-          value={runner.seat ?? 'work'}
+        <LabeledInput
+          label="Context (optional)"
+          placeholder="main"
+          value={runner.context ?? runner.seat ?? ''}
           disabled={disabled}
-          options={SEATS.map(seat => ({ value: seat, title: seat }))}
-          onChange={seat => set({ seat: seat as (typeof SEATS)[number] })}
+          onCommit={context => set({ context: context.trim() || null })}
         />
       </div>
+      <Txt as="span" variant="caption" className="text-muted-foreground">
+        Phases with the same context continue one session; a new context starts a fresh one. Empty is the card's main
+        context.
+      </Txt>
       <LabeledInput
         label="Model (optional)"
         placeholder="project default"

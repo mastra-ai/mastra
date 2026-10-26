@@ -1,12 +1,12 @@
 import type { ProjectBoardConfigInput, StoredBoardInput } from '../../storage/domains/boards/validation.js';
 
-const TRIAGE = { type: 'agent', agentId: 'factory-triage', skill: 'factory-triage', seat: 'triage' } as const;
-const REVIEW = { type: 'agent', agentId: 'factory-review', skill: 'factory-review', seat: 'work' } as const;
+const TRIAGE = { type: 'agent', agentId: 'factory-triage', skill: 'factory-triage', context: 'triage' } as const;
+const REVIEW = { type: 'agent', agentId: 'factory-review', skill: 'factory-review', context: null } as const;
 const COMPLETE = {
   type: 'agent',
   agentId: 'factory-complete',
   skill: 'factory-complete-issue',
-  seat: 'triage',
+  context: 'triage',
 } as const;
 
 /**
@@ -15,6 +15,8 @@ const COMPLETE = {
  * their `board`/`stages` values. Each phase's agent activates the skill it always has; the agent id
  * names the built-in runner that decides when (PR auto-review, self-review, source fetch hints).
  * Building activates no skill, so it names its code runner directly.
+ * Building and Review work in the card's main context, so the builder answers feedback on its own change.
+ * Review's built-in runner still reviews in its own `review` context, apart from the builder.
  * No phase declares `nextPhases`: any move is allowed, like the code board.
  */
 export const workBoardTemplate = {
@@ -28,7 +30,7 @@ export const workBoardTemplate = {
       key: 'planning',
       name: 'Planning',
       kind: 'working',
-      runner: { type: 'agent', agentId: 'factory-plan', skill: 'factory-plan', seat: 'plan' },
+      runner: { type: 'agent', agentId: 'factory-plan', skill: 'factory-plan', context: 'plan' },
       exitTool: 'submit_plan',
     },
     { key: 'execute', name: 'Building', kind: 'working', runner: { type: 'workflow', workflowId: 'factory-build' } },

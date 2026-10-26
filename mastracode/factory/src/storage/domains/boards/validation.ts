@@ -33,8 +33,14 @@ export const phaseRunnerSchema = z.discriminatedUnion('type', [
       model: z.string().trim().min(1).max(200).optional(),
       /** Skill the agent activates when a card enters the phase. */
       skill: runnerIdSchema.optional(),
-      /** Session seat the run uses; defaults to the card's `work` session. */
-      seat: z.enum(['triage', 'plan', 'work', 'review']).optional(),
+      /**
+       * The card's session this phase runs in. Phases with the same context continue one session;
+       * a new context starts a fresh one. Null means the card's main context (`work`). Any key works;
+       * `triage` and `review` sessions carry those roles' tools.
+       */
+      context: storedKeySchema.nullable().optional(),
+      /** Earlier name for `context`, still read from boards stored before the rename. */
+      seat: storedKeySchema.optional(),
     })
     .strict()
     .refine(runner => !!runner.skill || !!runner.instructions?.trim(), {

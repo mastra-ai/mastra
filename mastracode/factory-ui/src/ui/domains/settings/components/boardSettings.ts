@@ -52,8 +52,6 @@ export const BOARD_EVENTS = [
   'issue.closed',
 ] as const;
 
-export const SEATS = ['work', 'plan', 'triage', 'review'] as const;
-
 const ALL_OPERATORS: { value: RuleOperator; title: string }[] = [
   { value: 'equals', title: 'is' },
   { value: 'not_equals', title: 'is not' },
