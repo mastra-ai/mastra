@@ -7180,7 +7180,12 @@ describe('Scenario: Cross-session memory (resource scope)', () => {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
           usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
-          content: [{ type: 'text' as const, text: '<observations>\n- Resource input recovered\n</observations>' }],
+          content: [
+            {
+              type: 'text' as const,
+              text: '<observations>\n<thread id="thread-a">\n- Resource input recovered\n</thread>\n</observations>',
+            },
+          ],
           warnings: [],
         };
       },
@@ -7219,6 +7224,7 @@ describe('Scenario: Cross-session memory (resource scope)', () => {
     expect(recoveredRecord?.observedMessageIds).toEqual(['resource-msg-1', 'resource-msg-2']);
     expect((om as any).getUnobservedMessages(messages, recoveredRecord)).toHaveLength(0);
     expect(recoveredRecord?.activeObservations).toContain('<thread id="thread-a">');
+    expect(recoveredRecord?.activeObservations).toContain('Resource input recovered');
   });
 });
 

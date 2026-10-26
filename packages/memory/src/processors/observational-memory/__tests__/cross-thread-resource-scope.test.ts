@@ -111,6 +111,14 @@ const observerText = `<observations>
 </observations>
 <current-task>Help the user</current-task>`;
 
+const resourceObserverText = `<observations>
+<thread id="thread-A">
+## January 28, 2026
+- 🔴 User asked for help with a task
+<current-task>Help the user</current-task>
+</thread>
+</observations>`;
+
 const omTriggerTool = createTool({
   id: 'test',
   description: 'Trigger tool for OM testing',
@@ -168,7 +176,7 @@ describe('repro #15367 — cross-thread messages with resource-scoped OM', () =>
           enabled: true,
           scope: 'resource',
           observation: {
-            model: createSimpleModel(observerText) as any,
+            model: createSimpleModel(resourceObserverText) as any,
             messageTokens: 20,
             bufferTokens: false,
           },

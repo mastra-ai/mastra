@@ -88,7 +88,8 @@ export class OmIncompleteResponseError extends Error {
 }
 
 /**
- * A model reply that finished but contains no text, or only whitespace.
+ * A model reply that finished but carries nothing usable: no text, only whitespace,
+ * or text with no recognised Observer sections (e.g. a refusal).
  * Retryable, so an empty reply is retried like a transport error.
  *
  * @internal
@@ -96,8 +97,8 @@ export class OmIncompleteResponseError extends Error {
 export class OmEmptyResponseError extends Error {
   readonly isRetryable = true;
 
-  constructor(label: string) {
-    super(`${label} returned empty output`);
+  constructor(label: string, what = 'empty output') {
+    super(`${label} returned ${what}`);
     this.name = 'OmEmptyResponseError';
   }
 }
