@@ -120,9 +120,11 @@ export class MenuFrame implements Component, Focusable {
         target.setFilter(this.query);
         return;
       } else {
-        // A leading space is left to the menu (Space changes a setting); after text it is part of the search.
+        // A leading space is left to the menu (Space changes a setting); after text it is part of the
+        // search, unless the menu uses Space itself (toggling items in a multi-select list).
         const typed = typedText(data);
-        if (typed && (this.query || typed.trim())) {
+        const keepsSpace = typed === ' ' && (this.component as MenuChrome).menuKeepsSpace;
+        if (typed && !keepsSpace && (this.query || typed.trim())) {
           this.query += this.query ? typed : typed.trimStart();
           target.setFilter(this.query);
           return;
@@ -240,19 +242,23 @@ export class PromptSlot {
    */
   showLoadingWhile(name: string, pending: Promise<unknown>): void {
     if (this.isOpen()) return;
+    let frame: LoadingFrame | undefined;
     const timer = setTimeout(() => {
       if (this.isOpen()) return;
-      this.loading = new LoadingFrame(name, data => {
-        if (this.loading) this.remove(this.loading);
+      frame = new LoadingFrame(name, data => {
+        if (frame) this.remove(frame);
         if (!matchesKey(data, 'escape')) this.editor.handleInput?.(data);
       });
-      this.stack.push(this.loading);
-      this.swap(this.editor, this.loading);
+      this.loading = frame;
+      this.stack.push(frame);
+      this.swap(this.editor, frame);
     }, LOADING_DELAY_MS);
-    void pending.finally(() => {
+    // The command reports its own errors; here a failure only ends the wait.
+    const done = () => {
       clearTimeout(timer);
-      if (this.loading) this.remove(this.loading);
-    });
+      if (frame) this.remove(frame);
+    };
+    pending.then(done, done);
   }
 
   private mounted(): Component {

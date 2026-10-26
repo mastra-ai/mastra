@@ -170,6 +170,9 @@ export class GithubPRPickerDialog extends Box implements Focusable, Filterable, 
     this.tui.requestRender();
   }
 
+  /** Space toggles the highlighted PR, also while searching. */
+  readonly menuKeepsSpace = true;
+
   menuTitle(): string {
     return this.title;
   }

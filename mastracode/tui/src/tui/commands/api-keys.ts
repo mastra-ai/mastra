@@ -138,7 +138,9 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
       const originalHandleInput = list.handleInput.bind(list);
       list.handleInput = async (data: string) => {
         if (data === '\x7f' || data === '\x1b[3~') {
-          const info = providers.find(p => p.provider === currentSelection);
+          // Nothing is selected when the search matches no provider: then there is nothing to remove.
+          const selected = list.getSelectedItem();
+          const info = selected ? providers.find(p => p.provider === selected.value) : undefined;
           if (info?.source === 'stored' && ctx.authStorage) {
             const storedKey = ctx.authStorage.getStoredApiKey(info.provider);
             ctx.authStorage.remove(`apikey:${info.provider}`);

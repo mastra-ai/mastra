@@ -234,6 +234,41 @@ describe('PromptSlot', () => {
     expect(plain(mounted().render(60)).some(row => row.includes('switch model pack'))).toBe(true);
   });
 
+  it('removes the loading row when the command fails, without an unhandled rejection', async () => {
+    vi.useFakeTimers();
+    const { slot, mounted, editor } = setup();
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      let fail!: (error: Error) => void;
+      const pending = new Promise<void>((_, reject) => (fail = reject));
+      pending.catch(() => {});
+      slot.showLoadingWhile('models', pending);
+      vi.advanceTimersByTime(150);
+      expect(mounted()).not.toBe(editor);
+      fail(new Error('offline'));
+      await vi.runAllTimersAsync();
+      vi.useRealTimers();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(mounted()).toBe(editor);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
+  it('passes Space to menus that toggle with it, also while searching', () => {
+    const { slot, mounted } = setup();
+    const menu = list(['One', 'Two']);
+    const handleInput = vi.fn();
+    const root = Object.assign(new Container(), { handleInput, menuKeepsSpace: true });
+    root.addChild(menu);
+    slot.open(root);
+    mounted().handleInput!('o');
+    mounted().handleInput!(' ');
+    expect(handleInput).toHaveBeenCalledWith(' ');
+  });
+
   it('shows no loading row when the menu opens quickly', async () => {
     vi.useFakeTimers();
     const { slot, mounted, editor } = setup();

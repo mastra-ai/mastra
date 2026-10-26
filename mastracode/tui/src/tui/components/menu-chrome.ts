@@ -27,6 +27,8 @@ export interface MenuChrome {
    * it itself (e.g. /api-keys removes a key with the Mac delete key, a question is not skipped).
    */
   readonly menuKeepsBackspace?: boolean;
+  /** Space always goes to the menu, even after search text (multi-select lists toggle with it). */
+  readonly menuKeepsSpace?: boolean;
 }
 
 /** The list that typing should filter: the first component in the tree that names one. */

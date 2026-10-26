@@ -112,7 +112,12 @@ export class AskQuestionDialogComponent extends Container implements Focusable, 
     }
 
     if (this.multiSelect) {
-      const list = new WrappingSelectList(items, Math.min(items.length, 8), getSelectListTheme(), true);
+      // The multi-select list has no description column, so descriptions follow the label.
+      const multiItems = items.map(item => ({
+        ...item,
+        label: item.description ? `${item.label}  ${theme.fg('dim', item.description)}` : item.label,
+      }));
+      const list = new WrappingSelectList(multiItems, Math.min(items.length, 8), getSelectListTheme(), true);
       list.onConfirmMulti = (selected: SelectItem[]) => {
         const values = selected.map(item => item.value);
         if (this.onSubmitMulti) {
