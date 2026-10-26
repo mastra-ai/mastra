@@ -76,6 +76,11 @@ export function taskKeyOf(taskId: string): string {
   return createHash('sha256').update(taskId).digest('base64url');
 }
 
+/** Running, or pending but pinned (`pinToWorker`) to the worker that holds its attempt. */
+function isOwned(row: BackgroundTask): boolean {
+  return row.status === 'running' || (row.status === 'pending' && Boolean(row.ownerId));
+}
+
 function isTerminalRow(row: BackgroundTask): boolean {
   return TERMINAL_ROW_STATUSES.has(row.status);
 }
@@ -212,7 +217,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     this.#startSweeping();
   }
 
-  async create(params: MCPTaskCreateParams): Promise<MCPTask> {
+  async create(params: MCPTaskCreateParams, { pinToWorker = false }: { pinToWorker?: boolean } = {}): Promise<MCPTask> {
     const context = params.context as BackgroundToolTaskContext | undefined;
     if (!context || typeof context.toolName !== 'string') {
       throw new Error('A background-task MCP task needs the tool it runs in its context');
@@ -263,6 +268,10 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
           metadata: envelope as unknown as Record<string, unknown>,
         },
         taskContext,
+        // An attempt already running under the request must not also run on a peer that finds
+        // the row pending. While the pin's lease is live, peers skip it; if this process dies,
+        // the lost attempt is retried only when `recover` allows a retry.
+        { pinToWorker },
       );
       if (fallbackToSync) {
         throw new Error("Background tasks are at capacity and backpressure is 'fallback-sync'; MCP tasks need 'queue'");
@@ -394,7 +403,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       try {
         if (isExpired(row, now)) await this.#expire(storage, row);
         else if (isFullyAnswered(row, envelope)) await this.#resume(row, envelope);
-        else if (row.status === 'running' && row.leaseExpiresAt && row.leaseExpiresAt.getTime() <= now) {
+        else if (isOwned(row) && row.leaseExpiresAt && row.leaseExpiresAt.getTime() <= now) {
           await this.#reclaim(storage, row, envelope);
         } else if (row.status === 'pending' && this.#reclaimed.has(row.id)) await this.#restart(row.id);
       } catch (error) {
@@ -421,7 +430,8 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   }
 
   /**
-   * A running row whose lease lapsed: its worker died. Fenced like the manager's own recovery, so
+   * A running row, or a pending row pinned to the worker running its first attempt, whose lease
+   * lapsed: its worker died with the attempt in flight. Fenced like the manager's own recovery, so
    * of all instances (and managers) noticing it, exactly one settles it.
    */
   async #reclaim(
@@ -430,7 +440,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     envelope: BackgroundTaskEnvelope,
   ): Promise<void> {
     const fence = {
-      expectedStatus: 'running' as const,
+      expectedStatus: row.status,
       expectedOwnerId: row.ownerId ?? null,
       expectedLeaseExpiresAt: row.leaseExpiresAt ?? null,
     };

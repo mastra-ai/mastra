@@ -211,11 +211,24 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
   }
 
   /** Starts the server in its own process, so it can be killed mid-task. */
-  async function child(recover: boolean, slots = 'default'): Promise<{ url: URL; process: ChildProcess }> {
+  async function child(
+    recover: boolean,
+    slots = 'default',
+    mode = 'always',
+  ): Promise<{ url: URL; process: ChildProcess }> {
     // One node process (no tsx wrapper process), so SIGKILL kills the server itself.
     const proc = spawn(
       process.execPath,
-      ['--import', 'tsx', join(here, '__tests__/background-tasks-child.ts'), db, counterFile, String(recover), slots],
+      [
+        '--import',
+        'tsx',
+        join(here, '__tests__/background-tasks-child.ts'),
+        db,
+        counterFile,
+        String(recover),
+        slots,
+        mode,
+      ],
       { cwd: join(here, '../..'), stdio: ['ignore', 'pipe', 'inherit'] },
     );
     children.push(proc);
@@ -308,19 +321,48 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       expect(probe.runs.filter(run => run.tool === 'counted')).toHaveLength(1);
     });
 
-    // Fails until core pins a pending row to the worker that enqueued it (daniel/mcp-tasks-3b2-pinned-pending):
-    // B's stale-task sweep dispatches the unowned pending row to its static executor while A already runs it.
-    it.fails('is not run again by an instance sweeping for stale tasks while its row waits for a slot', async () => {
+    it('is not run again by an instance sweeping for stale tasks while its row waits for a slot', async () => {
       const a = await instance(tasks, { backgroundTasks: { perOwnerConcurrency: { 'mcp-server:tasks': 1 } } });
       const onA = await requester(a.url);
-      await waitFor(onA, await call(a.url, 'hang'), 'working');
+      const hung = await call(a.url, 'hang');
+      await waitFor(onA, hung, 'working');
       // B starts while A holds a live lease, so it keeps re-running its stale-task sweep.
       await instance(tasks);
       const taskId = await call(a.url, 'counted');
       await sleep(LEASE_MS * 2);
       expect(probe.runs.filter(run => run.tool === 'counted')).toHaveLength(1);
-      await waitFor(onA, taskId, 'completed');
+      // Once A has a slot, the row takes the attempt's outcome instead of running the tool again.
+      await onA.cancel(hung);
+      expect(await waitFor(onA, taskId, 'completed')).toMatchObject({
+        result: { content: [{ type: 'text', text: 'counted' }] },
+      });
+      expect(probe.runs.filter(run => run.tool === 'counted')).toHaveLength(1);
     });
+
+    it.each([
+      { slot: 'free', slots: 'default' },
+      { slot: 'taken', slots: 'oneSlot' },
+    ])(
+      'is reported lost, and never run by a peer, when its server dies (recover: false, slot $slot)',
+      async ({ slots }) => {
+        const survivor = await instance({ tools: { crashy: { mode: 'auto', recover: false }, hang: 'always' } });
+        const dying = await child(false, slots, 'auto');
+        const onDying = await requester(dying.url);
+        if (slots === 'oneSlot') await waitFor(onDying, await call(dying.url, 'hang'), 'working');
+        const taskId = await call(dying.url, 'crashy');
+        await until(() => runsIn(counterFile) === 1);
+        const row = (await rows(survivor.mastra)).find(r => r.toolName === 'crashy')!;
+        // With the slot taken, the row waits pinned to the dying server while its attempt runs.
+        expect(row.status).toBe(slots === 'oneSlot' ? 'pending' : 'running');
+        expect(row.ownerId).toBeDefined();
+        dying.process.kill('SIGKILL');
+
+        const lost = await waitFor(await requester(survivor.url), taskId, 'failed');
+        expect(lost).toMatchObject({ error: { code: -32603, message: TASK_LOST_MESSAGE } });
+        await sleep(LEASE_MS * 2);
+        expect(runsIn(counterFile)).toBe(1);
+      },
+    );
   });
 
   it('resumes an answered task whose queued resume was lost with its instance', async () => {

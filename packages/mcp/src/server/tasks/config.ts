@@ -212,6 +212,11 @@ export class SelectingMCPTaskStore implements MCPTaskStore {
     return this.#selected;
   }
 
+  /** The chosen store, choosing it if no task request has yet. */
+  resolve(): Promise<MCPTaskStore> {
+    return this.#store();
+  }
+
   #store(): Promise<MCPTaskStore> {
     this.#selecting ??= this.#select().then(store => (this.#selected = store));
     return this.#selecting;

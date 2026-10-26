@@ -1106,12 +1106,13 @@ export class MCPServer extends MCPServerBase {
       requestContext: persisted,
       ...(resume && { resume }),
     };
-    const task = await this.taskStore.create({
-      ttlMs: taskMode.ttlMs,
-      principal: principalOf(ctx, requestContext),
-      context,
-    });
-    this.taskStore.run(task.taskId, this.toolTaskWork(context), { initialAttempt });
+    const params = { ttlMs: taskMode.ttlMs, principal: principalOf(ctx, requestContext), context };
+    const store = this.taskStore instanceof SelectingMCPTaskStore ? await this.taskStore.resolve() : this.taskStore;
+    const task =
+      store instanceof BackgroundTaskMCPTaskStore
+        ? await store.create(params, { pinToWorker: initialAttempt !== undefined })
+        : await store.create(params);
+    store.run(task.taskId, this.toolTaskWork(context), { initialAttempt });
     this.logger.debug(`Tool '${name}' continues as task.`);
     return taskHandleResult(task);
   }
