@@ -212,7 +212,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'reasoning-signature':
-      return;
+      return undefined;
     // return {
     //   type: 'reasoning-signature' as const,
     //   id: chunk.payload.id,
@@ -478,7 +478,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
       if ('type' in chunk && chunk.type?.startsWith('data-')) {
         return chunk as any;
       }
-      return;
+      return undefined;
   }
 }
 
@@ -965,7 +965,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'tool-input-end': {
-      return;
+      return undefined;
     }
 
     case 'raw': {
@@ -991,7 +991,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         return toUIDataChunk(part) as InferUIMessageChunk<UI_MESSAGE>;
       }
 
-      return;
+      return undefined;
     }
   }
 }
