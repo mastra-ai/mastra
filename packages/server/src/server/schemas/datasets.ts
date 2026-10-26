@@ -542,8 +542,8 @@ export const triggerExperimentBodySchema = z
     body =>
       !body.agentModel ||
       !body.agentOverrides?.model ||
-      (body.agentModel.provider === body.agentOverrides.model.provider &&
-        body.agentModel.modelId === body.agentOverrides.model.name),
+      `${body.agentModel.provider}/${body.agentModel.modelId}` ===
+        `${body.agentOverrides.model.provider}/${body.agentOverrides.model.name}`,
     {
       path: ['agentOverrides', 'model'],
       message: 'agentOverrides.model and agentModel must name the same model',

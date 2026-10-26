@@ -976,9 +976,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         version,
         agentVersion,
         agentModel: agentModel ? `${agentModel.provider}/${agentModel.modelId}` : undefined,
-        agentOverrides: agentModel
-          ? { ...agentOverrides, model: { provider: agentModel.provider, name: agentModel.modelId } }
-          : agentOverrides,
+        agentOverrides,
         maxConcurrency,
         provenance,
         grouping,

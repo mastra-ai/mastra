@@ -241,7 +241,7 @@ describe('Datasets Handlers', () => {
       );
     });
 
-    it('forwards agentModel provider and modelId as received into agentOverrides.model', async () => {
+    it('forwards agentModel as a router string and agentOverrides unchanged, leaving model derivation to core', async () => {
       const startExperimentAsync = vi.fn().mockResolvedValue({
         experimentId: 'experiment-1',
         status: 'pending',
@@ -266,10 +266,7 @@ describe('Datasets Handlers', () => {
           targetType: 'agent',
           targetId: 'my-agent',
           agentModel: 'my-gateway/openai/gpt-5-mini',
-          agentOverrides: {
-            instructions: 'tweaked',
-            model: { provider: 'my-gateway/openai', name: 'gpt-5-mini' },
-          },
+          agentOverrides: { instructions: 'tweaked' },
         }),
       );
     });
@@ -411,14 +408,26 @@ describe('Datasets Handlers', () => {
         expect(result.success && result.data.agentOverrides).toEqual(agentOverrides);
       });
 
-      it('accepts agentModel and agentOverrides.model when they name the same model', () => {
-        const result = parse({
-          ...agent,
+      it.each([
+        {
+          condition: 'split the same way',
           agentModel: { provider: 'openai', modelId: 'gpt-5-mini' },
-          agentOverrides: { model: { provider: 'openai', name: 'gpt-5-mini' } },
-        });
-        expect(result.success).toBe(true);
-      });
+          provider: 'openai',
+          name: 'gpt-5-mini',
+        },
+        {
+          condition: 'split at a different slash',
+          agentModel: { provider: 'my-gateway', modelId: 'openai/gpt-5-mini' },
+          provider: 'my-gateway/openai',
+          name: 'gpt-5-mini',
+        },
+      ])(
+        'accepts agentModel and agentOverrides.model naming the same model, $condition',
+        ({ agentModel, provider, name }) => {
+          const result = parse({ ...agent, agentModel, agentOverrides: { model: { provider, name } } });
+          expect(result.success).toBe(true);
+        },
+      );
 
       it.each([
         { condition: 'a non-agent target', body: { targetType: 'workflow', targetId: 'w', agentOverrides: {} } },
