@@ -6,6 +6,21 @@ import type { WorkflowExecutionResult } from './transforms/temporal-workflow-run
 import type { TemporalEngineType } from './types';
 import { toWorkflowType } from './utils';
 
+// Builds Mastra step records from the Temporal result. Iterates `stepMeta` rather than `steps`
+// because a step that returned undefined has no key in `steps` once serialized. A result without
+// `stepMeta` came from a Worker that predates it, so `steps` stays empty instead of guessing times.
+function toStepResults(input: unknown, { steps, stepMeta }: WorkflowExecutionResult): Record<string, unknown> {
+  if (!stepMeta) {
+    return {};
+  }
+
+  const records: Record<string, unknown> = { input };
+  for (const [stepId, times] of Object.entries(stepMeta)) {
+    records[stepId] = { status: 'success', output: steps[stepId], ...times };
+  }
+  return records;
+}
+
 type TemporalRunStartArgs<TState, TInput, TRequestContext> = {
   inputData?: TInput;
   initialState?: TState;
@@ -62,6 +77,7 @@ export class TemporalRun<
             outputOptions: args.outputOptions,
             tracingOptions: args.tracingOptions,
             perStep: args.perStep,
+            recordStepMeta: true,
           },
         ],
       });
@@ -72,7 +88,7 @@ export class TemporalRun<
         input: input as TInput,
         result: result.result as TOutput,
         state: initialState,
-        steps: {},
+        steps: toStepResults(input, result),
       } as WorkflowResult<TState, TInput, TOutput, TSteps>;
     } catch (error) {
       return {
