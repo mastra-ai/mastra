@@ -270,6 +270,71 @@ describe('storageVersion per run', () => {
     expect(bRuns).toBe(2);
   });
 
+  it('restarts a dowhile that died mid-iteration from the state that iteration started with, as v1 does', async () => {
+    const seen = z.object({ seen: z.array(z.number()) });
+    const build = (storageVersion: 1 | 2, hang?: { at: number; reached: () => void }) =>
+      createWorkflow({
+        id: 'counted',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: seen,
+        options: { storageVersion },
+      })
+        .dowhile(
+          createStep({
+            id: 'count',
+            inputSchema: num,
+            outputSchema: num,
+            stateSchema: seen,
+            execute: async ({ inputData, state, setState }) => {
+              if (inputData.n === hang?.at) {
+                hang.reached();
+                await new Promise(() => {});
+              }
+              await setState({ seen: [...state.seen, inputData.n] });
+              return { n: inputData.n + 1 };
+            },
+          }),
+          async ({ inputData }) => inputData.n < 5,
+        )
+        .commit();
+
+    const dieAndRestart = async (storageVersion: 1 | 2) => {
+      const storage = new MockStore();
+      const store = storage.stores.workflows!;
+      // v1 keeps the snapshot it was given; clone it so later in-place edits don't show up as stored.
+      const persist = store.persistWorkflowSnapshot.bind(store);
+      store.persistWorkflowSnapshot = args => persist({ ...args, snapshot: cloneRunData(args.snapshot) });
+
+      // The process dies in the fourth iteration, once its start is stored.
+      let died = false;
+      const first = build(storageVersion, { at: 3, reached: () => (died = true) });
+      new Mastra({ logger: false, storage, workflows: { counted: first } });
+      const run = await first.createRun();
+      void run.start({ inputData: { n: 0 }, initialState: { seen: [] } });
+      await vi.waitFor(() => expect(died).toBe(true));
+      const stored = () => store.loadWorkflowSnapshot({ workflowName: 'counted', runId: run.runId });
+      const atDeath = await stored();
+
+      const second = build(storageVersion);
+      new Mastra({ logger: false, storage, workflows: { counted: second } });
+      const restarted = await (await second.createRun({ runId: run.runId })).restart();
+      return {
+        atDeath: { status: atDeath?.status, state: atDeath?.value },
+        restarted: restarted.status,
+        state: (await stored())?.value,
+      };
+    };
+
+    const v1 = await dieAndRestart(1);
+    expect(v1).toEqual({
+      atDeath: { status: 'running', state: { seen: [0, 1, 2] } },
+      restarted: 'success',
+      state: { seen: [0, 1, 2, 3, 4] },
+    });
+    expect(await dieAndRestart(2)).toEqual(v1);
+  });
+
   it('makes no v1 write for a parallel step that starts after the run stopped on a failed write', async () => {
     const storage = new MockStore();
     const store = storage.stores.workflows!;

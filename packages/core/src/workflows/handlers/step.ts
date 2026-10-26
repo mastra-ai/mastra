@@ -244,8 +244,10 @@ export async function executeStep(
     phase: 'start',
     recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
     // A foreach's iterations all run this step, so their writes would name the same step at the
-    // same time. Its result is written when the foreach ends.
-    stepIds: executionContext.foreachIndex === undefined ? [step.id] : [],
+    // same time. Its result is written when the foreach ends. A loop runs one iteration at a time
+    // and can't be a parallel or branch arm, so nothing else of the run is in flight here: the
+    // write is a boundary write and stores the state each iteration starts from, as v1 does.
+    stepIds: executionContext.foreachIndex !== undefined ? [] : iterationCount !== undefined ? undefined : [step.id],
     journal,
   });
 
