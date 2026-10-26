@@ -523,6 +523,78 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
         expectCloseTo(stored!.leaseExpiresAt, new Date(Date.now() + 60_000));
       });
 
+      it('fences a pinned pending task on its owner and lease', async () => {
+        if (!bgStorage) return;
+        // `enqueue(..., { pinToWorker: true })` writes a pending row that
+        // already carries its owner and lease.
+        const task = createSampleTask({
+          status: 'pending',
+          ownerId: 'worker-a',
+          leaseExpiresAt: new Date(Date.now() - 1_000),
+        });
+        await bgStorage.createTask(task);
+        const pinned = (await bgStorage.getTask(task.id))!;
+        expect(pinned.status).toBe('pending');
+        expect(pinned.ownerId).toBe('worker-a');
+
+        // A peer that observed no owner cannot claim it.
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { status: 'running', startedAt: new Date(), ownerId: 'worker-b' },
+            { expectedStatus: 'pending', expectedOwnerId: null, expectedLeaseExpiresAt: null },
+          ),
+        ).toBe(false);
+
+        // Recovery fenced on the observed owner and lapsed lease unpins it once.
+        const fence = {
+          expectedStatus: 'pending' as const,
+          expectedOwnerId: 'worker-a',
+          expectedLeaseExpiresAt: pinned.leaseExpiresAt ?? null,
+        };
+        expect(
+          await bgStorage.updateTask(task.id, { retryCount: 1, ownerId: undefined, leaseExpiresAt: undefined }, fence),
+        ).toBe(true);
+        expect(
+          await bgStorage.updateTask(task.id, { retryCount: 2, ownerId: undefined, leaseExpiresAt: undefined }, fence),
+        ).toBe(false);
+        const recovered = (await bgStorage.getTask(task.id))!;
+        expect(recovered.status).toBe('pending');
+        expect(recovered.retryCount).toBe(1);
+        expect(recovered.ownerId ?? null).toBeNull();
+        expect(recovered.leaseExpiresAt ?? null).toBeNull();
+      });
+
+      it('renews a pinned pending lease only for its owner', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({
+          status: 'pending',
+          ownerId: 'worker-a',
+          leaseExpiresAt: new Date(Date.now() + 10_000),
+        });
+        await bgStorage.createTask(task);
+
+        const renewedAt = new Date(Date.now() + 60_000);
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { leaseExpiresAt: new Date(Date.now() + 60_000) },
+            { expectedStatus: 'pending', expectedOwnerId: 'worker-b' },
+          ),
+        ).toBe(false);
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { leaseExpiresAt: renewedAt },
+            { expectedStatus: 'pending', expectedOwnerId: 'worker-a' },
+          ),
+        ).toBe(true);
+        const stored = (await bgStorage.getTask(task.id))!;
+        expect(stored.status).toBe('pending');
+        expect(stored.ownerId).toBe('worker-a');
+        expectCloseTo(stored.leaseExpiresAt, renewedAt);
+      });
+
       it('refuses a claim fenced on an owner that does not match', async () => {
         if (!bgStorage) return;
         const task = createSampleTask({

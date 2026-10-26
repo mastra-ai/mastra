@@ -517,4 +517,163 @@ describe('BackgroundTaskManager: non-agent owners', () => {
       );
     });
   });
+
+  describe('pinToWorker', () => {
+    // Two workers on one store and one broker. A holds a single slot, so a
+    // pinned task waits in A's local queue: the window in which a peer could
+    // otherwise pick the pending row up and run it a second time.
+    async function pinnedOnBusyWorker(maxRetries: number) {
+      const pubsub = new EventEmitterPubSub();
+      const a = await makeManager({ globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: 3_000 }, pubsub);
+      const busy = gate();
+      const { task: blocker } = await a.enqueue(
+        payload('mcp-server:ops', 'blocker'),
+        ctx(async () => {
+          await busy.promise;
+          return 'blocker';
+        }),
+      );
+      await vi.waitFor(async () => expect((await a.getTask(blocker.id))?.status).toBe('running'));
+
+      const onA = vi.fn(async () => 'from-a');
+      const { task } = await a.enqueue(payload('mcp-server:ops', 'pinned', { maxRetries }), ctx(onA), {
+        pinToWorker: true,
+      });
+      return { pubsub, a, busy, onA, task };
+    }
+
+    async function peer(pubsub: EventEmitterPubSub) {
+      const b = await makeManager(
+        { globalConcurrency: 10, perAgentConcurrency: 10, leaseDurationMs: 3_000, recoverStaleTasksOnStart: true },
+        pubsub,
+      );
+      const onB = vi.fn(async () => 'from-b');
+      b.registerStaticExecutor('tool', { execute: onB });
+      return { b, onB };
+    }
+
+    // Takes A off the broker and stops its lease heartbeat without a graceful
+    // shutdown, like a crashed process.
+    async function crash(mgr: BackgroundTaskManager, pubsub: EventEmitterPubSub) {
+      const internals = mgr as any;
+      clearInterval(internals.heartbeatInterval);
+      await pubsub.unsubscribe('background-tasks', internals.workerCallback);
+      await pubsub.unsubscribe(internals.processAffineDispatchTopic, internals.workerCallback);
+    }
+
+    it('keeps a queued pinned row away from other workers until its owner runs it', async () => {
+      const { pubsub, a, busy, onA, task } = await pinnedOnBusyWorker(1);
+      expect(await a.getTask(task.id)).toMatchObject({ status: 'pending', ownerId: a.ownerId });
+
+      // B starts up and recovers stale tasks, then is also handed a dispatch
+      // for the row, as if it arrived on the shared topic.
+      const { b, onB } = await peer(pubsub);
+      await expect(
+        (b as any).handleDispatch({ type: 'task.dispatch', data: { taskId: task.id }, runId: task.id }),
+      ).resolves.toBe(true);
+
+      // Outlive the original lease: A's heartbeat keeps the pin alive, so B's
+      // rescheduled recovery pass still leaves the row alone.
+      await new Promise(resolve => setTimeout(resolve, 4_000));
+      expect(onB).not.toHaveBeenCalled();
+      const waiting = await b.getTask(task.id);
+      expect(waiting).toMatchObject({ status: 'pending', ownerId: a.ownerId });
+      expect(waiting!.leaseExpiresAt!.getTime()).toBeGreaterThan(Date.now());
+
+      busy.release();
+      await vi.waitFor(async () => expect(await a.getTask(task.id)).toMatchObject({ status: 'completed' }), {
+        timeout: 3_000,
+      });
+      expect((await a.getTask(task.id))?.result).toBe('from-a');
+      expect(onA).toHaveBeenCalledTimes(1);
+      expect(onB).not.toHaveBeenCalled();
+    }, 15_000);
+
+    it('recovers a pinned row as a lost attempt once its owner dies, running it once on a peer', async () => {
+      const { pubsub, a, onA, task } = await pinnedOnBusyWorker(1);
+      await crash(a, pubsub);
+      const { b, onB } = await peer(pubsub);
+
+      await vi.waitFor(async () => expect(await b.getTask(task.id)).toMatchObject({ status: 'completed' }), {
+        timeout: 8_000,
+        interval: 100,
+      });
+      const done = await b.getTask(task.id);
+      expect(done).toMatchObject({ result: 'from-b', retryCount: 1 });
+      expect(done!.ownerId).toBeUndefined();
+      expect(onB).toHaveBeenCalledTimes(1);
+      expect(onA).not.toHaveBeenCalled();
+    }, 15_000);
+
+    it('fails a pinned row with no retries once its owner dies, without running it on a peer', async () => {
+      const { pubsub, a, onA, task } = await pinnedOnBusyWorker(0);
+      await crash(a, pubsub);
+      const { b, onB } = await peer(pubsub);
+
+      await vi.waitFor(async () => expect((await b.getTask(task.id))?.status).toBe('failed'), {
+        timeout: 8_000,
+        interval: 100,
+      });
+      const failed = await b.getTask(task.id);
+      expect(failed?.error?.message).toBe('Worker process terminated before task completed');
+      expect(failed!.ownerId).toBeUndefined();
+      expect(failed!.leaseExpiresAt).toBeUndefined();
+      // Give any stray dispatch a chance to run.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(onB).not.toHaveBeenCalled();
+      expect(onA).not.toHaveBeenCalled();
+    }, 15_000);
+
+    it('hands a pinned row to peers as a lost attempt on graceful shutdown', async () => {
+      const { pubsub, a, onA, task } = await pinnedOnBusyWorker(0);
+      await a.shutdown();
+      const { b, onB } = await peer(pubsub);
+
+      await vi.waitFor(async () => expect((await b.getTask(task.id))?.status).toBe('failed'), { timeout: 2_000 });
+      expect(onB).not.toHaveBeenCalled();
+      expect(onA).not.toHaveBeenCalled();
+    });
+
+    it('releases the pin when the owner claims a row it can run immediately', async () => {
+      const mgr = await makeManager({ globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: 3_000 });
+      const { task } = await mgr.enqueue(
+        payload('mcp-server:ops', 'free'),
+        ctx(async () => 'done'),
+        { pinToWorker: true },
+      );
+      await vi.waitFor(async () => expect(await mgr.getTask(task.id)).toMatchObject({ status: 'completed' }));
+      const done = await mgr.getTask(task.id);
+      expect(done).toMatchObject({ result: 'done', retryCount: 0 });
+      expect(done!.ownerId).toBeUndefined();
+    });
+
+    it('leaves rows unpinned by default, even with a task context', async () => {
+      const mgr = await makeManager({ globalConcurrency: 1, perAgentConcurrency: 1 });
+      const busy = gate();
+      await mgr.enqueue(
+        payload('agent-1', 'blocker'),
+        ctx(async () => {
+          await busy.promise;
+          return 'blocker';
+        }),
+      );
+      const { task } = await mgr.enqueue(
+        payload('agent-1', 'queued'),
+        ctx(async () => 'queued'),
+      );
+      const stored = await mgr.getTask(task.id);
+      expect(stored?.status).toBe('pending');
+      expect(stored?.ownerId).toBeUndefined();
+      expect(stored?.leaseExpiresAt).toBeUndefined();
+      busy.release();
+    });
+
+    it('rejects pinToWorker without a task context', async () => {
+      const mgr = await makeManager({});
+      await expect(
+        mgr.enqueue(payload('mcp-server:ops', 'portable'), undefined, { pinToWorker: true }),
+      ).rejects.toThrow('pinToWorker requires a task context');
+      expect((await mgr.listTasks({})).total).toBe(0);
+    });
+  });
 });

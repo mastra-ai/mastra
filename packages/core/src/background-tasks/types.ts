@@ -139,6 +139,29 @@ export interface TaskPayload {
 }
 
 /**
+ * Options for `BackgroundTaskManager.enqueue()`.
+ */
+export interface EnqueueOptions {
+  /**
+   * Pin the `pending` row to this worker. Use it when work for the task is
+   * already in flight on this worker, for example an execution the caller
+   * started before enqueueing that the task's executor adopts. Requires a
+   * `context`.
+   *
+   * The row is written with this worker's owner ID and an execution lease,
+   * which the lease heartbeat renews while the row waits for a local slot.
+   * While the lease is live, other workers' recovery and dispatch skip the row.
+   *
+   * If this worker dies and the lease lapses, the in-flight work is lost, so the
+   * row counts as a lost attempt, like a `running` task whose worker died: it
+   * consumes a retry and is re-dispatched if `retryCount < maxRetries`,
+   * otherwise it fails. It never re-runs on another worker for free, so a task
+   * with `maxRetries: 0` is never run elsewhere.
+   */
+  pinToWorker?: boolean;
+}
+
+/**
  * Options for `BackgroundTaskManager.resume()`.
  */
 export interface ResumeOptions {

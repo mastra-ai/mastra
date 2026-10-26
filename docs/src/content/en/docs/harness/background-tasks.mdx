@@ -469,8 +469,32 @@ export const mastra = new Mastra({
 Known limitations:
 
 - A recovered task runs without the original request. Store anything the executor needs, such as the principal in `resourceId` or other JSON in `metadata`, on the task itself.
-- A `pending` task holds no lease. On startup, another process can pick it up and dispatch it. If its executor only existed in the original process, the task fails with `No executor registered`. Static executors registered in every process avoid this.
+- A `pending` task that isn't pinned holds no lease. On startup, another process can pick it up and dispatch it. If its executor only existed in the original process, the task fails with `No executor registered`. Static executors registered in every process avoid this. Use `pinToWorker` when the original process already started the work.
 - The end-of-step wait in the agent loop only waits for `running` tasks, not `pending` ones. [#28228](https://github.com/mastra-ai/mastra/pull/28228) tracks the fix.
+
+### Pin a task to the current worker
+
+Sometimes work for a task is already running in this process before you enqueue it. For example, an MCP server may start a tool call inside the request and hand it to a background task only if it runs long. Pass `pinToWorker: true` with a task context so no other process starts the same work:
+
+```typescript
+await mastra.backgroundTaskManager?.enqueue(
+  {
+    agentId: 'mcp-server:ops',
+    toolName: 'mcp-server:ops:deploy',
+    toolCallId: taskId,
+    runId: taskId,
+    args,
+  },
+  { executor: { execute: adoptRunningDeploy } },
+  { pinToWorker: true },
+)
+```
+
+`pinToWorker` means work for this task is already in flight on this worker. The `pending` task records this worker as its owner and holds an execution lease, which the worker renews while the task waits for a free slot. Other processes don't recover or dispatch the task while the lease is live.
+
+If the worker dies or shuts down first, that work is lost. Recovery treats the task as a lost attempt, like a running task whose worker died. If `retryCount` is below `maxRetries`, the task uses a retry and runs on another worker, which needs a static executor for it. Otherwise the task fails with `Worker process terminated before task completed`. A task with `maxRetries: 0` never runs on another worker.
+
+`pinToWorker` throws without a task context. Tasks that aren't pinned, including all agent tasks, hold no lease while `pending`.
 
 ## Related
 
