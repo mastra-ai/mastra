@@ -55,6 +55,13 @@ describe('FactoryChannelReplyProcessor', () => {
     expect(text).not.toContain('Only messages you send with');
   });
 
+  it('tells every run with the reply tool that pull request links are posted for it', () => {
+    // A merge wakes the session without `channel`, so the woken run needs this too.
+    for (const requestContext of [new RequestContext(), channelContext()]) {
+      expect(instruction(requestContext, { reply_in_thread: {} })).toContain("so don't post the link yourself");
+    }
+  });
+
   it('tells every channel run to link the references it mentions', () => {
     const runs = [
       instruction(channelContext()),
