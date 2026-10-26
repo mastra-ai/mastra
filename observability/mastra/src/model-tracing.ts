@@ -266,8 +266,11 @@ function appendPreview(preview: string, addition: string): string {
   return preview ? `${preview} ${addition}` : addition;
 }
 
-function normalizeMessages(messages: unknown[]): Array<{ role: string; content: string }> {
-  return messages.map(message => {
+function normalizeMessages(
+  messages: unknown[],
+  spanIds?: Array<string | undefined>,
+): Array<{ role: string; content: string; spanId?: string }> {
+  return messages.map((message, index) => {
     if (!message || typeof message !== 'object') {
       return { role: 'user', content: summarizeMessageContent(message) };
     }
@@ -289,7 +292,8 @@ function normalizeMessages(messages: unknown[]): Array<{ role: string; content: 
       functionCallSnakeCasePreview,
     );
 
-    return { role, content: contentWithFunctionCall };
+    const spanId = spanIds?.[index];
+    return spanId ? { role, content: contentWithFunctionCall, spanId } : { role, content: contentWithFunctionCall };
   });
 }
 
@@ -336,7 +340,8 @@ function summarizeRequestBody(body: unknown): StepInputPreview {
  */
 function extractStepInput(payload?: StepStartPayload): StepInputPreview {
   if (Array.isArray(payload?.inputMessages)) {
-    return normalizeMessages(payload.inputMessages);
+    const spanIds = Array.isArray(payload.inputMessageSpanIds) ? payload.inputMessageSpanIds : undefined;
+    return normalizeMessages(payload.inputMessages, spanIds);
   }
 
   const request = payload?.request;

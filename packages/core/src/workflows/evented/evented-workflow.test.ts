@@ -722,6 +722,8 @@ describe('Workflow (Evented Engine Specific)', () => {
       removeByIds: vi.fn(),
       startRecording: vi.fn(),
       stopRecording: vi.fn(() => []),
+      startSystemOrigin: vi.fn(),
+      endSystemOrigin: vi.fn(),
       makeMessageSourceChecker: vi.fn(() => ({ getSource: () => 'input' })),
       getAllSystemMessages: vi.fn(() => []),
     } as any;

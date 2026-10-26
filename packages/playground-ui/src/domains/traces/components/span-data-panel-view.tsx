@@ -11,6 +11,7 @@ import {
   SpanPayloadSection,
   SpanProcessorAttributes,
 } from './span-payload';
+import { SpanOriginProvider } from './span-payload/span-origin-context';
 import { asCoreSpan } from './span-payload/span-payload-registry';
 import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
@@ -58,6 +59,10 @@ export interface SpanDataPanelViewProps {
   isAnchor?: boolean;
   /** Extra classes for the panel root (e.g. flattening the card when nested in the trace panel). */
   className?: string;
+  /** Spans of the trace; with `onSpanSelect`, lets the payload link a value to the span that produced it. */
+  traceSpans?: ReadonlyArray<{ spanId: string; name: string }>;
+  /** Selects another span of the trace (e.g. the span that added a system message). */
+  onSpanSelect?: (spanId: string) => void;
 }
 
 export function SpanDataPanelView({
@@ -75,6 +80,8 @@ export function SpanDataPanelView({
   feedbackTabBadge,
   isAnchor,
   className,
+  traceSpans,
+  onSpanSelect,
 }: SpanDataPanelViewProps) {
   // Not a DataPanel: this is the span column rendered inside `TraceDataPanelView`,
   // which already provides the panel chrome.
@@ -116,16 +123,18 @@ export function SpanDataPanelView({
       ) : !span ? (
         <DataPanel.NoData>Span not found.</DataPanel.NoData>
       ) : (
-        <SpanDataPanelContent
-          span={span}
-          traceId={traceId}
-          spanId={spanId}
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          feedbackTabSlot={feedbackTabSlot}
-          feedbackTabBadge={feedbackTabBadge}
-          isAnchor={isAnchor}
-        />
+        <SpanOriginProvider spans={traceSpans} onSpanSelect={onSpanSelect}>
+          <SpanDataPanelContent
+            span={span}
+            traceId={traceId}
+            spanId={spanId}
+            activeTab={activeTab}
+            onTabChange={onTabChange}
+            feedbackTabSlot={feedbackTabSlot}
+            feedbackTabBadge={feedbackTabBadge}
+            isAnchor={isAnchor}
+          />
+        </SpanOriginProvider>
       )}
     </section>
   );

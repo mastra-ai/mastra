@@ -368,4 +368,6 @@ export interface SerializedMessageListState {
   prunedResponseMessageIds?: string[];
   /** Where the latest loop-iteration boundary sits, so a restored list scopes final-step text the same way. */
   lastStepBoundary?: { messageId: string; partIndex: number };
+  /** Span that added each system message, aligned with `systemMessages` and `taggedSystemMessages` (null when unattributed). */
+  systemMessageSpanIds?: { untagged: Array<string | null>; tagged: Record<string, Array<string | null>> };
 }

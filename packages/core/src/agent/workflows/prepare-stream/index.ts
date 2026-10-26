@@ -158,6 +158,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     resourceId,
     runId,
     requestContext,
+    agentSpan,
     methodType,
     instructions,
     mcpServerGuidance,

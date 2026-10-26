@@ -521,4 +521,84 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
       }
     },
   );
+
+  describe('system message origin', () => {
+    type InferenceMessage = { role: string; content: string; spanId?: string };
+
+    const systemMessage = (inference: any, content: string): InferenceMessage => {
+      const message = ((inference?.input ?? []) as InferenceMessage[]).find(
+        m => m.role === 'system' && m.content === content,
+      );
+      expect(message, `missing system message "${content}" in inference input`).toBeDefined();
+      return message!;
+    };
+    const processorSpansNamed = (name: string) =>
+      byStart(testExporter.getSpansByType('processor_run' as any).filter((s: any) => s.name === name));
+
+    it.each(['durable', 'evented'] as const)(
+      '%s agent: links instructions and processInput system messages to the spans that added them',
+      async variant => {
+        const agent = new Agent({
+          id: 'a',
+          name: 'a',
+          instructions: 'Base instructions',
+          model: textModel('Hello') as any,
+          inputProcessors: [
+            {
+              id: 'injector',
+              processInput: async ({ messages, messageList }) => {
+                messageList.addSystem('Injected by processor');
+                return messages;
+              },
+            },
+          ],
+        });
+        const { wrapped } = buildMastra(testExporter, agent, variant);
+        await runToCompletion(wrapped, 'hi', testExporter);
+
+        const [inference] = testExporter.getSpansByType('model_inference' as any);
+        const [agentRun] = testExporter.getSpansByType('agent_run' as any);
+        const [injectorSpan] = processorSpansNamed('input processor: injector');
+        expect(injectorSpan).toBeDefined();
+        expect(systemMessage(inference, 'Injected by processor').spanId).toBe(idOf(injectorSpan));
+        expect(systemMessage(inference, 'Base instructions').spanId).toBe(idOf(agentRun));
+      },
+    );
+
+    it.each(['durable', 'evented'] as const)(
+      '%s agent: keeps per-step and deduplicated origins across serialized steps',
+      async variant => {
+        const agent = new Agent({
+          id: 'a',
+          name: 'a',
+          instructions: 'Base instructions',
+          model: toolThenTextModel('get_weather', { city: 'Paris' }, 'It is 21C in Paris.') as any,
+          tools: { get_weather: weatherTool },
+          inputProcessors: [
+            {
+              id: 'stepper',
+              processInputStep: async ({ messageList, stepNumber }) => {
+                messageList.addSystem(`Untagged step ${stepNumber}`);
+                messageList.addSystem('Tagged stable', 'stable-tag');
+                return messageList;
+              },
+            },
+          ],
+        });
+        const { wrapped } = buildMastra(testExporter, agent, variant);
+        await runToCompletion(wrapped, 'weather in paris?', testExporter);
+
+        const stepSpans = processorSpansNamed('input step processor: stepper');
+        expect(stepSpans).toHaveLength(2);
+        const [step0Span, step1Span] = stepSpans;
+        const inferences = byStart(testExporter.getSpansByType('model_inference' as any));
+        expect(inferences).toHaveLength(2);
+        const [agentRun] = testExporter.getSpansByType('agent_run' as any);
+
+        expect(systemMessage(inferences[1], 'Untagged step 1').spanId).toBe(idOf(step1Span));
+        expect(systemMessage(inferences[1], 'Tagged stable').spanId).toBe(idOf(step0Span));
+        expect(systemMessage(inferences[1], 'Base instructions').spanId).toBe(idOf(agentRun));
+      },
+    );
+  });
 });

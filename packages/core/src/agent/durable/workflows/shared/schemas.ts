@@ -174,6 +174,8 @@ export const baseIterationStateSchema = z.object({
   // Immutable untagged system-message baseline captured before the first
   // iteration. Each model attempt restores it before input-step processors run.
   initialUntaggedSystemMessages: z.array(z.any()).optional(),
+  // Span that added each baseline message, aligned with initialUntaggedSystemMessages.
+  initialUntaggedSystemMessageSpanIds: z.array(z.string().nullable()).optional(),
   toolsMetadata: z.array(z.any()),
   modelConfig: z.any(),
   options: durableOptionsSchema,

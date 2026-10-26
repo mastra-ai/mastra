@@ -319,6 +319,8 @@ export interface StepStartPayload {
     [key: string]: unknown;
   };
   inputMessages?: LanguageModelV2Prompt;
+  /** Id of the span that added each input message, aligned with `inputMessages`. Tracing only. */
+  inputMessageSpanIds?: Array<string | undefined>;
   warnings?: LanguageModelV2CallWarning[];
   [key: string]: unknown;
 }

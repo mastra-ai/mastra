@@ -432,6 +432,58 @@ export class MessageList {
     return events;
   }
 
+  // Span that added each stored system message, and the prompt messages built from them.
+  // Kept beside the messages so the id never reaches a provider request or a cache key.
+  private systemOrigins = new Set<AnySpan>();
+  private systemMessageSpanIds = new WeakMap<CoreMessageV4, string>();
+  private promptMessageSpanIds = new WeakMap<object, string>();
+
+  /**
+   * Attribute system messages stored from now on to `span`, until `endSystemOrigin(span)`.
+   * Several origins can be active at once (parallel processors); see `resolveSystemOrigin`.
+   */
+  public startSystemOrigin(span?: AnySpan): void {
+    if (span?.isValid) this.systemOrigins.add(span);
+  }
+
+  public endSystemOrigin(span?: AnySpan): void {
+    if (span) this.systemOrigins.delete(span);
+  }
+
+  /** Id of the span that added the system message this prompt message was built from. */
+  public getPromptMessageSpanId(message: object): string | undefined {
+    return this.promptMessageSpanIds.get(message);
+  }
+
+  /** Id of the span that added this stored system message. */
+  public getSystemMessageSpanId(message: CoreMessageV4): string | undefined {
+    return this.systemMessageSpanIds.get(message);
+  }
+
+  private restoreSystemMessageSpanIds(messages: CoreMessageV4[], spanIds: Array<string | null | undefined> = []): void {
+    messages.forEach((message, index) => {
+      const spanId = spanIds[index];
+      if (spanId) this.systemMessageSpanIds.set(message, spanId);
+    });
+  }
+
+  private resolveSystemOrigin(): string | undefined {
+    if (this.systemOrigins.size === 0) return undefined;
+    if (this.systemOrigins.size === 1) return this.systemOrigins.values().next().value!.id;
+    let span = resolveCurrentSpan();
+    while (span) {
+      if (this.systemOrigins.has(span)) return span.id;
+      span = span.parent;
+    }
+    return undefined;
+  }
+
+  private assignSystemOrigin(message: CoreMessageV4): void {
+    if (this.systemMessageSpanIds.has(message)) return;
+    const spanId = this.resolveSystemOrigin();
+    if (spanId) this.systemMessageSpanIds.set(message, spanId);
+  }
+
   private recordMutation(event: ReturnType<MessageList['getRecordedEvents']>[number]): void {
     // Child operations belong to the nearest processor recording. Parallel
     // processors share the list, but have separate async span contexts.
@@ -589,8 +641,19 @@ export class MessageList {
     });
     const lastStepBoundary = this.#locateLastStepBoundary();
     const prunedResponseMessageIds = this.#getPrunedResponseMessageIds();
+    const spanIdsOf = (messages: CoreMessageV4[]) => messages.map(m => this.systemMessageSpanIds.get(m) ?? null);
+    const systemMessageSpanIds = {
+      untagged: spanIdsOf(this.systemMessages),
+      tagged: Object.fromEntries(
+        Object.entries(this.taggedSystemMessages).map(([tag, msgs]) => [tag, spanIdsOf(msgs)]),
+      ),
+    };
+    const hasSystemMessageSpanIds = [systemMessageSpanIds.untagged, ...Object.values(systemMessageSpanIds.tagged)].some(
+      ids => ids.some(Boolean),
+    );
     return {
       ...state,
+      ...(hasSystemMessageSpanIds ? { systemMessageSpanIds } : {}),
       ...(lastStepBoundary ? { lastStepBoundary } : {}),
       ...(prunedResponseMessageIds.length > 0 ? { prunedResponseMessageIds } : {}),
     };
@@ -633,6 +696,10 @@ export class MessageList {
     this.taggedSystemMessages = data.taggedSystemMessages;
     this.memoryInfo = data.memoryInfo;
     this._agentNetworkAppend = data.agentNetworkAppend;
+    this.restoreSystemMessageSpanIds(this.systemMessages, state.systemMessageSpanIds?.untagged);
+    for (const [tag, messages] of Object.entries(this.taggedSystemMessages)) {
+      this.restoreSystemMessageSpanIds(messages, state.systemMessageSpanIds?.tagged[tag]);
+    }
     this.responseMessageSplits.clear();
     for (const message of this.messages) {
       this.updateLastCreatedAt(message);
@@ -1194,11 +1261,20 @@ export class MessageList {
             }
           }
         }
-        const systemMessages = convertAIV4CoreToAIV5ModelMessages(
-          [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
-          `system`,
-          this.createAdapterContext(),
-          this.messages,
+        // Converted one by one so each prompt message stays paired with the span that added it.
+        const systemSpanIds: Array<string | undefined> = [];
+        const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()].flatMap(
+          message => {
+            const converted = convertAIV4CoreToAIV5ModelMessages(
+              [message],
+              `system`,
+              this.createAdapterContext(),
+              this.messages,
+            );
+            const spanId = this.systemMessageSpanIds.get(message);
+            systemSpanIds.push(...converted.map(() => spanId));
+            return converted;
+          },
         );
 
         // Attachments that failed to download while building this prompt.
@@ -1291,12 +1367,20 @@ export class MessageList {
 
         messages = dropCrossProviderExecutedParts(messages, this.messages, options.targetProvider, this.logger);
 
-        return messages
+        const prompt = messages
           .filter(message => message != null)
           .map(aiV5ModelMessageToV2PromptMessage)
           .filter(
             message => message.role === 'system' || typeof message.content === 'string' || message.content.length > 0,
           );
+
+        // System messages lead the prompt in the order they were converted.
+        systemSpanIds.forEach((spanId, index) => {
+          const message = prompt[index];
+          if (spanId && message?.role === 'system') this.promptMessageSpanIds.set(message, spanId);
+        });
+
+        return prompt;
       },
     },
     aiV6: {
@@ -2376,13 +2460,17 @@ export class MessageList {
    * Replace the untagged system message bucket with the provided array while
    * leaving tagged system message buckets (owned by other processors) intact.
    * @param messages - Array of system messages to set as untagged
+   * @param spanIds - Span that added each message, aligned with `messages`. Used to restore
+   * attribution for messages that went through serialization.
    */
-  public replaceAllSystemMessages(messages: CoreMessageV4[]): this {
+  public replaceAllSystemMessages(messages: CoreMessageV4[], spanIds?: Array<string | null | undefined>): this {
     this.systemMessages = [];
+    this.restoreSystemMessageSpanIds(messages, spanIds);
 
     for (const message of messages) {
       if (message.role !== 'system') continue;
       this.systemMessages.push(message);
+      this.assignSystemOrigin(message);
     }
 
     return this;
@@ -2425,6 +2513,7 @@ export class MessageList {
     if (tag && !this.isDuplicateSystem(coreMessage, tag)) {
       this.taggedSystemMessages[tag] ||= [];
       this.taggedSystemMessages[tag].push(coreMessage);
+      this.assignSystemOrigin(coreMessage);
       this.recordMutation({
         type: 'addSystem',
         tag,
@@ -2432,6 +2521,7 @@ export class MessageList {
       });
     } else if (!tag && !this.isDuplicateSystem(coreMessage)) {
       this.systemMessages.push(coreMessage);
+      this.assignSystemOrigin(coreMessage);
       this.recordMutation({
         type: 'addSystem',
         message: coreMessage,

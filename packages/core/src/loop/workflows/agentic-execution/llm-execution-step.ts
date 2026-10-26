@@ -2078,7 +2078,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             toolChoice: currentStep.toolChoice as ModelInferenceContext['toolChoice'],
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });
-          modelSpanTracker?.startInference?.({ request: {}, inputMessages, messageId: currentStep.messageId });
+          modelSpanTracker?.startInference?.({
+            request: {},
+            inputMessages,
+            inputMessageSpanIds: inputMessages.map(message => messageList.getPromptMessageSpanId(message)),
+            messageId: currentStep.messageId,
+          });
           const inferenceStartedAt = Date.now();
 
           modelResult = executeWithContextSync({

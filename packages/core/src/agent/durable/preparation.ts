@@ -436,59 +436,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Add agent instructions. Per-call `options.instructions` overrides the
   // agent's default instructions to mirror non-durable Agent.stream() behavior.
   const instructions = execOptions?.instructions || (await typedAgent.getInstructions({ requestContext }));
-  if (instructions) {
-    if (typeof instructions === 'string') {
-      messageList.addSystem(instructions);
-    } else if (Array.isArray(instructions)) {
-      for (const inst of instructions) {
-        messageList.addSystem(inst);
-      }
-    } else {
-      messageList.addSystem(instructions);
-    }
-  }
-  const workspace = await typedAgent.getWorkspace({ requestContext });
-
-  // Durable preparation runs processInput processors below, but workspace
-  // instructions are a processInputStep concern in the non-durable path.
-  // Add them here once so durable runs get the same workspace context.
-  if (workspace) {
-    const hasFs =
-      typeof workspace.hasFilesystemConfig === 'function' ? workspace.hasFilesystemConfig() : !!workspace.filesystem;
-    const hasSb = typeof workspace.hasSandboxConfig === 'function' ? workspace.hasSandboxConfig() : !!workspace.sandbox;
-    if (hasFs || hasSb) {
-      const wsInstructions =
-        typeof workspace.getInstructionsAsync === 'function'
-          ? await workspace.getInstructionsAsync({ requestContext })
-          : workspace.getInstructions({ requestContext });
-      if (wsInstructions) {
-        messageList.addSystem({ role: 'system', content: wsInstructions });
-      }
-    }
-  }
-
-  // Add context messages if provided
-  if (execOptions?.context) {
-    messageList.add(execOptions.context, 'context');
-  }
-
-  // Per-call `options.system` is appended as an additional system message after
-  // context. Mirrors the non-durable Agent.stream() prepare-memory-step path.
-  if (execOptions?.system) {
-    const sys = execOptions.system;
-    if (typeof sys === 'string') {
-      messageList.addSystem(sys);
-    } else if (Array.isArray(sys)) {
-      for (const s of sys) {
-        messageList.addSystem(s);
-      }
-    } else {
-      messageList.addSystem(sys);
-    }
-  }
-
-  // Add user messages
-  messageList.add(messages, 'input');
 
   // 6. Establish the memory/thread context BEFORE resolving input processors.
   //
@@ -611,6 +558,66 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     requestContext,
     mastra,
   });
+
+  // Added once AGENT_RUN exists so these system messages are attributed to it.
+  const workspace = await typedAgent.getWorkspace({ requestContext });
+  messageList.startSystemOrigin(agentSpan);
+  try {
+    if (instructions) {
+      if (typeof instructions === 'string') {
+        messageList.addSystem(instructions);
+      } else if (Array.isArray(instructions)) {
+        for (const inst of instructions) {
+          messageList.addSystem(inst);
+        }
+      } else {
+        messageList.addSystem(instructions);
+      }
+    }
+    // Durable preparation runs processInput processors below, but workspace
+    // instructions are a processInputStep concern in the non-durable path.
+    // Add them here once so durable runs get the same workspace context.
+    if (workspace) {
+      const hasFs =
+        typeof workspace.hasFilesystemConfig === 'function' ? workspace.hasFilesystemConfig() : !!workspace.filesystem;
+      const hasSb =
+        typeof workspace.hasSandboxConfig === 'function' ? workspace.hasSandboxConfig() : !!workspace.sandbox;
+      if (hasFs || hasSb) {
+        const wsInstructions =
+          typeof workspace.getInstructionsAsync === 'function'
+            ? await workspace.getInstructionsAsync({ requestContext })
+            : workspace.getInstructions({ requestContext });
+        if (wsInstructions) {
+          messageList.addSystem({ role: 'system', content: wsInstructions });
+        }
+      }
+    }
+
+    // Add context messages if provided
+    if (execOptions?.context) {
+      messageList.add(execOptions.context, 'context');
+    }
+
+    // Per-call `options.system` is appended as an additional system message after
+    // context. Mirrors the non-durable Agent.stream() prepare-memory-step path.
+    if (execOptions?.system) {
+      const sys = execOptions.system;
+      if (typeof sys === 'string') {
+        messageList.addSystem(sys);
+      } else if (Array.isArray(sys)) {
+        for (const s of sys) {
+          messageList.addSystem(s);
+        }
+      } else {
+        messageList.addSystem(sys);
+      }
+    }
+
+    // Add user messages
+    messageList.add(messages, 'input');
+  } finally {
+    messageList.endSystemOrigin(agentSpan);
+  }
   // Run processInput (once, before execution) if we have any processors.
   // The MastraMemory context (thread + memoryConfig) was already established
   // above, before processor resolution, so processors that need it (working

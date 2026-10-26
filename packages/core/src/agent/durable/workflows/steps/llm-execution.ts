@@ -124,6 +124,7 @@ const durableLLMInputSchema = z.object({
   agentName: z.string().optional(),
   messageListState: z.any(), // SerializedMessageListState
   initialUntaggedSystemMessages: z.array(z.any()).optional(),
+  initialUntaggedSystemMessageSpanIds: z.array(z.string().nullable()).optional(),
   toolsMetadata: z.array(z.any()),
   modelConfig: z.object({
     provider: z.string(),
@@ -875,6 +876,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // to one model attempt, while tagged processor-owned buckets remain.
             messageList.replaceAllSystemMessages(
               typedInput.initialUntaggedSystemMessages ?? messageList.getSystemMessages(),
+              typedInput.initialUntaggedSystemMessageSpanIds,
             );
 
             if (needsTrailingAssistantGuard(currentModel, stepInputProcessors)) {
@@ -1454,7 +1456,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               toolChoice: currentToolChoice,
               responseFormat: structuredOutput ? 'json_schema' : undefined,
             });
-            modelSpanTracker?.startInference?.({ request: {}, inputMessages, messageId: currentMessageId });
+            modelSpanTracker?.startInference?.({
+              request: {},
+              inputMessages,
+              inputMessageSpanIds: inputMessages.map(message => messageList.getPromptMessageSpanId(message)),
+              messageId: currentMessageId,
+            });
             let inferenceStartedAt: number | undefined;
 
             // Collect chunks for post-stream message building (via

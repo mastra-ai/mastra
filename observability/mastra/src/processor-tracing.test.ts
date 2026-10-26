@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import { APICallError } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent/message-list';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { InMemoryServerCache } from '@mastra/core/cache';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { SpanType, TracingEventType, EntityType } from '@mastra/core/observability';
@@ -15,13 +17,13 @@ import type {
 } from '@mastra/core/observability';
 import { getCurrentSpan } from '@mastra/core/observability/context-storage';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
-import { ModerationProcessor, ProcessorStepSchema } from '@mastra/core/processors';
+import { ModerationProcessor, ProcessorStepSchema, ResponseCache } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
 import { ChunkFrom, MastraModelOutput } from '@mastra/core/stream';
 import type { ChunkType } from '@mastra/core/stream';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Observability } from './default';
@@ -2988,6 +2990,454 @@ describe('Processor Tracing Tests', () => {
           .length,
       ).toBeGreaterThan(1);
       await testExporter.finalExpectations();
+    });
+  });
+
+  // ==========================================================================
+  // System message origin
+  // ==========================================================================
+
+  describe('System message origin', () => {
+    type InferenceMessage = { role: string; content: string; spanId?: string };
+
+    function inferenceSystemMessages(inference: AnyExportedSpan | undefined): InferenceMessage[] {
+      return ((inference?.input ?? []) as InferenceMessage[]).filter(message => message.role === 'system');
+    }
+
+    function systemMessage(inference: AnyExportedSpan | undefined, content: string): InferenceMessage {
+      const message = inferenceSystemMessages(inference).find(m => m.content === content);
+      expect(message, `missing system message "${content}" in inference input`).toBeDefined();
+      return message!;
+    }
+
+    function processorSpan(name: string) {
+      const span = testExporter.getProcessorSpans().find(s => s.name === name);
+      expect(span, `missing processor span "${name}"`).toBeDefined();
+      return span!;
+    }
+
+    it('links a system message added in processInput to its processor span', async () => {
+      const agent = new Agent({
+        id: 'origin-agent',
+        name: 'Origin Agent',
+        instructions: 'Base instructions',
+        model: createMockModel(),
+        errorProcessorDefaults: false,
+        inputProcessors: [
+          {
+            id: 'injector',
+            processInput: async ({ messages, messageList }) => {
+              messageList.addSystem('Injected by processor');
+              return messages;
+            },
+          },
+        ],
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+      await mastra.getAgent('agent').generate('Hello');
+
+      const [inference] = testExporter.getModelInferenceSpans();
+      expect(systemMessage(inference, 'Injected by processor').spanId).toBe(
+        processorSpan('input processor: injector').id,
+      );
+      await testExporter.finalExpectations();
+    });
+
+    it('links the agent instructions to the agent run span', async () => {
+      const agent = new Agent({
+        id: 'origin-agent',
+        name: 'Origin Agent',
+        instructions: 'Base instructions',
+        model: createMockModel(),
+        errorProcessorDefaults: false,
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+      await mastra.getAgent('agent').generate('Hello');
+
+      const [inference] = testExporter.getModelInferenceSpans();
+      const [agentRun] = testExporter.getAgentSpans();
+      expect(systemMessage(inference, 'Base instructions').spanId).toBe(agentRun!.id);
+      await testExporter.finalExpectations();
+    });
+
+    it('links a system message returned by processInput to its processor span, without reattributing passed-through ones', async () => {
+      const agent = new Agent({
+        id: 'origin-agent',
+        name: 'Origin Agent',
+        instructions: 'Base instructions',
+        model: createMockModel(),
+        errorProcessorDefaults: false,
+        inputProcessors: [
+          {
+            id: 'injector',
+            processInput: async ({ messages, messageList }) => {
+              messageList.addSystem('Injected by processor');
+              return messages;
+            },
+          },
+          {
+            id: 'returner',
+            processInput: async ({ messages, systemMessages }) => ({
+              messages,
+              systemMessages: [...systemMessages, { role: 'system' as const, content: 'Returned by processor' }],
+            }),
+          },
+        ],
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+      await mastra.getAgent('agent').generate('Hello');
+
+      const [inference] = testExporter.getModelInferenceSpans();
+      const [agentRun] = testExporter.getAgentSpans();
+      expect(systemMessage(inference, 'Returned by processor').spanId).toBe(
+        processorSpan('input processor: returner').id,
+      );
+      expect(systemMessage(inference, 'Injected by processor').spanId).toBe(
+        processorSpan('input processor: injector').id,
+      );
+      expect(systemMessage(inference, 'Base instructions').spanId).toBe(agentRun!.id);
+      await testExporter.finalExpectations();
+    });
+
+    it('links a system message returned in a processInput message array to its processor span', async () => {
+      const agent = new Agent({
+        id: 'origin-agent',
+        name: 'Origin Agent',
+        instructions: 'Base instructions',
+        model: createMockModel(),
+        errorProcessorDefaults: false,
+        inputProcessors: [
+          {
+            id: 'array-returner',
+            processInput: async ({ messages }) => [
+              ...messages,
+              {
+                id: 'returned-system',
+                role: 'system' as const,
+                createdAt: new Date(),
+                content: { format: 2 as const, parts: [], content: 'Returned in array' },
+              },
+            ],
+          },
+        ],
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+      await mastra.getAgent('agent').generate('Hello');
+
+      const [inference] = testExporter.getModelInferenceSpans();
+      const [agentRun] = testExporter.getAgentSpans();
+      expect(systemMessage(inference, 'Returned in array').spanId).toBe(
+        processorSpan('input processor: array-returner').id,
+      );
+      expect(systemMessage(inference, 'Base instructions').spanId).toBe(agentRun!.id);
+      await testExporter.finalExpectations();
+    });
+
+    it('links each step system message to the span of the step that added it, and keeps the first span for a deduplicated tagged message', async () => {
+      let call = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          call++;
+          if (call === 1) {
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'response-metadata', id: '1' },
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'echo', input: JSON.stringify({ text: 'hi' }) },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          }
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'response-metadata', id: '2' },
+              { type: 'text-delta', id: '1', delta: 'done' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+            ]),
+          };
+        },
+      });
+
+      const agent = new Agent({
+        id: 'origin-agent',
+        name: 'Origin Agent',
+        instructions: 'Base instructions',
+        model,
+        errorProcessorDefaults: false,
+        tools: {
+          echo: createTool({
+            id: 'echo',
+            description: 'Echo the input back',
+            inputSchema: z.object({ text: z.string() }),
+            execute: async ({ text }) => ({ text }),
+          }),
+        },
+        inputProcessors: [
+          {
+            id: 'stepper',
+            processInputStep: async ({ messageList, stepNumber }) => {
+              messageList.addSystem(`Untagged step ${stepNumber}`);
+              messageList.addSystem('Tagged stable', 'stable-tag');
+              return messageList;
+            },
+          },
+        ],
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+      const stream = await mastra.getAgent('agent').stream('Hello');
+      await stream.consumeStream();
+
+      const stepSpans = testExporter.getProcessorSpans().filter(s => s.name === 'input step processor: stepper');
+      expect(stepSpans).toHaveLength(2);
+      const [step0Span, step1Span] = stepSpans;
+      const inferences = testExporter.getModelInferenceSpans();
+      expect(inferences).toHaveLength(2);
+      const step1Inference = inferences[1];
+
+      expect(systemMessage(step1Inference, 'Untagged step 1').spanId).toBe(step1Span!.id);
+      expect(systemMessage(step1Inference, 'Tagged stable').spanId).toBe(step0Span!.id);
+      expect(systemMessage(step1Inference, 'Base instructions').spanId).toBe(testExporter.getAgentSpans()[0]!.id);
+      await testExporter.finalExpectations();
+    });
+
+    it('does not link a system message rewritten by processLLMRequest to any span', async () => {
+      const agent = new Agent({
+        id: 'origin-agent',
+        name: 'Origin Agent',
+        instructions: 'Base instructions',
+        model: createMockModel(),
+        errorProcessorDefaults: false,
+        inputProcessors: [
+          {
+            id: 'rewriter',
+            processInput: async ({ messages, messageList }) => {
+              messageList.addSystem('Injected by processor');
+              return messages;
+            },
+            processLLMRequest: ({ prompt }) => ({
+              prompt: prompt.map(message =>
+                message.role === 'system' && message.content === 'Injected by processor'
+                  ? { role: 'system' as const, content: 'Rewritten at request time' }
+                  : message,
+              ),
+            }),
+          },
+        ],
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+      await mastra.getAgent('agent').generate('Hello');
+
+      const [inference] = testExporter.getModelInferenceSpans();
+      expect(systemMessage(inference, 'Rewritten at request time').spanId).toBeUndefined();
+      expect(systemMessage(inference, 'Base instructions').spanId).toBe(testExporter.getAgentSpans()[0]!.id);
+      await testExporter.finalExpectations();
+    });
+
+    it('does not link a system message that background-task guidance was appended to', async () => {
+      const agent = new Agent({
+        id: 'origin-agent',
+        name: 'Origin Agent',
+        instructions: 'Base instructions',
+        model: createMockModel(),
+        errorProcessorDefaults: false,
+        tools: {
+          slow: createTool({
+            id: 'slow',
+            description: 'A slow tool',
+            inputSchema: z.object({}),
+            background: { enabled: true },
+            execute: async () => ({ ok: true }),
+          }),
+        },
+      });
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        backgroundTasks: { enabled: true },
+        agents: { agent },
+      });
+
+      await mastra.getAgent('agent').generate('Hello');
+
+      const [inference] = testExporter.getModelInferenceSpans();
+      const [leading] = inferenceSystemMessages(inference);
+      expect(leading?.content).toMatch(/^Base instructions\n\n/);
+      expect(leading?.spanId).toBeUndefined();
+      await testExporter.finalExpectations();
+    });
+
+    it('does not link a system message that the auto-resume directive was appended to', async () => {
+      const agent = new Agent({
+        id: 'origin-agent',
+        name: 'Origin Agent',
+        instructions: 'Base instructions',
+        model: createMockModel(),
+        errorProcessorDefaults: false,
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+      await mastra.getAgent('agent').generate(
+        [
+          {
+            id: 'suspended-turn',
+            role: 'assistant',
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Waiting for your answer' }],
+              metadata: { suspendedTools: { 'call-1': { toolName: 'ask', args: {}, suspendPayload: {} } } },
+            },
+          },
+          {
+            id: 'user-turn',
+            role: 'user',
+            createdAt: new Date(),
+            content: { format: 2, parts: [{ type: 'text', text: 'My answer is 42' }] },
+          },
+        ],
+        { autoResumeSuspendedTools: true },
+      );
+
+      const [inference] = testExporter.getModelInferenceSpans();
+      const [leading] = inferenceSystemMessages(inference);
+      expect(leading?.content).toMatch(/^Base instructions\n\nAnalyse the suspended tools/);
+      expect(leading?.spanId).toBeUndefined();
+      await testExporter.finalExpectations();
+    });
+
+    it('keeps span ids out of the provider prompt and the response cache key', async () => {
+      const model = createMockModel();
+      const cache = new InMemoryServerCache();
+      const cacheSets = vi.spyOn(cache, 'set');
+      const agent = new Agent({
+        id: 'origin-agent',
+        name: 'Origin Agent',
+        instructions: 'Base instructions',
+        model,
+        errorProcessorDefaults: false,
+        inputProcessors: [
+          {
+            id: 'injector',
+            processInput: async ({ messages, messageList }) => {
+              messageList.addSystem('Injected by processor');
+              return messages;
+            },
+          },
+          new ResponseCache({ cache, agentId: 'origin-agent' }),
+        ],
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+      await mastra.getAgent('agent').generate('Hello');
+      await vi.waitFor(() => expect(cacheSets).toHaveBeenCalledTimes(1));
+      await mastra.getAgent('agent').generate('Hello');
+
+      const [inference] = testExporter.getModelInferenceSpans();
+      const attributedSpanId = systemMessage(inference, 'Injected by processor').spanId;
+      expect(attributedSpanId).toBeDefined();
+
+      const providerCalls = [...model.doGenerateCalls, ...model.doStreamCalls];
+      expect(providerCalls).toHaveLength(1);
+      const sentPrompt = JSON.stringify(providerCalls[0]!.prompt);
+      expect(sentPrompt).not.toContain('spanId');
+      expect(sentPrompt).not.toContain(attributedSpanId);
+    });
+
+    it('links each system message added by a parallel branch to that branch span', async () => {
+      let arrived = 0;
+      let releaseBarrier!: () => void;
+      const barrier = new Promise<void>(resolve => (releaseBarrier = resolve));
+      const branch = (id: string): Processor => ({
+        id,
+        processInput: async ({ messages, messageList }) => {
+          arrived += 1;
+          if (arrived === 2) releaseBarrier();
+          await Promise.race([barrier, new Promise(resolve => setTimeout(resolve, 1000))]);
+          messageList.addSystem(`Added by ${id}`);
+          return messages;
+        },
+      });
+      const parallelWorkflow = createWorkflow({
+        id: 'parallel-origin',
+        inputSchema: ProcessorStepSchema,
+        outputSchema: ProcessorStepSchema,
+      })
+        .parallel([createStep(branch('branch-a')), createStep(branch('branch-b'))])
+        .map(async ({ inputData }) => inputData['processor:branch-a'])
+        .commit();
+      const agent = new Agent({
+        id: 'origin-agent',
+        name: 'Origin Agent',
+        instructions: 'Base instructions',
+        model: createMockModel(),
+        inputProcessors: [parallelWorkflow],
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+      await mastra.getAgent('agent').generate('Hello');
+
+      expect(arrived).toBe(2);
+      const [inference] = testExporter.getModelInferenceSpans();
+      expect(systemMessage(inference, 'Added by branch-a').spanId).toBe(processorSpan('input processor: branch-a').id);
+      expect(systemMessage(inference, 'Added by branch-b').spanId).toBe(processorSpan('input processor: branch-b').id);
+      await testExporter.finalExpectations();
+    });
+
+    it('links a system message added by an error processor before a retry to its processor span', async () => {
+      let calls = 0;
+      const model = new MockLanguageModelV2({
+        doGenerate: async () => {
+          calls += 1;
+          if (calls === 1) {
+            throw new APICallError({
+              message: 'Bad request',
+              url: 'https://example.test',
+              requestBodyValues: {},
+              statusCode: 400,
+              isRetryable: false,
+            });
+          }
+          return {
+            content: [{ type: 'text', text: 'Recovered' }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            warnings: [],
+          };
+        },
+      });
+      const errorProcessor: Processor = {
+        id: 'recoverer',
+        processAPIError: async ({ messageList, retryCount }) => {
+          if (retryCount > 0) return { retry: false };
+          messageList.addSystem('Added on API error', 'recovery');
+          return { retry: true };
+        },
+      };
+      const agent = new Agent({
+        id: 'agent',
+        name: 'Agent',
+        instructions: 'Base instructions',
+        model,
+        errorProcessors: [errorProcessor],
+        errorProcessorDefaults: false,
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+      const result = await mastra.getAgent('agent').generate('Hello');
+
+      expect(result.text).toBe('Recovered');
+      const retried = testExporter.getModelInferenceSpans().at(-1);
+      expect(systemMessage(retried, 'Added on API error').spanId).toBe(
+        processorSpan('request error processor: recoverer').id,
+      );
     });
   });
 });

@@ -1243,6 +1243,7 @@ function createStepFromProcessor<TProcessorId extends string>(
           return mutations.length > 0 ? { messageListMutations: mutations } : undefined;
         };
         try {
+          recordingList?.startSystemOrigin(processorSpan);
           const result = await executeWithContext({ span: processorSpan, fn });
           processorSpan?.end({ output: buildProcessorSpanOutput(result), attributes: takeMutations() });
           return result;
@@ -1266,6 +1267,8 @@ function createStepFromProcessor<TProcessorId extends string>(
             processorSpan?.error({ error: error as Error, endSpan: true, attributes: mutationAttributes });
           }
           throw error;
+        } finally {
+          recordingList?.endSystemOrigin(processorSpan);
         }
       };
 

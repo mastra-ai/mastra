@@ -8,6 +8,7 @@ import type { MastraMemory } from '../../../memory/memory';
 import { MemoryRunState } from '../../../memory/run-state';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
+import type { Span, SpanType } from '../../../observability';
 import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows/workflow';
@@ -60,6 +61,7 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
+  agentSpan?: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   instructions: SystemMessage;
   /** MCP server guidance to include as a separate system message. */
@@ -78,6 +80,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
   resourceId,
   runId: _runId,
   requestContext,
+  agentSpan,
   instructions,
   mcpServerGuidance,
   memoryConfig,
@@ -107,6 +110,8 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       // Shared by all processor methods (input and output) for state sharing
       const processorStates = new Map<string, ProcessorState>();
 
+      messageList.startSystemOrigin(agentSpan);
+
       // Add instructions as system message(s)
       addSystemMessage(messageList, instructions);
 
@@ -118,6 +123,8 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       // Add user-provided system message if present
       addSystemMessage(messageList, options.system, 'user-provided');
+
+      messageList.endSystemOrigin(agentSpan);
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');

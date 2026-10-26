@@ -72,6 +72,8 @@ function SelectedSpanPanel({ traceId, spanId, panelClassName }: SelectedSpanPane
       onPrevious={handlePreviousSpan}
       onNext={handleNextSpan}
       onClose={() => selectSpan(traceId, undefined)}
+      traceSpans={traceData?.spans}
+      onSpanSelect={onSpanSelect}
     />
   );
 }

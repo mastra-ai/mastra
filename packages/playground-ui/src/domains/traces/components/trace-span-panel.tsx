@@ -222,6 +222,8 @@ export function TraceSpanPanel({
               onTabChange={onSpanTabChange}
               feedbackTabBadge={spanFeedbackTabBadge}
               feedbackTabSlot={spanFeedbackTabSlot}
+              traceSpans={spans}
+              onSpanSelect={onSpanSelect}
             />
           ) : null
         }

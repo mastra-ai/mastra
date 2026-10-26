@@ -27,6 +27,8 @@ function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
     removeByIds: vi.fn(),
     startRecording: vi.fn(),
     stopRecording: vi.fn(() => []),
+    startSystemOrigin: vi.fn(),
+    endSystemOrigin: vi.fn(),
     makeMessageSourceChecker: vi.fn(() => ({ getSource: () => 'input' })),
     getAllSystemMessages: vi.fn(() => []),
     getSystemMessages: vi.fn(() => []),

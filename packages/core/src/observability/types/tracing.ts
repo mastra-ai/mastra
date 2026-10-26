@@ -1149,6 +1149,8 @@ export interface ModelStepMessage {
   role: string;
   /** Message text, with non-text parts summarized */
   content: string;
+  /** Id of the span that added this message (system messages only) */
+  spanId?: string;
 }
 
 /**

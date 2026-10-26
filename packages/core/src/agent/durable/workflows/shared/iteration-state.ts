@@ -133,6 +133,7 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     agentName: currentState.agentName,
     messageListState: executionOutput.messageListState,
     initialUntaggedSystemMessages: currentState.initialUntaggedSystemMessages,
+    initialUntaggedSystemMessageSpanIds: currentState.initialUntaggedSystemMessageSpanIds,
     toolsMetadata: currentState.toolsMetadata,
     modelConfig: currentState.modelConfig,
     options: currentState.options,

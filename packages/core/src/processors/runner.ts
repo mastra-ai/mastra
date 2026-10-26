@@ -862,6 +862,7 @@ export class ProcessorRunner {
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
+      messageList.startSystemOrigin(processorSpan);
 
       try {
         // Get per-processor state that persists across all method calls within this request
@@ -945,6 +946,8 @@ export class ProcessorRunner {
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
         throw error;
+      } finally {
+        messageList.endSystemOrigin(processorSpan);
       }
     }
 
@@ -1619,6 +1622,7 @@ export class ProcessorRunner {
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
+      messageList.startSystemOrigin(processorSpan);
 
       try {
         // Get per-processor state that persists across all method calls within this request
@@ -1770,6 +1774,8 @@ export class ProcessorRunner {
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
         throw error;
+      } finally {
+        messageList.endSystemOrigin(processorSpan);
       }
     }
 
@@ -1945,6 +1951,7 @@ export class ProcessorRunner {
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
+      messageList.startSystemOrigin(processorSpan);
 
       try {
         // Get per-processor state that persists across all method calls within this request
@@ -2096,6 +2103,8 @@ export class ProcessorRunner {
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
         throw error;
+      } finally {
+        messageList.endSystemOrigin(processorSpan);
       }
     }
 
@@ -2488,6 +2497,7 @@ export class ProcessorRunner {
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
+      messageList.startSystemOrigin(processorSpan);
 
       // Get or create processor state (persists across steps within a request)
       const processorState = this.getProcessorState(processor.id);
@@ -2584,6 +2594,8 @@ export class ProcessorRunner {
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
         throw error;
+      } finally {
+        messageList.endSystemOrigin(processorSpan);
       }
     }
 
@@ -2705,6 +2717,7 @@ export class ProcessorRunner {
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
+      messageList.startSystemOrigin(processorSpan);
 
       // Get or create processor state (persists across calls within a request)
       const processorState = this.getProcessorState(processor.id);
@@ -2786,6 +2799,8 @@ export class ProcessorRunner {
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
         throw error;
+      } finally {
+        messageList.endSystemOrigin(processorSpan);
       }
     }
 
@@ -2868,6 +2883,7 @@ export class ProcessorRunner {
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
+      messageList.startSystemOrigin(processorSpan);
 
       // Get or create processor state (persists across steps within a request)
       const processorState = this.getProcessorState(processor.id);
@@ -2959,6 +2975,8 @@ export class ProcessorRunner {
           processorError,
         );
         // Don't re-throw — if the error processor itself fails, fall through to original error handling
+      } finally {
+        messageList.endSystemOrigin(processorSpan);
       }
     }
 

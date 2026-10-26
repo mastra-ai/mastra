@@ -525,6 +525,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               agentName: state.agentName,
               messageListState: state.messageListState,
               initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
+              initialUntaggedSystemMessageSpanIds: state.initialUntaggedSystemMessageSpanIds,
               toolsMetadata: state.toolsMetadata,
               modelConfig: state.modelConfig,
               modelList: state.modelList,
@@ -994,6 +995,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const iterationState: IterationState = {
               ...input,
               initialUntaggedSystemMessages: initialMessageList.getSystemMessages(),
+              initialUntaggedSystemMessageSpanIds: initialMessageList
+                .getSystemMessages()
+                .map(message => initialMessageList.getSystemMessageSpanId(message) ?? null),
               iterationCount: 0,
               accumulatedSteps: [],
               accumulatedUsage: {

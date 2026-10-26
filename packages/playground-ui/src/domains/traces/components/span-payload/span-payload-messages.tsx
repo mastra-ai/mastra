@@ -1,4 +1,6 @@
 import type { SpanInputMessage } from '@mastra/core/observability';
+import { CornerDownRightIcon } from 'lucide-react';
+import { useOriginSpan } from './span-origin-context';
 import { SpanPayloadAttachment } from './span-payload-attachment';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMarkdown, SpanPayloadLabel } from './span-payload-primitives';
@@ -6,6 +8,7 @@ import { SpanPayloadTool } from './span-payload-tool';
 import { parseSkillMarkup } from '@/domains/chat/messages/skill-activation';
 import { SkillMessage } from '@/domains/chat/messages/skill-message';
 import { ReasoningActivity } from '@/ds/components/ai/activity';
+import { Button } from '@/ds/components/Button';
 import { Message } from '@/ds/components/Message';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -119,11 +122,36 @@ function SpanMessage({ message }: { message: unknown }) {
       part => isRecord(part) && part.type === 'tool-result' && typeof part.toolName === 'string' && part.toolName,
     );
 
+  const originSpanId = role === 'system' && typeof message.spanId === 'string' ? message.spanId : undefined;
+
   return (
     <div data-role={role} className="flex min-w-0 flex-col gap-2">
-      {!hasToolResultLabels && <SpanPayloadLabel>{role}</SpanPayloadLabel>}
+      {!hasToolResultLabels && (
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <SpanPayloadLabel>{role}</SpanPayloadLabel>
+          <MessageOrigin spanId={originSpanId} />
+        </div>
+      )}
       {body}
     </div>
+  );
+}
+
+/** Links a message to the trace span that added it, when that span is part of the trace. */
+function MessageOrigin({ spanId }: { spanId: string | undefined }) {
+  const origin = useOriginSpan(spanId);
+  if (!origin) return null;
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      icon={<CornerDownRightIcon />}
+      tooltip="Go to the span that added this message"
+      className="min-w-0 truncate"
+      onClick={origin.select}
+    >
+      {origin.name}
+    </Button>
   );
 }
 
