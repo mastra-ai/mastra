@@ -2754,6 +2754,8 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
       const PROBE_INTERVAL_MS = 30_000;
       const PROBE_TIMEOUT_MS = 5_000;
+      const MAX_UNKNOWN_PROBES = 10;
+      let unknownProbeCount = 0;
       let activityVersion = 0;
       let inactiveCandidate: { generation?: number; version: number } | undefined;
       let probeInFlight = false;
@@ -2821,6 +2823,11 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
           settleProbeDeadline = undefined;
         }
         if (closed || activityVersion !== version) return;
+        unknownProbeCount = result.status === 'unknown' ? unknownProbeCount + 1 : 0;
+        if (unknownProbeCount >= MAX_UNKNOWN_PROBES) {
+          cleanup(controller);
+          return;
+        }
         if (result.status === 'inactive') {
           if (inactiveCandidate?.version === version && inactiveCandidate.generation === result.generation) {
             cleanup(controller);
@@ -2847,6 +2854,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       function resetIdleTimer(controller: ReadableStreamDefaultController) {
         if (closed) return;
         activityVersion++;
+        unknownProbeCount = 0;
         inactiveCandidate = undefined;
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {

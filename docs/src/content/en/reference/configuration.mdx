@@ -806,7 +806,7 @@ export const mastra = new Mastra({
 })
 ```
 
-For durable agents with producer-liveness support, `/observe` checks producer ownership after five minutes without execution events rather than closing a live stream. If the first check reports inactivity, a second check must confirm it 30 seconds later before the observer closes. Regardless of whether heartbeat comments are enabled, the observer remains attached during suspended approval waits and when storage is unavailable or a liveness check times out, while wrappers without liveness support retain the five-minute idle timeout.
+For durable agents with producer-liveness support, `/observe` checks producer ownership after five minutes without execution events rather than closing a live stream. If the first check reports inactivity, a second check must confirm it 30 seconds later before the observer closes. When liveness is unknown, including unavailable storage or a check that times out, the server retries at 30-second intervals and closes the observer after 10 consecutive inconclusive checks. Regardless of whether heartbeat comments are enabled, execution activity or an `alive` result resets this count, including approval waits whose suspended state can be verified, while wrappers without liveness support retain the five-minute idle timeout.
 
 ### server.apiRoutes
 

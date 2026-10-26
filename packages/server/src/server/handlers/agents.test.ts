@@ -2769,6 +2769,100 @@ describe('Agent Routes Authorization', () => {
       },
     );
 
+    it.each(['missing snapshot', 'unknown producer', 'hung producer'] as const)(
+      'releases an observer after ten inconclusive probes for a %s',
+      async state => {
+        vi.useFakeTimers();
+        const runId = `observe-unknown-cap-${state}`;
+        const unsubscribe = vi.spyOn(mockDurableAgent.pubsub, 'unsubscribe');
+        const probe = vi.spyOn(mockDurableAgent, '__getRunLiveness');
+        if (state === 'unknown producer') probe.mockResolvedValue({ status: 'unknown' });
+        if (state === 'hung producer') probe.mockImplementation(() => new Promise(() => {}));
+        await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          runId,
+          type: 'chunk',
+          data: { type: 'text-delta', payload: { text: 'started' } },
+        } as any);
+        const reader = (await observe(runId)).getReader();
+        let done = false;
+        let heartbeats = 0;
+        const drained = (async () => {
+          while (true) {
+            const result = await reader.read();
+            if (result.done) {
+              done = true;
+              return;
+            }
+            if (typeof result.value === 'string') heartbeats++;
+          }
+        })();
+        try {
+          await vi.advanceTimersByTimeAsync(305_000 + 8 * 30_000);
+          expect(done).toBe(false);
+          expect(heartbeats).toBeGreaterThan(0);
+          await vi.advanceTimersByTimeAsync(30_000);
+          expect(done).toBe(true);
+          await drained;
+          expect(unsubscribe).toHaveBeenCalledExactlyOnceWith(AGENT_STREAM_TOPIC(runId), expect.any(Function));
+          expect(probe).toHaveBeenCalledTimes(state === 'hung producer' ? 1 : 10);
+          await vi.advanceTimersByTimeAsync(300_000);
+          expect(probe).toHaveBeenCalledTimes(state === 'hung producer' ? 1 : 10);
+          expect(await mockDurableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).toHaveLength(1);
+        } finally {
+          await reader.cancel();
+          await drained;
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it.each(['execution activity', 'positive liveness'] as const)(
+      'resets the inconclusive-probe budget after %s',
+      async reset => {
+        vi.useFakeTimers();
+        mastra.setServer({ agentSseHeartbeatMs: 0 });
+        const runId = `observe-unknown-reset-${reset}`;
+        const probe = vi.spyOn(mockDurableAgent, '__getRunLiveness').mockResolvedValue({ status: 'unknown' });
+        const publish = () =>
+          mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+            runId,
+            type: 'chunk',
+            data: { type: 'text-delta', payload: { text: 'still working' } },
+          } as any);
+        await publish();
+        const reader = (await observe(runId)).getReader();
+        let done = false;
+        const drained = (async () => {
+          while (true) {
+            if ((await reader.read()).done) {
+              done = true;
+              return;
+            }
+          }
+        })();
+        try {
+          await vi.advanceTimersByTimeAsync(300_000 + 8 * 30_000);
+          expect(probe).toHaveBeenCalledTimes(9);
+          expect(done).toBe(false);
+          if (reset === 'execution activity') {
+            await publish();
+          } else {
+            probe.mockResolvedValueOnce({ status: 'alive' });
+            await vi.advanceTimersByTimeAsync(30_000);
+          }
+          await vi.advanceTimersByTimeAsync(300_000 + 8 * 30_000);
+          expect(done).toBe(false);
+          await vi.advanceTimersByTimeAsync(30_000);
+          expect(done).toBe(true);
+          await drained;
+        } finally {
+          await reader.cancel();
+          await drained;
+          vi.useRealTimers();
+        }
+      },
+    );
+
     it('cancels during a hung liveness deadline without leaving observer timers', async () => {
       vi.useFakeTimers();
       mastra.setServer({ agentSseHeartbeatMs: 0 });
