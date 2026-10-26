@@ -1,3 +1,4 @@
+import { FGADeniedError, MastraFGAPermissions } from '@mastra/core/auth/ee';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Client } from '@modelcontextprotocol/client';
@@ -11,6 +12,8 @@ import { connectClient, rawRequest, serveHTTP } from './__tests__/harness.mock';
 import type { ServedHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
 import type { MCPServerConfig } from './server';
+import { InMemoryMCPTaskStore } from './tasks/in-memory-store';
+import type { MCPTaskStore } from './tasks/store';
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -133,7 +136,7 @@ describe('MCPServer tasks', () => {
     const probe: Probe = { runs: [], aborted: [], authInfos: [] };
     const server = new MCPServer({ name: 'Tasks', version: '1.0.0', tools: makeTools(probe), tasks, ...extra });
     served = await serveHTTP(server, { auth: req => authFor(String(req.headers['x-test-user'] ?? 'alice')) });
-    return { probe, url: served.url };
+    return { probe, server, url: served.url };
   }
 
   /** `tools/call` as a client that declared the Tasks extension (unless `tasks: false`). */
@@ -253,6 +256,63 @@ describe('MCPServer tasks', () => {
     await tasks.cancel(result.taskId);
     await vi.waitFor(() => expect(probe.aborted).toEqual(['slowHang']));
     expect((await tasks.get(result.taskId)).status).toBe('cancelled');
+  });
+
+  it("aborts an 'auto' tool when its task can't be created after the window", async () => {
+    const memory = new InMemoryMCPTaskStore();
+    const store: MCPTaskStore = {
+      create: async () => {
+        throw new Error('store unavailable');
+      },
+      get: (taskId, access) => memory.get(taskId, access),
+      update: (taskId, responses, access) => memory.update(taskId, responses, access),
+      cancel: (taskId, access) => memory.cancel(taskId, access),
+      run: (taskId, work, options) => memory.run(taskId, work, options),
+    };
+    const { probe } = await start({ tools: { slowHang: { mode: 'auto', syncWindowMs: 50 } }, store });
+    const { result } = await call('slowHang');
+    expect(result).toMatchObject({ isError: true });
+    expect(result.content[0].text).toContain('store unavailable');
+    await vi.waitFor(() => expect(probe.aborted).toEqual(['slowHang']));
+  });
+
+  it('checks FGA again before a resumed attempt, against the persisted caller', async () => {
+    let deny = false;
+    // Only the MCP server's own tool resource; core's tool-level check is a separate resource.
+    const deniesServerTool = (resource: { id: string }) => deny && resource.id.startsWith('[');
+    const fga = {
+      check: vi.fn(),
+      filterAccessible: vi.fn(),
+      require: vi.fn(async (user: { id: string }, params: { resource: { type: string; id: string } }) => {
+        if (deniesServerTool(params.resource)) {
+          throw new FGADeniedError(user, params.resource, MastraFGAPermissions.TOOLS_EXECUTE);
+        }
+      }),
+    };
+    const { probe, server } = await start(
+      { tools: { approve: 'always' } },
+      { mapAuthInfoToUser: ({ authInfo }) => ({ id: authInfo.clientId }) },
+    );
+    server.__registerMastra({
+      getServer: () => ({ fga }),
+      getLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+      addTool: vi.fn(),
+      removeTool: vi.fn(),
+    } as any);
+
+    const { result } = await call('approve', { item: 'invoice' });
+    const tasks = await requester();
+    const waiting = await waitFor(tasks, result.taskId, 'input_required');
+    const [key] = Object.keys(waiting.inputRequests ?? {});
+
+    deny = true;
+    await tasks.update(result.taskId, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+    const done = await waitFor(tasks, result.taskId, 'completed');
+    expect(done).toMatchObject({ result: { isError: true } });
+    expect(JSON.stringify(done.result)).toContain('denied');
+    expect(probe.runs).toEqual([{ tool: 'approve', resumeData: undefined }]);
+    const serverToolChecks = fga.require.mock.calls.filter(([, params]) => params.resource.id.startsWith('['));
+    expect(serverToolChecks.at(-1)?.[0]).toEqual({ id: 'alice' });
   });
 
   it('asks for input when the tool suspends and re-runs it with the answer', async () => {

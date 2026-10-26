@@ -1056,15 +1056,21 @@ export class MCPServer extends MCPServerBase {
           ? this.toolErrorOutcome(name, outcome.error)
           : this.toTaskOutcome(name, tool, outcome.execution),
     );
-    return {
-      task: await this.startToolTask(ctx, requestContext, name, args, taskMode, {
-        resume:
-          options.resumeData === undefined
-            ? undefined
-            : { resumeData: options.resumeData, suspendPayload: options.suspendPayload },
-        initialAttempt: { outcome: first, abort: reason => controller.abort(reason) },
-      }),
-    };
+    try {
+      return {
+        task: await this.startToolTask(ctx, requestContext, name, args, taskMode, {
+          resume:
+            options.resumeData === undefined
+              ? undefined
+              : { resumeData: options.resumeData, suspendPayload: options.suspendPayload },
+          initialAttempt: { outcome: first, abort: reason => controller.abort(reason) },
+        }),
+      };
+    } catch (error) {
+      // No task owns the execution, so nothing could ever cancel it.
+      controller.abort(error);
+      throw error;
+    }
   }
 
   /**
@@ -1105,6 +1111,13 @@ export class MCPServer extends MCPServerBase {
     return async attempt => {
       const tool = this.convertedTools[name];
       if (!tool) throw new Error(`Tool '${name}' is no longer served`);
+      const requestContext: RequestContext = new RequestContext(Object.entries(context.requestContext));
+      try {
+        // Every attempt is authorized on its own, against the persisted caller, like every synchronous round.
+        await this.enforceToolExecutionFGA(name, requestContext);
+      } catch (error) {
+        return this.toolErrorOutcome(name, error);
+      }
       let { resumeData, suspendPayload } = context.resume ?? {};
       if (attempt.resume) {
         const [key] = Object.keys(attempt.resume.inputResponses);
@@ -1118,7 +1131,7 @@ export class MCPServer extends MCPServerBase {
       }
       try {
         const execution = await this.runTool(name, tool, context.args, {
-          requestContext: new RequestContext(Object.entries(context.requestContext)),
+          requestContext,
           abortSignal: attempt.signal,
           resumeData,
           suspendPayload,
