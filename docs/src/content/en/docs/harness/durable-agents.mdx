@@ -328,7 +328,10 @@ Evented agents always persist the full snapshot set: the evented engine coordina
 
 Set `recovery.durableAgents` to `'auto'` in the Mastra config. The deployer calls `recoverAllDurableAgents()` on boot, alongside the workflow run restarts (the two run concurrently):
 
-```typescript title="src/mastra/index.ts" {4}
+```typescript title="src/mastra/index.ts" {7}
+import { Mastra } from '@mastra/core'
+import { PostgresStore } from '@mastra/pg'
+
 export const mastra = new Mastra({
   agents: { myAgent: durableAgent },
   storage: new PostgresStore({ connectionString: process.env.DATABASE_URL! }),

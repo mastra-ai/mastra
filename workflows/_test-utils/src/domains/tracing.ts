@@ -151,7 +151,7 @@ export function createTracingTests(ctx: WorkflowTestContext, registry?: Workflow
         outputSchema: z.object({ result: z.string() }),
         execute: async ({ inputData, tracingContext }) => {
           expect(tracingContext).toBeDefined();
-          expect(typeof tracingContext.currentSpan).toBeDefined();
+          expect(typeof tracingContext?.currentSpan).toBeDefined();
 
           return { result: `processed: ${inputData.value}` };
         },
