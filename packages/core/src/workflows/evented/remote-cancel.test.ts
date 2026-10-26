@@ -112,7 +112,10 @@ function withTimeout<T>(promise: Promise<T>): Promise<T | 'timed out'> {
   ]);
 }
 
-type PubSubFactory = { name: string; create: () => { owner: PubSub; other: PubSub; cleanup: () => void } };
+type PubSubFactory = {
+  name: string;
+  create: () => { owner: PubSub; other: PubSub; cleanup: () => Promise<void> | void };
+};
 
 const PUBSUBS: PubSubFactory[] = [
   {
@@ -127,10 +130,16 @@ const PUBSUBS: PubSubFactory[] = [
     create: () => {
       const dir = mkdtempSync(join(tmpdir(), 'mastra-remote-cancel-'));
       const socketPath = join(dir, 'pubsub.sock');
+      const owner = new UnixSocketPubSub(socketPath);
+      const other = new UnixSocketPubSub(socketPath);
       return {
-        owner: new UnixSocketPubSub(socketPath),
-        other: new UnixSocketPubSub(socketPath),
-        cleanup: () => rmSync(dir, { recursive: true, force: true }),
+        owner,
+        other,
+        cleanup: async () => {
+          await other.close();
+          await owner.close();
+          rmSync(dir, { recursive: true, force: true });
+        },
       };
     },
   },
