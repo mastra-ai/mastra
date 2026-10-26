@@ -435,14 +435,14 @@ describe('evented workflow cancel with workers on both replicas', () => {
    * `gateNextStepRun` delays the next step-run handling on 'other' after the dispatch guard's
    * state load until the returned gate is released.
    */
-  async function setupPinnedCancel(opts: { gateControlSubscribe?: boolean } = {}) {
+  async function setupPinnedCancel(opts: { gateControlSubscribe?: boolean; nested?: boolean } = {}) {
     const storage = new MockStore();
     const pubsub = new EventEmitterPubSub();
     const holder: { current?: Blocker } = {};
     const block = async (abortSignal: AbortSignal) => {
       await holder.current?.block(abortSignal);
     };
-    const workflows = [0, 1].map(() => buildBothWorkflow(false, block));
+    const workflows = [0, 1].map(() => buildBothWorkflow(opts.nested ?? false, block));
     const [owner, other] = workflows.map(
       workflow => new Mastra({ logger: false, storage, pubsub, workflows: { [WORKFLOW_ID]: workflow } }),
     );
@@ -479,13 +479,14 @@ describe('evented workflow cancel with workers on both replicas', () => {
       return subscribe(topic, cb, options);
     });
 
+    // Nested setups hold only the child run's step, so the parent's nested-workflow step passes.
     let nextStepRun: Gate | undefined;
     const stepRun = WorkflowEventProcessor.prototype['processWorkflowStepRun'];
     vi.spyOn(WorkflowEventProcessor.prototype as any, 'processWorkflowStepRun').mockImplementation(async function (
       this: any,
       ...args: any[]
     ) {
-      if (nextStepRun) {
+      if (nextStepRun && (!opts.nested || args[0]?.parentWorkflow)) {
         const gate = nextStepRun;
         nextStepRun = undefined;
         await gate.pass();
@@ -510,6 +511,7 @@ describe('evented workflow cancel with workers on both replicas', () => {
     await other!.startWorkers();
     return {
       workflow: workflows[0]!,
+      storage,
       pubsub,
       holder,
       ends,
@@ -587,6 +589,43 @@ describe('evented workflow cancel with workers on both replicas', () => {
         });
       }
     });
+  });
+
+  // Cancelling the parent while the child's step is held: the pre-step check aborts the child's
+  // controller only through its ancestor, and the child body must still not run.
+  it('skips a nested step whose parent was canceled after the step passed its dispatch check', async () => {
+    const setup = await setupPinnedCancel({ nested: true });
+    await runPlain(setup);
+    await runPlain(setup);
+    setup.ends.clear();
+
+    const gate = setup.gateNextStepRun();
+    const run = await setup.workflow.createRun();
+    const resultPromise = run.start({ inputData: { count: 0 } });
+    await gate.reached;
+    await run.cancel();
+    const result = await withTimeout(resultPromise);
+    expect(result === 'timed out' ? result : result.status).toBe('canceled');
+
+    const blocker = createBlocker();
+    setup.holder.current = blocker;
+    gate.release();
+    const childRunIds = () => [...setup.ends.keys()].filter(id => id !== run.runId);
+    await vi.waitFor(
+      () => {
+        expect(childRunIds()).toHaveLength(1);
+        expect(setup.released).toContain(childRunIds()[0]);
+      },
+      { timeout: SETTLE_TIMEOUT_MS },
+    );
+    const childRunId = childRunIds()[0]!;
+    expect(blocker.state.calls).toBe(0);
+    expect([...setup.stepProcessor().stepRunRefs.keys()]).toEqual([]);
+    expect(setup.ends.get(run.runId)).toBe(1);
+    expect(setup.ends.get(childRunId)).toBe(1);
+    const workflows = await setup.storage.getStore('workflows');
+    const child = await workflows!.loadWorkflowSnapshot({ workflowName: `${WORKFLOW_ID}-child`, runId: childRunId });
+    expect(child?.status).toBe('canceled');
   });
 
   // A step dispatched while the subscription is still pending is canceled before the subscription

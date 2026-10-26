@@ -2744,8 +2744,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         throw err;
       }
       // This run's own cancel already landed and was finalized elsewhere: skip the
-      // step body. An ancestor-only abort leaves the controller unhandled, so it
-      // still goes through the path below and publishes this run's workflow.cancel.
+      // step body. An ancestor-only abort leaves the controller unhandled, so the
+      // body is skipped too and the post-step branch publishes this run's workflow.cancel.
       if (abortController.signal.aborted && this.cancelHandledControllers.has(abortController)) {
         releaseControl();
         return;
@@ -2755,6 +2755,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     try {
       if (completedResult) {
         stepResult = completedResult;
+      } else if (abortController.signal.aborted) {
+        stepResult = { status: 'canceled' };
       } else if (this.stepExecutionStrategy) {
         stepResult = await this.stepExecutionStrategy.executeStep({
           workflowId,
