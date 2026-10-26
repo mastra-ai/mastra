@@ -12,6 +12,7 @@ import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { PubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY, parseModelString, defaultGateways, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
@@ -289,6 +290,25 @@ async function validateDurableToolCallAccess({
  */
 const ALIASED_API_KEY_ENV_VAR_PROVIDERS = new Set(['google']);
 
+// Duck-typed so the server keeps working with a @mastra/core that predates resumable streams on Agent.
+type ResumableStreamsAgent = {
+  hasResumableStreams?: () => boolean;
+  __getStreamBus?: () => { pubsub: PubSub } | undefined;
+  __getPublishedRunOwner?: (runId: string) => { resourceId?: string; threadId?: string } | undefined;
+};
+
+/** Whether the agent publishes its runs, so a closed HTTP reader can detach instead of aborting. */
+function hasResumableStreams(agent: Agent): boolean {
+  const resumable = agent as unknown as ResumableStreamsAgent;
+  if (typeof resumable.hasResumableStreams === 'function') return resumable.hasResumableStreams();
+  return isDurableAgentLike(agent);
+}
+
+/** The bus a plain Agent with resumable streams publishes its runs on. */
+function getAgentStreamPubSub(agent: Agent): PubSub | undefined {
+  return (agent as unknown as ResumableStreamsAgent).__getStreamBus?.()?.pubsub;
+}
+
 /**
  * Checks if a provider has its required API key environment variable(s) configured.
  * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
@@ -297,6 +317,7 @@ const ALIASED_API_KEY_ENV_VAR_PROVIDERS = new Set(['google']);
  * @param customProviders - Optional record of custom gateway providers to check
  * @returns true if all required environment variables are set (or, for aliased providers, if any one is set), false otherwise
  */
+
 export function isProviderConnected(providerId: string, customProviders?: Record<string, ProviderConfig>): boolean {
   // Vertex AI is a distinct provider from Google AI Studio and must not be collapsed to the
   // "google" registry entry below (e.g. "google.vertex.chat", "google.vertex.anthropic.chat",
@@ -1960,8 +1981,8 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         // A disconnected HTTP observer must not cancel durable execution.
-        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
-        _detachObserverOnCancel: isDurableAgentLike(agent),
+        abortSignal: hasResumableStreams(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: hasResumableStreams(agent),
       };
 
       // Support `untilIdle` option on the /stream endpoint — delegates to
@@ -2305,7 +2326,8 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
   pathParamSchema: agentRunPathParams,
   responseSchema: abortAgentThreadResponseSchema,
   summary: 'Abort an agent run',
-  description: 'Explicitly stop a durable run, including runs without a memory thread',
+  description:
+    'Explicitly stop a durable run or a run of an agent with resumable streams, including runs without a memory thread',
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
@@ -2313,7 +2335,32 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
       if (!isDurableAgentLike(agent)) {
-        throw new HTTPException(501, { message: 'Run-scoped cancellation requires a durable agent' });
+        const getOwner = (agent as unknown as ResumableStreamsAgent).__getPublishedRunOwner;
+        if (typeof getOwner !== 'function' || !hasResumableStreams(agent)) {
+          throw new HTTPException(501, {
+            message: 'Run-scoped cancellation requires a durable agent or an agent with resumable streams',
+          });
+        }
+        // Plain runs keep no storage record, so only a run executing in this
+        // process has a known owner to authorize against.
+        const owner = getOwner.call(agent, runId);
+        if (!owner) {
+          throw new HTTPException(404, { message: 'Run is not executing on this server' });
+        }
+        await validateRunOwnership(owner, getContextResourceId(requestContext), mastra);
+        if (owner.threadId) {
+          const memory = await agent.getMemory({ requestContext });
+          const thread = await memory?.getThreadById({ threadId: owner.threadId });
+          await enforceThreadAccess({
+            mastra,
+            requestContext,
+            threadId: owner.threadId,
+            thread,
+            effectiveResourceId: getContextResourceId(requestContext),
+            permission: MastraFGAPermissions.MEMORY_WRITE,
+          });
+        }
+        return { aborted: agent.abortRunStream(runId) };
       }
       const workflows = await mastra.getStorage()?.getStore('workflows');
       const run = await workflows?.getWorkflowRunById({ workflowName: getDurableLoopWorkflowName(agent), runId });
@@ -2682,8 +2729,8 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         // A disconnected HTTP observer must not cancel durable execution.
-        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
-        _detachObserverOnCancel: isDurableAgentLike(agent),
+        abortSignal: hasResumableStreams(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: hasResumableStreams(agent),
       };
 
       const streamResult = structuredOutput
@@ -2732,7 +2779,8 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // so we must subscribe to the agent's pubsub to receive the correct stream events.
       const agent = await getAgentFromSystem({ mastra, agentId });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
-      const pubsub = durableAgent?.pubsub ?? mastra.pubsub;
+      // Plain agents with resumable streams publish on their own stream bus.
+      const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
       const topic = AGENT_STREAM_TOPIC(runId);
 
       // A durable agent subscribes for us so the client never sees what an
@@ -2896,8 +2944,8 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       const streamResult = await agent.approveToolCall({
         ...params,
         requestContext,
-        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
-        _detachObserverOnCancel: isDurableAgentLike(agent),
+        abortSignal: hasResumableStreams(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: hasResumableStreams(agent),
       });
 
       return streamResult.fullStream;
@@ -3101,8 +3149,8 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       const streamResult = await agent.declineToolCall({
         ...params,
         requestContext,
-        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
-        _detachObserverOnCancel: isDurableAgentLike(agent),
+        abortSignal: hasResumableStreams(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: hasResumableStreams(agent),
       });
 
       return streamResult.fullStream;
@@ -3222,8 +3270,8 @@ export const RESUME_STREAM_ROUTE = createRoute({
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         // A disconnected HTTP observer must not cancel durable execution.
-        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
-        _detachObserverOnCancel: isDurableAgentLike(agent),
+        abortSignal: hasResumableStreams(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: hasResumableStreams(agent),
       };
 
       // Support `untilIdle` option on the /resume-stream endpoint — delegates
@@ -3439,8 +3487,8 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         // A disconnected HTTP observer must not cancel durable execution.
-        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
-        _detachObserverOnCancel: isDurableAgentLike(agent),
+        abortSignal: hasResumableStreams(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: hasResumableStreams(agent),
       };
 
       const streamResult = structuredOutput

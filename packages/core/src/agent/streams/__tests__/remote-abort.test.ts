@@ -5,12 +5,13 @@
  * for another process). Model traffic goes through AIMock.
  */
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../../../loop/test-utils/aimock/types';
 import { Mastra } from '../../../mastra';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../../request-context';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 
@@ -96,6 +97,27 @@ describe('Agent streams remote abort', () => {
 
     expect(await done).toMatch(/abort|cancel/);
     expect(getMock().getRequests()).toHaveLength(1);
+  });
+
+  it('records the owner of a running published run and forgets it once the run ends', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const { agent, started, release } = setup(pubsub);
+
+    const output = await agent.stream('Look it up then continue.', {
+      maxSteps: 3,
+      requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-1']]),
+    });
+    const done = finishReason(output);
+    await started;
+
+    expect(agent.__getPublishedRunOwner(output.runId)).toEqual({ resourceId: 'user-1', threadId: undefined });
+    expect(agent.abortRunStream(output.runId)).toBe(true);
+    release();
+
+    expect(await done).toMatch(/abort|cancel/);
+    expect(getMock().getRequests()).toHaveLength(1);
+    await pubsub.flush();
+    await vi.waitFor(() => expect(agent.__getPublishedRunOwner(output.runId)).toBeUndefined());
   });
 
   it("still stops on the caller's own abort signal", async () => {

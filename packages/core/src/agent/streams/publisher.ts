@@ -4,6 +4,7 @@ import type { IMastraLogger } from '../../logger';
 import type { ChunkType } from '../../stream/types';
 import type { AgentSuspendedEventData } from '../durable/types';
 import { subscribeToAbortRequests } from './abort-transport';
+import { scheduleStreamCleanup } from './bus';
 import { AGENT_STREAM_TOPIC } from './constants';
 import { emitChunkEvent, emitErrorEvent, emitFinishEvent, emitStepStartEvent, emitSuspendedEvent } from './events';
 
@@ -43,6 +44,8 @@ export interface CreateAgentStreamPublisherOptions {
   logger?: IMastraLogger;
   /** The caller's own abort signal, folded into {@link AgentStreamPublisher.abortSignal}. */
   abortSignal?: AbortSignal;
+  /** Called once when the run stops publishing (finished, failed, or suspended). */
+  onEnd?: () => void;
 }
 
 /**
@@ -62,6 +65,7 @@ export function createAgentStreamPublisher({
   cleanupTimeoutMs,
   logger,
   abortSignal: callerSignal,
+  onEnd,
 }: CreateAgentStreamPublisherOptions): AgentStreamPublisher {
   const controller = new AbortController();
   const abort = (reason?: unknown) => {
@@ -105,17 +109,17 @@ export function createAgentStreamPublisher({
   };
 
   const scheduleCleanup = () => {
-    if (cleanupTimeoutMs === 0) return;
-    const timer = setTimeout(() => {
+    const timer = scheduleStreamCleanup(cleanupTimeoutMs, () => {
       void pubsub.clearTopic(AGENT_STREAM_TOPIC(runId)).catch(() => {});
-    }, cleanupTimeoutMs);
-    timer.unref?.();
+    });
+    timer?.unref?.();
   };
 
   const end = async (fallbackError: () => unknown) => {
     if (ended) return queue;
     ended = true;
     void stopAbortListener();
+    onEnd?.();
     if (!finished) {
       if (suspended) {
         const data = suspended;

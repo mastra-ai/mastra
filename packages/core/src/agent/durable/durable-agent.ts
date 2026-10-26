@@ -3018,8 +3018,8 @@ export class DurableAgent<
 
     // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
     };
 
     // Whether this caller's stream closes at the suspension boundary. Defaults
@@ -3735,8 +3735,8 @@ export class DurableAgent<
     };
 
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
     };
 
     const globalEntry = getRunRegistryEntry(runId, this.#mastra);
@@ -4255,8 +4255,8 @@ export class DurableAgent<
       cleanupOwnedRegistryState();
     };
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
     };
 
     let workflow: ReturnType<DurableAgent<TAgentId, TTools, TOutput>['getWorkflow']>;
@@ -4616,13 +4616,14 @@ export class DurableAgent<
 
     // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(() => {
-        if (!cleanedUp) {
-          releaseRunState();
-          cleanedUp = true;
-        }
-      }, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer =
+        this.#streams.scheduleCleanup(() => {
+          if (!cleanedUp) {
+            releaseRunState();
+            cleanedUp = true;
+          }
+        }) ?? null;
     };
 
     // 3. Create the durable agent stream (subscribes to pubsub)
@@ -5384,8 +5385,8 @@ export class DurableAgent<
     };
 
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
     };
 
     const completeTerminalLifecycle = () => {

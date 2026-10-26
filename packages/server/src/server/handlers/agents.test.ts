@@ -1813,9 +1813,11 @@ describe('Agent Routes Authorization', () => {
       });
     });
 
-    it('should pass abortSignal to agent.resumeStream()', async () => {
+    it('should pass abortSignal to agent.resumeStream() when the agent has no resumable streams', async () => {
       const requestContext = createContextWithReservedKeys({});
       const abortController = new AbortController();
+      // Registered agents publish by default and detach instead; see "plain Agent resumable streams".
+      vi.spyOn(mockAgent, 'hasResumableStreams').mockReturnValue(false);
 
       let capturedOptions: any;
       vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
@@ -2353,7 +2355,8 @@ describe('Agent Routes Authorization', () => {
       });
     }
 
-    it('returns 501 when run-scoped abort targets a non-durable agent', async () => {
+    it('returns 501 when run-scoped abort targets an agent without resumable streams', async () => {
+      vi.spyOn(mastra.getAgentById('test-agent'), 'hasResumableStreams').mockReturnValue(false);
       await expect(
         ABORT_AGENT_RUN_ROUTE.handler({
           mastra,
@@ -4597,5 +4600,123 @@ describe('extractVersionOptions', () => {
   it('should handle body requestContext without agentVersionId key', () => {
     expect(extractVersionOptions(undefined, { otherKey: 'value' })).toBeUndefined();
     expect(extractVersionOptions(undefined, {})).toBeUndefined();
+  });
+});
+
+describe('plain Agent resumable streams', () => {
+  function plainAgent(id: string, streams?: boolean) {
+    return new Agent({
+      id,
+      name: id,
+      instructions: 'test-instructions',
+      model: { specificationVersion: 'v2' } as any,
+      ...(streams === undefined ? {} : { streams }),
+    });
+  }
+
+  it.each([
+    [undefined, true],
+    [false, false],
+  ])('streams: %s on a registered agent detaches on HTTP close = %s', async (streams, detaches) => {
+    const agent = plainAgent('plain-agent', streams);
+    const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
+    let captured: any;
+    vi.spyOn(agent, 'stream').mockImplementation(async (_messages, options) => {
+      captured = options;
+      return { fullStream: new ReadableStream() } as any;
+    });
+    const abortSignal = new AbortController().signal;
+
+    await STREAM_GENERATE_ROUTE.handler({
+      mastra,
+      agentId: 'plain-agent',
+      requestContext: new RequestContext(),
+      abortSignal,
+      messages: [{ role: 'user', content: 'test' }],
+    } as any);
+
+    expect(captured.abortSignal).toBe(detaches ? undefined : abortSignal);
+    expect(captured._detachObserverOnCancel).toBe(detaches);
+  });
+
+  it('observes a plain Agent run from the agent stream bus', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const agent = new Agent({
+      id: 'plain-agent',
+      name: 'plain-agent',
+      instructions: 'test-instructions',
+      model: { specificationVersion: 'v2' } as any,
+      streams: { pubsub },
+    });
+    const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
+    const runId = 'plain-observe';
+    await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+      runId,
+      type: AgentStreamEventTypes.FINISH,
+      data: { output: {}, stepResult: { reason: 'stop' } },
+    });
+
+    const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+      mastra,
+      agentId: 'plain-agent',
+      runId,
+    } as any)) as ReadableStream<any>;
+    const events: any[] = [];
+    for await (const event of stream as any) events.push(event);
+
+    expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.FINISH]);
+  });
+
+  describe('run-scoped abort', () => {
+    function setup() {
+      const agent = plainAgent('plain-agent');
+      const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
+      const abort = vi.spyOn(agent, 'abortRunStream').mockReturnValue(true);
+      return { agent, mastra, abort };
+    }
+
+    it('stops a run executing here for its owner', async () => {
+      const { agent, mastra, abort } = setup();
+      vi.spyOn(agent, '__getPublishedRunOwner').mockReturnValue({ resourceId: 'user-a' });
+
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'plain-agent',
+          runId: 'plain-run',
+          requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-a']]),
+        }),
+      ).resolves.toEqual({ aborted: true });
+      expect(abort).toHaveBeenCalledWith('plain-run');
+    });
+
+    it('refuses a run owned by another resource', async () => {
+      const { agent, mastra, abort } = setup();
+      vi.spyOn(agent, '__getPublishedRunOwner').mockReturnValue({ resourceId: 'user-a' });
+
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'plain-agent',
+          runId: 'plain-run',
+          requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-b']]),
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(abort).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 for a run not executing on this server', async () => {
+      const { mastra, abort } = setup();
+
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'plain-agent',
+          runId: 'elsewhere',
+          requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-a']]),
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(abort).not.toHaveBeenCalled();
+    });
   });
 });

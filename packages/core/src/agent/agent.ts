@@ -929,6 +929,8 @@ export class Agent<
   readonly #streamsOption?: AgentStreamsOption;
   /** Resumable stream layer, built on first use once streams are enabled. */
   #streamBus?: AgentStreamBus;
+  /** Published runs executing in this process, with the owner the abort route checks. */
+  #publishedRuns = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
   /**
    * Cached DurableAgent wrapper created on-demand by `#getStandaloneDurable()`
    * when `durable: true` is set on the config but the agent is not attached
@@ -1730,16 +1732,35 @@ export class Agent<
     return !!this.#durable || !!this.__getStreamBus();
   }
 
-  #createStreamPublisher(runId: string, abortSignal?: AbortSignal): AgentStreamPublisher | undefined {
+  #createStreamPublisher(
+    runId: string,
+    owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
+  ): AgentStreamPublisher | undefined {
     const bus = this.#ownStreamBus();
     if (!bus) return undefined;
-    return createAgentStreamPublisher({
+    const publisher = createAgentStreamPublisher({
       pubsub: bus.pubsub,
       runId,
       cleanupTimeoutMs: bus.cleanupTimeoutMs,
       logger: this.logger,
-      abortSignal,
+      abortSignal: owner.abortSignal,
+      onEnd: () => {
+        if (this.#publishedRuns.get(runId)?.publisher === publisher) this.#publishedRuns.delete(runId);
+      },
     });
+    this.#publishedRuns.set(runId, { publisher, resourceId: owner.resourceId, threadId: owner.threadId });
+    return publisher;
+  }
+
+  /**
+   * Owner of a published run executing in this process, or undefined when the
+   * run is not running here. Lets the server authorize run-scoped aborts for
+   * agents without durable run storage.
+   * @internal
+   */
+  __getPublishedRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
+    const run = this.#publishedRuns.get(runId);
+    return run ? { resourceId: run.resourceId, threadId: run.threadId } : undefined;
   }
 
   /**
@@ -9069,7 +9090,11 @@ export class Agent<
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
 
-    const streamPublisher = this.#createStreamPublisher(runId, options.abortSignal);
+    const streamPublisher = this.#createStreamPublisher(runId, {
+      resourceId,
+      threadId: threadFromArgs?.id,
+      abortSignal: options.abortSignal,
+    });
 
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({
@@ -9135,6 +9160,8 @@ export class Agent<
     try {
       const run = await executionWorkflow.createRun();
       const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
+      // The loop never started, so its publisher would otherwise stay open.
+      if (result.status === 'failed') void streamPublisher?.fail(result.error);
       // A step failure surfaces as a resolved 'failed' result, not a rejection.
       // The stream terminal handlers never ran, so close the span tree here.
       if (result.status !== 'success' && agentSpan && !agentSpan.endTime) {
@@ -9177,6 +9204,7 @@ export class Agent<
               error,
             );
       agentSpan?.error({ error: spanError, endTree: true });
+      void streamPublisher?.fail(error);
       throw error;
     }
   }
