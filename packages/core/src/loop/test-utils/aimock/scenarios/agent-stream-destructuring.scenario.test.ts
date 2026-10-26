@@ -14,9 +14,10 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
   // Known gap: the durable/evented `result.output` is a plain MastraModelOutput,
   // not wrapped by `createDestructurableOutput` like the direct loop's result,
   // so a destructured `consumeStream()` loses `this` and throws.
-  const itOnEngine = engine === 'durable' || engine === 'evented' ? it.fails : it;
+  // Only that call is expected to fail; everything else is asserted normally.
+  const isDurableEngine = engine === 'durable' || engine === 'evented';
 
-  itOnEngine('resolves destructured stream properties and methods', async () => {
+  it('resolves destructured stream properties and methods', async () => {
     const llm = getMock();
     llm.on({ endpoint: 'chat' }, { content: 'Hello there!' });
     const { agent } = await createSharedAgent(llm, { engine });
@@ -28,18 +29,24 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
     expect(fullStream).toBeDefined();
     expect(textStream).toBeDefined();
 
-    // Drain via a separate reader first so the run (and its AIMock request) is
-    // finished before any destructured call can throw.
-    for await (const _chunk of result.fullStream as AsyncIterable<unknown>) {
+    // Drain first so the run (and its AIMock request) is finished before any
+    // destructured call can throw.
+    for await (const _chunk of fullStream as AsyncIterable<unknown>) {
       // drain
     }
-    await consumeStream();
+    if (isDurableEngine) {
+      await expect(async () => consumeStream()).rejects.toThrow(/consumeStreamPromise/);
+    } else {
+      await consumeStream();
+    }
 
     expect(await text).toBe('Hello there!');
     expect(await usage).toBeDefined();
     expect(await toolCalls).toEqual([]);
     expect(await finishReason).toBe('stop');
-    expect((await request)?.body).toBeDefined();
+    // Known gap: durable/evented resolve `request` to `{}` (no body), with or
+    // without destructuring.
+    expect((await request)?.body).toEqual(isDurableEngine ? undefined : expect.anything());
     expect(llm.getRequests()).toHaveLength(1);
   });
 });

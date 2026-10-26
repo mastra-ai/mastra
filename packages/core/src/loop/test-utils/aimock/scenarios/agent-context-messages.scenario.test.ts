@@ -69,10 +69,14 @@ describeForAllEngines('AIMock loop scenario: context messages', engine => {
       'Current question',
     );
 
-    const byRole = (role: string) => messages.filter((m: any) => m.role === role).map((m: any) => m.text);
-    expect(byRole('system')).toEqual(['You are a helpful assistant.', 'Additional context instructions']);
-    expect(byRole('user')).toEqual(['Previous user question', 'Current question']);
-    expect(byRole('assistant')).toEqual(['Previous assistant response']);
-    expect(messages.at(-1)).toEqual({ role: 'user', text: 'Current question' });
+    expect(messages.filter((m: any) => m.role === 'system').map((m: any) => m.text)).toEqual([
+      'You are a helpful assistant.',
+      'Additional context instructions',
+    ]);
+    expect(messages.filter((m: any) => m.role !== 'system')).toEqual([
+      { role: 'user', text: 'Previous user question' },
+      { role: 'assistant', text: 'Previous assistant response' },
+      { role: 'user', text: 'Current question' },
+    ]);
   });
 });

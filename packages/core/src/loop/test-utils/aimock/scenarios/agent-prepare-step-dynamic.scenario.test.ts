@@ -86,8 +86,8 @@ describeForAllEngines('AIMock loop scenario: prepareStep dynamic tools and model
       { type: 'function', name: 'tool1' },
       'none',
     ]);
-    expect(offeredTools(requests[1])).toContain('tool2');
-    expect(offeredTools(requests[2])).toContain('tool3');
+    expect(offeredTools(requests[1])).toEqual(['tool2']);
+    expect(offeredTools(requests[2])).toEqual(['tool3']);
     expect(offeredTools(requests[3])).toEqual(['tool1']);
 
     // prepareStep always receives the agent's own tool set, not the previous step's additions.
