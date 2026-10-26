@@ -137,10 +137,10 @@ describe('work board self-review', () => {
 
   it('wakes the builder to open the change request when self-review approves in place', () => {
     const context = executeContext('github-issue');
-    const result = (metadata: Record<string, unknown>, role = 'review') =>
+    const result = (metadata: Record<string, unknown>) =>
       openApprovedChangeRequest({
         ...context,
-        actor: { type: 'agent', id: 'binding-1', role },
+        actor: { type: 'agent', id: 'binding-1', role: 'review' },
         item: { ...context.item, stages: ['review'], metadata: { ...context.item.metadata, ...metadata } },
         toolName: 'factory_record_review_verdict',
         threadId: 'thread-1',
@@ -158,7 +158,6 @@ describe('work board self-review', () => {
     expect(approved?.prompt).toContain('All checks passed');
     expect(result({ selfReviewVerdict: 'request changes' })).toBeUndefined();
     expect(result({ selfReviewVerdict: 'approve', openPullRequestNumber: 7 })).toBeUndefined();
-    expect(result({ selfReviewVerdict: 'approve' }, 'work')).toBeUndefined();
   });
 });
 
@@ -175,6 +174,7 @@ describe('work board done policy', () => {
       isHumanTransition: actor.type === 'human',
       plansAutoApproved: false,
       planApproved: false,
+      fromPhaseTools: workBoard.toolsForPhase('review'),
       item: {
         ...executeContext('issue').item,
         stages: ['review'],

@@ -519,10 +519,10 @@ describe('FactoryPhaseStateProcessor', () => {
     const stageOf = async (storage: WorkItemsStorage, id: string) =>
       (await storage.get({ orgId: 'org-1', id }))?.stages;
 
-    it('fires Work’s submit_plan rule only for a plan-seated planning card', async () => {
+    it('fires Work’s submit_plan rule for any agent working a planning card', async () => {
       const cases = [
         { role: 'plan', message: approved(), stages: ['execute'] },
-        { role: 'work', message: approved(), stages: ['planning'] },
+        { role: 'work', message: approved(), stages: ['execute'] },
         { role: 'plan', message: toolMessage({ result: { content: 'Plan rejected.' } }), stages: ['planning'] },
         { role: 'plan', message: toolMessage({ state: 'error', result: 'boom' }), stages: ['planning'] },
         { role: 'plan', message: approved(), stages: ['triage'], from: 'triage' },

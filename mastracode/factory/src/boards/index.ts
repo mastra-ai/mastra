@@ -1,10 +1,11 @@
-export { BoardDefinitionError, defineBoard } from './define-board.js';
+export { BoardDefinitionError, defineBoard, FACTORY_PHASE_TOOLS } from './define-board.js';
 export type {
   BoardDefinition,
   BoardEventIntegration,
   BoardEventRules,
   BoardPhaseDefinition,
   BoardPhaseKind,
+  FactoryPhaseTool,
   BoardSourceClosed,
   BoardToolResultRuleHandler,
   BoardToolRule,
@@ -17,6 +18,8 @@ export {
   eventBoardId,
   isTerminalWorkItem,
   phaseForSeat,
+  phaseTools,
+  reviewsIndependently,
   resolveBoardClosure,
   resolveBoardToolRule,
   rulePhaseContext,

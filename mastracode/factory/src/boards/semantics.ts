@@ -6,6 +6,7 @@ import type {
   BoardEventRules,
   BoardPhaseKind,
   BoardToolResultRuleHandler,
+  FactoryPhaseTool,
 } from './define-board.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 
@@ -177,4 +178,30 @@ export function phaseForSeat(board: InstalledBoard | undefined, role: string): s
   if (seated !== undefined) return seated;
   const lane = factoryLaneForRole(role);
   return lane !== undefined && board?.phaseKind(lane) === 'working' ? lane : undefined;
+}
+
+/**
+ * Factory tools the card's current phase grants. Tools follow the phase, not the session: when a
+ * card moves, the agents working it see the next phase's tools on their next turn. A card spanning
+ * several phases, or on a board that is not installed, gets none.
+ */
+export function phaseTools(
+  registry: BoardRegistry,
+  item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
+): readonly FactoryPhaseTool[] {
+  if (item.stages.length !== 1) return [];
+  return registry.get(boardForWorkItem(item))?.toolsForPhase(item.stages[0]!) ?? [];
+}
+
+/**
+ * Whether a session in `role` may record a review verdict on a card of `board`. A context that
+ * works a phase granting no review — the builder's, triage's — never reviews: review stays
+ * independent of the work it judges.
+ */
+export function reviewsIndependently(board: InstalledBoard | undefined, role: string): boolean {
+  if (!board) return false;
+  return !Object.entries(board.phases).some(
+    ([phase, definition]) =>
+      definition.kind === 'working' && definition.role === role && !board.toolsForPhase(phase).includes('review'),
+  );
 }

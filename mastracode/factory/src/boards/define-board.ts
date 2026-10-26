@@ -87,8 +87,17 @@ type ReadonlyFactoryBoardRules = Readonly<
  */
 export type BoardPhaseKind = 'resting' | 'working' | 'terminal';
 
+/**
+ * Factory tools a phase grants to the agents working its cards, whichever session they run in:
+ * `triage` classifies the card as it leaves Triage, `review` records and publishes review verdicts.
+ */
+export const FACTORY_PHASE_TOOLS = ['triage', 'review'] as const;
+export type FactoryPhaseTool = (typeof FACTORY_PHASE_TOOLS)[number];
+
 type BoardPhaseBase<PhaseId extends string> = {
   readonly title: string;
+  /** Defaults to `review` for a working phase seating `review`, so code boards that do keep it. */
+  readonly factoryTools?: readonly FactoryPhaseTool[];
   readonly next?: PhaseId;
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
   readonly onEnter?: ReadonlyBoardPhaseHandlers;
@@ -134,6 +143,8 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   roleForPhase(phase: string): string | undefined;
   /** First working phase, in declaration order, carried by `role`. */
   phaseForRole(role: string): PhaseId | undefined;
+  /** Factory tools the phase grants; empty for unknown phases. */
+  toolsForPhase(phase: string): readonly FactoryPhaseTool[];
 }
 
 type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>> = {
@@ -299,6 +310,7 @@ export function defineBoard<
           title: phase.title,
           kind: phase.kind,
           ...(phase.kind === 'working' ? { role: phase.role } : {}),
+          ...(phase.factoryTools ? { factoryTools: Object.freeze([...phase.factoryTools]) } : {}),
           ...(phase.next !== undefined ? { next: phase.next } : {}),
           ...(phase.outcomes ? { outcomes: Object.freeze({ ...phase.outcomes }) } : {}),
           ...(phase.onEnter ? { onEnter: Object.freeze({ ...phase.onEnter }) } : {}),
@@ -339,8 +351,12 @@ export function defineBoard<
   const kinds = new Map<string, BoardPhaseKind>();
   const roles = new Map<string, string>();
   const phaseByRole = new Map<string, PhaseId>();
+  const phaseTools = new Map<string, readonly FactoryPhaseTool[]>();
   for (const [phaseId, phase] of Object.entries(phases) as [PhaseId, BoardPhaseDefinition<PhaseId>][]) {
     kinds.set(phaseId, phase.kind);
+    const declared =
+      phase.factoryTools ?? (phase.kind === 'working' && phase.role === 'review' ? (['review'] as const) : []);
+    phaseTools.set(phaseId, Object.freeze([...declared]));
     if (phase.kind !== 'working') continue;
     roles.set(phaseId, phase.role);
     if (!phaseByRole.has(phase.role)) phaseByRole.set(phase.role, phaseId);
@@ -365,5 +381,6 @@ export function defineBoard<
     isTerminal: (phase: string) => kinds.get(phase) === 'terminal',
     roleForPhase: (phase: string) => roles.get(phase),
     phaseForRole: (role: string) => phaseByRole.get(role),
+    toolsForPhase: (phase: string) => phaseTools.get(phase) ?? [],
   });
 }

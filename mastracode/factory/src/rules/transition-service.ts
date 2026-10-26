@@ -1,6 +1,6 @@
 import { phaseAutoApproves } from '../boards/auto-approve.js';
 import { createBoardRegistry } from '../boards/index.js';
-import type { BoardRegistry } from '../boards/index.js';
+import type { BoardRegistry, FactoryPhaseTool } from '../boards/index.js';
 import type { BoardResolver } from '../boards/resolver.js';
 import { boardForWorkItem, currentBoardId, LEGACY_REVIEW_BOARD } from '../boards/semantics.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
@@ -215,8 +215,9 @@ function stageTransitionMessage(fromStage: FactoryRuleStage, toStage: FactoryRul
   return `This work was moved from the ${fromStage} stage to the ${toStage} stage.`;
 }
 
-function isTriageAgent(actor: FactoryRuleActor): actor is Extract<FactoryRuleActor, { type: 'agent' }> {
-  return actor.type === 'agent' && actor.role === 'triage';
+/** An agent classifies a card only as it leaves a phase granting `triage`. */
+function classifiesCard(actor: FactoryRuleActor, fromPhaseTools: readonly FactoryPhaseTool[]): boolean {
+  return actor.type === 'agent' && fromPhaseTools.includes('triage');
 }
 
 function isHumanTransition(request: FactoryTransitionRequest): boolean {
@@ -495,6 +496,7 @@ export class FactoryTransitionService {
                 plansAutoApproved,
                 planApproved: request.planApproved === true,
                 requestedTriageType: request.triageType,
+                fromPhaseTools: board.toolsForPhase(fromStage),
               }),
             ),
           );
@@ -503,7 +505,7 @@ export class FactoryTransitionService {
           }
           if (
             policy?.triageType !== undefined &&
-            (!isTriageAgent(request.actor) ||
+            (!classifiesCard(request.actor, board.toolsForPhase(fromStage)) ||
               policy.triageType !== request.triageType ||
               (item.triageType !== null && item.triageType !== policy.triageType))
           ) {

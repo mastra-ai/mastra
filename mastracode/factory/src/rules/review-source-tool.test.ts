@@ -1,6 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
 
+import { createBoardRegistry } from '../boards/index.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './review-source-tool.js';
@@ -82,6 +83,7 @@ describe('factory_review_source', () => {
       requestContext: context,
       storage,
       uiOrigin: PUBLIC_ORIGIN,
+      boards: createBoardRegistry(),
     });
     const tool = tools.factory_review_source as ExecutableTool | undefined;
     expect(tool).toBeDefined();
@@ -118,6 +120,7 @@ describe('factory_review_source', () => {
       requestContext: context,
       storage,
       uiOrigin: PUBLIC_ORIGIN,
+      boards: createBoardRegistry(),
     });
     const output = (await (tools.factory_review_source as ExecutableTool).execute(
       {},
@@ -143,6 +146,7 @@ describe('factory_review_source', () => {
       requestContext: context,
       storage,
       uiOrigin: PUBLIC_ORIGIN,
+      boards: createBoardRegistry(),
     });
     const tool = tools.factory_review_source as ExecutableTool;
     const output = (await tool.execute({}, { requestContext: context, agent: { toolCallId: 'tc-1' } })) as {
@@ -159,6 +163,7 @@ describe('factory_review_source', () => {
       requestContext: context,
       storage,
       uiOrigin: PUBLIC_ORIGIN,
+      boards: createBoardRegistry(),
     });
     expect(tools.factory_review_source).toBeUndefined();
   });
@@ -177,6 +182,7 @@ describe('factory_review_source', () => {
         requestContext: context,
         storage,
         uiOrigin: resolveReviewSourceUiOrigin(raw),
+        boards: createBoardRegistry(),
       });
       expect(tools.factory_review_source, `raw env value: ${JSON.stringify(raw)}`).toBeUndefined();
     }
@@ -195,6 +201,7 @@ describe('factory_review_source', () => {
       requestContext: context,
       storage,
       uiOrigin: `${PUBLIC_ORIGIN}/`,
+      boards: createBoardRegistry(),
     });
     const output = (await (tools.factory_review_source as ExecutableTool).execute(
       {},
@@ -237,6 +244,7 @@ describe('factory_review_source', () => {
       requestContext: context,
       storage: wrapped,
       uiOrigin: PUBLIC_ORIGIN,
+      boards: createBoardRegistry(),
     });
     const tool = tools.factory_review_source as ExecutableTool | undefined;
     expect(tool).toBeDefined();

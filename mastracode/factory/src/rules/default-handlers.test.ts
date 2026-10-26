@@ -849,21 +849,26 @@ describe('built-in board and integration handlers', () => {
     });
   });
 
-  it('advances only an approved plan from a bound planning role', async () => {
+  it('advances only an approved plan, from whichever agent works the card in Planning', async () => {
     const rule = workBoard.tools.submit_plan?.onResult;
     expect(await rule?.(toolContext({ content: 'Plan approved. Proceed with implementation.' }))).toMatchObject({
       type: 'transition',
       board: 'work',
       stage: 'execute',
     });
+    expect(
+      await rule?.(
+        toolContext(
+          { content: 'Plan approved. Proceed.' },
+          { actor: { type: 'agent', bindingId: 'binding-1', role: 'chat' } },
+        ),
+      ),
+    ).toMatchObject({ type: 'transition', stage: 'execute' });
     for (const context of [
       toolContext({ content: 'Plan submitted for review.' }),
       toolContext({ content: 'Plan was not approved. Revise it.' }),
       toolContext({ status: 'approved' }),
-      toolContext(
-        { content: 'Plan approved. Proceed.' },
-        { actor: { type: 'agent', bindingId: 'binding-1', role: 'chat' } },
-      ),
+      toolContext({ content: 'Plan approved. Proceed.' }, { actor: { type: 'human', id: 'user-1' } } as never),
       toolContext({ content: 'Plan approved. Proceed.' }, { item: { ...item, stages: ['intake'] } }),
       toolContext({ content: 'Plan approved. Proceed.' }, { result: { status: 'error', value: 'failed' } }),
     ]) {

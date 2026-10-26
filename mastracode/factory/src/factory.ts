@@ -103,7 +103,7 @@ import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './r
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
 import type { FactoryStartCoordinator } from './rules/start-coordinator.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
-import { createFactoryTransitionTools } from './rules/tools.js';
+import { createFactoryTransitionTools, phaseGrants } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
@@ -1566,6 +1566,14 @@ export class MastraFactory {
         outputProcessors: [new FactoryChannelSessionLinkProcessor(), new FactoryReplyCredentialProcessor()],
         ...(vector ? { vector } : {}),
         extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
+          // Built every turn: the Factory tools a session gets follow the phase its card is in now.
+          const boardResolver = this.#boardResolver;
+          const phaseBoards = {
+            boards: this.#boards,
+            ...(boardResolver
+              ? { boardsFor: (scope: { orgId: string; factoryProjectId: string }) => boardResolver.forProject(scope) }
+              : {}),
+          };
           const tools: IntegrationTools = {};
           const toolOwners = new Map<string, string>();
           const mergeTools = (ownerId: string, contributed: IntegrationTools) => {
@@ -1635,9 +1643,10 @@ export class MastraFactory {
                         if (!resolution) return undefined;
                         const binding =
                           resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
-                        if (binding?.role !== 'review') return undefined;
+                        if (!binding) return undefined;
                         const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                        const source = item?.externalSource;
+                        if (!item || !(await phaseGrants(phaseBoards, item, binding.role)).review) return undefined;
+                        const source = item.externalSource;
                         if (!source || !/pull-request|merge-request/.test(source.type)) return undefined;
                         return /(\d+)$/.exec(source.externalId)?.[1];
                       },
@@ -1653,7 +1662,7 @@ export class MastraFactory {
                 requestContext,
                 storage: workItemsStorage,
                 transitionService,
-                boards: this.#boards,
+                ...phaseBoards,
                 // Heals crash-resumed sessions: recovered addresses re-seed
                 // projectRepositoryId/baseRef from the source session record.
                 // Only offered while the source-control domain is ready — a
@@ -1688,6 +1697,7 @@ export class MastraFactory {
                 requestContext,
                 storage: workItemsStorage,
                 uiOrigin: reviewSourceUiOrigin,
+                ...phaseBoards,
                 ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
               }),
             );

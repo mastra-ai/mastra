@@ -66,7 +66,8 @@ async function prepareBoundItem(
           externalId: `${source}:1`,
         },
         title: 'Factory item',
-        stages: ['intake'],
+        // Tools follow the phase: a triage or review session works a card in its phase.
+        stages: [role === 'triage' ? 'triage' : role === 'review' ? 'review' : 'intake'],
         sessions: {},
         metadata: { authorTrusted: true },
       },
@@ -122,7 +123,12 @@ describe('factory_transition_work_item', () => {
       kickoffMessage: null,
     });
     const context = requestContext();
-    const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: service,
+      boards: createBoardRegistry(),
+    });
     const tool = tools.factory_transition_work_item as ExecutableTool;
     expect(
       tool.inputSchema.safeParse({ stage: 'shipping', expectedRevision: prepared.item.revision, rationale: 'Ready.' })
@@ -197,13 +203,19 @@ describe('factory_transition_work_item', () => {
     });
 
     await expect(
-      createFactoryTransitionTools({ requestContext: requestContext(), storage, transitionService: service }),
+      createFactoryTransitionTools({
+        requestContext: requestContext(),
+        storage,
+        transitionService: service,
+        boards: createBoardRegistry(),
+      }),
     ).resolves.toHaveProperty('factory_transition_work_item');
     await expect(
       createFactoryTransitionTools({
         requestContext: requestContext({ threadId: 'other-thread' }),
         storage,
         transitionService: service,
+        boards: createBoardRegistry(),
       }),
     ).resolves.toEqual({});
     await expect(
@@ -211,6 +223,7 @@ describe('factory_transition_work_item', () => {
         requestContext: requestContext({ resourceId: 'other-resource' }),
         storage,
         transitionService: service,
+        boards: createBoardRegistry(),
       }),
     ).resolves.toEqual({});
     await expect(
@@ -218,6 +231,7 @@ describe('factory_transition_work_item', () => {
         requestContext: requestContext({ orgId: 'other-org' }),
         storage,
         transitionService: service,
+        boards: createBoardRegistry(),
       }),
     ).resolves.toEqual({});
   });
@@ -231,6 +245,7 @@ describe('factory_transition_work_item', () => {
       requestContext: requestContext(),
       storage,
       transitionService: service,
+      boards: createBoardRegistry(),
     });
 
     expect((tools.factory_transition_work_item as ExecutableTool).requireApproval).toBe(true);
@@ -243,6 +258,7 @@ describe('factory_transition_work_item', () => {
       requestContext: requestContext(),
       storage,
       transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
+      boards: createBoardRegistry(),
     });
     const triageTool = tools.factory_transition_work_item as ExecutableTool;
     expect(
@@ -274,6 +290,7 @@ describe('factory_transition_work_item', () => {
       requestContext: context,
       storage,
       transitionService: { transition },
+      boards: createBoardRegistry(),
     });
     const tool = tools.factory_transition_work_item as ExecutableTool;
     expect(
@@ -305,6 +322,7 @@ describe('factory_transition_work_item', () => {
       requestContext: context,
       storage,
       transitionService: { transition },
+      boards: createBoardRegistry(),
     });
     await execute(tools.factory_transition_work_item as ExecutableTool, context, {
       stage: 'intake',
@@ -337,6 +355,7 @@ describe('factory_transition_work_item', () => {
       requestContext: context,
       storage,
       transitionService: { transition },
+      boards: createBoardRegistry(),
     });
 
     const result = await execute(
@@ -376,6 +395,7 @@ describe('factory_transition_work_item', () => {
       requestContext: context,
       storage,
       transitionService: { transition },
+      boards: createBoardRegistry(),
     });
 
     const result = await execute(tools.factory_transition_work_item as ExecutableTool, context, {
@@ -392,7 +412,12 @@ describe('factory_transition_work_item', () => {
     const prepared = await prepareBoundItem(storage);
     const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     const context = requestContext();
-    const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: service,
+      boards: createBoardRegistry(),
+    });
     await expect(
       execute(tools.factory_transition_work_item as ExecutableTool, requestContext({ threadId: 'other-thread' }), {
         stage: 'planning',
@@ -494,6 +519,7 @@ describe('factory_transition_work_item', () => {
       requestContext: context,
       storage,
       transitionService: { transition },
+      boards: createBoardRegistry(),
     });
 
     // Handing planning its turn in the live session rotates the binding row.
@@ -539,7 +565,12 @@ describe('factory_transition_work_item', () => {
     await prepareBoundItem(storage);
     const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     const context = requestContext();
-    const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: service,
+      boards: createBoardRegistry(),
+    });
 
     await storage.prepareRunStart({
       orgId: 'org-1',
@@ -583,7 +614,12 @@ describe('factory_transition_work_item', () => {
       }),
     });
     const context = requestContext();
-    const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: service,
+      boards: createBoardRegistry(),
+    });
     const tool = tools.factory_transition_work_item as ExecutableTool;
 
     await expect(
@@ -604,7 +640,12 @@ describe('factory_transition_work_item', () => {
       boards: createLifecycleTestRegistry({ planning: { issue: { onEnter } } }),
     });
     const context = requestContext();
-    const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: service,
+      boards: createBoardRegistry(),
+    });
     const tool = tools.factory_transition_work_item as ExecutableTool;
     const input = { stage: 'planning', expectedRevision: 1, rationale: 'Investigation complete.' };
 
@@ -624,6 +665,7 @@ describe('factory_transition_work_item', () => {
       requestContext: context,
       storage,
       transitionService: { transition } as never,
+      boards: createBoardRegistry(),
     });
 
     await execute(tools.factory_transition_work_item as ExecutableTool, context, {
@@ -655,6 +697,7 @@ describe('factory_transition_work_item', () => {
         requestContext: context,
         storage,
         transitionService: { transition } as never,
+        boards: createBoardRegistry(),
       });
 
       await expect(
@@ -679,6 +722,7 @@ describe('factory_transition_work_item', () => {
         requestContext: context,
         storage,
         transitionService: { transition } as never,
+        boards: createBoardRegistry(),
       });
 
       await expect(
@@ -728,6 +772,7 @@ describe('factory_transition_work_item', () => {
         requestContext: context,
         storage,
         transitionService: { transition: vi.fn() } as never,
+        boards: createBoardRegistry(),
       });
 
       await expect(
@@ -762,6 +807,7 @@ describe('factory_transition_work_item', () => {
         requestContext: context,
         storage,
         transitionService: { transition: vi.fn() } as never,
+        boards: createBoardRegistry(),
       });
 
       await execute(tools.factory_record_review_verdict as ExecutableTool, context, {
@@ -778,22 +824,68 @@ describe('factory_transition_work_item', () => {
       });
     });
 
-    it('rejects a verdict for a card that is no longer Reviewing', async () => {
+    it('drops the verdict once the card leaves Review, and refuses one called from an earlier turn', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      await reviewingItem(storage, 'done');
+      const id = await reviewingItem(storage);
       const context = requestContext();
-      const tools = await createFactoryTransitionTools({
+      const options = {
         requestContext: context,
         storage,
         transitionService: { transition: vi.fn() } as never,
-      });
+        boards: createBoardRegistry(),
+      };
+      const earlier = await createFactoryTransitionTools(options);
+      await storage.update({ orgId: 'org-1', id, userId: 'user-1', patch: { stages: ['done'] } });
 
+      expect(await createFactoryTransitionTools(options)).not.toHaveProperty('factory_record_review_verdict');
       await expect(
-        execute(tools.factory_record_review_verdict as ExecutableTool, context, {
+        execute(earlier.factory_record_review_verdict as ExecutableTool, context, {
           verdict: 'approve',
           reviewedHeadSha: 'abc1234def000000000000000000000000000000',
         }),
-      ).rejects.toThrow('Only a card in Reviewing records a verdict');
+      ).rejects.toThrow('cannot record a verdict on a card in done');
+    });
+
+    it('follows the card’s phase, not the session: a builder in Review never gets the verdict', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepareBoundItem(storage, 'github-issue', 'work');
+      const options = {
+        requestContext: requestContext(),
+        storage,
+        transitionService: { transition: vi.fn() } as never,
+        boards: createBoardRegistry(),
+      };
+      const move = (stages: string[]) =>
+        storage.update({ orgId: 'org-1', id: prepared.item.id, userId: 'user-1', patch: { stages } });
+      const classifies = (tools: Awaited<ReturnType<typeof createFactoryTransitionTools>>) =>
+        !(tools.factory_transition_work_item as ExecutableTool).inputSchema.safeParse({
+          stage: 'intake',
+          expectedRevision: 1,
+          rationale: 'Await approval.',
+        }).success;
+
+      // The same work session classifies while its card is in Triage, and stops once it moves on.
+      await move(['triage']);
+      expect(classifies(await createFactoryTransitionTools(options))).toBe(true);
+      await move(['execute']);
+      expect(classifies(await createFactoryTransitionTools(options))).toBe(false);
+      // Review grants the verdict, but not to the session that builds the card.
+      await move(['review']);
+      expect(await createFactoryTransitionTools(options)).not.toHaveProperty('factory_record_review_verdict');
+    });
+
+    it('gives a reviewer the verdict only while its card is in Review', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const id = await reviewingItem(storage);
+      const options = {
+        requestContext: requestContext(),
+        storage,
+        transitionService: { transition: vi.fn() } as never,
+        boards: createBoardRegistry(),
+      };
+      expect(await createFactoryTransitionTools(options)).toHaveProperty('factory_record_review_verdict');
+      await storage.update({ orgId: 'org-1', id, userId: 'user-1', patch: { stages: ['triage'] } });
+      expect(await createFactoryTransitionTools(options)).not.toHaveProperty('factory_record_review_verdict');
     });
 
     it('is offered only to review bindings and bounds its input', async () => {
@@ -803,6 +895,7 @@ describe('factory_transition_work_item', () => {
         requestContext: requestContext(),
         storage,
         transitionService: { transition: vi.fn() } as never,
+        boards: createBoardRegistry(),
       });
       expect(workTools).not.toHaveProperty('factory_record_review_verdict');
 
@@ -812,6 +905,7 @@ describe('factory_transition_work_item', () => {
         requestContext: requestContext(),
         storage: reviewStorage,
         transitionService: { transition: vi.fn() } as never,
+        boards: createBoardRegistry(),
       });
       const schema = (tools.factory_record_review_verdict as ExecutableTool).inputSchema;
       expect(
@@ -842,6 +936,7 @@ describe('factory_transition_work_item', () => {
         storage,
         transitionService: { transition } as never,
         sessions,
+        boards: createBoardRegistry(),
       });
 
       expect(tools).toHaveProperty('factory_transition_work_item');
@@ -876,6 +971,7 @@ describe('factory_transition_work_item', () => {
       storage,
       transitionService: { transition: vi.fn(async () => ({ status: 'accepted' as const })) } as never,
       sessions: { getBySessionId: vi.fn(async () => Promise.reject(new Error('sessions down'))) },
+      boards: createBoardRegistry(),
     });
 
     expect(tools).toHaveProperty('factory_transition_work_item');
@@ -897,6 +993,7 @@ describe('factory_transition_work_item', () => {
       storage,
       transitionService: { transition: vi.fn(async () => ({ status: 'accepted' as const })) } as never,
       sessions: { getBySessionId },
+      boards: createBoardRegistry(),
     });
 
     expect(tools).toHaveProperty('factory_transition_work_item');
@@ -918,6 +1015,7 @@ describe('factory_transition_work_item', () => {
       requestContext: crashResumedContext(setState),
       storage,
       transitionService: service,
+      boards: createBoardRegistry(),
     });
 
     expect(tools).toHaveProperty('factory_transition_work_item');
@@ -939,6 +1037,7 @@ describe('factory_transition_work_item', () => {
         requestContext: crashResumedContext(setState, { threadId: 'other-thread' }),
         storage,
         transitionService: service,
+        boards: createBoardRegistry(),
       }),
     ).resolves.toEqual({});
     expect(setState).not.toHaveBeenCalled();
@@ -973,6 +1072,7 @@ describe('factory_transition_work_item', () => {
         requestContext: crashResumedContext(vi.fn(async () => {})),
         storage,
         transitionService: service,
+        boards: createBoardRegistry(),
       }),
     ).resolves.toEqual({});
   });
@@ -985,6 +1085,7 @@ describe('factory_transition_work_item', () => {
       requestContext: requestContext(),
       storage,
       transitionService: service,
+      boards: createBoardRegistry(),
     });
     const schema = (tools.factory_transition_work_item as ExecutableTool).inputSchema;
 
@@ -1008,6 +1109,7 @@ describe('factory_transition_work_item', () => {
       requestContext: requestContext(),
       storage,
       transitionService: service,
+      boards: createBoardRegistry(),
     });
     const schema = (tools.factory_transition_work_item as ExecutableTool).inputSchema;
 

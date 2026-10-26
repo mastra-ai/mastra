@@ -42,7 +42,7 @@ const preRefactorWorkBoard = defineBoard<'work', Record<Phase, BoardPhaseDefinit
   transitionPolicy: workTransitionPolicy,
   sourceClosed: { completed: 'done', canceled: 'canceled' },
   tools: {
-    submit_plan: exitToolRule({ tool: 'submit_plan', phase: 'planning', nextPhase: 'execute', role: 'plan' }),
+    submit_plan: exitToolRule({ tool: 'submit_plan', phase: 'planning', nextPhase: 'execute' }),
     factory_record_review_verdict: runner('factory-review').tools!.factory_record_review_verdict!,
   },
   phases: {
@@ -251,5 +251,27 @@ describe('compileStoredBoard', () => {
       item: { ...card.item, source: 'github-pr', metadata: { githubPullRequestNumber: 7 } },
     };
     expect(await board.rules.review?.pullRequest?.onEnter?.(pullRequest as never)).toMatchObject({ role: 'review' });
+  });
+
+  it('grants Factory tools by phase, from the phase’s runner and never from a context name', () => {
+    const board = compileStoredBoard(
+      {
+        ...workBoardTemplate,
+        phases: [
+          ...workBoardTemplate.phases,
+          {
+            key: 'qa',
+            name: 'QA',
+            kind: 'working',
+            runner: { type: 'agent', agentId: 'qa', skill: 'qa', context: 'review' },
+          },
+        ],
+      },
+      builtInRunners,
+    );
+    expect(board.toolsForPhase('triage')).toEqual(['triage']);
+    expect(board.toolsForPhase('review')).toEqual(['review']);
+    expect(board.toolsForPhase('execute')).toEqual([]);
+    expect(board.toolsForPhase('qa')).toEqual([]);
   });
 });

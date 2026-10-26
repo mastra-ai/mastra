@@ -8,6 +8,7 @@ import type {
   FactoryRuleSource,
   FactoryTriageType,
 } from '../rules/types.js';
+import type { FactoryPhaseTool } from './define-board.js';
 
 type Immutable<T> = T extends string | number | boolean | bigint | null | undefined
   ? T
@@ -32,6 +33,8 @@ export type BoardTransitionPolicyContext = Immutable<
     /** Whether this transition consumes a successfully approved `submit_plan` result. */
     planApproved: boolean;
     requestedTriageType?: FactoryTriageType;
+    /** Factory tools the phase the card leaves grants; an agent leaving a `triage` phase classifies. */
+    fromPhaseTools: readonly FactoryPhaseTool[];
     item: FactoryRuleItemContext & { triageType: FactoryTriageType | null };
   }
 >;

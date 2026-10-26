@@ -2,7 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem, workItemPhaseSemantics } from '../boards/index.js';
+import { boardForWorkItem, phaseTools, reviewsIndependently, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { SELF_REVIEW_ROUND_LIMIT } from '../boards/work.js';
 import type { IntegrationTools } from '../integrations/base.js';
@@ -40,12 +40,44 @@ const triageTransitionInputSchema = transitionInputSchema.extend({
   triageType: z.enum(FACTORY_TRIAGE_TYPES),
 });
 
+/** The boards a project runs: its stored boards when a resolver is wired, else the installed ones. */
+export type ProjectBoards = (scope: { orgId: string; factoryProjectId: string }) => Promise<BoardRegistry>;
+
+async function cardBoards(
+  options: { boards?: BoardRegistry; boardsFor?: ProjectBoards },
+  item: Pick<WorkItemRow, 'orgId' | 'factoryProjectId'>,
+): Promise<BoardRegistry | undefined> {
+  return options.boardsFor
+    ? options.boardsFor({ orgId: item.orgId, factoryProjectId: item.factoryProjectId })
+    : options.boards;
+}
+
+/**
+ * What the card's phase lets a session in `role` do: classify it (Triage), record a review verdict
+ * (Review, unless this session also works the card elsewhere). Tools follow the phase, so a session
+ * sees them change as the card moves.
+ */
+export async function phaseGrants(
+  options: { boards?: BoardRegistry; boardsFor?: ProjectBoards },
+  item: WorkItemRow,
+  role: string,
+): Promise<{ triage: boolean; review: boolean }> {
+  const boards = await cardBoards(options, item);
+  if (!boards) return { triage: false, review: false };
+  const tools = phaseTools(boards, item);
+  return {
+    triage: tools.includes('triage'),
+    review: tools.includes('review') && reviewsIndependently(boards.get(boardForWorkItem(item)), role),
+  };
+}
+
 export async function createFactoryTransitionTools(options: {
   requestContext: RequestContext;
   storage: WorkItemsStorage;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   sessions?: FactorySessionSourceLookup;
   boards?: BoardRegistry;
+  boardsFor?: ProjectBoards;
 }): Promise<IntegrationTools> {
   const resolution = await resolveFactorySessionAddress({
     requestContext: options.requestContext,
@@ -71,15 +103,17 @@ export async function createFactoryTransitionTools(options: {
     }
     return {};
   }
-  let isTriage = false;
-  if (availableBinding.role === 'triage') {
-    const item = await options.storage.get({ orgId: availableBinding.orgId, id: availableBinding.workItemId });
-    if (!item) return {};
-    isTriage = boardForWorkItem(item) === 'work';
-  }
+  // A failed lookup still leaves the plain transition tool; its execute re-reads the card.
+  const boundItem = await options.storage
+    .get({ orgId: availableBinding.orgId, id: availableBinding.workItemId })
+    .catch(() => null);
+  const grants = boundItem
+    ? await phaseGrants(options, boundItem, availableBinding.role)
+    : { triage: false, review: false };
+  const isTriage = grants.triage;
 
   return {
-    ...(availableBinding.role === 'review' ? createReviewVerdictTool(options, availableBinding.workItemId) : {}),
+    ...(grants.review ? createReviewVerdictTool(options, availableBinding.workItemId) : {}),
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description: isTriage
@@ -111,8 +145,8 @@ export async function createFactoryTransitionTools(options: {
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
         const board = boardForWorkItem(item);
-        // Only a Work triage binding may classify; other roles can echo the key from history.
-        const triageType = board === 'work' && binding.role === 'triage' ? requestedTriageType : undefined;
+        // Only an agent working a card in Triage may classify; others can echo the key from history.
+        const triageType = (await phaseGrants(options, item, binding.role)).triage ? requestedTriageType : undefined;
 
         const result = await options.transitionService.transition({
           orgId: binding.orgId,
@@ -168,6 +202,8 @@ function createReviewVerdictTool(
     storage: WorkItemsStorage;
     transitionService: Pick<FactoryTransitionService, 'transition'>;
     sessions?: FactorySessionSourceLookup;
+    boards?: BoardRegistry;
+    boardsFor?: ProjectBoards;
   },
   boundWorkItemId: string,
 ): IntegrationTools {
@@ -185,11 +221,16 @@ function createReviewVerdictTool(
           sessions: options.sessions,
         });
         const binding = resolution ? await options.storage.findActiveRunBinding(resolution.address) : null;
-        if (!binding || binding.workItemId !== boundWorkItemId || binding.role !== 'review') {
+        if (!binding || binding.workItemId !== boundWorkItemId) {
           throw new Error('Factory review binding is unavailable, revoked, or no longer matches this session.');
         }
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
+        if (!(await phaseGrants(options, item, binding.role)).review) {
+          throw new Error(
+            `This session cannot record a verdict on a card in ${item.stages.join(', ')}: only a reviewer independent of the work records one, in a phase that reviews.`,
+          );
+        }
         const pullRequestCard = item.externalSource?.type === 'pull-request';
         const openPullRequestNumber = item.metadata?.openPullRequestNumber;
         if (

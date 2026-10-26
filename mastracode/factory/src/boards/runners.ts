@@ -1,7 +1,7 @@
 import type { FactoryRuleItemContext, FactoryStageRuleContext, FactoryToolResultRuleContext } from '../rules/types.js';
 import { needsApproval } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
-import type { BoardToolRule, ReadonlyBoardPhaseHandlers } from './define-board.js';
+import type { BoardToolRule, FactoryPhaseTool, ReadonlyBoardPhaseHandlers } from './define-board.js';
 import { reviewPullRequest } from './review.js';
 
 function sourceIdentifier(item: FactoryRuleItemContext): string | undefined {
@@ -221,7 +221,6 @@ export function openApprovedChangeRequest(context: FactoryToolResultRuleContext)
   if (
     context.result.status !== 'success' ||
     context.actor.type !== 'agent' ||
-    context.actor.role !== 'review' ||
     context.item.stages.length !== 1 ||
     context.item.stages[0] !== 'review' ||
     context.item.metadata?.selfReviewVerdict !== 'approve' ||
@@ -265,6 +264,8 @@ export interface BoardRunner {
   readonly role?: string;
   /** The skill the runner activates; a stored agent runner naming this runner can swap it for another. */
   readonly skill?: string;
+  /** Factory tools a phase running this runner grants. */
+  readonly factoryTools?: readonly FactoryPhaseTool[];
   readonly onEnter?: ReadonlyBoardPhaseHandlers;
   readonly onExit?: ReadonlyBoardPhaseHandlers;
   readonly tools?: Readonly<Record<string, BoardToolRule>>;
@@ -290,6 +291,7 @@ const triageRunner: BoardRunner = {
   id: 'factory-triage',
   role: 'triage',
   skill: 'factory-triage',
+  factoryTools: ['triage'],
   onEnter: {
     pullRequest: triagePullRequest,
     gitlabPullRequest: triagePullRequest,
@@ -336,6 +338,7 @@ const reviewRunner: BoardRunner = {
   id: 'factory-review',
   role: 'work',
   skill: 'factory-review',
+  factoryTools: ['review'],
   onEnter: {
     // A pull request's own card is reviewed by an independent reviewer in its review seat.
     pullRequest: reviewPullRequest,

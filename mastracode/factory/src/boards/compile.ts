@@ -164,6 +164,8 @@ export function compileStoredBoard(
     const targets = phase.nextPhases ?? allKeys;
     const base = {
       title: phase.name,
+      // A phase grants the Factory tools its runner works with; a context name grants none.
+      factoryTools: runner?.factoryTools ?? [],
       outcomes: Object.fromEntries(targets.map(target => [target, target])),
       ...(runner?.onEnter ? { onEnter: runner.onEnter } : {}),
       ...(runner?.onExit ? { onExit: runner.onExit } : {}),
@@ -172,7 +174,7 @@ export function compileStoredBoard(
       phases[phase.key] = { ...base, kind: 'working', role: runner.role };
     } else if (phase.kind === 'working') {
       if (runner) options.warn?.(`Board '${board.key}' phase '${phase.key}' runner '${runner.id}' has no context.`);
-      phases[phase.key] = { title: phase.name, outcomes: base.outcomes, kind: 'resting' };
+      phases[phase.key] = { title: phase.name, outcomes: base.outcomes, factoryTools: [], kind: 'resting' };
       continue;
     } else {
       phases[phase.key] = { ...base, kind: phase.kind };
@@ -180,12 +182,8 @@ export function compileStoredBoard(
     Object.assign(tools, runner?.tools);
     const nextPhase = board.phases[index + 1]?.key;
     if (phase.exitTool && nextPhase) {
-      tools[phase.exitTool] = exitToolRule({
-        tool: phase.exitTool,
-        phase: phase.key,
-        nextPhase,
-        ...(runner?.role ? { role: runner.role } : {}),
-      });
+      // Any agent working the card in this phase may finish it; the tool decides, not the session.
+      tools[phase.exitTool] = exitToolRule({ tool: phase.exitTool, phase: phase.key, nextPhase });
     }
   }
 

@@ -9,20 +9,19 @@ function resultContent(value: unknown): string | undefined {
 }
 
 /**
- * A phase's exit tool: a successful call by the phase's own agent while the card
+ * A phase's exit tool: a successful call by an agent working the card while it
  * sits in that phase moves it to `nextPhase`. `submit_plan` only counts once the
  * plan was approved (by a person, or by the dispatcher when auto-approval applies).
  */
-export function exitToolRule(input: { tool: string; phase: string; nextPhase: string; role?: string }): BoardToolRule {
-  const { tool, phase, nextPhase, role } = input;
+export function exitToolRule(input: { tool: string; phase: string; nextPhase: string }): BoardToolRule {
+  const { tool, phase, nextPhase } = input;
   return {
     onResult(context: FactoryToolResultRuleContext) {
       if (
         context.result.status !== 'success' ||
         context.item.stages.length !== 1 ||
         context.item.stages[0] !== phase ||
-        context.actor.type !== 'agent' ||
-        (role !== undefined && context.actor.role !== role)
+        context.actor.type !== 'agent'
       ) {
         return;
       }

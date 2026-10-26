@@ -21,7 +21,7 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
       reason: `A pull request card cannot move from ${fromStage} to ${toStage}. It moves between Intake, Triage, Review, Done and Canceled.`,
     };
   }
-  const triageAgent = actor.type === 'agent' && actor.role === 'triage';
+  const triageAgent = actor.type === 'agent' && context.fromPhaseTools.includes('triage');
   if (triageAgent && !pullRequestCard && requestedTriageType === undefined) {
     return {
       type: 'reject',

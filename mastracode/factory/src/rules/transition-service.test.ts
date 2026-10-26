@@ -625,7 +625,7 @@ describe('FactoryTransitionService', () => {
 
   it('persists a feature classification without allowing a triage agent into Planning', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage);
+    const item = await createItem(storage, { stages: ['triage'] });
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
@@ -654,7 +654,7 @@ describe('FactoryTransitionService', () => {
     'requires both human actor and human ingress to approve %s',
     async stage => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const item = await createItem(storage);
+      const item = await createItem(storage, { stages: ['triage'] });
       const service = new FactoryTransitionService({
         configVersion: 'human-approval',
         storage,
@@ -695,7 +695,7 @@ describe('FactoryTransitionService', () => {
 
   it('allows a human to approve a classified feature into Planning', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage);
+    const item = await createItem(storage, { stages: ['triage'] });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
     await service.transition({
       ...request(item, { stage: 'intake', identity: 'triage-feature' }),
@@ -712,7 +712,7 @@ describe('FactoryTransitionService', () => {
 
   it('rejects every non-human ingress at both protected gates even when autonomy is armed', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage);
+    const item = await createItem(storage, { stages: ['triage'] });
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
@@ -796,7 +796,7 @@ describe('FactoryTransitionService', () => {
     'requires approval after an intermediate Review move into %s',
     async stage => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const item = await createItem(storage, { metadata: { authorTrusted: true } });
+      const item = await createItem(storage, { stages: ['triage'], metadata: { authorTrusted: true } });
       const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
       const reviewed = await service.transition({
         ...request(item, { stage: 'review', identity: 'classify-review' }),
