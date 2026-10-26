@@ -12282,7 +12282,7 @@ export class Agent<
     if (typeof instructions === 'string') {
       return instructions;
     }
-    const result = instructions({ requestContext, mastra: this.#mastra });
+    const result = resolveDynamicArgument(instructions, { requestContext, mastra: this.#mastra });
     return resolveMaybePromise(result, resolvedInstructions => {
       return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
     });
