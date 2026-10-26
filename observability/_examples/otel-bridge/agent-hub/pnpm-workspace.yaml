@@ -17,7 +17,7 @@ overrides:
   systeminformation: 5.33.13
   ajv@>=8.0.0 <8.20.0: 8.20.0
   fast-uri@<3.1.9: 3.1.9
-  fast-uri@>=4.0.0 <4.1.5: 4.2.1
+  fast-uri@>=4.0.0 <4.2.3: 4.2.3
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
   proxy-addr: 2.0.8
   'minimatch@>=10.0.0 <10.2.3': 10.2.3
