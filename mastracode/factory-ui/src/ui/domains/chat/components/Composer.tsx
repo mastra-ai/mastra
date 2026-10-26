@@ -189,7 +189,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const commandMenu = useComposerCommands({
     commands,
-    value: preview ?? draft,
+    value: preview?.text ?? draft,
     onValueChange: updateDraft,
     inputRef,
     enabled: !planFeedback.pending,
@@ -261,6 +261,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             placeholder={placeholder}
             disabled={textareaDisabled}
             readOnly={preview !== null}
+            style={preview ? { height: preview.height } : undefined}
             variant={variant}
             aria-label="Message"
           />

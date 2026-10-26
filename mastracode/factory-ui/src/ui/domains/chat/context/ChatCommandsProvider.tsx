@@ -1,13 +1,18 @@
-import { createContext, useContext, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { flushSync } from 'react-dom';
 
 import type { SlashCommand } from '../services/commands';
 import { useChatCommandRegistry } from './useChatCommandRegistry';
 
+export interface ComposerPreview {
+  text: string;
+  height: number;
+}
+
 export interface ChatCommandsApi {
   composerDraft: string;
-  composerPreview: string | null;
+  composerPreview: ComposerPreview | null;
   composerInputRef: RefObject<HTMLTextAreaElement | null>;
   setComposerDraft: (draft: string) => void;
   setComposerPreview: (preview: string | null) => void;
@@ -21,8 +26,13 @@ const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
 
 export function ChatCommandsProvider({ children }: { children: ReactNode }) {
   const [composerDraft, setComposerDraft] = useState('');
-  const [composerPreview, setComposerPreview] = useState<string | null>(null);
+  const [composerPreview, setPreview] = useState<ComposerPreview | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
+  // Measured before the preview lands: a composer that grew to fit it would move what the pointer is on.
+  const setComposerPreview = useCallback((text: string | null) => {
+    const height = composerInputRef.current?.getBoundingClientRect().height;
+    setPreview(text === null || height === undefined ? null : { text, height });
+  }, []);
   const prefillComposer = (draft: string) => {
     setComposerDraft(draft);
     requestAnimationFrame(() => composerInputRef.current?.focus());

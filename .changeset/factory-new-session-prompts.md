@@ -11,4 +11,4 @@ Added suggestions built from your board and an **In flight** line to the Factory
 - **Plan a fix for one of 5 open bugs**: bugs not yet planned or started.
 - **Recap 8 cards done this week**: cards that reached Done in the last seven days.
 
-Pointing at a suggestion shows its prompt in the composer, and moving away brings your own draft back. Clicking it starts the session with that prompt. **In flight** counts the Work board cards in Intake, Triage, Planning, Building and Review, and links to the board. The Factory name and branch line under the composer is gone.
+Pointing at a suggestion shows its prompt in the composer at the composer's current size, so nothing on the page moves under the pointer, and moving away brings your own draft back. Clicking it starts the session with that prompt. **In flight** counts the Work board cards in Intake, Triage, Planning, Building and Review, and links to the board. The Factory name and branch line under the composer is gone.
