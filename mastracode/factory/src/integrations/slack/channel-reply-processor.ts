@@ -8,6 +8,16 @@ const ID = 'factory-channel-reply';
 export const SESSION_LINK_LABEL = 'Open session ↗';
 
 /**
+ * Chat surfaces show what the agent writes as-is, so a bare `#28467`,
+ * `FACT-526` or `52db47cd` is a dead end for the reader. Every channel run
+ * gets this, whether it speaks in reply text or through the reply tool.
+ */
+const LINK_REFERENCES = [
+  'Write every pull request, issue, commit, Linear ticket or other reference you mention in the thread as a markdown link to its page, with the ID as plain link text: [#28467](https://github.com/<owner>/<repo>/pull/28467), [52db47cd](https://github.com/<owner>/<repo>/commit/52db47cd), [FACT-526](<the ticket URL>). Never leave one as a bare ID or wrap it in code formatting.',
+  "Build GitHub and GitLab links from the repository the reference belongs to, from the repositories listed in your environment or a tool result; with more than one repository, don't assume which one a bare number belongs to. Build Linear links from the workspace URL pattern in the `linear_get_issue` tool description, or from a URL a tool returned. Don't guess a URL; leave a reference unlinked only when you can't work out its URL.",
+].join('\n');
+
+/**
  * Tells the agent how to open a reply when the run came in over a chat
  * channel (Slack, …): acknowledge a job in one line that names it — "On it —
  * sleeping 30s, then running the echo" — before starting, so the sender sees
@@ -32,7 +42,7 @@ export class FactoryChannelReplyProcessor implements Processor {
       messageList.addSystem(
         {
           role: 'system',
-          content: `Post to that thread with \`${REPLY_TOOL}\`. This request came from outside it, so don't post an opener or progress there; post the outcome when the people in the thread asked for this work or are waiting on it, or when you're asked to. Don't write a note about what you posted. When you open a pull request, its link is posted to this thread for you, and again when it merges, so don't post the link yourself.`,
+          content: `Post to that thread with \`${REPLY_TOOL}\`. This request came from outside it, so don't post an opener or progress there; post the outcome when the people in the thread asked for this work or are waiting on it, or when you're asked to. Don't write a note about what you posted. When you open a pull request, its link is posted to this thread for you, and again when it merges, so don't post the link yourself.\n${LINK_REFERENCES}`,
         },
         ID,
       );
@@ -52,7 +62,7 @@ export class FactoryChannelReplyProcessor implements Processor {
             'When a request will take tools or more than a moment to answer, reply first with one short line that says what you are about to do — "On it — <the task in a few words>." — then do the work; the opener posts as its own message before any progress is shown. Give direct answers and trivial replies without an opener.',
             'Finish with the outcome, not a replay of the steps.',
           ];
-    messageList.addSystem({ role: 'system', content: content.join('\n') }, ID);
+    messageList.addSystem({ role: 'system', content: [...content, LINK_REFERENCES].join('\n') }, ID);
     return { messageList };
   }
 }

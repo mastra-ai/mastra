@@ -37,7 +37,7 @@ describe('FactoryChannelReplyProcessor', () => {
     const text = instruction(channelContext());
     expect(text).toMatch(/reply first with one short line that says what you are about to do/);
     expect(text).not.toContain('↗');
-    expect(text).not.toMatch(/link/i);
+    expect(text).not.toMatch(/session link|Open session/i);
   });
 
   it('points a run with the reply tool at the tool, and says staying quiet means not calling it', () => {
@@ -59,6 +59,21 @@ describe('FactoryChannelReplyProcessor', () => {
     // A merge wakes the session without `channel`, so the woken run needs this too.
     for (const requestContext of [new RequestContext(), channelContext()]) {
       expect(instruction(requestContext, { reply_in_thread: {} })).toContain("so don't post the link yourself");
+    }
+  });
+
+  it('tells every channel run to link the references it mentions', () => {
+    const runs = [
+      instruction(channelContext()),
+      instruction(channelContext(), { reply_in_thread: {} }),
+      instruction(new RequestContext(), { reply_in_thread: {} }),
+    ];
+    for (const text of runs) {
+      expect(text).toContain('as a markdown link to its page');
+      expect(text).toContain('[#28467](https://github.com/<owner>/<repo>/pull/28467)');
+      expect(text).toContain("Don't guess a URL");
+      expect(text).toContain('the repositories listed in your environment');
+      expect(text).toContain('workspace URL pattern in the `linear_get_issue` tool description');
     }
   });
 
