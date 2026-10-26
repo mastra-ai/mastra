@@ -60,10 +60,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
     }
   });
 
-  // The durable engines publish step results with `request: { body: undefined }`
-  // (durable/stream-adapter.ts), so the provider request body never reaches the output.
-  // The request itself is asserted by the plain case above; only the body is expected to fail.
-  (isDurableEngineVariant(engine) ? it.fails : it)('exposes the provider request body', async () => {
+  it('exposes the provider request body', async () => {
     const { result, output } = await streamHello();
     const { request } = output;
 
@@ -75,9 +72,26 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
     }
   });
 
-  // The durable stream adapter builds a bare MastraModelOutput without the
-  // destructurable proxy, so a destructured consumeStream() loses `this` there.
-  (isDurableEngineVariant(engine) ? it.fails : it)('keeps consumeStream bound after destructuring', async () => {
+  it('passes the provider request body to onFinish', async () => {
+    const llm = getMock();
+    llm.on({ endpoint: 'chat', userMessage: 'Say hello' }, { content: 'Hello there!' });
+    const { agent } = await createSharedAgent(llm, { engine });
+    let finishRequest: unknown;
+    const result: any = await agent.stream('Say hello', {
+      onFinish: ({ request }) => {
+        finishRequest = request;
+      },
+    });
+
+    try {
+      await (isDurableEngineVariant(engine) ? result.output : result).consumeStream();
+      expect(finishRequest).toMatchObject({ body: expect.anything() });
+    } finally {
+      result.cleanup?.();
+    }
+  });
+
+  it('keeps consumeStream bound after destructuring', async () => {
     const { result, output } = await streamHello();
     const { consumeStream } = output;
 

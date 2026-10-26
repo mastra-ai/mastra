@@ -703,6 +703,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           const textDeltas: string[] = [];
           let materializeStreamedMessages: (() => void) | undefined;
           let deferredStepFinishChunk: any = null;
+          let request: any = {};
           const prepareDeferredStepFinishChunk = ({
             reason,
             isContinued,
@@ -718,6 +719,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               ...deferredStepFinishChunk,
               payload: {
                 ...deferredStepFinishChunk.payload,
+                metadata: { ...deferredStepFinishChunk.payload?.metadata, request },
                 ...(reason === 'retry' && tripwire ? { processorRetryFeedback: tripwire.reason } : {}),
                 stepResult: {
                   ...deferredStepFinishChunk.payload?.stepResult,
@@ -1238,7 +1240,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // 7. Track state during streaming
             let warnings: any[] = [];
-            let request: any = {};
             let rawResponse: any = {};
             const toolCalls: DurableToolCallInput[] = [];
             let finishReason: string = 'stop';

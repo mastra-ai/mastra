@@ -1,10 +1,5 @@
 import { expect, it } from 'vitest';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * The stream result's properties and methods must keep working after being
@@ -15,12 +10,6 @@ import {
  */
 describeForAllEngines('AIMock loop scenario: stream result destructuring', engine => {
   const getMock = useLoopScenarioAimock();
-
-  // Known gap: the durable (durable/evented/inngest) `result.output` is a plain MastraModelOutput,
-  // not wrapped by `createDestructurableOutput` like the direct loop's result,
-  // so a destructured `consumeStream()` loses `this` and throws.
-  // Only that call is expected to fail; everything else is asserted normally.
-  const isDurableEngine = isDurableEngineVariant(engine);
 
   it('resolves destructured stream properties and methods', async () => {
     const llm = getMock();
@@ -39,19 +28,13 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
     for await (const _chunk of fullStream as AsyncIterable<unknown>) {
       // drain
     }
-    if (isDurableEngine) {
-      await expect(async () => consumeStream()).rejects.toThrow(/consumeStreamPromise/);
-    } else {
-      await consumeStream();
-    }
+    await consumeStream();
 
     expect(await text).toBe('Hello there!');
     expect(await usage).toBeDefined();
     expect(await toolCalls).toEqual([]);
     expect(await finishReason).toBe('stop');
-    // Known gap: durable/evented resolve `request` to `{}` (no body), with or
-    // without destructuring.
-    expect((await request)?.body).toEqual(isDurableEngine ? undefined : expect.anything());
+    expect((await request)?.body).toBeDefined();
     expect(llm.getRequests()).toHaveLength(1);
   });
 });
