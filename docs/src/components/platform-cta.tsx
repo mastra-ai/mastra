@@ -28,7 +28,7 @@ export default function PlatformCta({ placement }: { placement: 'header' | 'card
   }
 
   return (
-    <aside aria-label="Mastra Platform" data-llms-ignore>
+    <aside aria-label="Mastra Platform" data-llms-ignore className="@container">
       <Card className="gap-4 rounded-xl border border-(--border) bg-(--mastra-surface-1)/20 p-4 shadow-none">
         <div>
           <div className="flex items-center gap-2 text-sm font-semibold text-(--mastra-text-primary)">
@@ -45,7 +45,8 @@ export default function PlatformCta({ placement }: { placement: 'header' | 'card
           className="h-10 w-full shrink-0 justify-between rounded-xl border border-(--border) bg-(--mastra-surface-2) text-(--mastra-text-primary)! no-underline! hover:bg-(--mastra-surface-3) dark:bg-(--mastra-surface-4)"
         >
           <a href={signupUrl}>
-            Deploy your agents
+            <span className="hidden @max-[15rem]:inline">Sign up</span>
+            <span className="@max-[15rem]:hidden">Deploy your agents</span>
             <ArrowUpRight aria-hidden="true" />
           </a>
         </Button>
