@@ -1291,20 +1291,19 @@ describe('TestLangSmithExporter', () => {
       mockClient.awaitPendingTraceBatches.mockRejectedValueOnce(new Error('upload failed'));
       mockClient.createFeedback = vi.fn().mockResolvedValue(undefined);
       mockClient.readProject = vi.fn().mockResolvedValue({ id: 'project-uuid' });
-      const rootRunId = langsmithRunIdFor('trace-1');
-      mockClient.readRun = vi.fn(async (id: string) => {
-        if (id === rootRunId) return { id, extra: { metadata: { mastra_span_id: 'root-span' } } };
-        throw new Error('404 Run not found');
+      const rootRunId = langsmithRunIdFor('root-span');
+      mockClient.listRuns = vi.fn(async function* () {
+        yield { id: rootRunId, start_time: 1 };
       });
 
       await expect(exporter.shutdown()).rejects.toThrow('upload failed');
 
-      // The cached id is gone, so the score has to go through the LangSmith lookup (and still lands).
+      // The cached root is gone, so a trace-level score has to go through the LangSmith lookup (and still lands).
       await exporter.onScoreEvent({
         type: 'score',
-        score: { spanId: 'root-span', traceId: 'trace-1', scorerId: 'accuracy', scorerName: 'Accuracy', score: 1 },
+        score: { traceId: 'trace-1', scorerId: 'accuracy', scorerName: 'Accuracy', score: 1 },
       } as any);
-      expect(mockClient.readRun).toHaveBeenCalled();
+      expect(mockClient.listRuns).toHaveBeenCalled();
       expect(mockClient.createFeedback.mock.calls[0][0]).toBe(rootRunId);
     });
 
@@ -1741,19 +1740,26 @@ describe('TestLangSmithExporter', () => {
         }),
       });
 
+    /** LangSmith answers the root-run query with these runs (in this order). */
+    const rootRunsInLangSmith = (...runs: Array<{ id: string; start_time: number }>) => {
+      mockClient.listRuns = vi.fn(async function* () {
+        yield* runs;
+      });
+    };
+
     beforeEach(() => {
       mockClient.createFeedback = vi.fn().mockResolvedValue({});
-      mockClient.readRun = vi.fn().mockRejectedValue(new Error('404 Run not found'));
       mockClient.readProject = vi.fn().mockResolvedValue({ id: 'project-uuid' });
+      rootRunsInLangSmith();
     });
 
-    it('gives the root run the trace id and child runs their span id, and tags runs with the Mastra ids', async () => {
+    it('names every run after its own span id and tags runs with the Mastra ids', async () => {
       await startSpan(exporter, 'parent-id', true);
       await startSpan(exporter, 'child-span', false);
 
       expect(MockRunTreeClass).toHaveBeenCalledWith(
         expect.objectContaining({
-          id: langsmithRunIdFor(traceId),
+          id: langsmithRunIdFor('parent-id'),
           metadata: expect.objectContaining({ mastra_span_id: 'parent-id', mastra_trace_id: traceId }),
         }),
       );
@@ -1762,15 +1768,19 @@ describe('TestLangSmithExporter', () => {
       );
     });
 
-    it('a second root in the same Mastra trace keeps its own span id instead of colliding with the first', async () => {
+    // Several executions can share one Mastra trace (`tracingOptions.traceId`, resumed runs).
+    // Each root must keep its own run, whichever exporter instance posts it.
+    it('gives every root of a shared trace its own run id, in this exporter and in another one', async () => {
       await startSpan(exporter, 'root-a', true);
       await startSpan(exporter, 'root-b', true);
+      await startSpan(new TestLangSmithExporter(config), 'root-c', true);
 
       const ids = MockRunTreeClass.mock.calls.map((call: any[]) => call[0].id);
-      expect(ids).toEqual([langsmithRunIdFor(traceId), langsmithRunIdFor('root-b')]);
+      expect(ids).toEqual([langsmithRunIdFor('root-a'), langsmithRunIdFor('root-b'), langsmithRunIdFor('root-c')]);
+      expect(new Set(ids).size).toBe(3);
     });
 
-    it('scores a span this process exported without asking LangSmith, passing the project id feedback now requires', async () => {
+    it('scores a span without asking LangSmith, passing the project id feedback now requires', async () => {
       await startSpan(exporter, 'mastra-span-1', true);
 
       await exporter.onScoreEvent(
@@ -1786,19 +1796,16 @@ describe('TestLangSmithExporter', () => {
         }),
       );
 
-      expect(mockClient.readRun).not.toHaveBeenCalled();
+      expect(mockClient.listRuns).not.toHaveBeenCalled();
       expect(mockClient.createFeedback).toHaveBeenCalledTimes(1);
       const [runId, key, opts] = mockClient.createFeedback.mock.calls[0];
-      // The root span's run carries the trace id, so a score on the root lands on the trace root.
-      expect(runId).toBe(langsmithRunIdFor(traceId));
+      expect(runId).toBe(langsmithRunIdFor('mastra-span-1'));
       expect(key).toBe('Accuracy');
       expect(opts).toMatchObject({ sessionId: 'project-uuid', score: 0.9, comment: 'good', feedbackId: 'sc-1' });
       expect(opts.sourceInfo).toMatchObject({ scorerId: 'accuracy', scoreSource: 'live', foo: 'bar' });
     });
 
     it('does not let user metadata overwrite authoritative scorerId/scoreSource in sourceInfo', async () => {
-      await startSpan(exporter, 'mastra-span-1', true);
-
       await exporter.onScoreEvent(
         scoreEvent({
           traceId,
@@ -1814,70 +1821,89 @@ describe('TestLangSmithExporter', () => {
       expect(opts.sourceInfo).toMatchObject({ scorerId: 'accuracy', scoreSource: 'live', foo: 'bar' });
     });
 
-    // User feedback saved with only the Mastra traceId (#28381): must land on the trace's root run.
-    it('sends a trace-level score (traceId only) to the root run without any lookup', async () => {
-      await exporter.onScoreEvent(scoreEvent({ traceId: 'trace-only' }));
-
-      expect(mockClient.readRun).not.toHaveBeenCalled();
-      expect(mockClient.createFeedback).toHaveBeenCalledTimes(1);
-      expect(mockClient.createFeedback.mock.calls[0][0]).toBe(langsmithRunIdFor('trace-only'));
-    });
-
     // The span was exported by another replica, or before a restart: nothing is cached here (#28381).
-    it('scores a child span that another process exported', async () => {
-      const childRunId = langsmithRunIdFor('other-child');
-      mockClient.readRun = vi.fn(async (id: string) => {
-        if (id === childRunId) return { id };
-        throw new Error('404 Run not found');
-      });
-
+    it('scores a span that another process exported without any lookup', async () => {
       await exporter.onScoreEvent(scoreEvent({ traceId, spanId: 'other-child' }));
 
-      expect(mockClient.createFeedback.mock.calls[0][0]).toBe(childRunId);
+      expect(mockClient.listRuns).not.toHaveBeenCalled();
+      expect(mockClient.createFeedback.mock.calls[0][0]).toBe(langsmithRunIdFor('other-child'));
     });
 
-    it('scores the root span that another process exported, by matching the Mastra span id stored on the root run', async () => {
-      const rootRunId = langsmithRunIdFor(traceId);
-      mockClient.readRun = vi.fn(async (id: string) => {
-        if (id === rootRunId) return { id, extra: { metadata: { mastra_span_id: 'other-root' } } };
-        throw new Error('404 Run not found');
+    // User feedback saved with only the Mastra traceId (#28381): must land on the trace's root run.
+    it('sends a trace-level score to the root run this process exported without any lookup', async () => {
+      await startSpan(exporter, 'parent-id', true);
+      await startSpan(exporter, 'child-span', false);
+
+      await exporter.onScoreEvent(scoreEvent({ traceId }));
+
+      expect(mockClient.listRuns).not.toHaveBeenCalled();
+      expect(mockClient.createFeedback.mock.calls[0][0]).toBe(langsmithRunIdFor('parent-id'));
+    });
+
+    it('sends a trace-level score to the first root when the trace has several', async () => {
+      await startSpan(exporter, 'root-a', true);
+      await startSpan(exporter, 'root-b', true);
+
+      await exporter.onScoreEvent(scoreEvent({ traceId }));
+
+      expect(mockClient.createFeedback.mock.calls[0][0]).toBe(langsmithRunIdFor('root-a'));
+    });
+
+    it('finds the earliest root run of a trace another process exported, by its Mastra trace id, and caches it', async () => {
+      rootRunsInLangSmith(
+        { id: langsmithRunIdFor('later-root'), start_time: 2_000 },
+        { id: langsmithRunIdFor('first-root'), start_time: 1_000 },
+      );
+
+      await exporter.onScoreEvent(scoreEvent({ traceId: 'other-trace' }));
+      await exporter.onScoreEvent(scoreEvent({ traceId: 'other-trace', scoreId: 'sc-2' }));
+
+      expect(mockClient.listRuns).toHaveBeenCalledTimes(1);
+      expect(mockClient.listRuns.mock.calls[0][0]).toMatchObject({
+        projectId: 'project-uuid',
+        isRoot: true,
+        filter: `has(metadata, '{"mastra_trace_id":"other-trace"}')`,
       });
-
-      await exporter.onScoreEvent(scoreEvent({ traceId, spanId: 'other-root' }));
-
-      expect(mockClient.createFeedback.mock.calls[0][0]).toBe(rootRunId);
+      expect(mockClient.createFeedback.mock.calls.map((call: any[]) => call[0])).toEqual([
+        langsmithRunIdFor('first-root'),
+        langsmithRunIdFor('first-root'),
+      ]);
     });
 
     // LangSmith takes a few seconds to ingest a posted run; a score sent right after must wait.
-    it('retries the lookup until LangSmith has ingested the span', async () => {
-      const childRunId = langsmithRunIdFor('just-posted');
+    it('retries the root lookup until LangSmith has ingested the trace', async () => {
       let calls = 0;
-      mockClient.readRun = vi.fn(async (id: string) => {
-        calls++;
-        if (id === childRunId && calls > 4) return { id };
-        throw new Error('404 Run not found');
+      mockClient.listRuns = vi.fn(async function* () {
+        if (++calls > 2) yield { id: langsmithRunIdFor('just-posted'), start_time: 1 };
       });
 
-      const pending = exporter.onScoreEvent(scoreEvent({ traceId, spanId: 'just-posted' }));
+      const pending = exporter.onScoreEvent(scoreEvent({ traceId: 'other-trace' }));
       await vi.advanceTimersByTimeAsync(10_000);
       await pending;
 
-      expect(mockClient.createFeedback.mock.calls[0][0]).toBe(childRunId);
+      expect(mockClient.listRuns).toHaveBeenCalledTimes(3);
+      expect(mockClient.createFeedback.mock.calls[0][0]).toBe(langsmithRunIdFor('just-posted'));
     });
 
-    it('drops a span-level score when LangSmith still has no run for that span after retrying', async () => {
-      const rootRunId = langsmithRunIdFor(traceId);
-      mockClient.readRun = vi.fn(async (id: string) => {
-        if (id === rootRunId) return { id, extra: { metadata: { mastra_span_id: 'some-other-root' } } };
-        throw new Error('404 Run not found');
-      });
-
-      const pending = exporter.onScoreEvent(scoreEvent({ traceId, spanId: 'not-ingested-yet' }));
+    it('drops a trace-level score when LangSmith still has no root run for the trace after retrying', async () => {
+      const pending = exporter.onScoreEvent(scoreEvent({ traceId: 'other-trace' }));
       await vi.advanceTimersByTimeAsync(10_000);
       await pending;
 
-      // 4 attempts (first try + 3 retries), each checking the child id and the root id.
-      expect(mockClient.readRun).toHaveBeenCalledTimes(8);
+      // first try + 3 retries
+      expect(mockClient.listRuns).toHaveBeenCalledTimes(4);
+      expect(mockClient.createFeedback).not.toHaveBeenCalled();
+    });
+
+    it('drops a trace-level score when the root lookup itself fails', async () => {
+      mockClient.listRuns = vi.fn(async function* () {
+        throw new Error('403');
+      });
+
+      const pending = exporter.onScoreEvent(scoreEvent({ traceId: 'other-trace' }));
+      await vi.advanceTimersByTimeAsync(10_000);
+      await pending;
+
       expect(mockClient.createFeedback).not.toHaveBeenCalled();
     });
 
@@ -1890,41 +1916,37 @@ describe('TestLangSmithExporter', () => {
     it('still sends feedback when the project id cannot be resolved', async () => {
       mockClient.readProject = vi.fn().mockRejectedValue(new Error('403'));
 
-      await exporter.onScoreEvent(scoreEvent({ traceId: 'trace-only' }));
+      await exporter.onScoreEvent(scoreEvent({ traceId, spanId: 'span-1' }));
 
       expect(mockClient.createFeedback).toHaveBeenCalledTimes(1);
       expect(mockClient.createFeedback.mock.calls[0][2].sessionId).toBeUndefined();
     });
 
     it('resolves the project id once and reuses it for later scores', async () => {
-      await exporter.onScoreEvent(scoreEvent({ traceId: 'trace-only' }));
-      await exporter.onScoreEvent(scoreEvent({ traceId: 'trace-only', scoreId: 'sc-2' }));
+      await exporter.onScoreEvent(scoreEvent({ traceId, spanId: 'span-1' }));
+      await exporter.onScoreEvent(scoreEvent({ traceId, spanId: 'span-2', scoreId: 'sc-2' }));
 
       expect(mockClient.readProject).toHaveBeenCalledTimes(1);
       expect(mockClient.createFeedback).toHaveBeenCalledTimes(2);
     });
 
-    it('falls back to the LangSmith lookup once the cache has evicted a span', async () => {
+    it('falls back to the LangSmith lookup once the cache has evicted a trace', async () => {
       const cappedExporter = new TestLangSmithExporter({ apiKey: 'test-api-key', runIdCacheMaxEntries: 2 });
-      mockClient.readRun = vi.fn(async (id: string) => {
-        if (id === langsmithRunIdFor('ta')) return { id, extra: { metadata: { mastra_span_id: 'span-a' } } };
-        throw new Error('404 Run not found');
-      });
+      rootRunsInLangSmith({ id: langsmithRunIdFor('span-a'), start_time: 1 });
 
-      // Three roots at cap=2 → the oldest (span-a) is evicted from the in-memory cache.
+      // Three traces at cap=2 → the oldest (ta) is evicted from the in-memory cache.
       await startSpan(cappedExporter, 'span-a', true, 'ta');
       await startSpan(cappedExporter, 'span-b', true, 'tb');
       await startSpan(cappedExporter, 'span-c', true, 'tc');
 
-      await cappedExporter.onScoreEvent(scoreEvent({ traceId: 'ta', spanId: 'span-a' }));
-      expect(mockClient.readRun).toHaveBeenCalled();
-      expect(mockClient.createFeedback.mock.calls[0][0]).toBe(langsmithRunIdFor('ta'));
+      await cappedExporter.onScoreEvent(scoreEvent({ traceId: 'ta' }));
+      expect(mockClient.listRuns).toHaveBeenCalledTimes(1);
+      expect(mockClient.createFeedback.mock.calls[0][0]).toBe(langsmithRunIdFor('span-a'));
 
-      mockClient.readRun.mockClear();
-      await cappedExporter.onScoreEvent(scoreEvent({ traceId: 'tb', spanId: 'span-b' }));
-      await cappedExporter.onScoreEvent(scoreEvent({ traceId: 'tc', spanId: 'span-c' }));
-      expect(mockClient.readRun).not.toHaveBeenCalled();
-      expect(mockClient.createFeedback).toHaveBeenCalledTimes(3);
+      // The found root is cached again (evicting tb); tc is still cached and needs no lookup.
+      await cappedExporter.onScoreEvent(scoreEvent({ traceId: 'tc' }));
+      expect(mockClient.listRuns).toHaveBeenCalledTimes(1);
+      expect(mockClient.createFeedback).toHaveBeenCalledTimes(2);
     });
   });
 });

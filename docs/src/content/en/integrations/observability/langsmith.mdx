@@ -205,13 +205,12 @@ await mastra.observability.addScore({
 })
 ```
 
-Run ids are derived from Mastra trace and span ids, so scoring works from any process, after a restart, and long after the trace was exported. The same derivation is exported as `langsmithRunIdFor()` if you need to link to a run from your own UI:
+Each LangSmith run id is derived from its Mastra span id, so a span-level score works from any process, after a restart, and long after the trace was exported. A trace-level score finds the root run in the exporter's project through the `mastra_trace_id` metadata the exporter stores on every run. The same derivation is exported as `langsmithRunIdFor()` if you need to link to a run from your own UI:
 
 ```typescript
 import { langsmithRunIdFor } from '@mastra/langsmith'
 
-const rootRunId = langsmithRunIdFor(traceId) // the trace's root run
-const runId = langsmithRunIdFor(spanId) // any other span
+const runId = langsmithRunIdFor(spanId)
 ```
 
 ## Related

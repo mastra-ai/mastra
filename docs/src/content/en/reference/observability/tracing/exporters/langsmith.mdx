@@ -85,7 +85,7 @@ Extends both `ClientConfig` (from LangSmith SDK) and `BaseExporterConfig`:
     name: 'runIdCacheMaxEntries',
     type: 'number',
     description:
-      'How many span-to-run id mappings to keep in memory so scores for recently exported spans skip the LangSmith lookup. Defaults to 10000.',
+      'How many trace-to-root-run id mappings to keep in memory so trace-level scores for recently exported traces skip the LangSmith lookup. Defaults to 10000.',
     required: false,
   },
 ]}
@@ -154,10 +154,10 @@ const exporter = new LangSmithExporter({
 ## `langsmithRunIdFor`
 
 ```typescript
-function langsmithRunIdFor(mastraId: string): string
+function langsmithRunIdFor(spanId: string): string
 ```
 
-Returns the LangSmith run id the exporter uses for a Mastra id. Pass a trace id to get the trace's root run, or a span id to get that span's run. Scores submitted with `mastra.observability.addScore()` are attached to these runs as feedback, so no in-process state is needed.
+Returns the LangSmith run id the exporter uses for a Mastra span id. Scores submitted with `mastra.observability.addScore()` are attached to these runs as feedback, so no in-process state is needed.
 
 ## `withLangsmithMetadata`
 
