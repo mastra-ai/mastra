@@ -42,7 +42,7 @@ The `createToolCallAccuracyScorerCode()` function from `@mastra/evals/scorers/pr
     name: 'expectedTool',
     type: 'string',
     description:
-      'The name of the tool that should be called for the given task. Ignored when expectedToolOrder is provided.',
+      'The name of the tool that should be called for the given task. Ignored when a non-empty expectedToolOrder is provided.',
     required: false,
   },
   {
@@ -57,7 +57,7 @@ The `createToolCallAccuracyScorerCode()` function from `@mastra/evals/scorers/pr
     name: 'expectedToolOrder',
     type: 'string[]',
     description:
-      'Array of tool names in the expected calling order. When provided, enables order checking mode and ignores expectedTool parameter.',
+      'Array of tool names in the expected calling order. When a non-empty array is provided, enables order checking mode and ignores expectedTool parameter. An empty array falls back to single tool mode.',
     required: false,
   },
 ]}
@@ -71,14 +71,14 @@ The code-based scorer operates in two distinct modes:
 
 #### Single Tool Mode
 
-When `expectedToolOrder` isn't provided, the scorer evaluates single tool selection:
+When `expectedToolOrder` isn't provided or is empty, the scorer evaluates single tool selection:
 
 - **Standard Mode (strictMode: false)**: Returns `1` if the expected tool is called, regardless of other tools
 - **Strict Mode (strictMode: true)**: Returns `1` only if exactly one tool is called and it matches the expected tool
 
 #### Order Checking Mode
 
-When `expectedToolOrder` is provided, the scorer validates tool calling sequence:
+When a non-empty `expectedToolOrder` is provided, the scorer validates tool calling sequence:
 
 - **Strict Order (strictMode: true)**: Tools must be called in exactly the specified order with no extra tools
 - **Flexible Order (strictMode: false)**: Expected tools must appear in correct relative order (extra tools allowed)
