@@ -12,9 +12,11 @@ const require = createRequire(import.meta.url);
 // Keep real core behavior, removing only the newer exports at the package boundary.
 describe.each(['esm', 'cjs'] as const)('preview compatibility (%s)', format => {
   it.each([
-    { mode: 'span', missing: [] },
-    { mode: 'passthrough', missing: ['buildSpanPreviews'] },
-  ])('uses $mode previews when core lacks $missing', async ({ mode, missing }) => {
+    { mode: 'span', enabled: true, missing: [] },
+    { mode: 'passthrough', enabled: false, missing: [] },
+    { mode: 'passthrough', enabled: true, missing: ['buildSpanPreviews'] },
+    { mode: 'passthrough', enabled: false, missing: ['buildSpanPreviews'] },
+  ])('uses $mode previews with flag=$enabled and missing=$missing', async ({ mode, enabled, missing }) => {
     const directory = await mkdtemp(join(import.meta.dirname, '.preview-compat-'));
     try {
       const extension = format === 'esm' ? 'mjs' : 'cjs';
@@ -46,11 +48,14 @@ describe.each(['esm', 'cjs'] as const)('preview compatibility (%s)', format => {
       });
       const script =
         format === 'esm'
-          ? `import { withSpanPreviews } from './dist/previews.mjs';`
-          : `const { withSpanPreviews } = require('./dist/previews.cjs');`;
+          ? `import { withSpanPreviews } from './dist/previews.mjs';
+             import { coreFeatures } from '@mastra/core/features';`
+          : `const { withSpanPreviews } = require('./dist/previews.cjs');
+             const { coreFeatures } = require('@mastra/core/features');`;
       await writeFile(
         join(directory, `run.${extension}`),
         `${script}
+        if (!${enabled}) coreFeatures.delete('observability-span-previews');
         const span = {
           id: 'span', traceId: 'trace', type: 'model_step',
           input: [{role:'user',content:'Find my order'}, {role:'tool',content:'Order 123 was shipped'}],
