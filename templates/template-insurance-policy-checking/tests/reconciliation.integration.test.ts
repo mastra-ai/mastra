@@ -12,6 +12,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createInsuranceProcessingModel } from '../src/mastra/agents/insurance-processing-agent.js';
@@ -1163,14 +1164,17 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
     expect(await damaged.submit()).toMatchObject({ ok: false, code: 'ARTIFACT_INTEGRITY' });
     expect(damaged.wire.requests).toHaveLength(0);
     await writeFile(path, original);
+  });
+
+  it('recovers interrupted processing in a separate worker from any checkout path', async () => {
     const recovery = await setup(propertyDocuments(), { ...testBudget, timeoutMs: 500 });
     recovery.wire.hold();
     const child = spawn(
       process.execPath,
       [
         '--import',
-        new URL('./source-loader.mjs', import.meta.url).pathname,
-        new URL('./reconciliation-worker.mjs', import.meta.url).pathname,
+        fileURLToPath(new URL('./source-loader.mjs', import.meta.url)),
+        fileURLToPath(new URL('./reconciliation-worker.mjs', import.meta.url)),
         JSON.stringify({
           root: recovery.root,
           endpoint: recovery.wire.endpoint,
