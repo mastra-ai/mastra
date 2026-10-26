@@ -250,6 +250,31 @@ export async function executeStep(
     recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
   });
 
+  // The store refused the start write because another process canceled the run.
+  // Stop here so loop and foreach iterations don't keep running the step body.
+  if (engine.honorsStoredCancellation(runId) && engine.getLastPersistedStatus(runId) === 'canceled') {
+    abortController.abort(WORKFLOW_CANCELLED_SYMBOL);
+    delete executionContext.activeStepsPath[step.id];
+    await engine.endStepSpan({
+      span: stepSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+      endOptions: { attributes: { status: 'canceled' } },
+    });
+    const canceledResult = {
+      ...omitPriorCompletionFields(stepInfo),
+      status: 'canceled',
+      endedAt: Date.now(),
+    } as StepResult<any, any, any, any>;
+    return {
+      result: canceledResult,
+      stepResults: { [step.id]: canceledResult },
+      mutableContext: engine.buildMutableContext(executionContext),
+      requestContext: engine.requiresDurableContextSerialization()
+        ? engine.serializeRequestContext(requestContext)
+        : undefined,
+    };
+  }
+
   // Check if this is a nested workflow that requires special handling
   if (engine.isNestedWorkflowStep(step)) {
     const workflowResult = await engine.executeWorkflowStep({

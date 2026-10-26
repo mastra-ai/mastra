@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  isWorkflowRunStatus,
   mergeWorkflowStepResult,
   assertWorkflowStepGuard,
   isWorkflowStepConflictError,
@@ -146,24 +147,6 @@ export const WORKFLOW_SNAPSHOT_THREAD_ID_EXPR = `COALESCE(jsonb_path_query_first
 function workflowSnapshotThreadIdIndexSQL(indexName: string, schemaName?: string, concurrently = false): string {
   const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(schemaName) });
   return `CREATE INDEX ${concurrently ? 'CONCURRENTLY ' : ''}IF NOT EXISTS "${indexName}" ON ${tableName} ((${WORKFLOW_SNAPSHOT_THREAD_ID_EXPR}))`;
-}
-
-const WORKFLOW_RUN_STATUSES: Record<WorkflowRunStatus, true> = {
-  running: true,
-  success: true,
-  failed: true,
-  tripwire: true,
-  suspended: true,
-  waiting: true,
-  pending: true,
-  canceled: true,
-  bailed: true,
-  paused: true,
-  skipped: true,
-};
-
-function isWorkflowRunStatus(value: unknown): value is WorkflowRunStatus {
-  return typeof value === 'string' && Object.hasOwn(WORKFLOW_RUN_STATUSES, value);
 }
 
 export class WorkflowsPG extends WorkflowsStorage {

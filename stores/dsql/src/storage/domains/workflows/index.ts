@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  isWorkflowRunStatus,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_WORKFLOW_RUN_OWNERS,
@@ -78,24 +79,6 @@ function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
     createdAt: new Date(row.createdAtZ || (row.createdAt as string)),
     updatedAt: new Date(row.updatedAtZ || (row.updatedAt as string)),
   };
-}
-
-const WORKFLOW_RUN_STATUSES: Record<WorkflowRunStatus, true> = {
-  running: true,
-  success: true,
-  failed: true,
-  tripwire: true,
-  suspended: true,
-  waiting: true,
-  pending: true,
-  canceled: true,
-  bailed: true,
-  paused: true,
-  skipped: true,
-};
-
-function isWorkflowRunStatus(value: unknown): value is WorkflowRunStatus {
-  return typeof value === 'string' && Object.hasOwn(WORKFLOW_RUN_STATUSES, value);
 }
 
 export class WorkflowsDSQL extends WorkflowsStorage {

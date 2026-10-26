@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  isWorkflowRunStatus,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   TABLE_WORKFLOW_RUN_OWNERS,
@@ -99,24 +100,6 @@ function mapWorkflowRow(row: WorkflowRow): WorkflowRun {
     createdAt: parseDateTime(row.createdAt) ?? new Date(),
     updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
   };
-}
-
-const WORKFLOW_RUN_STATUSES: Record<WorkflowRunStatus, true> = {
-  running: true,
-  success: true,
-  failed: true,
-  tripwire: true,
-  suspended: true,
-  waiting: true,
-  pending: true,
-  canceled: true,
-  bailed: true,
-  paused: true,
-  skipped: true,
-};
-
-function isWorkflowRunStatus(value: unknown): value is WorkflowRunStatus {
-  return typeof value === 'string' && Object.hasOwn(WORKFLOW_RUN_STATUSES, value);
 }
 
 export class WorkflowsMySQL extends WorkflowsStorage {

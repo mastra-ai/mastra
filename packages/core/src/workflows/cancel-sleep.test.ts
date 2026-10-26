@@ -128,9 +128,8 @@ describe('workflow sleep cancellation', () => {
     }),
   );
 
-  // Read-before-write stores can't close the window between their status read and the write, so the
-  // "just before the write" races below only hold on guarded stores. This covers what they do promise:
-  // a cancellation that commits before the read stops the run.
+  // Read-before-write stores can't close the window between their status read and the write. This
+  // covers what they do promise: a cancellation that commits before the read stops the run.
   it.each([
     ['sequential', false],
     ['perStep', true],
@@ -181,127 +180,172 @@ describe('workflow sleep cancellation', () => {
       }),
   );
 
-  it('preserves a remote cancellation that commits just before the final snapshot write', async () => {
-    const workflowId = 'remote-cancel-before-write-workflow';
-    const storage = new MockStore();
-    const buildWorkflow = () =>
-      createWorkflow({
-        id: workflowId,
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        options: { validateInputs: false },
-      })
-        .then(noopStep('only-step'))
-        .commit();
-
-    const activeWorkflow = buildWorkflow();
-    const remoteWorkflow = buildWorkflow();
-    new Mastra({ logger: false, storage, workflows: { [workflowId]: activeWorkflow } });
-    new Mastra({ logger: false, storage, workflows: { [workflowId]: remoteWorkflow } });
-
-    const activeRun = await activeWorkflow.createRun();
-    const store = (await storage.getStore('workflows'))!;
+  // Guarded stores refuse the write itself, so the cancel lands right before the target write.
+  // Read-before-write stores can only honor a cancel that commits before their status read, so
+  // there it lands right after the write that precedes the target write.
+  function cancelRemotelyBefore(
+    store: Awaited<ReturnType<MockStore['getStore']>> & {},
+    {
+      guarded,
+      status,
+      armed,
+      cancel,
+    }: { guarded: boolean; status: string; armed: () => boolean; cancel: () => Promise<void> },
+  ) {
     const persist = store.persistWorkflowSnapshot.bind(store);
-    // Land the cancel after every check the engine makes and right before the write itself.
+    const state = { canceled: false };
     vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async args => {
-      if (args.snapshot.status === 'success') {
-        const remoteRun = await remoteWorkflow.createRun({ runId: activeRun.runId });
-        await remoteRun.cancel();
+      if (guarded && !state.canceled && args.snapshot.status === status) {
+        state.canceled = true;
+        await cancel();
+        return persist(args);
       }
-      return persist(args);
-    });
-
-    const result = await activeRun.start({ inputData: {} });
-
-    const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId: activeRun.runId });
-    expect(snapshot?.status).toBe('canceled');
-    expect(result.status).toBe('canceled');
-  });
-
-  it('preserves a remote cancellation that commits just before a per-step pause write', async () => {
-    const workflowId = 'remote-cancel-before-pause-workflow';
-    const storage = new MockStore();
-    const buildWorkflow = () =>
-      createWorkflow({
-        id: workflowId,
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        options: { validateInputs: false },
-      })
-        .then(noopStep('first-step'))
-        .then(noopStep('second-step'))
-        .commit();
-
-    const activeWorkflow = buildWorkflow();
-    const remoteWorkflow = buildWorkflow();
-    new Mastra({ logger: false, storage, workflows: { [workflowId]: activeWorkflow } });
-    new Mastra({ logger: false, storage, workflows: { [workflowId]: remoteWorkflow } });
-
-    const activeRun = await activeWorkflow.createRun();
-    const store = (await storage.getStore('workflows'))!;
-    const persist = store.persistWorkflowSnapshot.bind(store);
-    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async args => {
-      if (args.snapshot.status === 'paused') {
-        const remoteRun = await remoteWorkflow.createRun({ runId: activeRun.runId });
-        await remoteRun.cancel();
+      const written = await persist(args);
+      if (!guarded && !state.canceled && armed() && args.snapshot.status === 'running') {
+        state.canceled = true;
+        await cancel();
       }
-      return persist(args);
+      return written;
     });
+    return state;
+  }
 
-    const result = await activeRun.start({ inputData: {}, perStep: true });
+  const storeModes = [
+    ['guarded', true],
+    ['read-before-write', false],
+  ] as const;
 
-    const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId: activeRun.runId });
-    expect(snapshot?.status).toBe('canceled');
-    expect(result.status).toBe('canceled');
-  });
+  it.each(storeModes)(
+    'preserves a remote cancellation that commits just before the final snapshot write (%s)',
+    (_, guarded) =>
+      withReadBeforeWrite(guarded, async () => {
+        const workflowId = 'remote-cancel-before-write-workflow';
+        const storage = new MockStore();
+        const onlyStep = vi.fn().mockResolvedValue({});
+        const buildWorkflow = () =>
+          createWorkflow({
+            id: workflowId,
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            options: { validateInputs: false },
+          })
+            .then(noopStep('only-step', onlyStep))
+            .commit();
 
-  it('preserves a remote cancellation that commits just before an executor-abort waiting write', async () => {
-    const workflowId = 'remote-cancel-before-waiting-workflow';
-    const storage = new MockStore();
-    const firstStep = vi.fn().mockResolvedValue({});
-    const secondStep = vi.fn().mockResolvedValue({});
-    const buildWorkflow = () =>
-      createWorkflow({
-        id: workflowId,
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        options: { validateInputs: false },
-      })
-        .then(noopStep('first-step', firstStep))
-        .then(noopStep('second-step', secondStep))
-        .commit();
+        const activeWorkflow = buildWorkflow();
+        const remoteWorkflow = buildWorkflow();
+        new Mastra({ logger: false, storage, workflows: { [workflowId]: activeWorkflow } });
+        new Mastra({ logger: false, storage, workflows: { [workflowId]: remoteWorkflow } });
 
-    const activeWorkflow = buildWorkflow();
-    const remoteWorkflow = buildWorkflow();
-    new Mastra({ logger: false, storage, workflows: { [workflowId]: activeWorkflow } });
-    new Mastra({ logger: false, storage, workflows: { [workflowId]: remoteWorkflow } });
+        const activeRun = await activeWorkflow.createRun();
+        const store = (await storage.getStore('workflows'))!;
+        const race = cancelRemotelyBefore(store, {
+          guarded,
+          status: 'success',
+          armed: () => onlyStep.mock.calls.length > 0,
+          cancel: async () => (await remoteWorkflow.createRun({ runId: activeRun.runId })).cancel(),
+        });
 
-    const activeRun = await activeWorkflow.createRun();
-    const runId = activeRun.runId;
-    const store = (await storage.getStore('workflows'))!;
-    // Abort the executor after the first step has finished, so the loop-top abort branch
-    // writes `waiting` instead of the step handler.
-    const loadStatus = store.loadWorkflowRunStatus.bind(store);
-    vi.spyOn(store, 'loadWorkflowRunStatus').mockImplementation(async args => {
-      if (firstStep.mock.calls.length > 0) activeRun.abortController.abort();
-      return loadStatus(args);
-    });
-    const persist = store.persistWorkflowSnapshot.bind(store);
-    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async args => {
-      if (args.snapshot.status === 'waiting') {
-        const remoteRun = await remoteWorkflow.createRun({ runId });
-        await remoteRun.cancel();
-      }
-      return persist(args);
-    });
+        const result = await activeRun.start({ inputData: {} });
 
-    const result = await activeRun.start({ inputData: {} });
+        expect(race.canceled).toBe(true);
+        const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId: activeRun.runId });
+        expect(snapshot?.status).toBe('canceled');
+        expect(result.status).toBe('canceled');
+      }),
+  );
 
-    const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId });
-    expect(snapshot?.status).toBe('canceled');
-    expect(result.status).toBe('canceled');
-    expect(secondStep).not.toHaveBeenCalled();
-  });
+  it.each(storeModes)(
+    'preserves a remote cancellation that commits just before a per-step pause write (%s)',
+    (_, guarded) =>
+      withReadBeforeWrite(guarded, async () => {
+        const workflowId = 'remote-cancel-before-pause-workflow';
+        const storage = new MockStore();
+        const firstStep = vi.fn().mockResolvedValue({});
+        const buildWorkflow = () =>
+          createWorkflow({
+            id: workflowId,
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            options: { validateInputs: false },
+          })
+            .then(noopStep('first-step', firstStep))
+            .then(noopStep('second-step'))
+            .commit();
+
+        const activeWorkflow = buildWorkflow();
+        const remoteWorkflow = buildWorkflow();
+        new Mastra({ logger: false, storage, workflows: { [workflowId]: activeWorkflow } });
+        new Mastra({ logger: false, storage, workflows: { [workflowId]: remoteWorkflow } });
+
+        const activeRun = await activeWorkflow.createRun();
+        const store = (await storage.getStore('workflows'))!;
+        const race = cancelRemotelyBefore(store, {
+          guarded,
+          status: 'paused',
+          armed: () => firstStep.mock.calls.length > 0,
+          cancel: async () => (await remoteWorkflow.createRun({ runId: activeRun.runId })).cancel(),
+        });
+
+        const result = await activeRun.start({ inputData: {}, perStep: true });
+
+        expect(race.canceled).toBe(true);
+        const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId: activeRun.runId });
+        expect(snapshot?.status).toBe('canceled');
+        expect(result.status).toBe('canceled');
+      }),
+  );
+
+  it.each(storeModes)(
+    'preserves a remote cancellation that commits just before an executor-abort waiting write (%s)',
+    (_, guarded) =>
+      withReadBeforeWrite(guarded, async () => {
+        const workflowId = 'remote-cancel-before-waiting-workflow';
+        const storage = new MockStore();
+        const firstStep = vi.fn().mockResolvedValue({});
+        const secondStep = vi.fn().mockResolvedValue({});
+        const buildWorkflow = () =>
+          createWorkflow({
+            id: workflowId,
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            options: { validateInputs: false },
+          })
+            .then(noopStep('first-step', firstStep))
+            .then(noopStep('second-step', secondStep))
+            .commit();
+
+        const activeWorkflow = buildWorkflow();
+        const remoteWorkflow = buildWorkflow();
+        new Mastra({ logger: false, storage, workflows: { [workflowId]: activeWorkflow } });
+        new Mastra({ logger: false, storage, workflows: { [workflowId]: remoteWorkflow } });
+
+        const activeRun = await activeWorkflow.createRun();
+        const runId = activeRun.runId;
+        const store = (await storage.getStore('workflows'))!;
+        // Abort the executor after the first step has finished, so the loop-top abort branch
+        // writes `waiting` instead of the step handler.
+        const loadStatus = store.loadWorkflowRunStatus.bind(store);
+        vi.spyOn(store, 'loadWorkflowRunStatus').mockImplementation(async args => {
+          if (firstStep.mock.calls.length > 0) activeRun.abortController.abort();
+          return loadStatus(args);
+        });
+        const race = cancelRemotelyBefore(store, {
+          guarded,
+          status: 'waiting',
+          armed: () => firstStep.mock.calls.length > 0,
+          cancel: async () => (await remoteWorkflow.createRun({ runId })).cancel(),
+        });
+
+        const result = await activeRun.start({ inputData: {} });
+
+        expect(race.canceled).toBe(true);
+        const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+        expect(snapshot?.status).toBe('canceled');
+        expect(result.status).toBe('canceled');
+        expect(secondStep).not.toHaveBeenCalled();
+      }),
+  );
 
   it.each([
     ['cannot be claimed', ({ workflowStatus }: { workflowStatus: string }) => workflowStatus !== 'running'],
@@ -455,6 +499,81 @@ describe('workflow sleep cancellation', () => {
 
     expect(result.status).toBe('success');
     expect(afterFirstStep).toHaveBeenCalledTimes(1);
+  });
+
+  const loopShapes = [
+    [
+      'dountil',
+      (workflow: ReturnType<typeof createWorkflow>, body: ReturnType<typeof noopStep>) =>
+        workflow.dountil(body, async ({ iterationCount }) => iterationCount >= 3),
+      {},
+    ],
+    [
+      'foreach',
+      (workflow: ReturnType<typeof createWorkflow>, body: ReturnType<typeof noopStep>) =>
+        workflow.foreach(body, { concurrency: 1 }),
+      [{}, {}, {}],
+    ],
+  ] as const;
+
+  it.each(
+    loopShapes.flatMap(([shape, addLoop, inputData]) =>
+      [true, false].map(
+        guarded => [shape, guarded ? 'guarded' : 'read-before-write', addLoop, inputData, guarded] as const,
+      ),
+    ),
+  )('stops a %s loop after a remote cancellation (%s store)', async (shape, mode, addLoop, inputData, guarded) => {
+    await withReadBeforeWrite(guarded, async () => {
+      const workflowId = `remote-cancel-${shape}-${mode}-workflow`;
+      const storage = new MockStore();
+      const afterLoop = vi.fn().mockResolvedValue({});
+      let releaseFirstIteration = () => {};
+      let markFirstIterationStarted = () => {};
+      const firstIterationStarted = new Promise<void>(resolve => {
+        markFirstIterationStarted = resolve;
+      });
+      const firstIterationReleased = new Promise<void>(resolve => {
+        releaseFirstIteration = resolve;
+      });
+      const loopBody = vi.fn(async () => {
+        if (loopBody.mock.calls.length === 1) {
+          markFirstIterationStarted();
+          await firstIterationReleased;
+        }
+        return {};
+      });
+      const buildWorkflow = () =>
+        addLoop(
+          createWorkflow({
+            id: workflowId,
+            inputSchema: z.any(),
+            outputSchema: z.any(),
+            options: { validateInputs: false },
+          }),
+          createStep({ id: 'loop-body', inputSchema: z.any(), outputSchema: z.any(), execute: loopBody }),
+        )
+          .then(noopStep('after-loop', afterLoop))
+          .commit();
+
+      const activeWorkflow = buildWorkflow();
+      const remoteWorkflow = buildWorkflow();
+      new Mastra({ logger: false, storage, workflows: { [workflowId]: activeWorkflow } });
+      new Mastra({ logger: false, storage, workflows: { [workflowId]: remoteWorkflow } });
+
+      const activeRun = await activeWorkflow.createRun();
+      const resultPromise = activeRun.start({ inputData });
+      await firstIterationStarted;
+      await (await remoteWorkflow.createRun({ runId: activeRun.runId })).cancel();
+      releaseFirstIteration();
+      const result = await resultPromise;
+
+      expect(loopBody).toHaveBeenCalledTimes(1);
+      expect(afterLoop).not.toHaveBeenCalled();
+      expect(result.status).toBe('canceled');
+      const store = await storage.getStore('workflows');
+      const snapshot = await store?.loadWorkflowSnapshot({ workflowName: workflowId, runId: activeRun.runId });
+      expect(snapshot?.status).toBe('canceled');
+    });
   });
 
   it('completes a sleep normally when the run is not canceled', async () => {

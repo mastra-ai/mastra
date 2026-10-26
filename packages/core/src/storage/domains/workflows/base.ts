@@ -12,6 +12,29 @@ import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageList
 import type { WorkflowStepStartGuard, WorkflowStepCompletionGuard } from '../../workflow-step-guard';
 import { StorageDomain } from '../base';
 
+// A Record so adding a status to WorkflowRunStatus fails to compile until it is listed here.
+const WORKFLOW_RUN_STATUS_SET: Record<WorkflowRunStatus, true> = {
+  running: true,
+  success: true,
+  failed: true,
+  tripwire: true,
+  suspended: true,
+  waiting: true,
+  pending: true,
+  canceled: true,
+  bailed: true,
+  paused: true,
+  skipped: true,
+};
+
+/** Every workflow run status. */
+export const WORKFLOW_RUN_STATUSES = Object.keys(WORKFLOW_RUN_STATUS_SET) as readonly WorkflowRunStatus[];
+
+/** Whether a value read back from storage is a known workflow run status. */
+export function isWorkflowRunStatus(value: unknown): value is WorkflowRunStatus {
+  return typeof value === 'string' && Object.hasOwn(WORKFLOW_RUN_STATUS_SET, value);
+}
+
 export abstract class WorkflowsStorage extends StorageDomain {
   constructor() {
     super({

@@ -4,6 +4,7 @@ import type { SerializedError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
 import { resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
+import { WORKFLOW_RUN_STATUSES } from '../../storage/domains/workflows/base';
 import { WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type {
@@ -168,22 +169,8 @@ export interface PersistStepUpdateParams {
 
 // Every status but `canceled`, so only a persisted cancellation rejects the write.
 // Terminal statuses stay writable because restart and time travel re-run finished runs.
-const RUN_STATUSES: Record<WorkflowRunStatus, true> = {
-  running: true,
-  success: true,
-  failed: true,
-  tripwire: true,
-  suspended: true,
-  waiting: true,
-  pending: true,
-  canceled: true,
-  bailed: true,
-  paused: true,
-  skipped: true,
-};
-const NOT_CANCELED_STATUSES = Object.keys(RUN_STATUSES).filter(
-  (status): status is Exclude<WorkflowRunStatus, 'canceled'> =>
-    Object.hasOwn(RUN_STATUSES, status) && status !== 'canceled',
+const NOT_CANCELED_STATUSES = WORKFLOW_RUN_STATUSES.filter(
+  (status): status is Exclude<WorkflowRunStatus, 'canceled'> => status !== 'canceled',
 );
 
 export async function isWorkflowRunCanceled(

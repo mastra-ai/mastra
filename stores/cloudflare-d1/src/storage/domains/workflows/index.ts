@@ -17,6 +17,7 @@ import type {
   TableRetentionPolicy,
 } from '@mastra/core/storage';
 import {
+  isWorkflowRunStatus,
   createStorageErrorId,
   ensureDate,
   isRunFenceConflictError,
@@ -56,24 +57,6 @@ function toRunOwnershipRecord(runId: string, row: Record<string, unknown>): RunO
     leaseExpiresAt: leaseExpiresAt === null ? null : new Date(leaseExpiresAt),
     live: leaseExpiresAt !== null && leaseExpiresAt > Number(row.nowMs),
   };
-}
-
-const WORKFLOW_RUN_STATUSES: Record<WorkflowRunStatus, true> = {
-  running: true,
-  success: true,
-  failed: true,
-  tripwire: true,
-  suspended: true,
-  waiting: true,
-  pending: true,
-  canceled: true,
-  bailed: true,
-  paused: true,
-  skipped: true,
-};
-
-function isWorkflowRunStatus(value: unknown): value is WorkflowRunStatus {
-  return typeof value === 'string' && Object.hasOwn(WORKFLOW_RUN_STATUSES, value);
 }
 
 export class WorkflowsStorageD1 extends WorkflowsStorage {
