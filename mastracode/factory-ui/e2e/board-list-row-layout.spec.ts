@@ -140,6 +140,10 @@ test.describe('Factory board list row layout', () => {
         await page.goto('/factories/fp-1/work');
         const rows = page.getByTestId('work-item-card');
         await expect(rows.filter({ hasText: 'createEventedAgent' })).toBeVisible();
+        // The overlap check only measures text that renders, so make sure the verdicts under test are there.
+        for (const title of ['createEventedAgent', 'thread abort']) {
+          await expect(rows.filter({ hasText: title }).getByText('Self-review: approved (round 1)')).toBeAttached();
+        }
 
         // Set LIST_ROW_SCREENSHOT to a directory to capture the rows for visual review.
         const screenshotDir = process.env.LIST_ROW_SCREENSHOT;
