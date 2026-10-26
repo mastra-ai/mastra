@@ -74,6 +74,38 @@ export class TemporalWorkflow<
     );
 
     this.runs.set(runId, run);
+
+    const shouldPersistSnapshot = this.options.shouldPersistSnapshot({
+      workflowStatus: run.workflowRunStatus,
+      stepResults: {},
+    });
+    const existingStoredRun = await this.getWorkflowRunById(runId, { withNestedWorkflows: false });
+    const existsInStorage = existingStoredRun && !existingStoredRun.isFromInMemory;
+
+    if (!existsInStorage && shouldPersistSnapshot) {
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: this.id,
+        runId,
+        resourceId: options?.resourceId,
+        snapshot: {
+          runId,
+          status: 'pending',
+          value: {},
+          context: {},
+          activePaths: [],
+          activeStepsPath: {},
+          waitingPaths: {},
+          serializedStepGraph: this.serializedStepGraph,
+          suspendedPaths: {},
+          resumeLabels: {},
+          result: undefined,
+          error: undefined,
+          timestamp: Date.now(),
+        },
+      });
+    }
+
     return run;
   }
 }
