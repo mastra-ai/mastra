@@ -84,7 +84,7 @@ import type {
 } from '@mastra/core/stream';
 import type { CoreTool } from '@mastra/core/tools';
 import { deepMerge, rebindProcessorTools } from '@mastra/core/utils';
-import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
+import type { ShouldPersistSnapshotFn, Workflow, WorkflowRunState } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 
@@ -948,6 +948,55 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   }
 
   /**
+   * Record a new run as `running` before Inngest starts it. The engine only
+   * persists suspended and terminal snapshots, so without this row a run
+   * mid-execution is unknown to storage and `POST /agents/:agentId/runs/:runId/abort`
+   * cannot verify who owns it. The row carries only the ownership fields the
+   * route checks; the engine overwrites it once the run suspends or finishes.
+   * Returns whether a row was written, so a failed trigger can remove it.
+   */
+  async function persistRunningSnapshot(runId: string, workflowInput: any): Promise<boolean> {
+    try {
+      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+      if (!workflowsStore) return false;
+      const workflowName = InngestDurableStepIds.AGENTIC_LOOP;
+      // Never replace a suspended or terminal row a reused runId already has.
+      if (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) return false;
+      const threadId: string | undefined = workflowInput.state?.threadId;
+      const resourceId: string | undefined = workflowInput.state?.resourceId;
+      const context = {} as WorkflowRunState['context'];
+      context.input = { agentId: workflowInput.agentId, state: { threadId, resourceId } };
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        resourceId,
+        snapshot: {
+          runId,
+          status: 'running',
+          value: {},
+          context,
+          serializedStepGraph: [],
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          timestamp: Date.now(),
+        },
+      });
+      return true;
+    } catch (error) {
+      // The run can still execute; only the run-scoped abort route loses sight of it.
+      mastra?.getLogger?.()?.warn?.('Failed to persist running Inngest durable agent snapshot', {
+        agentId,
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+  }
+
+  /**
    * Tool calls and text from before the suspension, seeded into the resumed stream
    * so its `toolCalls` and `text` include them without replaying their chunks.
    * Mirrors core `DurableAgent.#loadSuspendedIteration`. The outer suspension can persist
@@ -1378,7 +1427,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             from: ChunkFrom.AGENT,
             payload: { id: workflowInput.agentId, messageId },
           });
-          return triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
+          // Written before the trigger so it can never land after the engine's terminal row.
+          const persistedRunning = await persistRunningSnapshot(runId, workflowInput);
+          try {
+            await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
+          } catch (error) {
+            if (persistedRunning) await deleteRunSnapshots(runId);
+            throw error;
+          }
         })
         .catch(async error => {
           await emitError(runId, error);
