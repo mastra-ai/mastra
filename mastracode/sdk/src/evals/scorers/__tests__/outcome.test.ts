@@ -121,12 +121,22 @@ describe('Outcome Scorer', () => {
       expect(reason).toContain('No build/typecheck ran');
     });
 
-    it('detects markerless TypeScript errors as build failures', async () => {
+    it('treats markerless build output containing an error phrase as success', async () => {
       const msgs = [
-        makeMsg('assistant', [commandResult('pnpm build', "error TS2322: Type 'string' is not assignable")]),
+        makeMsg('assistant', [commandResult('pnpm build', 'warning: Cannot find module "fsevents"\nBuild success')]),
       ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
-      expect(reason).toContain('Build failed (TypeScript errors in output)');
+      expect(reason).toContain('Build/typecheck passed');
+    });
+
+    it('uses the exit status when failed build output contains the same error phrase', async () => {
+      const msgs = [
+        makeMsg('assistant', [
+          commandResult('pnpm build', 'warning: Cannot find module "fsevents"\nBuild failed\n\nExit code: 1'),
+        ]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Build failed (exit 1)');
     });
 
     it('does not treat exit-code text in successful command output as a failure', async () => {
@@ -191,10 +201,22 @@ describe('Outcome Scorer', () => {
       expect(reason).toContain('Tests passed');
     });
 
-    it('detects markerless test failure output', async () => {
-      const msgs = [makeMsg('assistant', [commandResult('vitest run', '1 test failed')])];
+    it('treats markerless test output containing a failure phrase as success', async () => {
+      const msgs = [
+        makeMsg('assistant', [commandResult('vitest run', '✓ handles failed uploads\nTests 1 passed (1)')]),
+      ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
-      expect(reason).toContain('Tests failed (inferred)');
+      expect(reason).toContain('Tests passed');
+    });
+
+    it('uses the exit status when failed test output contains the same failure phrase', async () => {
+      const msgs = [
+        makeMsg('assistant', [
+          commandResult('vitest run', '✗ handles failed uploads\nTests 1 failed (1)\n\nExit code: 1'),
+        ]),
+      ];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Tests failed (exit 1)');
     });
 
     it('ignores background test commands', async () => {

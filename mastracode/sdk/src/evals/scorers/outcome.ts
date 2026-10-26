@@ -108,8 +108,9 @@ function scoreBuild(execResults: ExtractedToolCall[]): DimensionResult {
   const exitCode = getExitCode(last.result);
   if (exitCode !== null && exitCode !== 0)
     return { score: 0, detail: `Build failed (exit ${exitCode})`, applicable: true };
+  if (typeof last.result === 'string') return { score: 1, detail: 'Build/typecheck passed', applicable: true };
 
-  const text = typeof last.result === 'string' ? last.result : JSON.stringify(last.result ?? '');
+  const text = JSON.stringify(last.result ?? '');
   if (/error TS\d+|Cannot find module|is not assignable/i.test(text)) {
     return { score: 0, detail: 'Build failed (TypeScript errors in output)', applicable: true };
   }
@@ -133,8 +134,9 @@ function scoreTests(execResults: ExtractedToolCall[]): DimensionResult {
   const exitCode = getExitCode(last.result);
   if (exitCode !== null && exitCode !== 0)
     return { score: 0, detail: `Tests failed (exit ${exitCode})`, applicable: true };
+  if (typeof last.result === 'string') return { score: 1, detail: 'Tests passed', applicable: true };
 
-  const text = typeof last.result === 'string' ? last.result : JSON.stringify(last.result ?? '');
+  const text = JSON.stringify(last.result ?? '');
   if (/\bFAIL\b|failed|✗|✘/i.test(text)) {
     return { score: 0, detail: 'Tests failed (inferred)', applicable: true };
   }
