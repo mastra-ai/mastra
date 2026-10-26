@@ -166,6 +166,7 @@ describe.each(['durable', 'evented'] as const)('%s signal interruption tracing',
     const interruptedStep = steps.find(span => span.attributes?.finishReason === 'interrupted');
     const answeredStep = steps.find(span => span.attributes?.finishReason === 'stop');
     expect(steps).toHaveLength(2);
+    expect(interruptedStep).toBeDefined();
     expect(identity(interruptedStep)).toEqual({ model: undefined, provider: undefined });
     expect(identity(answeredStep)).toEqual({ model: 'acme-large', provider: 'acme' });
     expect(exporter.getIncompleteSpans()).toEqual([]);
