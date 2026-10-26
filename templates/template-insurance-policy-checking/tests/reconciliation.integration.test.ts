@@ -1085,31 +1085,6 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
     expect(await chunked.submit()).toMatchObject({ ok: false, code: 'MODEL_OUTPUT_LIMIT' });
     expect(chunked.wire.requests).toHaveLength(1);
     expect((await chunked.repository.status(context)).analyses).toEqual([]);
-    // Native timeouts must cancel both pending headers and a stalled response body.
-    for (const mode of ['normal', 'bodyStall'] as const) {
-      const timedOut = await setup(propertyDocuments(), { ...testBudget, timeoutMs: 100 });
-      timedOut.wire.state.mode = mode;
-      timedOut.wire.state.delay = 1000;
-      expect(await timedOut.submit()).toMatchObject({ ok: false, code: 'MODEL_REQUEST_INTERRUPTED' });
-      expect(timedOut.wire.requests).toHaveLength(1);
-      expect(await Promise.all(timedOut.wire.requests.map(request => request.canceled))).toEqual([true]);
-      const timeoutReservations = await timedOut.cases.client.execute(
-        'SELECT tokens,cost_micros,data FROM insurance_reservations',
-      );
-      expect(timeoutReservations.rows).toHaveLength(1);
-      for (const row of timeoutReservations.rows) {
-        const saved = JSON.parse(String(row.data));
-        expect(saved.usage).toBeNull();
-        expect(Number(row.tokens)).toBe(saved.reservedInputTokens + testBudget.maxOutputTokensPerRequest);
-        expect(Number(row.cost_micros)).toBe(saved.reservedInputTokens + 2 * testBudget.maxOutputTokensPerRequest);
-        expect(
-          timedOut.wire.requests.some(
-            request => Buffer.byteLength(request.raw, 'utf8') + 512 === saved.reservedInputTokens,
-          ),
-        ).toBe(true);
-      }
-      expect((await timedOut.repository.status(context)).analyses).toEqual([]);
-    }
     const oneAttempt = await setup(propertyDocuments(), { ...testBudget, maxAttempts: 1 });
     oneAttempt.wire.state.mode = 'http';
     await oneAttempt.submit();
@@ -1165,6 +1140,40 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
     expect(damaged.wire.requests).toHaveLength(0);
     await writeFile(path, original);
   });
+
+  it.each(['normal', 'bodyStall'] as const)(
+    'preserves failed case state when the provider times out during %s',
+    async mode => {
+      const timedOut = await setup(propertyDocuments(), { ...testBudget, timeoutMs: 100 });
+      timedOut.wire.state.mode = mode;
+      timedOut.wire.state.delay = 1000;
+      expect(await timedOut.submit()).toMatchObject({ ok: false, code: 'MODEL_REQUEST_INTERRUPTED' });
+      expect(timedOut.wire.requests).toHaveLength(1);
+      expect(await Promise.all(timedOut.wire.requests.map(request => request.canceled))).toEqual([true]);
+      const timeoutReservations = await timedOut.cases.client.execute(
+        'SELECT tokens,cost_micros,data FROM insurance_reservations',
+      );
+      expect(timeoutReservations.rows).toHaveLength(1);
+      for (const row of timeoutReservations.rows) {
+        const saved = JSON.parse(String(row.data));
+        expect(saved.usage).toBeNull();
+        expect(Number(row.tokens)).toBe(saved.reservedInputTokens + testBudget.maxOutputTokensPerRequest);
+        expect(Number(row.cost_micros)).toBe(saved.reservedInputTokens + 2 * testBudget.maxOutputTokensPerRequest);
+        expect(
+          timedOut.wire.requests.some(
+            request => Buffer.byteLength(request.raw, 'utf8') + 512 === saved.reservedInputTokens,
+          ),
+        ).toBe(true);
+      }
+      const status = await timedOut.repository.status(context);
+      expect(status.analyses).toEqual([]);
+      expect(status.attempts[0]).toMatchObject({
+        state: 'FAILED',
+        failure: { code: 'MODEL_REQUEST_INTERRUPTED' },
+      });
+      expect((await timedOut.cases.active(context))!.state).toBe('FAILED');
+    },
+  );
 
   it('recovers interrupted processing in a separate worker from any checkout path', async () => {
     const recovery = await setup(propertyDocuments(), { ...testBudget, timeoutMs: 500 });

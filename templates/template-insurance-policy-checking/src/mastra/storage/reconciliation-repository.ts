@@ -268,17 +268,20 @@ export class ReconciliationRepository {
       return reservationId;
     });
   }
+  /** Serialize late provider usage with attempt completion; reservations keep their full ceiling. */
   async usage(id: string, usage: unknown) {
-    const row = (
-      await this.cases.client.execute({ sql: 'SELECT data FROM insurance_reservations WHERE id=?', args: [id] })
-    ).rows[0]!;
-    const data = JSON.parse(String(row.data)) as Record<string, unknown>;
-    // Reservations remain charged at their conservative ceiling, including lost or missing usage.
-    await this.cases.client.execute({
-      sql: 'UPDATE insurance_reservations SET data=? WHERE id=?',
-      args: [JSON.stringify({ ...data, usage, billingCost: null }), id],
+    await this.transaction(async transaction => {
+      const row = (await transaction.execute({ sql: 'SELECT data FROM insurance_reservations WHERE id=?', args: [id] }))
+        .rows[0]!;
+      const data = JSON.parse(String(row.data)) as Record<string, unknown>;
+      // Reservations remain charged at their conservative ceiling, including lost or missing usage.
+      await transaction.execute({
+        sql: 'UPDATE insurance_reservations SET data=? WHERE id=?',
+        args: [JSON.stringify({ ...data, usage, billingCost: null }), id],
+      });
     });
   }
+
   async saveExtraction(context: OperationContext, attemptId: string, extraction: Extraction) {
     await this.transaction(async transaction => {
       const attempt = await this.attempt(context, attemptId);
