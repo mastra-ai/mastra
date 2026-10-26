@@ -2674,7 +2674,7 @@ export class AgentController<TState = {}> {
       return mem;
     }
     const requestContext = await this.buildRequestContext(session, callerContext);
-    const resolved = await Promise.resolve(mem({ requestContext }));
+    const resolved = await resolveDynamicArgument(mem, { requestContext, mastra: this.getMastra() });
     if (!resolved) {
       throw new Error('Dynamic memory factory returned empty value');
     }
