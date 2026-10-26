@@ -140,8 +140,8 @@ export async function main() {
   const results: ReturnType<typeof evaluateCase>[] = [];
   try {
     for (const test of evaluationCases) {
-      // Charge a complete per-case ceiling before dispatch. Reservations survive failure/restart;
-      // native transport additionally reserves every encoded request inside this allocation.
+      // Reserve one complete per-case ceiling in this ledger before dispatch; it survives failure/restart.
+      // The bounded transport records per-request reservations separately in the reconciliation repository.
       await allocation.reserve(test.id);
       const observation = await runEvaluationCase(test, join(runRoot, test.id), undefined, config.budget);
       const scored = evaluateCase(test, observation);
