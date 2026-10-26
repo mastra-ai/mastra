@@ -31,7 +31,7 @@ describe('TemporalRun', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it.each(['streamLegacy', 'resumeStream', 'restart', 'timeTravel', 'timeTravelStream'] as const)(
+  it.each(['streamLegacy', 'resumeStream', 'restart', 'timeTravelStream'] as const)(
     'rejects unsupported %s calls instead of using the local workflow engine',
     async method => {
       const workflow = createWorkflow(
@@ -45,6 +45,185 @@ describe('TemporalRun', () => {
       );
     },
   );
+
+  it('requires a time-travel target before observing the source execution', async () => {
+    const getHandle = vi.fn();
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
+      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.timeTravel({ step: [] })).rejects.toThrow('Step is required');
+    expect(getHandle).not.toHaveBeenCalled();
+  });
+
+  it('rejects time travel while the source execution is semantically running', async () => {
+    const query = vi.fn().mockResolvedValue({ status: 'running', input: { value: 1 }, state: {}, steps: {} });
+    const describe = vi.fn().mockResolvedValue({ runId: 'temporal-run-1' });
+    const start = vi.fn();
+    const getHandle = vi.fn().mockReturnValue({ query, describe });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
+      { client: { workflow: { getHandle, start } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.timeTravel({ step: 'target' })).rejects.toThrow('still running');
+    expect(query).toHaveBeenCalledWith('mastra.status');
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('surfaces source status query failures without starting a replacement', async () => {
+    const queryError = new Error('Temporal service unavailable');
+    const query = vi.fn().mockRejectedValue(queryError);
+    const start = vi.fn();
+    const getHandle = vi.fn().mockReturnValue({ query });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
+      { client: { workflow: { getHandle, start } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.timeTravel({ step: 'target' })).rejects.toMatchObject({
+      name: 'TemporalWorkflowStatusUnknownError',
+      cause: queryError,
+    });
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('validates graph divergence before starting a replacement execution', async () => {
+    const schema = z.object({ value: z.number() });
+    const first = createStep({
+      id: 'first',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => inputData,
+    });
+    const target = createStep({
+      id: 'target',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => inputData,
+    });
+    const query = vi.fn().mockResolvedValue({
+      status: 'success',
+      input: { value: 1 },
+      state: {},
+      steps: {},
+      result: { value: 1 },
+    });
+    const describe = vi.fn().mockResolvedValue({ runId: 'temporal-run-1' });
+    const start = vi.fn();
+    const getHandle = vi.fn().mockReturnValue({ query, describe });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      { client: { workflow: { getHandle, start } } as unknown as Client, taskQueue: 'test-queue' },
+    )
+      .then(first)
+      .then(target)
+      .commit();
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.timeTravel({ step: 'target' })).rejects.toThrow();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('starts a seeded replacement under the same Mastra run id and returns its terminal result', async () => {
+    const schema = z.object({ value: z.number() });
+    const first = createStep({
+      id: 'first',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => inputData,
+    });
+    const target = createStep({
+      id: 'target',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => inputData,
+    });
+    const sourceStatus = {
+      status: 'success',
+      input: { value: 1 },
+      state: { preserved: true },
+      steps: {
+        first: {
+          status: 'success',
+          payload: { value: 1 },
+          output: { value: 2 },
+          startedAt: 1,
+          endedAt: 2,
+        },
+        target: {
+          status: 'success',
+          payload: { value: 2 },
+          output: { value: 3 },
+          startedAt: 3,
+          endedAt: 4,
+        },
+      },
+      result: { value: 3 },
+    };
+    const replacementResult = {
+      status: 'success',
+      input: { value: 2 },
+      state: { preserved: true },
+      steps: sourceStatus.steps,
+      result: { value: 4 },
+    };
+    const sourceHandle = {
+      query: vi.fn().mockResolvedValue(sourceStatus),
+      describe: vi.fn().mockResolvedValue({ runId: 'temporal-run-1' }),
+    };
+    const replacementHandle = {
+      result: vi.fn().mockResolvedValue(replacementResult),
+      query: vi.fn(),
+    };
+    const start = vi.fn().mockResolvedValue(replacementHandle);
+    const getHandle = vi.fn().mockReturnValue(sourceHandle);
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      { client: { workflow: { getHandle, start } } as unknown as Client, taskQueue: 'test-queue' },
+    )
+      .then(first)
+      .then(target)
+      .commit();
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.timeTravel({ step: 'target', inputData: { value: 20 } })).resolves.toMatchObject({
+      status: 'success',
+      result: { value: 4 },
+    });
+    expect(start).toHaveBeenCalledWith(
+      'testWorkflow',
+      expect.objectContaining({
+        workflowId: 'test-run',
+        workflowIdReusePolicy: 'ALLOW_DUPLICATE',
+        args: [
+          expect.objectContaining({
+            runId: 'test-run',
+            timeTravel: expect.objectContaining({
+              inputData: { value: 20 },
+              steps: ['target'],
+              stepResults: expect.objectContaining({
+                first: expect.objectContaining({
+                  payload: { value: 1 },
+                  output: { value: 2 },
+                  startedAt: 1,
+                  endedAt: 2,
+                }),
+              }),
+            }),
+            timeTravelLineage: {
+              previousTemporalRunId: 'temporal-run-1',
+              target: ['target'],
+            },
+          }),
+        ],
+      }),
+    );
+  });
 
   it('signals the matching Temporal workflow when resuming and waits for the result', async () => {
     const result = {
