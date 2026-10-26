@@ -87,14 +87,15 @@ describe('the new session page', () => {
     expect(returned).not.toHaveAttribute('readonly');
   });
 
-  it('counts the Work board cards in each pipeline stage, leaving out intake, finished work and pull requests', async () => {
+  it('counts the Work board cards in each open stage, a card with no stage in Intake as the board shows it, leaving out finished work and pull requests', async () => {
     stubDraftRoute({
       workItems: [
+        card('intake', ['intake']),
+        card('unstaged', []),
         card('triage-1', ['triage']),
         card('triage-2', ['triage']),
         card('building', ['execute']),
         card('reviewing', ['review']),
-        card('intake', ['intake']),
         card('done', ['done']),
         card('canceled', ['canceled']),
         card('pull-request', ['review'], 'review'),
@@ -108,6 +109,6 @@ describe('the new session page', () => {
       within(inFlight)
         .getAllByRole('listitem')
         .map(stage => stage.textContent),
-    ).toEqual(['Triage 2', 'Planning 0', 'Building 1', 'Review 1']);
+    ).toEqual(['Intake 2', 'Triage 2', 'Planning 0', 'Building 1', 'Review 1']);
   });
 });

@@ -6,17 +6,21 @@ import { SquareKanban } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
-import { belongsToBoard } from '../boardStages';
+import { belongsToBoard, itemAppearsInStage } from '../boardStages';
 import { rememberedBoardPath } from '../services/boardViews';
-import { PIPELINE_STAGES, stageLabel } from '../stages';
+import { BOARD_STAGES, isTerminalStage } from '../stages';
 import { stageIndicatorClass } from './BoardIcons';
+
+// Saved cards only: the board's Intake column also lists live candidates that have no card yet.
+const OPEN_STAGES = BOARD_STAGES.filter(({ id }) => !isTerminalStage(id));
 
 export function InFlight({ factoryId }: { factoryId: string }) {
   const workItems = useWorkItemsQuery(factoryId);
   const cards = (workItems.data ?? []).filter(item => belongsToBoard(item, 'work'));
-  const stages = PIPELINE_STAGES.map(stage => ({
-    stage,
-    count: cards.filter(item => item.stages.includes(stage)).length,
+  const stages = OPEN_STAGES.map(({ id, label }) => ({
+    stage: id,
+    label,
+    count: cards.filter(item => itemAppearsInStage(item, id, BOARD_STAGES)).length,
   }));
   const total = stages.reduce((sum, { count }) => sum + count, 0);
   if (total === 0) return null;
@@ -24,7 +28,7 @@ export function InFlight({ factoryId }: { factoryId: string }) {
   return (
     <section className="flex flex-col gap-3" aria-labelledby="in-flight-heading">
       <div className="flex items-center justify-between gap-3">
-        <Txt as="h2" variant="eyebrow" tone="muted" id="in-flight-heading" className="m-0">
+        <Txt as="h2" variant="subheading" tone="muted" id="in-flight-heading" className="m-0">
           In flight
         </Txt>
         <Link
@@ -47,10 +51,10 @@ export function InFlight({ factoryId }: { factoryId: string }) {
           ))}
       </div>
       <ul className="m-0 flex list-none flex-wrap gap-x-5 gap-y-1 p-0">
-        {stages.map(({ stage, count }) => (
+        {stages.map(({ stage, label, count }) => (
           <li key={stage} className={cn(textStyle({ variant: 'caption', tone: 'muted' }), 'flex items-center gap-1.5')}>
             <span aria-hidden className={cn('size-1.5 rounded-full', stageIndicatorClass(stage))} />
-            {stageLabel(stage)} <span className="text-foreground tabular-nums">{count}</span>
+            {label} <span className="text-foreground tabular-nums">{count}</span>
           </li>
         ))}
       </ul>
