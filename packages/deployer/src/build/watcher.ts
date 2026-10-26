@@ -1,5 +1,5 @@
 import { dirname, posix } from 'node:path';
-import { noopLogger } from '@mastra/core/logger';
+import { noopLogger } from '@internal/core/logger';
 import * as pkg from 'empathic/package';
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';

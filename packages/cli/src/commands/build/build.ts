@@ -138,18 +138,12 @@ export async function build({
 
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {
-    try {
-      const { MastraError } = await import('@mastra/core/error');
-      if (error instanceof MastraError) {
-        const { message, ...details } = error.toJSONDetails();
-        logger.error(message, details);
-      } else if (error instanceof Error) {
-        logger.error(`Mastra Build failed: ${error.message}`, { stack: error.stack });
-      }
-    } catch {
-      if (error instanceof Error) {
-        logger.error(`Mastra Build failed: ${error.message}`, { stack: error.stack });
-      }
+    // Structural check: @mastra/deployer throws its own bundled copy of MastraError, so `instanceof` would miss it.
+    if (error instanceof Error && 'toJSONDetails' in error && typeof error.toJSONDetails === 'function') {
+      const { message, ...details } = error.toJSONDetails();
+      logger.error(message, details);
+    } else if (error instanceof Error) {
+      logger.error(`Mastra Build failed: ${error.message}`, { stack: error.stack });
     }
     process.exit(1);
   }

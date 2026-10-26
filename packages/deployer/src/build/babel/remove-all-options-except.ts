@@ -1,6 +1,6 @@
 import { types as t } from '@babel/core';
 import type { NodePath, PluginObject, types } from '@babel/core';
-import type { IMastraLogger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@internal/core/logger';
 import type { Config as MastraConfig } from '@mastra/core/mastra';
 
 export function removeAllOptionsFromMastraExcept(

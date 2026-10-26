@@ -87,6 +87,27 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
 });
 
+describe('Bundler.loadEnvVars', () => {
+  it('layers the env files returned by getEnvFiles, later files winning', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-env-'));
+    tempDirs.push(tempDir);
+    const envFile = join(tempDir, '.env');
+    const localFile = join(tempDir, '.env.local');
+    await writeFile(envFile, 'SHARED=base\nBASE_ONLY=1\n');
+    await writeFile(localFile, 'SHARED=local\nLOCAL_ONLY=2\n');
+
+    class EnvBundler extends TestBundler {
+      getEnvFiles(): Promise<string[]> {
+        return Promise.resolve([envFile, localFile]);
+      }
+    }
+
+    const env = await new EnvBundler('env-test').loadEnvVars();
+
+    expect(Object.fromEntries(env)).toEqual({ SHARED: 'local', BASE_ONLY: '1', LOCAL_ONLY: '2' });
+  });
+});
+
 describe('Bundler.installDependencies', () => {
   it('updates the selected lockfile and installs packed workspace dependencies in one operation', async () => {
     const bundler = new TestBundler('Test');

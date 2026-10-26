@@ -4934,6 +4934,9 @@ importers:
       '@sindresorhus/slugify':
         specifier: ^2.2.1
         version: 2.2.1
+      dotenv:
+        specifier: ^17.3.1
+        version: 17.4.2
       empathic:
         specifier: ^2.0.0
         version: 2.1.0
@@ -4986,6 +4989,9 @@ importers:
       '@internal/core':
         specifier: workspace:*
         version: link:../_internal-core
+      '@internal/deployer':
+        specifier: workspace:*
+        version: link:../_internals/deployer
       '@internal/find-workspaces':
         specifier: workspace:*
         version: link:../_internals/find-workspaces

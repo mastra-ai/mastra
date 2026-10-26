@@ -1,7 +1,7 @@
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseFrontmatter } from '@internal/core/frontmatter';
-import { MAX_FS_SUBAGENT_DEPTH } from '@mastra/core/agent';
+import { MAX_FS_SUBAGENT_DEPTH } from '@internal/deployer';
 import type { AgentSchedulePromptDefinition } from '@mastra/core/schedules';
 import { slash } from '../utils';
 
