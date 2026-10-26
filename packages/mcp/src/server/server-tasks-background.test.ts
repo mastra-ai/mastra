@@ -152,11 +152,28 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
         if (closed) return;
         closed = true;
         await served.close();
+        await drain(mastra);
         await mastra.shutdown();
       },
     };
     instances.push(created);
     return created;
+  }
+
+  /**
+   * Cancels the runs this instance still owns and waits for each to delete its workflow run.
+   * Core deletes it unawaited once the run settles; if that happens during `shutdown()`, after
+   * storage closed, it is an unhandled rejection. Remove once core awaits it on shutdown.
+   */
+  async function drain(mastra: Mastra) {
+    const manager = mastra.backgroundTaskManager!;
+    const workflow = mastra.__getInternalWorkflow('__background-task');
+    const { tasks: owned } = await manager.listTasks({ status: ['pending', 'running'] });
+    const mine = owned.filter(task => !task.ownerId || task.ownerId === manager.ownerId);
+    await Promise.all(mine.map(task => manager.cancel(task.id).catch(() => undefined)));
+    for (const task of mine) {
+      for (let i = 0; i < 100 && (await workflow.getWorkflowRunById(task.id)); i++) await sleep(20);
+    }
   }
 
   async function call(url: URL, name: string, args: Record<string, unknown> = {}) {
@@ -194,11 +211,11 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
   }
 
   /** Starts the server in its own process, so it can be killed mid-task. */
-  async function child(recover: boolean): Promise<{ url: URL; process: ChildProcess }> {
+  async function child(recover: boolean, slots = 'default'): Promise<{ url: URL; process: ChildProcess }> {
     // One node process (no tsx wrapper process), so SIGKILL kills the server itself.
     const proc = spawn(
       process.execPath,
-      ['--import', 'tsx', join(here, '__tests__/background-tasks-child.ts'), db, counterFile, String(recover)],
+      ['--import', 'tsx', join(here, '__tests__/background-tasks-child.ts'), db, counterFile, String(recover), slots],
       { cwd: join(here, '../..'), stdio: ['ignore', 'pipe', 'inherit'] },
     );
     children.push(proc);
@@ -307,27 +324,26 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
   });
 
   it('resumes an answered task whose queued resume was lost with its instance', async () => {
-    const tasks = { tools: { approve: 'always' as const, hang: 'always' as const } };
-    const a = await instance(tasks, { backgroundTasks: { perOwnerConcurrency: { 'mcp-server:tasks': 1 } } });
+    const a = await child(false, 'oneSlot');
     const onA = await requester(a.url);
     const taskId = await call(a.url, 'approve', { item: 'invoice' });
     const waiting = await waitFor(onA, taskId, 'input_required');
     const [key] = Object.keys(waiting.inputRequests ?? {});
-
-    // The only slot is busy, so the answer is acknowledged and its resume queued in A's memory.
-    const busy = await call(a.url, 'hang');
-    await waitFor(onA, busy, 'working');
+    // A's only slot is now held by a task that never ends.
+    await waitFor(onA, await call(a.url, 'hang'), 'working');
+    // With no slot free, the answer is acknowledged and its resume queued in A's memory.
     await onA.update(taskId, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
-    const answered = (await rows(a.mastra)).find(row => row.toolName === 'approve')!;
+
+    a.process.kill('SIGKILL');
+    const b = await instance({ tools: { approve: 'always', hang: 'always' } });
+    const answered = (await rows(b.mastra)).find(row => row.toolName === 'approve')!;
     expect(answered.status).toBe('suspended');
     expect(answered.metadata).toMatchObject({ inputResponses: { [key!]: { action: 'accept' } } });
-
-    await a.close();
-    const b = await instance(tasks);
-    expect((await rows(b.mastra)).find(row => row.toolName === 'approve')?.status).toBe('suspended');
     const done = await waitFor(await requester(b.url), taskId, 'completed');
     expect(done).toMatchObject({ result: { content: [{ type: 'text', text: 'invoice approved by bob' }] } });
-    expect(probe.runs.filter(run => run.tool === 'approve' && run.resumeData)).toHaveLength(1);
+    expect(probe.runs.filter(run => run.tool === 'approve')).toEqual([
+      { tool: 'approve', resumeData: { approver: 'bob' } },
+    ]);
   });
 
   it('fails a task waiting for input past its TTL, and cleanup deletes a finished task at its TTL', async () => {

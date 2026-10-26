@@ -157,6 +157,11 @@ describe('BackgroundTaskMCPTaskStore', () => {
       t => t?.status !== 'working',
     );
     expect(done).toMatchObject({ status: 'failed', error: { code: -32603, message: TASK_EXPIRED_MESSAGE } });
+    // Reported expired as soon as the TTL passes; the attempt's timeout aborts the work right after.
+    await until(
+      async () => aborted.length,
+      n => n > 0,
+    );
     expect(aborted).toHaveLength(1);
     store.close();
   });

@@ -1,26 +1,30 @@
 /**
- * An MCP server process for the restart tests: serves `crashy` as a task from Mastra background
- * tasks on the libsql file given as the first argument. Prints `READY <url>` once listening; the
- * test SIGKILLs it mid-task.
+ * An MCP server process for the tests that kill a server: serves `crashy`, `approve` and `hang` as
+ * tasks from Mastra background tasks on the libsql file given as the first argument, with one slot
+ * when `oneSlot` is passed. Prints `READY <url>` once listening; the test SIGKILLs it mid-task.
  */
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import { MCPServer } from '../server';
-import { authFor, makeCrashy } from './background-tasks.mock';
+import { authFor, makeApprove, makeCrashy, makeHang } from './background-tasks.mock';
 import { serveHTTP } from './harness.mock';
 
-const [url, counterFile, recover] = process.argv.slice(2);
+const [url, counterFile, recover, slots] = process.argv.slice(2);
 
 const server = new MCPServer({
   name: 'Tasks',
   version: '1.0.0',
-  tools: { crashy: makeCrashy(counterFile!) },
-  tasks: { tools: { crashy: { mode: 'always', recover: recover === 'true' } } },
+  tools: { crashy: makeCrashy(counterFile!), approve: makeApprove(), hang: makeHang() },
+  tasks: { default: 'always', tools: { crashy: { mode: 'always', recover: recover === 'true' } } },
 });
 const mastra = new Mastra({
   logger: false,
   storage: new LibSQLStore({ id: 'tasks', url: url! }),
-  backgroundTasks: { enabled: true, leaseDurationMs: 3_000 },
+  backgroundTasks: {
+    enabled: true,
+    leaseDurationMs: 3_000,
+    ...(slots === 'oneSlot' && { perOwnerConcurrency: { 'mcp-server:tasks': 1 } }),
+  },
   mcpServers: { tasks: server },
 });
 void mastra;

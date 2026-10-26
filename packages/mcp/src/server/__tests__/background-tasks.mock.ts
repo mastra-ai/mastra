@@ -27,3 +27,35 @@ export function makeCrashy(counterFile: string) {
     },
   });
 }
+
+/** Asks who approves, then finishes with the answer. */
+export function makeApprove(onRun: (resumeData: unknown) => void = () => {}) {
+  return createTool({
+    id: 'approve',
+    description: 'Asks who approves before finishing',
+    inputSchema: z.object({ item: z.string() }),
+    suspendSchema: z.object({ message: z.string() }),
+    resumeSchema: z.object({ approver: z.string() }),
+    execute: async ({ item }, context) => {
+      onRun(context.resumeData);
+      if (!context.resumeData) {
+        await context.suspend?.({ message: `Who approves ${item}?` });
+        return;
+      }
+      return `${item} approved by ${context.resumeData.approver}`;
+    },
+  });
+}
+
+/** Runs until aborted. */
+export function makeHang() {
+  return createTool({
+    id: 'hang',
+    description: 'Runs until aborted',
+    inputSchema: z.object({}),
+    execute: async (_input, context) => {
+      await new Promise<void>(resolve => context.abortSignal?.addEventListener('abort', () => resolve()));
+      return 'stopped';
+    },
+  });
+}
