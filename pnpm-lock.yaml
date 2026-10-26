@@ -2318,8 +2318,8 @@ importers:
   integrations/parallel:
     dependencies:
       parallel-web:
-        specifier: ^1.3.5
-        version: 1.3.5
+        specifier: ^1.3.6
+        version: 1.3.6
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -28153,8 +28153,8 @@ packages:
   papaparse@5.5.4:
     resolution: {integrity: sha512-SwzWD9gl/ElwYLCI0nUja1mFJzjq2D8ziShfNBa7zCHzkOozeOGDwHWQ+tvCzEZcewecWZ5U7kUopDnG+DFYEQ==}
 
-  parallel-web@1.3.5:
-    resolution: {integrity: sha512-ITnzfmsL7rtUm+C13E80sw5G6U73nQegJi0Am568S58Mje0ivqZHRVFk7Zw9mYc1pdDPSSzf5kRq7C3imLiuQQ==}
+  parallel-web@1.3.6:
+    resolution: {integrity: sha512-cuztm5XmBA08ImFH4ntFJe4wH4jVrW4GPraMa5mrZL7/Kp56vufjt7geq8xhqiXPM/PcVI1Q6Qll/18/QoP2fA==}
 
   param-case@3.0.4:
     resolution: {integrity: sha512-RXlj7zCYokReqWpOPH9oYivUzLYZ5vAPIfEmCTNViosC78F8F0H9y7T7gG2M39ymgutxF5gcFEsyZQSph9Bp3A==}
@@ -53189,7 +53189,7 @@ snapshots:
 
   papaparse@5.5.4: {}
 
-  parallel-web@1.3.5: {}
+  parallel-web@1.3.6: {}
 
   param-case@3.0.4:
     dependencies:
