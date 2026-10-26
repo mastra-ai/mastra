@@ -45,6 +45,7 @@ import type { AgentSignalInput } from '../signals';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
+import { isDurableAgentLike } from '../types';
 import { resolveThreadIdFromArgs } from '../utils';
 
 import { publishAbortRequest } from './abort-transport';
@@ -132,7 +133,7 @@ const unfencedStoresWarned = new WeakSet<WorkflowsStorage | MemoryStorage>();
  * middleware sets them from the authenticated identity so a request body cannot route memory
  * to another user's thread or resource.
  */
-function applyReservedMemoryContextKeys<T extends { requestContext?: RequestContext; memory?: any }>(
+export function applyReservedMemoryContextKeys<T extends { requestContext?: RequestContext; memory?: any }>(
   options: T | undefined,
 ): T | undefined {
   const requestContext = options?.requestContext;
@@ -391,6 +392,11 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   actor?: AgentExecutionOptions<OUTPUT>['actor'];
   /** MCP protocol context forwarded to tools for in-process durable runs. */
   mcp?: AgentExecutionOptions<OUTPUT>['mcp'];
+  /**
+   * Per-call tool lifecycle hooks. Applied when tools are prepared for this execution.
+   * Function hooks are not serialized; a cross-process recovery cannot restore them.
+   */
+  hooks?: AgentExecutionOptions<OUTPUT>['hooks'];
   /**
    * Per-invocation tool payload transform policy. The closure rides on the
    * in-process run registry; only the JSON-safe `targets` shadow is serialized
@@ -1652,6 +1658,9 @@ export class DurableAgent<
       // caller re-passing the option.
       returnScorerData: workflowInput.options?.returnScorerData,
       mastra: this.#mastra,
+      // The live model below makes resolveRuntimeDependencies skip its rebuild,
+      // so processor hooks only get the agent if it is stored here.
+      agent: wrapped,
       model,
       modelList,
       tools,
@@ -3209,6 +3218,7 @@ export class DurableAgent<
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
       processorStates: registryEntry.processorStates,
+      agent: registryEntry.agent,
       requestContext: registryEntry.requestContext,
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
@@ -3677,12 +3687,12 @@ export class DurableAgent<
       /* errors already handled by the prior segment */
     });
     // A warm resume reuses the tools built for the first request, which close
-    // over its request context and delegation hooks (#25960). Rebuild them for
+    // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
     // this call and swap in only entries still holding a request-built tool, so
     // tools a processor added or replaced are kept. Processor-added tools are
     // rebuilt for this call's request context instead (#27544). Cold resumes already
     // rebuilt everything in prepare() above.
-    if (!coldSnapshot && (options?.requestContext || options?.delegation)) {
+    if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks)) {
       try {
         const requestTools = await this.#wrappedAgent.getToolsForExecution({
           toolsets: resolvedOptions.toolsets,
@@ -3693,7 +3703,12 @@ export class DurableAgent<
           requestContext: resumeRequestContext,
           memoryConfig: resolvedOptions.memory?.options,
           autoResumeSuspendedTools: resolvedOptions.autoResumeSuspendedTools,
-          delegation: resolvedOptions.delegation,
+          // resolvedOptions always carries defaultOptions.delegation, so only a delegation passed
+          // to this resume may replace the one the first call parked on the entry.
+          delegation: options?.delegation
+            ? resolvedOptions.delegation
+            : (entry.delegation ?? resolvedOptions.delegation),
+          hooks: resolvedOptions.hooks,
           methodType: resolvedOptions.closeOnSuspend ? 'generate' : 'stream',
           backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
           backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
@@ -3713,7 +3728,10 @@ export class DurableAgent<
           reg.tools = rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext);
           if (reg.baseTools)
             reg.baseTools = rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext);
-          reg.requestTools = requestTools;
+          // Tools this rebuild did not produce still hold their earlier build, so
+          // keep that as their baseline; otherwise a later resume can never refresh them.
+          reg.requestTools = { ...reg.requestTools, ...requestTools };
+          if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }
       } catch (error) {
         this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
@@ -3974,6 +3992,7 @@ export class DurableAgent<
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
       processorStates: entry.processorStates,
+      agent: entry.agent,
       requestContext: resolvedOptions.requestContext,
       // Caller option wins, then the flag persisted at prepare time. Only fall
       // back to resolvedOptions (which merges agent defaultOptions) last, so a
@@ -4788,6 +4807,7 @@ export class DurableAgent<
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
       processorStates: registryEntry.processorStates,
+      agent: registryEntry.agent,
       requestContext: registryEntry.requestContext,
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
@@ -5524,6 +5544,7 @@ export class DurableAgent<
     let structuredOutput = observedEntry?.structuredOutput;
     let outputProcessors = observedEntry?.outputProcessors;
     const processorStates = observedEntry?.processorStates;
+    let streamAgent: Agent<any, any, any, any> = observedEntry?.agent ?? this.#wrappedAgent;
     let returnScorerData = observedEntry?.returnScorerData;
     let requestContext = observedEntry?.requestContext;
     let messageList = observedEntry?.messageList ?? this.#runRegistry.getMessageList(runId);
@@ -5660,6 +5681,12 @@ export class DurableAgent<
         }
       }
 
+      // Hooks get the agent the output processors come from, not an entry's agent
+      // (which is the current version). A pinned version is a DurableAgent fork; unwrap it.
+      streamAgent =
+        isDurableAgentLike(processorAgent) && processorAgent.agent !== processorAgent
+          ? processorAgent.agent
+          : processorAgent;
       try {
         outputProcessors = (await processorAgent.listOutputProcessors(requestContext)) ?? [];
       } catch (error) {
@@ -5771,6 +5798,7 @@ export class DurableAgent<
       },
       onSuspended: options?.onSuspended,
       structuredOutput: structuredOutput as any,
+      agent: streamAgent,
       outputProcessors,
       processorStates,
       returnScorerData,
@@ -5847,6 +5875,9 @@ export class DurableAgent<
         controller.abort(reason);
       }
       await this.requestRemoteAbort(runId);
+      // A run parked on a suspension has no steps left to stop; release it so
+      // it is no longer listed as suspended, as the stream abort does.
+      if (agentThreadStreamRuntime.isRunParked(runId, this.getPubSub())) super.abortRunStream(runId);
     };
 
     return {

@@ -23,12 +23,6 @@
         "values": ["high", "max"]
       }
     ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
     "zai-org/GLM-5.3": [
       {
         "type": "effort",
@@ -39,6 +33,12 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ]
   }
