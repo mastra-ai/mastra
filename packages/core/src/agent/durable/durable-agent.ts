@@ -5310,7 +5310,8 @@ export class DurableAgent<
           typeof record.snapshot === 'string' ? (JSON.parse(record.snapshot) as WorkflowRunState) : record.snapshot;
         if (!snapshot) return { status: 'unknown' };
         const input = snapshot.context?.input as DurableAgenticWorkflowInput | undefined;
-        if (input?.agentId !== this.id || input.__workflowKind !== 'durable-agent') return { status: 'unknown' };
+        if (input?.__workflowKind !== 'durable-agent') continue;
+        if (input.agentId !== this.id) return { status: 'unknown' };
         if (
           ![
             'running',

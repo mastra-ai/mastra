@@ -440,6 +440,25 @@ async function recoverFrom(
 }
 
 describe('DurableAgent crash recovery', () => {
+  it.each(['durable', 'evented-fallback'] as const)(
+    'releases abandoned observers after later tool iterations (%s, COR-1496)',
+    async kind => {
+      const { checkpoints, runId } = await captureCheckpoints(kind);
+      const later = checkpoints.filter(checkpoint =>
+        checkpoint.rows.some(row => Number(row.snapshot.context?.input?.iterationCount) >= 1),
+      );
+      expect(later.length).toBeGreaterThan(0);
+      for (const checkpoint of later) {
+        const { durableAgent, workflows } = await startProcess(kind);
+        for (const row of checkpoint.rows) await workflows.persistWorkflowSnapshot(row);
+        expect(await durableAgent.__getRunLiveness(runId), describeCheckpoint(checkpoint)).toMatchObject({
+          status: 'inactive',
+        });
+      }
+    },
+    60_000,
+  );
+
   it.each(['before-finish', 'after-finish', 'after-scorers'] as const)(
     'finishes genuine evented recovery %s without repeating saved effects (COR-1354)',
     async boundary => {

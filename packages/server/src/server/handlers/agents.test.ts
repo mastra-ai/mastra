@@ -1293,6 +1293,14 @@ describe('Agent Routes Authorization', () => {
   });
 
   describe('STREAM_GENERATE_ROUTE', () => {
+    it('preserves the streaming operation OpenAPI metadata', () => {
+      expect(STREAM_GENERATE_ROUTE.openapi).toMatchObject({
+        summary: 'Stream agent response',
+        description: 'Executes an agent with the provided messages and streams the response in real-time',
+        tags: ['Agents'],
+      });
+    });
+
     it('should return 403 when memory option specifies thread owned by different resource', async () => {
       // Create a thread owned by user-b
       await mockMemory.createThread({

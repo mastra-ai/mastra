@@ -1610,6 +1610,8 @@ export class Mastra<
       TKnowledge
     >,
   ) {
+    if (config?.server) this.validateAgentSseHeartbeat(config.server);
+
     // Register AsyncLocalStorage-backed context resolvers so that DualLogger
     // can correlate logs to the active span. Must happen before any agent runs.
     initContextStorage();
@@ -1995,7 +1997,6 @@ export class Mastra<
     }
 
     if (config?.server) {
-      this.validateAgentSseHeartbeat(config.server);
       this.#server = config.server;
       this.#serverExplicit = true;
     }

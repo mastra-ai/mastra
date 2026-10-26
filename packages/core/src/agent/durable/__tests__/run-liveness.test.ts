@@ -106,6 +106,23 @@ describe('HTTP observation producer liveness (COR-1496)', () => {
     }
   });
 
+  it('ignores marker-free nested iteration snapshots when reconciling an abandoned run', async () => {
+    const { agent, mastra, workflows, snapshot } = setup();
+    try {
+      await snapshot('running');
+      const record = await workflows.getWorkflowRunById({ workflowName: 'durable-agentic-loop', runId: 'run' });
+      const state = record!.snapshot as WorkflowRunState;
+      await workflows.persistWorkflowSnapshot({
+        workflowName: 'durable-agentic-execution',
+        runId: 'run',
+        snapshot: { ...state, context: { input: { agentId: agent.id } } },
+      });
+      expect(await agent.__getRunLiveness('run')).toMatchObject({ status: 'inactive' });
+    } finally {
+      await mastra.shutdown();
+    }
+  });
+
   it('does not classify an unassociated snapshot as an abandoned agent run', async () => {
     const { agent, mastra, workflows, snapshot } = setup();
     try {

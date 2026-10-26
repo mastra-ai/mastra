@@ -1983,6 +1983,9 @@ const STREAM_GENERATE_EXECUTION_ROUTE = createRoute({
 
 export const STREAM_GENERATE_ROUTE = createRoute({
   ...STREAM_GENERATE_EXECUTION_ROUTE,
+  summary: STREAM_GENERATE_EXECUTION_ROUTE.openapi?.summary,
+  description: STREAM_GENERATE_EXECUTION_ROUTE.openapi?.description,
+  tags: STREAM_GENERATE_EXECUTION_ROUTE.openapi?.tags,
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
   responseSchema: streamResponseSchema,

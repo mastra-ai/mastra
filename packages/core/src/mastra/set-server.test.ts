@@ -1,7 +1,28 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from './index';
 
 describe('Mastra.setServer()', () => {
+  it('rejects invalid heartbeat configuration before subscribing background tasks', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const subscribe = vi.spyOn(pubsub, 'subscribe');
+    try {
+      expect(
+        () =>
+          new Mastra({
+            logger: false,
+            pubsub,
+            backgroundTasks: { enabled: true },
+            workers: false,
+            server: { agentSseHeartbeatMs: -1 },
+          }),
+      ).toThrow('agentSseHeartbeatMs');
+      await Promise.resolve();
+      expect(subscribe).not.toHaveBeenCalled();
+    } finally {
+      await pubsub.close();
+    }
+  });
   it.each([0, 25_000, 2_147_483_647])('accepts agent SSE heartbeat interval %s', agentSseHeartbeatMs => {
     const mastra = new Mastra({ logger: false, server: { agentSseHeartbeatMs } });
     expect(mastra.getServer()?.agentSseHeartbeatMs).toBe(agentSseHeartbeatMs);
