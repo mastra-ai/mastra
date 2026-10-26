@@ -183,6 +183,46 @@ describe('ProviderList credential scopes', () => {
       expect(signOutScope).toBe('org');
     });
 
+    it('flags only the expired personal sign-in and renews it at user scope from its row', async () => {
+      const providers: ProviderInfo[] = [
+        {
+          provider: 'anthropic',
+          source: 'oauth-user',
+          userCredential: 'oauth',
+          userCredentialExpired: true,
+          orgKey: true,
+          orgCredential: 'oauth',
+          oauth: { supported: true, modes: ['paste-code'] },
+        },
+      ];
+      let startBody: unknown;
+      server.use(
+        http.get(PROVIDERS_URL, () => HttpResponse.json({ providers })),
+        http.post(oauthUrl('anthropic', 'start'), async ({ request }) => {
+          startBody = await request.json();
+          return HttpResponse.json(pasteCodeSession('session-renew'));
+        }),
+        http.post(oauthUrl('anthropic', 'complete'), () => {
+          providers[0] = { ...providers[0], userCredentialExpired: undefined };
+          return HttpResponse.json({ status: 'complete', ok: true });
+        }),
+      );
+      const user = userEvent.setup();
+      const lists = renderBothLists();
+
+      expect(await within(lists.personal()).findByText('Sign-in expired')).toBeInTheDocument();
+      expect(within(rowFor('anthropic', lists.factory())).getByText('Signed in')).toBeInTheDocument();
+
+      await pickRowAction(user, 'anthropic', 'Sign in again', lists.personal());
+      await user.type(await screen.findByLabelText('Authorization code'), 'code#state');
+      await user.click(screen.getByRole('button', { name: 'Complete sign in' }));
+
+      expect(startBody).toEqual({ mode: 'paste-code', scope: 'user' });
+      await waitFor(() =>
+        expect(within(rowFor('anthropic', lists.personal())).getByText('Signed in')).toBeInTheDocument(),
+      );
+    });
+
     it('shows members the Factory list read-only with the reason', async () => {
       stubProviders(
         [

@@ -79,6 +79,7 @@ export {
 // DurableAgent class (base class for durable agents)
 export {
   DurableAgent,
+  applyReservedMemoryContextKeys,
   type DurableAgentConfig,
   type DurableAgentStreamOptions,
   type DurableAgentStreamResult,
@@ -132,6 +133,7 @@ export {
   emitStepFinishEvent,
   emitFinishEvent,
   emitErrorEvent,
+  emitAbortEvent,
   emitSuspendedEvent,
   type DurableAgentStreamOptions as StreamAdapterOptions,
   type DurableAgentStreamResult as StreamAdapterResult,
@@ -215,6 +217,8 @@ export {
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
   createDurableLLMMappingStep,
+  createDurableIsTaskCompleteStep,
+  createDurableGoalStep,
 } from './workflows/steps';
 
 // Shared workflow utilities

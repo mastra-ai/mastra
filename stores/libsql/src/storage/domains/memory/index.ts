@@ -2911,12 +2911,11 @@ export class MemoryLibSQL extends MemoryStorage {
                 bestOverBoundary = boundary;
                 bestOverTokens = cumulativeMessageTokens;
               }
-            } else {
+            } else if (cumulativeMessageTokens > bestUnderTokens) {
               // Under — track the closest (highest) under boundary
-              if (cumulativeMessageTokens > bestUnderTokens) {
-                bestUnderBoundary = boundary;
-                bestUnderTokens = cumulativeMessageTokens;
-              }
+
+              bestUnderBoundary = boundary;
+              bestUnderTokens = cumulativeMessageTokens;
             }
           }
 
