@@ -28,6 +28,13 @@ export interface WorkingMemoryConfig {
    */
   readOnly?: boolean;
   /**
+   * When false, the agent has no update tool but the app updates working memory
+   * (for example after each response). The data is provided as context, and the agent is
+   * told the memory updates automatically. `readOnly` takes precedence.
+   * @default true
+   */
+  agentManaged?: boolean;
+  /**
    * Optional logger instance for structured logging
    */
   logger?: IMastraLogger;
@@ -70,6 +77,7 @@ export class WorkingMemory implements Processor {
       scope?: 'thread' | 'resource';
       useVNext?: boolean;
       readOnly?: boolean;
+      agentManaged?: boolean;
       templateProvider?: {
         getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfigInternal }): Promise<WorkingMemoryTemplate | null>;
       };
@@ -145,7 +153,9 @@ export class WorkingMemory implements Processor {
     // With agentManaged: false the app still updates the memory, so the agent must not claim it can't.
     const workingMemoryConfig = memoryContext.memoryConfig?.workingMemory;
     const isConfiguredReadOnly = this.options.readOnly || memoryContext.memoryConfig?.readOnly;
-    const isAppManaged = typeof workingMemoryConfig === 'object' && workingMemoryConfig.agentManaged === false;
+    const isAppManaged =
+      this.options.agentManaged === false ||
+      (typeof workingMemoryConfig === 'object' && workingMemoryConfig.agentManaged === false);
 
     // Format working memory instruction
     let instruction: string;
@@ -282,7 +292,7 @@ ${
     data: string | null;
     autoUpdated?: boolean;
   }): string {
-    return `WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY):
+    return `WORKING_MEMORY_SYSTEM_INSTRUCTION (${autoUpdated ? 'AUTO-UPDATED' : 'READ-ONLY'}):
 The following is your working memory - persistent information about the user and conversation collected over previous interactions. This data is provided for context to help you maintain continuity.
 
 <working_memory_data>

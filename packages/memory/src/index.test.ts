@@ -205,7 +205,7 @@ describe('Memory', () => {
 
       const systemMessage = await memory.getSystemMessage({ threadId, resourceId });
 
-      expect(systemMessage).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+      expect(systemMessage).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (AUTO-UPDATED)');
       expect(systemMessage).toContain('Location: Sooke');
       expect(systemMessage).not.toContain('calling the updateWorkingMemory tool');
       // The app updates the memory, so the agent must not be told it can't (#28367)

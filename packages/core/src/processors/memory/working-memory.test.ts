@@ -731,7 +731,7 @@ describe('WorkingMemory', () => {
       expect(resultMessages[0].content).not.toContain('updateWorkingMemory');
     });
 
-    it('should use read-only instruction format when workingMemory.agentManaged is false (#25896)', async () => {
+    it('should use auto-updated instruction format when workingMemory.agentManaged is false (#25896, #28367)', async () => {
       const processor = new WorkingMemory({
         storage: mockStorage,
         scope: 'thread',
@@ -778,7 +778,7 @@ describe('WorkingMemory', () => {
       const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0].role).toBe('system');
-      expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+      expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (AUTO-UPDATED)');
       expect(resultMessages[0].content).toContain(workingMemoryData);
       expect(resultMessages[0].content).not.toContain('updateWorkingMemory');
       // The app updates the memory, so the agent must not be told it can't (#28367)
@@ -839,6 +839,76 @@ describe('WorkingMemory', () => {
       expect(resultMessages[0].content).toContain('read-only in the current session - you cannot update it');
       expect(resultMessages[0].content).not.toContain('updated automatically');
     });
+
+    // The Memory class passes these as constructor options (no runtime memoryConfig flags), which is the live agent path.
+    it.each([
+      { readOnly: undefined, agentManaged: undefined, expected: 'tools' },
+      { readOnly: undefined, agentManaged: true, expected: 'tools' },
+      { readOnly: undefined, agentManaged: false, expected: 'auto-updated' },
+      { readOnly: true, agentManaged: undefined, expected: 'read-only' },
+      { readOnly: true, agentManaged: true, expected: 'read-only' },
+      { readOnly: true, agentManaged: false, expected: 'read-only' },
+    ] as const)(
+      'uses $expected instructions for constructor options readOnly=$readOnly agentManaged=$agentManaged (#28367)',
+      async ({ readOnly, agentManaged, expected }) => {
+        const processor = new WorkingMemory({ storage: mockStorage, scope: 'thread', readOnly, agentManaged });
+        const threadId = 'thread-123';
+        requestContext.set('MastraMemory', {
+          thread: {
+            id: threadId,
+            resourceId: 'resource-1',
+            title: 'Test',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          resourceId: 'resource-1',
+        });
+        vi.mocked(mockStorage.getThreadById).mockResolvedValue({
+          id: threadId,
+          resourceId: 'resource-1',
+          title: 'Test Thread',
+          metadata: { workingMemory: '# User Info\n- Name: Jane' },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        const messages: MastraDBMessage[] = [
+          {
+            id: 'msg-1',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+            createdAt: new Date(),
+          },
+        ];
+        const messageList = new MessageList();
+        messageList.add(messages, 'input');
+        const result = await processor.processInput({
+          messages,
+          messageList,
+          abort: () => {
+            throw new Error('Aborted');
+          },
+          requestContext,
+        });
+        const content = String((result instanceof MessageList ? result.get.all.aiV5.prompt() : result)[0].content);
+
+        expect(content).toContain('Name: Jane');
+        if (expected === 'tools') {
+          expect(content).toContain('updateWorkingMemory');
+          expect(content).not.toContain('(READ-ONLY)');
+          expect(content).not.toContain('(AUTO-UPDATED)');
+        } else if (expected === 'auto-updated') {
+          expect(content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (AUTO-UPDATED)');
+          expect(content).toContain('This memory is updated automatically after each response');
+          expect(content).not.toContain('read-only');
+          expect(content).not.toContain('updateWorkingMemory');
+        } else {
+          expect(content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+          expect(content).toContain('read-only in the current session - you cannot update it');
+          expect(content).not.toContain('updated automatically');
+          expect(content).not.toContain('updateWorkingMemory');
+        }
+      },
+    );
 
     it('should show fallback message when readOnly and no working memory data exists', async () => {
       const processor = new WorkingMemory({

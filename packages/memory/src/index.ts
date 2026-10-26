@@ -2614,7 +2614,7 @@ ${
     data: string | null;
     autoUpdated?: boolean;
   }) {
-    return `WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY):
+    return `WORKING_MEMORY_SYSTEM_INSTRUCTION (${autoUpdated ? 'AUTO-UPDATED' : 'READ-ONLY'}):
 The following is your working memory - persistent information about the user and conversation collected over previous interactions. This data is provided for context to help you maintain continuity.
 
 <working_memory_data>
