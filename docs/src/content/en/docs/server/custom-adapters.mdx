@@ -122,7 +122,7 @@ registerAuthMiddleware(): void {
 
 ### `registerHttpLoggingMiddleware()`
 
-Register request logging middleware. `init()` calls this after the context, auth, and user middleware. Return early when request logging isn't enabled in `this.httpLoggingConfig`, and skip paths that `this.shouldLogRequest()` excludes. If your framework doesn't support request logging, implement this method as a no-op.
+Register request logging middleware. `init()` calls this after the context, auth, and user middleware. Return early when request logging isn't enabled in `this.httpLoggingConfig`, and skip paths that `this.shouldLogRequest()` excludes. Implement this method as a no-op if your framework has no way to log requests.
 
 ```typescript oxfmt:false
 registerHttpLoggingMiddleware(): void {
