@@ -11,6 +11,7 @@ import {
   SpanProcessorAttributes,
 } from './span-payload';
 import { asCoreSpan } from './span-payload/span-payload-registry';
+import { SpanToolsSection } from './span-payload/span-tools-section';
 import { SpanRunId, SpanSummaryDescription } from './span-summary-description';
 import { TraceIdButton } from './trace-id-button';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
@@ -87,6 +88,7 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
           >
             <SpanOutputRenderer span={span} />
           </SpanPayloadSection>
+          <SpanToolsSection span={span} layout="details" />
           <SpanPayloadSection
             title="Metadata"
             icon={<BracesIcon />}

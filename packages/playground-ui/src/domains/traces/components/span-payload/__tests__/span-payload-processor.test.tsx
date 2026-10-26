@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { SpanType } from '@mastra/core/observability';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -150,13 +151,30 @@ describe('SpanProcessorAttributes', () => {
 
   it('shows message-list changes as readable actions', () => {
     render(<SpanProcessorAttributes span={processorInputSpan} />);
-    expect(screen.getByText('Added system message')).toBeTruthy();
-    expect(screen.getByText('context-note · 1 message')).toBeTruthy();
+    expect(valueOf('Added system message')).toBe('context-note · 1 message');
+  });
+
+  it('adds up identical changes into a single row', () => {
+    const span = makeSpan({
+      ...processorInputSpan,
+      attributes: {
+        processorPhase: 'inputStep',
+        messageListMutations: [
+          { type: 'add', source: 'memory', count: 1 },
+          { type: 'add', source: 'memory', count: 1 },
+          { type: 'add', source: 'input', count: 1 },
+        ],
+      },
+    });
+    render(<SpanProcessorAttributes span={span} />);
+    const rows = screen.getAllByText('Added messages').map(key => key.nextElementSibling?.textContent);
+    expect(rows).toEqual(['memory · 2 messages', 'input · 1 message']);
+    expect(slot('span-processor-mutations')).toBeNull();
   });
 
   it('shows cleared and removed messages, with the removed ids collapsed', () => {
     render(<SpanProcessorAttributes span={processorClearedMessagesSpan} />);
-    expect(screen.getByText('Cleared messages')).toBeTruthy();
+    expect(valueOf('Cleared messages')).toBe('2 messages');
     expect(screen.getByText('Removed messages')).toBeTruthy();
     fireEvent.click(screen.getByText('Removed ids (2)'));
     expect(slot('span-processor-mutations')?.textContent).toContain('msg-1');
@@ -218,6 +236,17 @@ describe.each(LAYOUTS)('processor spans in the %s layout', (_name, renderView) =
 
   it('leaves out the output of a processor that returned nothing', () => {
     render(renderView(processorSystemMutationSpan));
+    expect(screen.queryByText('Output')).toBeNull();
+    expect(section('Attributes')).toBeTruthy();
+  });
+
+  it('leaves out the empty output of a processor that retyped its span', () => {
+    // e.g. memory recall: a processor run recorded as a memory operation.
+    render(
+      renderView(
+        makeSpan({ ...processorSystemMutationSpan, spanId: 'span-memory-recall', spanType: SpanType.MEMORY_OPERATION }),
+      ),
+    );
     expect(screen.queryByText('Output')).toBeNull();
     expect(section('Attributes')).toBeTruthy();
   });

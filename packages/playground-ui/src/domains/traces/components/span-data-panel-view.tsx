@@ -13,6 +13,7 @@ import {
   SpanProcessorAttributes,
 } from './span-payload';
 import { asCoreSpan } from './span-payload/span-payload-registry';
+import { SpanToolsSection } from './span-payload/span-tools-section';
 import { SpanRunId, SpanSummaryDescription } from './span-summary-description';
 import { SpanModelSummary } from './span-token-usage';
 import { TraceIdButton } from './trace-id-button';
@@ -262,6 +263,7 @@ function SpanDataPanelContent({
         >
           <SpanOutputRenderer span={span} />
         </SpanPayloadSection>
+        <SpanToolsSection span={span} />
         <SpanPayloadSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} hasPreview={false}>
           {null}
         </SpanPayloadSection>

@@ -157,8 +157,9 @@ export function SpanPayloadProcessor({ value, hidden = [] }: SpanPayloadProcesso
 
 /**
  * A processor span's input, without the step and retry count that Attributes
- * shows as run context.
+ * shows as run context, nor the tools and tool choice the Tools section shows.
  */
 export function SpanPayloadProcessorInput({ value }: { value: ProcessorSpanPayload<ProcessorRunInputByPhase> }) {
-  return <SpanPayloadProcessor value={value} hidden={Object.keys(getProcessorRunContext(value))} />;
+  const toolKeys = 'tools' in value.data && hasItems(value.data.tools) ? ['tools', 'toolChoice'] : [];
+  return <SpanPayloadProcessor value={value} hidden={[...Object.keys(getProcessorRunContext(value)), ...toolKeys]} />;
 }
