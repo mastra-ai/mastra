@@ -26,13 +26,24 @@ jobs:
       head_sha: ${{ steps.filter.outputs.head_sha }}
       full_suite: ${{ steps.filter.outputs.full_suite }}
     steps:
+      - name: Checkout repo
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
+
       - name: Check for code changes
         id: filter
         env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          # Only a workflow_call (e.g. the alpha cron) and the Changesets release PR run the
-          # build and tests. Regular PRs rely on the Changed Test Gate and lint checks. A fork
-          # can pick any branch name, so the release PR head must also live in this repository.
+          # A workflow_call (e.g. the alpha cron) and the Changesets release PR run the full
+          # suite. Every other PR runs only the tests affected by its diff. A fork can pick any
+          # branch name, so the release PR head must also live in this repository.
           FULL_SUITE: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')) }}
         run: |
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
@@ -41,8 +52,23 @@ jobs:
           if [ "$FULL_SUITE" = "true" ]; then
             echo "Full suite requested; running Prebuild."
             echo "has_code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! changed_files=$(git diff --name-only "$BASE_SHA...$HEAD_SHA"); then
+            echo "Could not diff the PR; running affected tests fail-closed."
+            echo "has_code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          code_files=$(printf '%s\n' "$changed_files" \
+            | grep -vE '^(docs/|examples/|\.changeset/|explorations/)' \
+            | grep -v '^$' || true)
+          if [ -n "$code_files" ]; then
+            echo "Code changes found; running affected tests."
+            echo "has_code=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Regular PR; skipping Prebuild build and tests."
+            echo "Only docs, examples, changesets or explorations changed; skipping Prebuild."
             echo "has_code=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -91,8 +117,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       run_full: ${{ steps.compute.outputs.run_full }}
-      test_files: ${{ steps.compute.outputs.test_files }}
-      unit_test_files: ${{ steps.compute.outputs.unit_test_files }}
+      has_unit_tests: ${{ steps.compute.outputs.has_unit_tests }}
       e2e_test_files: ${{ steps.compute.outputs.e2e_test_files }}
       e2e_changed: ${{ steps.compute.outputs.e2e_changed }}
       experiment_worker_e2e_changed: ${{ steps.compute.outputs.experiment_worker_e2e_changed }}
@@ -165,9 +190,10 @@ jobs:
           const count = data.count || 0;
           const total = data.testFiles || 1;
           const ratio = count / total;
-          const hasChangedSource = changedFiles.some(file => /\/src\/.*\.(ts|tsx)$/.test(file) && !/__fixtures__|\/fixtures\//.test(file));
+          // Only the release PR and workflow calls run the full suite. A regular PR runs its
+          // affected tests, however many there are.
           const fullSuite = process.env.FULL_SUITE === 'true';
-          const runFull = fullSuite || (hasChangedSource && ratio > 0.5);
+          const runFull = fullSuite;
 
           const output = (line) => fs.appendFileSync(process.env.GITHUB_OUTPUT, line);
           const outputList = (name, files) => {
@@ -218,7 +244,7 @@ jobs:
             file.startsWith('packages/memory/') || file === '.github/workflows/prebuild.yml'
           );
           const { studioE2eChanged } = require('./.github/scripts/studio-e2e-routing.cjs');
-          const e2eChanged = fullSuite || studioE2eChanged(nonMarkdownChangedFiles) || affected(isExternalE2eTest) || (runFull && hasChangedSource) || changed(file =>
+          const e2eChanged = fullSuite || studioE2eChanged(nonMarkdownChangedFiles) || affected(isExternalE2eTest) || changed(file =>
             (file.startsWith('e2e-tests/') &&
               !file.startsWith('e2e-tests/experiment-worker/') &&
               !file.startsWith('e2e-tests/_local-registry-setup/')) ||
@@ -277,16 +303,16 @@ jobs:
           );
 
           if (runFull) {
-            console.error(fullSuite ? 'Full suite requested — running full suite.' : 'Above 50% threshold — running full suite.');
+            console.error('Full suite requested — running full suite.');
             output('run_full=true\n');
-            output('test_files=\n');
-            output('unit_test_files=\n');
+            output('has_unit_tests=false\n');
             output('e2e_test_files=\n');
           } else {
             console.error(`Running ${count} affected tests.`);
             output('run_full=false\n');
-            outputList('test_files', affectedTests);
-            outputList('unit_test_files', unitTestFiles);
+            // The unit list can reach hundreds of KB, so it travels as an artifact; the job
+            // output only says whether there is one.
+            output(`has_unit_tests=${unitTestFiles.length > 0}\n`);
             outputList('e2e_test_files', e2eTestFiles);
           }
           NODE
@@ -340,7 +366,7 @@ jobs:
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       has_code: ${{ needs.changes.outputs.has_code }}
-      unit_test_files: ${{ needs.affected-tests.outputs.unit_test_files }}
+      has_unit_tests: ${{ needs.affected-tests.outputs.has_unit_tests }}
       e2e_test_files: ${{ needs.affected-tests.outputs.e2e_test_files }}
       run_full: ${{ needs.affected-tests.outputs.run_full }}
     secrets:
@@ -509,30 +535,53 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          # A cancelled run says nothing about whether the suite is red or green.
-          if [ "$FAILED" != "true" ] && [ "$CANCELLED" = "true" ]; then
+          # A cancelled run was usually superseded by a newer push, which reports instead.
+          # Failures seen before the cancel would otherwise alert once per superseded run.
+          if [ "$CANCELLED" = "true" ]; then
             echo "Run was cancelled; leaving the alert state unchanged."
             exit 0
           fi
+
+          # Judge earlier runs by their test jobs, the same way this run is judged. The run
+          # conclusion is not usable: a newer push marks a run cancelled even when every job
+          # already passed, so a green run would be skipped and each later green push would
+          # alert "green again" against the last red one.
+          # Prints failure, success, or nothing when the run was cancelled or unreadable.
+          job_state() {
+            local conclusions
+            conclusions=$(gh api --paginate "$1?per_page=100" \
+              --jq '.jobs[] | select(.name | startswith("Notify Slack") | not) | .conclusion' 2>/dev/null) || return 0
+            if grep -qxE 'failure|timed_out' <<< "$conclusions"; then
+              echo failure
+            elif [ -n "$conclusions" ] && ! grep -qx cancelled <<< "$conclusions"; then
+              echo success
+            fi
+          }
 
           # A re-run keeps its run ID, so its previous state is the earlier attempt of this run.
           # Cancelled attempts are skipped, so walk back to the newest one that finished.
           previous=''
           attempt=$((GITHUB_RUN_ATTEMPT - 1))
           while [ -z "$previous" ] && [ "$attempt" -ge 1 ]; do
-            previous=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$attempt" \
-              --jq '.conclusion // ""' 2>/dev/null || true)
-            [ "$previous" = "cancelled" ] && previous=''
+            previous=$(job_state "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$attempt/jobs")
             attempt=$((attempt - 1))
           done
 
           # Otherwise this run is still in progress, so the newest completed run is the previous one.
-          if [ -z "$previous" ] && ! previous=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/prebuild.yml/runs" \
-            -f branch="$BRANCH" -f event=pull_request -f status=completed -F per_page=20 \
-            --jq "[.workflow_runs[] | select(.id != $GITHUB_RUN_ID and .conclusion != \"cancelled\")][0].conclusion // \"none\""); then
-            echo "::warning::Could not read the previous run; alerting on failure only."
-            previous=unknown
+          # Most release PR runs are cancelled by newer pushes, so walk past them.
+          if [ -z "$previous" ]; then
+            if ! runs=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/prebuild.yml/runs" \
+              -f branch="$BRANCH" -f event=pull_request -f status=completed -F per_page=50 \
+              --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | \"\(.id)/attempts/\(.run_attempt)\""); then
+              echo "::warning::Could not read the previous run; alerting on failure only."
+              previous=unknown
+            fi
+            for run in $runs; do
+              previous=$(job_state "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs")
+              [ -n "$previous" ] && break
+            done
           fi
+          previous=${previous:-none}
           echo "Previous release PR run: $previous; this run failed: $FAILED"
 
           pr="<$PR_URL|#$PR_NUMBER $PR_TITLE>"

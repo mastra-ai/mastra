@@ -1,17 +1,20 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import * as coreStorage from '@mastra/core/storage';
 import type {
-  TraceAggregateCountDistinctField,
-  TraceAggregateDimension,
+  SpanAggregateResponse,
+  TraceAggregateInterval,
   TraceAggregateResponse,
   TraceAggregateRow,
+  TraceQueryTenantScope,
+  TrustedAggregateMeasure,
+  TrustedSpanAggregatePlan,
   TrustedTraceAggregateHavingPredicate,
-  TrustedTraceAggregateMeasure,
-  TrustedTraceAggregateMeasureName,
+  TrustedTraceAggregateOrderBy,
   TrustedTraceAggregatePlan,
 } from '@mastra/core/storage';
 
 import { TABLE_METRIC_EVENTS } from './ddl';
+import { compileClickHouseSpanSelection } from './span-query';
 import type { CompiledClickHouseTraceQuery } from './trace-query';
 import {
   compileClickHouseTraceCandidates,
@@ -27,6 +30,9 @@ import {
 const DIMENSION_SQL: Record<string, string> = {
   entityType: 'r.entityType',
   entityName: 'r.entityName',
+  name: 'r.name',
+  spanType: 'r.spanType',
+  entityId: 'r.entityId',
   environment: 'r.environment',
   status: TRACE_STATUS_SQL,
   serviceName: 'r.serviceName',
@@ -38,6 +44,70 @@ const DIMENSION_SQL: Record<string, string> = {
   organizationId: 'r.organizationId',
   experimentId: 'r.experimentId',
 };
+
+/** Span column expressions (alias `r`, a `selected` span row) for each groupable span dimension. */
+const SPAN_DIMENSION_SQL: Record<string, string> = Object.fromEntries(
+  [
+    'name',
+    'spanType',
+    'entityType',
+    'entityId',
+    'entityName',
+    'parentEntityType',
+    'parentEntityName',
+    'rootEntityType',
+    'rootEntityName',
+    'environment',
+    'status',
+    'serviceName',
+    'executionSource',
+    'threadId',
+    'resourceId',
+    'userId',
+    'sessionId',
+    'organizationId',
+    'experimentId',
+  ].map(field => [field, `r.${field}`]),
+);
+
+/** What `aggregateTraces()` and `aggregateSpans()` plans share; each scope's plan is assignable to it. */
+interface AggregatePlan {
+  timeRange: { from: string; to: string };
+  scope?: TraceQueryTenantScope;
+  dimensions: readonly string[];
+  interval?: TraceAggregateInterval;
+  measures: readonly TrustedAggregateMeasure<string>[];
+  having?: TrustedTraceAggregateHavingPredicate<string>;
+  orderBy: TrustedTraceAggregateOrderBy<string, string>;
+  limit: number;
+}
+
+/**
+ * The population an aggregate groups: `ctes` end with `from`, whose rows (alias `r`) carry
+ * `traceId`, `startedAt`, `endedAt`, the `usageKey` columns, and every dimension column.
+ */
+interface AggregateSource {
+  ctes: string[];
+  from: string;
+  dimensionSql: (field: string) => string;
+  /** Whether a row is an error; trace roots and spans spell it differently. */
+  isErrorSql: string;
+  /** Columns that tie a usage metric row to one population row: `traceId`, or `traceId` + `spanId`. */
+  usageKey: readonly ('traceId' | 'spanId')[];
+  /**
+   * Bounds the usage scan. Traces semi-join their candidates; spans read the tenant's usage rows
+   * since `from` instead, because ClickHouse re-runs a CTE at every reference and a second
+   * selection pass doubled memory (X46). A `traceId IN` semi-join is no general fix either:
+   * `traceId` is not in the metric table's sort key, so it cuts the read only when the selection
+   * has few traces, and reads more than this scan for `model_generation` (X52).
+   *
+   * The cost of that read grows with how far back `from` is, since it covers every usage row
+   * written since then, not just the window's; installs that write no `organizationId` read all
+   * usage in the store. Bounding it above (`timestamp < to + lag`) would drop usage recorded more
+   * than `lag` after a span starts, so it is left to hosts that accept that limit.
+   */
+  usageBound: string;
+}
 
 const PERCENTILES: Record<string, number> = {
   'duration.p50': 0.5,
@@ -60,26 +130,60 @@ const COMPARISON_SQL = { eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>
  */
 export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
+  // Candidates hold each trace's current root once (ROOT_VERSION_ORDER), already filtered.
   const ctes = compileClickHouseTraceCandidates(plan, '*', parameters, { oneRootPerTrace: true });
-  // Candidates may hold unmerged copies of a trace's root; count each trace once, keeping the copy
-  // with the lowest dedupeKey.
-  ctes.push(`trace_roots AS (
-    SELECT *
-    FROM candidates
-    ORDER BY traceId, dedupeKey
-    LIMIT 1 BY traceId
-  )`);
+  return compileClickHouseAggregate(plan, parameters, {
+    ctes,
+    from: 'candidates',
+    dimensionSql: field => {
+      if (field.startsWith('metadata.')) {
+        return traceMetadataValueSql(parameters.add(field.slice('metadata.'.length), 'String'));
+      }
+      return lookupDimensionSql(DIMENSION_SQL, field);
+    },
+    isErrorSql: 'isNotNull(r.error)',
+    usageKey: ['traceId'],
+    usageBound: 'traceId IN (SELECT traceId FROM candidates)',
+  });
+}
 
-  const dimensionSql = (field: TraceAggregateDimension): string => {
-    if (field.startsWith('metadata.')) {
-      return traceMetadataValueSql(parameters.add(field.slice('metadata.'.length), 'String'));
-    }
-    const sql = Object.hasOwn(DIMENSION_SQL, field) ? DIMENSION_SQL[field] : undefined;
-    if (sql === undefined) throw new Error(`Unsupported trusted trace-aggregate field: ${field}`);
-    return sql;
-  };
-  const distinctSql = (field: TraceAggregateCountDistinctField): string =>
-    field === 'traceId' ? 'r.traceId' : dimensionSql(field);
+/**
+ * Compiles a trusted span aggregate plan over the spans `querySpans()` selects. Usage is
+ * attributed by `(traceId, spanId)`, so only the span that recorded a metric row carries it.
+ */
+export function compileClickHouseSpanAggregate(plan: TrustedSpanAggregatePlan): CompiledClickHouseTraceQuery {
+  const parameters = new ParameterBuilder();
+  const fields = [
+    ...plan.dimensions,
+    ...plan.measures.flatMap(measure =>
+      measure.type === 'countDistinct' && measure.field !== 'traceId' ? [measure.field] : [],
+    ),
+  ];
+  const ctes = compileClickHouseSpanSelection(plan, fields, parameters);
+  return compileClickHouseAggregate(plan, parameters, {
+    ctes,
+    from: 'selected',
+    dimensionSql: field => lookupDimensionSql(SPAN_DIMENSION_SQL, field),
+    isErrorSql: "r.status = 'error'",
+    usageKey: ['traceId', 'spanId'],
+    usageBound: 'isNotNull(spanId)',
+  });
+}
+
+function lookupDimensionSql(columns: Record<string, string>, field: string): string {
+  const sql = Object.hasOwn(columns, field) ? columns[field] : undefined;
+  if (sql === undefined) throw new Error(`Unsupported trusted aggregate field: ${field}`);
+  return sql;
+}
+
+function compileClickHouseAggregate(
+  plan: AggregatePlan,
+  parameters: ParameterBuilder,
+  source: AggregateSource,
+): CompiledClickHouseTraceQuery {
+  const { ctes } = source;
+  const dimensionSql = source.dimensionSql;
+  const distinctSql = (field: string): string => (field === 'traceId' ? 'r.traceId' : dimensionSql(field));
 
   const dimensionColumns = plan.dimensions.map((_, index) => `d${index}`);
   const distinctColumns = new Map<string, string>();
@@ -94,8 +198,8 @@ export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan)
   }
   factColumns.push(
     `toFloat64(${durationMsSql('r.startedAt', 'r.endedAt')}) AS durationMs`,
-    `isNotNull(r.error) AS isError`,
-    `cityHash64(r.traceId) AS traceSeed`,
+    `${source.isErrorSql} AS isError`,
+    `cityHash64(${source.usageKey.map(column => `r.${column}`).join(', ')}) AS traceSeed`,
   );
   if (plan.interval !== undefined) {
     const intervalMs = coreStorage.TRACE_AGGREGATE_INTERVAL_MS[plan.interval];
@@ -109,8 +213,8 @@ export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan)
   const hasCost = measureKinds.has('cost');
   let usageJoin = '';
   if (hasCost || measureKinds.has('tokens')) {
-    ctes.push(compileUsageCte(plan, parameters));
-    usageJoin = '\n    LEFT JOIN usage u ON u.traceId = r.traceId';
+    ctes.push(compileUsageCte(plan, parameters, source));
+    usageJoin = `\n    LEFT JOIN usage u ON ${source.usageKey.map(column => `u.${column} = r.${column}`).join(' AND ')}`;
     // A non-matching LEFT JOIN row holds column defaults (0, ''), not NULL, unless
     // `join_use_nulls` is set, so every usage column is read through the `hasUsage` marker.
     // A usage-bearing trace with no row of a name contributes 0; any other trace contributes NULL.
@@ -125,14 +229,14 @@ export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan)
   }
   ctes.push(`facts AS (
     SELECT ${factColumns.join(',\n      ')}
-    FROM trace_roots r${usageJoin}
+    FROM ${source.from} r${usageJoin}
   )`);
 
   // More than one distinct priced unit in the group; NULL (treated as false) when nothing is priced.
   const mixedUnitsSql = 'minOrNull(unitMin) != maxOrNull(unitMax)';
 
   // All measures are Float64 so having literals compare as Float64 parameters.
-  const measureSql = (name: TrustedTraceAggregateMeasureName): string => {
+  const measureSql = (name: string): string => {
     if (name === 'count') return 'toFloat64(count())';
     const rule = measureRule(name);
     // The -OrNull aggregates skip the NULL per-trace values of traces that are not usage-bearing
@@ -155,7 +259,7 @@ export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan)
     // percentiles, rankings, and `truncated`; it stays approximate past 8192 traces (Decision 3).
     if (percentile !== undefined) return `quantileDeterministic(${percentile})(durationMs, traceSeed)`;
     const measure = plan.measures.find(
-      (candidate): candidate is Extract<TrustedTraceAggregateMeasure, { type: 'countDistinct' }> =>
+      (candidate): candidate is Extract<TrustedAggregateMeasure<string>, { type: 'countDistinct' }> =>
         candidate.type === 'countDistinct' && candidate.name === name,
     );
     const distinctColumn = measure && distinctColumns.get(measure.field);
@@ -163,7 +267,7 @@ export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan)
     return `toFloat64(uniqExact(${distinctColumn}))`;
   };
 
-  const compileHaving = (predicate: TrustedTraceAggregateHavingPredicate): string => {
+  const compileHaving = (predicate: TrustedTraceAggregateHavingPredicate<string>): string => {
     if (predicate.type === 'boolean') {
       return predicate.args.map(arg => `(${compileHaving(arg)})`).join(predicate.operator === 'and' ? ' AND ' : ' OR ');
     }
@@ -272,30 +376,32 @@ function usageMetricIndex(name: string): number {
 }
 
 /**
- * Builds `usage`: one row per candidate trace that has at least one token metric row, holding
- * per-name token sums (`t<i>`, indexed by `TRACE_AGGREGATE_USAGE_METRIC_NAMES`) and the trace's
- * pricing state. Metric rows are matched by traceId, usage metric name, tenant scope, and
- * `timestamp >= from` only: a trace that starts in the window can emit metrics after `to`, and
- * the candidates semi-join already bounds the scan.
+ * Builds `usage`: one row per usage key (a trace, or a span) that has at least one token metric
+ * row, holding per-name token sums (`t<i>`, indexed by `TRACE_AGGREGATE_USAGE_METRIC_NAMES`) and
+ * its pricing state. Metric rows are matched by the source's usage bound, usage metric name,
+ * tenant scope, and `timestamp >= from` only: a trace or span that starts in the window can emit
+ * metrics after `to`. For spans that makes the read cost grow with the age of `from` (see
+ * `usageBound`).
  *
  * Rows are deduplicated with `LIMIT 1 BY metricId` at query time. `ReplacingMergeTree` only
  * collapses rows with equal sort keys `(name, timestamp, metricId)`, so retried copies with
  * different timestamps never merge, and copies with equal keys stay separate until a background
  * merge runs.
  */
-function compileUsageCte(plan: TrustedTraceAggregatePlan, parameters: ParameterBuilder): string {
+function compileUsageCte(plan: AggregatePlan, parameters: ParameterBuilder, source: AggregateSource): string {
+  const key = source.usageKey.join(', ');
   const names = USAGE_METRIC_NAMES.map(name => parameters.add(name, 'String'));
   const costNames = coreStorage.TRACE_AGGREGATE_COST_METRIC_NAMES.map(name => names[usageMetricIndex(name)]);
   const costRow = `name IN (${costNames.join(', ')})`;
   const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
   const tenant = compileTenantScope(plan.scope, parameters);
-  const priced = `${costRow} AND isNotNull(estimatedCost) AND isNotNull(costUnit) AND NOT hasError`;
+  const priced = `${costRow} AND isNotNull(estimatedCost) AND isNotNull(costUnit) AND (NOT hasError OR partialCost)`;
   const failed = `${costRow} AND (hasError OR (isNotNull(estimatedCost) AND isNull(costUnit)))`;
   // Retried writes share a metricId, and copies with different timestamps never merge under the
   // (name, timestamp, metricId) sort key. Collapse them with a parallel, spillable aggregation
   // that deterministically keeps the latest copy; one tuple keeps every column from that copy.
   return `usage AS (
-    SELECT traceId,
+    SELECT ${key},
       toUInt8(1) AS hasUsage,
       ${names.map((name, index) => `sumIf(value, name = ${name}) AS t${index}`).join(',\n      ')},
       sumIf(assumeNotNull(estimatedCost), ${priced}) AS cost,
@@ -304,27 +410,29 @@ function compileUsageCte(plan: TrustedTraceAggregatePlan, parameters: ParameterB
       minIf(assumeNotNull(costUnit), ${priced}) AS unitMin,
       maxIf(assumeNotNull(costUnit), ${priced}) AS unitMax
     FROM (
-      SELECT traceId,
+      SELECT ${key},
         latest.1 AS name,
         latest.2 AS value,
         latest.3 AS estimatedCost,
         latest.4 AS costUnit,
-        latest.5 AS hasError
+        latest.5 AS hasError,
+        latest.6 AS partialCost
       FROM (
-        SELECT traceId,
-          argMax(tuple(name, value, estimatedCost, costUnit, hasError), timestamp) AS latest
+        SELECT ${key},
+          argMax(tuple(name, value, estimatedCost, costUnit, hasError, partialCost), timestamp) AS latest
         FROM (
-          SELECT traceId, metricId, timestamp, name, value, estimatedCost, costUnit,
-            if(${costRow}, ifNull(JSONHas(costMetadata, 'error') AND JSONType(costMetadata, 'error') != 'Null', 0), 0) AS hasError
+          SELECT ${key}, metricId, timestamp, name, value, estimatedCost, costUnit,
+            if(${costRow}, ifNull(JSONHas(costMetadata, 'error') AND JSONType(costMetadata, 'error') != 'Null', 0), 0) AS hasError,
+            if(${costRow}, ifNull(JSONExtractString(costMetadata, 'error') = 'partial_cost', 0), 0) AS partialCost
           FROM ${TABLE_METRIC_EVENTS}
-          WHERE traceId IN (SELECT traceId FROM candidates)
+          WHERE ${source.usageBound}
             AND name IN (${names.join(', ')})
             AND timestamp >= ${from}${tenant}
         )
-        GROUP BY traceId, metricId
+        GROUP BY ${key}, metricId
       )
     )
-    GROUP BY traceId
+    GROUP BY ${key}
   )`;
 }
 
@@ -332,12 +440,30 @@ function nullableNumber(value: unknown): number | null {
   return value === null || value === undefined ? null : Number(value);
 }
 
-export async function aggregateTraces(
+export function aggregateTraces(
   client: ClickHouseClient,
   plan: TrustedTraceAggregatePlan,
   timeoutMs: number,
 ): Promise<TraceAggregateResponse> {
-  const result = await runWithClickHouseTraceQueryTimeout(client, { timeoutMs }, compileClickHouseTraceAggregate(plan));
+  return runAggregate(client, plan, compileClickHouseTraceAggregate(plan), timeoutMs);
+}
+
+export async function aggregateSpans(
+  client: ClickHouseClient,
+  plan: TrustedSpanAggregatePlan,
+  timeoutMs: number,
+): Promise<SpanAggregateResponse> {
+  // Measures holds exactly the requested names, which the core record types cannot express.
+  return (await runAggregate(client, plan, compileClickHouseSpanAggregate(plan), timeoutMs)) as SpanAggregateResponse;
+}
+
+async function runAggregate(
+  client: ClickHouseClient,
+  plan: AggregatePlan,
+  compiled: CompiledClickHouseTraceQuery,
+  timeoutMs: number,
+): Promise<TraceAggregateResponse> {
+  const result = await runWithClickHouseTraceQueryTimeout(client, { timeoutMs }, compiled);
 
   let truncated: boolean;
   let resultRows: Record<string, unknown>[];

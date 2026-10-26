@@ -4,7 +4,12 @@
  * directions are `factory-session` notifications on the receiver's stored thread.
  */
 
-import type { NotificationPriority, NotificationRecord, NotificationsStorage } from '@mastra/core/notifications';
+import type {
+  NotificationPriority,
+  NotificationRecord,
+  NotificationsStorage,
+  SendNotificationSignalInput,
+} from '@mastra/core/notifications';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -21,26 +26,65 @@ import {
 import type { FactoryDeliveryController, FactoryDeliveryResult } from './deliver.js';
 import { workItemNumber } from './read-tools.js';
 import { reportNotification, workItemReportAttributes, workItemReportRecipients } from './reports.js';
+import { requirePerson } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
+import { listSideSessions, sessionModel } from './side-sessions.js';
 
 /** Messages plus replies, per sender session, per target thread, per window. */
 export const SIGNAL_RATE_LIMIT = 10;
 export const SIGNAL_RATE_WINDOW_MS = 10 * 60 * 1000;
 /** How many recent `factory-session` notifications on a thread the rate and duplicate checks read. */
 const RECENT_SCAN = 100;
-const RATE_LIMITED = 'Too many messages to that session in the last 10 minutes; wait before sending more.';
+/** How often a waiting queue is reconsidered. Delivery still waits for a free slot in the window. */
+const QUEUE_FLUSH_MS = 1000;
 
+/** A message accepted past the delivery cap, held until the window has a free slot. */
+interface PendingMessage {
+  notification: Omit<SendNotificationSignalInput, 'source'>;
+  /** When the sender handed it over. Oldest goes first. */
+  acceptedAt: number;
+  actor: { actorId: string; actorType: 'human' | 'agent' };
+}
+
+interface QueuedDelivery extends PendingMessage {
+  /** The moment a slot in the window is expected to free. Set once, when it joins the queue. */
+  deliverAt: number;
+  target: { sessionId: string; threadId: string };
+}
+
+/**
+ * Waiting messages, per sender session and target thread, oldest first.
+ * Process-local: a restart drops what was still waiting, the same as a message
+ * that had not been handed to the tool yet. Delivered messages live in the
+ * notification store and are unaffected.
+ */
+const pendingQueues = new Map<string, QueuedDelivery[]>();
+const flushTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+const queueOwners = new WeakMap<object, number>();
+let nextQueueOwnerId = 0;
+
+const queueKey = (owner: object, senderSessionId: string, threadId: string): string => {
+  let id = queueOwners.get(owner);
+  if (id === undefined) {
+    nextQueueOwnerId += 1;
+    id = nextQueueOwnerId;
+    queueOwners.set(owner, id);
+  }
+  return `${id}\0${senderSessionId}\0${threadId}`;
+};
 export interface FactoryMessaging {
   controller: FactoryDeliveryController;
   notifications: Pick<NotificationsStorage, 'listNotifications' | 'getNotification'>;
 }
 
 export interface FactoryMessagingToolDependencies {
-  sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'listByOrigin'>;
+  sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'listByOrigin' | 'setOriginMuted'>;
   workItems: Pick<
     WorkItemsStorage,
     | 'findActiveRunBindingForSession'
     | 'getForProject'
+    | 'hasRunBindingForSession'
     | 'listSessionSubscriptions'
     | 'listRunBindings'
     | 'listWorkItemSubscribers'
@@ -98,22 +142,161 @@ export function createFactoryMessagingTools(
     if (row.visibility === 'private' && row.userId !== scope.userId) return 'private';
     return null;
   };
-  /** Messages, replies and reports (not progress) this session put on a thread inside the rate window. */
-  const overRateLimit = (records: NotificationRecord[]) => {
+  const overRateLimit = (records: NotificationRecord[]) => countedInWindow(records).length >= SIGNAL_RATE_LIMIT;
+  /** This session's delivered messages on the thread that still sit inside the window, oldest first. */
+  const countedInWindow = (records: NotificationRecord[]): NotificationRecord[] => {
     const since = Date.now() - SIGNAL_RATE_WINDOW_MS;
-    return (
-      records.filter(
+    return records
+      .filter(
         record =>
           // Everything this session sends counts except coalescing progress updates.
           record.kind !== 'progress' &&
           record.kind !== 'stage' &&
           record.attributes?.['from-session'] === scope.sessionId &&
           record.createdAt.getTime() >= since,
-      ).length >= SIGNAL_RATE_LIMIT
-    );
+      )
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   };
+  /**
+   * When the next message can be delivered: one window after the oldest message
+   * that has to age out to free a slot, given how many are already waiting.
+   */
+  const nextDeliveryAt = (counted: NotificationRecord[], waiting: number): number => {
+    const blocking = counted[counted.length + waiting - SIGNAL_RATE_LIMIT];
+    return (blocking ? blocking.createdAt.getTime() : Date.now()) + SIGNAL_RATE_WINDOW_MS;
+  };
+  const queuedResult = (deliverAt: number) => ({
+    delivered: 'queued' as const,
+    deliverAt: new Date(deliverAt).toISOString(),
+    note: `Queued; it will be delivered at about ${new Date(deliverAt).toISOString()}. Do not send it again.`,
+  });
   const recent = (notifications: FactoryMessaging['notifications'], threadId: string) =>
     notifications.listNotifications({ threadId, source: FACTORY_SESSION_NOTIFICATION_SOURCE, limit: RECENT_SCAN });
+
+  const actor = (): QueuedDelivery['actor'] => ({
+    actorId: human ? scope.userId : `agent:${scope.threadId}`,
+    actorType: human ? 'human' : 'agent',
+  });
+
+  /**
+   * Deliver now, or hold until the window has a slot. The cap limits how fast
+   * messages are delivered, not whether they are accepted.
+   */
+  const accept = async (
+    messaging: FactoryMessaging,
+    target: { sessionId: string; threadId: string },
+    notification: Omit<SendNotificationSignalInput, 'source'>,
+  ): Promise<
+    { notificationId: string; delivered: FactoryDeliveryResult['delivered'] } | ReturnType<typeof queuedResult>
+  > => {
+    const counted = countedInWindow(await recent(messaging.notifications, target.threadId));
+    if (counted.length < SIGNAL_RATE_LIMIT) {
+      const result = await deliverFactorySessionNotification({
+        controller: messaging.controller,
+        sessions: deps.sessions,
+        runs: deps.workItems,
+        target,
+        notification,
+      });
+      if (result.delivered === 'skipped') throw unavailable(result);
+      await audit({
+        targetSessionId: target.sessionId,
+        priority: notification.priority ?? 'medium',
+        kind: notification.kind,
+        delivery: result.delivered,
+      });
+      return { notificationId: result.notificationId, delivered: result.delivered };
+    }
+    const key = queueKey(deps, scope.sessionId, target.threadId);
+    const waiting = pendingQueues.get(key)?.length ?? 0;
+    const deliverAt = nextDeliveryAt(counted, waiting);
+    enqueue(key, {
+      notification,
+      acceptedAt: Date.now(),
+      actor: actor(),
+      deliverAt,
+      target,
+    });
+    return queuedResult(deliverAt);
+  };
+
+  const enqueue = (key: string, delivery: QueuedDelivery): void => {
+    const queue = pendingQueues.get(key) ?? [];
+    queue.push(delivery);
+    queue.sort((a, b) => a.acceptedAt - b.acceptedAt);
+    pendingQueues.set(key, queue);
+    scheduleFlush(key);
+  };
+
+  /**
+   * Deliver the oldest waiting message once the window has a free slot, then
+   * the next, in the order they were accepted. A target that is gone by then
+   * is dropped and recorded, the same way an undeliverable live message is.
+   */
+  const flush = async (key: string): Promise<void> => {
+    flushTimers.delete(key);
+    const queue = pendingQueues.get(key);
+    if (!queue || queue.length === 0) {
+      pendingQueues.delete(key);
+      return;
+    }
+    const messaging = await deps.messaging();
+    if (!messaging) {
+      scheduleFlush(key);
+      return;
+    }
+    const head = queue[0];
+    if (!head || head.deliverAt > Date.now()) {
+      scheduleFlush(key);
+      return;
+    }
+    const counted = countedInWindow(await recent(messaging.notifications, head.target.threadId));
+    if (counted.length >= SIGNAL_RATE_LIMIT) {
+      scheduleFlush(key);
+      return;
+    }
+    queue.shift();
+    if (queue.length === 0) pendingQueues.delete(key);
+    const result = await deliverFactorySessionNotification({
+      controller: messaging.controller,
+      sessions: deps.sessions,
+      runs: deps.workItems,
+      target: head.target,
+      notification: head.notification,
+    });
+    await deps.auditRecorder.record({
+      orgId: scope.orgId,
+      actorId: head.actor.actorId,
+      actorType: head.actor.actorType,
+      action: 'factory.agent.signaled',
+      factoryProjectId: scope.factoryProjectId,
+      targets: [{ type: 'session', id: head.target.sessionId }],
+      metadata: {
+        targetSessionId: head.target.sessionId,
+        priority: head.notification.priority ?? 'medium',
+        kind: head.notification.kind,
+        delivery: result.delivered === 'skipped' ? 'dropped' : result.delivered,
+        ...(result.delivered === 'skipped' ? { reason: result.reason } : {}),
+      },
+    });
+    if (queue.length > 0) scheduleFlush(key);
+  };
+
+  function scheduleFlush(key: string): void {
+    if (flushTimers.has(key)) return;
+    if (!pendingQueues.get(key)?.[0]) return;
+    const timer = setTimeout(() => {
+      flushTimers.delete(key);
+      void flush(key).catch(() => {
+        // A failed flush leaves the rest of the queue waiting; the next tick retries the head.
+        if ((pendingQueues.get(key)?.length ?? 0) > 0) scheduleFlush(key);
+      });
+    }, QUEUE_FLUSH_MS);
+    // Keep the wait on the real clock. A fake clock that jumps the window would
+    // skip a timer scheduled for the old deadline, and the message would sit.
+    timer.unref?.();
+    flushTimers.set(key, timer);
+  }
 
   /** On turns nobody signed in started, only sessions working on items this session follows. */
   const followedWorkers = async () => {
@@ -147,6 +330,7 @@ export function createFactoryMessagingTools(
       'Send a message to another session in this Factory: a work item role session, or a teammate session you can see.',
       'Replies come back to this session as `factory-session` notifications with kind `reply` and an `in-reply-to` attribute naming your message.',
       'Priority `medium` (default) wakes an idle session and waits for a busy one to finish its step; use `urgent` only to make it stop and change course.',
+      '`delivered` is `woken` when the session was idle and is now running, `mid-run` when it was already busy and will read the message when its run next checks in.',
       ...(scope.interactive
         ? []
         : ['On this turn you can only message your side sessions and sessions working on items this session follows.']),
@@ -179,15 +363,10 @@ export function createFactoryMessagingTools(
       });
       if (!threadId) throw new Error('The session is not available (thread-not-found).');
 
-      if (overRateLimit(await recent(messaging.notifications, threadId))) {
-        throw new Error(RATE_LIMITED);
-      }
-
-      const result = await deliverFactorySessionNotification({
-        controller: messaging.controller,
-        sessions: deps.sessions,
-        target: { sessionId, threadId },
-        notification: {
+      return accept(
+        messaging,
+        { sessionId, threadId },
+        {
           kind: 'message',
           priority,
           summary: text,
@@ -198,10 +377,7 @@ export function createFactoryMessagingTools(
             ...senderAttributes(scope),
           },
         },
-      });
-      if (result.delivered === 'skipped') throw unavailable(result);
-      await audit({ targetSessionId: sessionId, priority, kind: 'message', delivery: result.delivered });
-      return { notificationId: result.notificationId, delivered: result.delivered };
+      );
     },
   });
 
@@ -264,13 +440,11 @@ export function createFactoryMessagingTools(
           record.attributes?.['from-session'] === scope.sessionId,
       );
       if (answered) throw new Error(`You already answered ${inReplyTo}.`);
-      if (overRateLimit(onSenderThread)) throw new Error(RATE_LIMITED);
 
-      const result = await deliverFactorySessionNotification({
-        controller: messaging.controller,
-        sessions: deps.sessions,
-        target: { sessionId: fromSession, threadId: fromThread },
-        notification: {
+      return accept(
+        messaging,
+        { sessionId: fromSession, threadId: fromThread },
+        {
           kind: 'reply',
           priority: 'high',
           summary: text,
@@ -282,10 +456,7 @@ export function createFactoryMessagingTools(
             ...(status ? { status } : {}),
           },
         },
-      });
-      if (result.delivered === 'skipped') throw unavailable(result);
-      await audit({ targetSessionId: fromSession, priority: 'high', kind: 'reply', delivery: result.delivered });
-      return { notificationId: result.notificationId, delivered: result.delivered };
+      );
     },
   });
 
@@ -295,6 +466,12 @@ export function createFactoryMessagingTools(
     let recipients: Array<{ sessionId: string; threadId: string }>;
     let attributes: Record<string, string> = {};
     if (scope.origin) {
+      // The origin can mute this side session; the session keeps working, its reports just stop.
+      // Blocked reports still go through, since the session cannot go on until the origin answers.
+      const row = await deps.sessions.getBySessionId(scope.sessionId);
+      if (row?.originMutedAt && status !== 'blocked') {
+        return { delivered: 0, recipients: [], muted: true, note: 'Your origin muted your reports; keep working.' };
+      }
       recipients = [scope.origin];
     } else {
       const binding = await deps.workItems.findActiveRunBindingForSession({
@@ -319,16 +496,37 @@ export function createFactoryMessagingTools(
 
     const messaging = await requireMessaging();
     const notification = reportNotification({ sender, status, message: text, attributes });
-    const results: Array<{ sessionId: string; delivered: FactoryDeliveryResult['delivered']; reason?: string }> = [];
+    const results: Array<{
+      sessionId: string;
+      delivered: FactoryDeliveryResult['delivered'] | 'queued';
+      reason?: string;
+      deliverAt?: string;
+    }> = [];
     for (const recipient of recipients) {
       // Progress replaces itself while unread; anything else can wake a follower, so it counts.
       if (status !== 'progress' && overRateLimit(await recent(messaging.notifications, recipient.threadId))) {
-        results.push({ sessionId: recipient.sessionId, delivered: 'skipped', reason: 'rate-limited' });
+        const counted = countedInWindow(await recent(messaging.notifications, recipient.threadId));
+        const key = queueKey(deps, scope.sessionId, recipient.threadId);
+        const waiting = pendingQueues.get(key)?.length ?? 0;
+        const at = nextDeliveryAt(counted, waiting);
+        enqueue(key, {
+          notification,
+          acceptedAt: Date.now(),
+          actor: actor(),
+          deliverAt: at,
+          target: recipient,
+        });
+        results.push({
+          sessionId: recipient.sessionId,
+          delivered: 'queued',
+          deliverAt: new Date(at).toISOString(),
+        });
         continue;
       }
       const result = await deliverFactorySessionNotification({
         controller: messaging.controller,
         sessions: deps.sessions,
+        runs: deps.workItems,
         target: recipient,
         notification,
       });
@@ -341,11 +539,108 @@ export function createFactoryMessagingTools(
         delivery: result.delivered,
       });
     }
-    const delivered = results.filter(result => result.delivered !== 'skipped').length;
-    if (delivered === 0 && results.every(result => result.reason === 'rate-limited')) throw new Error(RATE_LIMITED);
-    return { delivered, recipients: results };
+    const delivered = results.filter(result => result.delivered !== 'skipped' && result.delivered !== 'queued').length;
+    const queued = results.filter(result => result.delivered === 'queued').length;
+    return {
+      delivered,
+      recipients: results,
+      ...(queued > 0
+        ? {
+            queued,
+            note: 'Queued past the delivery cap. It will be delivered when the window allows. Do not send it again.',
+          }
+        : {}),
+    };
   }
 
+  const listSide = createTool({
+    id: 'factory_list_side_sessions',
+    description: [
+      'List the side sessions this session started with factory_start_session: state (running, parked waiting on an answer, idle), last report, whether you muted it, its model, and the work item it works on.',
+      'Use the session ids with factory_signal_session and factory_switch_session_model. On a turn a person started, also with factory_answer_approval, factory_unsubscribe_session and factory_subscribe_session.',
+    ].join(' '),
+    inputSchema: z
+      .object({
+        state: z.enum(['running', 'parked', 'idle']).optional().describe('Only sessions in this state.'),
+        muted: z.boolean().optional().describe('true for only muted sessions, false for only unmuted ones.'),
+      })
+      .strict(),
+    execute: async ({ state, muted }) => {
+      const messaging = await deps.messaging();
+      const sessions = await listSideSessions(
+        {
+          sessions: deps.sessions,
+          workItems: deps.workItems,
+          notifications: messaging?.notifications ?? null,
+          isRunning: async sessionId => (await messaging?.controller.getSession(sessionId))?.stream.isActive() ?? false,
+          model: messaging
+            ? sessionId => sessionModel(messaging.controller, deps.sessions, deps.workItems, sessionId)
+            : undefined,
+        },
+        scope,
+      );
+      return {
+        sessions: sessions.filter(
+          row => (!state || row.state === state) && (muted === undefined || (row.mutedAt !== null) === muted),
+        ),
+      };
+    },
+  });
+
+  /** A side session this session started, or an error naming why it isn't one. */
+  const ownSideSession = async (sessionId: string) => {
+    const row = await deps.sessions.getBySessionId(sessionId);
+    if (
+      !row ||
+      row.orgId !== scope.orgId ||
+      row.factoryProjectId !== scope.factoryProjectId ||
+      row.originSessionId !== scope.sessionId
+    ) {
+      throw new Error(`Session ${sessionId} is not a side session you started; see factory_list_side_sessions.`);
+    }
+    return row;
+  };
+  const sideSessionId = z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .describe('The side session, from factory_list_side_sessions.');
+
+  const unsubscribe = createTool({
+    id: 'factory_unsubscribe_session',
+    description:
+      "Mute a side session you started: its reports and run-end notices stop reaching you, but it keeps working. Approval requests and blocked reports still arrive, since the session can't go on without an answer. Undo with factory_subscribe_session. Only on a turn a person started.",
+    inputSchema: z.object({ sessionId: sideSessionId }).strict(),
+    execute: async ({ sessionId }) => {
+      requirePerson(scope, 'mute a side session');
+      const row = await ownSideSession(sessionId);
+      if (row.originMutedAt) return { sessionId, muted: true, mutedAt: row.originMutedAt.toISOString() };
+      await deps.sessions.setOriginMuted({ sessionId, muted: true });
+      const updated = await deps.sessions.getBySessionId(sessionId);
+      return { sessionId, muted: true, mutedAt: updated?.originMutedAt?.toISOString() ?? null };
+    },
+  });
+
+  const subscribe = createTool({
+    id: 'factory_subscribe_session',
+    description:
+      'Unmute a side session you muted with factory_unsubscribe_session, so its reports reach you again. Reports it sent while muted are not replayed. Only on a turn a person started.',
+    inputSchema: z.object({ sessionId: sideSessionId }).strict(),
+    execute: async ({ sessionId }) => {
+      requirePerson(scope, 'unmute a side session');
+      const row = await ownSideSession(sessionId);
+      if (row.originMutedAt) await deps.sessions.setOriginMuted({ sessionId, muted: false });
+      return { sessionId, muted: false };
+    },
+  });
+
   if (scope.kind === 'worker') return { factory_message_origin: reply };
-  return { factory_signal_session: signal, factory_message_origin: reply };
+  return {
+    factory_signal_session: signal,
+    factory_message_origin: reply,
+    factory_list_side_sessions: listSide,
+    factory_unsubscribe_session: unsubscribe,
+    factory_subscribe_session: subscribe,
+  };
 }

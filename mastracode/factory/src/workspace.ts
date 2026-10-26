@@ -59,7 +59,7 @@ import type { SessionEnvironmentRepositoryState } from './session/environment-st
 import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import { timedPhase } from './timing.js';
+import { instrumentMethods, timed, timedPhase } from './timing.js';
 import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
@@ -80,13 +80,15 @@ export const BUNDLED_FACTORY_SKILLS_PATH =
  * addition to the bundled skills so projects can add (or override) Factory
  * skills without patching the installed package. Candidates cover the cwd
  * variants the dev server runs with (`repo root`, `--dir src/mastra` which
- * runs with cwd `src/mastra/public`).
+ * runs with cwd `src/mastra/public`), then the platform build output when
+ * the server runs from its parent directory.
  */
 export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): string | undefined {
   const candidates = [
     join(cwd, 'src', 'mastra', 'public', 'factory-skills'),
     join(cwd, 'public', 'factory-skills'),
     join(cwd, 'factory-skills'),
+    join(cwd, 'output', 'factory-skills'),
   ];
   return candidates.find(
     candidate => path.normalize(candidate) !== path.normalize(BUNDLED_FACTORY_SKILLS_PATH) && existsSync(candidate),
@@ -105,7 +107,10 @@ export const FACTORY_SKILL_NAMES = new Set([
   'factory-triage',
 ]);
 
-/** Review skills only sessions with an active review run binding may discover or load. */
+/**
+ * Review skills only sessions with an active review run binding, or unbound
+ * side sessions a user session started, may discover or load.
+ */
 export const REVIEW_ONLY_FACTORY_SKILLS = new Set([
   'factory-gitlab-rereview',
   'factory-gitlab-review',
@@ -345,7 +350,7 @@ export interface CreateWorkspaceFactoryOptions {
   /** Work-items storage used to resolve the session's run-binding role, so
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
-  workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession'>;
+  workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'hasRunBindingForSession'>;
   /** Projects storage used to resolve a session's project environment. */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
@@ -585,9 +590,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // than on the context it was constructed with.
   const skillReviewChecks = new Map<string, () => Promise<boolean>>();
 
-  return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
+  const resolve = async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
-    const resolvedSession = ctx?.resourceId ? await resolveSourceControlSession(sourceControls, ctx.resourceId) : null;
+    const resolvedSession = ctx?.sessionId ? await resolveSourceControlSession(sourceControls, ctx.sessionId) : null;
     const session = resolvedSession?.session ?? null;
     const sourceControl = resolvedSession?.provider;
 
@@ -616,6 +621,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
     const factorySandbox = sandboxConfig;
     const githubProvider = sourceControl.github;
+    const gitIdentity = githubProvider?.gitIdentity ?? { name: user.name, email: user.email };
 
     const storage = sourceControl.storage;
     const projectRepository = session.projectRepositoryId
@@ -801,32 +807,36 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         () => {
           // The provider reads its own settings (resources, images) from the
           // project's stored document, never from the context.
-          const sandbox = factorySandbox.create(
-            {
-              sessionId: session.id,
-              // Physical VM id persisted from a prior start (undefined on first
-              // start). Providers that reattach by physical id use it to resume the
-              // original VM instead of provisioning a replacement.
-              sandboxId: session.sandboxId ?? undefined,
-              repoFullName,
-              ...(environment
-                ? environmentSandboxContext(environment, {
-                    orgId: session.orgId,
-                    getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
-                  })
-                : {
-                    // Stored nullable; the context speaks `undefined` for absent.
-                    setupCommand: projectRepository.setupCommand ?? undefined,
-                    // Deferred call, only dereferenced when a provider needs the repo
-                    // outside the VM (template build time).
-                    getRepositoryAccess: () =>
-                      sourceControl.versionControl.getRepositoryAccess({
-                        orgId: session.orgId,
-                        repositoryId: repository.id,
-                      }),
-                  }),
-            },
-            sandboxSettings,
+          const sandbox = instrumentMethods(
+            factorySandbox.create(
+              {
+                sessionId: session.id,
+                // Physical VM id persisted from a prior start (undefined on first
+                // start). Providers that reattach by physical id use it to resume the
+                // original VM instead of provisioning a replacement.
+                sandboxId: session.sandboxId ?? undefined,
+                repoFullName,
+                ...(environment
+                  ? environmentSandboxContext(environment, {
+                      orgId: session.orgId,
+                      getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
+                    })
+                  : {
+                      // Stored nullable; the context speaks `undefined` for absent.
+                      setupCommand: projectRepository.setupCommand ?? undefined,
+                      // Deferred call, only dereferenced when a provider needs the repo
+                      // outside the VM (template build time).
+                      getRepositoryAccess: () =>
+                        sourceControl.versionControl.getRepositoryAccess({
+                          orgId: session.orgId,
+                          repositoryId: repository.id,
+                        }),
+                    }),
+              },
+              sandboxSettings,
+            ),
+            `sandbox(${session.id})`,
+            ['start', 'stop', 'executeCommand', 'reconnect'],
           );
           // Attached inside the construction closure, so exactly once per
           // instance: `constructSessionEntry` runs on every open and would
@@ -904,12 +914,23 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         sessionId: session.sessionId,
       });
       if (!binding || !ctx?.threadId) return binding;
-      return binding.threadId === ctx.threadId && binding.resourceId === ctx.resourceId ? binding : null;
+      return binding.threadId === ctx.threadId && binding.sessionId === ctx.sessionId ? binding : null;
     };
-    // Fails closed: without a readable active review binding, review skills stay hidden.
+    // Fails closed: review skills need a readable active review binding, or a
+    // side session (started by a user session to run a skill on request) that
+    // has never been bound. Any binding (another role, revoked, or several
+    // ambiguous active ones) keeps the side session on the binding check.
     const isReviewSession = async (): Promise<boolean> => {
       if (!workItems) return false;
       try {
+        if (session.originSessionId) {
+          const everBound = await workItems.hasRunBindingForSession({
+            orgId: session.orgId,
+            factoryProjectId: connection.factoryProjectId,
+            sessionId: session.sessionId,
+          });
+          if (!everBound) return true;
+        }
         return isActiveReviewBinding(await findSessionBinding(), session.orgId);
       } catch {
         return false;
@@ -1189,6 +1210,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         storage: storage.sessions,
       });
       await checkoutSessionBranch(target, workdir, {
+        identity: gitIdentity,
         branch: session.branch,
         baseBranch: session.baseBranch || projectRepository.branch || repository.defaultBranch,
         token,
@@ -1334,6 +1356,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
             const synced = await timedPhase(`workspace.sync(${repo.slug})`, () =>
               syncEnvironmentRepository(target, entry.dir, {
+                identity: gitIdentity,
                 branch: session.branch,
                 defaultBranch: repo.defaultBranch,
                 token,
@@ -1531,4 +1554,5 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     fireEagerStart();
     return workspace;
   };
+  return (context: DynamicWorkspaceContext) => timed('workspace.resolve', () => resolve(context));
 }

@@ -1,5 +1,5 @@
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
-import { workItemBranch, workItemNumber } from '../work-item-branch.js';
+import { legacyGithubWorkItemBranch, workItemBranch, workItemNumber } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
@@ -37,9 +37,11 @@ function checkoutHint(item: FactoryRuleItemContext): string {
       headBranch
     );
   }
-  const refresh = `${deepen} && git fetch --filter=blob:none origin refs/pull/${number}/head && git checkout -B ${sessionBranch} FETCH_HEAD`;
+  const legacyBranch = legacyGithubWorkItemBranch(sessionBranch);
+  const guard = `session_branch=$(git symbolic-ref --short HEAD) && { test "$session_branch" = "${sessionBranch}"${legacyBranch ? ` || test "$session_branch" = "${legacyBranch}"` : ''}; }`;
+  const refresh = `${guard} && ${deepen} && git fetch --filter=blob:none origin refs/pull/${number}/head && git checkout -B "$session_branch" FETCH_HEAD`;
   return (
-    `The PR head is checked out on branch \`${sessionBranch}\` with the repository history: do not run \`gh pr checkout\`. ` +
+    `The PR head is checked out on the session branch with the repository history: do not run \`gh pr checkout\`. ` +
     `Past file contents load on demand, so keep \`git log -S\` and \`-G\` to a path. ` +
     `If \`gh pr view ${number} --json headRefOid --jq .headRefOid\` differs from \`git rev-parse HEAD\`, refresh with \`${refresh}\`. ` +
     `Read the change with \`gh pr diff ${number}\`.${headBranch}`
@@ -56,6 +58,46 @@ function isSafeBranchName(value: string): boolean {
     !value.endsWith('/') &&
     !value.endsWith('.lock')
   );
+}
+
+function commitSha(value: unknown): string | undefined {
+  return typeof value === 'string' && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(value) ? value.toLowerCase() : undefined;
+}
+
+/**
+ * Names the head this pass covers. Without it every pass on a pull request
+ * opens with the same text, so a reviewer reading a re-review kickoff in the
+ * session that recorded the last verdict can take it for a repeat and restate
+ * that verdict instead of reviewing what was pushed since.
+ */
+function headLine(item: FactoryRuleItemContext, priorReviewCompleted: boolean): string {
+  const head = commitSha(item.metadata?.pullRequestHeadSha);
+  const reviewed = priorReviewCompleted ? commitSha(item.metadata?.reviewedHeadSha) : undefined;
+  const recorded = item.metadata?.reviewVerdict;
+  const priorPass = recorded === 'approve' || recorded === 'request changes' ? `recorded "${recorded}"` : 'reviewed';
+  if (head && reviewed && head !== reviewed) {
+    return (
+      `\n\nThis is a new review pass for head \`${head}\`. The previous pass ${priorPass} on \`${reviewed}\`; ` +
+      `that pass does not cover this head. Review the changes since \`${reviewed}\` and record a verdict for \`${head}\`.`
+    );
+  }
+  // The recorded head can lag the change request when a push's head was not
+  // recorded, so a match is not proof that nothing was pushed.
+  if (head && reviewed) {
+    return (
+      `\n\nThis is a new review pass. The previous pass ${priorPass} on \`${reviewed}\`, which is also the last recorded head. ` +
+      `Read the current head first: if it moved, review the changes since \`${reviewed}\` and record a verdict for the new head; ` +
+      `otherwise check the change request for anything new and record a verdict for \`${head}\`.`
+    );
+  }
+  if (head) return `\n\nThis review pass covers head \`${head}\`. Record your verdict for that head.`;
+  if (reviewed) {
+    return (
+      `\n\nThis is a new review pass. The previous pass ${priorPass} on \`${reviewed}\`. ` +
+      `Read the current head first; if it moved, review the changes since \`${reviewed}\` and record a verdict for the new head.`
+    );
+  }
+  return '';
 }
 
 export function hasRecordedVerdict(item: FactoryRuleItemContext): boolean {
@@ -95,7 +137,7 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
     idempotencyKey: `${context.ingress.id}:${skillName}`,
     role: 'review',
     skillName,
-    arguments: `${sourceRef(context.item)}\n\n${checkoutHint(context.item)}`,
+    arguments: `${sourceRef(context.item)}\n\n${checkoutHint(context.item)}${headLine(context.item, priorReviewCompleted)}`,
     // Same-stage re-entry mid-pass: the skill is already live in the card's
     // session, so continue it with a compact kickoff. After a recorded verdict
     // the next pass is a re-review, which needs its full skill delivered.

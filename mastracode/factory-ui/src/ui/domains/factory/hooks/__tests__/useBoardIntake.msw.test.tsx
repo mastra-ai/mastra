@@ -213,7 +213,7 @@ describe('useBoardIntake board-bound sources', () => {
   });
 
   it('withholds the Linear feed from a custom board with nothing bound to it', async () => {
-    stubIntake([bindings[0]!], ['factory-1'], issues);
+    stubIntake([bindings[0]], ['factory-1'], issues);
 
     const { result } = renderIntake('factory-1', releaseBoard);
 
@@ -662,7 +662,7 @@ describe('useBoardIntake Jira gating', () => {
     const { result } = renderIntake('factory-1');
 
     await waitFor(() => expect(result.current.candidates).toHaveLength(1));
-    const candidate = result.current.candidates[0]!;
+    const candidate = result.current.candidates[0];
     expect(candidate.sourceKey).toBe('jira-issue-acme-eng-42');
     expect(candidate.source).toBe('jira-issue');
     expect(candidate.url).toBe('https://acme.atlassian.net/browse/ENG-42');

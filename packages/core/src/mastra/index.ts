@@ -24,7 +24,7 @@ import { isRunLocalTopic } from '../events/topics';
 import type { Event, EventCallback } from '../events/types';
 import type { Harness } from '../harness';
 import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
-import { Knowledge } from '../knowledge';
+import type { Knowledge } from '../knowledge';
 import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
@@ -1099,8 +1099,8 @@ export class Mastra<
                 // for workflow ids only known to this instance's public registry
                 // (e.g. background scheduler runs like the notification
                 // dispatcher) — they have no cross-instance consumer.
-                const isOwnedHere = (() => {
-                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId, topic)) return true;
+                const isOwnedHere = (guarded = false) => {
+                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId, topic, guarded)) return true;
                   let parent = data?.parentWorkflow as
                     | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
                     | undefined;
@@ -1108,7 +1108,7 @@ export class Mastra<
                   while (parent && depth < 16) {
                     const pwfId = parent.workflowId;
                     const prId = parent.runId;
-                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId, topic)) return true;
+                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId, topic, guarded)) return true;
                     parent = parent.parentWorkflow as typeof parent;
                     depth++;
                   }
@@ -1121,8 +1121,13 @@ export class Mastra<
                   if (rId && rId.startsWith('sched_wf_')) return true;
                   if (rId && rId.startsWith(`sched_${NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID}_`)) return true;
                   return false;
-                })();
-                if (isOwnedHere) {
+                };
+                if (isOwnedHere()) {
+                  if (topic === 'workflows' && !isOwnedHere(true)) {
+                    return Promise.resolve(self.getStorage()?.getStore('workflows')).then(store =>
+                      target.publish(topic, event, { localOnly: !store?.supportsWorkflowStepGuards() }),
+                    );
+                  }
                   // A local-only start in a process that consumes no workflow
                   // events (e.g. `MASTRA_WORKERS=false`) is dropped by the
                   // transport. Say so instead of hanging silently.
@@ -3987,16 +3992,16 @@ export class Mastra<
    * Whether this internal workflow event must stay in this process. A
    * run-scoped registration always qualifies; an unscoped one does unless it
    * was registered `distributed`. A distributed workflow's `workflows` events
-   * stay local while this process runs workflow workers (so runs stay pinned
-   * to the process that started them) and only cross processes when it
-   * can't run them itself. Its `workflows-finish` events always cross, since
+   * stay local on stores without atomic occurrence guards. Guarded stores
+   * allow workers to publish reclaimable continuations through the broker.
+   * Its `workflows-finish` events always cross, since
    * the process waiting for the result may not be the one that ran it.
    */
-  #isProcessLocalInternalWorkflow(id: string, runId: string, topic: string): boolean {
+  #isProcessLocalInternalWorkflow(id: string, runId: string, topic: string, guarded: boolean): boolean {
     if (!this.__hasInternalWorkflow(id, runId)) return false;
     if (this.#internalMastraWorkflows[`${id}:${runId}`]) return true;
     if (!this.#distributedInternalWorkflowIds.has(id)) return true;
-    return topic === 'workflows' && this.__hasLocalWorkflowExecution();
+    return topic === 'workflows' && !guarded && this.__hasLocalWorkflowExecution();
   }
 
   /**
@@ -4237,20 +4242,71 @@ export class Mastra<
     if (runs.length > 0) {
       this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
     }
-    await runWithConcurrency(runs, this.#recoveryConfig.workflowConcurrency, async runSnapshot => {
-      try {
-        const workflow = this.getWorkflowById(runSnapshot.workflowName);
-        const run = await workflow.createRun({ runId: runSnapshot.runId });
-        await run.restart();
-        this.#logger.debug('Restarted workflow run', { workflow: runSnapshot.workflowName, runId: runSnapshot.runId });
-      } catch (error) {
-        this.#logger.error('Failed to restart workflow run', {
-          workflow: runSnapshot.workflowName,
-          runId: runSnapshot.runId,
-          error,
+    await runWithConcurrency(runs, this.#recoveryConfig.workflowConcurrency, runSnapshot =>
+      this.#restartWorkflowRun(runSnapshot.workflowName, runSnapshot.runId),
+    );
+  }
+
+  /**
+   * Restarts one active run. A run whose ownership lease is still live belongs to another
+   * process (or to this one before a crash), so it is skipped and re-checked once the lease
+   * could have lapsed: a live owner keeps renewing it, an orphaned run is then recovered.
+   * A re-check that throws is retried with backoff; `recheck.failures` counts the
+   * consecutive ones.
+   */
+  async #restartWorkflowRun(workflowName: string, runId: string, recheck?: { failures: number }): Promise<void> {
+    try {
+      const workflow = this.getWorkflowById(workflowName);
+      const run = await workflow.createRun({ runId });
+      // A re-check can find the run already settled or suspended by its owner.
+      if (recheck && run.workflowRunStatus !== 'running' && run.workflowRunStatus !== 'waiting') return;
+      await run.restart();
+      this.#logger.debug('Restarted workflow run', { workflow: workflowName, runId });
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'WORKFLOW_RESTART_RUN_OWNED') {
+        this.#logger.debug('Skipped restarting workflow run owned by a live process', {
+          workflow: workflowName,
+          runId,
         });
+        const leaseExpiresAt = error.details?.leaseExpiresAt;
+        const retryAt = typeof leaseExpiresAt === 'string' ? Date.parse(leaseExpiresAt) : NaN;
+        this.#scheduleWorkflowRecoveryRecheck(workflowName, runId, Number.isNaN(retryAt) ? Date.now() : retryAt);
+        return;
       }
-    });
+      const context = { workflow: workflowName, runId, error };
+      if (!recheck) {
+        this.#logger.error('Failed to restart workflow run', context);
+        return;
+      }
+      if (recheck.failures >= DURABLE_RECOVERY_RECHECK_MAX_RETRIES) {
+        this.#logger.error(
+          'Failed to re-check workflow run for recovery; leaving it for the next boot or a manual restart()',
+          context,
+        );
+        return;
+      }
+      this.#logger.warn('Failed to re-check workflow run for recovery; retrying', context);
+      this.#scheduleWorkflowRecoveryRecheck(
+        workflowName,
+        runId,
+        Date.now() + DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS * 2 ** recheck.failures,
+        recheck.failures + 1,
+      );
+    }
+  }
+
+  #scheduleWorkflowRecoveryRecheck(workflowName: string, runId: string, retryAt: number, failures = 0): void {
+    if (this.#shuttingDown) return;
+    const key = JSON.stringify(['workflow', workflowName, runId]);
+    clearTimeout(this.#durableRecoveryRechecks.get(key));
+    const delay = Math.max(0, retryAt - Date.now()) + Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS;
+    const timer = setTimeout(() => {
+      this.#durableRecoveryRechecks.delete(key);
+      if (this.#shuttingDown) return;
+      void this.#trackDurableRecovery(this.#restartWorkflowRun(workflowName, runId, { failures }));
+    }, delay);
+    timer.unref?.();
+    this.#durableRecoveryRechecks.set(key, timer);
   }
 
   /**
@@ -4325,8 +4381,8 @@ export class Mastra<
         let failed = 0;
         let skipped = 0;
 
-        for (const agent of durableAgents) {
-          if (this.#shuttingDown) break;
+        await runWithConcurrency(durableAgents, DEFAULT_RESTART_CONCURRENCY, async agent => {
+          if (this.#shuttingDown) return;
           try {
             const result = await agent.recoverActiveRuns();
             for (const run of result.recovered) {
@@ -4345,7 +4401,7 @@ export class Mastra<
               error,
             });
           }
-        }
+        });
 
         return { agents: durableAgents.length, recovered, succeeded, failed, skipped };
       })(),
@@ -4370,10 +4426,11 @@ export class Mastra<
   }
 
   /**
-   * Re-check a run another execution drove when it was skipped, once that
-   * execution's claim could have lapsed. Runs this process drives carry no
-   * `retryAt` and are not re-checked. A re-check that throws is retried with
-   * backoff; `failures` counts the consecutive ones.
+   * Re-check skipped runs after a foreign claim could have lapsed or a
+   * recovery wait timed out. Timed-out originals keep their ownership and
+   * defer rechecks until settlement without starting duplicate executions.
+   * A re-check that throws is retried with backoff; `failures` counts the
+   * consecutive ones.
    */
   #scheduleDurableRecoveryRecheck(
     agent: DurableAgentLike,

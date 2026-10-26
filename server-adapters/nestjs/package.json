@@ -1,6 +1,6 @@
 {
   "name": "@mastra/nestjs",
-  "version": "0.2.38-alpha.3",
+  "version": "0.2.39-alpha.3",
   "description": "Mastra NestJS adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
     "hono": "^4.13.7"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.115",
+    "@ai-sdk/openai": "^2.0.135",
     "@internal/lint": "workspace:*",
     "@mastra/server-adapters-test-suite": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
@@ -55,9 +55,9 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "supertest": "^7.1.1",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
-    "vitest": "^4.1.11",
+    "vitest": "^4.1.12",
     "zod": "^3.25.0"
   },
   "peerDependencies": {

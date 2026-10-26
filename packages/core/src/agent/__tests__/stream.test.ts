@@ -17,46 +17,44 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
   const engineOnly = version === 'v1' || version === 'v2';
 
   describe(`${version} - stream`, () => {
-    if (engineOnly) {
-      it('should persist the full message after a successful run', async () => {
-        const mockMemory = new MockMemory();
-        const agent = new Agent({
-          id: 'test-agent',
-          name: 'Test Agent',
-          instructions: 'test',
-          model: dummyResponseModel,
-          memory: mockMemory,
-        });
-
-        let stream;
-        if (version === 'v1') {
-          stream = await agent.streamLegacy('repeat tool calls', {
-            threadId: 'thread-1',
-            resourceId: 'resource-1',
-          });
-        } else {
-          stream = await agent.stream('repeat tool calls', {
-            memory: {
-              thread: 'thread-1',
-              resource: 'resource-1',
-            },
-          });
-        }
-
-        await stream.consumeStream();
-
-        const result = await mockMemory.recall({ threadId: 'thread-1', resourceId: 'resource-1' });
-        const messages = result.messages;
-        // Check that the last message matches the expected final output
-        expect(
-          messages[messages.length - 1]?.content?.parts?.some(
-            p => p.type === 'text' && p.text?.includes('Dummy response'),
-          ),
-        ).toBe(true);
+    it('should persist the full message after a successful run', async () => {
+      const mockMemory = new MockMemory();
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: dummyResponseModel,
+        memory: mockMemory,
       });
-    }
 
-    if (version === 'v2') {
+      let stream;
+      if (version === 'v1') {
+        stream = await agent.streamLegacy('repeat tool calls', {
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+        });
+      } else {
+        stream = await agent.stream('repeat tool calls', {
+          memory: {
+            thread: 'thread-1',
+            resource: 'resource-1',
+          },
+        });
+      }
+
+      await stream.consumeStream();
+
+      const result = await mockMemory.recall({ threadId: 'thread-1', resourceId: 'resource-1' });
+      const messages = result.messages;
+      // Check that the last message matches the expected final output
+      expect(
+        messages[messages.length - 1]?.content?.parts?.some(
+          p => p.type === 'text' && p.text?.includes('Dummy response'),
+        ),
+      ).toBe(true);
+    });
+
+    if (version !== 'v1') {
       it('keeps direct stream consumption working when a thread subscriber is attached', async () => {
         const mockMemory = new MockMemory();
         const agent = new Agent({

@@ -13,7 +13,12 @@ import type {
   QueryTracesGroupedInput,
   QueryTracesInput,
 } from './observability';
-import type { AggregateTracesArgs, AggregateTracesResponse } from './observability-route-types';
+import type {
+  AggregateSpansArgs,
+  AggregateSpansResponse,
+  AggregateTracesArgs,
+  AggregateTracesResponse,
+} from './observability-route-types';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -687,6 +692,60 @@ describe('Observability Methods', () => {
     });
   });
 
+  describe('aggregateSpans()', () => {
+    const request: AggregateSpansArgs = {
+      timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+      where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+      groupBy: ['status'],
+      interval: '1d',
+      measures: ['count', 'countDistinct.traceId'],
+    };
+    const response: AggregateSpansResponse = {
+      rows: [
+        {
+          dimensions: { status: 'error' },
+          bucket: '2026-08-01T00:00:00.000Z',
+          measures: { count: 4, 'countDistinct.traceId': 2 },
+        },
+      ],
+      truncated: false,
+    };
+
+    it('should post the span aggregate request body unchanged with a typed response', async () => {
+      mockSuccessfulResponse(response);
+
+      const result = await client.aggregateSpans(request);
+
+      expectTypeOf(result).toEqualTypeOf<AggregateSpansResponse>();
+      expect(result).toEqual(response);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/spans/aggregate`,
+        expect.objectContaining({ method: 'POST', body: JSON.stringify(request) }),
+      );
+    });
+
+    it('should not retry validation errors or execution timeouts', async () => {
+      const retryingClient = new MastraClient({ ...clientOptions, retries: 2, backoffMs: 0 });
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: 'TRACE_QUERY_INVALID', issues: [] }), { status: 422 }),
+      );
+      await expect(retryingClient.aggregateSpans(request)).rejects.toMatchObject({ status: 422 });
+
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: 'TRACE_QUERY_EXECUTION_TIMEOUT', message: 'timed out' }), { status: 504 }),
+      );
+      await expect(retryingClient.aggregateSpans(request)).rejects.toMatchObject({ status: 504 });
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects model and provider as span groupBy dimensions at the type level', () => {
+      // @ts-expect-error model/provider are not span aggregate dimensions in v1 (OBS-693)
+      const invalid: AggregateSpansArgs = { ...request, groupBy: ['model'] };
+      expect(invalid.groupBy).toEqual(['model']);
+    });
+  });
+
   describe('trace-query discovery', () => {
     const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
 
@@ -773,9 +832,10 @@ describe('Observability Methods', () => {
 
       const result = await client.queryTraceThreads(request);
 
-      expectTypeOf(result).toEqualTypeOf<QueryTraceThreadsResult>();
-      expectTypeOf<QueryTraceThreadsResult['threads'][number]>().toEqualTypeOf<{ threadId: string }>();
-      expectTypeOf<QueryTraceThreadsResult['threads'][number]>().not.toHaveProperty('traceId');
+      expectTypeOf(result).toEqualTypeOf<QueryTraceThreadsResult<typeof request>>();
+      expectTypeOf<QueryTraceThreadsResult<typeof request>['threads'][number]>().toEqualTypeOf<{ threadId: string }>();
+      expectTypeOf<QueryTraceThreadsResult['threads'][number]>().toHaveProperty('firstTraceId');
+      expectTypeOf<QueryTraceThreadsResult['threads'][number]['traceCount']>().toEqualTypeOf<number>();
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/threads/query`,
         expect.objectContaining({

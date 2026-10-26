@@ -313,7 +313,7 @@ describe('toFlowGraph', () => {
   it('maps nodes to sized flow nodes and typed edges', () => {
     const { nodes, edges } = toFlowGraph([node('a'), node('b')], [edge('a', 'b'), edge('b', 'a')]);
     expect(nodes[0]).toMatchObject({ id: 'a', type: 'knowledgeNode' });
-    expect(nodes[0]!.data.size).toBeGreaterThanOrEqual(NODE_SIZE_MIN);
+    expect(nodes[0].data.size).toBeGreaterThanOrEqual(NODE_SIZE_MIN);
     expect(edges.map(e => e.data?.linkType)).toEqual(['wikilink', 'wikilink']);
     expect(edges.every(e => e.type === 'knowledgeLink')).toBe(true);
   });
@@ -322,8 +322,8 @@ describe('toFlowGraph', () => {
     const positions = new Map([['a', { x: 10, y: 20 }]]);
     const { nodes } = toFlowGraph([node('a')], [], positions);
     // 'a' is an unreferenced dot (size 26): top-left = center - 13.
-    expect(nodes[0]!.data.size).toBe(NODE_SIZE_DOT);
-    expect(nodes[0]!.position).toEqual({ x: 10 - 13, y: 20 - 13 });
+    expect(nodes[0].data.size).toBe(NODE_SIZE_DOT);
+    expect(nodes[0].position).toEqual({ x: 10 - 13, y: 20 - 13 });
   });
 
   it('forces the focused node to max size and labels it even with zero incoming', () => {
@@ -370,11 +370,11 @@ describe('runLayout', () => {
     const positions = runLayout(mixed, dense);
     for (let i = 0; i < mixed.length; i++) {
       for (let j = i + 1; j < mixed.length; j++) {
-        const p1 = positions.get(mixed[i]!.id)!;
-        const p2 = positions.get(mixed[j]!.id)!;
+        const p1 = positions.get(mixed[i].id)!;
+        const p2 = positions.get(mixed[j].id)!;
         const distance = Math.hypot(p1.x - p2.x, p1.y - p2.y);
         // Every pair clears the sum of radii — no node sits inside another.
-        expect(distance).toBeGreaterThan(mixed[i]!.size / 2 + mixed[j]!.size / 2);
+        expect(distance).toBeGreaterThan(mixed[i].size / 2 + mixed[j].size / 2);
       }
     }
   });

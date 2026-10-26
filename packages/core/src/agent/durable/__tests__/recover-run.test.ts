@@ -179,6 +179,8 @@ describe('DurableAgent.recover(runId)', () => {
 
     const entry = globalRunRegistry.get('run-1');
     expect(entry).toBeDefined();
+    expect(entry?.agentId).toBe(agent.id);
+    expect(agent.runRegistry.get('run-1')?.agentId).toBe(agent.id);
     expect(entry?.messageList).toBeDefined();
     expect(entry?.requestContext?.get?.('userId')).toBe('u-1');
 
@@ -1460,6 +1462,7 @@ describe('DurableAgent.recover(runId) tracing', () => {
     const recordedSpan = (id: string): any => ({
       id,
       exportSpan: () => ({ id }),
+      snapshot: () => ({ id }),
       createChildSpan: () => recordedSpan(`${id}-model`),
       end: (opts?: { output?: unknown }) => endedSpans.push({ id, output: opts?.output }),
     });

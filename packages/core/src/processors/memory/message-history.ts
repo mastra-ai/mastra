@@ -204,83 +204,79 @@ export class MessageHistory implements Processor {
     const { threadId, resourceId } = context;
     const memoryRunState = parseMemoryRequestContext(requestContext)?.runState?.();
 
+    // The runner records failures on this span and ends it.
     const span = this.memorySpan(observabilityContext);
     span?.update({ attributes: { lastMessages: this.lastMessages } });
 
-    try {
-      // 1. Fetch historical messages from storage (as DB format)
-      const storedBoundary = getMemoryTokenBoundary(parseMemoryRequestContext(requestContext)?.thread);
-      const boundary =
-        this.tokenLimit &&
-        storedBoundary?.maxTokens === this.tokenLimit.maxTokens &&
-        storedBoundary.atMaxRemoveTokens === this.tokenLimit.atMaxRemoveTokens
-          ? storedBoundary
-          : undefined;
-      const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}:${JSON.stringify(boundary)}`;
-      const loadMessages = async () => {
-        if (this.tokenLimit) {
-          const result = await loadMessageHistory({
-            storage: this.storage,
-            threadId,
-            resourceId,
-            boundary,
-            maxMessages: typeof this.lastMessages === 'number' ? this.lastMessages : undefined,
-            maxTokens: this.tokenLimit.maxTokens,
-            atMaxRemoveTokens: this.tokenLimit.atMaxRemoveTokens,
-            tokenCounter: this.tokenCounter,
-            includeOverflow: true,
-          });
-          return [...result.overflow, ...result.messages].reverse();
-        }
-
-        const result = await this.storage.listMessages({
+    // 1. Fetch historical messages from storage (as DB format)
+    const storedBoundary = getMemoryTokenBoundary(parseMemoryRequestContext(requestContext)?.thread);
+    const boundary =
+      this.tokenLimit &&
+      storedBoundary?.maxTokens === this.tokenLimit.maxTokens &&
+      storedBoundary.atMaxRemoveTokens === this.tokenLimit.atMaxRemoveTokens
+        ? storedBoundary
+        : undefined;
+    const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}:${JSON.stringify(boundary)}`;
+    const loadMessages = async () => {
+      if (this.tokenLimit) {
+        const result = await loadMessageHistory({
+          storage: this.storage,
           threadId,
           resourceId,
-          page: 0,
-          perPage: this.lastMessages,
-          orderBy: { field: 'createdAt', direction: 'DESC' },
-          // Last-N history read only consumes `messages`; skip the COUNT(*) work.
-          includeTotal: false,
+          boundary,
+          maxMessages: typeof this.lastMessages === 'number' ? this.lastMessages : undefined,
+          maxTokens: this.tokenLimit.maxTokens,
+          atMaxRemoveTokens: this.tokenLimit.atMaxRemoveTokens,
+          tokenCounter: this.tokenCounter,
+          includeOverflow: true,
         });
-        return result.messages;
-      };
-      const messages = memoryRunState ? await memoryRunState.load(cacheKey, loadMessages) : await loadMessages();
+        return [...result.overflow, ...result.messages].reverse();
+      }
 
-      // 2. Filter out system messages (they should never be stored in DB)
-      const filteredMessages = messages.filter((msg: MastraDBMessage) => {
-        return msg.role !== 'system' && (!boundary || isAfterMemoryTokenBoundary(msg, boundary));
-      });
-
-      // A background task's result is written into its original tool-call message, which keeps
-      // its dispatch-time createdAt. The continuation turn that reports the result must still see
-      // it, so load those messages even when they fall outside the history window.
-      const pinnedMessages = await this.loadContinuationToolCallMessages(
-        requestContext,
+      const result = await this.storage.listMessages({
         threadId,
         resourceId,
-        filteredMessages,
-      );
-      if (pinnedMessages.length) {
-        const fitted = await this.fitPinnedMessages(filteredMessages, pinnedMessages);
-        filteredMessages.splice(0, filteredMessages.length, ...fitted.history, ...fitted.pinned);
-        filteredMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      }
+        page: 0,
+        perPage: this.lastMessages,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+        // Last-N history read only consumes `messages`; skip the COUNT(*) work.
+        includeTotal: false,
+      });
+      return result.messages;
+    };
+    const messages = memoryRunState ? await memoryRunState.load(cacheKey, loadMessages) : await loadMessages();
 
-      // 3. Add stored history in chronological order. MessageList layers any matching
-      // input copy onto the stored message so memory remains the authoritative base.
-      const chronologicalMessages = filteredMessages.reverse();
+    // 2. Filter out system messages (they should never be stored in DB)
+    const filteredMessages = messages.filter((msg: MastraDBMessage) => {
+      return msg.role !== 'system' && (!boundary || isAfterMemoryTokenBoundary(msg, boundary));
+    });
 
-      for (const msg of chronologicalMessages) {
-        messageList.add(msg, 'memory');
-      }
-
-      span?.update({ attributes: { messageCount: chronologicalMessages.length } });
-
-      return messageList;
-    } catch (error) {
-      // The runner records the failure on this span and ends it.
-      throw error;
+    // A background task's result is written into its original tool-call message, which keeps
+    // its dispatch-time createdAt. The continuation turn that reports the result must still see
+    // it, so load those messages even when they fall outside the history window.
+    const pinnedMessages = await this.loadContinuationToolCallMessages(
+      requestContext,
+      threadId,
+      resourceId,
+      filteredMessages,
+    );
+    if (pinnedMessages.length) {
+      const fitted = await this.fitPinnedMessages(filteredMessages, pinnedMessages);
+      filteredMessages.splice(0, filteredMessages.length, ...fitted.history, ...fitted.pinned);
+      filteredMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
+
+    // 3. Add stored history in chronological order. MessageList layers any matching
+    // input copy onto the stored message so memory remains the authoritative base.
+    const chronologicalMessages = filteredMessages.reverse();
+
+    for (const msg of chronologicalMessages) {
+      messageList.add(msg, 'memory');
+    }
+
+    span?.update({ attributes: { messageCount: chronologicalMessages.length } });
+
+    return messageList;
   }
 
   async processOutputResult(
@@ -328,19 +324,15 @@ export class MessageHistory implements Processor {
       return messageList;
     }
 
+    // The runner records failures on this span and ends it.
     const span = this.memorySpan(observabilityContext);
     span?.update({ attributes: { messageCount: messagesToSave.length } });
 
-    try {
-      await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
-      // add extra 1ms latency to make sure the next generate has not the same input
-      await new Promise(resolve => setTimeout(resolve, 10));
+    await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
+    // add extra 1ms latency to make sure the next generate has not the same input
+    await new Promise(resolve => setTimeout(resolve, 10));
 
-      return messageList;
-    } catch (error) {
-      // The runner records the failure on this span and ends it.
-      throw error;
-    }
+    return messageList;
   }
 
   /**

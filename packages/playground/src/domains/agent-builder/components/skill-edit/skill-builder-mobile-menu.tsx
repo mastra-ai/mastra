@@ -5,7 +5,6 @@ import { useFormContext, useWatch } from 'react-hook-form';
 
 import { useVisibilityChange } from '../../hooks/use-visibility-change-skill';
 import { DeleteSkillMenuItem } from './delete-skill-action';
-import type { Visibility } from './visibility-select';
 import type { SkillEditFormValues } from '@/domains/agent-builder/hooks/use-autosave-skill';
 
 export interface SkillBuilderMobileMenuProps {
@@ -54,7 +53,7 @@ interface VisibilityMenuItemProps {
 
 function VisibilityMenuItem({ skillId, disabled }: VisibilityMenuItemProps) {
   const formMethods = useFormContext<SkillEditFormValues>();
-  const value = (useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private') as Visibility;
+  const value = useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private';
   const { requestChange, dialog } = useVisibilityChange(skillId);
 
   return (

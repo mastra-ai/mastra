@@ -2,6 +2,7 @@ import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
 import { embedMany as embedManyV6 } from '@internal/ai-v6';
+import { embedMany as embedManyV7 } from '@internal/ai-v7';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -239,6 +240,9 @@ export function extractWorkingMemoryContent(text: string): string | null {
 type MastraMessagePart = MastraDBMessage['content']['parts'][number];
 const UPDATE_WORKING_MEMORY_TOOL_NAME = 'updateWorkingMemory';
 
+// Google's documented dummy signature for Gemini function calls without a real one.
+const SKIP_THOUGHT_SIGNATURE_VALIDATOR = 'skip_thought_signature_validator';
+
 /**
  * Removes `updateWorkingMemory` tool invocations from stored message parts, one step
  * at a time. A step starts at a `step-start` part, or where a tool part is followed by
@@ -266,6 +270,28 @@ function removeWorkingMemoryToolInvocationParts(parts: MastraMessagePart[]): Mas
   return steps.flatMap(step => {
     if (!step.some(isWorkingMemoryCall)) return step;
     const remaining = step.filter(part => !isWorkingMemoryCall(part));
+    // Gemini signs only the first call of a parallel step and rejects a replayed step
+    // whose first call is unsigned. When the signed call was the working-memory call,
+    // mark the first surviving call with Google's documented skip-validator signature
+    // (#27231). The real signature is bound to the removed call, so it is not moved.
+    // A signature already on the surviving call wins.
+    const targetIndex = remaining.findIndex(part => part?.type === 'tool-invocation');
+    const target = remaining[targetIndex];
+    if (target?.type === 'tool-invocation') {
+      let providerMetadata = target.providerMetadata;
+      for (const removed of step) {
+        if (!isWorkingMemoryCall(removed)) continue;
+        for (const [provider, metadata] of Object.entries(removed.providerMetadata ?? {})) {
+          if (metadata?.thoughtSignature === undefined) continue;
+          if (providerMetadata?.[provider]?.thoughtSignature !== undefined) continue;
+          providerMetadata = {
+            ...providerMetadata,
+            [provider]: { ...providerMetadata?.[provider], thoughtSignature: SKIP_THOUGHT_SIGNATURE_VALIDATOR },
+          };
+        }
+      }
+      if (providerMetadata !== target.providerMetadata) remaining[targetIndex] = { ...target, providerMetadata };
+    }
     const onlyReasoningLeft = remaining.every(
       part =>
         part?.type === 'step-start' ||
@@ -491,11 +517,11 @@ export class Memory extends MastraMemory {
    * await store.close();
    * ```
    */
-  override async settled(): Promise<void> {
+  override async settled(scope?: { threadId?: string | null; resourceId?: string | null }): Promise<void> {
     await this.pendingVectorCleanup;
     // Only join an engine that already exists — never instantiate one just to drain it.
     const engine = this._omEngine ? await this._omEngine : this._omEngineInstance;
-    await engine?.settled();
+    await engine?.settled(scope);
     // Observational-memory cycles can start further vector cleanup; drain once more.
     await this.pendingVectorCleanup;
   }
@@ -1641,28 +1667,40 @@ ${workingMemory}`;
       await this.firstEmbed;
     }
 
-    let embedFn: typeof embedMany | typeof embedManyV5 | typeof embedManyV6;
-    const specVersion = this.embedder.specificationVersion;
-
-    switch (specVersion) {
+    const options = { values: chunks, maxRetries: 3 };
+    // Options share a public union; select the SDK-specific options alongside the model version.
+    const model = this.embedder;
+    let promise;
+    switch (model.specificationVersion) {
+      case 'v4':
+        promise = embedManyV7({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV7>[0], 'model' | 'values'>),
+          model,
+        });
+        break;
       case 'v3':
-        embedFn = embedManyV6;
+        promise = embedManyV6({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV6>[0], 'model' | 'values'>),
+          model,
+        });
         break;
       case 'v2':
-        embedFn = embedManyV5;
+        promise = embedManyV5({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV5>[0], 'model' | 'values'>),
+          model,
+        });
         break;
       default:
-        embedFn = embedMany;
+        promise = embedMany({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedMany>[0], 'model' | 'values'>),
+          model,
+        });
         break;
     }
-
-    const promise = embedFn({
-      values: chunks,
-      maxRetries: 3,
-      // @ts-expect-error - embedder type mismatch
-      model: this.embedder,
-      ...(this.embedderOptions || {}),
-    });
 
     if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
     const { embeddings, usage } = await promise;
@@ -1694,12 +1732,7 @@ ${workingMemory}`;
       // System messages are runtime instructions and should never be stored in memory.
       // Transient signals (`transient: true`) are delivery-only and must never be stored.
       // Then strip working memory tags from all persistable messages.
-      const updatedMessages = messages
-        .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
-        .map(m => {
-          return this.updateMessageToHideWorkingMemoryV2(m);
-        })
-        .filter((m): m is MastraDBMessage => Boolean(m));
+      const updatedMessages = this.prepareMessagesForPersistence(messages);
 
       const config = this.getMergedThreadConfig(memoryConfig);
 
@@ -1877,6 +1910,13 @@ ${workingMemory}`;
     }
   }
 
+  private prepareMessagesForPersistence(messages: MastraDBMessage[]): MastraDBMessage[] {
+    return messages
+      .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
+      .map(m => this.updateMessageToHideWorkingMemoryV2(m))
+      .filter((m): m is MastraDBMessage => m !== null);
+  }
+
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
     const newMessage = { ...message };
     // Only spread content if it's a proper V2 object to avoid corrupting non-object content
@@ -1892,6 +1932,8 @@ ${workingMemory}`;
       if (Array.isArray(newMessage.content.toolInvocations)) {
         newMessage.content.toolInvocations = removeWorkingMemoryToolInvocations(newMessage.content.toolInvocations);
       }
+      const lastOriginalPart = newMessage.content.parts.at(-1);
+      const sealMetadata = lastOriginalPart && 'metadata' in lastOriginalPart ? lastOriginalPart.metadata : undefined;
       newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts).map(part => {
         if (part?.type === 'text') {
           const text = typeof part.text === 'string' ? part.text : '';
@@ -1902,6 +1944,24 @@ ${workingMemory}`;
         }
         return part;
       });
+
+      // The last part can be a hidden tool call. Retain its seal boundary on the
+      // last surviving part without changing the live message used by the observer.
+      const lastIndex = newMessage.content.parts.length - 1;
+      const lastPart = newMessage.content.parts[lastIndex];
+      if (lastPart && sealMetadata && typeof sealMetadata === 'object' && 'mastra' in sealMetadata) {
+        const mastra = sealMetadata.mastra;
+        if (mastra && typeof mastra === 'object' && 'sealedAt' in mastra && typeof mastra.sealedAt === 'number') {
+          const existingMetadata = 'metadata' in lastPart ? lastPart.metadata : undefined;
+          const metadata = existingMetadata && typeof existingMetadata === 'object' ? existingMetadata : {};
+          const existingMastra =
+            'mastra' in metadata && metadata.mastra && typeof metadata.mastra === 'object' ? metadata.mastra : {};
+          newMessage.content.parts[lastIndex] = {
+            ...lastPart,
+            ...{ metadata: { ...metadata, mastra: { ...existingMastra, sealedAt: mastra.sealedAt } } },
+          };
+        }
+      }
 
       // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls),
       // only skip the message when it also has no text content left.
@@ -2076,6 +2136,19 @@ ${workingMemory}`;
           template: workingMemoryTemplate,
           data: workingMemoryData,
         });
+  }
+
+  /** Fetch current stored copies of messages in a resumed turn, bypassing run-state history caches. */
+  public async getPersistedMessages(threadId: string, ids: string[]): Promise<MastraDBMessage[]> {
+    if (!ids.length) return [];
+    const memoryStore = await this.getMemoryStore();
+    const result = await memoryStore.listMessages({
+      threadId,
+      perPage: 0,
+      include: ids.map(id => ({ id })),
+      includeTotal: false,
+    });
+    return result.messages.filter(message => ids.includes(message.id));
   }
 
   /**
@@ -2296,13 +2369,13 @@ ${workingMemory}`;
   }
 
   /**
-   * Raw message upsert — persist messages to storage without embedding or working memory processing.
+   * Raw message upsert — apply the persistence projection without embedding or extracting working memory.
    * Used by the processor to save sealed messages before firing a background buffer operation.
    */
   async persistMessages(messages: MastraDBMessage[]): Promise<void> {
     if (messages.length === 0) return;
 
-    const persistableMessages = messages.filter(m => m.role !== 'system' && !isTransientSignalMessage(m));
+    const persistableMessages = this.prepareMessagesForPersistence(messages);
     if (persistableMessages.length === 0) return;
 
     const memoryStore = await this.getMemoryStore();
@@ -3080,16 +3153,82 @@ Notes:
     const memoryStore = await this.getMemoryStore();
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    // Update vector database if semantic recall is enabled and any messages have content updates
-    if (this.vector && config.semanticRecall) {
-      const messagesWithContent = messages.filter(m => m.content !== undefined);
+    // Use effective content for filtering/empty-message decisions, but keep the
+    // patch shape: forwarding omitted fields would overwrite concurrent edits.
+    const existing = await memoryStore.listMessagesById({ messageIds: messages.map(m => m.id) });
+    const existingById = new Map(existing.messages.map(m => [m.id, m]));
+    // Text to index per edited message, read from the projected effective content so a
+    // sparse patch does not hide stored text. Fields the patch sets take priority.
+    const textForEmbeddingById = new Map<string, string | null>();
+    const textFields = ['content', 'parts'] as const;
+    const textOf = (
+      content: Partial<Pick<MastraDBMessage['content'], (typeof textFields)[number]>>,
+      fields: readonly (typeof textFields)[number][],
+    ): string | null => {
+      for (const field of fields) {
+        const text =
+          field === 'content'
+            ? content.content?.trim()
+              ? content.content
+              : null
+            : (content.parts ?? [])
+                .filter((part): part is TextPart => part?.type === 'text')
+                .map(part => part.text)
+                .join(' ')
+                .trim();
+        if (text) return text;
+      }
+      return null;
+    };
+    messages = messages.flatMap(update => {
+      const stored = existingById.get(update.id);
+      if (!stored) return [];
+      const effective = {
+        ...stored,
+        ...update,
+        content:
+          update.content === undefined
+            ? stored.content
+            : {
+                ...stored.content,
+                ...update.content,
+                metadata: { ...stored.content.metadata, ...update.content.metadata },
+              },
+      };
+      const [projected] = this.prepareMessagesForPersistence([effective]);
+      if (!projected) return [];
+      if (update.content === undefined) {
+        existingById.set(update.id, effective);
+        return [update];
+      }
+      const content = {
+        ...update.content,
+        ...(update.content.parts !== undefined ? { parts: projected.content.parts } : {}),
+        ...(update.content.content !== undefined ? { content: projected.content.content } : {}),
+        ...(update.content.toolInvocations !== undefined ? { toolInvocations: projected.content.toolInvocations } : {}),
+      };
+      existingById.set(update.id, { ...effective, content: { ...effective.content, ...content } });
+      const patched = textFields.filter(field => update.content?.[field] !== undefined);
+      if (patched.length > 0) {
+        const omitted = textFields.filter(field => !patched.includes(field));
+        // Fall back to stored text only when the projection hid the patched text, not
+        // when the edit cleared it.
+        const text =
+          textOf(projected.content, patched) ??
+          (textOf(update.content, patched) ? textOf(projected.content, omitted) : null);
+        textForEmbeddingById.set(update.id, text);
+      }
+      return [{ ...update, content }];
+    });
+    if (messages.length === 0) return [];
 
-      if (messagesWithContent.length > 0) {
-        // Get existing messages to obtain threadId and resourceId for vector metadata
-        const existingMessagesResult = await memoryStore.listMessagesById({
-          messageIds: messagesWithContent.map(m => m.id),
-        });
-        const existingMessagesMap = new Map(existingMessagesResult.messages.map(m => [m.id, m]));
+    // Update vector database if semantic recall is enabled and any messages have text updates
+    if (this.vector && config.semanticRecall) {
+      const messagesWithTextUpdates = [...textForEmbeddingById.keys()].map(id => ({ id }));
+
+      if (messagesWithTextUpdates.length > 0) {
+        // Reuse the pre-update rows for vector metadata.
+        const existingMessagesMap = new Map(existing.messages.map(m => [m.id, m]));
 
         // Collect embeddings for messages with new text content
         const embeddingData: Array<{
@@ -3112,37 +3251,11 @@ Notes:
 
         // Prepare new embeddings and track which messages need vector operations
         await Promise.all(
-          messagesWithContent.map(async message => {
+          messagesWithTextUpdates.map(async message => {
             const existingMessage = existingMessagesMap.get(message.id);
             if (!existingMessage) return;
 
-            // Extract text from the new content
-            let textForEmbedding: string | null = null;
-            const content = message.content;
-
-            if (content) {
-              if (
-                'content' in content &&
-                content.content &&
-                typeof content.content === 'string' &&
-                content.content.trim() !== ''
-              ) {
-                textForEmbedding = content.content;
-              } else if (
-                'parts' in content &&
-                content.parts &&
-                Array.isArray(content.parts) &&
-                content.parts.length > 0
-              ) {
-                // Extract text from all text parts, concatenate
-                const joined = (content.parts as any[])
-                  .filter(part => part?.type === 'text')
-                  .map(part => (part as TextPart).text)
-                  .join(' ')
-                  .trim();
-                if (joined) textForEmbedding = joined;
-              }
-            }
+            const textForEmbedding = textForEmbeddingById.get(message.id) ?? null;
 
             // If there's new text content, embed it
             if (textForEmbedding) {
@@ -3599,11 +3712,11 @@ Notes:
 
     // Preserve the storage no-op contract when there is no vector migration to worry about:
     // if the thread already belongs to the target resource there is nothing to move, so return
-    // it untouched. When vector migration IS configured we deliberately do NOT short-circuit on
+    // it untouched. When a vector store is attached we deliberately do NOT short-circuit on
     // a same-resource call, because a previous attempt may have committed the storage move but
     // failed to migrate the vectors — short-circuiting there would make the documented retry a
     // no-op and leave the vectors stale. Re-running the (idempotent) migration repairs that state.
-    if (!migratesVectors) {
+    if (!this.vector) {
       const existing = await memoryStore.getThreadById({ threadId });
       if (existing && existing.resourceId === resourceId) {
         return existing;
@@ -3647,7 +3760,74 @@ Notes:
       }
     }
 
+    if (this.vector) {
+      try {
+        await this.moveObservationVectors(threadId, resourceId);
+      } catch (error) {
+        this.logger.error('Failed to move observation vectors during thread transfer', {
+          threadId,
+          resourceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw new Error(
+          `Thread "${threadId}" was transferred to resource "${resourceId}", but moving its ` +
+            `observation vectors failed. Its observations may not surface in recall search under the new ` +
+            `resource until the transfer is retried. Cause: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
+      }
+    }
+
     return thread;
+  }
+
+  /**
+   * Re-tag a thread's observation vectors with its new resource. Recall search filters
+   * observations by `resource_id`, so untouched vectors would hide the thread's past
+   * observations under the new owner. Each vector is updated on its own with its metadata
+   * merged, because filter-based updates replace the whole metadata object on some stores.
+   */
+  private async moveObservationVectors(threadId: string, resourceId: string): Promise<void> {
+    const vector = this.vector!;
+    const indexes = await this.getMemoryVectorIndexes([this.observationIndexPrefix]);
+    for (const indexName of indexes) {
+      const { dimension } = await vector.describeIndex({ indexName });
+      // Most stores need a query vector even for a metadata-filtered read; any unit vector will do.
+      const queryVector = Array.from({ length: dimension }, (_, i) => (i === 0 ? 1 : 0));
+      const moved = new Set<string>();
+      for (;;) {
+        const stale = await vector.query({
+          indexName,
+          queryVector,
+          // Vectorize caps topK at 20 when values and metadata are returned.
+          topK: 20,
+          includeVector: true,
+          filter: { thread_id: threadId, resource_id: { $ne: resourceId } },
+        });
+        const pending = stale.filter(result => !moved.has(result.id));
+        if (pending.length === 0) break;
+        for (const result of pending) {
+          moved.add(result.id);
+          // Stores that replace metadata would drop thread_id/group_id if we wrote resource_id alone.
+          if (!result.metadata) {
+            this.logger.warn('Skipping observation vector without metadata during thread transfer', {
+              indexName,
+              id: result.id,
+            });
+            continue;
+          }
+          await vector.updateVector({
+            indexName,
+            id: result.id,
+            // Some stores (Vectorize) reject metadata-only updates, so send the existing values back.
+            update: {
+              metadata: { ...result.metadata, resource_id: resourceId },
+              ...(result.vector ? { vector: result.vector } : {}),
+            },
+          });
+        }
+      }
+    }
   }
 
   /**
@@ -4122,12 +4302,14 @@ Notes:
     const runtimeObservationalMemory = normalizeObservationalMemoryConfig(
       runtimeMemory?.memoryConfig?.observationalMemory,
     );
-    const threadConfig = runtimeObservationalMemory
-      ? this.getMergedThreadConfig({
-          ...runtimeMemory?.memoryConfig,
-          observationalMemory: runtimeObservationalMemory,
-        } as MemoryConfigInternal)
-      : this.threadConfig;
+    // A disabled override normalizes to undefined, but must not restore instance defaults.
+    const threadConfig =
+      runtimeMemory?.memoryConfig?.observationalMemory !== undefined
+        ? this.getMergedThreadConfig({
+            ...runtimeMemory?.memoryConfig,
+            observationalMemory: runtimeObservationalMemory ?? false,
+          } as MemoryConfigInternal)
+        : this.threadConfig;
 
     const effectiveConfig = normalizeObservationalMemoryConfig(threadConfig.observationalMemory);
     if (!effectiveConfig) return null;

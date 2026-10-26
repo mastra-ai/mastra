@@ -96,7 +96,7 @@ type PhaseSnapshotValue = ActivePhaseSnapshotValue | { bindingId?: string; statu
 
 function reviewRuntimeFromRequestContext(
   requestContext: ComputeStateSignalArgs['requestContext'],
-  factoryThinkingLevel: ThinkingLevel | undefined,
+  defaultThinkingLevel: ThinkingLevel | undefined,
 ): RuntimeSnapshot {
   if (!requestContext || typeof requestContext.get !== 'function') {
     throw new Error('Factory review phase requires a controller request context.');
@@ -108,7 +108,7 @@ function reviewRuntimeFromRequestContext(
   }
   return {
     modelId,
-    thinkingLevel: resolveRequestThinkingLevel({ state: context?.state }, undefined, factoryThinkingLevel),
+    thinkingLevel: resolveRequestThinkingLevel({ state: context?.state }, undefined, defaultThinkingLevel),
   };
 }
 
@@ -275,8 +275,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         requestContext: ProcessInputStepArgs['requestContext'];
         binding: FactoryRunBindingRecord | null;
       }) => Promise<void>;
-      /** The Factory's stored thinking default, used when the session has not picked a level. */
-      factoryThinkingLevel?: (factoryProjectId: string) => Promise<ThinkingLevel>;
+      /** The session's routed thinking default, used when the session has not picked a level. */
+      defaultThinkingLevel?: (requestContext: ComputeStateSignalArgs['requestContext']) => Promise<ThinkingLevel>;
       transitionService?: Pick<FactoryTransitionService, 'transition'>;
       messageReader?: PersistedMessageReader;
       recordPullRequestProvenance?: (input: {
@@ -422,7 +422,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
             board,
             ...reviewRuntimeFromRequestContext(
               args.requestContext,
-              await this.options.factoryThinkingLevel?.(binding.factoryProjectId),
+              await this.options.defaultThinkingLevel?.(args.requestContext),
             ),
           }
         : { ...baseValue, board };

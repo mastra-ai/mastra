@@ -2,7 +2,7 @@ import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { Code } from '@/ds/components/Code/code';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
@@ -58,6 +58,7 @@ export function DataDetailsPanelCodeSection({
             <CopyButton content={codeStr || 'No content'} />
             {hasMultilineText && (
               <Button
+                size="icon-md"
                 aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 onClick={() => setShowAsMultilineText(v => !v)}
               >
@@ -78,7 +79,15 @@ export function DataDetailsPanelCodeSection({
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
-          <Code code={codeStr} lang="json" className="font-mono text-caption break-all whitespace-pre-wrap" />
+          <CodeEditor
+            value={codeStr}
+            language="json"
+            editable={false}
+            lineNumbers={false}
+            showCopyButton={false}
+            variant="embedded"
+            aria-label={typeof title === 'string' ? title : 'JSON'}
+          />
         )}
       </div>
     </div>
