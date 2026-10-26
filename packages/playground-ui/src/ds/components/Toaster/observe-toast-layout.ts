@@ -2,7 +2,7 @@ import { measureScrollableToastContent } from './scrollable-toast-content';
 import { createToastStackLayout } from './toast-stack-layout';
 
 export function observeToastLayout(root: HTMLElement | null) {
-  if (!root) return;
+  if (!root || typeof ResizeObserver === 'undefined') return;
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const stackLayout = createToastStackLayout(reduceMotion);
   reduceMotion.addEventListener('change', stackLayout.cancelAnimations);

@@ -5,7 +5,6 @@ import { createElement } from 'react';
 import { toast as sonnerToast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import '@/test/inert-resize-observer';
 import { Toaster, toast } from './toast';
 
 function latestToast() {
