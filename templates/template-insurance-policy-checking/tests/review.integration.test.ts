@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { canonicalJson, hashBytes, type OutputProvider } from '../src/mastra/domain/case-contracts.js';
+import { reportHash } from '../src/mastra/domain/report-contracts.js';
 import { reviewRequestSchema, type ReviewRequest } from '../src/mastra/domain/review-contracts.js';
 import { createApprovedOutputProvider } from '../src/mastra/providers/approved-output-provider.js';
 import { createRegistry } from '../src/mastra/providers/provider-registry.js';
@@ -1002,6 +1003,61 @@ describe('Recorded broker review and approved publication', () => {
         expect(final.text).not.toContain('J. Proposed correction request');
       }
     }
+  });
+
+  it('keeps source Markdown literal in correction drafts without flattening evidence lines', async () => {
+    const runtime = await setup();
+    const snapshot = structuredClone((await runtime.reportRepository.get(reportContext))!.snapshot);
+    const finding = snapshot.comparisons.find(f => f.key === 'water')!;
+    await submit(
+      runtime,
+      await decision(runtime, 'approve', {
+        dispositions: [{ findingId: finding.id, disposition: 'confirmed', reason: null }],
+      }),
+    );
+    const approval = structuredClone((await runtime.reviewRepository.approval(reportContext, snapshot.id))!);
+    // The output provider accepts validated snapshots; exercise arbitrary source text at that boundary.
+    snapshot.identity.policyNumber = 'CP-4021\n---';
+    finding.label = 'Water condition\n1. Forged finding';
+    finding.action = 'Please correct\r\n~~~\nforged fence\n~~~';
+    finding.baseline!.value = { type: 'text', value: 'Agreed wording\n===\nnew heading' };
+    finding.actual!.value = { type: 'text', value: 'Issued wording\n- new item' };
+    const evidence = finding.evidence[0]!;
+    evidence.excerpt = 'Quoted wording\r\n- literal list\n1. literal number\n~~~\nliteral fence\n~~~\nHeading\n===';
+    snapshot.sources.find(source => source.sourceId === evidence.sourceId)!.displayName = 'proposal\n- fake.pdf';
+    approval.reviewerId = 'Broker\n---';
+    for (const event of approval.events) event.reviewerId = approval.reviewerId;
+    approval.eventSetHash = hashBytes(canonicalJson(approval.events));
+    approval.snapshotHash = reportHash(snapshot);
+    const provider = createApprovedOutputProvider('correctionOutput');
+    const outputDirectory = join(runtime.root, 'literal-markdown');
+    await mkdir(outputDirectory);
+    const context = { ...reportContext, outputDirectory };
+    const artifact = await provider.materialize(
+      {
+        stage: 'correctionOutput',
+        operationId: randomUUID(),
+        snapshotId: snapshot.id,
+        snapshotHash: approval.snapshotHash,
+        snapshot,
+        approval,
+      },
+      context,
+    );
+    const content = Buffer.from(await provider.retrieve(artifact, context)).toString('utf8');
+    expect(content).toContain('Policy: CP\\-4021 \\-\\-\\-\n');
+    expect(content).toContain(': Water condition 1\\. Forged finding\n');
+    expect(content).toContain('Expected terms: Agreed wording \\=\\=\\= new heading\n');
+    expect(content).toContain('Issued terms: Issued wording \\- new item\n');
+    expect(content).toContain(
+      'Requested correction or clarification: Please correct \\~\\~\\~ forged fence \\~\\~\\~\n',
+    );
+    expect(content).toContain('proposal \\- fake\\.pdf');
+    expect(content).toContain('Reviewed by: Broker \\-\\-\\- at ');
+    expect(content).toContain(
+      '> Quoted wording\n> \\- literal list\n> 1\\. literal number\n> \\~\\~\\~\n> literal fence\n> \\~\\~\\~\n> Heading\n> \\=\\=\\=',
+    );
+    expect(content).not.toContain('\r');
   });
 
   it('output_adapter_cannot_bypass_approval_or_duplicate_finalization', async () => {

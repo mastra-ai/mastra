@@ -8,8 +8,10 @@ import { termValue } from '../domain/report-presentation.js';
 import { actionableFindings } from '../domain/review-contracts.js';
 import { renderDraftPdf } from './draft-pdf-provider.js';
 
-/** Escape source text before including it in broker-facing Markdown. */
-const markdown = (text: string) => text.replace(/[\\`*_{}\[\]()#+!|<>]/g, '\\$&');
+/** Preserve excerpt lines while escaping Markdown block and inline syntax. */
+const markdownMultiline = (text: string) => text.replace(/\r\n?/g, '\n').replace(/[\\`*_{}\[\]()#+!|<>.~=-]/g, '\\$&');
+/** Keep source labels and metadata on the single line allocated by the correction template. */
+const markdownInline = (text: string) => markdownMultiline(text.replace(/\s+/g, ' ').trim());
 /** Materialize the approved report or correction draft using the frozen approval and provider stage. */
 export function createApprovedOutputProvider<C extends 'reportOutput' | 'correctionOutput'>(
   stage: C,
@@ -36,12 +38,12 @@ export function createApprovedOutputProvider<C extends 'reportOutput' | 'correct
         '# Proposed correction request — not sent',
         '',
         'To: [Insurer or responsible team]',
-        `Policy: ${markdown(r.identity.policyNumber ?? 'Not available')}`,
+        `Policy: ${markdownInline(r.identity.policyNumber ?? 'Not available')}`,
         'Subject: Request to correct confirmed policy discrepancies',
         '',
         `Report: ${r.id}, version ${r.version}`,
         `Approved snapshot checksum: ${request.snapshotHash}`,
-        `Reviewed by: ${markdown(request.approval.reviewerId)} at ${request.approval.approvedAt} (UTC)`,
+        `Reviewed by: ${markdownInline(request.approval.reviewerId)} at ${request.approval.approvedAt} (UTC)`,
         '',
         'Please review these confirmed discrepancies against the agreed terms and provide the requested correction or clarification.',
         '',
@@ -49,19 +51,19 @@ export function createApprovedOutputProvider<C extends 'reportOutput' | 'correct
       for (const f of findings) {
         const name = `Finding ${String(r.comparisons.findIndex(item => item.id === f.id) + 1).padStart(3, '0')}`;
         lines.push(
-          `## ${name}: ${markdown(f.label)}`,
+          `## ${name}: ${markdownInline(f.label)}`,
           '',
           `Finding identifier: ${f.id}`,
-          `Expected terms: ${markdown(termValue(f.baseline?.value))}`,
-          `Issued terms: ${markdown(termValue(f.actual?.value))}`,
-          `Requested correction or clarification: ${markdown(f.action)}`,
+          `Expected terms: ${markdownInline(termValue(f.baseline?.value))}`,
+          `Issued terms: ${markdownInline(termValue(f.actual?.value))}`,
+          `Requested correction or clarification: ${markdownInline(f.action)}`,
           '',
         );
         for (const e of f.evidence) {
           const source = r.sources.find(source => source.sourceId === e.sourceId)!;
           lines.push(
-            `Source document ${String(r.sources.indexOf(source) + 1).padStart(3, '0')}: ${markdown(source.displayName)} (${source.sourceId}), version ${markdown(e.version)}, ${e.physicalPage !== null ? 'physical page ' + e.physicalPage : 'record ' + markdown(e.recordId!) + ', field ' + markdown(e.field!)}.`,
-            `> ${markdown(e.excerpt).replace(/\n/g, '\n> ')}`,
+            `Source document ${String(r.sources.indexOf(source) + 1).padStart(3, '0')}: ${markdownInline(source.displayName)} (${source.sourceId}), version ${markdownInline(e.version)}, ${e.physicalPage !== null ? 'physical page ' + e.physicalPage : 'record ' + markdownInline(e.recordId!) + ', field ' + markdownInline(e.field!)}.`,
+            `> ${markdownMultiline(e.excerpt).replace(/\n/g, '\n> ')}`,
             '',
           );
         }
