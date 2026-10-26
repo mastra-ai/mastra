@@ -200,7 +200,7 @@ export async function persistStepUpdate(
     return;
   }
 
-  await engine.wrapDurableOperation(operationId, async () => {
+  const write = async () => {
     if (!evaluateBeforeDurableOperation && !persistencePredicate?.({ stepResults, workflowStatus })) {
       return;
     }
@@ -249,7 +249,13 @@ export async function persistStepUpdate(
       snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
     });
     engine.setLastPersistedStatus(runId, workflowStatus);
-  });
+  };
+
+  await engine.wrapDurableOperation(operationId, () =>
+    // Engines that replay memoized durable operations (Inngest) record each write as its own
+    // durable step, so only the in-process engine needs writes kept in call order.
+    engine.requiresDurableContextSerialization() ? write() : engine.serializeSnapshotWrite(runId, write),
+  );
 }
 
 export interface ExecuteEntryParams extends ObservabilityContext {

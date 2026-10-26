@@ -12,11 +12,9 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  * reason for the retry rather than as a comment on the tool result.
  */
 describeForAllEngines('AIMock loop scenario: isTaskComplete feedback order', engine => {
-  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
   const getMock = useLoopScenarioAimock();
 
-  // Inngest's agentic loop has no isTaskComplete step yet.
-  itFailsOnInngest('keeps the feedback before the tool call the model makes in response to it', async () => {
+  it('keeps the feedback before the tool call the model makes in response to it', async () => {
     let scorerCalls = 0;
     const scorer = {
       id: 'fail-then-pass-scorer',

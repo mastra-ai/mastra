@@ -1727,16 +1727,15 @@ export class Mastra<
     if (config?.logger === false) {
       logger = noopLogger as unknown as TLogger;
       this.#loggerExplicit = true;
+    } else if (config?.logger) {
+      logger = config.logger;
+      this.#loggerExplicit = true;
     } else {
-      if (config?.logger) {
-        logger = config.logger;
-        this.#loggerExplicit = true;
-      } else {
-        const levelOnEnv =
-          process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
-        logger = new ConsoleLogger({ name: 'Mastra', level: levelOnEnv }) as unknown as TLogger;
-      }
+      const levelOnEnv =
+        process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
+      logger = new ConsoleLogger({ name: 'Mastra', level: levelOnEnv }) as unknown as TLogger;
     }
+
     this.#logger = logger;
 
     this.#idGenerator = config?.idGenerator;
