@@ -221,6 +221,11 @@ import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { AgentSignalInput, CreatedAgentSignal } from './signals';
 import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
+import { AgentStreamBus } from './streams/bus';
+import { agentStreamsConfig, areAgentStreamsEnabled, mergeDurableStreamsConfig } from './streams/config';
+import type { AgentStreamsOption } from './streams/config';
+import { createAgentStreamPublisher } from './streams/publisher';
+import type { AgentStreamPublisher } from './streams/publisher';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import type { ActiveThreadRun } from './thread-stream-runtime';
@@ -919,6 +924,9 @@ export class Agent<
   #activeStreamUntilIdle = new Map<string, () => void>();
   readonly #options?: AgentCreateOptions;
   readonly #durable?: AgentDurableOption;
+  readonly #streamsOption?: AgentStreamsOption;
+  /** Resumable stream layer, built on first use once streams are enabled. */
+  #streamBus?: AgentStreamBus;
   /**
    * Cached DurableAgent wrapper created on-demand by `#getStandaloneDurable()`
    * when `durable: true` is set on the config but the agent is not attached
@@ -968,6 +976,7 @@ export class Agent<
     this.#metadata = config.metadata;
     this.#options = config.options;
     this.#durable = config.durable;
+    this.#streamsOption = config.streams;
 
     if (!config.model) {
       const mastraError = new MastraError({
@@ -1657,6 +1666,64 @@ export class Agent<
   }
 
   /**
+   * The `streams` option this agent was constructed with, if any.
+   * See {@link AgentConfig.streams}.
+   */
+  get streams(): AgentStreamsOption | undefined {
+    return this.#streamsOption;
+  }
+
+  /**
+   * Options to wrap this agent with `createDurableAgent`: its `durable` option
+   * with the `streams` option folded in.
+   *
+   * @internal
+   */
+  __getDurableWrapOptions(): Record<string, unknown> {
+    const durable = this.#durable === true || !this.#durable ? {} : { ...(this.#durable as object) };
+    return mergeDurableStreamsConfig(durable, this.#streamsOption, message =>
+      this.logger.warn(`[Agent:${this.id}] ${message}`),
+    ) as Record<string, unknown>;
+  }
+
+  /**
+   * The resumable stream layer runs of this agent publish on, or `undefined`
+   * when streams are off. See {@link AgentConfig.streams}.
+   *
+   * @internal
+   */
+  __getStreamBus(): AgentStreamBus | undefined {
+    // A durable agent publishes through its DurableAgent wrapper.
+    if (this.#durable) return undefined;
+    if (!areAgentStreamsEnabled(this.#streamsOption, !!this.#mastra)) return undefined;
+    if (!this.#streamBus) {
+      const config = agentStreamsConfig(this.#streamsOption);
+      this.#streamBus = new AgentStreamBus(
+        { ...config, pubsub: config.pubsub ?? this.#pubsub },
+        {
+          getMastra: () => this.#mastra,
+          // Plain agent runs execute and publish in this process.
+          usesSharedRunLog: () => false,
+          warn: message => this.logger.warn(`[Agent:${this.id}] ${message}`),
+        },
+      );
+      if (this.#mastra) this.#streamBus.registerMastra(this.#mastra.pubsub);
+    }
+    return this.#streamBus;
+  }
+
+  #createStreamPublisher(runId: string): AgentStreamPublisher | undefined {
+    const bus = this.__getStreamBus();
+    if (!bus) return undefined;
+    return createAgentStreamPublisher({
+      pubsub: bus.pubsub,
+      runId,
+      cleanupTimeoutMs: bus.cleanupTimeoutMs,
+      logger: this.logger,
+    });
+  }
+
+  /**
    * Self-referential `agent` accessor exposed only when this agent was
    * constructed with `durable: true`.
    *
@@ -1704,8 +1771,7 @@ export class Agent<
       return this.#standaloneDurable as StandaloneDurableWrapper;
     }
     const { createDurableAgent } = await import('./durable/create-durable-agent');
-    const opts = this.#durable === true ? {} : (this.#durable as object);
-    const wrapper = createDurableAgent({ agent: this as unknown as Agent, ...opts });
+    const wrapper = createDurableAgent({ agent: this as unknown as Agent, ...this.__getDurableWrapOptions() });
     this.#standaloneDurable = wrapper;
     return wrapper as unknown as StandaloneDurableWrapper;
   }
@@ -4157,6 +4223,8 @@ export class Agent<
     if (this.#standaloneDurable) {
       this.#standaloneDurable = undefined;
     }
+
+    this.#streamBus?.registerMastra(mastra.pubsub);
 
     // Propagate logger to workspace if it's a direct instance (not a factory function)
     if (this.#workspace && typeof this.#workspace !== 'function') {
@@ -8987,6 +9055,7 @@ export class Agent<
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       toolCallConcurrency: options.toolCallConcurrency,
+      streamPublisher: this.#createStreamPublisher(runId),
       // Resolved to a boolean here, at the one entry point the contract covers, rather
       // than left undefined and defaulted deep in the loop. Anything that reaches the
       // agentic-execution workflow without coming through a regular agent call — the

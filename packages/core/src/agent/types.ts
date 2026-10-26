@@ -76,6 +76,7 @@ import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
 import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
+import type { AgentStreamsConfig } from './streams/types';
 import type { SubAgent } from './subagent';
 export type {
   MastraDBMessage,
@@ -774,6 +775,22 @@ interface AgentConfigBase<
    * ```
    */
   durable?: AgentDurableOption;
+  /**
+   * Resumable streams: publish each run's chunks on the Mastra pubsub and keep
+   * them in a replay cache, so `observe()` and reconnecting clients can follow a
+   * run the caller started.
+   *
+   * - Omitted: on when the agent is registered on a Mastra instance, off otherwise.
+   * - `true`: on, with the defaults (Mastra pubsub and server cache when registered).
+   * - `false`: off. Runs only stream to their caller.
+   * - An object: on, with a custom `pubsub`, `cache` (`false` keeps publishing but
+   *   disables replay), `shouldCache` or `cleanupTimeoutMs`.
+   *
+   * With `durable`, these options configure the durable agent's stream layer and take
+   * precedence over the same keys under `durable`. Durable agents always publish,
+   * so `streams: false` only disables their replay cache.
+   */
+  streams?: boolean | AgentStreamsConfig;
   /**
    * Default options used when calling `generate()`.
    */

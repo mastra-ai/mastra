@@ -37,6 +37,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
     agentId,
     toolCallId,
     toolCallConcurrency,
+    streamPublisher,
     ...rest
   }: LoopRun<Tools, OUTPUT>,
   finalization?: { register: (cleanup: () => Promise<void>) => void },
@@ -48,9 +49,22 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         enqueue: chunk => {
           if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
           streamController.enqueue(chunk);
+          streamPublisher?.publish(chunk);
         },
-        close: () => streamController.close(),
-        error: reason => streamController.error(reason),
+        close: () => {
+          try {
+            streamController.close();
+          } finally {
+            void streamPublisher?.close();
+          }
+        },
+        error: reason => {
+          try {
+            streamController.error(reason);
+          } finally {
+            void streamPublisher?.fail(reason);
+          }
+        },
         get desiredSize() {
           return streamController.desiredSize;
         },
@@ -581,6 +595,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         await loopSource.start(streamController);
       } catch (error) {
         failure = { error };
+        void streamPublisher?.fail(error);
       }
     },
     pull: streamController => {
