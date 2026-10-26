@@ -675,6 +675,17 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
         expect(originalGeneration).toEqual(expect.any(Number));
+        // Simulate a model step published before its result was checkpointed.
+        const abandonedStartAt = (await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0))
+          .length;
+        await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          type: AgentStreamEventTypes.STEP_START,
+          runId,
+          data: { type: 'step-start', payload: { messageId: 'same-message' } },
+          stepIndex: 0,
+          generation: originalGeneration,
+          producedAt: Date.now(),
+        });
         // The original execution's events so far carry its claim.
         await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
         expect(events.every(event => event.generation === originalGeneration)).toBe(true);
@@ -713,6 +724,16 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         // The claim is announced before the recovered execution publishes, and everything it publishes carries it.
         const claimedAt = events.findIndex(event => event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED);
         expect(events[claimedAt]?.generation).toBe(recoveredGeneration);
+        const replay = await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        expect((replay[claimedAt]?.data as { supersededFrom?: number }).supersededFrom).toBe(abandonedStartAt);
+        const replayed: Array<{ type: string; generation?: number }> = [];
+        const unsubscribe = await agentB.__subscribeToRunStream(runId, {}, event => replayed.push(event));
+        expect(
+          replayed.filter(
+            event => event.type === AgentStreamEventTypes.STEP_START && event.generation === originalGeneration,
+          ),
+        ).toHaveLength(0);
+        await unsubscribe();
         const afterClaim = events.slice(claimedAt + 1);
         expect(afterClaim.some(event => event.type === 'finish' && event.generation === recoveredGeneration)).toBe(
           true,

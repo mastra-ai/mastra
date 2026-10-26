@@ -96,10 +96,23 @@ export function createRunGenerationFilter({
   };
 }
 
-/**
- * Map workflow usage (which may use legacy promptTokens/completionTokens) to
- * the canonical LanguageModelUsage shape (inputTokens/outputTokens).
- */
+/** Drop only the uncheckpointed tail superseded by a later recovery. Earlier generations' committed steps remain. */
+export function createSupersededEventFilter(history: AgentStreamEvent[]): (event: AgentStreamEvent) => boolean {
+  const ranges = history.flatMap(event => {
+    if (event.type !== AgentStreamEventTypes.OWNERSHIP_CLAIMED || event.index === undefined) return [];
+    const from = (event.data as { supersededFrom?: number })?.supersededFrom;
+    return typeof from === 'number' && from < event.index && event.generation !== undefined
+      ? [{ from, to: event.index, generation: event.generation }]
+      : [];
+  });
+  return event =>
+    event.index === undefined ||
+    event.generation === undefined ||
+    !ranges.some(
+      ({ from, to, generation }) => event.index! >= from && event.index! < to && event.generation! < generation,
+    );
+}
+
 /**
  * The run's serialized steps are the authoritative step list (a resumed segment's output only buffered
  * its own suffix), but only the buffered steps carry each step's `response` and `content` (#26780).
@@ -128,6 +141,7 @@ async function withBufferedStepResponses(
   });
 }
 
+/** Map legacy workflow token usage to the canonical LanguageModelUsage fields. */
 function normalizeUsage(raw?: Record<string, unknown>): LanguageModelUsage {
   const inputTokens = (raw?.inputTokens as number | undefined) ?? (raw?.promptTokens as number | undefined);
   const outputTokens = (raw?.outputTokens as number | undefined) ?? (raw?.completionTokens as number | undefined);
@@ -195,6 +209,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * of a superseded execution doesn't close the stream.
    */
   rereadMinGeneration?: () => Promise<number | undefined>;
+  /** Reject events in uncheckpointed tails superseded before this reader attached. */
+  keepReplayEvent?: (event: AgentStreamEvent) => boolean;
   /**
    * If set, terminate the stream when no pubsub event arrives for this many ms
    * AND the run is not alive (see `isAlive`). A durable run whose driving process
@@ -323,6 +339,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     offset,
     minGeneration,
     rereadMinGeneration,
+    keepReplayEvent,
     idleTimeoutMs,
     isAlive,
     onChunk,
@@ -535,6 +552,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
     // Parse the event data as AgentStreamEvent
     const streamEvent = event as unknown as AgentStreamEvent;
+    if (keepReplayEvent && !keepReplayEvent(streamEvent)) return;
 
     // Another execution took the run over: what the superseded one still
     // publishes is stale, and doesn't prove the run's producer is alive.
@@ -1085,11 +1103,16 @@ export async function emitChunkEvent<OUTPUT = undefined>(
  * offset. Readers swallow it and never forward it as a chunk. Readers that
  * reconnect past it read the claim's generation from storage instead.
  */
-export async function emitOwnershipClaimedEvent(pubsub: PubSub, runId: string, generation: number): Promise<void> {
+export async function emitOwnershipClaimedEvent(
+  pubsub: PubSub,
+  runId: string,
+  generation: number,
+  supersededFrom?: number,
+): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.OWNERSHIP_CLAIMED,
     runId,
-    data: {},
+    data: supersededFrom === undefined ? {} : { supersededFrom },
     generation,
   });
 }
@@ -1152,11 +1175,13 @@ export async function publishStepStartChunk(
   runId: string,
   chunk: ChunkType,
   outputProcessed?: boolean,
+  stepIndex?: number,
 ): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.STEP_START,
     runId,
     data: chunk,
+    ...(stepIndex === undefined ? {} : { stepIndex }),
     ...(outputProcessed ? { outputProcessed } : {}),
     ...generationTag(runId),
   });

@@ -87,6 +87,7 @@ import {
 import {
   createDurableAgentStream,
   createRunGenerationFilter,
+  createSupersededEventFilter,
   emitAbortEvent,
   emitChunkEvent,
   emitErrorEvent,
@@ -4348,9 +4349,10 @@ export class DurableAgent<
     const { requestContext, threadId, resourceId, messageList, recoverAgentSpan, recoverModelSpan, registryEntry } =
       recoveryState;
     if (executionFence.generation !== undefined) {
-      // Readers of the run's stream, including the superseded execution's own
-      // caller, drop what that execution still publishes from here on.
-      await emitOwnershipClaimedEvent(this.pubsub, runId, executionFence.generation).catch(error => {
+      // Record the earliest event from the step the persisted snapshot will re-execute.
+      // A replay can then omit the abandoned tail without losing completed iterations.
+      const supersededFrom = await this.#supersededFrom(workflowsStore, runId);
+      await emitOwnershipClaimedEvent(this.pubsub, runId, executionFence.generation, supersededFrom).catch(error => {
         this.logger.warn(`[DurableAgent] recover(${runId}) failed to announce its claim on the run stream`, {
           runId,
           error,
@@ -5252,6 +5254,31 @@ export class DurableAgent<
     return { recovered, succeeded, failed };
   }
 
+  /** Locate the start of the model step that recovery will re-execute, if it was published. */
+  async #supersededFrom(workflowsStore: WorkflowsStorage, runId: string): Promise<number | undefined> {
+    try {
+      const parent = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+      const parentSnapshot = typeof parent?.snapshot === 'string' ? JSON.parse(parent.snapshot) : parent?.snapshot;
+      const nestedRunId = parentSnapshot?.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
+      const nested = await workflowsStore.getWorkflowRunById({
+        runId: typeof nestedRunId === 'string' ? nestedRunId : runId,
+        workflowName: DurableStepIds.AGENTIC_EXECUTION,
+      });
+      const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
+      if (!snapshot || snapshot.context?.[DurableStepIds.LLM_EXECUTION]?.status === 'success') return;
+      const stepIndex = snapshot.context?.input?.iterationCount;
+      if (typeof stepIndex !== 'number') return;
+      const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
+      const starts = history.filter(
+        event => event.type === AgentStreamEventTypes.STEP_START && event.stepIndex === stepIndex,
+      );
+      const latestGeneration = starts.at(-1)?.generation;
+      return starts.find(event => event.generation === latestGeneration)?.index;
+    } catch (error) {
+      this.logger.warn(`[DurableAgent] recover(${runId}) couldn't locate the uncheckpointed stream tail`, { error });
+    }
+  }
+
   /**
    * A replay from an offset can start past the marker of the execution that
    * took the run over, and would then accept what the lost execution still
@@ -5267,19 +5294,21 @@ export class DurableAgent<
   async #readReplayFloor(
     runId: string,
     offset: number | undefined,
-  ): Promise<Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration'>> {
-    if (!offset) return {};
+  ): Promise<Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent'>> {
     try {
-      const skipped = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).slice(0, offset);
+      const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
+      const keepReplayEvent = createSupersededEventFilter(history);
+      if (!offset) return { keepReplayEvent };
+      const skipped = history.slice(0, offset);
       if (skipped.length === offset) {
         let floor: number | undefined;
         for (const event of skipped) {
           const generation = event.generation;
           if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
         }
-        return { minGeneration: floor };
+        return { minGeneration: floor, keepReplayEvent };
       }
-      return { minGeneration: await readRunGeneration(this.#mastra, runId) };
+      return { minGeneration: await readRunGeneration(this.#mastra, runId), keepReplayEvent };
     } catch (error) {
       this.logger.warn(`[DurableAgent] Couldn't read the claim of run ${runId}; observing it without a floor`, {
         error,
@@ -5387,7 +5416,8 @@ export class DurableAgent<
     options: { offset?: number; onComplete?: () => void },
     onEvent: (event: AgentStreamEvent) => void,
   ): Promise<() => Promise<void>> {
-    const keepGeneration = createRunGenerationFilter(await this.#readReplayFloor(runId, options.offset));
+    const replayFloor = await this.#readReplayFloor(runId, options.offset);
+    const keepGeneration = createRunGenerationFilter(replayFloor);
     const topic = AGENT_STREAM_TOPIC(runId);
     let subscribed = true;
     let activityVersion = 0;
@@ -5409,6 +5439,7 @@ export class DurableAgent<
     // keep them pending.
     const callback = withAck(event => {
       const streamEvent = event as unknown as AgentStreamEvent;
+      if (replayFloor.keepReplayEvent && !replayFloor.keepReplayEvent(streamEvent)) return;
       const keep = keepGeneration(streamEvent);
       if (typeof keep === 'boolean') {
         if (keep) deliver(streamEvent);

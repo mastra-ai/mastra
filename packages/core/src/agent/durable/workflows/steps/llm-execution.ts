@@ -1776,7 +1776,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           }
                           try {
                             if (chunk.type === 'step-start') {
-                              await publishStepStartChunk(pubsub, runId, chunk, true);
+                              await publishStepStartChunk(pubsub, runId, chunk, true, inputData.stepIndex ?? 0);
                             } else {
                               await emitChunkEvent(pubsub, runId, chunk, true);
                             }
@@ -1807,7 +1807,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       break;
                     }
                   } else {
-                    await publishStepStartChunk(pubsub, runId, stepStartChunk);
+                    await publishStepStartChunk(pubsub, runId, stepStartChunk, undefined, inputData.stepIndex ?? 0);
                   }
                 }
 
