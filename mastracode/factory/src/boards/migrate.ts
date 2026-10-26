@@ -1,4 +1,4 @@
-import { githubPullRequestLinkKey } from '../integrations/github/rules.js';
+import { adoptsPullRequest, githubPullRequestLinkKey } from '../integrations/github/rules.js';
 import type { BoardsStorage } from '../storage/domains/boards/base.js';
 import type { ProjectBoardConfigInput } from '../storage/domains/boards/validation.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
@@ -204,7 +204,10 @@ export async function migrateBoards(input: {
       // folded card's review seat is not moved: the parent's review seat starts fresh, so no session
       // is bound to two cards.
       const takesOn =
-        item.metadata?.state !== 'closed' && item.metadata?.merged !== true && typeof recorded !== 'number';
+        item.metadata?.state !== 'closed' &&
+        item.metadata?.merged !== true &&
+        typeof recorded !== 'number' &&
+        adoptsPullRequest(parent);
       const stamp =
         recorded === number || takesOn
           ? {

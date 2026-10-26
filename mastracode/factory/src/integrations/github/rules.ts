@@ -1478,16 +1478,8 @@ export function sameStrings(left: unknown, right: string[] | undefined): boolean
   return leftValues.size === rightValues.size && [...leftValues].every(value => rightValues.has(value));
 }
 
-/**
- * Extracts the PR number a work item tracks, but only when the item belongs
- * to the given repository. Card URLs pin the repository unambiguously; the
- * legacy source key embeds the repository id. Canonical keys (`github-pr:N`)
- * carry no repository, so they are only trusted when the item has no URL —
- * a project mapped to multiple repositories must not reconcile one repo's
- * card against another repo's PR number.
- */
 /** Whether a card can take a pull request on: a non-pull-request card on Work that isn't finished. */
-function adoptsPullRequest(item: WorkItemRow): boolean {
+export function adoptsPullRequest(item: WorkItemRow): boolean {
   return (
     item.externalSource?.type !== 'pull-request' &&
     boardForWorkItem(item) === 'work' &&
@@ -1496,6 +1488,14 @@ function adoptsPullRequest(item: WorkItemRow): boolean {
   );
 }
 
+/**
+ * Extracts the PR number a work item tracks, but only when the item belongs
+ * to the given repository. Card URLs pin the repository unambiguously; the
+ * legacy source key embeds the repository id. Canonical keys (`github-pr:N`)
+ * carry no repository, so they are only trusted when the item has no URL —
+ * a project mapped to multiple repositories must not reconcile one repo's
+ * card against another repo's PR number.
+ */
 function reconcilablePullRequestNumber(item: WorkItemRow, repository: ReconcileRepository): number | undefined {
   if (item.externalSource?.type !== 'pull-request') return undefined;
   const url = item.externalSource.url;
