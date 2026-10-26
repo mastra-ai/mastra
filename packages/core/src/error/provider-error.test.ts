@@ -1,6 +1,7 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 
+import { MAX_PERSISTED_RESPONSE_BODY_LENGTH } from '../loop/shared/provider-error-details';
 import { toPersistedErrorIdentity } from '../loop/shared/record-terminal-error-message';
 import { classifyProviderError, providerErrorFacts, providerErrorReason } from './provider-error';
 import type { ProviderFailureKind } from './provider-error';
@@ -421,7 +422,22 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
   ['persisted "Bad Request" without a status', { name: 'AI_APICallError', message: 'Bad Request' }, 'invalid_request'],
   ['persisted "Unauthorized" without a status', { name: 'AI_APICallError', message: 'Unauthorized' }, 'auth'],
   ['persisted "Forbidden" without a status', { name: 'APICallError', message: 'Forbidden' }, 'auth'],
-  ['a bare "Unauthorized" outside a provider call', new Error('Unauthorized'), 'invalid_request'],
+  ['a bare "Unauthorized" outside a provider call', new Error('Unauthorized'), 'unknown'],
+  [
+    'a refused MCP server call',
+    Object.assign(new Error('Error POSTing to endpoint (HTTP 401): invalid_token'), { code: 401 }),
+    'unknown',
+  ],
+  [
+    'a refused GitHub API call',
+    Object.assign(new Error('Bad credentials'), { name: 'HttpError', status: 401 }),
+    'unknown',
+  ],
+  [
+    'a storage outage behind a failed save',
+    new Error('Failed to save thread', { cause: { status: 503, message: 'connect ECONNREFUSED 10.0.0.4:5432' } }),
+    'unknown',
+  ],
   ['plain error', new Error('Network connection lost'), 'unknown'],
   ['undefined', undefined, 'unknown'],
 ];
@@ -545,6 +561,13 @@ describe('providerErrorFacts', () => {
       expect(providerErrorFacts({ name: 'AI_APICallError', message: 'Request failed', data: phrase })).toEqual({});
       expect(providerErrorFacts(Object.assign(new Error('Request failed'), { cause: new Error(phrase) }))).toEqual({});
     }
+  });
+
+  it('caps a long provider reason before it reaches history', () => {
+    const essay = 'x'.repeat(MAX_PERSISTED_RESPONSE_BODY_LENGTH + 500);
+    const { reason } = providerErrorFacts(apiError(400, 'Bad Request', JSON.stringify({ error: { message: essay } })));
+
+    expect(reason).toBe(`${essay.slice(0, MAX_PERSISTED_RESPONSE_BODY_LENGTH)}…`);
   });
 
   it('returns no keys for an error without provider facts', () => {

@@ -19,7 +19,7 @@ function teammatePayingForSession(
   return owner;
 }
 
-export function ProviderReconnectAction({ label = 'Login' }: { label?: string }) {
+export function ProviderReconnectAction() {
   const location = useLocation();
   const { factoryId, modelScope, scopeLoading } = useChatModelScope();
   const { owner } = useChatSessionContext();
@@ -39,7 +39,7 @@ export function ProviderReconnectAction({ label = 'Login' }: { label?: string })
         />
       }
     >
-      {label} <ArrowRight aria-hidden="true" />
+      Review credentials <ArrowRight aria-hidden="true" />
     </Notice.Button>
   );
 }

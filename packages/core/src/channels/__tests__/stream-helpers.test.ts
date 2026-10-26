@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
+import { classifyProviderError } from '../../error/provider-error';
+import { ChunkFrom } from '../../stream/types';
 import {
   ToolTracker,
   editOrPostMessage,
@@ -324,5 +326,20 @@ describe('postStreamError', () => {
       requestId: 'req_123',
     });
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain('SECRET_PROMPT_TEXT');
+  });
+
+  it('hands a custom formatter the provider frame behind a plain stream error, so it can name the failure', async () => {
+    const frame = { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } };
+    const formatError = vi.fn((error: Error) => classifyProviderError(error));
+    const post = vi.fn(async () => undefined);
+
+    await postStreamError({
+      chunk: { type: 'error', runId: 'r', from: ChunkFrom.AGENT, payload: { error: frame } },
+      chatThread: { post },
+      platform: 'slack',
+      formatError,
+    });
+
+    expect(post).toHaveBeenCalledWith('unavailable');
   });
 });

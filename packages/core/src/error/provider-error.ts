@@ -1,3 +1,5 @@
+import { capPersistedText } from '../loop/shared/provider-error-details';
+
 // Reads an APICallError, a raw stream error frame, a cause chain or the persisted
 // `{ name, message, statusCode?, code? }` identity. The status and symbolic codes are the provider's
 // verdict; wording only narrows an invalid request, or speaks when the provider named nothing.
@@ -47,7 +49,7 @@ const CONTEXT_OVERFLOW = [
 const MODEL_REJECTED =
   /model_not_found|model not found|no[_ ]?such[_ ]?model|not_found_error|invalid[_ ]model|unsupported[_ ]model|\bmodel\b[^.]{0,40}\bis not supported\b|unsupported[_ ]parameter|unsupported[_ ]value/i;
 const TOOL_HISTORY_REJECTED =
-  /no tool output found for (?:function|tool) call|tool_call_ids.*(?:response|respond)|tool_use.*tool_result/i;
+  /no tool output found for (?:function|tool) call|tool_call_ids[^.]{0,40}(?:response|respond)|tool_use[^.]{0,40}tool_result/i;
 const INVALID_REQUEST_CODE = /invalid_request_error|invalid_prompt/i;
 // The envelope type every OpenAI and Anthropic 400 carries; a code beside it is the provider naming the rejection.
 const INVALID_REQUEST_ENVELOPE = /^invalid_request_error$/i;
@@ -98,12 +100,15 @@ function collect(value: unknown, facts: CollectedFacts, depth: number): void {
   if (typeof value !== 'object' || facts.seen.has(value)) return;
   facts.seen.add(value);
 
-  const status = readField(value, 'statusCode') ?? readField(value, 'status');
-  if (typeof status === 'number' && facts.statusCode === undefined) facts.statusCode = status;
-  // Google puts the HTTP status in `error.code` and a symbolic status in `error.status`; a lifecycle `status: 'failed'` names nothing.
-  if (typeof status === 'string' && SYMBOLIC_STATUS.test(status.trim())) facts.codes.push(status.trim());
+  const statusCode = readField(value, 'statusCode');
+  if (typeof statusCode === 'number' && Number.isInteger(statusCode)) facts.statusCode ??= statusCode;
+  // Google puts the HTTP status in a body's `error.code`; a thrown error's numeric `code` and any numeric `status` come from an MCP, GitHub or storage call.
   const code = readField(value, 'code');
-  if (typeof code === 'number' && facts.statusCode === undefined && code >= 400 && code < 600) facts.statusCode = code;
+  if (!(value instanceof Error) && typeof code === 'number' && Number.isInteger(code) && code >= 400 && code < 600)
+    facts.statusCode ??= code;
+  // Google's symbolic `error.status` names the failure; a lifecycle `status: 'failed'` names nothing.
+  const status = readField(value, 'status');
+  if (typeof status === 'string' && SYMBOLIC_STATUS.test(status.trim())) facts.codes.push(status.trim());
   const saved = readField(value, 'codes');
   const savedCodes = Array.isArray(saved) ? saved : [];
   for (const candidate of [code, readField(value, 'type'), ...savedCodes]) {
@@ -132,21 +137,18 @@ export function classifyProviderError(error: unknown): ProviderFailureKind {
     usageKind(evidence) ??
     terminalKindFromWording(evidence) ??
     transientKindFromWording(evidence) ??
-    (isDeniedProviderCall(error) ? 'auth' : undefined) ??
-    (facts.texts.some(text => HTTP_REASON_PHRASE.test(text.trim())) ? 'invalid_request' : 'unknown')
+    providerCallPhraseKind(error, facts.texts) ??
+    'unknown'
   );
 }
 
-function isDeniedProviderCall(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
+function providerCallPhraseKind(error: unknown, texts: string[]): ProviderFailureKind | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
   const name = readField(error, 'name');
+  if (typeof name !== 'string' || !PROVIDER_CALL_ERROR_NAME.test(name)) return undefined;
   const message = readField(error, 'message');
-  return (
-    typeof name === 'string' &&
-    PROVIDER_CALL_ERROR_NAME.test(name) &&
-    typeof message === 'string' &&
-    ACCESS_DENIED_PHRASE.test(message.trim())
-  );
+  if (typeof message === 'string' && ACCESS_DENIED_PHRASE.test(message.trim())) return 'auth';
+  return texts.some(text => HTTP_REASON_PHRASE.test(text.trim())) ? 'invalid_request' : undefined;
 }
 
 function providerVerdict(status: number | undefined, codes: string, evidence: string): ProviderFailureKind | undefined {
@@ -202,13 +204,14 @@ export function providerErrorFacts(error: unknown): ProviderErrorFacts {
   const message = typeof error === 'object' && error !== null ? readField(error, 'message') : error;
   const reason = innermostReason(error, 0);
   if (reason !== undefined && reason !== (typeof message === 'string' ? message.trim() : undefined))
-    result.reason = reason;
+    result.reason = capPersistedText(reason);
   return result;
 }
 
 /** The innermost sentence a provider wrote for a person, unwrapped from envelopes, stringified layers and a wrapped provider response. */
 export function providerErrorReason(error: unknown): string | undefined {
-  return innermostReason(error, 0);
+  const reason = innermostReason(error, 0);
+  return reason === undefined ? undefined : capPersistedText(reason);
 }
 
 function innermostReason(error: unknown, depth: number): string | undefined {
@@ -246,6 +249,5 @@ function reasonBehindCause(cause: unknown, depth: number): string | undefined {
 }
 
 function carriesProviderResponse(value: object): boolean {
-  const status = readField(value, 'statusCode') ?? readField(value, 'status');
-  return typeof status === 'number' || typeof readField(value, 'responseBody') === 'string';
+  return typeof readField(value, 'statusCode') === 'number' || typeof readField(value, 'responseBody') === 'string';
 }

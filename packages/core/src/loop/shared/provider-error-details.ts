@@ -10,6 +10,12 @@
 
 export const MAX_PERSISTED_RESPONSE_BODY_LENGTH = 2000;
 
+export function capPersistedText(text: string): string {
+  return text.length > MAX_PERSISTED_RESPONSE_BODY_LENGTH
+    ? `${text.slice(0, MAX_PERSISTED_RESPONSE_BODY_LENGTH)}…`
+    : text;
+}
+
 const REQUEST_ID_HEADERS = ['request-id', 'x-request-id'];
 
 export type ProviderErrorDetails = {
@@ -45,10 +51,7 @@ export function readProviderErrorDetails(error: unknown): ProviderErrorDetails {
 
   const responseBody = readField(error, 'responseBody');
   if (typeof responseBody === 'string' && responseBody.trim()) {
-    details.responseBody =
-      responseBody.length > MAX_PERSISTED_RESPONSE_BODY_LENGTH
-        ? `${responseBody.slice(0, MAX_PERSISTED_RESPONSE_BODY_LENGTH)}…`
-        : responseBody;
+    details.responseBody = capPersistedText(responseBody);
   }
 
   const requestId = readRequestId(readField(error, 'responseHeaders'));

@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added `classifyProviderError`, `providerErrorFacts` and `providerErrorReason` to `@mastra/core/error`: one reader for model-provider failures (authentication, quota, rate limit, context overflow, rejected model or request, timeout, outage) that takes HTTP status and provider codes before wording. Persisted error parts also keep every provider code as `codes` and the provider's `reason` sentence, so a reloaded thread classifies like a live one. The `reason` comes from the provider's response, including a string `detail` field and a response wrapped as another error's cause; any other cause stays out of thread history.
+Added `classifyProviderError`, `providerErrorFacts` and `providerErrorReason` to `@mastra/core/error`: one reader for model-provider failures (authentication, quota, rate limit, context overflow, rejected model or request, timeout, outage) that takes HTTP status and provider codes before wording. A status from an MCP server or the GitHub API is not mistaken for the model provider's. Persisted error parts also keep every provider code as `codes` and the provider's `reason` sentence, so a reloaded thread classifies like a live one. The `reason` comes from the provider's response, including a string `detail` field and a response wrapped as another error's cause; any other cause stays out of thread history, and a long reason is cut at 2,000 characters.
 
 Each kind names a recovery action. New kinds can arrive in minor releases, and no kind is renamed or removed within 1.x, so keep a default branch when you switch on one:
 

@@ -40,9 +40,5 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
 }
 
 function RecoveryAction({ recovery }: { recovery: RunErrorRecovery }) {
-  return recovery === 'credentials' ? (
-    <ProviderReconnectAction label="Review credentials" />
-  ) : (
-    <ModelPicker triggerLabel="Change model" />
-  );
+  return recovery === 'credentials' ? <ProviderReconnectAction /> : <ModelPicker triggerLabel="Change model" />;
 }
