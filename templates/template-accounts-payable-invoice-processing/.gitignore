@@ -1,0 +1,20 @@
+output.txt
+node_modules
+dist
+.mastra
+.env.development
+.env
+.env.local
+data
+*.db
+*.db-*
+*.duckdb
+*.duckdb.wal
+.netlify
+.vercel
+
+# Local dependencies, credentials, test fixtures and verification evidence.
+.local/
+.npm-cache/
+package-lock.json
+coverage/

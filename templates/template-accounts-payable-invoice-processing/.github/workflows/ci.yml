@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ACCOUNTING_PROVIDER: quickbooks-mcp
+      QBO_MCP_SERVER_PATH: ${{ github.workspace }}/package.json
+      QBO_MCP_TOKEN_STORE_PATH: ${{ github.workspace }}/package.json
+      QBO_MCP_ENABLE_POSTING: "false"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build

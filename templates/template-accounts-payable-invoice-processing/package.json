@@ -1,0 +1,34 @@
+{
+  "name": "accounts-payable-invoice-processing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An accounts payable agent that extracts invoices, matches POs and receipts, routes approvals, and optionally posts bills to QuickBooks.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@mastra/core": "1.60.0",
+    "@mastra/libsql": "1.21.0",
+    "@mastra/mcp": "1.17.0",
+    "@mastra/memory": "1.27.0",
+    "currency-codes": "2.2.0",
+    "decimal.js": "10.6.0",
+    "dotenv": "16.6.1",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "mastra": "1.25.1",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
