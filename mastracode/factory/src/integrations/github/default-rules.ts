@@ -25,6 +25,27 @@ function pullRequestCard(context: FactoryGithubRuleContext): boolean {
   return context.item?.source === 'github-pr';
 }
 
+/** The bound card reviews this pull request: its own card, or the card that has it out. */
+function reviewsPullRequest(context: FactoryGithubRuleContext): boolean {
+  if (pullRequestCard(context)) return true;
+  return (
+    context.pullRequestLinked === true && context.item?.metadata?.openPullRequestNumber === context.pullRequest?.number
+  );
+}
+
+/**
+ * Feedback on a pull request wakes the card's builder only when the builder owns that pull request:
+ * Factory opened it, or it is the one the card has out. An outsider's pull request that merely
+ * references the card's issue must not steer its builder.
+ */
+function builderOwnsPullRequest(context: FactoryGithubRuleContext): boolean {
+  if (!context.pullRequest) return false;
+  if (context.pullRequestLinked !== true) return true;
+  return (
+    context.pullRequest.factoryAuthored || context.item?.metadata?.openPullRequestNumber === context.pullRequest.number
+  );
+}
+
 function retriageGithubIssue(context: FactoryGithubRuleContext) {
   if (!context.item || context.item.source !== 'github-issue' || !context.item.url) return;
   if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
@@ -176,23 +197,24 @@ function materializePullRequestIntake(
 
 function pullRequestOpened(context: FactoryGithubRuleContext) {
   if (!context.pullRequest) return;
-  // Opening a pull request is evaluated once per card it concerns. This rule
-  // files the pull request's own Review card, which is the arrival — the
-  // evaluation carrying `pullRequestIntake` — so the authoring Work item's own
-  // evaluation only moves it out for review: Building means "no pull request
-  // yet", Review means one is open. The card rests there through every round of
-  // feedback — the builder is woken in place — until the merge closes it.
+  // A pull request that belongs to a card (Factory opened it from the card, it came from the card's
+  // branch, or it says it fixes the card's issue) is linked to that card instead of getting its own:
+  // the card moves to Review, where its review seat reviews the pull request. The card rests there
+  // through every round of feedback — the builder is woken in place — until the merge closes it.
   if (context.item && context.pullRequestIntake !== true) {
     if (context.board !== 'work' || pullRequestCard(context) || context.pullRequest.state !== 'open') return;
-    if (!context.item.stages.includes('execute')) return;
-    // Resolution can match a Work item by branch alone, so a fork's pull
-    // request must not be able to move it: same bar as auto-starting a review.
+    if (isTerminalFactoryRuleStage(context.item.stages)) return;
+    // Resolution can match a card by branch or by a "fixes #N" an outsider wrote, so an untrusted
+    // pull request is only linked: it moves nothing and starts no review until a maintainer asks.
     if (!trustedGithubActor(context) && !context.pullRequest.factoryAuthored) return;
+    const reviewing = context.item.stages.length === 1 && context.item.stages[0] === 'review';
     return {
       type: 'transition',
       idempotencyKey: `${context.ingress.id}:out-for-review`,
       board: 'work',
       stage: 'review',
+      // Already in Review (self-review approved the branch): re-enter to review the pull request.
+      ...(reviewing ? { reenter: true } : {}),
     } as const;
   }
   // A GitHub App bot is never a collaborator, so Factory's own PRs score
@@ -256,7 +278,7 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
   // Only the Work item that authored the PR can act on the feedback. Provenance
   // binds the event there; a Review card seeing its own posted review must not
   // react to it (that would loop the reviewer against itself).
-  if (context.board !== 'work' || pullRequestCard(context)) return;
+  if (context.board !== 'work' || pullRequestCard(context) || !builderOwnsPullRequest(context)) return;
   // A closed or merged pull request has no branch left to push fixes to.
   if (context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // `approved` needs no work, and `commented` (a review body with no verdict)
@@ -313,7 +335,7 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
   // Provenance binds the comment to the Work item that authored the PR — the
   // only session that can act on it. A Review card must not react to comments
   // on the PR it is reviewing.
-  if (context.board !== 'work' || pullRequestCard(context)) return;
+  if (context.board !== 'work' || pullRequestCard(context) || !builderOwnsPullRequest(context)) return;
   if (context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // `factoryAuthored` is one bit for the whole Factory, so Factory's own
   // comments are indistinguishable between roles — waking on all of them would
@@ -362,7 +384,7 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
   // GitHub reviewer requests and Factory's exact mention command are both
   // explicit requests to enter the same Review lifecycle.
   const factoryReviewEntry = context.reviewRequest?.factoryReviewer || context.reviewCommand !== undefined;
-  if ((context.item && !pullRequestCard(context)) || !factoryReviewEntry) return;
+  if ((context.item && !pullRequestCard(context) && context.pullRequestLinked !== true) || !factoryReviewEntry) return;
   if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
   // Trusted (write/admin) requesters only: creating or re-entering review checks
   // out and executes PR code, the same bar pullRequestOpened applies to auto-review.
@@ -383,7 +405,9 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
   // Once a verdict is recorded the card rests in Reviewing, so a fresh request
   // re-enters the stage to start another pass.
   const reviewing = context.item.stages.length === 1 && context.item.stages[0] === 'review';
-  if (reviewing && !hasRecordedVerdict(context.item)) return;
+  // A linked card starts reviewing the pull request on request (it becomes the one the card has out).
+  const startsReview = !reviewsPullRequest(context);
+  if (reviewing && !hasRecordedVerdict(context.item) && !startsReview) return;
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:re-review-requested`,
@@ -394,8 +418,11 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
 }
 
 function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
-  if (!context.item || !pullRequestCard(context)) return;
+  if (!context.item || !reviewsPullRequest(context)) return;
   if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
+  // On the card that has the pull request out, only a card in Review re-reviews: elsewhere the
+  // builder is still working and will hand the card to Review itself.
+  if (!pullRequestCard(context) && !context.item.stages.includes('review')) return;
   // Intake has not started a review pass yet, so a push there is just more of
   // the code the first pass will read. A push to a card sitting in Reviewing is
   // different: it invalidates whatever that pass is reading, so re-enter the

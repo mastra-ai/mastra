@@ -190,6 +190,27 @@ export function githubPullRequestLinkKey(repositoryId: number, pullRequestNumber
   })!;
 }
 
+/** Cards folded into another card (a pull request's old card) no longer receive events. */
+function unfolded(items: WorkItemRow[]): WorkItemRow[] {
+  return items.filter(item => typeof item.metadata?.foldedInto !== 'string');
+}
+
+const CLOSING_REFERENCE =
+  /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+(?:([\w.-]+\/[\w.-]+)#|https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/|#)(\d+)\b/gi;
+
+/** Issue numbers in this repository a pull request body says it closes, in order. */
+export function closingIssueNumbers(body: string | undefined, repositoryFullName: string): number[] {
+  if (!body) return [];
+  const numbers: number[] = [];
+  for (const match of body.matchAll(CLOSING_REFERENCE)) {
+    const repository = match[1] ?? match[2];
+    if (repository && repository.toLowerCase() !== repositoryFullName.toLowerCase()) continue;
+    const value = Number(match[3]);
+    if (Number.isSafeInteger(value) && value > 0 && !numbers.includes(value)) numbers.push(value);
+  }
+  return numbers;
+}
+
 function provenanceTarget(repositoryId: number, pullRequestNumber: number): string {
   return `factory-pr-provenance:${repositoryId}:${pullRequestNumber}`;
 }
@@ -734,10 +755,57 @@ export class GithubRules {
       reReviewEvent ? null : provenance,
       senderIsResponder && !reviewEntryRequested,
     );
-    // A review-entry request must never treat a branch-matched authoring Work
-    // card as the PR's Review card. A missing Review card is materialized below.
+    const pullRequestLinkKey = pullRequestNumber
+      ? githubPullRequestLinkKey(repositoryId, pullRequestNumber)
+      : undefined;
+    const pullRequestOpened = event === 'pullRequestOpened';
+    // A pull request that says it fixes an issue Factory tracks belongs to that issue's card.
+    const referencedItem =
+      !resolvedItem && pullRequestOpened && string(pullRequest?.state) === 'open'
+        ? await this.#referencedIssueItem(
+            project.orgId,
+            project.factoryProjectId,
+            repositoryId,
+            repositoryName,
+            pullRequest,
+          )
+        : undefined;
+    const ownerItem = resolvedItem ?? referencedItem;
+    // A pull request that belongs to a card is linked to it, never filed as a card of its own.
+    if (
+      pullRequestOpened &&
+      pullRequestLinkKey &&
+      ownerItem &&
+      ownerItem.externalSource?.type !== 'pull-request' &&
+      string(pullRequest?.state) === 'open'
+    ) {
+      await this.options.storage.linkSource({
+        orgId: project.orgId,
+        factoryProjectId: project.factoryProjectId,
+        workItemId: ownerItem.id,
+        sourceKey: pullRequestLinkKey,
+        kind: 'pull_request',
+        integration: 'github',
+        external: { repositoryId, number: pullRequestNumber, url: string(pullRequest?.html_url) ?? null },
+        factoryAuthored: pullRequestFactoryAuthored,
+      });
+    }
+    const pullRequestLink = pullRequestLinkKey
+      ? await this.options.storage.findBySourceKey({
+          orgId: project.orgId,
+          factoryProjectId: project.factoryProjectId,
+          sourceKey: pullRequestLinkKey,
+        })
+      : null;
+    const linksPullRequest = (item: WorkItemRow | undefined) =>
+      item !== undefined && item.externalSource?.type !== 'pull-request' && pullRequestLink?.workItemId === item.id;
+    // A review-entry request must never treat a branch-matched authoring Work card as the pull
+    // request's card unless that card links the pull request. A missing card is materialized below.
     const relatedItem =
-      reviewEntryRequested && resolvedItem?.externalSource?.type !== 'pull-request' ? undefined : resolvedItem;
+      reviewEntryRequested && resolvedItem?.externalSource?.type !== 'pull-request' && !linksPullRequest(resolvedItem)
+        ? undefined
+        : ownerItem;
+    const pullRequestLinked = linksPullRequest(relatedItem);
     const intake = issueNumber
       ? await this.#intakeTarget(project, repositoryName, labelNames(issue?.labels))
       : pullRequestNumber && pullRequest
@@ -805,6 +873,7 @@ export class GithubRules {
           : {}),
         ...(intake ? { intake } : {}),
         ...(pullRequestIntake ? { pullRequestIntake: true } : {}),
+        ...(item && pullRequestLinked && item.id === relatedItem?.id ? { pullRequestLinked: true } : {}),
         event,
         deliveryId: parsed.deliveryId,
         factory: { createdAt: factoryProject.createdAt.toISOString() },
@@ -968,6 +1037,16 @@ export class GithubRules {
       const headSha = string(object(pullRequest?.head)?.sha)?.toLowerCase();
       if (event !== 'pullRequestUpdated' || !headSha || !pullRequestNumber) return;
       const headAt = timestamp(pullRequest?.updated_at);
+      if (pullRequestLinked && relatedItem) {
+        await recordPullRequestHead(this.options.storage, {
+          orgId: relatedItem.orgId,
+          id: relatedItem.id,
+          headSha,
+          headAt,
+          ownedPullRequestNumber: pullRequestNumber,
+        });
+        return;
+      }
       if (relatedItem?.externalSource?.type !== 'pull-request') return;
       const parent = await this.#linkedClosureItem(
         project.orgId,
@@ -1008,8 +1087,11 @@ export class GithubRules {
     // the delivery's own evaluation; the item's is a second one, under an
     // identity suffixed with its id, because ingress identities are the replay
     // key and reusing the delivery's own would drop it as a duplicate.
-    const pullRequestOpened = event === 'pullRequestOpened';
-    const primary = await evaluate(evaluated, deliveryIdentity, pullRequestOpened);
+    const authoringItem =
+      pullRequestOpened && relatedItem !== undefined && relatedItem.externalSource?.type !== 'pull-request'
+        ? relatedItem
+        : undefined;
+    const primary = await evaluate(evaluated, deliveryIdentity, pullRequestOpened && authoringItem === undefined);
     // A closed pull request is the one *other* event both linked cards need:
     // the Review card has to close, and the Work item that wrote the code has
     // to finish (on merge) or at least stop recording it as open. Resolution binds the delivery to
@@ -1028,7 +1110,7 @@ export class GithubRules {
     // Moving the card to Done does not touch its pull request fields, so without
     // this the card reads "open" until the next sweep and still offers Re-review.
     // Stamped after the evaluations, which commit at the revision they read.
-    const stampClosed = async (companionStatus?: string) => {
+    const stampClosed = async () => {
       if (!pullRequestNumber) return;
       // The authoring Work item records which pull request it has out, so an
       // agent cannot close the work while that pull request is still open.
@@ -1038,21 +1120,16 @@ export class GithubRules {
         // pull request's Review card still records it open, so a redelivery
         // after the close cannot block the Work item again.
         const trusted = (actor.type === 'github' && actor.trusted) || pullRequestFactoryAuthored;
-        const reviewCard =
-          authoringItem && trusted
-            ? await this.#linkedClosureItem(
-                project.orgId,
-                project.factoryProjectId,
-                repositoryId,
-                repositoryName,
-                pullRequestNumber,
-                authoringItem,
-              )
-            : undefined;
-        const stillOpen =
-          companionStatus === 'replayed'
-            ? reviewCard !== undefined && reviewCard.metadata?.state !== 'closed'
-            : reviewCard?.metadata?.state !== 'closed';
+        // The link records whether the pull request is still open, so a redelivery after the close
+        // cannot block the card again.
+        const link = pullRequestLinkKey
+          ? await this.options.storage.findBySourceKey({
+              orgId: project.orgId,
+              factoryProjectId: project.factoryProjectId,
+              sourceKey: pullRequestLinkKey,
+            })
+          : null;
+        const stillOpen = link?.workItemId === authoringItem?.id && link?.state === 'open';
         if (authoringItem && trusted && stillOpen) {
           // The head comes along so a head recorded for an earlier pull
           // request cannot mark this one's verdict outdated. A replayed opening
@@ -1068,7 +1145,13 @@ export class GithubRules {
             orgId: authoringItem.orgId,
             id: authoringItem.id,
             userId: 'factory-rule-dispatcher',
-            patch: { metadata: { openPullRequestNumber: pullRequestNumber, ...head } },
+            patch: {
+              metadata: {
+                openPullRequestNumber: pullRequestNumber,
+                openPullRequestUrl: string(pullRequest?.html_url) ?? null,
+                ...head,
+              },
+            },
           });
         }
         return;
@@ -1087,7 +1170,7 @@ export class GithubRules {
             ...(ownsCard && event === 'pullRequestMerged' && typeof card.metadata?.reviewVerdict === 'string'
               ? { reviewVerdict: null }
               : {}),
-            ...(recorded === pullRequestNumber ? { openPullRequestNumber: null } : {}),
+            ...(recorded === pullRequestNumber ? { openPullRequestNumber: null, openPullRequestUrl: null } : {}),
           };
           if (Object.keys(settled).length > 0) {
             await this.options.storage.update({
@@ -1107,20 +1190,34 @@ export class GithubRules {
         });
       }
     };
-    const authoringItem =
-      linked === undefined &&
-      pullRequestOpened &&
-      relatedItem !== undefined &&
-      relatedItem.externalSource?.type !== 'pull-request'
-        ? relatedItem
-        : undefined;
-    if (linked === undefined && authoringItem === undefined) {
+    // A maintainer asking Factory to review a pull request linked to a card (one an outsider opened
+    // against its issue, say) makes it the pull request that card has out.
+    const stampReviewRequested = async () => {
+      if (!reviewEntryRequested || !pullRequestLinked || !relatedItem || !pullRequestNumber) return;
+      if (actor.type !== 'github' || !actor.trusted || actor.factoryAuthored) return;
+      if (string(pullRequest?.state) !== 'open' || pullRequest?.merged === true) return;
+      if (relatedItem.metadata?.openPullRequestNumber === pullRequestNumber) return;
+      await this.options.storage.update({
+        orgId: relatedItem.orgId,
+        id: relatedItem.id,
+        userId: 'factory-rule-dispatcher',
+        patch: {
+          metadata: {
+            openPullRequestNumber: pullRequestNumber,
+            openPullRequestUrl: string(pullRequest?.html_url) ?? null,
+            pullRequestHeadSha: string(object(pullRequest?.head)?.sha)?.toLowerCase() ?? null,
+            pullRequestHeadAt: timestamp(pullRequest?.updated_at) ?? null,
+          },
+        },
+      });
+    };
+    if (linked === undefined) {
       await stampClosed();
+      await stampReviewRequested();
       return primary;
     }
-    const companion = linked ?? authoringItem;
-    const secondary = await evaluate(companion, `${deliveryIdentity}:${companion?.id ?? 'pull-request'}`);
-    await stampClosed(secondary.status);
+    const secondary = await evaluate(linked, `${deliveryIdentity}:${linked.id}`);
+    await stampClosed();
     for (const status of ['committed', 'replayed'] as const) {
       if (primary.status === status || secondary.status === status) return { status };
     }
@@ -1142,7 +1239,7 @@ export class GithubRules {
     pullRequestNumber: number,
     resolved: WorkItemRow,
   ): Promise<WorkItemRow | undefined> {
-    const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
+    const items = unfolded(await this.options.storage.list({ orgId, factoryProjectId: projectId }));
     const linked =
       resolved.externalSource?.type === 'pull-request'
         ? // Bound to the pull request's own Review card: follow the recorded
@@ -1161,6 +1258,27 @@ export class GithubRules {
     return linked?.id === resolved.id ? undefined : linked;
   }
 
+  /**
+   * The issue card a newly opened pull request says it closes ("fixes #12", "closes acme/repo#12" or
+   * the issue's URL), in the same repository. The first referenced issue with a card wins.
+   */
+  async #referencedIssueItem(
+    orgId: string,
+    projectId: string,
+    repositoryId: number,
+    repositoryFullName: string,
+    pullRequest: Record<string, unknown> | undefined,
+  ): Promise<WorkItemRow | undefined> {
+    const numbers = closingIssueNumbers(string(pullRequest?.body), repositoryFullName);
+    if (numbers.length === 0) return undefined;
+    const items = unfolded(await this.options.storage.list({ orgId, factoryProjectId: projectId }));
+    for (const issueNumber of numbers) {
+      const item = this.#resolveItem(items, repositoryId, repositoryFullName, issueNumber, undefined, undefined, null);
+      if (item) return item;
+    }
+    return undefined;
+  }
+
   async #relatedItem(
     orgId: string,
     projectId: string,
@@ -1172,7 +1290,7 @@ export class GithubRules {
     provenance: FactoryPullRequestProvenanceData | null,
     preferAuthoringItem = false,
   ): Promise<WorkItemRow | undefined> {
-    const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
+    const items = unfolded(await this.options.storage.list({ orgId, factoryProjectId: projectId }));
     const resolved = this.#resolveItem(
       items,
       repositoryId,
@@ -1192,7 +1310,14 @@ export class GithubRules {
     if (preferAuthoringItem && resolved?.externalSource?.type === 'pull-request' && resolved.parentWorkItemId) {
       return items.find(item => item.id === resolved.parentWorkItemId) ?? resolved;
     }
-    return resolved;
+    if (resolved || !pullRequestNumber) return resolved;
+    // No card of its own: the pull request belongs to the card that links it.
+    const link = await this.options.storage.findBySourceKey({
+      orgId,
+      factoryProjectId: projectId,
+      sourceKey: githubPullRequestLinkKey(repositoryId, pullRequestNumber),
+    });
+    return link ? items.find(item => item.id === link.workItemId) : undefined;
   }
 
   #resolveItem(

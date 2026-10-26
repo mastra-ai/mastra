@@ -28,7 +28,9 @@ export const workBoardTemplate = {
   eventRoutes: [
     // Event routes decide where a move the integration's rule proposes lands; the rule keeps its gates
     // (trusted actor, Factory-authored, recorded verdict, PR still open).
-    { event: 'pull_request.opened', fromPhases: ['execute'], toPhaseKey: 'review' },
+    // A pull request that belongs to a card moves it to Review from wherever it is: Factory opens one
+    // from Building, and one that fixes the card's issue can arrive before Factory builds anything.
+    { event: 'pull_request.opened', toPhaseKey: 'review' },
     {
       event: 'pull_request.merged',
       when: {

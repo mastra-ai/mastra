@@ -97,4 +97,67 @@ describe.each(engines)('boards migration (%s)', engine => {
     expect(report).toMatchObject({ boardsSeeded: 0, cardsMoved: 0, skipped: [] });
     expect((await workItems.get({ orgId, id: legacy.item.id }))?.board).toBe('review');
   });
+
+  it("folds Factory's pull request card into the card that opened it, handing over its review seat", async () => {
+    const { boards, workItems, orgId, project } = await setup(engine);
+    const only = await project('Only');
+    const scope = { orgId, factoryProjectId: only.id, userId: 'user-1' };
+    const issue = await workItems.upsert({
+      ...scope,
+      input: {
+        title: 'Issue 42',
+        board: 'work',
+        stages: ['review'],
+        externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:10:issue:42' },
+        sessions: { work: { sessionId: 'builder', branch: 'factory/issue-42', threadId: 'thread-work' } },
+        metadata: { openPullRequestNumber: 17 },
+      },
+    });
+    const companion = await workItems.upsert({
+      ...scope,
+      input: {
+        title: 'PR 17',
+        board: 'review',
+        stages: ['review'],
+        parentWorkItemId: issue.item.id,
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        sessions: { review: { sessionId: 'reviewer', branch: 'factory/pr-17', threadId: 'thread-review' } },
+        metadata: { factoryAuthored: true, githubRepositoryId: 10, githubPullRequestNumber: 17 },
+      },
+    });
+
+    const report = await migrateBoards({ mode: 'apply', projects: [only], boards, workItems });
+
+    expect(report).toMatchObject({ cardsFolded: 1, cardsMoved: 0, skipped: [] });
+    expect(await workItems.get({ orgId, id: companion.item.id })).toMatchObject({
+      board: 'work',
+      stages: ['canceled'],
+      metadata: { foldedInto: issue.item.id },
+    });
+    const parent = await workItems.get({ orgId, id: issue.item.id });
+    // The independent reviewer keeps reviewing; the builder's seat is untouched.
+    expect(parent?.sessions).toMatchObject({
+      work: { sessionId: 'builder' },
+      review: { sessionId: 'reviewer', threadId: 'thread-review' },
+    });
+    expect(parent?.metadata).toMatchObject({ openPullRequestUrl: 'https://github.com/acme/repo/pull/17' });
+    expect(
+      await workItems.findBySourceKey({
+        orgId,
+        factoryProjectId: only.id,
+        sourceKey: 'github:pull-request:github:10:pull-request:17',
+      }),
+    ).toMatchObject({ workItemId: issue.item.id, factoryAuthored: true });
+
+    expect(await migrateBoards({ mode: 'apply', projects: [only], boards, workItems })).toMatchObject({
+      cardsFolded: 0,
+      pullRequestLinksMoved: 0,
+      skipped: [],
+    });
+  });
 });

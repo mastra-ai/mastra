@@ -30,10 +30,11 @@ export function belongsToBoard(item: WorkItem, kind: BoardKind): boolean {
 }
 
 /**
- * A pull request Factory opened for a card is filed as that card's child: it hosts the
- * independent review. The board shows the parent card, which carries the pull request link.
+ * Cards the board leaves out because another card carries their work: a pull request card folded
+ * into the card that opened it, and a GitLab merge request Factory opened, filed as that card's child.
  */
-export function isAuthoredPullRequestCard(item: Pick<WorkItem, 'source' | 'parentWorkItemId'>): boolean {
+export function isFoldedCard(item: Pick<WorkItem, 'source' | 'parentWorkItemId' | 'metadata'>): boolean {
+  if (typeof item.metadata?.foldedInto === 'string') return true;
   return (item.source === 'github-pr' || item.source === 'gitlab-pr') && item.parentWorkItemId != null;
 }
 

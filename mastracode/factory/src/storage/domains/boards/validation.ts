@@ -210,7 +210,8 @@ const WORK_BOARD_REQUIRED_MOVES: Readonly<Record<string, readonly string[]>> = {
   // Cards filed past Intake (a review request, a route to Review) are created in Intake, then moved.
   intake: ['triage', 'review', 'done', 'canceled'],
   triage: ['intake', 'planning', 'review', 'done', 'canceled'],
-  planning: ['execute', 'done', 'canceled'],
+  // A pull request that fixes the card's issue can arrive before Factory builds it.
+  planning: ['execute', 'review', 'done', 'canceled'],
   execute: ['review', 'done', 'canceled'],
   // Self-review parks a card in Intake once it hits the round limit.
   review: ['intake', 'execute', 'done', 'canceled'],

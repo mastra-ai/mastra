@@ -2,7 +2,7 @@ import { FACTORY_RULE_STAGES } from '@mastra/factory/rules/types';
 
 import { describe, expect, it } from 'vitest';
 
-import { boardStages, currentItemStageLabel, itemAppearsInStage } from './boardStages';
+import { boardStages, currentItemStageLabel, isFoldedCard, itemAppearsInStage } from './boardStages';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 
 function workItem(source: WorkItemSource, stages: string[]): WorkItem {
@@ -69,5 +69,15 @@ describe('itemAppearsInStage', () => {
     const canceled = workItem('github-pr', ['canceled']);
     expect(itemAppearsInStage(canceled, 'canceled', stages)).toBe(true);
     expect(itemAppearsInStage(canceled, 'intake', stages)).toBe(false);
+  });
+});
+
+describe('isFoldedCard', () => {
+  it('leaves out cards another card carries the work of, and shows the rest', () => {
+    const issue = workItem('github-issue', ['review']);
+    expect(isFoldedCard(issue)).toBe(false);
+    expect(isFoldedCard(workItem('github-pr', ['triage']))).toBe(false);
+    expect(isFoldedCard({ ...workItem('github-pr', ['canceled']), metadata: { foldedInto: issue.id } })).toBe(true);
+    expect(isFoldedCard({ ...workItem('gitlab-pr', ['review']), parentWorkItemId: issue.id })).toBe(true);
   });
 });

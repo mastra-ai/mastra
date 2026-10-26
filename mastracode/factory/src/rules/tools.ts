@@ -175,7 +175,7 @@ function createReviewVerdictTool(
     factory_record_review_verdict: createTool({
       id: 'factory_record_review_verdict',
       description:
-        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On a Review card it records the published PR verdict and the card stays in Reviewing. On a Work card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
+        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On a card whose pull request is open it records the published PR verdict and the card stays in Reviewing. On a Work card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
       inputSchema: reviewVerdictInputSchema,
       requireApproval: false,
       execute: async ({ verdict, reviewedHeadSha, findings }, execution) => {
@@ -191,6 +191,7 @@ function createReviewVerdictTool(
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
         const pullRequestCard = item.externalSource?.type === 'pull-request';
+        const openPullRequestNumber = item.metadata?.openPullRequestNumber;
         if (
           !pullRequestCard &&
           boardForWorkItem(item) === 'work' &&
@@ -208,7 +209,8 @@ function createReviewVerdictTool(
             toolCallId: execution.agent?.toolCallId,
           });
         }
-        if (!pullRequestCard || item.stages[0] !== 'review') {
+        // A pull request is reviewed on its own card, or on the card that has it out.
+        if ((!pullRequestCard && typeof openPullRequestNumber !== 'number') || item.stages[0] !== 'review') {
           throw new Error(`Only a card in Reviewing records a verdict; this one is in ${item.stages.join(', ')}.`);
         }
         const reviewedAt = new Date().toISOString();
@@ -250,7 +252,15 @@ function createReviewVerdictTool(
             },
           });
         }
-        const sourceKey = externalSourceKey(item.externalSource);
+        const sourceKey = pullRequestCard
+          ? externalSourceKey(item.externalSource)
+          : (
+              await options.storage.listSources({
+                orgId: binding.orgId,
+                factoryProjectId: item.factoryProjectId,
+                workItemId: item.id,
+              })
+            ).find(link => link.kind === 'pull_request' && link.external.number === openPullRequestNumber)?.sourceKey;
         if (sourceKey) {
           await options.storage.recordSourceReview({
             orgId: binding.orgId,

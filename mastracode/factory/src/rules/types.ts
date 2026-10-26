@@ -294,15 +294,16 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
    */
   intake?: FactoryRuleIntakeTarget;
   /**
-   * Set on the one evaluation per pull request delivery that files the pull
-   * request's own Review card. Opening a pull request concerns two cards — that
-   * Review card and the Work item that authored the pull request — so the rule
-   * answers for the two separately: the arrival carries this flag and is
-   * committed against the authoring item when resolution found one, which is
-   * what links the new card to it, while the authoring item's own evaluation
-   * leaves the flag unset.
+   * Set on the evaluation that files a pull request's own card. Only a pull request that belongs to
+   * no card gets one; a pull request a card authored or was linked to is handled on that card.
    */
   pullRequestIntake?: boolean;
+  /**
+   * The bound card is not the pull request's own card but links it: Factory opened it from the card,
+   * it came from the card's session branch, or it references the card's issue. Its review, pushes and
+   * review requests are handled on that card.
+   */
+  pullRequestLinked?: boolean;
   event: FactoryGithubEventName;
   deliveryId: string;
   factory: { createdAt: string };

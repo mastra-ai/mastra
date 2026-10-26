@@ -16,6 +16,7 @@ export interface BoardsMigrationReport {
   linksBackfilled: number;
   pullRequestLinksMoved: number;
   cardsMoved: number;
+  cardsFolded: number;
   labelRoutesRetargeted: number;
   bindingsRetargeted: number;
   skipped: { id: string; reason: string }[];
@@ -37,11 +38,13 @@ function sourceKind(item: WorkItemRow): 'issue' | 'pull_request' | null {
  * a second run finds nothing to do. Per project:
  * 1. seed the stored Work board and default routes when the project has none;
  * 2. link every card to its own issue or pull request; a GitHub pull request Factory opened is also
- *    linked to the card that authored it, under the key provenance uses (its own card stays as that
- *    card's child, hosting the review);
- * 3. move cards still on the retired Review board (and legacy board-less pull request cards) to
+ *    linked to the card that authored it, under the key provenance uses;
+ * 3. fold that pull request's own card into the authoring card: one card per piece of work. The
+ *    folded card is canceled and marked `metadata.foldedInto`; its sessions, comments and history
+ *    stay on it, and its review seat moves over when the authoring card has none;
+ * 4. move cards still on the retired Review board (and legacy board-less pull request cards) to
  *    Work — phase keys are shared, so stages are kept;
- * 4. retarget label routes and source bindings that named the Review board to Work.
+ * 5. retarget label routes and source bindings that named the Review board to Work.
  * `dry-run` reports what would change and writes nothing.
  */
 export async function migrateBoards(input: {
@@ -64,6 +67,7 @@ export async function migrateBoards(input: {
     linksBackfilled: 0,
     pullRequestLinksMoved: 0,
     cardsMoved: 0,
+    cardsFolded: 0,
     labelRoutesRetargeted: 0,
     bindingsRetargeted: 0,
     skipped: [],
@@ -170,6 +174,8 @@ export async function migrateBoards(input: {
             }
           }
           await copyVerdict(authoringKey, held?.workItemId === parent.id ? held : null);
+          await fold(item, parent);
+          return;
         }
       }
 
@@ -185,6 +191,50 @@ export async function migrateBoards(input: {
         expectedBoard: item.board,
       });
       if (!moved) report.skipped.push({ id: item.id, reason: 'changed during migration; moved next run' });
+    }
+
+    async function fold(item: WorkItemRow, listed: WorkItemRow): Promise<void> {
+      if (typeof item.metadata?.foldedInto === 'string') return;
+      report.cardsFolded++;
+      if (!apply) return;
+      const parent = (await input.workItems.get({ orgId: listed.orgId, id: listed.id })) ?? listed;
+      const number = item.metadata?.githubPullRequestNumber;
+      const ownsPullRequest = parent.metadata?.openPullRequestNumber === number;
+      const reviewSeat = item.sessions.review;
+      // The parent first: should the second write fail, the next run finds the card unfolded and redoes both.
+      if ((ownsPullRequest && item.externalSource?.url) || (reviewSeat && !parent.sessions.review)) {
+        const updated = await input.workItems.update({
+          orgId: parent.orgId,
+          id: parent.id,
+          userId: MIGRATION_USER,
+          expectedRevision: parent.revision,
+          patch: {
+            ...(ownsPullRequest && item.externalSource?.url
+              ? { metadata: { openPullRequestUrl: item.externalSource.url } }
+              : {}),
+            ...(reviewSeat && !parent.sessions.review
+              ? {
+                  sessions: {
+                    review: {
+                      sessionId: reviewSeat.sessionId,
+                      branch: reviewSeat.branch,
+                      threadId: reviewSeat.threadId,
+                    },
+                  },
+                }
+              : {}),
+          },
+        });
+        if (!updated) throw new Error('authoring card changed during migration; folded next run');
+      }
+      const folded = await input.workItems.update({
+        orgId: item.orgId,
+        id: item.id,
+        userId: MIGRATION_USER,
+        expectedRevision: item.revision,
+        patch: { board: 'work', stages: ['canceled'], metadata: { foldedInto: parent.id } },
+      });
+      if (!folded) throw new Error('changed during migration; folded next run');
     }
 
     for (const item of items) {

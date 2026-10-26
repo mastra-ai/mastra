@@ -198,9 +198,9 @@ function buildWorkItem(context: FactoryStageRuleContext) {
 }
 
 function selfReviewWorkItem(context: FactoryStageRuleContext) {
-  // A card whose change request is already open is past self-review; the Review
-  // board's reviewer covers it on the change request itself.
-  if (typeof context.item.metadata?.openPullRequestNumber === 'number') return;
+  // A card whose change request is already open is past self-review: the same review seat
+  // reviews the change request itself.
+  if (typeof context.item.metadata?.openPullRequestNumber === 'number') return reviewPullRequest(context);
   if (context.selfReviewEnabled !== true) return;
   return {
     type: 'invokeSkill',
@@ -327,6 +327,7 @@ const buildRunner: BoardRunner = {
 // The builder's seat carries Review: it answers feedback on its own change request.
 // With self-review on, entering Review first runs an independent reviewer in its own
 // review seat on the pushed branch; on approve the builder opens the change request here.
+// Once the card has a change request out, that review seat reviews the change request.
 const reviewRunner: BoardRunner = {
   id: 'factory-review',
   role: 'work',

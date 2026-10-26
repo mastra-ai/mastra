@@ -1301,10 +1301,9 @@ describe('built-in board and integration handlers', () => {
     });
   });
 
-  it('files the pull request card on the arrival and moves the authoring item out for review', async () => {
-    // Opening a pull request is evaluated once per card it concerns. Only the
-    // arrival — flagged `pullRequestIntake` — files the card; the authoring
-    // item's own evaluation moves it from Building to Review.
+  it('moves the card a pull request belongs to into Review, and files a card only for a pull request no card owns', async () => {
+    // A pull request that belongs to a card is evaluated once, on that card, which moves to Review.
+    // Only an arrival no card owns — flagged `pullRequestIntake` — files a card of its own.
     const authored = {
       ...githubContext('pullRequestOpened'),
       item: {
@@ -1327,9 +1326,20 @@ describe('built-in board and integration handlers', () => {
       board: 'work',
       stage: 'review',
     });
-    // Only Building moves: a card already past it (or a draft-closed PR) is left alone.
+    // A card already in Review (self-review approved the branch) re-enters it to review the pull request.
     expect(
       await defaultGithubRules.pullRequestOpened?.({ ...authored, item: { ...authored.item, stages: ['review'] } }),
+    ).toMatchObject({ type: 'transition', stage: 'review', reenter: true });
+    // A finished card stays finished, and an untrusted pull request (a fork's "fixes #42") only links.
+    expect(
+      await defaultGithubRules.pullRequestOpened?.({ ...authored, item: { ...authored.item, stages: ['done'] } }),
+    ).toBeUndefined();
+    expect(
+      await defaultGithubRules.pullRequestOpened?.({
+        ...authored,
+        actor: { type: 'github', login: 'outsider', trusted: false, factoryAuthored: false },
+        pullRequest: { ...authored.pullRequest!, factoryAuthored: false },
+      }),
     ).toBeUndefined();
     expect(await defaultGithubRules.pullRequestOpened?.({ ...authored, pullRequestIntake: true })).toMatchObject({
       type: 'upsertLinkedWorkItem',

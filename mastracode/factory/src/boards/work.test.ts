@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
+
+import { workItemBranch } from '../work-item-branch.js';
 import { openApprovedChangeRequest, workBoard } from './work.js';
 
 function executeContext(source: FactoryRuleItemContext['source']): FactoryStageRuleContext {
@@ -116,12 +117,22 @@ describe('work board self-review', () => {
     expect(decision).toMatchObject({ type: 'invokeSkill', role: 'review', skillName: 'factory-self-review' });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected self-review invocation.');
     expect(decision.arguments).toContain('Self-review round 1 of at most 3');
-    expect(
-      await workBoard.rules.review?.issue?.onEnter?.({
-        ...entry,
-        item: { ...context.item, metadata: { ...context.item.metadata, openPullRequestNumber: 7 } },
-      }),
-    ).toBeUndefined();
+    // With a pull request out, the same review seat reviews the pull request, on the card's own branch.
+    const pullRequestReview = await workBoard.rules.review?.issue?.onEnter?.({
+      ...entry,
+      item: {
+        ...context.item,
+        metadata: {
+          ...context.item.metadata,
+          openPullRequestNumber: 7,
+          openPullRequestUrl: 'https://github.com/acme/repo/pull/7',
+        },
+      },
+    });
+    expect(pullRequestReview).toMatchObject({ type: 'invokeSkill', role: 'review', skillName: 'factory-review' });
+    if (!pullRequestReview || pullRequestReview.type !== 'invokeSkill') throw new Error('Expected PR review.');
+    expect(pullRequestReview.arguments).toContain('GitHub pull request #7 (https://github.com/acme/repo/pull/7)');
+    expect(pullRequestReview.arguments).toContain(`git checkout -B ${workItemBranch(context.item)} FETCH_HEAD`);
   });
 
   it('wakes the builder to open the change request when self-review approves in place', () => {
