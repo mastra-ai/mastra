@@ -304,6 +304,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
    * review requests are handled on that card.
    */
   pullRequestLinked?: boolean;
+  /** A maintainer's review request just made this linked pull request the one the card has out. */
+  pullRequestAdopted?: boolean;
   event: FactoryGithubEventName;
   deliveryId: string;
   factory: { createdAt: string };

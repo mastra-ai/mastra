@@ -41,7 +41,7 @@ function sourceKind(item: WorkItemRow): 'issue' | 'pull_request' | null {
  *    linked to the card that authored it, under the key provenance uses;
  * 3. fold that pull request's own card into the authoring card: one card per piece of work. The
  *    folded card is canceled and marked `metadata.foldedInto`; its sessions, comments and history
- *    stay on it, and its review seat moves over when the authoring card has none;
+ *    stay on it. The authoring card records the pull request when it is still open;
  * 4. move cards still on the retired Review board (and legacy board-less pull request cards) to
  *    Work — phase keys are shared, so stages are kept;
  * 5. retarget label routes and source bindings that named the Review board to Work.
@@ -199,31 +199,28 @@ export async function migrateBoards(input: {
       if (!apply) return;
       const parent = (await input.workItems.get({ orgId: listed.orgId, id: listed.id })) ?? listed;
       const number = item.metadata?.githubPullRequestNumber;
-      const ownsPullRequest = parent.metadata?.openPullRequestNumber === number;
-      const reviewSeat = item.sessions.review;
+      const recorded = parent.metadata?.openPullRequestNumber;
+      // The parent takes the pull request on when it is still open and the parent has none out. The
+      // folded card's review seat is not moved: the parent's review seat starts fresh, so no session
+      // is bound to two cards.
+      const takesOn =
+        item.metadata?.state !== 'closed' && item.metadata?.merged !== true && typeof recorded !== 'number';
+      const stamp =
+        recorded === number || takesOn
+          ? {
+              openPullRequestNumber: number,
+              openPullRequestUrl: item.externalSource?.url ?? null,
+              openPullRequestFactoryAuthored: true,
+            }
+          : null;
       // The parent first: should the second write fail, the next run finds the card unfolded and redoes both.
-      if ((ownsPullRequest && item.externalSource?.url) || (reviewSeat && !parent.sessions.review)) {
+      if (stamp && parent.metadata?.openPullRequestUrl !== stamp.openPullRequestUrl) {
         const updated = await input.workItems.update({
           orgId: parent.orgId,
           id: parent.id,
           userId: MIGRATION_USER,
           expectedRevision: parent.revision,
-          patch: {
-            ...(ownsPullRequest && item.externalSource?.url
-              ? { metadata: { openPullRequestUrl: item.externalSource.url } }
-              : {}),
-            ...(reviewSeat && !parent.sessions.review
-              ? {
-                  sessions: {
-                    review: {
-                      sessionId: reviewSeat.sessionId,
-                      branch: reviewSeat.branch,
-                      threadId: reviewSeat.threadId,
-                    },
-                  },
-                }
-              : {}),
-          },
+          patch: { metadata: stamp },
         });
         if (!updated) throw new Error('authoring card changed during migration; folded next run');
       }

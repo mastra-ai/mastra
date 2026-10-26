@@ -18,7 +18,7 @@ function sourceRef(item: FactoryRuleItemContext): string {
  * before the history was fetched still has one, and `--unshallow` is fatal on
  * the complete clone every session gets now.
  */
-function checkoutHint(item: FactoryRuleItemContext, sessionBranch: string): string {
+function checkoutHint(item: FactoryRuleItemContext, sessionBranch: string, checkedOut = true): string {
   const number = workItemNumber(item);
   const branch = item.metadata?.headBranch;
   const safeHeadBranch = typeof branch === 'string' && isSafeBranchName(branch) ? branch : undefined;
@@ -37,6 +37,15 @@ function checkoutHint(item: FactoryRuleItemContext, sessionBranch: string): stri
     );
   }
   const refresh = `${deepen} && git fetch --filter=blob:none origin refs/pull/${number}/head && git checkout -B ${sessionBranch} FETCH_HEAD`;
+  if (!checkedOut) {
+    // A pull request someone else opened against the card's issue is not on the card's branch: it is
+    // checked out on a branch of its own, so the card's work is never reset to it.
+    return (
+      `Check out the PR head on its own branch first: \`${refresh}\`. Do not run \`gh pr checkout\`. ` +
+      `Past file contents load on demand, so keep \`git log -S\` and \`-G\` to a path. ` +
+      `Read the change with \`gh pr diff ${number}\`.${headBranch}`
+    );
+  }
   return (
     `The PR head is checked out on branch \`${sessionBranch}\` with the repository history: do not run \`gh pr checkout\`. ` +
     `Past file contents load on demand, so keep \`git log -S\` and \`-G\` to a path. ` +
@@ -141,6 +150,8 @@ export function reviewPullRequest(context: FactoryStageRuleContext) {
   // closed as Done before verdicts were recorded in place also count.
   const priorReviewCompleted = hasRecordedVerdict(context.item) || context.fromStage === 'done';
   const isGitlab = pullRequest.source === 'gitlab-pr';
+  // Factory's own pull request is the card's branch; one someone else opened against the card is not.
+  const onCardBranch = pullRequest === context.item || context.item.metadata?.openPullRequestFactoryAuthored !== false;
   const skillName = isGitlab
     ? priorReviewCompleted
       ? 'factory-gitlab-rereview'
@@ -153,7 +164,7 @@ export function reviewPullRequest(context: FactoryStageRuleContext) {
     idempotencyKey: `${context.ingress.id}:${skillName}`,
     role: 'review',
     skillName,
-    arguments: `${sourceRef(pullRequest)}\n\n${checkoutHint(pullRequest, workItemBranch(context.item))}${headLine(context.item, priorReviewCompleted)}`,
+    arguments: `${sourceRef(pullRequest)}\n\n${checkoutHint(pullRequest, onCardBranch ? workItemBranch(context.item) : workItemBranch(pullRequest), onCardBranch)}${headLine(context.item, priorReviewCompleted)}`,
     // Same-stage re-entry mid-pass: the skill is already live in the card's
     // session, so continue it with a compact kickoff. After a recorded verdict
     // the next pass is a re-review, which needs its full skill delivered.

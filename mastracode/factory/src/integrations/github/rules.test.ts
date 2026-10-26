@@ -5222,4 +5222,125 @@ describe('one card per piece of work', () => {
     await settle();
     expect(await cards()).toEqual(['Issue 42', 'Issue 43', 'PR 20']);
   });
+
+  it("reviews an outsider's linked pull request on a branch of its own, never the card's", async () => {
+    const { service, settle, issueCard, decisionsFor } = await harness();
+    const card = await issueCard(42, ['intake']);
+    await service.ingest(
+      pullRequestEvent(18, 'opened', 'd-18', { sender: 'outsider', pullRequest: { body: 'Fixes #42' } }),
+    );
+    await service.ingest(
+      pullRequestEvent(18, 'review_requested', 'd-18-rr', {
+        pullRequest: { user: { login: 'outsider' } },
+        extra: { requested_reviewer: { login: 'factory-app[bot]' } },
+      }),
+    );
+    await settle();
+    const review = (await decisionsFor(card.id)).find(decision => decision.type === 'invokeSkill');
+    const prompt = review && 'arguments' in review ? String(review.arguments) : '';
+    expect(prompt).toContain('git checkout -B factory/pr-18 FETCH_HEAD');
+    expect(prompt).not.toContain('factory/issue-42');
+  });
+
+  it("files a card of its own for a pull request that fixes a finished card's issue", async () => {
+    const { service, settle, issueCard, workItems, project, linkOf } = await harness();
+    const finished = await issueCard(42, ['done']);
+    await service.ingest(pullRequestEvent(19, 'opened', 'd-19', { pullRequest: { body: 'Fixes #42' } }));
+    await settle();
+    const cards = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(cards.map(card => [card.title, card.stages])).toEqual(
+      expect.arrayContaining([
+        ['Issue 42', ['done']],
+        ['PR 19', expect.arrayContaining([expect.stringMatching(/triage|review/)])],
+      ]),
+    );
+    expect((await workItems.get({ orgId: 'org-1', id: finished.id }))?.metadata?.openPullRequestNumber).toBe(undefined);
+    expect((await linkOf(19))?.workItemId).not.toBe(finished.id);
+  });
+
+  it("closes the card when Factory's pull request merges, whatever an outsider's linked one does", async () => {
+    const { service, settle, issueCard, workItems, integrationStorage, project } = await harness();
+    const card = await issueCard(42, ['execute']);
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: card.id },
+    });
+    await service.ingest(pullRequestEvent(17, 'opened', 'd-17', { sender: 'factory-app[bot]' }));
+    // The outsider's pull request stays open: it does not hold the card.
+    await service.ingest(
+      pullRequestEvent(18, 'opened', 'd-18', { sender: 'outsider', pullRequest: { body: 'Fixes #42' } }),
+    );
+    await settle();
+    await service.ingest(pullRequestEvent(17, 'closed', 'd-17-merge', { pullRequest: { merged: true } }));
+    await settle();
+    expect((await workItems.get({ orgId: 'org-1', id: card.id }))?.stages).toEqual(['done']);
+  });
+
+  it("leaves the card where it is when an outsider's linked pull request merges", async () => {
+    const { service, settle, issueCard, workItems } = await harness();
+    const card = await issueCard(42, ['planning']);
+    await service.ingest(
+      pullRequestEvent(18, 'opened', 'd-18', { sender: 'outsider', pullRequest: { body: 'Fixes #42' } }),
+    );
+    await settle();
+    await service.ingest(pullRequestEvent(18, 'closed', 'd-18-merge', { pullRequest: { merged: true } }));
+    await settle();
+    expect((await workItems.get({ orgId: 'org-1', id: card.id }))?.stages).toEqual(['planning']);
+  });
+
+  it('replays a missed merge of the pull request a card has out', async () => {
+    const context = await harness();
+    const { service, settle, issueCard, workItems, integrationStorage, project } = context;
+    const card = await issueCard(42, ['execute']);
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: card.id },
+    });
+    await service.ingest(pullRequestEvent(17, 'opened', 'd-17', { sender: 'factory-app[bot]' }));
+    await settle();
+    // The merge webhook never arrives; the sweep finds it.
+    const fetchPullRequest = vi.fn(async () => ({
+      title: 'PR 17',
+      url: 'https://github.com/acme/repo/pull/17',
+      state: 'closed',
+      draft: false,
+      merged: true,
+      assignees: [],
+      requestedReviewers: [],
+      labels: [],
+      headBranch: 'factory/issue-42',
+      baseBranch: 'main',
+      author: 'factory-app[bot]',
+      createdAt: '2030-01-01T00:00:00Z',
+      mergedBy: 'maintainer',
+    }));
+    const reconcile = createGithubPullRequestReconciler(
+      {
+        github: context.github,
+        sourceControl: context.sourceControl,
+        integrationStorage,
+        projects: context.projects,
+        storage: workItems,
+        configVersion: 'factory-config-v1',
+        boards: createBoardRegistry(),
+      },
+      fetchPullRequest as never,
+    );
+    await expect(reconcile([{ id: 10, fullName: 'acme/repo', installationId: 7 }])).resolves.toMatchObject({
+      checked: 1,
+      merged: 1,
+      failed: 0,
+    });
+    await settle();
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({
+      stages: ['done'],
+      metadata: { openPullRequestNumber: null },
+    });
+  });
 });

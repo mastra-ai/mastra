@@ -250,6 +250,9 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
   // Custom boards define their own lifecycle and cannot accept a transition
   // targeting the built-in Work board. Let their custom rules handle the merge.
   if (context.board !== 'work') return;
+  // A linked pull request the card never took on (an outsider's "fixes #N") finishes nothing here:
+  // when its merge closes the issue, the issue's close moves the card.
+  if (!builderOwnsPullRequest(context)) return;
   // Provenance bound the event to the originating Work item instead: the merge
   // is what finishes the work, so it closes the Work card alongside its Review card —
   // unless the card has since opened another pull request, which is still out.
@@ -406,7 +409,7 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
   // re-enters the stage to start another pass.
   const reviewing = context.item.stages.length === 1 && context.item.stages[0] === 'review';
   // A linked card starts reviewing the pull request on request (it becomes the one the card has out).
-  const startsReview = !reviewsPullRequest(context);
+  const startsReview = context.pullRequestAdopted === true || !reviewsPullRequest(context);
   if (reviewing && !hasRecordedVerdict(context.item) && !startsReview) return;
   return {
     type: 'transition',

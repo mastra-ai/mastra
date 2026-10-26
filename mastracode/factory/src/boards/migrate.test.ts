@@ -98,7 +98,7 @@ describe.each(engines)('boards migration (%s)', engine => {
     expect((await workItems.get({ orgId, id: legacy.item.id }))?.board).toBe('review');
   });
 
-  it("folds Factory's pull request card into the card that opened it, handing over its review seat", async () => {
+  it("folds Factory's pull request card into the card that opened it", async () => {
     const { boards, workItems, orgId, project } = await setup(engine);
     const only = await project('Only');
     const scope = { orgId, factoryProjectId: only.id, userId: 'user-1' };
@@ -110,7 +110,7 @@ describe.each(engines)('boards migration (%s)', engine => {
         stages: ['review'],
         externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:10:issue:42' },
         sessions: { work: { sessionId: 'builder', branch: 'factory/issue-42', threadId: 'thread-work' } },
-        metadata: { openPullRequestNumber: 17 },
+        metadata: {},
       },
     });
     const companion = await workItems.upsert({
@@ -140,12 +140,14 @@ describe.each(engines)('boards migration (%s)', engine => {
       metadata: { foldedInto: issue.item.id },
     });
     const parent = await workItems.get({ orgId, id: issue.item.id });
-    // The independent reviewer keeps reviewing; the builder's seat is untouched.
-    expect(parent?.sessions).toMatchObject({
-      work: { sessionId: 'builder' },
-      review: { sessionId: 'reviewer', threadId: 'thread-review' },
+    // No session ends up bound to two cards: the parent's review seat starts fresh.
+    expect(Object.keys(parent?.sessions ?? {})).toEqual(['work']);
+    // The still-open pull request becomes the one the card has out, so the card reviews it.
+    expect(parent?.metadata).toMatchObject({
+      openPullRequestNumber: 17,
+      openPullRequestUrl: 'https://github.com/acme/repo/pull/17',
+      openPullRequestFactoryAuthored: true,
     });
-    expect(parent?.metadata).toMatchObject({ openPullRequestUrl: 'https://github.com/acme/repo/pull/17' });
     expect(
       await workItems.findBySourceKey({
         orgId,
