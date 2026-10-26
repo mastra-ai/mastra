@@ -1,9 +1,12 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { renderWithProviders, waitForMutationsIdle } from '../../../../e2e/ui/render';
+import { server } from '../../../../e2e/ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
+import { queryKeys } from '../../../api/keys';
 import { workItem } from '../../__tests__/workBoardStubs';
 import { createAppRoutes } from '../../router';
 import { DRAFT_SESSION_ID, FACTORY_ID, stubDraftRoute } from './fixtures/draftRoute';
@@ -55,6 +58,33 @@ describe('the new session page', () => {
 
     route.finishWorkspace();
     await waitForMutationsIdle(client);
+  });
+
+  it('gives the composer back empty when the cards vanish under the pointer and later return', async () => {
+    stubDraftRoute();
+    const user = userEvent.setup();
+    const { client } = renderDraft();
+    const answerProviders = (source: string) =>
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({ providers: [{ provider: 'openai', source }] }),
+        ),
+      );
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.hover(screen.getByRole('button', { name: /^Triage new intake/ }));
+
+    answerProviders('none');
+    await client.invalidateQueries({ queryKey: queryKeys.providers() });
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Message' })).not.toBeInTheDocument());
+
+    answerProviders('env');
+    await client.invalidateQueries({ queryKey: queryKeys.providers() });
+
+    const returned = await screen.findByRole('textbox', { name: 'Message' });
+    expect(returned).toHaveValue('');
+    expect(returned).not.toHaveAttribute('readonly');
   });
 
   it('counts the Work board cards in each pipeline stage, leaving out intake, finished work and pull requests', async () => {

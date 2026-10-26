@@ -2,6 +2,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { CalendarCheck, ClipboardList, GitPullRequestArrow, Inbox, LifeBuoy, Rocket } from 'lucide-react';
+import { useEffect } from 'react';
 
 import { useChatCommands } from '../context/ChatCommandsProvider';
 
@@ -40,6 +41,8 @@ const STARTER_PROMPTS = [
 
 export function StarterPrompts() {
   const { setComposerPreview, submitComposer } = useChatCommands();
+  // Unmounting under the pointer or focus fires no pointerleave/blur.
+  useEffect(() => () => setComposerPreview(null), [setComposerPreview]);
 
   return (
     <section className="flex flex-col gap-3" aria-labelledby="starter-prompts-heading">
