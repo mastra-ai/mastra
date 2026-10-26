@@ -1,6 +1,6 @@
 {
   "name": "@mastra/factory",
-  "version": "0.25.0-alpha.2",
+  "version": "0.25.0-alpha.4",
   "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery",
   "type": "module",
   "publishConfig": {
@@ -65,6 +65,7 @@
     "@mastra/code-sdk": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:*",
+    "@mastra/platform-workspace": "workspace:*",
     "@mastra/slack": "workspace:*",
     "@octokit/auth-app": "^8.0.0",
     "@octokit/rest": "^22.0.1",

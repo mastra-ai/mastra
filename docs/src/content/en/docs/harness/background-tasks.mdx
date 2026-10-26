@@ -306,6 +306,19 @@ await mastra.backgroundTaskManager?.resume(taskId, {
 })
 ```
 
+### Resume when no slot is free
+
+By default, `resume()` throws `Concurrency limit reached` when every concurrency slot is in use. Pass `{ onNoSlot: 'queue' }` to queue the resume instead:
+
+```typescript
+const task = await mastra.backgroundTaskManager?.resume(taskId, resumeData, { onNoSlot: 'queue' })
+// task.status is still 'suspended' until a slot frees up
+```
+
+The task stays `suspended` until a slot frees up, then resumes with the queued `resumeData`. Cancelling the task drops the queued resume.
+
+The queue lives in the memory of the process that called `resume()`. If that process exits before the resume runs, the task stays `suspended` and the `resumeData` is lost. To survive restarts, persist the resume data yourself and call `resume()` again.
+
 ### What happens to the agent loop
 
 When a task suspends mid-`stream()` with `untilIdle`, the wrapper treats it as terminal for the current iteration and closes. Once the resume payload is available, call `agent.resumeStream(resumeData, { runId, toolCallId, memory, untilIdle: true })` to continue immediately. The resumed background task completes and adds its result to the message list before the agent runs a follow-up turn on the same SSE connection. To drive the resume out of band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly. Its result is still written into the thread for the next user turn.
@@ -324,7 +337,7 @@ Each layer can register terminal-state callbacks. They don't replace one another
 
 - Tool-level `background.onComplete` / `onFailed`: scoped to one tool.
 - Agent-level `backgroundTasks.onTaskComplete` / `onTaskFailed`: scoped to all tasks dispatched by this agent.
-- Manager-level `onTaskComplete` / `onTaskFailed`: scoped globally.
+- Manager-level `onTaskComplete` / `onTaskFailed`: scoped globally. These fire for every task, including tasks from [non-agent owners](#non-agent-owners).
 
 ```typescript title="src/mastra/index.ts"
 export const mastra = new Mastra({
@@ -413,6 +426,51 @@ const { tasks, total } = await mastra.backgroundTaskManager?.listTasks({
 ```
 
 These read from storage rather than the pubsub stream, so they're suitable for paginated lists and detail views.
+
+## Non-agent owners
+
+Code other than agents can run tasks through the manager. For example, an MCP server can run long tool calls as background tasks. The task's `agentId` is its owner key, and agent streams, `untilIdle`, and the end-of-step wait only see tasks whose `agentId` matches the agent. Use a namespaced owner key such as `mcp-server:<serverId>` so it can't collide with a real agent ID. Mastra doesn't enforce this.
+
+Non-agent owners usually register a static executor with `registerStaticExecutor()` so any process can run or recover their tasks. They can also set these optional task fields:
+
+- `expiresAt`: When cleanup deletes the task. Once a task completes, fails, is cancelled, or times out, cleanup deletes it after `expiresAt` passes instead of using `completedTtlMs` or `failedTtlMs`. Cleanup only runs when you set the `cleanup` option, and it never deletes a pending, running, or suspended task, so cancel expired work first. It also needs a storage adapter version that supports `expiresAt`. Older adapters keep using the global retention settings.
+- `metadata`: JSON stored with the task. The manager doesn't read it.
+
+```typescript
+mastra.backgroundTaskManager?.registerStaticExecutor('mcp-server:ops:deploy', {
+  execute: runDeploy,
+})
+
+await mastra.backgroundTaskManager?.enqueue({
+  agentId: 'mcp-server:ops',
+  toolName: 'mcp-server:ops:deploy',
+  toolCallId: taskId,
+  runId: taskId,
+  args,
+  resourceId: principalId,
+  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  metadata: { ttlMs: 86_400_000 },
+})
+```
+
+Use `perOwnerConcurrency` to give an owner its own concurrency limit instead of `perAgentConcurrency`. Its tasks still count toward `globalConcurrency`:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  storage,
+  backgroundTasks: {
+    enabled: true,
+    globalConcurrency: 60,
+    perOwnerConcurrency: { 'mcp-server:ops': 50 },
+  },
+})
+```
+
+Known limitations:
+
+- A recovered task runs without the original request. Store anything the executor needs, such as the principal in `resourceId` or other JSON in `metadata`, on the task itself.
+- A `pending` task holds no lease. On startup, another process can pick it up and dispatch it. If its executor only existed in the original process, the task fails with `No executor registered`. Static executors registered in every process avoid this.
+- The end-of-step wait in the agent loop only waits for `running` tasks, not `pending` ones. [#28228](https://github.com/mastra-ai/mastra/pull/28228) tracks the fix.
 
 ## Related
 

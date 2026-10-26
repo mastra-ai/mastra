@@ -39,6 +39,8 @@ function toRecord(task: BackgroundTask): Record<string, any> {
     completedAt: task.completedAt ?? new Date(0),
     ownerId: task.ownerId ?? null,
     leaseExpiresAt: task.leaseExpiresAt ?? null,
+    expiresAt: task.expiresAt ?? null,
+    metadata: serializeJson(task.metadata) ?? null,
   };
 }
 
@@ -66,6 +68,7 @@ function fromRecord(row: Record<string, any>): BackgroundTask {
       : row.leaseExpiresAt
         ? new Date(row.leaseExpiresAt)
         : undefined;
+  const expiresAt = row.expiresAt instanceof Date ? row.expiresAt : row.expiresAt ? new Date(row.expiresAt) : undefined;
 
   return {
     id: String(row.id),
@@ -89,6 +92,8 @@ function fromRecord(row: Record<string, any>): BackgroundTask {
     completedAt: completedAt && completedAt.getTime() > 0 ? completedAt : undefined,
     ownerId: row.ownerId != null && row.ownerId !== '' ? String(row.ownerId) : undefined,
     leaseExpiresAt,
+    expiresAt,
+    metadata: parseJson(row.metadata),
   };
 }
 
@@ -97,6 +102,7 @@ function escapeStr(val: string): string {
 }
 
 export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   private client: Connection;
   #db: LanceDB;
 
@@ -115,7 +121,7 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
     await this.#db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt', 'expiresAt', 'metadata'],
     });
   }
 
@@ -144,6 +150,8 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
     if ('completedAt' in update) values.completedAt = update.completedAt?.getTime() ?? 0;
     if ('ownerId' in update) values.ownerId = update.ownerId ?? null;
     if ('leaseExpiresAt' in update) values.leaseExpiresAt = update.leaseExpiresAt?.getTime() ?? null;
+    if ('expiresAt' in update) values.expiresAt = update.expiresAt?.getTime() ?? null;
+    if ('metadata' in update) values.metadata = serializeJson(update.metadata) ?? null;
     if (Object.keys(values).length === 0) return false;
 
     const conditions = [`id = '${escapeStr(taskId)}'`];
@@ -205,6 +213,10 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
 
       const records = await query.toArray();
       let tasks = records.map(fromRecord);
+
+      if (filter.hasExpiresAt !== undefined) {
+        tasks = tasks.filter(t => (t.expiresAt != null) === filter.hasExpiresAt);
+      }
 
       // Date range filters — apply in-memory since Lance doesn't support timestamp comparisons well in WHERE
       const dateCol = filter.dateFilterBy ?? 'createdAt';

@@ -335,6 +335,13 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             description: 'Max concurrent tasks per agent.',
           },
           {
+            name: 'perOwnerConcurrency',
+            type: 'Record<string, number>',
+            isOptional: true,
+            description:
+              'Per-owner overrides of `perAgentConcurrency`, keyed by `agentId`. Overridden owners still count toward `globalConcurrency`.',
+          },
+          {
             name: 'backpressure',
             type: "'queue' | 'reject' | 'fallback-sync'",
             isOptional: true,

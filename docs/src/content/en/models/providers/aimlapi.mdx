@@ -7,7 +7,7 @@ description: "Browse AI/ML API model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/aimlapi.svg" alt="AI/ML API logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />AI/ML API
 
-Access 177 AI/ML API models through Mastra's model router. Authentication is handled automatically using the `AIMLAPI_API_KEY` environment variable.
+Access 178 AI/ML API models through Mastra's model router. Authentication is handled automatically using the `AIMLAPI_API_KEY` environment variable.
 
 Learn more in the [AI/ML API documentation](https://docs.aimlapi.com).
 
@@ -1712,6 +1712,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 100000,
     "inputCost": 21.16,
     "outputCost": 84.64
+  },
+  {
+    "model": "aimlapi/perceptron/perceptron-mk1.5",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 36864,
+    "maxOutput": 8192,
+    "inputCost": 0.1587,
+    "outputCost": 1.587
   },
   {
     "model": "aimlapi/perplexity/sonar",

@@ -11,13 +11,10 @@
   ],
   "structuredOutput": ["glm-5-turbo", "glm-5.2", "glm-5.2-highspeed", "glm-5.3", "glm-5.3-flash", "glm-5.3-highspeed"],
   "reasoning": {
-    "glm-5.2-highspeed": [
-      {
-        "type": "toggle"
-      },
+    "glm-5.3-highspeed": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "glm-5.3-flash": [
@@ -26,14 +23,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5-turbo": [
+    "glm-5.2-highspeed": [
       {
         "type": "toggle"
-      }
-    ],
-    "glm-4.7": [
+      },
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "glm-5.2": [
@@ -45,10 +41,14 @@
         "values": ["high", "max"]
       }
     ],
-    "glm-5.3-highspeed": [
+    "glm-4.7": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
+      }
+    ],
+    "glm-5-turbo": [
+      {
+        "type": "toggle"
       }
     ],
     "glm-5.3": [

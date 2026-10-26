@@ -2412,6 +2412,9 @@ importers:
       '@mastra/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
+      '@mastra/platform-workspace':
+        specifier: workspace:*
+        version: link:../../workspaces/platform-workspace
       '@mastra/slack':
         specifier: workspace:*
         version: link:../../channels/slack

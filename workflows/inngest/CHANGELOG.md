@@ -1,5 +1,18 @@
 # @mastra/inngest
 
+## 1.10.8-alpha.2
+
+### Patch Changes
+
+- Restore text streamed before tool approval in Inngest agents' resumed output. ([#27582](https://github.com/mastra-ai/mastra/pull/27582))
+
+- Fixed resumed Inngest agent output so it includes tool calls made before suspension. Earlier stream events do not repeat, and completed tools do not run again. ([#28080](https://github.com/mastra-ai/mastra/pull/28080))
+
+  `resume()` now waits up to 10 seconds for the stored run state to include the suspended tool calls. If they are still missing, `resume()` rejects with `Cannot resume run <runId>: ...` without sending a resume event. The run stays suspended, so you can call `resume()` again.
+
+- Updated dependencies [[`b7ff751`](https://github.com/mastra-ai/mastra/commit/b7ff751ed0fd87a3f93ce438c355c2dcc16e79d5), [`ca04e2c`](https://github.com/mastra-ai/mastra/commit/ca04e2cbb6f5ae13edf006905d9810434b4163fe), [`decd0a0`](https://github.com/mastra-ai/mastra/commit/decd0a0066286996a4558f63e91a8edfa1143feb), [`5bd713b`](https://github.com/mastra-ai/mastra/commit/5bd713b4f2ca7769675d949f8052943807c11598), [`2ca9e35`](https://github.com/mastra-ai/mastra/commit/2ca9e3522f117cc12fee7a9dad2f5961cd41164e), [`2ded35c`](https://github.com/mastra-ai/mastra/commit/2ded35cb0c97b26f641a9eb9a5747d32164d45c9), [`2b9f9a5`](https://github.com/mastra-ai/mastra/commit/2b9f9a55799ee7a6020a063d2419096429254481), [`34ee1d1`](https://github.com/mastra-ai/mastra/commit/34ee1d16226852f57d1f8bb34ee7a88397e5cce2), [`b7ff751`](https://github.com/mastra-ai/mastra/commit/b7ff751ed0fd87a3f93ce438c355c2dcc16e79d5), [`1e31034`](https://github.com/mastra-ai/mastra/commit/1e31034b30cb9661e38af548dfda646aee74f08f)]:
+  - @mastra/core@1.80.0-alpha.3
+
 ## 1.10.8-alpha.1
 
 ### Patch Changes

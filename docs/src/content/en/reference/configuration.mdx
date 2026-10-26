@@ -94,6 +94,13 @@ export const mastra = new Mastra({
     description: 'Maximum number of background tasks running concurrently for a single agent.',
   },
   {
+    name: 'perOwnerConcurrency',
+    type: 'Record<string, number>',
+    isOptional: true,
+    description:
+      "Per-owner overrides of `perAgentConcurrency`, keyed by the task's `agentId`. Non-agent owners use a namespaced key such as `'mcp-server:ops'`. Overridden owners still count toward `globalConcurrency`, so raise `globalConcurrency` if an override is larger than it.",
+  },
+  {
     name: 'backpressure',
     type: "'queue' | 'reject' | 'fallback-sync'",
     isOptional: true,
@@ -158,7 +165,8 @@ export const mastra = new Mastra({
     name: 'cleanup',
     type: 'CleanupConfig',
     isOptional: true,
-    description: 'Controls how long task records are kept and how often the cleanup process runs.',
+    description:
+      'Controls how long task records are kept and how often the cleanup process runs. Cleanup only runs when this option is set, including deletion of tasks whose `expiresAt` has passed.',
     properties: [
       {
         parameters: [
@@ -167,14 +175,16 @@ export const mastra = new Mastra({
             type: 'number',
             isOptional: true,
             defaultValue: '3600000',
-            description: 'How long to keep completed task records, in milliseconds. Default: 1 hour.',
+            description:
+              'How long to keep completed task records, in milliseconds. Default: 1 hour. Does not apply to tasks that set their own `expiresAt`; cleanup deletes those once `expiresAt` passes.',
           },
           {
             name: 'failedTtlMs',
             type: 'number',
             isOptional: true,
             defaultValue: '86400000',
-            description: 'How long to keep failed task records, in milliseconds. Default: 24 hours.',
+            description:
+              'How long to keep failed, cancelled, and timed-out task records, in milliseconds. Default: 24 hours. Does not apply to tasks that set their own `expiresAt`.',
           },
           {
             name: 'cleanupIntervalMs',

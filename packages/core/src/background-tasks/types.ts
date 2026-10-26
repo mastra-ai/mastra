@@ -75,6 +75,17 @@ export interface BackgroundTask {
    * so consumers don't have to read the workflow snapshot directly.
    */
   suspendPayload?: unknown;
+
+  /**
+   * Owner-defined retention deadline. When set, `cleanup()` deletes the row once
+   * it is terminal and `expiresAt` has passed, instead of applying the global
+   * `cleanup.completedTtlMs` / `cleanup.failedTtlMs`. Non-terminal rows are never
+   * deleted by cleanup, even after `expiresAt`.
+   */
+  expiresAt?: Date;
+
+  /** Owner-defined JSON metadata persisted with the row. Not interpreted by the manager. */
+  metadata?: Record<string, unknown>;
 }
 
 export type BackgroundTaskOutputChunk = Extract<AgentChunkType, { type: 'tool-output' }>;
@@ -121,12 +132,35 @@ export interface TaskPayload {
   resourceId?: string;
   timeoutMs?: number;
   maxRetries?: number;
+  /** See `BackgroundTask.expiresAt`. */
+  expiresAt?: Date;
+  /** See `BackgroundTask.metadata`. */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Options for `BackgroundTaskManager.resume()`.
+ */
+export interface ResumeOptions {
+  /**
+   * What to do when no concurrency slot is free.
+   * - `'throw'` (default): throw a `Concurrency limit reached` error.
+   * - `'queue'`: keep the task `suspended` and dispatch the resume once a slot
+   *   frees. Slots are rechecked when a task settles and on the lease-heartbeat
+   *   tick, so a slot freed by another process is picked up too.
+   *
+   * The queue is process-local and not durable. If the process exits before
+   * dispatch, the row stays `suspended` and the queued `resumeData` is lost.
+   * Owners that need durability must persist their resume data and call
+   * `resume()` again.
+   */
+  onNoSlot?: 'throw' | 'queue';
 }
 
 /**
  * Filter for querying and managing tasks.
  */
-export type TaskDateColumn = 'createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt';
+export type TaskDateColumn = 'createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt' | 'expiresAt';
 
 export interface TaskFilter {
   toolCallId?: string;
@@ -142,8 +176,10 @@ export interface TaskFilter {
   toDate?: Date;
   /** Which date column to use for fromDate/toDate filtering. Default: 'createdAt' */
   dateFilterBy?: TaskDateColumn;
-  /** Column to sort by. Default: 'createdAt' */
-  orderBy?: TaskDateColumn;
+  /** `true` matches only rows with `expiresAt` set; `false` only rows without it. */
+  hasExpiresAt?: boolean;
+  /** Column to sort by. Default: 'createdAt'. Sorting by `expiresAt` is not supported. */
+  orderBy?: Exclude<TaskDateColumn, 'expiresAt'>;
   orderDirection?: 'asc' | 'desc';
   /** Page number (0-indexed). Used with perPage for pagination. */
   page?: number;
@@ -205,6 +241,15 @@ export interface BackgroundTaskManagerConfig {
   globalConcurrency?: number;
   /** Per-agent concurrency limit. Default: 5 */
   perAgentConcurrency?: number;
+  /**
+   * Concurrency limits for specific owners, keyed by the task's `agentId`.
+   * Overrides `perAgentConcurrency` for matching owners. Tasks still count
+   * toward `globalConcurrency`, so raise it if an override exceeds it.
+   *
+   * Non-agent owners (such as MCP servers) should use a namespaced key like
+   * `'mcp-server:<id>'` so they can't collide with an agent ID.
+   */
+  perOwnerConcurrency?: Record<string, number>;
   /**
    * What happens when concurrency limit is reached.
    * - 'queue': task waits in pending state until a slot opens (default)
@@ -534,7 +579,7 @@ export interface BackgroundTaskHandle {
   /** Check if the task is running */
   checkIfRunning(args: CheckIfRunningPayload): Promise<boolean>;
   /** Resume the task */
-  resume(resumeData?: unknown): Promise<BackgroundTask>;
+  resume(resumeData?: unknown, options?: ResumeOptions): Promise<BackgroundTask>;
   /** Restarts a task */
   restart(): Promise<BackgroundTask>;
   /** Cancel this task */

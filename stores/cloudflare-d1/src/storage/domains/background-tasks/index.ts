@@ -50,10 +50,13 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     completedAt: row.completedAt ? new Date(row.completedAt) : undefined,
     ownerId: row.ownerId || undefined,
     leaseExpiresAt: row.leaseExpiresAt ? new Date(row.leaseExpiresAt) : undefined,
+    expiresAt: row.expiresAt ? new Date(row.expiresAt) : undefined,
+    metadata: parseJson(row.metadata),
   };
 }
 
 export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   #db: D1DB;
 
   constructor(config: D1DomainConfig) {
@@ -67,7 +70,7 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
     await this.#db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt', 'expiresAt', 'metadata'],
     });
   }
 
@@ -102,6 +105,8 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
           'completedAt',
           'ownerId',
           'leaseExpiresAt',
+          'expiresAt',
+          'metadata',
         ],
         [
           task.id,
@@ -125,6 +130,8 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
           task.completedAt?.toISOString() ?? null,
           task.ownerId ?? null,
           task.leaseExpiresAt?.toISOString() ?? null,
+          task.expiresAt?.toISOString() ?? null,
+          serializeJson(task.metadata),
         ],
       )
       .build();
@@ -177,6 +184,14 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
     if ('leaseExpiresAt' in update) {
       sets.push('leaseExpiresAt = ?');
       params.push(update.leaseExpiresAt?.toISOString() ?? null);
+    }
+    if ('expiresAt' in update) {
+      sets.push('expiresAt = ?');
+      params.push(update.expiresAt?.toISOString() ?? null);
+    }
+    if ('metadata' in update) {
+      sets.push('metadata = ?');
+      params.push(serializeJson(update.metadata));
     }
     if (sets.length === 0) return false;
     params.push(taskId);
@@ -252,7 +267,14 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
           ? 'suspendedAt'
           : filter.dateFilterBy === 'completedAt'
             ? 'completedAt'
-            : 'createdAt';
+            : filter.dateFilterBy === 'expiresAt'
+              ? 'expiresAt'
+              : 'createdAt';
+    if (filter.hasExpiresAt !== undefined) {
+      const clause = filter.hasExpiresAt ? 'expiresAt IS NOT NULL' : 'expiresAt IS NULL';
+      builder = builder.whereAnd(clause);
+      countBuilder = countBuilder.whereAnd(clause);
+    }
     if (filter.fromDate) {
       builder = builder.whereAnd(`${dateCol} >= ?`, filter.fromDate.toISOString());
       countBuilder = countBuilder.whereAnd(`${dateCol} >= ?`, filter.fromDate.toISOString());
@@ -309,7 +331,12 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
           ? 'suspendedAt'
           : filter.dateFilterBy === 'completedAt'
             ? 'completedAt'
-            : 'createdAt';
+            : filter.dateFilterBy === 'expiresAt'
+              ? 'expiresAt'
+              : 'createdAt';
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(filter.hasExpiresAt ? 'expiresAt IS NOT NULL' : 'expiresAt IS NULL');
+    }
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= ?`);
       params.push(filter.fromDate.toISOString());
