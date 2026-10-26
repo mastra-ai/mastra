@@ -32,12 +32,7 @@ At the end of this phase, publish a small summary to the source issue as stated 
 <!-- mastra-factory-triage -->
 
 > [!NOTE]
-> **<type emoji> <Type>** → **Triage in progress**
-> <one-sentence classification>
-
-| Severity | Confidence | Effort | Impact |
-| :------: | :--------: | :----: | :----: |
-|    ⏳    |     ⏳     |   ⏳   |   ⏳   |
+> **<Type> → triage in progress.** <one-sentence classification>
 ```
 
 For GitHub issues, add `status: needs triage` only if no `status:` label is present, using `gh issue edit "$ISSUE" --add-label "status: needs triage"`. For Linear issues, skip this GitHub-only label mutation.
@@ -101,12 +96,11 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 <!-- mastra-factory-triage -->
 
 > [!<CAUTION|WARNING|NOTE>]
-> **<type emoji> <Type>** → **<Route>**
-> <one-sentence classification>
+> **<Type> → <Route>.** <one-sentence classification>
 
-|   Severity    |   Confidence   |     Effort     |     Impact     |
-| :-----------: | :------------: | :------------: | :------------: |
-| <dot> <level> | <bars> <level> | <bars> <level> | <bars> <level> |
+| Severity | Confidence | Effort  | Impact  |
+| -------- | ---------- | ------- | ------- |
+| <level>  | <level>    | <level> | <level> |
 
 - **Severity** — <short reason>
 - **Confidence** — <short reason>
@@ -132,15 +126,13 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 <for reproduced bugs: exact successful steps. Otherwise: attempted steps, environment, and result, or `Not applicable` / `Not reproduced` with a reason.>
 ```
 
-Fill the header placeholders exactly as follows. Both templates use the same placeholders; the pending summary also uses `Type` and the type emoji.
+Fill the placeholders as follows:
 
-- `Type` is one of: bug, feature request, docs, question/support, maintenance, duplicate, resolved, invalid, spam, out-of-scope, other. Capitalize it in the headline.
-- `<type emoji>`: 🐛 bug, ✨ feature request, 📝 docs, ❓ question/support, 🧹 maintenance, 🗂️ duplicate/resolved/invalid/spam/out-of-scope, 📌 other.
-- `Route` is one of: Plan fix, Await approval, Ask author for info, Close as duplicate/resolved/invalid/spam/out-of-scope, Answer provided / close, No transition / refresh, Other.
-- The alert follows severity: `[!CAUTION]` for critical or high, `[!WARNING]` for medium, `[!NOTE]` for low.
-- `<dot>` for severity: 🔴 critical, 🟠 high, 🟡 medium, 🟢 low.
-- `<bars>` for confidence, effort, and impact show magnitude, not good or bad: `▰▱▱` low, `▰▰▱` medium, `▰▰▰` high.
-- Keep each reason to one short line. Put detail in Understanding.
+- `<Type>` is one of: bug, feature request, docs, question/support, maintenance, duplicate, resolved, invalid, spam, out-of-scope, other. Pass the same value as `triageType`.
+- `<Route>` is one of: Plan fix, Await approval, Ask author for info, Close as duplicate/resolved/invalid/spam/out-of-scope, Answer provided / close, No transition / refresh, Other.
+- `<level>` is the plain lowercase rating from the guides below.
+- The alert type follows severity: `CAUTION` for critical or high, `WARNING` for medium, `NOTE` for low.
+- Use no emoji. Keep each reason to one line and put detail in Understanding.
 
 Severity guide:
 
