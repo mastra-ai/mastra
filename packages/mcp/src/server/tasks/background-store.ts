@@ -27,7 +27,8 @@ export interface BackgroundTaskMCPTaskStoreOptions {
   workFor: (context: BackgroundToolTaskContext) => MCPTaskWork;
   /** Whether a crashed attempt of this tool runs again. */
   recoverFor: (toolName: string) => boolean;
-  logger?: IMastraLogger;
+  /** Read on every log, since Mastra sets the server's logger after registering it. */
+  logger?: () => IMastraLogger;
 }
 
 /** The MCP side of a task, kept in the row's `metadata`. */
@@ -174,7 +175,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   readonly #owner: string;
   readonly #workFor: BackgroundTaskMCPTaskStoreOptions['workFor'];
   readonly #recoverFor: BackgroundTaskMCPTaskStoreOptions['recoverFor'];
-  readonly #logger?: IMastraLogger;
+  readonly #getLogger?: () => IMastraLogger;
   readonly #gates = new Map<string, Gate>();
   readonly #executors = new Set<string>();
   /** Rows this instance reclaimed for another attempt but could not dispatch yet. */
@@ -187,7 +188,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     this.#owner = `mcp-server:${options.serverId}`;
     this.#workFor = options.workFor;
     this.#recoverFor = options.recoverFor;
-    this.#logger = options.logger;
+    this.#getLogger = options.logger;
   }
 
   /** The `agentId` every row of this server carries. */
@@ -337,7 +338,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       try {
         await this.#manager.cancel(found.row.id);
       } catch (error) {
-        this.#logger?.warn('Could not cancel MCP task', { error });
+        this.#getLogger?.().warn('Could not cancel MCP task', { error });
       }
     }
     return true;
@@ -365,7 +366,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     if (this.#sweepTimer) return;
     // Once per lease: a dead worker's rows are noticed about a lease after it stops renewing.
     this.#sweepTimer = setInterval(() => {
-      this.sweep().catch(error => this.#logger?.debug('MCP task sweep failed', { error }));
+      this.sweep().catch(error => this.#getLogger?.().debug('MCP task sweep failed', { error }));
     }, this.#manager.config.leaseDurationMs);
     this.#sweepTimer.unref?.();
   }
@@ -397,7 +398,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
           await this.#reclaim(storage, row, envelope);
         } else if (row.status === 'pending' && this.#reclaimed.has(row.id)) await this.#restart(row.id);
       } catch (error) {
-        this.#logger?.debug('Could not sweep MCP task', { error });
+        this.#getLogger?.().debug('Could not sweep MCP task', { error });
       }
     }
   }
@@ -464,7 +465,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       this.#reclaimed.delete(rowId);
     } catch (error) {
       // No slot yet, or another worker already took it: the next sweep tries again.
-      this.#logger?.debug('Could not restart MCP task', { error });
+      this.#getLogger?.().debug('Could not restart MCP task', { error });
     }
   }
 
@@ -494,7 +495,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       await this.#manager.resume(row.id, resumeData, { onNoSlot: 'queue' });
     } catch (error) {
       // Resumed or cancelled meanwhile, or the manager is down: the next read or sweep tries again.
-      this.#logger?.debug('Could not resume MCP task', { error });
+      this.#getLogger?.().debug('Could not resume MCP task', { error });
     }
   }
 

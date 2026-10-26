@@ -1588,7 +1588,7 @@ export class MCPServer extends MCPServerBase {
       serverId: this.id,
       workFor: context => this.toolTaskWork(context as unknown as ToolTaskContext),
       recoverFor: name => this.tasks.modeFor(name, this.convertedTools[name]?.mcp?.toolType).recover,
-      logger: this.logger,
+      logger: () => this.logger,
     });
     for (const [name, tool] of Object.entries(this.convertedTools)) {
       if (this.tasks.modeFor(name, tool.mcp?.toolType).mode !== 'off') store.registerTool(name);

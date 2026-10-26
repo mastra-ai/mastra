@@ -1,0 +1,446 @@
+import { spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Agent } from '@mastra/core/agent';
+import { FGADeniedError, MastraFGAPermissions } from '@mastra/core/auth/ee';
+import type { BackgroundTask, BackgroundTaskManagerConfig } from '@mastra/core/background-tasks';
+import { Mastra } from '@mastra/core/mastra';
+import { createTool } from '@mastra/core/tools';
+import { LibSQLStore } from '@mastra/libsql';
+import type { Client } from '@modelcontextprotocol/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
+import { TaskRequester } from '../client/tasks/requester';
+import { tasksCapabilityEntry } from '../shared/tasks';
+import type { MCPDetailedTask } from '../shared/tasks';
+import { authFor, makeCrashy, runsIn } from './__tests__/background-tasks.mock';
+import { connectClient, rawRequest, serveHTTP } from './__tests__/harness.mock';
+import { MCPServer } from './server';
+import type { MCPServerConfig } from './server';
+import { TASK_EXPIRED_MESSAGE, TASK_LOST_MESSAGE } from './tasks/background-store';
+import { InMemoryMCPTaskStore } from './tasks/in-memory-store';
+
+vi.setConfig({ testTimeout: 60_000 });
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const LEASE_MS = 3_000;
+const here = fileURLToPath(new URL('.', import.meta.url));
+
+class User {
+  constructor(readonly id: string) {}
+}
+
+interface Probe {
+  runs: Array<{ tool: string; resumeData: unknown }>;
+}
+
+function makeTools(probe: Probe, counterFile: string) {
+  return {
+    echo: createTool({
+      id: 'echo',
+      description: 'Echoes its text',
+      inputSchema: z.object({ text: z.string() }),
+      execute: async ({ text }) => {
+        probe.runs.push({ tool: 'echo', resumeData: undefined });
+        return `echo: ${text}`;
+      },
+    }),
+    approve: createTool({
+      id: 'approve',
+      description: 'Asks who approves before finishing',
+      inputSchema: z.object({ item: z.string() }),
+      suspendSchema: z.object({ message: z.string() }),
+      resumeSchema: z.object({ approver: z.string() }),
+      execute: async ({ item }, context) => {
+        probe.runs.push({ tool: 'approve', resumeData: context.resumeData });
+        if (!context.resumeData) {
+          await context.suspend?.({ message: `Who approves ${item}?` });
+          return;
+        }
+        return `${item} approved by ${context.resumeData.approver}`;
+      },
+    }),
+    hang: createTool({
+      id: 'hang',
+      description: 'Runs until aborted',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        await new Promise<void>(resolve => context.abortSignal?.addEventListener('abort', () => resolve()));
+        return 'stopped';
+      },
+    }),
+    crashy: makeCrashy(counterFile),
+    counted: createTool({
+      id: 'counted',
+      description: 'Takes a while, counting its runs',
+      inputSchema: z.object({}),
+      execute: async () => {
+        probe.runs.push({ tool: 'counted', resumeData: undefined });
+        await sleep(LEASE_MS * 2.5);
+        return 'counted';
+      },
+    }),
+  };
+}
+
+interface Instance {
+  url: URL;
+  server: MCPServer;
+  mastra: Mastra;
+  close(): Promise<void>;
+}
+
+describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
+  let dir: string;
+  let db: string;
+  let counterFile: string;
+  let probe: Probe;
+  const instances: Instance[] = [];
+  const children: ChildProcess[] = [];
+  const clients: Client[] = [];
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'mcp-bg-tasks-'));
+    db = `file:${join(dir, 'mastra.db')}`;
+    counterFile = join(dir, 'crashy-runs');
+    probe = { runs: [] };
+  });
+
+  afterEach(async () => {
+    for (const child of children.splice(0)) child.kill('SIGKILL');
+    await Promise.all(clients.splice(0).map(client => client.close()));
+    for (const instance of instances.splice(0)) await instance.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  async function instance(
+    tasks: MCPServerConfig['tasks'],
+    {
+      backgroundTasks = {},
+      extra = {},
+      mastraExtra = {},
+    }: {
+      backgroundTasks?: Partial<BackgroundTaskManagerConfig>;
+      extra?: Partial<MCPServerConfig>;
+      mastraExtra?: Record<string, unknown>;
+    } = {},
+  ): Promise<Instance> {
+    const server = new MCPServer({
+      name: 'Tasks',
+      version: '1.0.0',
+      tools: makeTools(probe, counterFile),
+      tasks,
+      ...extra,
+    });
+    const mastra = new Mastra({
+      logger: false,
+      storage: new LibSQLStore({ id: 'tasks', url: db }),
+      backgroundTasks: { enabled: true, leaseDurationMs: LEASE_MS, ...backgroundTasks },
+      mcpServers: { tasks: server },
+      ...mastraExtra,
+    });
+    const served = await serveHTTP(server, { auth: req => authFor(String(req.headers['x-test-user'] ?? 'alice')) });
+    let closed = false;
+    const created: Instance = {
+      url: served.url,
+      server,
+      mastra,
+      close: async () => {
+        if (closed) return;
+        closed = true;
+        await served.close();
+        await mastra.shutdown();
+      },
+    };
+    instances.push(created);
+    return created;
+  }
+
+  async function call(url: URL, name: string, args: Record<string, unknown> = {}) {
+    const response = await rawRequest(url, {
+      method: 'tools/call',
+      params: { name, arguments: args },
+      capabilities: { extensions: tasksCapabilityEntry() },
+      headers: { 'x-test-user': 'alice', 'mcp-name': name },
+    });
+    const { result, error } = response.json();
+    if (error) throw new Error(JSON.stringify(error));
+    expect(result).toMatchObject({ resultType: 'task' });
+    return result.taskId as string;
+  }
+
+  async function requester(url: URL) {
+    const client = await connectClient(url, {}, { 'x-test-user': 'alice' });
+    clients.push(client);
+    return new TaskRequester(client);
+  }
+
+  async function waitFor(tasks: TaskRequester, taskId: string, status: MCPDetailedTask['status'], ms = 20_000) {
+    const deadline = Date.now() + ms;
+    let task: MCPDetailedTask | undefined;
+    while (Date.now() < deadline) {
+      task = await tasks.get(taskId);
+      if (task.status === status) return task;
+      await sleep(50);
+    }
+    throw new Error(`task never reached ${status}; last ${JSON.stringify(task)}`);
+  }
+
+  async function rows(mastra: Mastra) {
+    return (await mastra.backgroundTaskManager!.listTasks({ agentId: 'mcp-server:tasks' })).tasks;
+  }
+
+  /** Starts the server in its own process, so it can be killed mid-task. */
+  async function child(recover: boolean): Promise<{ url: URL; process: ChildProcess }> {
+    // One node process (no tsx wrapper process), so SIGKILL kills the server itself.
+    const proc = spawn(
+      process.execPath,
+      ['--import', 'tsx', join(here, '__tests__/background-tasks-child.ts'), db, counterFile, String(recover)],
+      { cwd: join(here, '../..'), stdio: ['ignore', 'pipe', 'inherit'] },
+    );
+    children.push(proc);
+    const url = await new Promise<URL>((resolve, reject) => {
+      let out = '';
+      proc.stdout!.on('data', chunk => {
+        out += String(chunk);
+        const ready = out.match(/READY (\S+)/);
+        if (ready) resolve(new URL(ready[1]!));
+      });
+      proc.once('exit', code => reject(new Error(`server process exited (${code}) before it was ready`)));
+    });
+    return { url, process: proc };
+  }
+
+  async function until(check: () => boolean, ms = 20_000) {
+    const deadline = Date.now() + ms;
+    while (!check()) {
+      if (Date.now() > deadline) throw new Error('condition never held');
+      await sleep(50);
+    }
+  }
+
+  it('serves a task created on one instance from another: read, answer, and run there', async () => {
+    const a = await instance({ tools: { approve: 'always', echo: 'always' } });
+    const b = await instance({ tools: { approve: 'always', echo: 'always' } });
+
+    const echoed = await call(a.url, 'echo', { text: 'hi' });
+    const onB = await requester(b.url);
+    expect(await waitFor(onB, echoed, 'completed')).toMatchObject({
+      result: { content: [{ type: 'text', text: 'echo: hi' }] },
+    });
+
+    const taskId = await call(a.url, 'approve', { item: 'invoice' });
+    const waiting = await waitFor(onB, taskId, 'input_required');
+    const [key] = Object.keys(waiting.inputRequests ?? {});
+    await onB.update(taskId, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+    const done = await waitFor(await requester(a.url), taskId, 'completed');
+    expect(done).toMatchObject({ result: { content: [{ type: 'text', text: 'invoice approved by bob' }] } });
+    // One run per attempt: the first, and one resume.
+    expect(probe.runs.filter(run => run.tool === 'approve')).toEqual([
+      { tool: 'approve', resumeData: undefined },
+      { tool: 'approve', resumeData: { approver: 'bob' } },
+    ]);
+  });
+
+  describe.each([
+    { recover: true, when: 'starts after the crash', before: false },
+    { recover: true, when: 'was already running', before: true },
+    { recover: false, when: 'starts after the crash', before: false },
+    { recover: false, when: 'was already running', before: true },
+  ])('when a server dies mid-task (recover: $recover) and the next instance $when', ({ recover, before }) => {
+    it(
+      recover ? 'runs the tool again there and completes' : 'reports the task lost and never runs it again',
+      async () => {
+        const tasks = { tools: { crashy: { mode: 'always' as const, recover } } };
+        let survivor = before ? await instance(tasks) : undefined;
+        const dying = await child(recover);
+        const taskId = await call(dying.url, 'crashy');
+        await until(() => runsIn(counterFile) === 1);
+        dying.process.kill('SIGKILL');
+
+        survivor ??= await instance(tasks);
+        const onSurvivor = await requester(survivor.url);
+        if (recover) {
+          const done = await waitFor(onSurvivor, taskId, 'completed');
+          expect(done).toMatchObject({ result: { content: [{ type: 'text', text: 'recovered' }] } });
+          expect(runsIn(counterFile)).toBe(2);
+        } else {
+          const lost = await waitFor(onSurvivor, taskId, 'failed');
+          expect(lost).toMatchObject({ error: { code: -32603, message: TASK_LOST_MESSAGE } });
+          // Another lease and sweep later, it still ran exactly once.
+          await sleep(LEASE_MS * 2);
+          expect(runsIn(counterFile)).toBe(1);
+        }
+      },
+    );
+  });
+
+  describe("an 'auto' task's first attempt, already running under its request", () => {
+    const tasks = { tools: { counted: { mode: 'auto' as const, syncWindowMs: 50 }, hang: 'always' as const } };
+
+    it('is not run again by an idle instance', async () => {
+      const a = await instance(tasks);
+      await instance(tasks);
+      const taskId = await call(a.url, 'counted');
+      expect(await waitFor(await requester(a.url), taskId, 'completed')).toMatchObject({
+        result: { content: [{ type: 'text', text: 'counted' }] },
+      });
+      expect(probe.runs.filter(run => run.tool === 'counted')).toHaveLength(1);
+    });
+
+    // Fails until core pins a pending row to the worker that enqueued it (daniel/mcp-tasks-3b2-pinned-pending):
+    // B's stale-task sweep dispatches the unowned pending row to its static executor while A already runs it.
+    it.fails('is not run again by an instance sweeping for stale tasks while its row waits for a slot', async () => {
+      const a = await instance(tasks, { backgroundTasks: { perOwnerConcurrency: { 'mcp-server:tasks': 1 } } });
+      const onA = await requester(a.url);
+      await waitFor(onA, await call(a.url, 'hang'), 'working');
+      // B starts while A holds a live lease, so it keeps re-running its stale-task sweep.
+      await instance(tasks);
+      const taskId = await call(a.url, 'counted');
+      await sleep(LEASE_MS * 2);
+      expect(probe.runs.filter(run => run.tool === 'counted')).toHaveLength(1);
+      await waitFor(onA, taskId, 'completed');
+    });
+  });
+
+  it('resumes an answered task whose queued resume was lost with its instance', async () => {
+    const tasks = { tools: { approve: 'always' as const, hang: 'always' as const } };
+    const a = await instance(tasks, { backgroundTasks: { perOwnerConcurrency: { 'mcp-server:tasks': 1 } } });
+    const onA = await requester(a.url);
+    const taskId = await call(a.url, 'approve', { item: 'invoice' });
+    const waiting = await waitFor(onA, taskId, 'input_required');
+    const [key] = Object.keys(waiting.inputRequests ?? {});
+
+    // The only slot is busy, so the answer is acknowledged and its resume queued in A's memory.
+    const busy = await call(a.url, 'hang');
+    await waitFor(onA, busy, 'working');
+    await onA.update(taskId, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+    const answered = (await rows(a.mastra)).find(row => row.toolName === 'approve')!;
+    expect(answered.status).toBe('suspended');
+    expect(answered.metadata).toMatchObject({ inputResponses: { [key!]: { action: 'accept' } } });
+
+    await a.close();
+    const b = await instance(tasks);
+    expect((await rows(b.mastra)).find(row => row.toolName === 'approve')?.status).toBe('suspended');
+    const done = await waitFor(await requester(b.url), taskId, 'completed');
+    expect(done).toMatchObject({ result: { content: [{ type: 'text', text: 'invoice approved by bob' }] } });
+    expect(probe.runs.filter(run => run.tool === 'approve' && run.resumeData)).toHaveLength(1);
+  });
+
+  it('fails a task waiting for input past its TTL, and cleanup deletes a finished task at its TTL', async () => {
+    const a = await instance({
+      tools: { approve: { mode: 'always', ttlMs: 500 }, echo: { mode: 'always', ttlMs: 500 } },
+    });
+    const onA = await requester(a.url);
+    const waitingId = await call(a.url, 'approve', { item: 'invoice' });
+    const waiting = await waitFor(onA, waitingId, 'input_required');
+    const echoed = await call(a.url, 'echo', { text: 'hi' });
+    await waitFor(onA, echoed, 'completed');
+
+    // The sweep runs once per lease.
+    await sleep(LEASE_MS + 1_000);
+    const expired = (await rows(a.mastra)).find(row => row.toolName === 'approve')!;
+    expect(expired).toMatchObject({ status: 'failed', error: { message: TASK_EXPIRED_MESSAGE } });
+    expect(await onA.get(waitingId)).toMatchObject({ status: 'failed', error: { message: TASK_EXPIRED_MESSAGE } });
+    // A late answer is not taken.
+    const [key] = Object.keys(waiting.inputRequests ?? {});
+    await onA.update(waitingId, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+    expect(probe.runs.filter(run => run.tool === 'approve' && run.resumeData)).toHaveLength(0);
+
+    await a.mastra.backgroundTaskManager!.cleanup();
+    expect((await rows(a.mastra)).map(row => row.toolName)).toEqual(['approve']);
+    await expect(onA.get(echoed)).rejects.toMatchObject({ code: -32602 });
+  });
+
+  // Fails until core exempts its internal background-task workflow from the workflow FGA check
+  // (daniel/fix-bg-task-fga-internal): every background task fails "authenticated user is required" under FGA.
+  it.fails('checks FGA on an attempt resumed on another instance against the caller read back from storage', async () => {
+    const checked: unknown[] = [];
+    const fga = {
+      check: vi.fn(),
+      filterAccessible: vi.fn(),
+      require: vi.fn(async (user: { id: string }, params: { resource: { type: string; id: string } }) => {
+        // Only the MCP server's own tool resource; core's tool-level check is a separate resource.
+        if (!params.resource.id.startsWith('[')) return;
+        checked.push(user);
+        if (user.id !== 'alice') throw new FGADeniedError(user, params.resource, MastraFGAPermissions.TOOLS_EXECUTE);
+      }),
+    };
+    const options = {
+      extra: { mapAuthInfoToUser: ({ authInfo }: { authInfo: { clientId: string } }) => new User(authInfo.clientId) },
+      mastraExtra: { server: { fga } },
+    };
+    const a = await instance({ tools: { approve: 'always' } }, options);
+    const b = await instance({ tools: { approve: 'always' } }, options);
+
+    const taskId = await call(a.url, 'approve', { item: 'invoice' });
+    const onB = await requester(b.url);
+    const waiting = await waitFor(onB, taskId, 'input_required');
+    const [key] = Object.keys(waiting.inputRequests ?? {});
+    // Answering through B runs the resume on B, from the row alone.
+    await onB.update(taskId, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+    expect(await waitFor(onB, taskId, 'completed')).toMatchObject({
+      result: { content: [{ type: 'text', text: 'invoice approved by bob' }] },
+    });
+    expect(checked[0]).toBeInstanceOf(User);
+    const resumed = checked.at(-1);
+    expect(resumed).toEqual({ id: 'alice' });
+    expect(Object.getPrototypeOf(resumed)).toBe(Object.prototype);
+  });
+
+  it('keeps task rows out of agents, resource-scoped listings and plaintext, and passes them to global hooks', async () => {
+    const completed: BackgroundTask[] = [];
+    const agent = new Agent({ id: 'helper', name: 'helper', instructions: 'help', model: 'openai/gpt-4o-mini' });
+    const a = await instance(
+      { tools: { echo: 'always' } },
+      {
+        backgroundTasks: { onTaskComplete: task => void completed.push(task) },
+        mastraExtra: { agents: { helper: agent } },
+      },
+    );
+    const taskId = await call(a.url, 'echo', { text: 'hi' });
+    await waitFor(await requester(a.url), taskId, 'completed');
+    await until(() => completed.length > 0, 5_000);
+
+    const manager = a.mastra.backgroundTaskManager!;
+    expect((await manager.listTasks({ agentId: 'helper' })).tasks).toEqual([]);
+    // A route scoped to a Mastra resource (here, the caller's own name) sees no MCP rows.
+    expect((await manager.listTasks({ resourceId: 'alice' })).tasks).toEqual([]);
+
+    // Unscoped readers and hooks get the row, but nothing that would let them act as the caller.
+    const [row] = (await manager.listTasks({})).tasks;
+    expect(row).toMatchObject({ agentId: 'mcp-server:tasks', toolName: 'echo' });
+    expect(row!.threadId).toBeUndefined();
+    expect(completed[0]).toMatchObject({ id: row!.id, agentId: 'mcp-server:tasks' });
+    for (const seen of [row, completed[0]]) {
+      const text = JSON.stringify(seen);
+      expect(text).not.toContain(taskId);
+      expect(text).not.toContain('alice-token');
+    }
+  });
+
+  it('keeps tasks in memory, with a warning, when the storage cannot expire rows', async () => {
+    const a = await instance({ tools: { echo: 'always' } });
+    const storage = await a.mastra.backgroundTaskManager!.getStorage();
+    // What an adapter predating per-row expiry reports.
+    Object.defineProperty(storage, 'supportsTaskExpiry', { value: false });
+    const warn = vi.spyOn((a.server as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger, 'warn');
+
+    const taskId = await call(a.url, 'echo', { text: 'hi' });
+    await waitFor(await requester(a.url), taskId, 'completed');
+    expect(await rows(a.mastra)).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('does not support task expiry'));
+  });
+
+  it('uses the store passed in over Mastra background tasks', async () => {
+    const store = new InMemoryMCPTaskStore();
+    const a = await instance({ tools: { echo: 'always' }, store });
+    const taskId = await call(a.url, 'echo', { text: 'hi' });
+    await waitFor(await requester(a.url), taskId, 'completed');
+    expect(await rows(a.mastra)).toEqual([]);
+    store.close();
+  });
+});
