@@ -230,8 +230,11 @@ Then in Studio:
    {
      "teamName": "Platform",
      "notes": [
-       { "author": "Alex", "text": "yesterday shipped the auth fix. today wiring up the retry queue. blocked on staging creds." },
-       { "author": "Sam",  "text": "finished the migration script. moving on to the dashboard rewrite. no blockers." }
+       {
+         "author": "Alex",
+         "text": "yesterday shipped the auth fix. today wiring up the retry queue. blocked on staging creds."
+       },
+       { "author": "Sam", "text": "finished the migration script. moving on to the dashboard rewrite. no blockers." }
      ]
    }
    ```
@@ -241,7 +244,7 @@ Then in Studio:
      "teamName": "Platform",
      "notes": [
        { "author": "Alex", "text": "shipped auth fix. today: retry queue. no blockers." },
-       { "author": "Sam",  "text": "migration done. today: dashboard rewrite. no blockers." }
+       { "author": "Sam", "text": "migration done. today: dashboard rewrite. no blockers." }
      ]
    }
    ```

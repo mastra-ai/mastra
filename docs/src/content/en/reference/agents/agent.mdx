@@ -16,7 +16,7 @@ The `Agent` class is the foundation for creating AI agents in Mastra. It provide
 Passing instructions as a string or array of strings is the simplest way to set up an agent. This is useful for straightforward use cases where you need to provide a prompt without additional configuration.
 
 ```typescript title="src/mastra/agents/string-agent.ts"
-import { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent'
 
 // String instructions
 export const agent = new Agent({
@@ -25,7 +25,7 @@ export const agent = new Agent({
   // highlight-next-line
   instructions: 'You are a helpful assistant that provides concise answers.',
   model: '__GATEWAY_OPENAI_MODEL__',
-});
+})
 
 // System message object
 export const agent2 = new Agent({
@@ -38,7 +38,7 @@ export const agent2 = new Agent({
   },
   // highlight-end
   model: '__GATEWAY_OPENAI_MODEL__',
-});
+})
 
 // Array of system messages
 export const agent3 = new Agent({
@@ -51,7 +51,7 @@ export const agent3 = new Agent({
   ],
   // highlight-end
   model: '__GATEWAY_OPENAI_MODEL__',
-});
+})
 ```
 
 ### Provider-specific configurations
@@ -59,7 +59,7 @@ export const agent3 = new Agent({
 Each model provider also enables a few different options, including prompt caching and configuring reasoning. You can set `providerOptions` on the instruction level to set different caching strategy per system instruction/prompt.
 
 ```typescript title="src/mastra/agents/core-message-agent.ts"
-import { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
   id: 'core-message-agent',
@@ -76,19 +76,19 @@ export const agent = new Agent({
     // highlight-end
   },
   model: '__GATEWAY_OPENAI_MODEL__',
-});
+})
 ```
 
 ### Mixed instruction formats
 
 ```typescript title="src/mastra/agents/multi-message-agent.ts"
-import { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent'
 
 // This could be customizable based on the user
 const preferredTone = {
   role: 'system',
   content: 'Always maintain a professional and empathetic tone.',
-};
+}
 
 export const agent = new Agent({
   id: 'multi-message-agent',
@@ -105,7 +105,7 @@ export const agent = new Agent({
     },
   ],
   model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-});
+})
 ```
 
 ## Model strings
@@ -130,13 +130,13 @@ When the target thread is running, `sendMessage()` delivers the message into the
 const subscription = await agent.subscribeToThread({
   resourceId: 'user-123',
   threadId: 'thread-abc',
-});
+})
 
 void (async () => {
   for await (const chunk of subscription.stream) {
-    console.log(chunk);
+    console.log(chunk)
   }
-})();
+})()
 
 agent.sendMessage('Use the latest customer note too.', {
   resourceId: 'user-123',
@@ -146,7 +146,7 @@ agent.sendMessage('Use the latest customer note too.', {
       maxSteps: 3,
     },
   },
-});
+})
 ```
 
 Use `attributes` to identify different users in a shared thread. The attributes are rendered as XML so the model can distinguish who said what:
@@ -158,7 +158,7 @@ agent.sendMessage(
     attributes: { name: 'Devin', from: 'slack' },
   },
   { resourceId: 'user-123', threadId: 'thread-abc' },
-);
+)
 ```
 
 The model receives this as:
@@ -181,7 +181,7 @@ agent.sendMessage(
     ifActive: { attributes: { delivery: 'while-active' } },
     ifIdle: { attributes: { delivery: 'new-message' } },
   },
-);
+)
 ```
 
 When the thread is active, the model sees:
@@ -204,103 +204,103 @@ Sends a user message to an active run or memory thread. Use this when the active
 
 <PropertiesTable
   content={[
-    {
-      name: 'message',
-      type: 'string | Array<TextPart | FilePart> | { contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }',
-      description:
-        'User-authored input. Bare strings and parts without attributes are sent to the model as normal user input. When `attributes` are present, Mastra renders the message as a `<user>` XML element with the attributes included.',
-    },
-    {
-      name: 'options',
-      type: 'object',
-      isOptional: true,
-      description: 'Targeting and delivery behavior for the message.',
-      properties: [
-        {
-          type: 'object',
-          parameters: [
-            {
-              name: 'runId',
-              type: 'string',
-              isOptional: true,
-              description: 'Run ID to target directly. Use this when you already know the active run ID.',
-            },
-            {
-              name: 'resourceId',
-              type: 'string',
-              isOptional: true,
-              description: 'Resource ID for the memory thread. Required with `threadId` for thread-targeted messages.',
-            },
-            {
-              name: 'threadId',
-              type: 'string',
-              isOptional: true,
-              description: 'Thread ID to target. Required with `resourceId` for thread-targeted messages.',
-            },
-            {
-              name: 'ifActive',
-              type: 'object',
-              isOptional: true,
-              description: 'Controls what happens when the target thread is active.',
-              properties: [
-                {
-                  type: 'object',
-                  parameters: [
-                    {
-                      name: 'behavior',
-                      type: "'deliver' | 'persist' | 'discard'",
-                      isOptional: true,
-                      description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
-                    },
-                    {
-                      name: 'attributes',
-                      type: 'Record<string, string | number | boolean>',
-                      isOptional: true,
-                      description:
-                        'Attributes merged into the message when Mastra accepts it while the target thread is active.',
-                    },
-                  ],
-                },
-              ],
-            },
-            {
-              name: 'ifIdle',
-              type: 'object',
-              isOptional: true,
-              description: 'Controls what happens when the target thread is idle.',
-              properties: [
-                {
-                  type: 'object',
-                  parameters: [
-                    {
-                      name: 'behavior',
-                      type: "'wake' | 'persist' | 'discard'",
-                      isOptional: true,
-                      description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
-                    },
-                    {
-                      name: 'streamOptions',
-                      type: 'AgentExecutionOptions',
-                      isOptional: true,
-                      description:
-                        'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
-                    },
-                    {
-                      name: 'attributes',
-                      type: 'Record<string, string | number | boolean>',
-                      isOptional: true,
-                      description:
-                        'Attributes merged into the message when Mastra accepts it while the target thread is idle.',
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+  {
+    name: 'message',
+    type: 'string | Array<TextPart | FilePart> | { contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }',
+    description:
+      'User-authored input. Bare strings and parts without attributes are sent to the model as normal user input. When `attributes` are present, Mastra renders the message as a `<user>` XML element with the attributes included.',
+  },
+  {
+    name: 'options',
+    type: 'object',
+    isOptional: true,
+    description: 'Targeting and delivery behavior for the message.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'runId',
+            type: 'string',
+            isOptional: true,
+            description: 'Run ID to target directly. Use this when you already know the active run ID.',
+          },
+          {
+            name: 'resourceId',
+            type: 'string',
+            isOptional: true,
+            description: 'Resource ID for the memory thread. Required with `threadId` for thread-targeted messages.',
+          },
+          {
+            name: 'threadId',
+            type: 'string',
+            isOptional: true,
+            description: 'Thread ID to target. Required with `resourceId` for thread-targeted messages.',
+          },
+          {
+            name: 'ifActive',
+            type: 'object',
+            isOptional: true,
+            description: 'Controls what happens when the target thread is active.',
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'behavior',
+                    type: "'deliver' | 'persist' | 'discard'",
+                    isOptional: true,
+                    description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
+                  },
+                  {
+                    name: 'attributes',
+                    type: 'Record<string, string | number | boolean>',
+                    isOptional: true,
+                    description:
+                      'Attributes merged into the message when Mastra accepts it while the target thread is active.',
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'ifIdle',
+            type: 'object',
+            isOptional: true,
+            description: 'Controls what happens when the target thread is idle.',
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'behavior',
+                    type: "'wake' | 'persist' | 'discard'",
+                    isOptional: true,
+                    description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
+                  },
+                  {
+                    name: 'streamOptions',
+                    type: 'AgentExecutionOptions',
+                    isOptional: true,
+                    description:
+                      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+                  },
+                  {
+                    name: 'attributes',
+                    type: 'Record<string, string | number | boolean>',
+                    isOptional: true,
+                    description:
+                      'Attributes merged into the message when Mastra accepts it while the target thread is idle.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+]}
 />
 
 Set `ifIdle.behavior` to `wake` and pass `ifIdle.streamOptions` when an idle thread should start a new stream with custom execution options:
@@ -315,7 +315,7 @@ agent.sendMessage('Continue with the next step.', {
       maxSteps: 3,
     },
   },
-});
+})
 ```
 
 Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the message: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the message is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `runId` is the authoritative id of the run that handled the message and is present only on `wake` and `deliver`. For `persist`/`discard` use `result.signal.id` to correlate the stored message. `accepted` resolves for routing (a generation error on a `wake` run surfaces through `output.consumeStream()`) and rejects only when the message couldn't be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the message to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
@@ -328,7 +328,7 @@ Queues a user message for the next turn on a thread. If the thread is active, Ma
 agent.queueMessage('Also check whether the tests need updates.', {
   resourceId: 'user-123',
   threadId: 'thread-abc',
-});
+})
 ```
 
 `queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`, with the same `accepted` semantics as `sendMessage()`. Pass an optional `queueOwnerId` to group local queued messages for observation and cancellation. The owner ID is local metadata: it's neither serialized with the message nor an authorization mechanism.
@@ -348,7 +348,7 @@ agent.queueSignal(
     contents: 'Triage the new issue.',
   },
   { resourceId: 'user-123', threadId: 'thread-abc' },
-);
+)
 ```
 
 `queueSignal()` accepts the same `options` as `queueMessage()`, including `queueOwnerId`, and returns the same result shape. Queued signals share the `queueMessage()` queue, so they count toward queue-count events and `cancelQueuedMessages()` can cancel them.
@@ -365,33 +365,33 @@ const { cancelledSignalIds } = agent.cancelQueuedMessages({
   resourceId: 'user-123',
   threadId: 'thread-abc',
   signalIds: ['signal-123', 'signal-456'],
-});
+})
 ```
 
 <PropertiesTable
   content={[
-    {
-      name: 'resourceId',
-      type: 'string',
-      isOptional: true,
-      description: 'Resource ID for the memory thread. Required with queueOwnerId.',
-    },
-    { name: 'threadId', type: 'string', description: 'Thread containing the pending signals.' },
-    {
-      name: 'signalIds',
-      type: 'string[]',
-      isOptional: true,
-      description:
-        'IDs to cancel across Agents on the thread. Duplicate and unknown IDs are ignored. Supply this or queueOwnerId, not both.',
-    },
-    {
-      name: 'queueOwnerId',
-      type: 'string',
-      isOptional: true,
-      description:
-        "Owner group to cancel within the calling Agent's queued messages. Supply this or signalIds, not both.",
-    },
-  ]}
+  {
+    name: 'resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID for the memory thread. Required with queueOwnerId.',
+  },
+  { name: 'threadId', type: 'string', description: 'Thread containing the pending signals.' },
+  {
+    name: 'signalIds',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'IDs to cancel across Agents on the thread. Duplicate and unknown IDs are ignored. Supply this or queueOwnerId, not both.',
+  },
+  {
+    name: 'queueOwnerId',
+    type: 'string',
+    isOptional: true,
+    description:
+      "Owner group to cancel within the calling Agent's queued messages. Supply this or signalIds, not both.",
+  },
+]}
 />
 
 Returns `{ cancelledSignalIds: string[] }`, containing each ID actually cancelled by this call once. An empty array means none of the selected signals were still pending locally. A signal waiting to acquire or transfer its lease remains cancellable. Once execution or forwarding starts, the local copy is no longer cancellable.
@@ -404,103 +404,103 @@ Sends a signal to an active run or memory thread.
 
 <PropertiesTable
   content={[
-    {
-      name: 'signal',
-      type: "{ type: 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder'; tagName?: string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata; transient?: boolean }",
-      description:
-        "Signal context to send to the thread. `type` is the semantic signal category. `tagName` controls the XML tag the model sees. For example, `{ type: 'notification', tagName: 'github-review' }` renders as `<github-review>...</github-review>`. `tagName` and attribute names must be XML-safe: letters, numbers, periods, hyphens, and underscores, starting with a letter or underscore. Set `transient: true` to deliver the signal to the current model request without storing it; transient signals are never stored, state signals cannot be transient, and combining `transient` with a `persist` behavior discards the signal. Legacy `user-message` and `system-reminder` payloads are still accepted and normalized. Unknown `type` values are rejected; use `tagName` for custom XML tags.",
-    },
-    {
-      name: 'options',
-      type: 'object',
-      isOptional: true,
-      description: 'Targeting and delivery behavior for the signal.',
-      properties: [
-        {
-          type: 'object',
-          parameters: [
-            {
-              name: 'runId',
-              type: 'string',
-              isOptional: true,
-              description: 'Run ID to target directly. Use this when you already know the active run ID.',
-            },
-            {
-              name: 'resourceId',
-              type: 'string',
-              isOptional: true,
-              description: 'Resource ID for the memory thread. Required with `threadId` for thread-targeted signals.',
-            },
-            {
-              name: 'threadId',
-              type: 'string',
-              isOptional: true,
-              description: 'Thread ID to target. Required with `resourceId` for thread-targeted signals.',
-            },
-            {
-              name: 'ifActive',
-              type: 'object',
-              isOptional: true,
-              description: 'Controls what happens when the target thread is active.',
-              properties: [
-                {
-                  type: 'object',
-                  parameters: [
-                    {
-                      name: 'behavior',
-                      type: "'deliver' | 'persist' | 'discard'",
-                      isOptional: true,
-                      description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
-                    },
-                    {
-                      name: 'attributes',
-                      type: 'Record<string, string | number | boolean>',
-                      isOptional: true,
-                      description:
-                        'Attributes merged into the signal when Mastra accepts it while the target thread is active.',
-                    },
-                  ],
-                },
-              ],
-            },
-            {
-              name: 'ifIdle',
-              type: 'object',
-              isOptional: true,
-              description: 'Controls what happens when the target thread is idle.',
-              properties: [
-                {
-                  type: 'object',
-                  parameters: [
-                    {
-                      name: 'behavior',
-                      type: "'wake' | 'persist' | 'discard'",
-                      isOptional: true,
-                      description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
-                    },
-                    {
-                      name: 'streamOptions',
-                      type: 'AgentExecutionOptions',
-                      isOptional: true,
-                      description:
-                        'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
-                    },
-                    {
-                      name: 'attributes',
-                      type: 'Record<string, string | number | boolean>',
-                      isOptional: true,
-                      description:
-                        'Attributes merged into the signal when Mastra accepts it while the target thread is idle.',
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+  {
+    name: 'signal',
+    type: "{ type: 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder'; tagName?: string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata; transient?: boolean }",
+    description:
+      "Signal context to send to the thread. `type` is the semantic signal category. `tagName` controls the XML tag the model sees. For example, `{ type: 'notification', tagName: 'github-review' }` renders as `<github-review>...</github-review>`. `tagName` and attribute names must be XML-safe: letters, numbers, periods, hyphens, and underscores, starting with a letter or underscore. Set `transient: true` to deliver the signal to the current model request without storing it; transient signals are never stored, state signals cannot be transient, and combining `transient` with a `persist` behavior discards the signal. Legacy `user-message` and `system-reminder` payloads are still accepted and normalized. Unknown `type` values are rejected; use `tagName` for custom XML tags.",
+  },
+  {
+    name: 'options',
+    type: 'object',
+    isOptional: true,
+    description: 'Targeting and delivery behavior for the signal.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'runId',
+            type: 'string',
+            isOptional: true,
+            description: 'Run ID to target directly. Use this when you already know the active run ID.',
+          },
+          {
+            name: 'resourceId',
+            type: 'string',
+            isOptional: true,
+            description: 'Resource ID for the memory thread. Required with `threadId` for thread-targeted signals.',
+          },
+          {
+            name: 'threadId',
+            type: 'string',
+            isOptional: true,
+            description: 'Thread ID to target. Required with `resourceId` for thread-targeted signals.',
+          },
+          {
+            name: 'ifActive',
+            type: 'object',
+            isOptional: true,
+            description: 'Controls what happens when the target thread is active.',
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'behavior',
+                    type: "'deliver' | 'persist' | 'discard'",
+                    isOptional: true,
+                    description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
+                  },
+                  {
+                    name: 'attributes',
+                    type: 'Record<string, string | number | boolean>',
+                    isOptional: true,
+                    description:
+                      'Attributes merged into the signal when Mastra accepts it while the target thread is active.',
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'ifIdle',
+            type: 'object',
+            isOptional: true,
+            description: 'Controls what happens when the target thread is idle.',
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'behavior',
+                    type: "'wake' | 'persist' | 'discard'",
+                    isOptional: true,
+                    description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
+                  },
+                  {
+                    name: 'streamOptions',
+                    type: 'AgentExecutionOptions',
+                    isOptional: true,
+                    description:
+                      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+                  },
+                  {
+                    name: 'attributes',
+                    type: 'Record<string, string | number | boolean>',
+                    isOptional: true,
+                    description:
+                      'Attributes merged into the signal when Mastra accepts it while the target thread is idle.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+]}
 />
 
 Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the signal: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the signal is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `action` mirrors the winning `behavior` from `ifActive`/`ifIdle`. `runId` is the authoritative id of the run that handled the signal and is present only on `wake` and `deliver`. For `persist`/`discard` use `result.signal.id` to correlate the stored signal. `accepted` resolves for routing (a generation error on a `wake` run surfaces through `output.consumeStream()`) and rejects only when the signal couldn't be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
@@ -508,14 +508,14 @@ Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSigna
 In serverless handlers, await `accepted` and pass the `wake` output to your platform's `waitUntil` equivalent so the winning process can drain the stream after the HTTP response returns.
 
 ```typescript
-const result = agent.sendSignal(signal, { resourceId, threadId });
+const result = agent.sendSignal(signal, { resourceId, threadId })
 ctx.waitUntil(
   result.accepted.then(async accepted => {
     if (accepted.action === 'wake') {
-      await accepted.output.consumeStream();
+      await accepted.output.consumeStream()
     }
   }),
-);
+)
 ```
 
 ### `sendStateSignal(state, options)`
@@ -539,76 +539,76 @@ const result = await agent.sendStateSignal(
     resourceId: 'user-123',
     threadId: 'thread-abc',
   },
-);
+)
 ```
 
 <PropertiesTable
   content={[
-    {
-      name: 'state',
-      type: 'object',
-      description: 'State signal to send to the thread.',
-      properties: [
-        {
-          type: 'object',
-          parameters: [
-            { name: 'id', type: 'string', description: 'State lane name, such as `browser` or `editor`.' },
-            {
-              name: 'cacheKey',
-              type: 'string',
-              description: 'Producer-owned key Mastra uses to skip duplicate state for the same lane and mode.',
-            },
-            {
-              name: 'contents',
-              type: 'string | Array<TextPart | FilePart>',
-              description: 'LLM-facing representation of the state.',
-            },
-            {
-              name: 'mode',
-              type: "'snapshot' | 'delta'",
-              isOptional: true,
-              description: 'Whether the state is an authoritative snapshot or a change event. Defaults to `snapshot`.',
-            },
-            {
-              name: 'value',
-              type: 'unknown',
-              isOptional: true,
-              description: "Structured snapshot value for `mode: 'snapshot'`.",
-            },
-            {
-              name: 'delta',
-              type: 'unknown',
-              isOptional: true,
-              description: "Structured change value for `mode: 'delta'`.",
-            },
-            {
-              name: 'attributes',
-              type: 'Record<string, string | number | boolean>',
-              isOptional: true,
-              description: 'Attributes rendered on the state signal tag.',
-            },
-            {
-              name: 'metadata',
-              type: 'Record<string, unknown>',
-              isOptional: true,
-              description: 'Application metadata stored with the state signal.',
-            },
-            {
-              name: 'tagName',
-              type: 'string',
-              isOptional: true,
-              description: 'XML tag name shown to the model. Defaults to `state`.',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: 'options',
-      type: 'object',
-      description: 'Targeting and delivery behavior for the state signal. Accepts the same options as `sendSignal()`.',
-    },
-  ]}
+  {
+    name: 'state',
+    type: 'object',
+    description: 'State signal to send to the thread.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          { name: 'id', type: 'string', description: 'State lane name, such as `browser` or `editor`.' },
+          {
+            name: 'cacheKey',
+            type: 'string',
+            description: 'Producer-owned key Mastra uses to skip duplicate state for the same lane and mode.',
+          },
+          {
+            name: 'contents',
+            type: 'string | Array<TextPart | FilePart>',
+            description: 'LLM-facing representation of the state.',
+          },
+          {
+            name: 'mode',
+            type: "'snapshot' | 'delta'",
+            isOptional: true,
+            description: 'Whether the state is an authoritative snapshot or a change event. Defaults to `snapshot`.',
+          },
+          {
+            name: 'value',
+            type: 'unknown',
+            isOptional: true,
+            description: "Structured snapshot value for `mode: 'snapshot'`.",
+          },
+          {
+            name: 'delta',
+            type: 'unknown',
+            isOptional: true,
+            description: "Structured change value for `mode: 'delta'`.",
+          },
+          {
+            name: 'attributes',
+            type: 'Record<string, string | number | boolean>',
+            isOptional: true,
+            description: 'Attributes rendered on the state signal tag.',
+          },
+          {
+            name: 'metadata',
+            type: 'Record<string, unknown>',
+            isOptional: true,
+            description: 'Application metadata stored with the state signal.',
+          },
+          {
+            name: 'tagName',
+            type: 'string',
+            isOptional: true,
+            description: 'XML tag name shown to the model. Defaults to `state`.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'options',
+    type: 'object',
+    description: 'Targeting and delivery behavior for the state signal. Accepts the same options as `sendSignal()`.',
+  },
+]}
 />
 
 Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void>, skipped?: false }` when Mastra accepts new state. Returns `{ skipped: true, reason: 'unchanged' }` when the same `cacheKey` and mode are already current for the state lane. `accepted` resolves at decision-time, once Mastra decides what to do with the signal: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the signal is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `runId` is the authoritative id of the run that handled the signal and is present only on `wake` and `deliver`. For `persist`/`discard` use `result.signal.id` to correlate the stored signal. On the `wake` action, `output` is the agent stream for in-process consumption.
@@ -630,117 +630,117 @@ const result = await agent.sendNotificationSignal(
     resourceId: 'user-123',
     threadId: 'thread-abc',
   },
-);
+)
 ```
 
 <PropertiesTable
   content={[
-    {
-      name: 'notification',
-      type: 'object',
-      description: 'Notification inbox record to create or coalesce.',
-      properties: [
-        {
-          type: 'object',
-          parameters: [
-            {
-              name: 'source',
-              type: 'string',
-              description: 'External system that produced the notification, such as `github`, `slack`, or `email`.',
-            },
-            {
-              name: 'kind',
-              type: 'string',
-              description: 'Notification kind within the source, such as `ci-status`, `mention`, or `direct-message`.',
-            },
-            {
-              name: 'summary',
-              type: 'string',
-              description: 'LLM-facing summary used as the notification signal contents.',
-            },
-            {
-              name: 'priority',
-              type: "'low' | 'medium' | 'high' | 'urgent'",
-              isOptional: true,
-              description: 'Priority used by the notification delivery policy. Defaults to `medium`.',
-            },
-            {
-              name: 'payload',
-              type: 'unknown',
-              isOptional: true,
-              description: 'Structured payload stored on the inbox record for tools or application code.',
-            },
-            {
-              name: 'dedupeKey',
-              type: 'string',
-              isOptional: true,
-              description: 'Key used to coalesce duplicate pending notifications from the same source and thread.',
-            },
-            {
-              name: 'coalesceKey',
-              type: 'string',
-              isOptional: true,
-              description: 'Key used to combine related pending notifications from the same source and thread.',
-            },
-            {
-              name: 'attributes',
-              type: 'Record<string, JSONValue>',
-              isOptional: true,
-              description: 'Extra attributes copied onto the emitted notification signal.',
-            },
-            {
-              name: 'metadata',
-              type: 'Record<string, unknown>',
-              isOptional: true,
-              description: 'Application metadata stored on the inbox record.',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: 'options',
-      type: 'object',
-      description: 'Target thread and wake-up behavior for the notification.',
-      properties: [
-        {
-          type: 'object',
-          parameters: [
-            {
-              name: 'resourceId',
-              type: 'string',
-              description: 'Resource ID for the notification inbox and target memory thread.',
-            },
-            {
-              name: 'threadId',
-              type: 'string',
-              description: 'Thread ID for the notification inbox and target memory thread.',
-            },
-            {
-              name: 'ifIdle',
-              type: 'object',
-              isOptional: true,
-              description: 'Controls what happens when the target thread is idle.',
-              properties: [
-                {
-                  type: 'object',
-                  parameters: [
-                    {
-                      name: 'streamOptions',
-                      type: 'AgentExecutionOptions',
-                      isOptional: true,
-                      description:
-                        'Options for the stream that starts when an immediate notification wakes an idle thread.',
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+  {
+    name: 'notification',
+    type: 'object',
+    description: 'Notification inbox record to create or coalesce.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'source',
+            type: 'string',
+            description: 'External system that produced the notification, such as `github`, `slack`, or `email`.',
+          },
+          {
+            name: 'kind',
+            type: 'string',
+            description: 'Notification kind within the source, such as `ci-status`, `mention`, or `direct-message`.',
+          },
+          {
+            name: 'summary',
+            type: 'string',
+            description: 'LLM-facing summary used as the notification signal contents.',
+          },
+          {
+            name: 'priority',
+            type: "'low' | 'medium' | 'high' | 'urgent'",
+            isOptional: true,
+            description: 'Priority used by the notification delivery policy. Defaults to `medium`.',
+          },
+          {
+            name: 'payload',
+            type: 'unknown',
+            isOptional: true,
+            description: 'Structured payload stored on the inbox record for tools or application code.',
+          },
+          {
+            name: 'dedupeKey',
+            type: 'string',
+            isOptional: true,
+            description: 'Key used to coalesce duplicate pending notifications from the same source and thread.',
+          },
+          {
+            name: 'coalesceKey',
+            type: 'string',
+            isOptional: true,
+            description: 'Key used to combine related pending notifications from the same source and thread.',
+          },
+          {
+            name: 'attributes',
+            type: 'Record<string, JSONValue>',
+            isOptional: true,
+            description: 'Extra attributes copied onto the emitted notification signal.',
+          },
+          {
+            name: 'metadata',
+            type: 'Record<string, unknown>',
+            isOptional: true,
+            description: 'Application metadata stored on the inbox record.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'options',
+    type: 'object',
+    description: 'Target thread and wake-up behavior for the notification.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'resourceId',
+            type: 'string',
+            description: 'Resource ID for the notification inbox and target memory thread.',
+          },
+          {
+            name: 'threadId',
+            type: 'string',
+            description: 'Thread ID for the notification inbox and target memory thread.',
+          },
+          {
+            name: 'ifIdle',
+            type: 'object',
+            isOptional: true,
+            description: 'Controls what happens when the target thread is idle.',
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'streamOptions',
+                    type: 'AgentExecutionOptions',
+                    isOptional: true,
+                    description:
+                      'Options for the stream that starts when an immediate notification wakes an idle thread.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+]}
 />
 
 Returns `{ record: NotificationRecord, decision: NotificationDeliveryDecision, runId?: string, signal?: CreatedAgentSignal, persisted?: Promise<void>, accepted?: Promise<SendAgentSignalAccepted> }`. `record` is the stored inbox record. `decision` is the delivery-policy result. `signal` and `runId` are present when ingress emits a signal immediately, including the immediate summary emitted for active high-priority notifications. `persisted` is present when the emitted signal is persisted without waking an idle thread. `accepted` is present when a signal is emitted and resolves at decision-time, once Mastra decides what to do with it: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the signal is forwarded onto an existing run, or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `runId` on the accepted result is present only on `wake` and `deliver`. On the `wake` action, `output` is the agent stream for in-process consumption.
@@ -765,12 +765,12 @@ export const supportAgent = new Agent({
           return {
             action: 'summarize',
             summaryAt: new Date(Date.now() + 30 * 60 * 1000),
-          };
+          }
         }
       },
     },
   },
-});
+})
 ```
 
 ### `abortThreadStream(options)`
@@ -782,22 +782,22 @@ const aborted = agent.abortThreadStream({
   resourceId: 'user-123',
   threadId: 'thread-abc',
   clearPendingSignals: true,
-});
+})
 ```
 
 <PropertiesTable
   content={[
-    { name: 'resourceId', type: 'string', isOptional: true, description: 'Resource ID for the memory thread.' },
-    { name: 'threadId', type: 'string', description: 'Thread to abort.' },
-    {
-      name: 'clearPendingSignals',
-      type: 'boolean',
-      isOptional: true,
-      defaultValue: 'false',
-      description:
-        'Clear pending signals before aborting. Includes signals waiting for preparation or a lease, but not running work or continuations from continueWithMessages().',
-    },
-  ]}
+  { name: 'resourceId', type: 'string', isOptional: true, description: 'Resource ID for the memory thread.' },
+  { name: 'threadId', type: 'string', description: 'Thread to abort.' },
+  {
+    name: 'clearPendingSignals',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Clear pending signals before aborting. Includes signals waiting for preparation or a lease, but not running work or continuations from continueWithMessages().',
+  },
+]}
 />
 
 Returns a boolean indicating whether an active run was found for cancellation. For a remote owner, `true` means an abort request was sent, not that cancellation was acknowledged. The request carries `clearPendingSignals` so the active owner clears its own queues before applying the abort. Other processes' queues aren't globally cleared.
@@ -812,56 +812,56 @@ Subscribes to raw stream chunks for a memory thread. Use this before calling `se
 
 <PropertiesTable
   content={[
-    {
-      name: 'options',
-      type: 'object',
-      description: 'Thread subscription target.',
-      properties: [
-        {
-          type: 'object',
-          parameters: [
-            {
-              name: 'resourceId',
-              type: 'string',
-              isOptional: true,
-              description: 'Resource ID for the memory thread.',
-            },
-            {
-              name: 'threadId',
-              type: 'string',
-              description: 'Thread ID to subscribe to.',
-            },
-            {
-              name: 'hideSignals',
-              type: 'boolean | AgentSignalType[]',
-              isOptional: true,
-              defaultValue: '[]',
-              description:
-                'Use true to hide all recognized signals, false to show all, or an array to hide selected types from this subscription, including live, idle-persisted, and replayed signals. Other subscribers and the initiating stream keep their own policies.',
-            },
-            {
-              name: 'withInitialHistory',
-              type: 'boolean | { perPage?: number }',
-              isOptional: true,
-              defaultValue: 'false',
-              description:
-                "Emit the stored thread messages as one `thread-history` chunk first, then only retained parts newer than that history, then live parts. Completed runs already in storage aren't replayed; pending tool approvals are still emitted. `perPage` limits how many recent messages are loaded (default 40). Without agent memory, or when the thread has no stored messages yet, the history chunk is emitted with an empty `messages` array.",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+  {
+    name: 'options',
+    type: 'object',
+    description: 'Thread subscription target.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'resourceId',
+            type: 'string',
+            isOptional: true,
+            description: 'Resource ID for the memory thread.',
+          },
+          {
+            name: 'threadId',
+            type: 'string',
+            description: 'Thread ID to subscribe to.',
+          },
+          {
+            name: 'hideSignals',
+            type: 'boolean | AgentSignalType[]',
+            isOptional: true,
+            defaultValue: '[]',
+            description:
+              'Use true to hide all recognized signals, false to show all, or an array to hide selected types from this subscription, including live, idle-persisted, and replayed signals. Other subscribers and the initiating stream keep their own policies.',
+          },
+          {
+            name: 'withInitialHistory',
+            type: 'boolean | { perPage?: number }',
+            isOptional: true,
+            defaultValue: 'false',
+            description:
+              "Emit the stored thread messages as one `thread-history` chunk first, then only retained parts newer than that history, then live parts. Completed runs already in storage aren't replayed; pending tool approvals are still emitted. `perPage` limits how many recent messages are loaded (default 40). Without agent memory, or when the thread has no stored messages yet, the history chunk is emitted with an empty `messages` array.",
+          },
+        ],
+      },
+    ],
+  },
+]}
 />
 
 By default, subscriptions include every signal type, including reactive reminders. To hide reminders for one subscriber without affecting another:
 
 ```ts
-const visible = await agent.subscribeToThread({ threadId: 'thread-abc' });
+const visible = await agent.subscribeToThread({ threadId: 'thread-abc' })
 const filtered = await agent.subscribeToThread({
   threadId: 'thread-abc',
   hideSignals: ['reactive', 'system-reminder'],
-});
+})
 ```
 
 To render a thread without replaying finished runs, request initial history. The first chunk carries the stored messages:
@@ -870,10 +870,10 @@ To render a thread without replaying finished runs, request initial history. The
 const subscription = await agent.subscribeToThread({
   threadId: 'thread-abc',
   withInitialHistory: true,
-});
+})
 for await (const chunk of subscription.stream) {
-  if (chunk.type === 'thread-history') render(chunk.payload.messages);
-  else handle(chunk);
+  if (chunk.type === 'thread-history') render(chunk.payload.messages)
+  else handle(chunk)
 }
 ```
 
@@ -887,232 +887,232 @@ Returns an `AgentThreadSubscription` object with these members:
 
 <PropertiesTable
   content={[
-    {
-      name: 'stream',
-      type: 'AsyncIterable<AgentChunkType>',
-      description: 'Raw agent stream chunks for the subscribed thread.',
-    },
-    {
-      name: 'activeRunId',
-      type: '() => string | null',
-      description: 'Returns the active run ID for the thread, or `null` when no run is active.',
-    },
-    {
-      name: 'abort',
-      type: '(options?: { clearPendingSignals?: boolean }) => boolean',
-      description:
-        'Requests an abort for the active run. Pending signals survive unless clearPendingSignals is true. Uses the same cancellation and return semantics as abortThreadStream().',
-    },
-    {
-      name: 'unsubscribe',
-      type: '() => void',
-      description: 'Stops the subscription without aborting the active run.',
-    },
-  ]}
+  {
+    name: 'stream',
+    type: 'AsyncIterable<AgentChunkType>',
+    description: 'Raw agent stream chunks for the subscribed thread.',
+  },
+  {
+    name: 'activeRunId',
+    type: '() => string | null',
+    description: 'Returns the active run ID for the thread, or `null` when no run is active.',
+  },
+  {
+    name: 'abort',
+    type: '(options?: { clearPendingSignals?: boolean }) => boolean',
+    description:
+      'Requests an abort for the active run. Pending signals survive unless clearPendingSignals is true. Uses the same cancellation and return semantics as abortThreadStream().',
+  },
+  {
+    name: 'unsubscribe',
+    type: '() => void',
+    description: 'Stops the subscription without aborting the active run.',
+  },
+]}
 />
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: 'id',
-      type: 'string',
-      isOptional: false,
-      description: 'Unique identifier for the agent.',
-    },
-    {
-      name: 'name',
-      type: 'string',
-      isOptional: false,
-      description: 'Display name for the agent.',
-    },
-    {
-      name: 'description',
-      type: 'string',
-      isOptional: true,
-      description: "Optional description of the agent's purpose and capabilities.",
-    },
-    {
-      name: 'metadata',
-      type: 'Record<string, unknown> | ({ requestContext: RequestContext }) => Record<string, unknown> | Promise<Record<string, unknown>>',
-      isOptional: true,
-      description:
-        'Optional metadata for classifying or filtering the agent in clients. Can be a static record or a function that resolves the metadata from the request context.',
-    },
-    {
-      name: 'instructions',
-      type: 'SystemMessage | ({ requestContext: RequestContext }) => SystemMessage | Promise<SystemMessage>',
-      isOptional: false,
-      description: `Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: false,
+    description: 'Unique identifier for the agent.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: false,
+    description: 'Display name for the agent.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    isOptional: true,
+    description: "Optional description of the agent's purpose and capabilities.",
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown> | ({ requestContext: RequestContext }) => Record<string, unknown> | Promise<Record<string, unknown>>',
+    isOptional: true,
+    description:
+      'Optional metadata for classifying or filtering the agent in clients. Can be a static record or a function that resolves the metadata from the request context.',
+  },
+  {
+    name: 'instructions',
+    type: 'SystemMessage | ({ requestContext: RequestContext }) => SystemMessage | Promise<SystemMessage>',
+    isOptional: false,
+    description: `Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
 array of system messages, or a function that returns any of these types dynamically.
 SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]`,
-    },
-    {
-      name: 'model',
-      type: 'MastraLanguageModel | ({ requestContext: RequestContext }) => MastraLanguageModel | Promise<MastraLanguageModel>',
-      isOptional: false,
-      description:
-        'The language model used by the agent. Pass a model router string in `provider/model` format, a model configuration or provider instance, or a function that resolves the model at runtime. See [Model strings](#model-strings) for common providers and environment variables.',
-    },
-    {
-      name: 'agents',
-      type: 'Record<string, Agent> | ({ requestContext: RequestContext }) => Record<string, Agent> | Promise<Record<string, Agent>>',
-      isOptional: true,
-      description: 'Subagents that the agent can access. Can be provided statically or resolved dynamically.',
-    },
-    {
-      name: 'tools',
-      type: 'ToolsInput | ({ requestContext: RequestContext, mastra?: Mastra }) => ToolsInput | Promise<ToolsInput>',
-      isOptional: true,
-      description:
-        'Tools that the agent can access. Can be provided statically or resolved dynamically from the request context and associated Mastra instance when available.',
-    },
-    {
-      name: 'hooks',
-      type: 'ToolHooks',
-      isOptional: true,
-      description:
-        'Hooks that run before and after every tool call made by this agent. Per-execution hooks passed to `generate()` or `stream()` override matching hooks set here. See Tool hooks below.',
-      properties: [
-        {
-          type: 'ToolHooks',
-          parameters: [
-            {
-              name: 'beforeToolCall',
-              type: '(context: ToolHookContext) => void | ToolBeforeHookResult | Promise<void | ToolBeforeHookResult>',
-              isOptional: true,
-              description:
-                'Runs before a tool executes. Receives `{ toolName, input, context, metadata }`. Return `{ proceed: false, output }` to skip the tool call and use `output` as its result.',
-            },
-            {
-              name: 'afterToolCall',
-              type: '(context: ToolAfterHookContext) => void | Promise<void>',
-              isOptional: true,
-              description:
-                'Runs after a tool executes. Receives `{ toolName, input, context, metadata, output, error }`. `output` is undefined when the tool throws, and `error` is set instead.',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: 'transform',
-      type: 'ToolPayloadTransformPolicy',
-      isOptional: true,
-      description:
-        'Shared policy for transforming tool payloads before display streams or user-visible transcript messages receive them. Use per-tool `transform` on `createTool()` for tool-local rules.',
-    },
-    {
-      name: 'workflows',
-      type: 'Record<string, Workflow> | ({ requestContext: RequestContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>',
-      isOptional: true,
-      description: 'Workflows that the agent can execute. Can be static or dynamically resolved.',
-    },
-    {
-      name: 'defaultOptions',
-      type: 'AgentExecutionOptions | ({ requestContext: RequestContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>',
-      isOptional: true,
-      description: 'Default options used when calling `stream()` and `generate()`.',
-    },
-    {
-      name: 'defaultGenerateOptionsLegacy',
-      type: 'AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>',
-      isOptional: true,
-      description: 'Default options used when calling `generateLegacy()`.',
-    },
-    {
-      name: 'defaultStreamOptionsLegacy',
-      type: 'AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>',
-      isOptional: true,
-      description: 'Default options used when calling `streamLegacy()`.',
-    },
-    {
-      name: 'mastra',
-      type: 'Mastra',
-      isOptional: true,
-      description: 'Reference to the Mastra runtime instance (injected automatically).',
-    },
-    {
-      name: 'scorers',
-      type: 'MastraScorers | ({ requestContext: RequestContext }) => MastraScorers | Promise<MastraScorers>',
-      isOptional: true,
-      description: 'Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.',
-    },
-    {
-      name: 'scopes',
-      type: 'string[] | ({ requestContext: RequestContext }) => string[] | Promise<string[]>',
-      isOptional: true,
-      description:
-        'Scopes every run of this agent acts as, written as `<type>:<value>`. Combined with per-call `scopes` and the `mastra__scopes` request context key.',
-    },
-    {
-      name: 'memory',
-      type: 'MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>',
-      isOptional: true,
-      description: 'Memory module used for storing and retrieving stateful context.',
-    },
-    {
-      name: 'notifications',
-      type: 'object',
-      isOptional: true,
-      description: 'Notification delivery configuration for durable notification signals.',
-      properties: [
-        {
-          type: 'object',
-          parameters: [
-            {
-              name: 'deliveryPolicy',
-              type: 'NotificationDeliveryPolicyConfig',
-              isOptional: true,
-              description:
-                'Controls how notification records are delivered. Configure a default decision, per-priority decisions, per-source decisions, or a custom `decide()` function. See [Notifications](/reference/signals/notifications) for policy types and evaluation order.',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: 'voice',
-      type: 'CompositeVoice',
-      isOptional: true,
-      description: 'Voice settings for speech input and output.',
-    },
-    {
-      name: 'inputProcessors',
-      type: '(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>',
-      isOptional: true,
-      description:
-        'Input processors that can modify or validate messages before they are processed by the agent. Can be individual Processor objects or workflows created with `createWorkflow()` using ProcessorStepSchema.',
-    },
-    {
-      name: 'outputProcessors',
-      type: '(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>',
-      isOptional: true,
-      description:
-        'Output processors that can modify or validate messages from the agent before they are sent to the client. Can be individual Processor objects or workflows.',
-    },
-    {
-      name: 'maxProcessorRetries',
-      type: 'number',
-      isOptional: true,
-      description: 'Maximum number of times a processor can request retrying the LLM step.',
-    },
-    {
-      name: 'requestContextSchema',
-      type: 'StandardJSONSchemaV1',
-      isOptional: true,
-      description:
-        'Standard JSON Schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.',
-    },
-    {
-      name: 'editor',
-      type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean }; model?: boolean }',
-      isOptional: true,
-      description:
-        'Controls which fields the editor can override for this code-defined agent. Omit to allow editing instructions and tools. See Editor overrides below.',
-    },
-  ]}
+  },
+  {
+    name: 'model',
+    type: 'MastraLanguageModel | ({ requestContext: RequestContext }) => MastraLanguageModel | Promise<MastraLanguageModel>',
+    isOptional: false,
+    description:
+      'The language model used by the agent. Pass a model router string in `provider/model` format, a model configuration or provider instance, or a function that resolves the model at runtime. See [Model strings](#model-strings) for common providers and environment variables.',
+  },
+  {
+    name: 'agents',
+    type: 'Record<string, Agent> | ({ requestContext: RequestContext }) => Record<string, Agent> | Promise<Record<string, Agent>>',
+    isOptional: true,
+    description: 'Subagents that the agent can access. Can be provided statically or resolved dynamically.',
+  },
+  {
+    name: 'tools',
+    type: 'ToolsInput | ({ requestContext: RequestContext, mastra?: Mastra }) => ToolsInput | Promise<ToolsInput>',
+    isOptional: true,
+    description:
+      'Tools that the agent can access. Can be provided statically or resolved dynamically from the request context and associated Mastra instance when available.',
+  },
+  {
+    name: 'hooks',
+    type: 'ToolHooks',
+    isOptional: true,
+    description:
+      'Hooks that run before and after every tool call made by this agent. Per-execution hooks passed to `generate()` or `stream()` override matching hooks set here. See Tool hooks below.',
+    properties: [
+      {
+        type: 'ToolHooks',
+        parameters: [
+          {
+            name: 'beforeToolCall',
+            type: '(context: ToolHookContext) => void | ToolBeforeHookResult | Promise<void | ToolBeforeHookResult>',
+            isOptional: true,
+            description:
+              'Runs before a tool executes. Receives `{ toolName, input, context, metadata }`. Return `{ proceed: false, output }` to skip the tool call and use `output` as its result.',
+          },
+          {
+            name: 'afterToolCall',
+            type: '(context: ToolAfterHookContext) => void | Promise<void>',
+            isOptional: true,
+            description:
+              'Runs after a tool executes. Receives `{ toolName, input, context, metadata, output, error }`. `output` is undefined when the tool throws, and `error` is set instead.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'transform',
+    type: 'ToolPayloadTransformPolicy',
+    isOptional: true,
+    description:
+      'Shared policy for transforming tool payloads before display streams or user-visible transcript messages receive them. Use per-tool `transform` on `createTool()` for tool-local rules.',
+  },
+  {
+    name: 'workflows',
+    type: 'Record<string, Workflow> | ({ requestContext: RequestContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>',
+    isOptional: true,
+    description: 'Workflows that the agent can execute. Can be static or dynamically resolved.',
+  },
+  {
+    name: 'defaultOptions',
+    type: 'AgentExecutionOptions | ({ requestContext: RequestContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>',
+    isOptional: true,
+    description: 'Default options used when calling `stream()` and `generate()`.',
+  },
+  {
+    name: 'defaultGenerateOptionsLegacy',
+    type: 'AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>',
+    isOptional: true,
+    description: 'Default options used when calling `generateLegacy()`.',
+  },
+  {
+    name: 'defaultStreamOptionsLegacy',
+    type: 'AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>',
+    isOptional: true,
+    description: 'Default options used when calling `streamLegacy()`.',
+  },
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    isOptional: true,
+    description: 'Reference to the Mastra runtime instance (injected automatically).',
+  },
+  {
+    name: 'scorers',
+    type: 'MastraScorers | ({ requestContext: RequestContext }) => MastraScorers | Promise<MastraScorers>',
+    isOptional: true,
+    description: 'Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.',
+  },
+  {
+    name: 'scopes',
+    type: 'string[] | ({ requestContext: RequestContext }) => string[] | Promise<string[]>',
+    isOptional: true,
+    description:
+      'Scopes every run of this agent acts as, written as `<type>:<value>`. Combined with per-call `scopes` and the `mastra__scopes` request context key.',
+  },
+  {
+    name: 'memory',
+    type: 'MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>',
+    isOptional: true,
+    description: 'Memory module used for storing and retrieving stateful context.',
+  },
+  {
+    name: 'notifications',
+    type: 'object',
+    isOptional: true,
+    description: 'Notification delivery configuration for durable notification signals.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'deliveryPolicy',
+            type: 'NotificationDeliveryPolicyConfig',
+            isOptional: true,
+            description:
+              'Controls how notification records are delivered. Configure a default decision, per-priority decisions, per-source decisions, or a custom `decide()` function. See [Notifications](/reference/signals/notifications) for policy types and evaluation order.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'voice',
+    type: 'CompositeVoice',
+    isOptional: true,
+    description: 'Voice settings for speech input and output.',
+  },
+  {
+    name: 'inputProcessors',
+    type: '(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>',
+    isOptional: true,
+    description:
+      'Input processors that can modify or validate messages before they are processed by the agent. Can be individual Processor objects or workflows created with `createWorkflow()` using ProcessorStepSchema.',
+  },
+  {
+    name: 'outputProcessors',
+    type: '(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>',
+    isOptional: true,
+    description:
+      'Output processors that can modify or validate messages from the agent before they are sent to the client. Can be individual Processor objects or workflows.',
+  },
+  {
+    name: 'maxProcessorRetries',
+    type: 'number',
+    isOptional: true,
+    description: 'Maximum number of times a processor can request retrying the LLM step.',
+  },
+  {
+    name: 'requestContextSchema',
+    type: 'StandardJSONSchemaV1',
+    isOptional: true,
+    description:
+      'Standard JSON Schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.',
+  },
+  {
+    name: 'editor',
+    type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean }; model?: boolean }',
+    isOptional: true,
+    description:
+      'Controls which fields the editor can override for this code-defined agent. Omit to allow editing instructions and tools. See Editor overrides below.',
+  },
+]}
 />
 
 ## `generate()` memory options
@@ -1125,7 +1125,7 @@ const response = await agent.generate('What did we decide about retries?', {
     resource: 'user-123',
     thread: 'support-thread-456',
   },
-});
+})
 ```
 
 Use a thread object when you need to create or update thread metadata during the call:
@@ -1140,7 +1140,7 @@ const response = await agent.generate('Continue the support conversation.', {
       metadata: { category: 'billing' },
     },
   },
-});
+})
 ```
 
 ## Tool hooks
@@ -1148,7 +1148,7 @@ const response = await agent.generate('Continue the support conversation.', {
 Use `hooks` to run logic around every tool call the agent makes, including assigned tools, memory tools, toolsets, client tools, and workspace tools.
 
 ```typescript title="src/mastra/agents/hooked-agent.ts"
-import { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
   id: 'support-agent',
@@ -1158,14 +1158,14 @@ export const agent = new Agent({
   // highlight-start
   hooks: {
     beforeToolCall: ({ toolName, input }) => {
-      console.log(`Running ${toolName}`, input);
+      console.log(`Running ${toolName}`, input)
     },
     afterToolCall: ({ toolName, output, error }) => {
-      console.log(`Finished ${toolName}`, { output, error });
+      console.log(`Finished ${toolName}`, { output, error })
     },
   },
   // highlight-end
-});
+})
 ```
 
 `beforeToolCall` can short-circuit the tool call by returning `{ proceed: false, output }`. The agent skips execution and uses `output` as the tool result:
@@ -1175,11 +1175,11 @@ const result = await agent.generate('Clean up old records', {
   hooks: {
     beforeToolCall: ({ toolName }) => {
       if (toolName === 'deleteRecord') {
-        return { proceed: false, output: { blocked: true } };
+        return { proceed: false, output: { blocked: true } }
       }
     },
   },
-});
+})
 ```
 
 The hook context `metadata` includes `agentId` and `agentName`. Per-execution hooks passed to `generate()` or `stream()` override matching agent-level hooks. When a [workspace](/reference/workspace/workspace-class) also defines `tools.hooks`, workspace hooks run inside the agent hook wrapper.
@@ -1190,14 +1190,14 @@ When you register the [`MastraEditor`](/reference/editor/mastra-editor), the `ed
 
 <PropertiesTable
   content={[
-    {
-      name: 'editor',
-      type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean }; model?: boolean }',
-      isOptional: true,
-      description:
-        'Omit to allow editing instructions and tools, using values in code as defaults. Set to `false` to lock the agent. Set `instructions: true` to make Studio own the instructions; omit `instructions` from code. Set `tools: true` to make Studio own tool membership and descriptions; omit `tools` from code. Set `tools: { description: true }` to keep tool membership in code and allow only description edits. Set `model: true` to allow edits to a static model fallback list.',
-    },
-  ]}
+  {
+    name: 'editor',
+    type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean }; model?: boolean }',
+    isOptional: true,
+    description:
+      'Omit to allow editing instructions and tools, using values in code as defaults. Set to `false` to lock the agent. Set `instructions: true` to make Studio own the instructions; omit `instructions` from code. Set `tools: true` to make Studio own tool membership and descriptions; omit `tools` from code. Set `tools: { description: true }` to keep tool membership in code and allow only description edits. Set `model: true` to allow edits to a static model fallback list.',
+  },
+]}
 />
 
 When a field is owned by Studio, TypeScript rejects it in code: `instructions` with `editor: { instructions: true }` and `tools` with `editor: { tools: true }` are type errors. An agent whose instructions are owned by Studio fails closed until a stored version with instructions is published.
@@ -1208,10 +1208,10 @@ The agent's `id` and `name` always come from code. Models also remain code-owned
 
 <PropertiesTable
   content={[
-    {
-      name: 'agent',
-      type: 'Agent<TAgentId, TTools>',
-      description: 'A new Agent instance with the specified configuration.',
-    },
-  ]}
+  {
+    name: 'agent',
+    type: 'Agent<TAgentId, TTools>',
+    description: 'A new Agent instance with the specified configuration.',
+  },
+]}
 />

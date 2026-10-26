@@ -69,6 +69,7 @@ type AgentVersionRow = {
   description?: string | null;
   instructions?: string | null;
   model: unknown;
+  modelList?: unknown;
   tools?: unknown;
   defaultOptions?: unknown;
   workflows?: unknown;
@@ -132,6 +133,7 @@ export class AgentsOracle extends AgentsStorage {
       tableName: TABLE_AGENT_VERSIONS,
       schema: ORACLE_AGENT_VERSIONS_SCHEMA,
       ifNotExists: [
+        'modelList',
         'tools',
         'mcpClients',
         'requestContextSchema',
@@ -590,6 +592,7 @@ export class AgentsOracle extends AgentsStorage {
       description: input.description,
       instructions: input.instructions,
       model: input.model,
+      modelList: input.modelList,
       tools: normalizeLegacyTools(input.tools) as AgentVersion['tools'],
       defaultOptions: input.defaultOptions,
       workflows: input.workflows,
@@ -640,14 +643,14 @@ export class AgentsOracle extends AgentsStorage {
     await client.none(
       `INSERT INTO ${this.table(TABLE_AGENT_VERSIONS)} (
         id, ${VERSION_AGENT_ID}, ${VERSION_VERSION_NUMBER},
-        name, description, instructions, model, tools,
+        name, description, instructions, model, "modelList", tools,
         ${VERSION_DEFAULT_OPTIONS}, workflows, agents, ${VERSION_INTEGRATION_TOOLS},
         ${VERSION_INPUT_PROCESSORS}, ${VERSION_OUTPUT_PROCESSORS}, memory, scorers,
         ${VERSION_MCP_CLIENTS}, ${VERSION_REQUEST_CONTEXT_SCHEMA},
         browser, ${VERSION_CHANGED_FIELDS}, ${VERSION_CHANGE_MESSAGE}, ${VERSION_CREATED_AT}
       ) VALUES (
         :id, :agentId, :versionNumber,
-        :name, :description, :instructions, :model, :tools,
+        :name, :description, :instructions, :model, :modelList, :tools,
         :defaultOptions, :workflows, :agents, :integrationTools,
         :inputProcessors, :outputProcessors, :memory, :scorers,
         :mcpClients, :requestContextSchema,
@@ -659,8 +662,9 @@ export class AgentsOracle extends AgentsStorage {
         versionNumber: input.versionNumber,
         name: input.name,
         description: nullableClobBind(input.description),
-        instructions: clobBind(this.serializeInstructions(input.instructions)),
-        model: jsonBind(input.model),
+        instructions: clobBind(this.serializeInstructions(input.instructions ?? '')),
+        model: jsonBind(input.model ?? {}),
+        modelList: nullableJsonBind(input.modelList),
         tools: nullableJsonBind(normalizeLegacyTools(input.tools)),
         defaultOptions: nullableJsonBind(input.defaultOptions),
         workflows: nullableJsonBind(input.workflows),
@@ -760,6 +764,7 @@ export class AgentsOracle extends AgentsStorage {
       `description AS "description"`,
       `instructions AS "instructions"`,
       `model AS "model"`,
+      `"modelList" AS "modelList"`,
       `tools AS "tools"`,
       `${VERSION_DEFAULT_OPTIONS} AS "defaultOptions"`,
       `workflows AS "workflows"`,
@@ -803,6 +808,7 @@ export class AgentsOracle extends AgentsStorage {
       description: optionalString(row.description),
       instructions: this.deserializeInstructions(row.instructions),
       model: parseOracleJson(row.model) as AgentVersion['model'],
+      modelList: parseOptionalJson<AgentVersion['modelList']>(row.modelList),
       tools: normalizeLegacyTools(parseOptionalJson<AgentVersion['tools']>(row.tools)) as AgentVersion['tools'],
       defaultOptions: parseOptionalJson<AgentVersion['defaultOptions']>(row.defaultOptions),
       workflows: parseOptionalJson<AgentVersion['workflows']>(row.workflows),
@@ -821,7 +827,8 @@ export class AgentsOracle extends AgentsStorage {
     };
   }
 
-  private serializeInstructions(instructions: string | AgentInstructionBlock[]): string {
+  private serializeInstructions(instructions: string | AgentInstructionBlock[] | undefined): string {
+    if (instructions === undefined) return '';
     return Array.isArray(instructions) ? JSON.stringify(instructions) : instructions;
   }
 
