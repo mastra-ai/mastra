@@ -75,9 +75,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
     }
   });
 
-  // The durable stream adapter builds a bare MastraModelOutput without the
-  // destructurable proxy, so a destructured consumeStream() loses `this` there.
-  (isDurableEngineVariant(engine) ? it.fails : it)('keeps consumeStream bound after destructuring', async () => {
+  it('keeps consumeStream bound after destructuring', async () => {
     const { result, output } = await streamHello();
     const { consumeStream } = output;
 
