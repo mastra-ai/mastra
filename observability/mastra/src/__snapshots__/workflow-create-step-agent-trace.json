@@ -368,7 +368,8 @@
                             "input": [
                               {
                                 "role": "system",
-                                "content": "You are an agent in a workflow"
+                                "content": "You are an agent in a workflow",
+                                "spanId": "<span-4>"
                               },
                               {
                                 "role": "user",

@@ -455,6 +455,13 @@ export class MessageList {
     return this.promptMessageSpanIds.get(message);
   }
 
+  /** Keep a prompt message's origin on the copy that replaced it, e.g. when guidance is appended at request time. */
+  public inheritPromptMessageSpanId(from: object | undefined, to: object | undefined): void {
+    if (!from || !to || from === to) return;
+    const spanId = this.promptMessageSpanIds.get(from);
+    if (spanId) this.promptMessageSpanIds.set(to, spanId);
+  }
+
   /** Id of the span that added this stored system message. */
   public getSystemMessageSpanId(message: CoreMessageV4): string | undefined {
     return this.systemMessageSpanIds.get(message);
@@ -469,12 +476,13 @@ export class MessageList {
 
   private resolveSystemOrigin(): string | undefined {
     if (this.systemOrigins.size === 0) return undefined;
-    if (this.systemOrigins.size === 1) return this.systemOrigins.values().next().value!.id;
     let span = resolveCurrentSpan();
     while (span) {
       if (this.systemOrigins.has(span)) return span.id;
       span = span.parent;
     }
+    // The caller's span context reaches no open origin: fall back to the only one, if unambiguous.
+    if (this.systemOrigins.size === 1) return this.systemOrigins.values().next().value!.id;
     return undefined;
   }
 

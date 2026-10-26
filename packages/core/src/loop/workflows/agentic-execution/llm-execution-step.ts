@@ -1932,6 +1932,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           : undefined;
 
         if (!downloadError) {
+          const leadingMessage = inputMessages[0];
           inputMessages = applyAutoResumeSystemMessage({
             autoResume: autoResumeSuspendedTools,
             inputMessages,
@@ -1944,6 +1945,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             tools: currentStep.tools,
             agentBackgroundConfig: readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig'),
           });
+          messageList.inheritPromptMessageSpanId(leadingMessage, inputMessages[0]);
 
           // Run `processLLMRequest` for any input processors that implement it.
           // This hook lets processors rewrite the outbound prompt transiently

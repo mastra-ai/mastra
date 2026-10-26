@@ -347,7 +347,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "You use tools and add metadata"
+                        "content": "You use tools and add metadata",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",
@@ -738,7 +739,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "You use tools and add metadata"
+                        "content": "You use tools and add metadata",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",

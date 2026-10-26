@@ -3242,7 +3242,7 @@ describe('Processor Tracing Tests', () => {
       await testExporter.finalExpectations();
     });
 
-    it('does not link a system message that background-task guidance was appended to', async () => {
+    it('keeps the agent span on the leading system message after background-task guidance is appended', async () => {
       const agent = new Agent({
         id: 'origin-agent',
         name: 'Origin Agent',
@@ -3270,11 +3270,11 @@ describe('Processor Tracing Tests', () => {
       const [inference] = testExporter.getModelInferenceSpans();
       const [leading] = inferenceSystemMessages(inference);
       expect(leading?.content).toMatch(/^Base instructions\n\n/);
-      expect(leading?.spanId).toBeUndefined();
+      expect(leading?.spanId).toBe(testExporter.getAgentSpans()[0]!.id);
       await testExporter.finalExpectations();
     });
 
-    it('does not link a system message that the auto-resume directive was appended to', async () => {
+    it('keeps the agent span on the leading system message after the auto-resume directive is appended', async () => {
       const agent = new Agent({
         id: 'origin-agent',
         name: 'Origin Agent',
@@ -3309,7 +3309,7 @@ describe('Processor Tracing Tests', () => {
       const [inference] = testExporter.getModelInferenceSpans();
       const [leading] = inferenceSystemMessages(inference);
       expect(leading?.content).toMatch(/^Base instructions\n\nAnalyse the suspended tools/);
-      expect(leading?.spanId).toBeUndefined();
+      expect(leading?.spanId).toBe(testExporter.getAgentSpans()[0]!.id);
       await testExporter.finalExpectations();
     });
 

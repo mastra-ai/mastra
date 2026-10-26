@@ -364,7 +364,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "You are a helpful calculator assistant that announces what you will do before doing it."
+                        "content": "You are a helpful calculator assistant that announces what you will do before doing it.",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",
@@ -804,7 +805,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "You are a helpful calculator assistant that announces what you will do before doing it."
+                        "content": "You are a helpful calculator assistant that announces what you will do before doing it.",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",

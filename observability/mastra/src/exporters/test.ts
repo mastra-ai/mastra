@@ -1006,6 +1006,10 @@ export class TestExporter extends BaseExporter {
         return '<date>';
       }
       if (typeof value === 'string') {
+        // Span references inside payloads (e.g. system message origins) use the same placeholders as span ids
+        if (key === 'spanId' && spanIdMap.has(value)) {
+          return spanIdMap.get(value)!;
+        }
         // Special handling for traceId - use the shared traceIdMap (handles both UUID and 32-char hex formats)
         if (key === 'traceId' && (uuidRegex.test(value) || hexId32Regex.test(value))) {
           if (!traceIdMap.has(value)) {

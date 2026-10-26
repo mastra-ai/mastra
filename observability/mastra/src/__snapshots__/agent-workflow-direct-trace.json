@@ -391,7 +391,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "You can execute workflows that exist in your config"
+                        "content": "You can execute workflows that exist in your config",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",
@@ -877,7 +878,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "You can execute workflows that exist in your config"
+                        "content": "You can execute workflows that exist in your config",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",

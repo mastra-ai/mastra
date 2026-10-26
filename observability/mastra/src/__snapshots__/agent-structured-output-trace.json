@@ -299,7 +299,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "Return a simple response"
+                        "content": "Return a simple response",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",

@@ -346,7 +346,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "You use tools that create child spans"
+                        "content": "You use tools that create child spans",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",
@@ -756,7 +757,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "You use tools that create child spans"
+                        "content": "You use tools that create child spans",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",

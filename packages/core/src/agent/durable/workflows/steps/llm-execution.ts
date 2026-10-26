@@ -1112,6 +1112,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Inject the auto-resume directive into the leading system message when
             // there are suspended tools waiting for resumption (parity with the
             // non-durable agentic-execution step).
+            const leadingMessage = inputMessages[0];
             inputMessages = applyAutoResumeSystemMessage({
               autoResume: execOptions.autoResumeSuspendedTools,
               inputMessages,
@@ -1128,6 +1129,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               tools: currentTools,
               agentBackgroundConfig: registryEntry?.backgroundTasksConfig,
             });
+            messageList.inheritPromptMessageSpanId(leadingMessage, inputMessages[0]);
 
             // Run `processLLMRequest` for any input processors that implement it.
             // This hook lets processors rewrite the outbound prompt transiently

@@ -504,7 +504,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "You are a test agent"
+                        "content": "You are a test agent",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",
@@ -988,7 +989,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "You are a test agent"
+                        "content": "You are a test agent",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",

@@ -380,7 +380,8 @@
                             "input": [
                               {
                                 "role": "system",
-                                "content": "You validate input messages"
+                                "content": "You validate input messages",
+                                "spanId": "<span-3>"
                               },
                               {
                                 "role": "user",
@@ -677,7 +678,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "You are a helpful assistant"
+                        "content": "You are a helpful assistant",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",
@@ -1054,7 +1056,8 @@
                             "input": [
                               {
                                 "role": "system",
-                                "content": "You summarize text concisely"
+                                "content": "You summarize text concisely",
+                                "spanId": "<span-17>"
                               },
                               {
                                 "role": "user",

@@ -425,7 +425,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "You can execute workflows using the workflow executor tool"
+                        "content": "You can execute workflows using the workflow executor tool",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",
@@ -944,7 +945,8 @@
                     "input": [
                       {
                         "role": "system",
-                        "content": "You can execute workflows using the workflow executor tool"
+                        "content": "You can execute workflows using the workflow executor tool",
+                        "spanId": "<span-1>"
                       },
                       {
                         "role": "user",

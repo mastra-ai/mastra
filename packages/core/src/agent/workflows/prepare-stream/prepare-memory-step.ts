@@ -111,20 +111,21 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       const processorStates = new Map<string, ProcessorState>();
 
       messageList.startSystemOrigin(agentSpan);
+      try {
+        // Add instructions as system message(s)
+        addSystemMessage(messageList, instructions);
 
-      // Add instructions as system message(s)
-      addSystemMessage(messageList, instructions);
+        // Add MCP server guidance as a separate system message so the base
+        // instructions remain a stable prefix for prompt caching.
+        addSystemMessage(messageList, mcpServerGuidance, 'mcp-guidance');
 
-      // Add MCP server guidance as a separate system message so the base
-      // instructions remain a stable prefix for prompt caching.
-      addSystemMessage(messageList, mcpServerGuidance, 'mcp-guidance');
+        messageList.add(options.context || [], 'context');
 
-      messageList.add(options.context || [], 'context');
-
-      // Add user-provided system message if present
-      addSystemMessage(messageList, options.system, 'user-provided');
-
-      messageList.endSystemOrigin(agentSpan);
+        // Add user-provided system message if present
+        addSystemMessage(messageList, options.system, 'user-provided');
+      } finally {
+        messageList.endSystemOrigin(agentSpan);
+      }
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');
