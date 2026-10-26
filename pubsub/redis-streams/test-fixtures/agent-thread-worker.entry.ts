@@ -21,10 +21,11 @@ import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 
 import type { Agent } from '@mastra/core/agent';
-// These helpers aren't part of the public test surface; this fixture reaches
-// into workspace source so the child process exercises the real implementations.
+// Each worker is its own process, so the process-wide runtime is this worker's runtime.
+import { agentThreadStreamRuntime } from '@mastra/core/agent/durable';
+// This helper isn't part of the public test surface; this fixture reaches
+// into workspace source so the child process exercises the real implementation.
 import { convertMastraChunkToAISDKBase } from '../../../client-sdks/ai-sdk/src/helpers';
-import { AgentThreadStreamRuntime } from '../../../packages/core/src/agent/thread-stream-runtime';
 
 import { RedisStreamsPubSub } from '../src/index';
 
@@ -50,7 +51,7 @@ function emit(event: Record<string, unknown>) {
  */
 const runEnds = new Map<string, () => void>();
 
-function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub: RedisStreamsPubSub) {
+function makeStubAgent(runMs: number, runtime: typeof agentThreadStreamRuntime, pubsub: RedisStreamsPubSub) {
   const agent: any = {
     id: `${WORKER_ID}-agent`,
     name: `${WORKER_ID} Stub Agent`,
@@ -138,7 +139,7 @@ async function collectRun(subscription: any, convert: boolean) {
 
 async function main() {
   const pubsub = new RedisStreamsPubSub({ url: REDIS_URL });
-  const runtime = new AgentThreadStreamRuntime();
+  const runtime = agentThreadStreamRuntime;
   // runMs is fixed per worker (set at boot via env) so the test can vary
   // "slow worker A" vs "fast follower workers B/C" without per-send wiring.
   const runMs = Number(process.env.RUN_MS ?? '300');
