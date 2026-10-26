@@ -168,6 +168,13 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
     });
   });
 
+  it('rotates on a rate limit a provider reports as a plain 400', () => {
+    expect(classifyRotationError(apiError(400, { message: 'Rate limit exceeded' }))).toEqual({
+      kind: 'rotate',
+      reason: 'rate-limit',
+    });
+  });
+
   it('never rotates on quota wording riding a non-quota status or generic limit text', () => {
     expect(
       classifyRotationError(apiError(404, { message: 'You have exceeded your usage limit for Claude Max' })),

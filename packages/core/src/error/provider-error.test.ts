@@ -272,6 +272,11 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     'rate_limited',
   ],
   ['500', apiError(500, 'The server had an error while processing your request'), 'unavailable'],
+  [
+    'a 500 relaying a context overflow',
+    apiError(500, 'prompt is too long: 210345 tokens > 200000 maximum'),
+    'context_overflow',
+  ],
   ['503 that mentions authentication', apiError(503, 'Upstream authentication service unavailable'), 'unavailable'],
   ['504 that mentions authentication', apiError(504, 'authentication backend timed out'), 'timeout'],
   ['529 overloaded', apiError(529, 'Overloaded', undefined, { error: { type: 'overloaded_error' } }), 'unavailable'],
@@ -335,6 +340,7 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     'model_rejected',
   ],
   ['plain 400 Claude Max usage limit', apiError(400, 'You have exceeded your usage limit for Claude Max'), 'quota'],
+  ['plain 400 rate limit', apiError(400, 'Rate limit exceeded'), 'rate_limited'],
   [
     'usage-limit wording on a 404',
     apiError(404, 'You have exceeded your usage limit for Claude Max'),

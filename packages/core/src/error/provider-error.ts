@@ -1,8 +1,5 @@
 import { capPersistedText } from '../loop/shared/provider-error-details';
 
-// Reads an APICallError, a raw stream error frame, a cause chain or the persisted
-// `{ name, message, statusCode?, code? }` identity. The status and symbolic codes are the provider's
-// verdict; wording only narrows an invalid request, or speaks when the provider named nothing.
 export type ProviderFailureKind =
   | 'auth'
   | 'quota'
@@ -131,6 +128,8 @@ export function classifyProviderError(error: unknown): ProviderFailureKind {
   const evidence = [...facts.codes, ...facts.texts].join('\n');
   const verdict = providerVerdict(facts.statusCode, facts.codes.join('\n'), evidence);
   if (verdict === 'invalid_request') return narrowInvalidRequest(evidence, facts.statusCode, facts.codes);
+  // A gateway can relay an upstream context overflow as a 5xx; retrying the same prompt can't succeed.
+  if (verdict === 'unavailable' && isContextOverflow(evidence)) return 'context_overflow';
   if (verdict) return verdict;
   return (
     usageKind(evidence) ??
@@ -165,9 +164,10 @@ function providerVerdict(status: number | undefined, codes: string, evidence: st
 function narrowInvalidRequest(evidence: string, status: number | undefined, codes: string[]): ProviderFailureKind {
   // Anthropic reports an exhausted credit balance as a 400 invalid request.
   if (BILLING_EXHAUSTED.test(evidence)) return 'quota';
-  // Claude Max reports an exhausted usage cap as a 400 with no code of its own; a coded rejection, a 404 or a 422 names something else.
+  // An uncoded 400 can be a usage cap (Claude Max) or a rate limit; a coded rejection, a 404 or a 422 names something else.
   const uncodedRejection = status === 400 && codes.every(code => INVALID_REQUEST_ENVELOPE.test(code));
   if (uncodedRejection && usageKind(evidence) === 'quota') return 'quota';
+  if (uncodedRejection && RATE_LIMITED.test(evidence)) return 'rate_limited';
   return terminalKindFromWording(evidence) ?? 'invalid_request';
 }
 
@@ -179,11 +179,15 @@ function usageKind(evidence: string): 'quota' | 'rate_limited' | undefined {
 
 function terminalKindFromWording(evidence: string): ProviderFailureKind | undefined {
   if (ACCESS_DENIED_WORDING.test(evidence)) return 'auth';
-  if (CONTEXT_OVERFLOW.some(pattern => pattern.test(evidence))) return 'context_overflow';
+  if (isContextOverflow(evidence)) return 'context_overflow';
   if (MODEL_REJECTED.test(evidence)) return 'model_rejected';
   if (TOOL_HISTORY_REJECTED.test(evidence)) return 'tool_history_rejected';
   if (INVALID_REQUEST_CODE.test(evidence)) return 'invalid_request';
   return undefined;
+}
+
+function isContextOverflow(evidence: string): boolean {
+  return CONTEXT_OVERFLOW.some(pattern => pattern.test(evidence));
 }
 
 function transientKindFromWording(evidence: string): ProviderFailureKind | undefined {

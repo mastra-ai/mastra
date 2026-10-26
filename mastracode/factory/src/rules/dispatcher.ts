@@ -12,6 +12,7 @@ import {
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { moveCardToBoard } from '../boards/relocate.js';
+import { PROVIDER_ERROR_NAMES } from '../run-error.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   heartbeatSessionOpenRun,
@@ -110,7 +111,7 @@ function causeOf(error: unknown): unknown {
 
 function isProviderCallError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
-  if ('name' in error && (error.name === 'AI_APICallError' || error.name === 'APICallError')) return true;
+  if ('name' in error && typeof error.name === 'string' && PROVIDER_ERROR_NAMES.has(error.name)) return true;
   return 'statusCode' in error || 'responseBody' in error;
 }
 

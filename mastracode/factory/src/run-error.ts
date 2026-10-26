@@ -15,7 +15,7 @@ export interface RunErrorIdentity {
   message: string;
 }
 
-const PROVIDER_ERROR_NAMES = new Set(['AI_APICallError', 'APICallError']);
+export const PROVIDER_ERROR_NAMES: ReadonlySet<string> = new Set(['AI_APICallError', 'APICallError']);
 const UNEXPECTED_ERROR = 'An unexpected error stopped the run. Copy the error details to investigate.';
 const NO_REASON_AVAILABLE =
   'The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.';
