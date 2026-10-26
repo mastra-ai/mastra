@@ -126,7 +126,7 @@ it(
           ),
         );
       };
-      const accounts = await call('search_accounts', { fetchAll: true });
+      const accounts = await call('search_accounts', { criteria: { fetchAll: true } });
       for (const [name, type] of [
         ['QBO_MCP_EXPENSE_ACCOUNT_ID', 'Expense'],
         ['QBO_MCP_TAX_ACCOUNT_ID', 'Expense'],
