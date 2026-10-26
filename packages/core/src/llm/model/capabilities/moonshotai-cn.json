@@ -22,10 +22,9 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k3.1-pro-highspeed": [
+    "kimi-k2.6": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "kimi-k3": [
@@ -34,9 +33,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k2.6": [
+    "kimi-k3.1-pro-highspeed": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }
