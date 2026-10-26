@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defineBoard } from './define-board.js';
 import { createBoardRegistry } from './registry.js';
-import { reviewBoard } from './review.js';
 import { createTestBoard } from './test-utils.js';
 import { workBoard } from './work.js';
 
@@ -62,9 +61,9 @@ describe('createBoardRegistry', () => {
   });
 
   it('rejects the retired Review board id, which now reads as Work', () => {
-    expect(() => createBoardRegistry({ boards: [workBoard, reviewBoard], includeDefaultBoards: false })).toThrow(
-      "board id 'review' is retired",
-    );
+    expect(() =>
+      createBoardRegistry({ boards: [workBoard, createTestBoard({ id: 'review' })], includeDefaultBoards: false }),
+    ).toThrow("board id 'review' is retired");
   });
 
   it('rejects duplicate replacement ids when default boards are disabled', () => {

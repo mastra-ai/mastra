@@ -45,3 +45,25 @@ describe('work transition policy: self-review', () => {
     expect(workTransitionPolicy(context('execute', 'review'))).toMatchObject({ type: 'allow' });
   });
 });
+
+describe('work transition policy: pull request cards', () => {
+  const pullRequest = (toStage: string, actor: object) =>
+    ({
+      ...context('review', toStage),
+      actor,
+      source: 'pullRequest',
+    }) as BoardTransitionPolicyContext;
+
+  it('keeps Done for merges: a review agent cannot move a pull request card there', () => {
+    expect(workTransitionPolicy(pullRequest('done', { type: 'agent', id: 'binding-1', role: 'review' }))).toMatchObject(
+      {
+        type: 'reject',
+        reason: expect.stringContaining('Done is reserved for merged pull requests'),
+      },
+    );
+    expect(workTransitionPolicy(pullRequest('done', { type: 'github', id: 'merge' }))?.type).not.toBe('reject');
+    expect(workTransitionPolicy(pullRequest('canceled', { type: 'agent', id: 'b', role: 'review' }))?.type).not.toBe(
+      'reject',
+    );
+  });
+});

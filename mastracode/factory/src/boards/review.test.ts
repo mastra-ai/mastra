@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
-import { reviewBoard } from './review.js';
+import { reviewPullRequest } from './review.js';
 
 function reviewContext(headBranch: string, fromStage = 'intake'): FactoryStageRuleContext {
   const item: FactoryRuleItemContext = {
@@ -47,19 +47,15 @@ function gitlabReviewContext(headBranch = 'factory/gitlab-mr-head', fromStage = 
 }
 
 async function reviewArguments(headBranch: string): Promise<string> {
-  const decision = await reviewBoard.rules.review?.pullRequest?.onEnter?.(reviewContext(headBranch));
+  const decision = await reviewPullRequest(reviewContext(headBranch));
   expect(decision).toMatchObject({ type: 'invokeSkill', skillName: 'factory-review' });
   if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected review skill invocation.');
   return decision.arguments;
 }
 
-describe('reviewBoard', () => {
-  it('keeps completed reviews terminal when the PR or MR is later closed without merging', () => {
-    expect(reviewBoard.phases.done.outcomes).not.toHaveProperty('closed');
-    expect(reviewBoard.phases.canceled.outcomes.reviewRequested).toBe('review');
-  });
+describe('reviewPullRequest', () => {
   it('names a GitLab merge request and points its kickoff at provider-neutral review tools', async () => {
-    const decision = await reviewBoard.rules.review?.gitlabPullRequest?.onEnter?.(gitlabReviewContext());
+    const decision = await reviewPullRequest(gitlabReviewContext());
     expect(decision).toMatchObject({ type: 'invokeSkill', role: 'review', skillName: 'factory-gitlab-review' });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected review invocation.');
     expect(decision.arguments).toContain('GitLab merge request !5');
@@ -72,7 +68,7 @@ describe('reviewBoard', () => {
 
   it('does not interpolate an unsafe GitLab head branch into a shell refresh hint', async () => {
     const hostileBranch = 'feat/`run-untrusted-command`';
-    const decision = await reviewBoard.rules.review?.gitlabPullRequest?.onEnter?.(gitlabReviewContext(hostileBranch));
+    const decision = await reviewPullRequest(gitlabReviewContext(hostileBranch));
     expect(decision).toMatchObject({ type: 'invokeSkill' });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected review invocation.');
     expect(decision.arguments).not.toContain(hostileBranch);
@@ -80,9 +76,7 @@ describe('reviewBoard', () => {
   });
 
   it('reuses a GitLab review session on same-stage re-entry and starts a fresh re-review after done', async () => {
-    const resumed = await reviewBoard.rules.review?.gitlabPullRequest?.onEnter?.(
-      gitlabReviewContext('factory/gitlab-mr-head', 'review'),
-    );
+    const resumed = await reviewPullRequest(gitlabReviewContext('factory/gitlab-mr-head', 'review'));
     expect(resumed).toMatchObject({
       type: 'invokeSkill',
       skillName: 'factory-gitlab-review',
@@ -90,9 +84,7 @@ describe('reviewBoard', () => {
       resume: true,
     });
 
-    const rereview = await reviewBoard.rules.review?.gitlabPullRequest?.onEnter?.(
-      gitlabReviewContext('factory/gitlab-mr-head', 'done'),
-    );
+    const rereview = await reviewPullRequest(gitlabReviewContext('factory/gitlab-mr-head', 'done'));
     expect(rereview).toMatchObject({ type: 'invokeSkill', skillName: 'factory-gitlab-rereview' });
     expect(rereview).not.toHaveProperty('resume');
   });
@@ -121,9 +113,7 @@ describe('reviewBoard', () => {
   });
 
   it('resumes the live session on a same-stage re-entry instead of re-pasting the skill', async () => {
-    const decision = await reviewBoard.rules.review?.pullRequest?.onEnter?.(
-      reviewContext('feat/review-board', 'review'),
-    );
+    const decision = await reviewPullRequest(reviewContext('feat/review-board', 'review'));
     expect(decision).toMatchObject({
       type: 'invokeSkill',
       skillName: 'factory-review',
@@ -133,16 +123,14 @@ describe('reviewBoard', () => {
   });
 
   it('delivers the full skill on a first-time entry from intake', async () => {
-    const decision = await reviewBoard.rules.review?.pullRequest?.onEnter?.(
-      reviewContext('feat/review-board', 'intake'),
-    );
+    const decision = await reviewPullRequest(reviewContext('feat/review-board', 'intake'));
     expect(decision).toMatchObject({ type: 'invokeSkill', skillName: 'factory-review' });
     expect(decision).not.toHaveProperty('resume');
     expect(decision).not.toHaveProperty('cancelInFlight');
   });
 
   it('delivers the full re-review skill when returning from done, without resuming', async () => {
-    const decision = await reviewBoard.rules.review?.pullRequest?.onEnter?.(reviewContext('feat/review-board', 'done'));
+    const decision = await reviewPullRequest(reviewContext('feat/review-board', 'done'));
     expect(decision).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview' });
     expect(decision).not.toHaveProperty('resume');
   });
@@ -150,7 +138,7 @@ describe('reviewBoard', () => {
   it('re-reviews a Reviewing card that already recorded a verdict with the full re-review skill', async () => {
     const context = reviewContext('feat/review-board', 'review');
     context.item.metadata = { ...context.item.metadata, reviewVerdict: 'request changes', reviewedHeadSha: 'abc1234' };
-    const decision = await reviewBoard.rules.review?.pullRequest?.onEnter?.(context);
+    const decision = await reviewPullRequest(context);
     expect(decision).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview', cancelInFlight: true });
     expect(decision).not.toHaveProperty('resume');
   });
@@ -163,7 +151,7 @@ describe('reviewBoard', () => {
       context = reviewContext('feat/review-board', 'review'),
     ) => {
       context.item.metadata = { ...context.item.metadata, ...metadata };
-      const decision = await reviewBoard.rules.review?.[context.source as 'pullRequest']?.onEnter?.(context);
+      const decision = await reviewPullRequest(context);
       if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected review skill invocation.');
       return decision.arguments;
     };
@@ -201,7 +189,7 @@ describe('reviewBoard', () => {
       reviewedHeadSha: 'not-a-sha`; rm -rf /',
       pullRequestHeadSha: { sha: 'b'.repeat(40) },
     };
-    const decision = await reviewBoard.rules.review?.pullRequest?.onEnter?.(context);
+    const decision = await reviewPullRequest(context);
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected review skill invocation.');
     expect(decision.arguments).not.toContain('rm -rf');
     expect(decision.arguments).not.toContain('ignore previous instructions');
@@ -214,21 +202,9 @@ describe('reviewBoard', () => {
       reviewedHeadSha: 'a'.repeat(40),
       pullRequestHeadSha: 'b'.repeat(40),
     };
-    const valid = await reviewBoard.rules.review?.pullRequest?.onEnter?.(context);
+    const valid = await reviewPullRequest(context);
     if (!valid || valid.type !== 'invokeSkill') throw new Error('Expected review skill invocation.');
     expect(valid.arguments).toContain(`The previous pass reviewed on \`${'a'.repeat(40)}\``);
     expect(valid.arguments).not.toContain('Ignore previous instructions');
-  });
-
-  it('keeps Done for merges: a review agent cannot move its card there', () => {
-    const policy = reviewBoard.transitionPolicy!;
-    const base = { fromStage: 'review', toStage: 'done' };
-    expect(policy({ ...base, actor: { type: 'agent', id: 'binding-1', role: 'review' } } as never)).toMatchObject({
-      type: 'reject',
-    });
-    expect(policy({ ...base, actor: { type: 'github', id: 'merge' } } as never)).toBeUndefined();
-    expect(
-      policy({ ...base, toStage: 'canceled', actor: { type: 'agent', id: 'b', role: 'review' } } as never),
-    ).toBeUndefined();
   });
 });

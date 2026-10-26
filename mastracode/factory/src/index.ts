@@ -1,11 +1,4 @@
-export {
-  BoardDefinitionError,
-  createBoardRegistry,
-  defaultBoards,
-  defineBoard,
-  reviewBoard,
-  workBoard,
-} from './boards/index.js';
+export { BoardDefinitionError, createBoardRegistry, defaultBoards, defineBoard, workBoard } from './boards/index.js';
 export type {
   BoardDefinition,
   BoardEventIntegration,
@@ -18,7 +11,6 @@ export type {
   BoardTransitionPolicyContext,
   BoardTransitionPolicyResult,
   InstalledBoard,
-  ReviewBoardPhase,
   WorkBoardPhase,
 } from './boards/index.js';
 export { MastraFactory } from './factory.js';

@@ -1159,6 +1159,12 @@ describe('factory_start_session in work-item mode', () => {
     }
   });
 
+  it('starts an independent review seat on a Work card, where Review is worked from the review seat', async () => {
+    const { start, item, prepare } = await withItem();
+    await start({ prompt: 'Review the branch.', workItem: item.id, role: 'review' });
+    expect(prepare.mock.calls[0]![0]).toMatchObject({ workItem: { id: item.id, role: 'review' } });
+  });
+
   it("refuses a role the item's board doesn't seat", async () => {
     const { start, item, prepare } = await withItem();
     await expect(start({ prompt: 'Go.', workItem: item.id, role: 'deploy' })).rejects.toThrow(

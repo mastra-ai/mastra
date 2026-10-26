@@ -7,7 +7,7 @@ import {
 } from '../rules/types.js';
 import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { BoardDefinitionError, defineBoard } from './define-board.js';
-import { reviewBoard } from './review.js';
+import { phaseForSeat } from './semantics.js';
 import { workBoard } from './work.js';
 import { allowsBuiltInBoardTransition } from './index.js';
 
@@ -235,23 +235,6 @@ describe('defineBoard', () => {
     });
   });
 
-  it('defines the built-in Review lifecycle', () => {
-    expect(reviewBoard.initialPhase).toBe('intake');
-    expect(reviewBoard.allowsTransition('intake', 'review')).toBe(true);
-    expect(reviewBoard.allowsTransition('review', 'done')).toBe(true);
-    expect(reviewBoard.allowsTransition('review', 'canceled')).toBe(true);
-    expect(reviewBoard.allowsTransition('review', 'intake')).toBe(true);
-    expect(reviewBoard.allowsTransition('done', 'review')).toBe(true);
-    expect(reviewBoard.allowsTransition('canceled', 'review')).toBe(true);
-    expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
-    expect(reviewBoard.rules.intake?.gitlabPullRequest?.onEnter).toBeUndefined();
-    expect(reviewBoard.rules.review?.pullRequest?.onEnter).toBeTypeOf('function');
-    expect(reviewBoard.phaseKind('intake')).toBe('resting');
-    expect(reviewBoard.roleForPhase('review')).toBe('review');
-    expect(reviewBoard.isTerminal('done')).toBe(true);
-    expect(reviewBoard.isTerminal('canceled')).toBe(true);
-  });
-
   it('defines the built-in Work lifecycle and phase behavior', () => {
     expect(workBoard.initialPhase).toBe('intake');
     const phases = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
@@ -284,13 +267,9 @@ describe('defineBoard', () => {
       expect(workBoard.isWorking(stage), `${stage} working`).toBe(isWorkingFactoryRuleStage(stage));
     }
     for (const [role, stage] of Object.entries(FACTORY_ROLE_STAGES)) {
-      const board = role === 'review' ? reviewBoard : workBoard;
-      expect(board.phaseForRole(role), `lane for ${role}`).toBe(stage);
-      expect(board.roleForPhase(stage), `role for ${stage}`).toBe(role);
-    }
-    for (const stage of Object.keys(reviewBoard.phases)) {
-      expect(reviewBoard.isTerminal(stage)).toBe(isTerminalFactoryRuleStage([stage]));
-      expect(reviewBoard.isWorking(stage)).toBe(isWorkingFactoryRuleStage(stage));
+      // Work seats Review as `work` (the builder answers feedback there); the review seat still works it.
+      expect(phaseForSeat(workBoard, role), `lane for ${role}`).toBe(stage);
+      if (role !== 'review') expect(workBoard.roleForPhase(stage), `role for ${stage}`).toBe(role);
     }
   });
 
@@ -333,9 +312,8 @@ describe('defineBoard tool-result rules', () => {
     expect(() => define({ ship_it: () => undefined })).toThrow(BoardDefinitionError);
   });
 
-  it('declares Work’s submit_plan rule and nothing on Review', () => {
+  it('declares Work’s submit_plan rule', () => {
     expect(workBoard.tools.submit_plan?.onResult).toBeTypeOf('function');
-    expect(Object.keys(reviewBoard.tools)).toEqual([]);
   });
 });
 
@@ -374,8 +352,7 @@ describe('defineBoard sourceClosed', () => {
     expect(() => define('shipped')).toThrow(/plain object/);
   });
 
-  it('maps Work closures to its Done and Canceled phases and leaves Review undeclared', () => {
+  it('maps Work closures to its Done and Canceled phases', () => {
     expect(workBoard.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
-    expect(reviewBoard.sourceClosed).toBeUndefined();
   });
 });

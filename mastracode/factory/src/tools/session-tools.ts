@@ -2,7 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem } from '../boards/index.js';
+import { boardForWorkItem, phaseForSeat } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { buildModelCatalog, listSessionScopedCredentials } from '../routes/config.js';
@@ -373,7 +373,7 @@ export function createFactorySessionTools(
     if (!item) throw workItemNotFound(workItem);
     const label = workItemLabel(item);
     const board = deps.boards.get(boardForWorkItem(item));
-    if (!board?.phaseForRole(role)) throw new Error(`${label}'s board has no ${role} role.`);
+    if (!phaseForSeat(board, role)) throw new Error(`${label}'s board has no ${role} role.`);
     const seated = item.sessions[role];
     if (seated) {
       throw new Error(

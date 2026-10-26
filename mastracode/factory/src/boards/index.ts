@@ -16,6 +16,7 @@ export {
   boardForWorkItem,
   eventBoardId,
   isTerminalWorkItem,
+  phaseForSeat,
   resolveBoardClosure,
   resolveBoardToolRule,
   rulePhaseContext,
@@ -34,8 +35,6 @@ export { createBoardRegistry, defaultBoards } from './registry.js';
 export type { BoardRegistry, InstalledBoard } from './registry.js';
 import { isWorkBoardPhase, workBoard } from './work.js';
 
-export { reviewBoard } from './review.js';
-export type { ReviewBoardPhase } from './review.js';
 export { workBoard } from './work.js';
 export type { WorkBoardPhase } from './work.js';
 

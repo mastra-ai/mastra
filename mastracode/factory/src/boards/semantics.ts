@@ -1,4 +1,5 @@
 import type { FactoryRuleBoardClosure, FactoryRulePhaseContext } from '../rules/types.js';
+import { factoryLaneForRole } from '../rules/types.js';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
 import type {
   BoardEventIntegration,
@@ -6,7 +7,7 @@ import type {
   BoardPhaseKind,
   BoardToolResultRuleHandler,
 } from './define-board.js';
-import type { BoardRegistry } from './registry.js';
+import type { BoardRegistry, InstalledBoard } from './registry.js';
 
 export interface PhaseSemantics {
   readonly kind: BoardPhaseKind;
@@ -165,4 +166,15 @@ export function rulePhaseField(
 ): { readonly phase?: FactoryRulePhaseContext } {
   const phase = rulePhaseContext(boards, item);
   return phase ? { phase } : {};
+}
+
+/**
+ * The phase a seat role works in on a board: the phase that seats it, else the role's standard lane
+ * when the board works there. Work seats its Review phase as `work`, yet its review seat reviews there.
+ */
+export function phaseForSeat(board: InstalledBoard | undefined, role: string): string | undefined {
+  const seated = board?.phaseForRole(role);
+  if (seated !== undefined) return seated;
+  const lane = factoryLaneForRole(role);
+  return lane !== undefined && board?.phaseKind(lane) === 'working' ? lane : undefined;
 }

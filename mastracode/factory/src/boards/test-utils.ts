@@ -2,7 +2,6 @@ import type { FactoryRuleHandler, FactoryStageRuleContext } from '../rules/types
 import { defineBoard } from './define-board.js';
 import type { BoardDefinition } from './define-board.js';
 import type { BoardRegistry } from './registry.js';
-import { reviewBoard } from './review.js';
 import { workBoard } from './work.js';
 
 // Unit tests inject a registry directly to exercise Work-specific runtime policies.
@@ -37,10 +36,7 @@ export function createLifecycleTestRegistry(handlers: BoardDefinition<string, st
       }),
     ),
   });
-  return new Map<string, BoardDefinition<string, string>>([
-    [board.id, board],
-    [reviewBoard.id, reviewBoard],
-  ]);
+  return new Map<string, BoardDefinition<string, string>>([[board.id, board]]);
 }
 
 /** Work board with its tool-result rules replaced, for exercising the processor's tool ingress. */
@@ -54,10 +50,7 @@ export function createToolRuleTestRegistry(tools: BoardDefinition<string, string
     sourceClosed: workBoard.sourceClosed,
     tools: { ...tools },
   });
-  return new Map<string, BoardDefinition<string, string>>([
-    [board.id, board],
-    [reviewBoard.id, reviewBoard],
-  ]);
+  return new Map<string, BoardDefinition<string, string>>([[board.id, board]]);
 }
 
 export function createTestBoard(

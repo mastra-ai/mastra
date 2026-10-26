@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defineBoard } from '../boards/define-board.js';
 import { createBoardRegistry } from '../boards/registry.js';
-import { reviewBoard } from '../boards/review.js';
 import { withBoardClosure } from '../boards/semantics.js';
 import { workBoard } from '../boards/work.js';
 import { defaultGithubRules } from '../integrations/github/default-rules.js';
@@ -174,8 +173,8 @@ describe('built-in board and integration handlers', () => {
     expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();
     expect(workBoard.rules.triage?.issue?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.done?.issue?.onEnter).toBeTypeOf('function');
-    expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
-    expect(reviewBoard.rules.review?.pullRequest?.onEnter).toBeTypeOf('function');
+    expect(workBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
+    expect(workBoard.rules.review?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(workBoard.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(defaultGithubRules.issueOpened).toBeTypeOf('function');
     expect(defaultGithubRules.issueEdited).toBeTypeOf('function');
@@ -640,7 +639,7 @@ describe('built-in board and integration handlers', () => {
   });
 
   it('starts PR understanding when a human moves a pull request into Review', async () => {
-    const rule = reviewBoard.rules.review?.pullRequest?.onEnter;
+    const rule = workBoard.rules.review?.pullRequest?.onEnter;
     const context = {
       ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
       stage: 'review',
@@ -659,7 +658,7 @@ describe('built-in board and integration handlers', () => {
   });
 
   it('tells the review agent how to check the pull request out and which branch to expect', async () => {
-    const rule = reviewBoard.rules.review?.pullRequest?.onEnter;
+    const rule = workBoard.rules.review?.pullRequest?.onEnter;
     const context = {
       ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
       item: { ...item, source: 'github-pr', metadata: { githubPullRequestNumber: 7, headBranch: 'factory/issue-42' } },
@@ -675,7 +674,7 @@ describe('built-in board and integration handlers', () => {
   });
 
   it('dispatches factory-rereview without cancellation when a completed review restarts', async () => {
-    const rule = reviewBoard.rules.review?.pullRequest?.onEnter;
+    const rule = workBoard.rules.review?.pullRequest?.onEnter;
     const context = {
       ...stageContext({ type: 'github', login: 'author', trusted: true, factoryAuthored: false }, 'review'),
       cause: 'github.pullRequestUpdated',
@@ -697,7 +696,7 @@ describe('built-in board and integration handlers', () => {
     // Review from Review itself. There is no prior published review to
     // reconcile against, so the fresh pass is a regular factory-review — the
     // cancellation just clears the aborted in-flight run.
-    const rule = reviewBoard.rules.review?.pullRequest?.onEnter;
+    const rule = workBoard.rules.review?.pullRequest?.onEnter;
     const context = {
       ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
       stage: 'review',
@@ -1257,11 +1256,11 @@ describe('built-in board and integration handlers', () => {
     },
   );
 
-  it('does not run default arrival handlers from Work or Review Intake', () => {
+  it('does not run default arrival handlers from Work Intake', () => {
     expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();
     expect(workBoard.rules.intake?.gitlabIssue?.onEnter).toBeUndefined();
-    expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
-    expect(reviewBoard.rules.intake?.gitlabPullRequest?.onEnter).toBeUndefined();
+    expect(workBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
+    expect(workBoard.rules.intake?.gitlabPullRequest?.onEnter).toBeUndefined();
   });
 
   it('keeps a factory-authored pull request opened before the Factory from being picked up on its own', async () => {

@@ -1,7 +1,5 @@
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
 import { workItemBranch, workItemNumber } from '../work-item-branch.js';
-import { defineBoard } from './define-board.js';
-import type { BoardTransitionPolicy } from './transition-policy.js';
 
 function sourceRef(item: FactoryRuleItemContext): string {
   const link = item.url ? ` (${item.url})` : '';
@@ -110,18 +108,6 @@ export function hasRecordedVerdict(item: FactoryRuleItemContext): boolean {
   return typeof item.metadata?.reviewVerdict === 'string';
 }
 
-// Done means the PR merged. A review agent records its verdict and leaves the
-// card in Reviewing, so a blocking finding never reads as finished work.
-const reviewTransitionPolicy: BoardTransitionPolicy = ({ actor, toStage }) => {
-  if (toStage !== 'done' || actor.type !== 'agent') return undefined;
-  return {
-    type: 'reject',
-    code: 'invalid_transition',
-    reason:
-      'Done is reserved for merged pull requests. Record the verdict with factory_record_review_verdict; the card stays in Reviewing.',
-  };
-};
-
 /**
  * The pull request a card has out, seen as the card the reviewer reads: a card that authored (or was
  * linked to) a pull request is reviewed on it, in the card's own review seat — no second card.
@@ -171,49 +157,4 @@ export function reviewPullRequest(context: FactoryStageRuleContext) {
     ...(supersedes ? { cancelInFlight: true } : {}),
     ...(supersedes && !priorReviewCompleted ? { resume: true } : {}),
   } as const;
-}
-
-export const reviewBoard = defineBoard({
-  id: 'review',
-  title: 'Review',
-  initialPhase: 'intake',
-  transitionPolicy: reviewTransitionPolicy,
-  phases: {
-    intake: {
-      title: 'Intake',
-      kind: 'resting',
-      outcomes: {
-        reviewRequested: 'review',
-        merged: 'done',
-        closed: 'canceled',
-      },
-    },
-    review: {
-      title: 'Reviewing',
-      kind: 'working',
-      role: 'review',
-      outcomes: {
-        parked: 'intake',
-        merged: 'done',
-        closed: 'canceled',
-      },
-      onEnter: { pullRequest: reviewPullRequest, gitlabPullRequest: reviewPullRequest },
-    },
-    done: {
-      title: 'Done',
-      kind: 'terminal',
-      outcomes: { updated: 'review' },
-    },
-    canceled: {
-      title: 'Canceled',
-      kind: 'terminal',
-      outcomes: { reviewRequested: 'review' },
-    },
-  },
-});
-
-export type ReviewBoardPhase = keyof typeof reviewBoard.phases;
-
-export function isReviewBoardPhase(value: string): value is ReviewBoardPhase {
-  return value in reviewBoard.phases;
 }

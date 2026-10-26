@@ -6,8 +6,8 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
-import { boardForWorkItem } from '../boards/index.js';
-import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
+import { boardForWorkItem, phaseForSeat } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
 import type { BoardResolver } from '../boards/resolver.js';
 import type { BoardRunnerRegistry } from '../boards/runners.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '../integrations/base.js';
@@ -18,7 +18,6 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import { factoryLaneForRole } from '../rules/types.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
@@ -278,11 +277,6 @@ async function inheritEarlierSession(
  * The lane named after a role, when no phase seats it: on Work the review phase runs in the work
  * seat for issues, but a pull request's review runs in the review seat and still belongs there.
  */
-function roleLane(board: InstalledBoard | undefined, role: string): string | undefined {
-  const lane = factoryLaneForRole(role);
-  return lane !== undefined && board?.phaseKind(lane) === 'working' ? lane : undefined;
-}
-
 export async function prepareFactoryRuleBinding(
   sourceControlProvider: SourceControlStorageHandle | Pick<GithubIntegration, 'sourceControlStorage'>,
   coordinator: Pick<FactoryStartCoordinator, 'prepare'>,
@@ -309,7 +303,7 @@ export async function prepareFactoryRuleBinding(
       currentKind === undefined
         ? undefined
         : currentKind === 'resting'
-          ? (board?.phaseForRole(input.role) ?? roleLane(board, input.role))
+          ? phaseForSeat(board, input.role)
           : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
