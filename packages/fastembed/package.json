@@ -39,7 +39,7 @@
   },
   "dependencies": {
     "@anush008/tokenizers": "^0.6.0",
-    "@huggingface/hub": "^2.12.0",
+    "@huggingface/hub": "^2.17.9",
     "onnxruntime-node": "1.26.0"
   },
   "devDependencies": {
@@ -48,7 +48,7 @@
     "@internal/ai-v6": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@types/node": "22.20.5",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai-v4": "npm:ai@4.3.19",
