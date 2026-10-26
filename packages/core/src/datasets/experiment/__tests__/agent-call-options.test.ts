@@ -104,6 +104,30 @@ async function setup({ editor }: { editor?: unknown } = {}) {
   return { mastra, dataset, defaultModel, overrideModel };
 }
 
+/** Agent "legacy-agent" on a v1 (legacy) model, with the fake gateway available for model overrides. */
+async function legacySetup() {
+  const legacyModel = new MockLanguageModelV1({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { promptTokens: 1, completionTokens: 1 },
+      text: 'from-legacy',
+    }),
+  });
+  const overrideModel = textModel('from-override');
+  const agent = new Agent({ id: 'legacy-agent', name: 'Legacy Agent', instructions: 'code', model: legacyModel });
+  const mastra = new Mastra({
+    agents: { agent },
+    storage: new InMemoryStore(),
+    gateways: { evalTest: new FakeGateway(overrideModel) },
+    logger: false,
+  });
+  const dataset = await mastra.datasets.create({ name: 'legacy DS' });
+  await dataset.addItem({ input: 'first' });
+  await dataset.addItem({ input: 'second' });
+  return { dataset, overrideModel };
+}
+
 describe('Feature: tweak how an agent is called per experiment without changing it', () => {
   describe('Scenario: the experiment runs on tweaked instructions', () => {
     it('sends the tweaked instructions, never the code instructions, on every item', async () => {
@@ -397,19 +421,7 @@ describe('Feature: tweak how an agent is called per experiment without changing 
   describe('Scenario: empty call options leave a legacy-model agent on its legacy path', () => {
     it('runs every item when agentCallOptions sets nothing', async () => {
       // Given agent "legacy-agent" on a v1 (legacy) model
-      const legacyModel = new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop' as const,
-          usage: { promptTokens: 1, completionTokens: 1 },
-          text: 'from-legacy',
-        }),
-      });
-      const agent = new Agent({ id: 'legacy-agent', name: 'Legacy Agent', instructions: 'code', model: legacyModel });
-      const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
-      const dataset = await mastra.datasets.create({ name: 'legacy DS' });
-      await dataset.addItem({ input: 'first' });
-      await dataset.addItem({ input: 'second' });
+      const { dataset } = await legacySetup();
 
       // When I start an experiment with agentCallOptions that set no option
       const summary = await dataset.startExperiment({
@@ -424,6 +436,40 @@ describe('Feature: tweak how an agent is called per experiment without changing 
         expect.objectContaining({ text: 'from-legacy' }),
         expect.objectContaining({ text: 'from-legacy' }),
       ]);
+    });
+
+    it('runs every item on the call options model when it replaces the legacy model', async () => {
+      // Given agent "legacy-agent" on a v1 (legacy) model
+      const { dataset, overrideModel } = await legacySetup();
+
+      // When I start an experiment that moves it to a supported model
+      const summary = await dataset.startExperiment({
+        targetType: 'agent',
+        targetId: 'legacy-agent',
+        agentCallOptions: { instructions: 'tweaked instructions', model: 'eval-test/fake/override-model' },
+      });
+
+      // Then every item runs on the new model with the tweaked instructions
+      expect(summary.succeededCount).toBe(2);
+      expect(systemPromptsOf(overrideModel)).toEqual(['tweaked instructions', 'tweaked instructions']);
+    });
+
+    it('fails every item with a clear error when the options need the legacy model to support them', async () => {
+      // Given agent "legacy-agent" on a v1 (legacy) model
+      const { dataset } = await legacySetup();
+
+      // When I start an experiment that tweaks only its instructions
+      const summary = await dataset.startExperiment({
+        targetType: 'agent',
+        targetId: 'legacy-agent',
+        agentCallOptions: { instructions: 'tweaked instructions' },
+      });
+
+      // Then no item runs, and the error says to also set agentCallOptions.model
+      expect(summary.succeededCount).toBe(0);
+      for (const result of summary.results) {
+        expect(result.error?.message).toContain('agentCallOptions.model');
+      }
     });
   });
 

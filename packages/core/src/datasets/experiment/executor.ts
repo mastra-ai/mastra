@@ -1,6 +1,7 @@
 import type { Agent } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
+import { MastraError } from '../../error';
 import type { MastraScorer } from '../../evals/base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
 import type { ScoringData } from '../../llm/model/base.types';
@@ -246,10 +247,20 @@ async function executeAgent(
     ? new RequestContext(Object.entries(requestContext))
     : undefined;
   const generateOptions = agentCallOptions ? toGenerateOptions(agentCallOptions) : {};
-  // generateLegacy() has no per-call model or options, so set call options always run through generate().
-  const useLegacy =
-    Object.keys(generateOptions).length === 0 &&
-    !isSupportedLanguageModel(await agent.getModel({ requestContext: reqCtx }));
+  const hasCallOptions = Object.keys(generateOptions).length > 0;
+  // A call options model replaces the agent's model, so the agent's own model only matters without one.
+  const legacyAgentModel =
+    !generateOptions.model && !isSupportedLanguageModel(await agent.getModel({ requestContext: reqCtx }));
+  // generateLegacy() has no per-call model or options, so call options can't run on a legacy model.
+  if (legacyAgentModel && hasCallOptions) {
+    throw new MastraError({
+      id: 'EXPERIMENT_AGENT_CALL_OPTIONS_LEGACY_MODEL',
+      domain: 'STORAGE',
+      category: 'USER',
+      text: `Agent "${agent.name}" uses an AI SDK v4 model, which doesn't support agentCallOptions. Set agentCallOptions.model to an AI SDK v5+ model.`,
+    });
+  }
+  const useLegacy = legacyAgentModel;
 
   // Both generate() and generateLegacy() return different types (FullOutput vs GenerateTextResult)
   // but share the fields we extract. Cast input to MessageListInput at the boundary.
