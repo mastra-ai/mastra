@@ -567,7 +567,11 @@ describe('workflow sleep cancellation', () => {
       releaseFirstIteration();
       const result = await resultPromise;
 
-      expect(loopBody).toHaveBeenCalledTimes(1);
+      // A dountil iteration writes its own start snapshot, so the next iteration sees the
+      // cancellation. Foreach items skip that write and the foreach checkpoints finished
+      // items without holding the queue (#26214), so the item that starts while the first
+      // item's checkpoint is in flight still runs; the one after it does not.
+      expect(loopBody).toHaveBeenCalledTimes(shape === 'foreach' ? 2 : 1);
       expect(afterLoop).not.toHaveBeenCalled();
       expect(result.status).toBe('canceled');
       const store = await storage.getStore('workflows');
