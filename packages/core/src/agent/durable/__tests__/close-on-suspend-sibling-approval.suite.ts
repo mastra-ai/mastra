@@ -22,9 +22,11 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 
+type ClosablePubSub = PubSub & { close(): Promise<void> };
+
 export interface SiblingApprovalSuiteOptions {
   /** A fresh transport per test; the suite wraps it in the agent's CachingPubSub. */
-  createPubSub(): PubSub | Promise<PubSub>;
+  createPubSub(): ClosablePubSub | Promise<ClosablePubSub>;
   cleanup?(): Promise<void>;
   /** Repeats per engine, to catch a race that only shows up some of the time. */
   repeat?: number;
@@ -44,7 +46,7 @@ async function read(output: { fullStream: AsyncIterable<unknown> }): Promise<str
 export function defineSiblingApprovalSuite(name: string, options: SiblingApprovalSuiteOptions) {
   const repeat = options.repeat ?? 1;
   let llm: LLMock;
-  const pubsubs: PubSub[] = [];
+  const pubsubs: ClosablePubSub[] = [];
 
   beforeAll(async () => {
     llm = new LLMock({ port: 0 });
