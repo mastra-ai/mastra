@@ -12,11 +12,7 @@ const mockUpsertIndexFn = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 const mockGetAllIndexesFn = vi.hoisted(() =>
   vi
     .fn()
-    .mockResolvedValue([
-      { name: `${test_indexName}` },
-      { name: `${test_indexName}_1` },
-      { name: `${test_indexName}_2` },
-    ]),
+    .mockResolvedValue([{ name: test_indexName }, { name: `${test_indexName}_1` }, { name: `${test_indexName}_2` }]),
 );
 const mockGetIndexFn = vi.hoisted(() =>
   vi.fn().mockResolvedValue({
@@ -309,7 +305,7 @@ describe('Unit Testing CouchbaseVector', () => {
       expect(mockScopeSearchIndexesFn).toHaveBeenCalledTimes(1);
       expect(mockGetAllIndexesFn).toHaveBeenCalledTimes(1);
       expect(mockGetAllIndexesFn).toHaveResolved();
-      expect(indexes).toEqual([`${test_indexName}`, `${test_indexName}_1`, `${test_indexName}_2`]);
+      expect(indexes).toEqual([test_indexName, `${test_indexName}_1`, `${test_indexName}_2`]);
     }, 50000);
 
     it('should describe index', async () => {

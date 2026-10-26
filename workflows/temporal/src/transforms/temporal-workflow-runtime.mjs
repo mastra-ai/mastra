@@ -20,6 +20,9 @@ export class TemporalExecutionEngine {
       ...(params.resourceId !== undefined && { resourceId: params.resourceId }),
       workflowId: params.workflowId,
     };
+    // Step times let start() build Mastra step records. Only recorded on request so runs that
+    // never read them (startAsync, runs started before the field existed) keep their result size.
+    this.stepMeta = params.recordStepMeta ? {} : undefined;
     let result = params.input;
     const stepResults = {};
 
@@ -33,7 +36,20 @@ export class TemporalExecutionEngine {
       result,
       state: params.initialState,
       steps: stepResults,
+      ...(this.stepMeta && { stepMeta: this.stepMeta }),
     };
+  }
+
+  // Runs one timed entry and stores its output under `id`. Date.now() in Workflow code is the
+  // Workflow Task time, which replay reads from history.
+  async timed(stepResults, id, run) {
+    const startedAt = Date.now();
+    const out = await run();
+    stepResults[id] = out;
+    if (this.stepMeta) {
+      this.stepMeta[id] = { startedAt, endedAt: Date.now() };
+    }
+    return out;
   }
 
   activityParams(inputData, extra = {}) {
@@ -44,28 +60,26 @@ export class TemporalExecutionEngine {
     switch (entry.type) {
       case 'step': {
         log.info('step', { stepId: entry.step.id });
-        const out = await this.activityHandle[entry.step.id](
-          this.activityParams(inputData, { initData: this.initData }),
+        return this.timed(stepResults, entry.step.id, () =>
+          this.activityHandle[entry.step.id](this.activityParams(inputData, { initData: this.initData })),
         );
-        stepResults[entry.step.id] = out;
-        return out;
       }
 
       case 'childWorkflow': {
         log.info('childWorkflow', { workflowType: entry.workflowType });
-        const childResult = await executeChild(entry.workflowType, {
-          args: [{ inputData, ...this.executionContext }],
+        return this.timed(stepResults, entry.id, async () => {
+          const childResult = await executeChild(entry.workflowType, {
+            args: [{ inputData, ...this.executionContext }],
+          });
+          return childResult?.result ?? childResult;
         });
-        const out = childResult?.result ?? childResult;
-        stepResults[entry.workflowType] = out;
-        return out;
       }
 
       case 'mapping': {
         log.info('mapping', { mappingId: entry.id });
-        const out = await this.activityHandle[entry.id](this.activityParams(inputData, { initData: this.initData }));
-        stepResults[entry.id] = out;
-        return out;
+        return this.timed(stepResults, entry.id, () =>
+          this.activityHandle[entry.id](this.activityParams(inputData, { initData: this.initData })),
+        );
       }
 
       case 'sleep': {
@@ -90,6 +104,8 @@ export class TemporalExecutionEngine {
       }
 
       case 'parallel': {
+        // The next step keeps reading a nested workflow under its Temporal type name, as before.
+        // Only the step records use the Mastra id.
         const entryId = parallelEntry =>
           parallelEntry.type === 'childWorkflow' ? parallelEntry.workflowType : parallelEntry.step.id;
         log.info('parallel', { steps: entry.steps.map(entryId) });
@@ -117,9 +133,9 @@ export class TemporalExecutionEngine {
         for (let i = 0; i < entry.steps.length; i++) {
           if (condResults[i]) {
             const stepId = entry.steps[i].step.id;
-            const res = await this.activityHandle[stepId](this.activityParams(inputData, { initData: this.initData }));
-            out[stepId] = res;
-            stepResults[stepId] = res;
+            out[stepId] = await this.timed(stepResults, stepId, () =>
+              this.activityHandle[stepId](this.activityParams(inputData, { initData: this.initData })),
+            );
           }
         }
 
@@ -131,8 +147,10 @@ export class TemporalExecutionEngine {
         let current = inputData;
 
         while (true) {
-          current = await this.activityHandle[entry.step.id](this.activityParams(current, { initData: this.initData }));
-          stepResults[entry.step.id] = current;
+          const stepInput = current;
+          current = await this.timed(stepResults, entry.step.id, () =>
+            this.activityHandle[entry.step.id](this.activityParams(stepInput, { initData: this.initData })),
+          );
           const shouldContinue = Boolean(
             await this.activityHandle[entry.serializedCondition.id](this.activityParams(current)),
           );
@@ -154,23 +172,24 @@ export class TemporalExecutionEngine {
             : (entry.opts.concurrency ?? 1);
         const concurrency = Number.isFinite(configured) ? Math.max(1, Math.floor(configured)) : 1;
         log.info('foreach', { step: entry.step.id, concurrency });
-        const results = new Array(items.length);
-        let index = 0;
-        const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-          while (true) {
-            const i = index++;
-            if (i >= items.length) {
-              break;
+        return this.timed(stepResults, entry.step.id, async () => {
+          const results = new Array(items.length);
+          let index = 0;
+          const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+            while (true) {
+              const i = index++;
+              if (i >= items.length) {
+                break;
+              }
+              results[i] = await this.activityHandle[entry.step.id](
+                this.activityParams(items[i], { initData: this.initData }),
+              );
             }
-            results[i] = await this.activityHandle[entry.step.id](
-              this.activityParams(items[i], { initData: this.initData }),
-            );
-          }
-        });
+          });
 
-        await Promise.all(workers);
-        stepResults[entry.step.id] = results;
-        return results;
+          await Promise.all(workers);
+          return results;
+        });
       }
 
       default:
@@ -198,6 +217,7 @@ export function createWorkflow(workflowId, options) {
       },
       input: startArgs?.inputData,
       initialState: startArgs?.initialState,
+      recordStepMeta: startArgs?.recordStepMeta,
     });
   };
 
@@ -211,10 +231,11 @@ export function createWorkflow(workflowId, options) {
       });
       return workflow;
     },
-    thenWorkflow(workflowType) {
+    thenWorkflow(workflowType, id) {
       stepFlow.push({
         type: 'childWorkflow',
         workflowType,
+        id,
       });
       return workflow;
     },

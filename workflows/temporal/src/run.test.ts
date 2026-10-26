@@ -84,6 +84,86 @@ describe('TemporalRun', () => {
     }
   });
 
+  it('returns one step record per step, like a local run', async () => {
+    const schema = z.object({ value: z.number() });
+    const step = createStep({
+      id: 'increment',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async () => ({ value: 6 }),
+    });
+    const start = vi.fn(async () => ({
+      result: async () => ({
+        status: 'success',
+        input: { value: 5 },
+        result: { value: 6 },
+        steps: { increment: { value: 6 } },
+        stepMeta: {
+          increment: { startedAt: 1_000, endedAt: 1_250 },
+          'no-output': { startedAt: 1_250, endedAt: 1_300 },
+        },
+      }),
+    }));
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    )
+      .then(step)
+      .commit();
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    const result = await run.start({ inputData: { value: 5 } });
+
+    expect(start).toHaveBeenCalledWith(
+      'testWorkflow',
+      expect.objectContaining({ args: [expect.objectContaining({ inputData: { value: 5 }, recordStepMeta: true })] }),
+    );
+    expect(result.status).toBe('success');
+    expect(result.steps).toStrictEqual({
+      input: { value: 5 },
+      increment: { status: 'success', output: { value: 6 }, startedAt: 1_000, endedAt: 1_250 },
+      'no-output': { status: 'success', output: undefined, startedAt: 1_250, endedAt: 1_300 },
+    });
+  });
+
+  it('does not ask for step times from startAsync()', async () => {
+    const start = vi.fn(async () => ({}));
+    const workflow = createWorkflow(
+      { id: 'test-workflow' },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await run.startAsync({ inputData: { value: 5 } });
+
+    expect(start).toHaveBeenCalledWith(
+      'testWorkflow',
+      expect.objectContaining({ args: [expect.not.objectContaining({ recordStepMeta: expect.anything() })] }),
+    );
+  });
+
+  it('keeps steps empty for a result from a Worker that records no step times', async () => {
+    const schema = z.object({ value: z.number() });
+    const start = vi.fn(async () => ({
+      result: async () => ({
+        status: 'success',
+        input: { value: 5 },
+        result: { value: 6 },
+        steps: { increment: { value: 6 } },
+      }),
+    }));
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    const result = await run.start({ inputData: { value: 5 } });
+
+    expect(result.status).toBe('success');
+    expect(result.steps).toEqual({});
+  });
+
   it('does not execute stream runs with the local workflow engine', async () => {
     const execute = vi.fn().mockResolvedValue({ value: 2 });
     const start = vi.fn();
