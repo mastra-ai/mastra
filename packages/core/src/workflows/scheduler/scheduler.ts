@@ -15,7 +15,7 @@ export const TOPIC_AGENT_SCHEDULES = 'agent-schedules';
  */
 export const SCHEDULER_WAKE_TOPIC = 'scheduler';
 export const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
-const DEFAULT_MAX_SLEEP_MS = 10 * 60_000;
+const DEFAULT_MAX_SLEEP_MS = 60 * 60_000;
 // Delay before re-checking when rows are still due after a tick (skipped by the
 // stale-build fence or the missing-target grace window, a batch overflow, or a
 // storage error). Keeps those retry paths from hot-looping.

@@ -648,7 +648,7 @@ describe('Declarative schedules registered after the scheduler is sleeping', () 
         logger: false,
         storage,
         // Yearly cadence: the scheduler starts, then sleeps for the full
-        // default 10-minute cap because nothing is due sooner.
+        // default 1-hour cap because nothing is due sooner.
         workflows: { yearly: scheduled('yearly', '0 0 1 1 *') },
         notifications: { dispatch: { enabled: false } },
       }),

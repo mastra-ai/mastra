@@ -77,7 +77,7 @@ export type SchedulerConfig = {
    * schedules it doesn't check storage until a wake event arrives, unless
    * `enabled` is true, in which case it keeps checking at this interval so
    * processes without a shared pubsub still pick up new schedules.
-   * Defaults to 600_000 (10 minutes).
+   * Defaults to 3_600_000 (1 hour).
    */
   tickIntervalMs?: number;
   /**

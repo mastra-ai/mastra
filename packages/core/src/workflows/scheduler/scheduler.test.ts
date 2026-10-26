@@ -606,7 +606,7 @@ describe('Scheduler', () => {
       }
     });
 
-    it('caps the sleep at tickIntervalMs (default 10 minutes)', async () => {
+    it('caps the sleep at tickIntervalMs (default 1 hour)', async () => {
       const { store } = makeStore();
       await addFutureSchedule(store, 'sched-far', Date.now() + 24 * 3_600_000);
       const timers = spyTimerDelays();
@@ -614,7 +614,7 @@ describe('Scheduler', () => {
 
       try {
         await scheduler.start();
-        expect(timers.delays()).toEqual([600_000]);
+        expect(timers.delays()).toEqual([3_600_000]);
       } finally {
         await scheduler.stop();
         timers.restore();
@@ -1363,9 +1363,9 @@ describe('Scheduler', () => {
     const batchArg = listDue.mock.calls[0]![1];
     expect(batchArg).toBe(100);
 
-    // tickIntervalMs should fall back to 600_000 (the default), not undefined.
+    // tickIntervalMs should fall back to 3_600_000 (the default), not undefined.
     // With enabled: true and no active schedules it sleeps for the full cap.
-    expect(stSpy.mock.calls.map(([, ms]) => ms)).toContain(600_000);
+    expect(stSpy.mock.calls.map(([, ms]) => ms)).toContain(3_600_000);
 
     await scheduler.stop();
     stSpy.mockRestore();
