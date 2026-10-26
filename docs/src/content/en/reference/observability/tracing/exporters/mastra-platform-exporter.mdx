@@ -47,37 +47,37 @@ new MastraPlatformExporter(config?: MastraPlatformExporterConfig)
 ```typescript
 interface MastraPlatformExporterConfig extends BaseExporterConfig {
   /** Maximum number of buffered events per batch (spans, logs, metrics, scores, feedback). Default: 1000 */
-  maxBatchSize?: number;
+  maxBatchSize?: number
 
   /** Maximum wait time before flushing in milliseconds. Default: 5000 */
-  maxBatchWaitMs?: number;
+  maxBatchWaitMs?: number
 
   /** Maximum retry attempts. Default: 3 */
-  maxRetries?: number;
+  maxRetries?: number
 
   /** Mastra Observability access token (from env or config) */
-  accessToken?: string;
+  accessToken?: string
 
   /** Project ID for project-scoped collector routes (letters, numbers, hyphens, underscores) */
-  projectId?: string;
+  projectId?: string
 
   /** Base observability endpoint */
-  endpoint?: string;
+  endpoint?: string
 
   /** Explicit traces endpoint override */
-  tracesEndpoint?: string;
+  tracesEndpoint?: string
 
   /** Explicit logs endpoint override */
-  logsEndpoint?: string;
+  logsEndpoint?: string
 
   /** Explicit metrics endpoint override */
-  metricsEndpoint?: string;
+  metricsEndpoint?: string
 
   /** Explicit scores endpoint override */
-  scoresEndpoint?: string;
+  scoresEndpoint?: string
 
   /** Explicit feedback endpoint override */
-  feedbackEndpoint?: string;
+  feedbackEndpoint?: string
 
   /**
    * When false, `accessToken`, `projectId` and the traces endpoint are taken
@@ -85,7 +85,7 @@ interface MastraPlatformExporterConfig extends BaseExporterConfig {
    * when embedding Mastra in another tool so a user project's `.env` cannot
    * redirect the host's own telemetry. Default: true
    */
-  resolveFromEnv?: boolean;
+  resolveFromEnv?: boolean
 }
 ```
 
@@ -305,16 +305,16 @@ The shape of each span sent to Mastra platform is documented here for reference 
 ```typescript
 type MastraPlatformSpanRecord = AnyExportedSpan & {
   // Aliases derived from the source span
-  spanId: string; // alias for span.id
-  spanType: string; // alias for span.type
-  startedAt: Date; // alias for span.startTime
-  endedAt: Date | null; // alias for span.endTime ?? null
-  error: AnyExportedSpan['errorInfo'] | null;
+  spanId: string // alias for span.id
+  spanType: string // alias for span.type
+  startedAt: Date // alias for span.startTime
+  endedAt: Date | null // alias for span.endTime ?? null
+  error: AnyExportedSpan['errorInfo'] | null
 
   // Stamped at export time
-  createdAt: Date;
-  updatedAt: Date | null;
-};
+  createdAt: Date
+  updatedAt: Date | null
+}
 ```
 
 The spread `AnyExportedSpan` also carries the original `id`, `type`, `name`, `traceId`, `parentSpanId`, `isRootSpan`, `isEvent`, `startTime`, `endTime`, `entityType`, `entityId`, `entityName`, `tags`, `attributes`, `metadata`, `input`, `output`, and `errorInfo`. See [Interfaces](/reference/observability/tracing/interfaces) for `AnyExportedSpan`.
@@ -322,10 +322,10 @@ The spread `AnyExportedSpan` also carries the original `id`, `type`, `name`, `tr
 ## Usage
 
 ```typescript
-import { MastraPlatformExporter } from '@mastra/observability';
+import { MastraPlatformExporter } from '@mastra/observability'
 
 // Uses environment variable for token
-const exporter = new MastraPlatformExporter();
+const exporter = new MastraPlatformExporter()
 
 // Explicit configuration
 const customExporter = new MastraPlatformExporter({
@@ -334,7 +334,7 @@ const customExporter = new MastraPlatformExporter({
   maxBatchSize: 500,
   maxBatchWaitMs: 2000,
   logLevel: 'debug',
-});
+})
 ```
 
 ## Migrating from `CloudExporter`
@@ -343,12 +343,12 @@ Both classes share the same constructor signature, environment variables, and be
 
 ```typescript
 // Before
-import { CloudExporter } from '@mastra/observability';
-const exporter = new CloudExporter();
+import { CloudExporter } from '@mastra/observability'
+const exporter = new CloudExporter()
 
 // After
-import { MastraPlatformExporter } from '@mastra/observability';
-const exporter = new MastraPlatformExporter();
+import { MastraPlatformExporter } from '@mastra/observability'
+const exporter = new MastraPlatformExporter()
 ```
 
 The original `CloudExporter` is preserved unchanged so dashboards or alert rules that match the previous `CLOUD_EXPORTER_*` error IDs or `mastra-cloud-observability-exporter` exporter name keep working until you migrate.
