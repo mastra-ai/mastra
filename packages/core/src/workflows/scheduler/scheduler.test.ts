@@ -346,6 +346,61 @@ describe('Scheduler', () => {
     expect(triggers).toHaveLength(1);
   });
 
+  it.each(['workflow', 'agent'] as const)(
+    'retries a transient %s publish failure with the same claim id',
+    async targetType => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-23T10:00:01Z'));
+
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events: workflowEvents } = captureWorkflowsTopic(pubsub);
+      const { events: agentEvents } = captureAgentSchedulesTopic(pubsub);
+      const original = pubsub.publish.bind(pubsub);
+      const attempts: Event[] = [];
+      vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+        if (topic === 'workflows' || topic === TOPIC_AGENT_SCHEDULES) {
+          attempts.push(event);
+          if (attempts.length === 1) throw new Error('temporary outage');
+        }
+        return original(topic, event, options);
+      });
+      const onError = vi.fn();
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub, config: { onError } });
+      const fireAt = Date.now() - 1_000;
+      await store.createSchedule({
+        id: 'sched-transient',
+        target:
+          targetType === 'workflow'
+            ? { type: 'workflow', workflowId: 'wf-test' }
+            : { type: 'agent', agentId: 'agent-test', prompt: 'hello' },
+        cron: '0 0 10 23 9 * 2026',
+        status: 'active',
+        nextFireAt: fireAt,
+        createdAt: fireAt,
+        updatedAt: fireAt,
+      });
+
+      const tick = scheduler.tick();
+      await vi.advanceTimersByTimeAsync(100);
+      await tick;
+      await scheduler.tick();
+
+      const published = targetType === 'workflow' ? workflowEvents : agentEvents;
+      expect(attempts).toHaveLength(2);
+      expect(attempts.map(event => event.runId)).toEqual([
+        `sched_sched-transient_${fireAt}`,
+        `sched_sched-transient_${fireAt}`,
+      ]);
+      expect(published).toHaveLength(1);
+      expect((await store.getSchedule('sched-transient'))!.status).toBe('completed');
+      expect(onError).not.toHaveBeenCalled();
+      const triggers = await store.listTriggers('sched-transient');
+      if (targetType === 'workflow') expect(triggers.map(trigger => trigger.outcome)).toEqual(['published']);
+      else expect(triggers).toHaveLength(0); // Agent worker records the successful run.
+    },
+  );
+
   it('records a failed trigger when publish throws and invokes onError', async () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
@@ -376,6 +431,7 @@ describe('Scheduler', () => {
     expect(triggers).toHaveLength(1);
     expect(triggers[0]!.outcome).toBe('failed');
     expect(triggers[0]!.error).toBe('boom');
+    expect(publishSpy).toHaveBeenCalledTimes(3);
     expect(onError).toHaveBeenCalledOnce();
     expect(onError.mock.calls[0]![1]).toEqual({ scheduleId: 'sched-fail' });
 
