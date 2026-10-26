@@ -1,4 +1,5 @@
 import type { SpanInputMessage } from '@mastra/core/observability';
+import type { ReactNode } from 'react';
 import { SpanPayloadAttachment } from './span-payload-attachment';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMarkdown, SpanPayloadLabel } from './span-payload-primitives';
@@ -75,10 +76,11 @@ function skillOf(parts: unknown[]) {
 
 // `unknown` on purpose: SpanInputMessage is a wide union of SDK message shapes, and the
 // renderer only needs `isRecord` narrowing to read `role` / `content` / `parts` defensively.
-function SpanMessage({ message }: { message: unknown }) {
+/** One message of a span; `footer` sits right under it (e.g. the metadata of the signal it came from). */
+export function SpanMessage({ message, footer }: { message: unknown; footer?: ReactNode }) {
   if (typeof message === 'string') {
     return (
-      <Message from="user" data-role="user">
+      <Message from="user" data-role="user" footer={footer}>
         <div className="flex flex-col gap-2">
           <SpanPayloadLabel>user</SpanPayloadLabel>
           <MessageText text={message} />
@@ -96,15 +98,16 @@ function SpanMessage({ message }: { message: unknown }) {
   const skill = role === 'user' ? skillOf(parts) : undefined;
   if (skill) {
     return (
-      <div data-role="skill">
+      <div data-role="skill" className="flex flex-col gap-1">
         <SkillMessage activation={skill} defaultOpen />
+        {footer}
       </div>
     );
   }
 
   if (role === 'user' || role === 'assistant') {
     return (
-      <Message from={role} data-role={role}>
+      <Message from={role} data-role={role} footer={footer}>
         <div className="flex flex-col gap-2">
           <SpanPayloadLabel>{role}</SpanPayloadLabel>
           {body}

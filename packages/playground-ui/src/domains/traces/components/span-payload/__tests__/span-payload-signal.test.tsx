@@ -38,11 +38,13 @@ describe('Agent run started by a signal', () => {
   it('shows the signal metadata that identifies where the run came from', () => {
     render(<SpanInputRenderer span={agentRunSkillSignalSpan} />);
 
-    const details = screen.getByText('Signal').parentElement;
-    expect(details?.textContent).toContain('reactive');
-    expect(details?.textContent).toContain('skill');
-    expect(details?.textContent).toContain('factory-triage');
-    expect(details?.textContent).toContain('signal-skill-1');
+    const details = screen.getByLabelText('Signal');
+    expect(details.textContent).toContain('reactive');
+    expect(details.textContent).toContain('skill');
+    expect(details.textContent).toContain('factory-triage');
+    expect(details.textContent).toContain('signal');
+    expect(details.textContent).not.toContain('signal-skill-1');
+    expect(screen.getByRole('button', { name: 'Copy signal id signal-skill-1' })).toBeTruthy();
   });
 
   it('renders a user signal as a user message, not as a signal row', () => {
@@ -52,6 +54,16 @@ describe('Agent run started by a signal', () => {
     expect(screen.getByText('Can you summarize the open triage queue?')).toBeTruthy();
     expect(document.body.textContent).toContain('user');
     expect(screen.queryByLabelText(/^Skill:/)).toBeNull();
+  });
+
+  it('drops the type and tag of a user signal, which the user bubble already says, but keeps its id', () => {
+    render(<SpanInputRenderer span={agentRunUserSignalSpan} />);
+
+    const details = screen.getByLabelText('Signal');
+    expect(details.textContent).not.toContain('Type');
+    expect(details.textContent).not.toContain('Tag');
+    expect(details.textContent).toContain('Signal idsignal');
+    expect(screen.getByRole('button', { name: 'Copy signal id signal-user-1' })).toBeTruthy();
   });
 
   it('renders a reactive signal labelled by its tag', () => {

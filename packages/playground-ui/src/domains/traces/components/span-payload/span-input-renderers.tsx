@@ -4,7 +4,7 @@ import type { SpanRecord } from '../../types';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMessages } from './span-payload-messages';
 import { SpanPayloadField, SpanPayloadMarkdown } from './span-payload-primitives';
-import { SpanPayloadProcessor } from './span-payload-processor';
+import { SpanPayloadProcessorInput } from './span-payload-processor';
 import { asCoreSpan, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
 import { SpanSignalInput } from './span-signal-input';
@@ -58,7 +58,7 @@ const SPAN_INPUT_RENDERERS = {
   text: SpanTextRenderer,
   messages: SpanPayloadMessages,
   'agent-run-resume': SpanAgentRunResumeRenderer,
-  processor: SpanPayloadProcessor,
+  processor: SpanPayloadProcessorInput,
   json: SpanPayloadJson,
 } satisfies PayloadRegistry<SpanInputDescription>;
 

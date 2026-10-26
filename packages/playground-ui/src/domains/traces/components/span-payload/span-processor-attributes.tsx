@@ -1,10 +1,10 @@
-import { describeProcessorPipeline } from '@mastra/core/observability';
+import { describeProcessorPipeline, describeSpanInput } from '@mastra/core/observability';
 import type { ProcessorPipelineDescription } from '@mastra/core/observability';
 import type { SpanRecord } from '../../types';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMessages } from './span-payload-messages';
 import { SpanPayloadCollapsible, SpanPayloadField } from './span-payload-primitives';
-import { asCoreSpan } from './span-payload-registry';
+import { asCoreSpan, getProcessorRunContext } from './span-payload-registry';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt/Txt';
@@ -76,6 +76,8 @@ export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) 
   if (!pipeline) return null;
 
   const { phaseLabel, executor, processorIndex, hookDurationMs, messageListMutations, tripwireAbort, rest } = pipeline;
+  const input = describeSpanInput(asCoreSpan(span));
+  const { stepNumber, retryCount } = input?.type === 'processor' ? getProcessorRunContext(input.value) : {};
   const processorName = span.entityName ?? span.entityId;
   const hookDuration = hookDurationMs === undefined ? undefined : formatDuration(hookDurationMs);
 
@@ -102,6 +104,18 @@ export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) 
           <>
             <DataKeysAndValues.Key>Pipeline position</DataKeysAndValues.Key>
             <DataKeysAndValues.Value>{processorIndex + 1}</DataKeysAndValues.Value>
+          </>
+        )}
+        {stepNumber !== undefined && (
+          <>
+            <DataKeysAndValues.Key>Step</DataKeysAndValues.Key>
+            <DataKeysAndValues.Value>{stepNumber}</DataKeysAndValues.Value>
+          </>
+        )}
+        {retryCount !== undefined && (
+          <>
+            <DataKeysAndValues.Key>Retries</DataKeysAndValues.Key>
+            <DataKeysAndValues.Value>{retryCount}</DataKeysAndValues.Value>
           </>
         )}
         {hookDuration && (

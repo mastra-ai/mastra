@@ -4,6 +4,7 @@ import type { SpanRecord } from '../types';
 import {
   SpanErrorRenderer,
   SpanInputRenderer,
+  getSpanOutputPayload,
   hasSpanInputPreview,
   SpanOutputRenderer,
   SpanPayloadSection,
@@ -75,7 +76,7 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
           <SpanPayloadSection
             title="Output"
             icon={<FileOutputIcon />}
-            raw={span.output}
+            raw={getSpanOutputPayload(span)}
             hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
             layout="details"
           >

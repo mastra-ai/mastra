@@ -65,10 +65,29 @@ describe('SpanPayloadProcessor', () => {
   it('shows single values as labelled rows, with copy buttons on ids', () => {
     render(<SpanInputRenderer span={processorToolResultSpan} />);
     expect(valueOf('Tool')).toBe('search');
-    expect(valueOf('Step')).toBe('3');
     expect(valueOf('Provider executed')).toBe('No');
     expect(screen.getByText('call_17')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Copy to clipboard' })).toBeTruthy();
+  });
+
+  it('leaves the step and retry count out of the input, since Attributes shows them', () => {
+    render(<SpanInputRenderer span={processorToolResultSpan} />);
+    expect(screen.queryByText('Step')).toBeNull();
+    cleanup();
+    render(<SpanInputRenderer span={processorInputSpan} />);
+    expect(screen.queryByText('Retries')).toBeNull();
+  });
+
+  it('keeps a step that is not a number in the input', () => {
+    const span = makeSpan({
+      ...processorToolResultSpan,
+      input: { ...processorToolResultSpan.input, stepNumber: 'three' },
+    });
+    render(<SpanInputRenderer span={span} />);
+    expect(valueOf('Step')).toBe('three');
+    cleanup();
+    render(<SpanProcessorAttributes span={span} />);
+    expect(screen.queryByText('Step')).toBeNull();
   });
 
   it('keeps the two output hooks apart', () => {
@@ -119,6 +138,14 @@ describe('SpanProcessorAttributes', () => {
     // processorIndex is 0-based; the position reads 1-based.
     expect(valueOf('Pipeline position')).toBe('2');
     expect(valueOf('Hook duration')).toBe('1.84s');
+  });
+
+  it('shows where in the generation the hook ran', () => {
+    render(<SpanProcessorAttributes span={processorInputSpan} />);
+    expect(valueOf('Retries')).toBe('0');
+    cleanup();
+    render(<SpanProcessorAttributes span={processorToolResultSpan} />);
+    expect(valueOf('Step')).toBe('3');
   });
 
   it('shows message-list changes as readable actions', () => {
@@ -189,11 +216,15 @@ describe.each(LAYOUTS)('processor spans in the %s layout', (_name, renderView) =
     expect(attributes.textContent).toContain('Answer briefly.');
   });
 
-  it('shows an empty output as JSON without a preview toggle', () => {
+  it('leaves out the output of a processor that returned nothing', () => {
     render(renderView(processorSystemMutationSpan));
-    const output = section('Output');
-    expect(output.querySelector('[data-slot="span-payload-view-toggle"]')).toBeNull();
-    expect(output.querySelector('[data-slot="span-payload-json"]')).not.toBeNull();
+    expect(screen.queryByText('Output')).toBeNull();
+    expect(section('Attributes')).toBeTruthy();
+  });
+
+  it('still shows an empty output for spans that are not processors', () => {
+    render(renderView(makeSpan({ spanId: 'span-empty-output', output: {} })));
+    expect(section('Output')).toBeTruthy();
   });
 
   it('shows a failed processor span with its error', () => {

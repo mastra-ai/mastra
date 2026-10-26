@@ -13,7 +13,7 @@ import {
   SpanPayloadMarkdown,
   SpanPayloadToolCalls,
 } from './span-payload-primitives';
-import { hasItems } from './span-payload-registry';
+import { getProcessorRunContext, hasItems } from './span-payload-registry';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 
 type Scalar = string | number | boolean;
@@ -75,6 +75,8 @@ const withCount = (label: string, value: unknown) => (Array.isArray(value) ? `${
 
 export interface SpanPayloadProcessorProps {
   value: ProcessorSpanPayload<ProcessorRunInputByPhase> | ProcessorSpanPayload<ProcessorRunOutputByPhase>;
+  /** Keys another section already shows; left out of the preview but kept in the raw JSON. */
+  hidden?: readonly string[];
 }
 
 /**
@@ -82,8 +84,10 @@ export interface SpanPayloadProcessorProps {
  * phases share most keys, and each payload carries only the ones its phase
  * records. The phase itself is shown once, in the Attributes preview.
  */
-export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
-  const data: Record<string, unknown> = { ...value.data };
+export function SpanPayloadProcessor({ value, hidden = [] }: SpanPayloadProcessorProps) {
+  const data: Record<string, unknown> = Object.fromEntries(
+    Object.entries(value.data).filter(([key]) => !hidden.includes(key)),
+  );
   const messages = [...listOf(data.systemMessages), ...listOf(data.messages)];
   const texts = [data.text, data.accumulatedText].filter(isText);
   const scalars = SCALAR_FIELDS.filter(({ key }) => isScalar(data[key]));
@@ -149,4 +153,12 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
       )}
     </div>
   );
+}
+
+/**
+ * A processor span's input, without the step and retry count that Attributes
+ * shows as run context.
+ */
+export function SpanPayloadProcessorInput({ value }: { value: ProcessorSpanPayload<ProcessorRunInputByPhase> }) {
+  return <SpanPayloadProcessor value={value} hidden={Object.keys(getProcessorRunContext(value))} />;
 }

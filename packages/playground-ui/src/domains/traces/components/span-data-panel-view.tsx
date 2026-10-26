@@ -6,6 +6,7 @@ import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils'
 import {
   SpanErrorRenderer,
   SpanInputRenderer,
+  getSpanOutputPayload,
   hasSpanInputPreview,
   SpanOutputRenderer,
   SpanPayloadSection,
@@ -24,7 +25,7 @@ import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 import { cn } from '@/lib/utils';
 
 // Mirrors `DataPanel.Content` padding without requiring the Drawer root (this view also renders standalone).
-const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-2 py-3';
+const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto p-2';
 
 export interface SpanDataPanelViewProps {
   traceId: string;
@@ -32,6 +33,7 @@ export interface SpanDataPanelViewProps {
   /** Full span record. Caller fetches via useSpanDetail. */
   span: SpanRecord | undefined;
   isLoading?: boolean;
+  /** Previous/next buttons show only when one is provided; omit both where a span tree already navigates. */
   onPrevious?: () => void;
   onNext?: () => void;
   /** When provided, an × button in the header closes the span column. */
@@ -101,12 +103,14 @@ export function SpanDataPanelView({
               <ExternalLinkIcon />
             </Button>
           )}
-          <DataPanel.NextPrevNav
-            onPrevious={onPrevious}
-            onNext={onNext}
-            previousLabel="Go to previous span"
-            nextLabel="Go to next span"
-          />
+          {(onPrevious || onNext) && (
+            <DataPanel.NextPrevNav
+              onPrevious={onPrevious}
+              onNext={onNext}
+              previousLabel="Go to previous span"
+              nextLabel="Go to next span"
+            />
+          )}
           {onClose && <DataPanel.CloseButton icon="x" onClick={onClose} label="Close span" tooltip="Close span" />}
         </DataPanel.HeaderActions>
       </DataPanel.Header>
@@ -255,7 +259,7 @@ function SpanDataPanelContent({
         <SpanPayloadSection
           title="Output"
           icon={<FileOutputIcon />}
-          raw={span.output}
+          raw={getSpanOutputPayload(span)}
           hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
         >
           <SpanOutputRenderer span={span} />

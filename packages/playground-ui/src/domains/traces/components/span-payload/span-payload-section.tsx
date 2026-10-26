@@ -109,7 +109,8 @@ export function SpanPayloadSection({
         {framed ? (
           <Card data-slot="span-payload-card" className="min-w-0 overflow-hidden">
             <CollapsibleBox state={box} expandLabel="Expand">
-              <CardContent>{content}</CardContent>
+              {/* Renderers space their children with gaps; a user bubble's chat margin would double the card's Y padding. */}
+              <CardContent className="[&_[data-slot=message]]:my-0">{content}</CardContent>
             </CollapsibleBox>
           </Card>
         ) : (
