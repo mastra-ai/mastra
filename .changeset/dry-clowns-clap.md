@@ -2,7 +2,7 @@
 '@mastra/observability': minor
 ---
 
-Added span-aware input, output, and error previews shared by the storage and Platform exporters. Previews use processed payloads and preserve intentionally empty strings. Exporters use core's span-aware formatter when available, fall back to its generic preview formatter on older versions, and preserve spans unchanged when neither formatter exists.
+Added span-aware input, output, and error previews shared by the storage and Platform exporters. Previews use processed payloads and preserve intentionally empty strings. Exporters use core's span-aware formatter when available and otherwise preserve spans unchanged, leaving preview generation to storage.
 
 Existing exporter configuration enables these previews automatically:
 

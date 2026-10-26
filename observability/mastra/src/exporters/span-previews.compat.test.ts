@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import * as storage from '@mastra/core/storage';
+import * as observability from '@mastra/core/observability';
 import { build } from 'tsdown';
 import { describe, expect, it } from 'vitest';
 
@@ -13,21 +13,24 @@ const require = createRequire(import.meta.url);
 describe.each(['esm', 'cjs'] as const)('preview compatibility (%s)', format => {
   it.each([
     { mode: 'span', missing: [] },
-    { mode: 'span', missing: ['buildPreview', 'PREVIEW_MAX_LENGTH'] },
-    { mode: 'generic', missing: ['buildSpanPreviews'] },
-    { mode: 'passthrough', missing: ['buildSpanPreviews', 'buildPreview', 'PREVIEW_MAX_LENGTH'] },
+    { mode: 'passthrough', missing: ['buildSpanPreviews'] },
   ])('uses $mode previews when core lacks $missing', async ({ mode, missing }) => {
     const directory = await mkdtemp(join(import.meta.dirname, '.preview-compat-'));
     try {
       const extension = format === 'esm' ? 'mjs' : 'cjs';
-      const compatibilityModule = join(directory, `storage.${extension}`);
-      const names = Object.keys(storage).filter(name => !missing.includes(name));
+      const compatibilityModule = join(directory, `observability.${extension}`);
+      const names = Object.keys(observability).filter(name => !missing.includes(name));
       await writeFile(
         compatibilityModule,
         format === 'esm'
-          ? `export { ${names.join(', ')} } from ${JSON.stringify(import.meta.resolve('@mastra/core/storage'))};`
-          : `const storage = require(${JSON.stringify(require.resolve('@mastra/core/storage'))});
-           for (const name of ${JSON.stringify(names)}) exports[name] = storage[name];`,
+          ? `export { ${names.join(', ')} } from ${JSON.stringify(import.meta.resolve('@mastra/core/observability'))};`
+          : `const observability = require(${JSON.stringify(require.resolve('@mastra/core/observability'))});
+           for (const name of ${JSON.stringify(names)}) exports[name] = observability[name];`,
+      );
+      const forbiddenStorageModule = join(directory, `storage.${extension}`);
+      await writeFile(
+        forbiddenStorageModule,
+        "throw new Error('Exporter must not generate generic storage previews');",
       );
       await build({
         config: false,
@@ -36,7 +39,9 @@ describe.each(['esm', 'cjs'] as const)('preview compatibility (%s)', format => {
         format,
         dts: false,
         treeshake: true,
-        outputOptions: { paths: { '@mastra/core/storage': compatibilityModule } },
+        outputOptions: {
+          paths: { '@mastra/core/observability': compatibilityModule, '@mastra/core/storage': forbiddenStorageModule },
+        },
         logLevel: 'silent',
       });
       const script =
@@ -73,19 +78,11 @@ describe.each(['esm', 'cjs'] as const)('preview compatibility (%s)', format => {
         expect(result[1]).not.toHaveProperty('outputPreview');
         expect(result[1]).not.toHaveProperty('errorPreview');
       } else {
-        expect(result[1]).toMatchObject(
-          mode === 'span'
-            ? {
-                inputPreview: 'Tool: Order 123 was shipped',
-                outputPreview: '{"orderId":"123"}',
-                errorPreview: 'TimeoutError: Partial failure',
-              }
-            : {
-                inputPreview: 'Find my order',
-                outputPreview: 'Order shipped',
-                errorPreview: 'Partial failure',
-              },
-        );
+        expect(result[1]).toMatchObject({
+          inputPreview: 'Tool: Order 123 was shipped',
+          outputPreview: '{"orderId":"123"}',
+          errorPreview: 'TimeoutError: Partial failure',
+        });
       }
       expect(result[2].errorPreview).toBe(mode === 'passthrough' ? undefined : '');
       expect(result[1].output).toEqual({ object: { orderId: '123' }, text: 'Order shipped' });

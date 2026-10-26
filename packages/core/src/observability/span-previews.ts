@@ -1,6 +1,6 @@
-import type { AnyExportedSpan } from '../../../observability/types/tracing';
-import { SpanType } from '../../../observability/types/tracing';
-import { buildPreview, PREVIEW_MAX_LENGTH } from './tracing';
+import { buildPreview, PREVIEW_MAX_LENGTH } from '../storage/domains/observability/tracing';
+import type { AnyExportedSpan } from './types/tracing';
+import { SpanType } from './types/tracing';
 
 type RecordValue = Record<string, unknown>;
 type Direction = 'input' | 'output';

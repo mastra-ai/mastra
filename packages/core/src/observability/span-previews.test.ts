@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { MessageList } from '../../../agent/message-list';
-import { coreFeatures } from '../../../features';
-import { SpanType } from '../../../observability/types/tracing';
-import type { AnyExportedSpan } from '../../../observability/types/tracing';
+import { MessageList } from '../agent/message-list';
+import { coreFeatures } from '../features';
 import { buildSpanPreviews } from './span-previews';
+import { SpanType } from './types/tracing';
+import type { AnyExportedSpan } from './types/tracing';
 
 function span(overrides: Partial<AnyExportedSpan> = {}): AnyExportedSpan {
   return {
