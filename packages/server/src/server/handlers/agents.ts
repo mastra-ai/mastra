@@ -84,8 +84,9 @@ import type { InferParams, RouteSchemas, ServerRoute } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
-import { toSlug } from '../utils';
+import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
+import { assertWriteAccess, getCallerAuthorId } from './authorship';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
@@ -159,10 +160,12 @@ async function persistEditorOwnedModelList({
   mastra,
   agent,
   modelList,
+  requestContext,
 }: {
   mastra: Mastra;
   agent: Agent;
   modelList: NonNullable<Awaited<ReturnType<Agent['getModelList']>>>;
+  requestContext: RequestContext;
 }): Promise<boolean> {
   const editorConfig = agent.__getEditorConfig?.();
   if (!editorConfig || editorConfig.model !== true) return false;
@@ -176,12 +179,25 @@ async function persistEditorOwnedModelList({
 
   const storedModelList = toStoredModelList(modelList);
   const storedAgent = await agentsStore.getById(agent.id);
+  const scope = await getStoredResourceScope(mastra, requestContext);
   if (storedAgent) {
+    assertStoredResourceScope(storedAgent, scope);
+    assertWriteAccess({
+      requestContext,
+      resource: 'stored-agents',
+      resourceId: agent.id,
+      action: 'edit',
+      record: storedAgent,
+    });
     await editorAgent.update({ id: agent.id, modelList: storedModelList });
   } else {
+    const authorId = getCallerAuthorId(requestContext) ?? undefined;
     await editorAgent.create({
       id: agent.id,
       name: agent.name,
+      authorId,
+      visibility: authorId ? 'private' : 'public',
+      metadata: scopeStoredResourceMetadata(undefined, scope),
       modelList: storedModelList,
     } as StorageCreateAgentInput);
   }
@@ -1099,6 +1115,19 @@ async function getAgentForModelListMutation({
   const editorConfig = publishedAgent.__getEditorConfig?.();
   if (editorConfig === false || editorConfig?.model !== true) {
     return publishedAgent;
+  }
+
+  const agentsStore = await mastra.getStorage?.()?.getStore('agents');
+  const storedAgent = await agentsStore?.getById(agentId);
+  if (storedAgent) {
+    assertStoredResourceScope(storedAgent, await getStoredResourceScope(mastra, requestContext));
+    assertWriteAccess({
+      requestContext,
+      resource: 'stored-agents',
+      resourceId: agentId,
+      action: 'edit',
+      record: storedAgent,
+    });
   }
 
   const draftAgent = await getAgentFromSystem({
@@ -3757,6 +3786,7 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
           mastra,
           agent: mutableAgent,
           modelList: reorderedModelList,
+          requestContext,
         });
       }
 
@@ -3815,7 +3845,12 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
 
       const updatedModelList = await mutableAgent.getModelList(requestContext);
       if (updatedModelList) {
-        await persistEditorOwnedModelList({ mastra, agent: mutableAgent, modelList: updatedModelList });
+        await persistEditorOwnedModelList({
+          mastra,
+          agent: mutableAgent,
+          modelList: updatedModelList,
+          requestContext,
+        });
       }
 
       return { message: 'Model updated in model list' };

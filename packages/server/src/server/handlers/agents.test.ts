@@ -832,6 +832,9 @@ describe('Agent Routes Authorization', () => {
       expect(create).toHaveBeenCalledWith({
         id: 'model-owned-agent',
         name: 'Model Owned Agent',
+        authorId: undefined,
+        visibility: 'public',
+        metadata: undefined,
         modelList: [
           {
             id: 'fallback',
@@ -849,6 +852,53 @@ describe('Agent Routes Authorization', () => {
           },
         ],
       });
+    });
+
+    it('rejects model-list edits without write access before mutating the draft', async () => {
+      const modelOwnedAgent = new Agent({
+        id: 'model-owned-agent',
+        name: 'Model Owned Agent',
+        instructions: 'Code-owned instructions',
+        model: [
+          { id: 'primary', model: 'openai/gpt-5.1', maxRetries: 0 },
+          { id: 'fallback', model: 'openai/gpt-5.4-pro', maxRetries: 2 },
+        ],
+        editor: { model: true },
+      });
+      const update = vi.fn();
+      const editorAgent = {
+        applyStoredOverrides: vi.fn(async (agent: Agent) => agent),
+        update,
+      };
+      mastra = new Mastra({
+        agents: { 'model-owned-agent': modelOwnedAgent },
+        storage,
+        logger: false,
+      });
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: editorAgent } as any);
+      const agentsStore = await storage.getStore('agents');
+      vi.spyOn(agentsStore, 'getById').mockResolvedValue({
+        id: 'model-owned-agent',
+        authorId: 'owner',
+        visibility: 'private',
+      } as any);
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'intruder');
+
+      await expect(
+        REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+          mastra,
+          agentId: 'model-owned-agent',
+          reorderedModelIds: ['fallback', 'primary'],
+          requestContext,
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+
+      expect(await modelOwnedAgent.getModelList()).toMatchObject([
+        { id: 'primary', model: { modelId: 'gpt-5.1' } },
+        { id: 'fallback', model: { modelId: 'gpt-5.4-pro' } },
+      ]);
+      expect(update).not.toHaveBeenCalled();
     });
   });
 

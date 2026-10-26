@@ -21,4 +21,47 @@ describe('AgentsLibSQL', () => {
       client.close();
     }
   });
+
+  it('persists a sparse model-only agent override', async () => {
+    const client = createClient({ url: 'file::memory:?cache=shared' });
+
+    try {
+      const agents = new AgentsLibSQL({ client });
+      await agents.init();
+
+      await agents.create({
+        agent: {
+          id: 'model-owned-agent',
+          name: 'Model Owned Agent',
+          modelList: [
+            {
+              id: 'primary',
+              provider: 'openai',
+              modelId: 'gpt-5.1',
+              enabled: true,
+              maxRetries: 0,
+            },
+          ],
+        } as any,
+      });
+
+      const version = await agents.getVersionByNumber('model-owned-agent', 1);
+      expect(version).toMatchObject({
+        name: 'Model Owned Agent',
+        instructions: '',
+        model: {},
+        modelList: [
+          {
+            id: 'primary',
+            provider: 'openai',
+            modelId: 'gpt-5.1',
+            enabled: true,
+            maxRetries: 0,
+          },
+        ],
+      });
+    } finally {
+      client.close();
+    }
+  });
 });
