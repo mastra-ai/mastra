@@ -55,6 +55,7 @@ import {
   getRunRegistryEntry,
   deleteRunRegistryEntry,
   publishAbortRequest,
+  requestAcknowledgedAbort,
   normalizeResumeGenerateArgs,
   validateModelTimeoutSettings,
   DurableStepIds,
@@ -666,6 +667,11 @@ export interface InngestAgent<TOutput = undefined> {
   /** Abort a run by id, including on the Inngest worker executing it. */
   abortRunStream: Agent<any, any, TOutput>['abortRunStream'];
   /**
+   * Abort a run by id, resolving `true` only once this process or the Inngest
+   * worker executing the run confirms the abort.
+   */
+  abortRunAcknowledged(runId: string): Promise<boolean>;
+  /**
    * Resume a suspended durable run and return its streaming output. Routes
    * through {@link InngestAgent.resume}; requires `runId` in `streamOptions`.
    */
@@ -1226,6 +1232,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'declineToolCallGenerate'
     | 'abortThreadStream'
     | 'abortRunStream'
+    | 'abortRunAcknowledged'
     | '__fork'
     | 'getDurableWorkflows'
     | 'durableLoopWorkflowName'
@@ -2447,6 +2454,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // on an Inngest worker this process cannot see.
       abortDurableRun(runId);
       return aborted || getRunRegistryEntry(runId, mastra) !== undefined;
+    },
+
+    async abortRunAcknowledged(runId) {
+      if (inngestAgent.abortRunStream(runId)) return true;
+      return requestAcknowledgedAbort(getPubsub(), runId);
     },
 
     __fork() {

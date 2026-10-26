@@ -1351,6 +1351,12 @@ export interface DurableAgentLike {
    */
   getDurableWorkflows?(): Workflow<any, any, any, any, any, any, any>[];
   /**
+   * Abort `runId` wherever it executes, and resolve whether the abort was
+   * confirmed: by this process, or by the process executing the run answering
+   * over pubsub. Resolves `false` when no executing process answers in time.
+   */
+  abortRunAcknowledged?(runId: string): Promise<boolean>;
+  /**
    * Set the Mastra instance for observability and other services.
    * Called by Mastra during agent registration.
    * @internal

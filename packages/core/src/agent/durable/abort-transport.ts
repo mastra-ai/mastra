@@ -14,7 +14,7 @@
  */
 import type { PubSub } from '../../events';
 import type { Mastra } from '../../mastra';
-import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from './constants';
+import { AGENT_CONTROL_ACK_TOPIC, AGENT_CONTROL_TOPIC, AgentControlEventTypes } from './constants';
 import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './types';
 
@@ -25,12 +25,60 @@ import type { RunRegistryEntry } from './types';
  * when nobody is listening — an unheard request is a no-op, exactly like
  * aborting a run that already finished.
  */
-export async function publishAbortRequest(pubsub: PubSub, runId: string): Promise<void> {
+export async function publishAbortRequest(pubsub: PubSub, runId: string, requestId?: string): Promise<void> {
   await pubsub.publish(AGENT_CONTROL_TOPIC(runId), {
     type: AgentControlEventTypes.ABORT_REQUEST,
     runId,
-    data: {},
+    data: requestId ? { requestId } : {},
   });
+}
+
+/** How long `requestAcknowledgedAbort` waits for the executing process to answer. */
+export const ABORT_ACK_TIMEOUT_MS = 2_000;
+
+/**
+ * Ask whichever process is executing `runId` to abort it, and wait for that
+ * process to confirm it applied the request.
+ *
+ * Resolves `true` only when an executing process acknowledged the abort, and
+ * `false` when nobody answered within `timeoutMs` (the run is not executing
+ * anywhere, its owner died, or its listener is not installed yet). A publish
+ * failure rejects: the caller cannot claim an abort it never sent.
+ */
+export async function requestAcknowledgedAbort(
+  pubsub: PubSub,
+  runId: string,
+  timeoutMs: number = ABORT_ACK_TIMEOUT_MS,
+): Promise<boolean> {
+  const requestId = globalThis.crypto.randomUUID();
+  const topic = AGENT_CONTROL_ACK_TOPIC(runId);
+  let acknowledge!: () => void;
+  const acknowledged = new Promise<boolean>(resolve => {
+    acknowledge = () => resolve(true);
+  });
+  const handler = async (
+    event: { type?: string; data?: { requestId?: string } },
+    ack?: () => Promise<void>,
+  ): Promise<void> => {
+    if (event?.type === AgentControlEventTypes.ABORT_ACK && event.data?.requestId === requestId) acknowledge();
+    await ack?.();
+  };
+
+  // Subscribe before publishing so an acknowledgement cannot race past us.
+  await pubsub.subscribe(topic, handler as Parameters<PubSub['subscribe']>[1], { startFrom: 'latest' });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await publishAbortRequest(pubsub, runId, requestId);
+    return await Promise.race([
+      acknowledged,
+      new Promise<boolean>(resolve => {
+        timer = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    await pubsub.unsubscribe(topic, handler as Parameters<PubSub['subscribe']>[1]).catch(() => {});
+  }
 }
 
 /**
@@ -48,9 +96,21 @@ export async function subscribeToAbortRequests(
   // Every delivery is acknowledged, including control events this listener
   // ignores. An ignored delivery is still a delivery, and a durable transport
   // keeps unacknowledged entries pending for the life of the subscription.
-  const handler = async (event: { type?: string }, ack?: () => Promise<void>) => {
+  const handler = async (event: { type?: string; data?: { requestId?: string } }, ack?: () => Promise<void>) => {
     if (event?.type === AgentControlEventTypes.ABORT_REQUEST) {
       onAbortRequested();
+      const requestId = event.data?.requestId;
+      if (requestId) {
+        // Confirm to a requester waiting on `requestAcknowledgedAbort`. A lost
+        // acknowledgement only makes the requester retry; the abort has applied.
+        await pubsub
+          .publish(AGENT_CONTROL_ACK_TOPIC(runId), {
+            type: AgentControlEventTypes.ABORT_ACK,
+            runId,
+            data: { requestId },
+          })
+          .catch(() => {});
+      }
     }
     await ack?.();
   };

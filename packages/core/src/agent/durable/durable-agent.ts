@@ -48,7 +48,7 @@ import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } fro
 import { isDurableAgentLike } from '../types';
 import { resolveThreadIdFromArgs } from '../utils';
 
-import { publishAbortRequest } from './abort-transport';
+import { publishAbortRequest, requestAcknowledgedAbort } from './abort-transport';
 import {
   AGENT_STREAM_TOPIC,
   AgentStreamEventTypes,
@@ -2824,6 +2824,17 @@ export class DurableAgent<
     this.#abortDurableRun(runId);
 
     return aborted || this.#isRunExecuting(runId);
+  }
+
+  /**
+   * Like `abortRunStream`, but a run this process does not know is only
+   * reported aborted once the process executing it confirms the request.
+   * A run nobody executes (finished, or orphaned by a dead owner) resolves
+   * `false`. Rejects when the abort request cannot be published.
+   */
+  async abortRunAcknowledged(runId: string): Promise<boolean> {
+    if (this.abortRunStream(runId)) return true;
+    return requestAcknowledgedAbort(this.pubsub, runId);
   }
 
   /** Whether this process can see `runId` executing, in its registries or on the thread runtime. */
