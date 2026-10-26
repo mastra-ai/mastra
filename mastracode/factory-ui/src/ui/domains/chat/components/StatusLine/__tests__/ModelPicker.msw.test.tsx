@@ -81,7 +81,7 @@ function renderPicker({
   catalogLoaded?: Promise<void>;
   modelSwitched?: Promise<void>;
   thinkingDefaultsFail?: boolean;
-  /** Mount on a Factory route, so the Factory's thinking level applies. */
+  /** Mount on a Factory-routed Factory, so the Factory's thinking level applies. */
   inFactory?: boolean;
   /** Mount on a Factory route whose project has this model scope. */
   modelScope?: 'factory' | 'user' | 'hybrid';
@@ -140,7 +140,9 @@ function renderPicker({
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
       thinkingDefaultsFail
         ? HttpResponse.json({ error: 'unavailable' }, { status: 500 })
-        : HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultThinkingLevel: 'medium' } }),
+        : HttpResponse.json({
+            project: { id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultThinkingLevel: 'medium' },
+          }),
     ),
     http.get(`${API}/sessions/:resourceId`, async ({ params }) => {
       await settingsLoaded;
@@ -182,7 +184,7 @@ function renderPicker({
             name: 'Mastra',
             modelScope,
             defaultModelId: factoryDefaultModelId,
-            defaultThinkingLevel: 'medium',
+            defaultThinkingLevel: 'low',
           },
         }),
       ),
@@ -296,6 +298,16 @@ describe('ModelPicker', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Thinking: High · Personal default' }));
     expect(screen.getByText('Follows the Personal default.')).toBeInTheDocument();
+  });
+
+  it("starts a chat on personal defaults at medium, never the Factory's level, when its owner set no personal level", async () => {
+    renderPicker({
+      modelScope: 'user',
+      modelId: 'anthropic/claude-sonnet-4-6',
+      sessionPolicy: { modelScope: 'user', defaultModelId: 'anthropic/claude-sonnet-4-6', personalThinkingLevel: null },
+    });
+
+    expect(await screen.findByRole('button', { name: 'Thinking: Medium · Built-in default' })).toBeEnabled();
   });
 
   it('uses personal credentials to show a hybrid user session model as configured', async () => {

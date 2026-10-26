@@ -68,9 +68,6 @@ describe('ModelRoutingSection', () => {
     const { client } = renderRoutingSection();
 
     await waitFor(() => expect(routing('Personal')).toBeChecked());
-    expect(
-      within(region('Factory defaults')).getByText('Used only when someone has no personal default'),
-    ).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Factory default model' })).not.toBeInTheDocument();
 
     await user.click(routing('Factory'));

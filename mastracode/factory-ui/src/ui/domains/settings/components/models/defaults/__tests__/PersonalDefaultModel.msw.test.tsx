@@ -18,7 +18,7 @@ const renderInField = () =>
   renderWithProviders(
     <>
       <Field>
-        <PersonalDefaultModel factoryId="fp-1" />
+        <PersonalDefaultModel />
       </Field>
       <Toaster position="bottom-right" />
     </>,
@@ -29,7 +29,7 @@ const THINKING_URL = `${DEFAULT_MODEL_URL}/thinking`;
 const MODELS_URL = `${TEST_BASE_URL}/web/config/models`;
 const FACTORY_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
 const UNAVAILABLE_WARNING = /None of your connected accounts can run/;
-const FOLLOWING_FACTORY_LOW = 'Thinking: Low · Factory default';
+const FOLLOWING_BUILT_IN = 'Thinking: Medium · Built-in default';
 
 const models: AvailableModelOption[] = [
   { id: 'openai/gpt-5', provider: 'openai', modelName: 'gpt-5', hasApiKey: true },
@@ -170,7 +170,7 @@ describe('PersonalDefaultModel', () => {
     ).toBeInTheDocument();
   });
 
-  it('saves a personal thinking level and hands it back to the Factory default', async () => {
+  it('follows the built-in level, never the Factory level, until a personal level is saved, and hands back to it', async () => {
     let thinkingLevel: DefaultModelResponse['thinkingLevel'] = null;
     const putBodies: unknown[] = [];
     stubPersonalCatalog(models);
@@ -186,21 +186,21 @@ describe('PersonalDefaultModel', () => {
     const user = userEvent.setup();
     const { client } = renderInField();
 
-    await user.click(await screen.findByRole('button', { name: FOLLOWING_FACTORY_LOW }));
-    expect(screen.getByText('Follows the Factory default.')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: FOLLOWING_BUILT_IN }));
+    expect(screen.getByText('Follows the Built-in default.')).toBeInTheDocument();
     await user.keyboard('{Escape}');
 
-    await dragThinkingTo(user, FOLLOWING_FACTORY_LOW, 3);
+    await dragThinkingTo(user, FOLLOWING_BUILT_IN, 3);
     await waitForMutationsIdle(client);
 
     expect(putBodies).toEqual([{ thinkingLevel: 'high' }]);
     expect(await screen.findByRole('button', { name: 'Thinking: High' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Use Factory default' }));
+    await user.click(screen.getByRole('button', { name: 'Use default' }));
     await waitForMutationsIdle(client);
 
     expect(putBodies).toEqual([{ thinkingLevel: 'high' }, { thinkingLevel: null }]);
-    expect(await screen.findByRole('button', { name: FOLLOWING_FACTORY_LOW })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: FOLLOWING_BUILT_IN })).toBeInTheDocument();
   });
 
   it('puts the personal thinking level back when the server rejects it', async () => {
@@ -212,11 +212,11 @@ describe('PersonalDefaultModel', () => {
     const user = userEvent.setup();
     const { client } = renderInField();
 
-    await dragThinkingTo(user, FOLLOWING_FACTORY_LOW, 3);
+    await dragThinkingTo(user, FOLLOWING_BUILT_IN, 3);
     await waitForMutationsIdle(client);
 
     expect(await screen.findByText('default_model_not_set')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: FOLLOWING_FACTORY_LOW })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: FOLLOWING_BUILT_IN })).toBeInTheDocument();
   });
 
   it('keeps a cleared personal model cleared when a thinking change still in flight then fails', async () => {
@@ -241,7 +241,7 @@ describe('PersonalDefaultModel', () => {
     const { client } = renderInField();
     const modelPicker = await screen.findByRole('combobox', { name: 'Personal default model' });
 
-    await dragThinkingTo(user, FOLLOWING_FACTORY_LOW, 3);
+    await dragThinkingTo(user, FOLLOWING_BUILT_IN, 3);
     await user.keyboard('{Escape}');
     await user.click(screen.getByRole('button', { name: 'Clear' }));
     await waitFor(() => expect(modelPicker).toHaveValue(''));

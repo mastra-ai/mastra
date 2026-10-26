@@ -1,7 +1,10 @@
 import { THINKING_LEVEL_VALUES, getAvailableThinkingLevelsForModel, runThinkingLevel } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ModelReasoningOption } from '@mastra/core/llm';
+import { DEFAULT_THINKING_LEVEL } from '@mastra/factory/default-thinking-level';
 import type { ThinkingLevelOption } from '@mastra/playground-ui/components/ThinkingLevel';
+
+import type { FactoryModelScope } from '../../workspaces/services/github';
 
 export const THINKING_LEVEL_LABELS: Record<ThinkingLevelSetting, string> = {
   off: 'Off',
@@ -35,12 +38,13 @@ export function thinkingLevelOptionsForModel(
   return thinkingLevelOptions(getAvailableThinkingLevelsForModel(modelId, reasoningOptions));
 }
 
-export type ThinkingDefaultOrigin = 'personal' | 'factory';
+export type ThinkingDefaultOrigin = 'personal' | 'factory' | 'built-in';
 export type ThinkingLevelOrigin = 'session' | ThinkingDefaultOrigin;
 
 export const THINKING_DEFAULT_SOURCE_LABELS: Record<ThinkingDefaultOrigin, string> = {
   personal: 'Personal default',
   factory: 'Factory default',
+  'built-in': 'Built-in default',
 };
 
 export interface ThinkingDefault {
@@ -53,16 +57,21 @@ export interface EffectiveThinkingLevel {
   origin: ThinkingLevelOrigin;
 }
 
-/** Undefined while loading; null when it follows the Factory. */
+/** Undefined while loading; null when unset. */
 export type PersonalThinkingDefault = ThinkingLevelSetting | null | undefined;
 
+export function personalThinkingDefault(personal: ThinkingLevelSetting | null): ThinkingDefault {
+  return personal ? { level: personal, origin: 'personal' } : { level: DEFAULT_THINKING_LEVEL, origin: 'built-in' };
+}
+
 export function routedThinkingDefault(
+  modelScope: FactoryModelScope | undefined,
   personal: PersonalThinkingDefault,
   factory: ThinkingLevelSetting | undefined,
 ): ThinkingDefault | undefined {
-  if (personal) return { level: personal, origin: 'personal' };
-  if (personal === undefined || !factory) return undefined;
-  return { level: factory, origin: 'factory' };
+  if (modelScope === 'factory') return factory ? { level: factory, origin: 'factory' } : undefined;
+  if (modelScope === undefined || personal === undefined) return undefined;
+  return personalThinkingDefault(personal);
 }
 
 export function resolveEffectiveThinkingLevel({

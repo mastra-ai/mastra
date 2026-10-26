@@ -24,7 +24,7 @@ import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
 import { TranscriptEntries } from '../domains/chat/components/Transcript';
-import { chatStartModelId } from '../domains/chat/context/chatDefaultModel';
+import { routedDefaultModelId } from '../domains/chat/context/chatDefaultModel';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
@@ -39,21 +39,24 @@ export function NewPage() {
   const projectQuery = useFactoryProjectQuery(activeFactory?.id);
   const personalDefaultQuery = useDefaultModelQuery();
   const providersQuery = useProvidersQuery();
-  const chatModelId = chatStartModelId(projectQuery.data?.modelScope, {
+  const routedToFactory = projectQuery.data?.modelScope === 'factory';
+  const chatModelId = routedDefaultModelId(projectQuery.data?.modelScope, {
     factory: projectQuery.data?.defaultModelId,
     personal: personalDefaultQuery.data?.modelId,
   });
-  const chatModelSettled = Boolean(activeFactory) && projectQuery.isSuccess && !personalDefaultQuery.isPending;
+  const chatModelSettled =
+    Boolean(activeFactory) && projectQuery.isSuccess && (routedToFactory || personalDefaultQuery.isSuccess);
   const missingDefaultModel = chatModelSettled && !chatModelId;
   const chatModelProvider = chatModelId
     ? providersQuery.data?.find(entry => entry.provider === chatModelId.split('/')[0])
     : undefined;
-  const chatCredentialScope = projectQuery.data?.modelScope === 'factory' ? 'org' : 'user';
+  const chatCredentialScope = routedToFactory ? 'org' : 'user';
   const missingCredential =
     chatModelSettled && chatModelId && chatModelProvider && !isConnectedAt(chatModelProvider, chatCredentialScope)
       ? { modelId: chatModelId, provider: chatModelProvider.provider }
       : undefined;
-  const configurationError = projectQuery.error ?? providersQuery.error ?? undefined;
+  const configurationError =
+    projectQuery.error ?? (routedToFactory ? null : personalDefaultQuery.error) ?? providersQuery.error ?? undefined;
 
   return (
     <ChatPageLayout
@@ -202,12 +205,19 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
 function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
   const anchor = sessionDefaultsAnchor(projectQuery.data?.modelScope);
+  const factoryRouted = anchor === MODEL_DEFAULTS_ANCHORS.factory;
   return (
     <EmptyState
       as="h2"
       iconSlot={<Bot />}
-      titleSlot="No default model configured for this Factory"
-      descriptionSlot="Connect a model provider and choose a default model in Models settings before starting a chat."
+      titleSlot={
+        factoryRouted ? 'No default model configured for this Factory' : 'No personal default model configured'
+      }
+      descriptionSlot={
+        factoryRouted
+          ? 'Connect a model provider and choose a default model in Models settings before starting a chat.'
+          : `Chats in this Factory run on your own keys. Connect a provider and choose a model under ${MODEL_DEFAULTS_LABELS.personal} in Models settings.`
+      }
       actionSlot={
         <Link to={settingsSectionPath(factoryId, 'models', anchor)} className={buttonVariants({ variant: 'primary' })}>
           Open Models settings

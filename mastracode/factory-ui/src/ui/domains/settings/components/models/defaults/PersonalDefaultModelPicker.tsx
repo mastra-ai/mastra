@@ -15,12 +15,10 @@ import { AppliedSessionsSummary } from './AppliedSessionsSummary';
 import { PersonalThinkingControl } from './PersonalThinkingControl';
 
 export function PersonalDefaultModelPicker({
-  factoryId,
   savedModelId,
   savedThinkingLevel,
   models,
 }: {
-  factoryId: string;
   savedModelId: string | undefined;
   savedThinkingLevel: ThinkingLevelSetting | null;
   models: AvailableModelOption[] | undefined;
@@ -58,12 +56,7 @@ export function PersonalDefaultModelPicker({
           className="min-w-0 flex-1"
           disabled={busy}
         />
-        <PersonalThinkingControl
-          factoryId={factoryId}
-          savedModelId={savedModelId}
-          savedThinkingLevel={savedThinkingLevel}
-          saving={busy}
-        />
+        <PersonalThinkingControl savedModelId={savedModelId} savedThinkingLevel={savedThinkingLevel} saving={busy} />
       </ButtonsGroup>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" disabled={busy || !savedModelId} onClick={() => applyDefaultModel.mutate()}>

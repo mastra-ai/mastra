@@ -59,6 +59,34 @@ describe('NewPage default-model guard', () => {
     expect(screen.queryByRole('heading', { name: 'What do you want to work on?' })).not.toBeInTheDocument();
   });
 
+  it("asks for a personal default instead of starting on the Factory's model when chats run on personal defaults", async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'user', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+
+    renderNewPage();
+
+    expect(await screen.findByRole('heading', { name: 'No personal default model configured' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/models#personal-defaults',
+    );
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+  });
+
+  it("fails open with a visible error when a personal-routed chat can't read the personal default", async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'user', defaultModelId: null });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ error: 'boom' }, { status: 500 }),
+      ),
+    );
+
+    renderNewPage();
+
+    expect(await screen.findByText(/Failed to load session configuration/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Message')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'No personal default model configured' })).not.toBeInTheDocument();
+  });
+
   it('renders a usable composer while the guard resolves, then swaps in the guard', async () => {
     let releaseProject = () => {};
     const projectGate = new Promise<void>(resolve => {
@@ -68,7 +96,9 @@ describe('NewPage default-model guard', () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async () => {
         await projectGate;
-        return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: null } });
+        return HttpResponse.json({
+          project: { id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: null },
+        });
       }),
     );
 
@@ -86,7 +116,7 @@ describe('NewPage default-model guard', () => {
   });
 
   it('renders the composer when the Factory has a default model', async () => {
-    stubFactory({ id: 'fp-1', name: 'Mastra', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: 'anthropic/claude-sonnet-4-5' });
 
     renderNewPage();
 
@@ -109,8 +139,11 @@ describe('NewPage default-model guard', () => {
 
 describe('NewPage credential guard', () => {
   it('asks for a personal key when a chat that runs on personal credentials is missing one, since an org key cannot unblock it', async () => {
-    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'hybrid', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'hybrid', defaultModelId: null });
     server.use(
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: 'anthropic/claude-sonnet-4-5', thinkingLevel: null }),
+      ),
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
         HttpResponse.json({
           providers: [{ provider: 'anthropic', source: 'stored-org', orgKey: true, orgCredential: 'api_key' }],
@@ -173,7 +206,7 @@ describe('NewPage credential guard', () => {
   });
 
   it('fails open for providers not in the catalog (custom providers manage keys separately)', async () => {
-    stubFactory({ id: 'fp-1', name: 'Mastra', defaultModelId: 'my-custom/self-hosted-model' });
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: 'my-custom/self-hosted-model' });
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
         HttpResponse.json({ providers: [{ provider: 'anthropic', source: 'none' }] }),

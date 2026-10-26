@@ -5,7 +5,7 @@ import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
 import { useChatModelScope } from './useChatModelScope';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { chatStartModelId, routedDefaultModelId } from './chatDefaultModel';
+import { routedDefaultModelId } from './chatDefaultModel';
 import { ChatModelsContext } from './ChatModelsContext';
 import type { ChatModelsApi } from './ChatModelsContext';
 import { useChatConnection } from './useChatConnection';
@@ -28,10 +28,13 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
   const { projectQuery: factoryProjectQuery, modelScope } = useChatModelScope();
   const defaultModelQuery = useDefaultModelQuery();
   const [draftModelId, setDraftModelId] = useState<string>();
-  const defaults = { factory: factoryProjectQuery.data?.defaultModelId, personal: defaultModelQuery.data?.modelId };
+  const defaultModelId = routedDefaultModelId(modelScope, {
+    factory: factoryProjectQuery.data?.defaultModelId,
+    personal: defaultModelQuery.data?.modelId,
+  });
   const value: ChatModelsApi = {
-    activeModelId: draftModelId ?? chatStartModelId(modelScope, defaults),
-    defaultModelId: routedDefaultModelId(modelScope, defaults),
+    activeModelId: draftModelId ?? defaultModelId,
+    defaultModelId,
     isLoading: factoryProjectQuery.isPending || defaultModelQuery.isPending,
     error: defaultModelQuery.error ?? factoryProjectQuery.error ?? undefined,
     setModel: modelId => {
