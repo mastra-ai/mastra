@@ -224,31 +224,42 @@ describe('compileStoredBoard', () => {
     ).toBeUndefined();
   });
 
-  it('builds from the approved plan with the skill stored on Building', async () => {
+  it('starts Building as a goal, and sends review findings back with the skill stored on Building', async () => {
     const card = {
       ingress: { id: 'in-1' },
       board: 'work',
       fromStage: 'planning',
       item: { title: 'Fix login', url: 'https://x/1', source: 'manual' },
     };
-    const build = (board: ReturnType<typeof compileStoredBoard>) =>
-      board.rules.execute?.manual?.onEnter?.(card as never);
-    expect(await build(compileStoredBoard(workBoardTemplate, builtInRunners))).toMatchObject({
-      type: 'invokeSkill',
-      role: 'work',
-      skillName: 'factory-build',
-      arguments: expect.stringContaining('Implement the approved plan for the work item.'),
-    });
+    const returned = {
+      ...card,
+      fromStage: 'review',
+      item: { ...card.item, metadata: { selfReviewVerdict: 'request changes', selfReviewFindings: '1. Fix the test' } },
+    };
     const edited = {
       ...workBoardTemplate,
       phases: workBoardTemplate.phases.map(phase =>
         phase.key === 'execute' ? { ...phase, runner: { ...phase.runner!, skill: 'our-builder' } } : phase,
       ),
     };
-    expect(await build(compileStoredBoard(edited, builtInRunners))).toMatchObject({
-      skillName: 'our-builder',
-      arguments: expect.stringContaining('Implement the approved plan for the work item.'),
-    });
+    for (const board of [
+      compileStoredBoard(workBoardTemplate, builtInRunners),
+      compileStoredBoard(edited, builtInRunners),
+    ]) {
+      const build = await board.rules.execute?.manual?.onEnter?.(card as never);
+      expect(build).toMatchObject({
+        type: 'invokeSkill',
+        role: 'work',
+        goal: expect.stringContaining('approved plan'),
+      });
+      expect(build).not.toHaveProperty('skillName');
+    }
+    expect(
+      await compileStoredBoard(workBoardTemplate, builtInRunners).rules.execute?.manual?.onEnter?.(returned as never),
+    ).toMatchObject({ skillName: 'factory-build', arguments: expect.stringContaining('1. Fix the test') });
+    expect(
+      await compileStoredBoard(edited, builtInRunners).rules.execute?.manual?.onEnter?.(returned as never),
+    ).toMatchObject({ skillName: 'our-builder', arguments: expect.stringContaining('1. Fix the test') });
   });
 
   it("moves a default phase into another context while Review's reviewer keeps its own", async () => {

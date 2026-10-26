@@ -294,6 +294,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'role',
           'skillName',
           'prompt',
+          'goal',
           'arguments',
           'precedingMessage',
           'cancelInFlight',
@@ -304,8 +305,10 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       // A run activates a skill or carries a prompt, never both: they are two
       // ways to author the same kickoff message, so accepting both would leave
       // the dispatcher picking a winner.
-      if ((value.skillName === undefined) === (value.prompt === undefined)) {
-        throw new FactoryRuleValidationError('Factory skill invocation needs exactly one of skillName or prompt.');
+      if ([value.skillName, value.prompt, value.goal].filter(field => field !== undefined).length !== 1) {
+        throw new FactoryRuleValidationError(
+          'Factory skill invocation needs exactly one of skillName, prompt or goal.',
+        );
       }
       const args = optionalBoundedString(value.arguments, 'Factory skill arguments', MAX_ARGUMENTS_LENGTH);
       const precedingMessage = optionalBoundedString(
@@ -328,12 +331,14 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         type,
         ...commonCommitFields(value),
         role: boundedString(value.role, 'Factory skill role', MAX_ROLE_LENGTH, IDENTIFIER_RE),
-        ...(value.skillName === undefined
-          ? { prompt: boundedString(value.prompt, 'Factory skill prompt', MAX_MESSAGE_LENGTH) }
-          : {
-              skillName: boundedString(value.skillName, 'Factory skill name', MAX_SKILL_NAME_LENGTH, SKILL_NAME_RE),
-              ...(value.resume === true ? { resume: true } : {}),
-            }),
+        ...(value.goal !== undefined
+          ? { goal: boundedString(value.goal, 'Factory goal', MAX_MESSAGE_LENGTH) }
+          : value.skillName === undefined
+            ? { prompt: boundedString(value.prompt, 'Factory skill prompt', MAX_MESSAGE_LENGTH) }
+            : {
+                skillName: boundedString(value.skillName, 'Factory skill name', MAX_SKILL_NAME_LENGTH, SKILL_NAME_RE),
+                ...(value.resume === true ? { resume: true } : {}),
+              }),
         ...(args ? { arguments: args } : {}),
         ...(precedingMessage ? { precedingMessage } : {}),
         ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),

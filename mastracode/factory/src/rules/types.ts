@@ -632,6 +632,7 @@ export type FactoryInvokeSkillDecision = FactoryInvokeSkillDecisionBase &
     | {
         skillName: string;
         prompt?: never;
+        goal?: never;
         /**
          * Same-stage re-entry: the skill is already active in the card's live session,
          * so deliver a compact continuation that references it by name and carries only
@@ -640,7 +641,18 @@ export type FactoryInvokeSkillDecision = FactoryInvokeSkillDecisionBase &
          */
         resume?: boolean;
       }
-    | { prompt: string; skillName?: never; resume?: never }
+    | { prompt: string; skillName?: never; goal?: never; resume?: never }
+    | {
+        /**
+         * Pursue an objective as a goal: the session's goal judge keeps the run
+         * going until the objective is met. Delivered as a goal reminder rather than
+         * a fresh instruction, so a session already working continues where it is.
+         */
+        goal: string;
+        skillName?: never;
+        prompt?: never;
+        resume?: never;
+      }
   );
 
 export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {

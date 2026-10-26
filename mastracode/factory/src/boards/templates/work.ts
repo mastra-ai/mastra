@@ -16,6 +16,8 @@ const COMPLETE = {
  * names the built-in runner that decides when (PR auto-review, self-review, source fetch hints).
  * Building and Review work in the card's main context, so the builder answers feedback on its own change.
  * Building's session continues Planning's when the card has one, so the builder implements the plan it holds.
+ * Building is a status: entering it sets a goal on that session, so it keeps working until the change is handed
+ * on. Its `factory-build` skill only runs when review sends findings back.
  * Review's built-in runner still reviews in its own `review` context, apart from the builder.
  * No phase declares `nextPhases`: any move is allowed, like the code board.
  */

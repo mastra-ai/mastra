@@ -351,6 +351,30 @@ interface DispatcherSession extends SkillSession {
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSession' | 'listActiveThreadRuns'>;
 type BoundDispatcherSession = Session<MastraCodeState>;
 
+/**
+ * Make `objective` the session thread's goal, judged in-loop by the agent's goal
+ * step. The judge is the one configured in settings, else the session's own model.
+ * Returns the reminder metadata the goal UI reads.
+ */
+async function startGoal(
+  session: BoundDispatcherSession,
+  binding: FactoryRunBindingRecord,
+  objective: string,
+): Promise<{ goalId: string; judgeModelId?: string }> {
+  const judgeModelId = session.model.get() || undefined;
+  const id = globalThis.crypto.randomUUID();
+  const record = await session.machinery.getAgent().setObjective(objective, {
+    id,
+    threadId: binding.threadId,
+    resourceId: binding.resourceId,
+    ...(judgeModelId ? { judgeModelId } : {}),
+  });
+  if (!record) {
+    throw new FactoryDispatchError('run_configuration_invalid', 'The session has no storage to hold a goal.');
+  }
+  return { goalId: record.id ?? id, ...(judgeModelId ? { judgeModelId } : {}) };
+}
+
 function factoryRequestContext(input: {
   session: BoundDispatcherSession;
   binding: FactoryRunBindingRecord;
@@ -1041,7 +1065,7 @@ export class FactoryDecisionDispatcher {
             decision.skillName === undefined
               ? await resolvePromptInvocation(this.#controller, {
                   sessionId: binding.sessionId,
-                  prompt: decision.prompt,
+                  prompt: decision.goal ?? decision.prompt,
                 })
               : decision.resume === true
                 ? await resolveSkillResumeInvocation(this.#controller, {
@@ -1109,22 +1133,27 @@ export class FactoryDecisionDispatcher {
           if (await kickoffLanded()) return;
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           // Safe under the replay guard above: it matches deliveryId, never prompt content.
-          const kickoffContents = await withWorkItemFeed(
-            this.#feedReader,
-            { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
-            resolved.contents,
-          );
+          const kickoffContents =
+            decision.goal !== undefined
+              ? decision.goal
+              : await withWorkItemFeed(
+                  this.#feedReader,
+                  { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
+                  resolved.contents,
+                );
           // A skill kickoff is system-generated, not something the human typed: send it
           // as a typed `skill` signal so the model sees `<skill name="…">` and traces
           // record the skill name. Plain-prompt kickoffs stay user messages.
           const kickoffSignal =
-            resolved.skillName !== undefined
-              ? {
-                  type: 'reactive' as const,
-                  tagName: 'skill',
-                  attributes: { name: resolved.skillName },
-                }
-              : { type: 'user' as const, tagName: 'user' };
+            decision.goal !== undefined
+              ? ({ type: 'system-reminder' as const, attributes: { type: 'goal' } } as const)
+              : resolved.skillName !== undefined
+                ? {
+                    type: 'reactive' as const,
+                    tagName: 'skill',
+                    attributes: { name: resolved.skillName },
+                  }
+                : { type: 'user' as const, tagName: 'user' };
           // The feed read is async storage I/O; the card can move while it runs.
           if (await kickoffLanded()) return;
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
@@ -1151,6 +1180,9 @@ export class FactoryDecisionDispatcher {
             );
             if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           }
+          // Set before the reminder lands, so the judge reads this objective at the
+          // run's next boundary instead of an earlier goal (or none).
+          const goal = decision.goal !== undefined ? await startGoal(session, binding, decision.goal) : undefined;
           // The run's own verdict, not the delivery's. A signal can reach the
           // agent perfectly and the run still die on a provider error or be
           // cancelled mid-flight; without this the decision reports success and
@@ -1170,6 +1202,7 @@ export class FactoryDecisionDispatcher {
                 id: deliveryId,
                 ...kickoffSignal,
                 contents: kickoffContents,
+                ...(goal ? { metadata: goal } : {}),
               },
               // Without `requireDelivery` the session resolves `accepted` on the
               // next tick and swallows wake failures, so a kickoff that never

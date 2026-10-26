@@ -34,22 +34,23 @@ function executeContext(source: FactoryRuleItemContext['source']): FactoryStageR
 }
 
 describe('work board build prompt', () => {
+  // Building starts as a goal: the objective carries the hand-off the judge holds the run to.
   it('hands a GitLab build to self-review without opening a merge request', async () => {
     const decision = await workBoard.rules.execute?.gitlabIssue?.onEnter?.(executeContext('gitlab-issue'));
     expect(decision).toMatchObject({ type: 'invokeSkill', role: 'work' });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
-    expect(decision.arguments).toContain('Do not open a pull or merge request.');
-    expect(decision.arguments).toContain('stage `review`');
-    expect(decision.arguments).toContain('GitLab issue acme/app#3');
-    expect(decision.arguments).not.toContain('pull request');
+    expect(decision.goal).toContain('Do not open a pull or merge request.');
+    expect(decision.goal).toContain('stage `review`');
+    expect(decision.goal).toContain('GitLab issue acme/app#3');
+    expect(decision.goal).not.toContain('pull request');
   });
 
   it('asks the builder to open the change request itself when self-review is off, which is the default', async () => {
     const { selfReviewEnabled: _on, ...off } = executeContext('gitlab-issue');
     const build = await workBoard.rules.execute?.gitlabIssue?.onEnter?.(off);
     if (!build || build.type !== 'invokeSkill') throw new Error('Expected build invocation.');
-    expect(build.arguments).toContain('Open a merge request when the work is ready for review.');
-    expect(build.arguments).not.toContain('Do not open');
+    expect(build.goal).toContain('Open a merge request when the work is ready for review.');
+    expect(build.goal).not.toContain('Do not open');
 
     const review = await workBoard.rules.review?.gitlabIssue?.onEnter?.({
       ...off,
@@ -64,7 +65,7 @@ describe('work board build prompt', () => {
     const decision = await workBoard.rules.execute?.issue?.onEnter?.(executeContext('github-issue'));
     expect(decision).toMatchObject({ type: 'invokeSkill', role: 'work' });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
-    expect(decision.arguments).toContain('Do not open a pull or merge request.');
+    expect(decision.goal).toContain('Do not open a pull or merge request.');
   });
 
   it('passes self-review findings back to the builder', async () => {
@@ -84,6 +85,9 @@ describe('work board build prompt', () => {
       },
     });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
+    // Work to do comes back as the factory-build skill, not a new goal.
+    expect(decision).toMatchObject({ skillName: 'factory-build' });
+    expect(decision).not.toHaveProperty('goal');
     expect(decision.arguments).toContain(`Self-review requested changes on branch head ${'a'.repeat(40)}`);
     expect(decision.arguments).toContain('1. Fix the test');
   });

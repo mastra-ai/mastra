@@ -2,8 +2,8 @@
 '@mastra/factory': minor
 ---
 
-Building on the default Work board is now an agent phase like the others: it activates the new bundled `factory-build` skill, which implements the plan approved in Planning, proves it with tests, pushes, and hands the work on. The round's task and hand-off arrive as the skill's arguments, so changing Building's skill in Settings › Boards changes how cards are built while Factory still decides when.
+Building on the default Work board is now a status rather than an instruction. When a card enters Building (for example after its plan is approved), Factory sets a goal on the card's session — implement the approved plan and hand the change on — and the session's goal judge keeps the run going until that is done. Nothing new is sent to a session that is already building.
 
-```ts
-{ key: 'execute', name: 'Building', kind: 'working', runner: { type: 'agent', agentId: 'factory-build', skill: 'factory-build', context: null } }
-```
+When self-review sends a card back, Building activates the new bundled `factory-build` skill with the findings, so changing Building's skill in Settings › Boards changes how findings are handled.
+
+Rule handlers can start a goal the same way: `{ type: 'invokeSkill', idempotencyKey, role: 'work', goal: 'Ship the fix with tests.' }`.

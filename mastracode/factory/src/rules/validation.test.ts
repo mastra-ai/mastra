@@ -333,7 +333,7 @@ describe('Factory rule validation', () => {
     expect(String(error)).not.toContain(secret);
   });
 
-  it('takes a prompt in place of a skill, but never both and never neither', () => {
+  it('takes a prompt or a goal in place of a skill, but only ever one of them', () => {
     expect(
       validateFactoryRuleDecision({
         type: 'invokeSkill',
@@ -352,9 +352,14 @@ describe('Factory rule validation', () => {
     for (const invalid of [
       { type: 'invokeSkill', idempotencyKey: 'build-2', role: 'work', skillName: 'factory-plan', prompt: 'Build it.' },
       { type: 'invokeSkill', idempotencyKey: 'build-3', role: 'work' },
+      { type: 'invokeSkill', idempotencyKey: 'build-4', role: 'work', goal: 'Ship it.', prompt: 'Build it.' },
+      { type: 'invokeSkill', idempotencyKey: 'build-5', role: 'work', goal: 'Ship it.', skillName: 'factory-build' },
     ]) {
-      expect(() => validateFactoryRuleDecision(invalid)).toThrow(/exactly one of skillName or prompt/);
+      expect(() => validateFactoryRuleDecision(invalid)).toThrow(/exactly one of skillName, prompt or goal/);
     }
+    expect(
+      validateFactoryRuleDecision({ type: 'invokeSkill', idempotencyKey: 'build-6', role: 'work', goal: 'Ship it.' }),
+    ).toEqual({ type: 'invokeSkill', idempotencyKey: 'build-6', role: 'work', goal: 'Ship it.' });
   });
 
   it('accepts and normalizes the optional cancelInFlight flag on invokeSkill decisions', () => {
