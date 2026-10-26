@@ -267,6 +267,12 @@ export type ServerConfig = {
    */
   timeout?: number;
   /**
+   * Silence interval (ms) for transport-only agent SSE heartbeat comments.
+   * Set 0 to disable. Must be an integer from 0 through 2_147_483_647.
+   * @default 25000
+   */
+  agentSseHeartbeatMs?: number;
+  /**
    * Max time (ms) to drain in-flight requests after SIGINT/SIGTERM. Must be a
    * finite number from 0 through 2_147_483_647. When the window passes,
    * remaining HTTP connections are force-closed. Mastra shutdown then runs

@@ -1492,6 +1492,13 @@ export class Mastra<
     this.#idGenerator = idGenerator;
   }
 
+  private validateAgentSseHeartbeat(server: ServerConfig): void {
+    const interval = server.agentSseHeartbeatMs;
+    if (interval !== undefined && (!Number.isInteger(interval) || interval < 0 || interval > 2_147_483_647)) {
+      throw new Error('server.agentSseHeartbeatMs must be an integer from 0 through 2_147_483_647');
+    }
+  }
+
   /**
    * Sets the server configuration for this Mastra instance.
    *
@@ -1503,6 +1510,7 @@ export class Mastra<
    * ```
    */
   public setServer(server: ServerConfig): void {
+    this.validateAgentSseHeartbeat(server);
     this.#server = server;
   }
 
@@ -1987,6 +1995,7 @@ export class Mastra<
     }
 
     if (config?.server) {
+      this.validateAgentSseHeartbeat(config.server);
       this.#server = config.server;
       this.#serverExplicit = true;
     }

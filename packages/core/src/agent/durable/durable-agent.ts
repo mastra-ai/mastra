@@ -5,6 +5,7 @@ import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '..
 import { withAck } from '../../events/acking-callback';
 import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { NoopLeaseProvider } from '../../events/pubsub';
 import type { PubSub } from '../../events/pubsub';
 import { isRunLocalTopic } from '../../events/topics';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
@@ -62,6 +63,7 @@ import {
   ExecutionFence,
   assertExecutionOwned,
   executionLeaseKey,
+  getExecutionClaim,
   fencePubSub,
   readRunGeneration,
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
@@ -81,6 +83,7 @@ import {
   ExtendedRunRegistry,
   getRunRegistryEntry,
   globalRunRegistry,
+  hasActiveRunOperation,
   markResumeInFlight,
 } from './run-registry';
 import {
@@ -5268,7 +5271,94 @@ export class DurableAgent<
     }
   }
 
-  /** Reconcile only after subscribing, so a completion racing attachment is not lost. */
+  get durableLoopWorkflowName(): string {
+    return this.#workflow?.id ?? DurableStepIds.AGENTIC_LOOP;
+  }
+
+  /** @internal HTTP observer liveness; never refreshes or disposes a run-registry entry. */
+  async __getRunLiveness(runId: string): Promise<{
+    status: 'alive' | 'inactive' | 'unknown';
+    generation?: number;
+  }> {
+    try {
+      const store = await this.#mastra?.getStorage()?.getStore('workflows');
+      if (!store) return { status: 'unknown' };
+      const fencing = await supportsRunFencing(store);
+      const ownership = fencing ? await store.getRunOwnership({ runId }) : undefined;
+      if (ownership?.live) return { status: 'alive', generation: ownership.generation };
+
+      const leases = resolveLeaseProvider(this.pubsub);
+      const supportsLeases = leases !== NoopLeaseProvider;
+      if (supportsLeases && (await leases.getLeaseOwner(executionLeaseKey(this.id, runId)))) {
+        return { status: 'alive', generation: ownership?.generation };
+      }
+
+      // Read after observing lease absence: a suspending run releases its producer.
+      const names = new Set([
+        this.durableLoopWorkflowName,
+        DurableStepIds.AGENTIC_LOOP,
+        DurableStepIds.AGENTIC_EXECUTION,
+      ]);
+      const snapshots = await Promise.all(
+        [...names].map(workflowName => store.getWorkflowRunById({ workflowName, runId })),
+      );
+      let hasSnapshot = false;
+      let suspended = false;
+      for (const record of snapshots) {
+        if (!record) continue;
+        const snapshot =
+          typeof record.snapshot === 'string' ? (JSON.parse(record.snapshot) as WorkflowRunState) : record.snapshot;
+        if (!snapshot) return { status: 'unknown' };
+        const input = snapshot.context?.input as DurableAgenticWorkflowInput | undefined;
+        if (input?.agentId !== this.id || input.__workflowKind !== 'durable-agent') return { status: 'unknown' };
+        if (
+          ![
+            'running',
+            'pending',
+            'paused',
+            'suspended',
+            'waiting',
+            'success',
+            'failed',
+            'tripwire',
+            'canceled',
+            'bailed',
+            'skipped',
+          ].includes(snapshot.status)
+        ) {
+          return { status: 'unknown' };
+        }
+        hasSnapshot = true;
+        if (snapshot.status === 'suspended') {
+          const claim = getExecutionClaim(new RequestContext(Object.entries(snapshot.requestContext ?? {})), runId);
+          if (ownership && claim?.generation === undefined) return { status: 'unknown' };
+          if (!ownership || claim?.generation === ownership.generation) suspended = true;
+        }
+        if (input && (await this.#untrackedRunLiveness(runId, input)?.isLive())) {
+          return { status: 'alive', generation: ownership?.generation };
+        }
+      }
+
+      // These operations are process-global, not owner/generation scoped: ambiguity is not death.
+      if (!suspended && (hasActiveRunOperation(runId) || localRecoveryClaims.has(JSON.stringify([this.id, runId])))) {
+        return { status: 'unknown' };
+      }
+      if (hasSnapshot && (fencing || supportsLeases)) {
+        // A replacement producer may have claimed the run while snapshots were read.
+        const current = fencing ? await store.getRunOwnership({ runId }) : undefined;
+        if (current?.live) return { status: 'alive', generation: current.generation };
+        if (current?.generation !== ownership?.generation) return { status: 'unknown' };
+        if (supportsLeases && (await leases.getLeaseOwner(executionLeaseKey(this.id, runId)))) {
+          return { status: 'alive', generation: current?.generation };
+        }
+        return { status: suspended ? 'alive' : 'inactive', generation: current?.generation };
+      }
+      return { status: 'unknown' };
+    } catch {
+      return { status: 'unknown' };
+    }
+  }
+
   async #isObservationComplete(runId: string): Promise<boolean> {
     try {
       const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');

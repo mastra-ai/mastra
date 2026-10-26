@@ -84,6 +84,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
 import { toSlug } from '../utils';
+import { withAgentSseHeartbeat } from '../utils/agent-sse-heartbeat';
 
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
@@ -1872,7 +1873,7 @@ export const GENERATE_AGENT_VNEXT_ROUTE = createRoute({
   handler: GENERATE_AGENT_ROUTE.handler,
 });
 
-export const STREAM_GENERATE_ROUTE = createRoute({
+const STREAM_GENERATE_EXECUTION_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/stream',
   responseType: 'stream' as const,
@@ -1977,6 +1978,18 @@ export const STREAM_GENERATE_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, 'error streaming agent response');
     }
+  },
+});
+
+export const STREAM_GENERATE_ROUTE = createRoute({
+  ...STREAM_GENERATE_EXECUTION_ROUTE,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  handler: async params => {
+    const stream = await STREAM_GENERATE_EXECUTION_ROUTE.handler(params);
+    if (!(stream instanceof ReadableStream)) return stream;
+    return withAgentSseHeartbeat(stream, params.mastra.getServer()?.agentSseHeartbeatMs, params.abortSignal);
   },
 });
 
@@ -2544,17 +2557,9 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       });
 
       let cleanedUp = false;
-      let heartbeat: ReturnType<typeof setTimeout> | undefined;
-      const clearHeartbeat = () => {
-        if (heartbeat) {
-          clearTimeout(heartbeat);
-          heartbeat = undefined;
-        }
-      };
       const cleanup = (closeController?: ReadableStreamDefaultController) => {
         if (cleanedUp) return;
         cleanedUp = true;
-        clearHeartbeat();
         subscription.unsubscribe();
         if (closeController) {
           try {
@@ -2563,38 +2568,26 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         }
       };
 
-      return new ReadableStream({
+      const stream = new ReadableStream({
         async start(controller) {
-          const scheduleHeartbeat = () => {
-            if (cleanedUp) return;
-            clearHeartbeat();
-            heartbeat = setTimeout(() => {
-              heartbeat = undefined;
-              if (cleanedUp) return;
-              try {
-                controller.enqueue(': heartbeat\n\n');
-              } catch {
-                cleanup();
-                return;
-              }
-              scheduleHeartbeat();
-            }, 25_000);
-          };
           const abortCleanup = () => cleanup(controller);
           abortSignal?.addEventListener('abort', abortCleanup, { once: true });
-          scheduleHeartbeat();
-
+          if (abortSignal?.aborted) {
+            abortCleanup();
+            return;
+          }
           try {
             for await (const part of subscription.stream) {
+              if (cleanedUp) break;
               controller.enqueue(part);
-              scheduleHeartbeat();
             }
             cleanup(controller);
           } catch (error) {
-            cleanup();
-            controller.error(error);
+            if (!cleanedUp) {
+              cleanup();
+              controller.error(error);
+            }
           } finally {
-            clearHeartbeat();
             abortSignal?.removeEventListener('abort', abortCleanup);
           }
         },
@@ -2602,6 +2595,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
           cleanup();
         },
       });
+      return withAgentSseHeartbeat(stream, mastra.getServer()?.agentSseHeartbeatMs, abortSignal);
     } catch (error) {
       return handleError(error, 'error subscribing to agent thread');
     }
@@ -2689,7 +2683,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         ? await agent.streamUntilIdle(messages, { ...options, structuredOutput })
         : await agent.streamUntilIdle(messages, options);
 
-      return streamResult.fullStream;
+      return withAgentSseHeartbeat(streamResult.fullStream, mastra.getServer()?.agentSseHeartbeatMs, abortSignal);
     } catch (error) {
       return handleError(error, 'error streaming agent response');
     }
@@ -2708,7 +2702,7 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   deprecated: true,
-  handler: STREAM_GENERATE_ROUTE.handler,
+  handler: STREAM_GENERATE_EXECUTION_ROUTE.handler,
 });
 
 export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
@@ -2753,18 +2747,28 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       let idleTimer: ReturnType<typeof setTimeout> | null = null;
       let onAbort: (() => void) | undefined;
 
-      // Idle timeout: close the stream if no events are received within 5 minutes.
-      // This prevents subscription leaks when an agent crashes without emitting a terminal event.
+      // Transport comments never count as execution activity.
       const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+      const PROBE_INTERVAL_MS = 30_000;
+      const PROBE_TIMEOUT_MS = 5_000;
+      let activityVersion = 0;
+      let inactiveCandidate: { generation?: number; version: number } | undefined;
+      let probeInFlight = false;
+      let probeTimer: ReturnType<typeof setTimeout> | undefined;
+      let settleProbeDeadline: (() => void) | undefined;
+      let lastLiveness: string | undefined;
 
       function releaseSubscription(unsubscribeFromRun: () => Promise<void>) {
         void Promise.resolve()
           .then(unsubscribeFromRun)
-          .catch(error => console.error(`[ObserveAgentStream] Failed to unsubscribe from ${topic}:`, error));
+          .catch(error => mastra.getLogger().error('[ObserveAgentStream] Failed to unsubscribe', { topic, error }));
       }
 
       function stop() {
         closed = true;
+        clearTimeout(probeTimer);
+        settleProbeDeadline?.();
+        settleProbeDeadline = undefined;
         if (idleTimer) {
           clearTimeout(idleTimer);
           idleTimer = null;
@@ -2786,10 +2790,65 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
         controller.close();
       }
 
+      async function probeLiveness(controller: ReadableStreamDefaultController) {
+        if (closed) return;
+        const probe = durableAgent?.__getRunLiveness;
+        if (!probe) {
+          cleanup(controller);
+          return;
+        }
+        const version = activityVersion;
+        let result: { status: 'alive' | 'inactive' | 'unknown'; generation?: number } = { status: 'unknown' };
+        if (!probeInFlight) {
+          probeInFlight = true;
+          const pending = Promise.resolve()
+            .then(() => probe.call(durableAgent, runId))
+            .catch(() => ({ status: 'unknown' as const }));
+          void pending.then(() => {
+            probeInFlight = false;
+          });
+          result = await Promise.race([
+            pending,
+            new Promise<{ status: 'unknown' }>(resolve => {
+              settleProbeDeadline = () => resolve({ status: 'unknown' });
+              probeTimer = setTimeout(settleProbeDeadline, PROBE_TIMEOUT_MS);
+            }),
+          ]);
+          clearTimeout(probeTimer);
+          settleProbeDeadline = undefined;
+        }
+        if (closed || activityVersion !== version) return;
+        if (result.status === 'inactive') {
+          if (inactiveCandidate?.version === version && inactiveCandidate.generation === result.generation) {
+            cleanup(controller);
+            return;
+          }
+          inactiveCandidate = { generation: result.generation, version };
+        } else {
+          inactiveCandidate = undefined;
+        }
+        if (result.status === 'unknown' && lastLiveness !== 'unknown') {
+          mastra
+            .getLogger()
+            .warn('[ObserveAgentStream] Producer liveness unavailable; retaining observer', { agentId, runId });
+        }
+        lastLiveness = result.status;
+        idleTimer = setTimeout(
+          () => {
+            void probeLiveness(controller);
+          },
+          result.status === 'alive' ? IDLE_TIMEOUT_MS : PROBE_INTERVAL_MS,
+        );
+      }
+
       function resetIdleTimer(controller: ReadableStreamDefaultController) {
         if (closed) return;
+        activityVersion++;
+        inactiveCandidate = undefined;
         if (idleTimer) clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => cleanup(controller), IDLE_TIMEOUT_MS);
+        idleTimer = setTimeout(() => {
+          void probeLiveness(controller);
+        }, IDLE_TIMEOUT_MS);
       }
 
       const stream = new ReadableStream({
@@ -2843,7 +2902,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
         },
       });
 
-      return stream;
+      return withAgentSseHeartbeat(stream, mastra.getServer()?.agentSseHeartbeatMs, abortSignal);
     } catch (error) {
       return handleError(error, 'error observing agent stream');
     }
@@ -2899,7 +2958,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         _detachObserverOnCancel: isDurableAgentLike(agent),
       });
 
-      return streamResult.fullStream;
+      return withAgentSseHeartbeat(streamResult.fullStream, mastra.getServer()?.agentSseHeartbeatMs, abortSignal);
     } catch (error) {
       return handleError(error, 'error approving tool call');
     }
@@ -3104,7 +3163,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         _detachObserverOnCancel: isDurableAgentLike(agent),
       });
 
-      return streamResult.fullStream;
+      return withAgentSseHeartbeat(streamResult.fullStream, mastra.getServer()?.agentSseHeartbeatMs, abortSignal);
     } catch (error) {
       return handleError(error, 'error declining tool call');
     }
@@ -3230,7 +3289,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         ? await agent.resumeStream(resumeData, { ...options, structuredOutput })
         : await agent.resumeStream(resumeData, options);
 
-      return streamResult.fullStream;
+      return withAgentSseHeartbeat(streamResult.fullStream, mastra.getServer()?.agentSseHeartbeatMs, abortSignal);
     } catch (error) {
       return handleError(error, 'error resuming agent stream');
     }
@@ -3302,7 +3361,7 @@ export const RECOVER_ROUTE = createRoute({
       // ownership checks and version resolution.
       const streamResult = await (agent as any).recover(runId);
 
-      return streamResult.fullStream;
+      return withAgentSseHeartbeat(streamResult.fullStream, mastra.getServer()?.agentSseHeartbeatMs, abortSignal);
     } catch (error) {
       return handleError(error, 'error recovering agent run');
     }
@@ -3431,7 +3490,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         ? await agent.resumeStreamUntilIdle(resumeData, { ...options, structuredOutput })
         : await agent.resumeStreamUntilIdle(resumeData, options);
 
-      return streamResult.fullStream;
+      return withAgentSseHeartbeat(streamResult.fullStream, mastra.getServer()?.agentSseHeartbeatMs, abortSignal);
     } catch (error) {
       return handleError(error, 'error resuming agent stream');
     }
@@ -3586,7 +3645,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
         memory: authorizedMemoryOption,
       });
 
-      return streamResult;
+      return withAgentSseHeartbeat(streamResult, mastra.getServer()?.agentSseHeartbeatMs, params.abortSignal);
     } catch (error) {
       return handleError(error, 'error streaming agent loop response');
     }
@@ -3626,7 +3685,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
         ...params,
       });
 
-      return streamResult;
+      return withAgentSseHeartbeat(streamResult, mastra.getServer()?.agentSseHeartbeatMs, params.abortSignal);
     } catch (error) {
       return handleError(error, 'error approving network tool call');
     }
@@ -3666,7 +3725,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
         ...params,
       });
 
-      return streamResult;
+      return withAgentSseHeartbeat(streamResult, mastra.getServer()?.agentSseHeartbeatMs, params.abortSignal);
     } catch (error) {
       return handleError(error, 'error declining network tool call');
     }

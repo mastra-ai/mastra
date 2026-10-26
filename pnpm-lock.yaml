@@ -6547,6 +6547,9 @@ importers:
       '@ai-sdk/openai':
         specifier: ^2.0.136
         version: 2.0.136(zod@4.6.7)
+      '@copilotkit/aimock':
+        specifier: ^1.46.0
+        version: 1.46.0(vitest@4.1.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config

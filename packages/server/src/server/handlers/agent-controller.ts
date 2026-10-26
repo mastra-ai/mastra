@@ -22,6 +22,7 @@ import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { withAgentSseHeartbeat } from '../utils/agent-sse-heartbeat';
 import { handleError } from './error';
 import { enforceThreadAccess } from './utils';
 
@@ -659,18 +660,12 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
       const session = await getExistingSession(controller, sessionId, requestContext);
 
       let cleanedUp = false;
-      let heartbeat: ReturnType<typeof setTimeout> | undefined;
       let unsubscribe: (() => void) | undefined;
-      const clearHeartbeat = () => {
-        if (heartbeat) {
-          clearTimeout(heartbeat);
-          heartbeat = undefined;
-        }
-      };
+      let abortCleanup: (() => void) | undefined;
       const cleanup = (controller?: ReadableStreamDefaultController) => {
         if (cleanedUp) return;
         cleanedUp = true;
-        clearHeartbeat();
+        if (abortCleanup) abortSignal?.removeEventListener('abort', abortCleanup);
         unsubscribe?.();
         if (controller) {
           try {
@@ -682,24 +677,8 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
       // The stream yields raw event objects plus `:`-prefixed SSE comments
       // (heartbeats); the server adapter frames events and passes comments
       // through verbatim.
-      return new ReadableStream<unknown>({
+      const stream = new ReadableStream<unknown>({
         start(controller) {
-          const scheduleHeartbeat = () => {
-            if (cleanedUp) return;
-            clearHeartbeat();
-            heartbeat = setTimeout(() => {
-              heartbeat = undefined;
-              if (cleanedUp) return;
-              try {
-                controller.enqueue(': heartbeat\n\n');
-              } catch {
-                cleanup();
-                return;
-              }
-              scheduleHeartbeat();
-            }, 25_000);
-          };
-
           // Live events are not replayed, so seed a late subscriber with the
           // current display state (including the message in flight). This runs
           // before subscribe() so it precedes the buffered workspace events
@@ -720,20 +699,20 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
               // for SSE framing (`data: <json>\n\n`); enqueuing a pre-framed
               // string here would double-encode it.
               controller.enqueue(toWireEvent(event));
-              scheduleHeartbeat();
             } catch {
               cleanup();
             }
           });
 
-          const abortCleanup = () => cleanup(controller);
+          abortCleanup = () => cleanup(controller);
           abortSignal?.addEventListener('abort', abortCleanup, { once: true });
-          scheduleHeartbeat();
+          if (abortSignal?.aborted) abortCleanup();
         },
         cancel() {
           cleanup();
         },
       });
+      return withAgentSseHeartbeat(stream, mastra.getServer()?.agentSseHeartbeatMs, abortSignal);
     } catch (error) {
       return handleError(error, 'error streaming controller session');
     }

@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.136",
+    "@copilotkit/aimock": "^1.46.0",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",

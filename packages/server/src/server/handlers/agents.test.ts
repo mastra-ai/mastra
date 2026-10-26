@@ -1859,7 +1859,13 @@ describe('Agent Routes Authorization', () => {
 
     it('should return fullStream from agent.resumeStream()', async () => {
       const requestContext = createContextWithReservedKeys({});
-      const expectedStream = new ReadableStream();
+      const expectedChunk = { type: 'finish' };
+      const expectedStream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(expectedChunk);
+          controller.close();
+        },
+      });
 
       vi.spyOn(mockAgent, 'resumeStream').mockResolvedValue({
         fullStream: expectedStream,
@@ -1874,7 +1880,9 @@ describe('Agent Routes Authorization', () => {
         resumeData: { step: 'next' },
       } as any);
 
-      expect(result).toBe(expectedStream);
+      const reader = result.getReader();
+      expect(await reader.read()).toEqual({ value: expectedChunk, done: false });
+      expect(await reader.read()).toEqual({ value: undefined, done: true });
     });
   });
 
@@ -2568,7 +2576,13 @@ describe('Agent Routes Authorization', () => {
     });
 
     it('should recover without coupling durable execution to the HTTP request signal', async () => {
-      const expectedStream = new ReadableStream();
+      const expectedChunk = { type: 'finish' };
+      const expectedStream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(expectedChunk);
+          controller.close();
+        },
+      });
       const recoverMock = vi.fn().mockResolvedValue({ fullStream: expectedStream });
       (mockDurableAgent as any).recover = recoverMock;
 
@@ -2586,7 +2600,9 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(recoverMock).toHaveBeenCalledWith('recover-run-1');
-      expect(result).toBe(expectedStream);
+      const reader = result.getReader();
+      expect(await reader.read()).toEqual({ value: expectedChunk, done: false });
+      expect(await reader.read()).toEqual({ value: undefined, done: true });
 
       delete (mockAgent as any).recover;
     });
@@ -2666,6 +2682,111 @@ describe('Agent Routes Authorization', () => {
       });
       mockDurableAgent = createDurableAgent({ agent: mockAgent, id: 'test-durable-agent', name: 'test-durable-agent' });
       mastra = new Mastra({ agents: { 'test-durable-agent': mockDurableAgent }, storage, logger: false });
+    });
+
+    it.each(['live', 'abandoned', 'suspending', 'unavailable', 'hung'] as const)(
+      'reconciles a silent %s producer without treating heartbeats as run activity',
+      async state => {
+        vi.useFakeTimers();
+        mastra.setServer({ agentSseHeartbeatMs: 0 });
+        const runId = `observe-idle-${state}`;
+        const store = await storage.getStore('workflows');
+        const snapshot = (status: 'running' | 'suspended') =>
+          store!.persistWorkflowSnapshot({
+            runId,
+            workflowName: 'durable-agentic-loop',
+            snapshot: {
+              runId,
+              status,
+              value: {},
+              context: { input: { agentId: 'test-durable-agent', __workflowKind: 'durable-agent' } },
+              activePaths: [],
+              activeStepsPath: {},
+              serializedStepGraph: [],
+              suspendedPaths: {},
+              resumeLabels: {},
+              waitingPaths: {},
+              timestamp: Date.now(),
+            } as any,
+          });
+        await snapshot('running');
+        const claim = await store!.claimRunOwnership({ runId, ownerId: 'producer', leaseMs: 900_000 });
+        if (!claim.acquired) throw new Error('Expected ownership');
+        if (state !== 'live')
+          await store!.releaseRunOwnership({ runId, ownerId: 'producer', generation: claim.record.generation });
+        await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          runId,
+          type: 'chunk',
+          data: { type: 'text-delta', payload: { text: 'started' } },
+        } as any);
+        const reader = (await observe(runId)).getReader();
+        try {
+          expect((await reader.read()).done).toBe(false);
+          const hungProbe =
+            state === 'hung'
+              ? vi.spyOn(store!, 'getRunOwnership').mockImplementation(() => new Promise(() => {}))
+              : undefined;
+          if (state === 'unavailable')
+            vi.spyOn(store!, 'getRunOwnership').mockRejectedValue(new Error('storage offline'));
+          let done = false;
+          const next = reader.read().then(value => {
+            done = value.done;
+            return value;
+          });
+          await vi.advanceTimersByTimeAsync(300_000);
+          expect(done).toBe(false);
+          if (state === 'suspending') await snapshot('suspended');
+          await vi.advanceTimersByTimeAsync(30_000);
+          if (hungProbe) {
+            await vi.advanceTimersByTimeAsync(60_000);
+            expect(hungProbe).toHaveBeenCalledTimes(1);
+          }
+          if (state === 'abandoned') {
+            expect(await next).toEqual({ done: true, value: undefined });
+            expect((await mockDurableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).length).toBeGreaterThan(0);
+          } else {
+            expect(done).toBe(false);
+            await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+              runId,
+              type: 'finish',
+              data: {},
+            } as any);
+            expect((await next).value.type).toBe('finish');
+            expect((await reader.read()).done).toBe(true);
+          }
+        } finally {
+          await reader.cancel();
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it('cancels during a hung liveness deadline without leaving observer timers', async () => {
+      vi.useFakeTimers();
+      mastra.setServer({ agentSseHeartbeatMs: 0 });
+      const runId = 'observe-cancel-hung-probe';
+      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+        runId,
+        type: 'chunk',
+        data: { type: 'text-delta', payload: { text: 'started' } },
+      } as any);
+      const reader = (await observe(runId)).getReader();
+      try {
+        await reader.read();
+        const store = await storage.getStore('workflows');
+        const probe = vi.spyOn(store!, 'getRunOwnership').mockImplementation(() => new Promise(() => {}));
+        await vi.advanceTimersByTimeAsync(300_000);
+        expect(probe).toHaveBeenCalledTimes(1);
+        const pendingTimers = vi.getTimerCount();
+        await reader.cancel();
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(vi.getTimerCount()).toBeLessThan(pendingTimers);
+        expect(probe).toHaveBeenCalledTimes(1);
+        expect((await mockDurableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).length).toBe(1);
+      } finally {
+        await reader.cancel();
+        vi.useRealTimers();
+      }
     });
 
     it('closes an unknown run within one second', async () => {

@@ -1033,6 +1033,9 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       await suspendedFence.whenSettled;
       expect(await suspendedFence.settle(async () => {})).toBe('owned');
       expect(await foreign.owner(durableAgent.id, runId)).toBeUndefined();
+      await vi.waitFor(async () => {
+        expect(await durableAgent.__getRunLiveness(runId)).toMatchObject({ status: 'alive' });
+      });
 
       // ---- Another execution holds the run: resume() must not drive it.
       await foreign.hold(durableAgent.id, runId, 'foreign-holder');

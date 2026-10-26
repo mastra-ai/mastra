@@ -1345,6 +1345,11 @@ export interface DurableAgentLike {
     options: { offset?: number; onComplete?: () => void },
     onEvent: (event: AgentStreamEvent) => void,
   ): Promise<() => Promise<void>>;
+  /** @internal Producer evidence for HTTP observation cleanup, not run cleanup. */
+  __getRunLiveness?(runId: string): Promise<{
+    status: 'alive' | 'inactive' | 'unknown';
+    generation?: number;
+  }>;
   /**
    * Get workflows that need to be registered with Mastra.
    * Called during agent registration to auto-register durable execution workflows.

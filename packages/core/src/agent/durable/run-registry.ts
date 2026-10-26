@@ -123,6 +123,11 @@ export function takeRunScorerInstances(
 
 /** runId -> number of in-flight operations holding the entry alive. */
 const activeRuns = new Map<string, number>();
+
+export function hasActiveRunOperation(runId: string): boolean {
+  return (activeRuns.get(runId) ?? 0) > 0;
+}
+
 let activityHeartbeat: ReturnType<typeof setInterval> | undefined;
 
 function runActivityHeartbeat(): void {

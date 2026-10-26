@@ -787,6 +787,27 @@ Explicit `allowBuilds` and `onlyBuiltDependencies` values use the same validatio
 
 ## Server options
 
+### server.agentSseHeartbeatMs
+
+**Type:** `number`\
+**Default:** `25_000`
+
+Interval in milliseconds between transport keepalive comments during silent agent SSE streams. Applies to agent streaming, observation, approval, recovery, network, thread subscription, and agent-controller session routes. Set to `0` to disable comments. The value must be an integer from `0` through `2_147_483_647`.
+
+The server sends `: heartbeat\n\n` comments while waiting for execution events. These comments aren't agent events, aren't persisted, and don't advance observation replay offsets. Non-SSE streams, including the deprecated `/stream/vnext` endpoint, are unchanged. Comments pause when the HTTP consumer stops reading rather than accumulating in memory.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    agentSseHeartbeatMs: 25_000,
+  },
+})
+```
+
+For durable agents with producer-liveness support, `/observe` checks producer ownership after five minutes without execution events instead of closing a live stream. Confirmed inactive producers are checked again 30 seconds later before the observer closes. Suspended approval waits remain observable. If storage is unavailable or a liveness check times out, the observer stays attached. Older wrappers without liveness support retain the five-minute idle timeout. Disabling heartbeat comments doesn't change this lifecycle behavior.
+
 ### server.apiRoutes
 
 **Type:** `ApiRoute[]`
