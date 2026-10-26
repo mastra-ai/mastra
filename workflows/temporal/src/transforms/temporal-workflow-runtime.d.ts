@@ -23,7 +23,7 @@ export type StepEntry = {
 export type ChildWorkflowEntry = {
   type: 'childWorkflow';
   workflowType: string;
-  /** The child's Mastra workflow id, its key in `steps` and in parallel output. */
+  /** The child's Mastra workflow id, its key in `steps`. Parallel output is keyed by `workflowType`. */
   id: string;
 };
 

@@ -119,7 +119,7 @@ describe('TemporalRun', () => {
       expect.objectContaining({ args: [expect.objectContaining({ inputData: { value: 5 }, recordStepMeta: true })] }),
     );
     expect(result.status).toBe('success');
-    expect(result.steps).toEqual({
+    expect(result.steps).toStrictEqual({
       input: { value: 5 },
       increment: { status: 'success', output: { value: 6 }, startedAt: 1_000, endedAt: 1_250 },
       'no-output': { status: 'success', output: undefined, startedAt: 1_250, endedAt: 1_300 },
