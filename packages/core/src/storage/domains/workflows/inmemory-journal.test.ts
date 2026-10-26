@@ -189,6 +189,7 @@ describe('WorkflowsInMemory storage v2 methods', () => {
       header: makeHeader('r1'),
       lastSeq: 4,
       state: { n: 1 },
+      statePatchBytes: 0,
       steps: { input: { x: 1 }, a: ok(1), b: ok(2) },
       summarizedStepIds: [],
     });
@@ -252,6 +253,7 @@ describe('WorkflowsInMemory storage v2 methods', () => {
       header: makeHeader('r1'),
       lastSeq: 1,
       state: {},
+      statePatchBytes: 0,
       steps: { a: ok(1) },
       summarizedStepIds: [],
     });
@@ -435,6 +437,143 @@ describe('WorkflowsInMemory storage v2 methods', () => {
   });
 });
 
+describe('WorkflowsInMemory storage v2 state patches', () => {
+  const parent = { workflowName: 'parent', runId: 'r1' };
+  const child = { workflowName: 'child', runId: 'r1' };
+  const grandchild = { workflowName: 'grandchild', runId: 'r1' };
+  const childOf = (workflowId: string, overrides: Record<string, any> = {}) =>
+    makeHeader('r1', { parentWorkflow: { workflowId, runId: 'r1', stepId: 'nested' }, ...overrides });
+  const set = (path: (string | number)[], value: unknown) => ({ op: 'set' as const, path, value });
+  const bytes = (...ops: unknown[][]) => ops.reduce((sum: number, o) => sum + JSON.stringify(o).length, 0);
+
+  /** The state every reader returns for a run, which must agree. */
+  async function statesOf(store: WorkflowsInMemory, run: { workflowName: string; runId: string }) {
+    const loaded = await store.loadWorkflowRun({ ...run, successfulSteps: 'summary' });
+    const snapshot = await store.loadWorkflowSnapshot(run);
+    const byId = await store.getWorkflowRunById(run);
+    const listed = (await store.listWorkflowRuns({ workflowName: run.workflowName })).runs[0];
+    for (const other of [
+      snapshot!.value,
+      (byId!.snapshot as WorkflowRunState).value,
+      (listed!.snapshot as WorkflowRunState).value,
+    ]) {
+      expect(other).toEqual(loaded!.state);
+    }
+    return loaded!;
+  }
+
+  it('applies every patch after the latest full state, in order, ignoring earlier ones', async () => {
+    const { db, store } = setup();
+    const early = [set(['a'], 'ignored')];
+    const p1 = [set(['list', 1], 'y'), { op: 'delete' as const, path: ['gone'] }];
+    const p2 = [set(['n'], 2)];
+    await store.writeWorkflowRunCheckpoint({ ...parent, header: makeHeader('r1'), steps: {}, state: { a: 0 } });
+    await store.appendWorkflowRunEntries({ ...parent, header: makeHeader('r1'), steps: {}, statePatch: early });
+    await store.appendWorkflowRunEntries({
+      ...parent,
+      header: makeHeader('r1'),
+      steps: {},
+      state: { n: 1, list: ['x'], gone: true },
+    });
+    await store.appendWorkflowRunEntries({ ...parent, header: makeHeader('r1'), steps: { a: ok(1) }, statePatch: p1 });
+    await store.appendWorkflowRunEntries({ ...parent, header: makeHeader('r1'), steps: {}, statePatch: p2 });
+
+    expect(db.workflowRunEntries.get('parent-r1')!.map(e => e.kind)).toEqual([
+      'state',
+      'state-patch',
+      'state',
+      'step',
+      'state-patch',
+      'state-patch',
+    ]);
+    const loaded = await statesOf(store, parent);
+    expect(loaded.state).toEqual({ n: 2, list: ['x', 'y'] });
+    expect(loaded.statePatchBytes).toBe(bytes(p1, p2));
+    // Rebuilding doesn't touch the stored entries.
+    expect((await statesOf(store, parent)).state).toEqual({ n: 2, list: ['x', 'y'] });
+  });
+
+  it('stores a checkpoint patch instead of a full state', async () => {
+    const { db, store } = setup();
+    await store.writeWorkflowRunCheckpoint({
+      ...child,
+      header: makeHeader('r1'),
+      steps: {},
+      statePatch: [set(['n'], 1)],
+    });
+    expect(db.workflowRunEntries.get('child-r1')!.map(e => e.kind)).toEqual(['state-patch']);
+    expect((await statesOf(store, child)).state).toEqual({ n: 1 });
+  });
+
+  it("starts a run without a full state from its parent's state, recursively", async () => {
+    const { store } = setup();
+    await store.writeWorkflowRunCheckpoint({
+      ...parent,
+      header: makeHeader('r1'),
+      steps: {},
+      state: { p: 1, list: [1] },
+    });
+    await store.appendWorkflowRunEntries({
+      ...parent,
+      header: makeHeader('r1'),
+      steps: {},
+      statePatch: [set(['p'], 2)],
+    });
+    // The child inherits: its checkpoint stores no state.
+    await store.writeWorkflowRunCheckpoint({ ...child, header: childOf('parent'), steps: { input: {} as any } });
+    expect((await statesOf(store, child)).state).toEqual({ p: 2, list: [1] });
+
+    const c1 = [set(['list', 1], 2)];
+    await store.appendWorkflowRunEntries({ ...child, header: childOf('parent'), steps: {}, statePatch: c1 });
+    await store.writeWorkflowRunCheckpoint({ ...grandchild, header: childOf('child'), steps: {} });
+    const g1 = [set(['g'], true)];
+    await store.appendWorkflowRunEntries({ ...grandchild, header: childOf('child'), steps: {}, statePatch: g1 });
+
+    const loadedChild = await statesOf(store, child);
+    expect(loadedChild.state).toEqual({ p: 2, list: [1, 2] });
+    expect(loadedChild.statePatchBytes).toBe(bytes(c1));
+    const loadedGrandchild = await statesOf(store, grandchild);
+    expect(loadedGrandchild.state).toEqual({ p: 2, list: [1, 2], g: true });
+    expect(loadedGrandchild.statePatchBytes).toBe(bytes(g1));
+    // The parent's state is untouched by its children's patches.
+    expect((await statesOf(store, parent)).state).toEqual({ p: 2, list: [1] });
+  });
+
+  it("follows the parent's later state, and stops inheriting once the run stores a full state", async () => {
+    const { store } = setup();
+    await store.writeWorkflowRunCheckpoint({ ...parent, header: makeHeader('r1'), steps: {}, state: { p: 1 } });
+    await store.writeWorkflowRunCheckpoint({ ...child, header: childOf('parent'), steps: {} });
+    await store.appendWorkflowRunEntries({
+      ...child,
+      header: childOf('parent'),
+      steps: {},
+      statePatch: [set(['c'], 1)],
+    });
+
+    await store.appendWorkflowRunEntries({ ...parent, header: makeHeader('r1'), steps: {}, state: { p: 2 } });
+    expect((await statesOf(store, child)).state).toEqual({ p: 2, c: 1 });
+
+    await store.appendWorkflowRunEntries({ ...child, header: childOf('parent'), steps: {}, state: { own: true } });
+    await store.appendWorkflowRunEntries({ ...parent, header: makeHeader('r1'), steps: {}, state: { p: 3 } });
+    expect((await statesOf(store, child)).state).toEqual({ own: true });
+  });
+
+  it('starts from an empty state when the parent is not stored, or the run has no parent', async () => {
+    const { store } = setup();
+    await store.writeWorkflowRunCheckpoint({ ...child, header: childOf('missing'), steps: {} });
+    await store.appendWorkflowRunEntries({
+      ...child,
+      header: childOf('missing'),
+      steps: {},
+      statePatch: [set(['c'], 1)],
+    });
+    expect((await statesOf(store, child)).state).toEqual({ c: 1 });
+
+    await store.appendWorkflowRunEntries({ ...parent, header: makeHeader('r1'), steps: {} });
+    expect((await statesOf(store, parent)).state).toEqual({});
+  });
+});
+
 describe('summarizeStepResult', () => {
   it('keeps the summary fields that are set, and nothing else', () => {
     const result = { ...ok('data'), metadata: { nestedRunId: 'n1' }, resumePayload: { r: 1 } };
@@ -464,5 +603,17 @@ describe('materializeWorkflowRun', () => {
 
   it('defaults to an empty state without a state entry', () => {
     expect(materializeWorkflowRun({ runId: 'r1' } as any, [])).toMatchObject({ context: {}, value: {} });
+  });
+
+  it('applies patches to the parent state only without a full state entry, never mutating it', () => {
+    const parentState = { p: { n: 1 } };
+    const patch = { seq: 1, kind: 'state-patch' as const, ops: [{ op: 'set' as const, path: ['p', 'n'], value: 2 }] };
+
+    expect(materializeWorkflowRun({ runId: 'r1' } as any, [patch], parentState).value).toEqual({ p: { n: 2 } });
+    expect(parentState).toEqual({ p: { n: 1 } });
+    expect(
+      materializeWorkflowRun({ runId: 'r1' } as any, [{ seq: 0, kind: 'state', state: { own: 1 } }, patch], parentState)
+        .value,
+    ).toEqual({ own: 1, p: { n: 2 } });
   });
 });
