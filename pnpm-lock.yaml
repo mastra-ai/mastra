@@ -4766,6 +4766,9 @@ importers:
       '@internal/core':
         specifier: workspace:*
         version: link:../_internal-core
+      '@internal/deployer':
+        specifier: workspace:*
+        version: link:../_internals/deployer
       '@internal/external-types':
         specifier: workspace:*
         version: link:../_external-types

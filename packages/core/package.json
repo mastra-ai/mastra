@@ -969,6 +969,7 @@
     "@internal/ai-v7": "workspace:*",
     "@internal/auth": "workspace:*",
     "@internal/core": "workspace:*",
+    "@internal/deployer": "workspace:*",
     "@internal/external-types": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",

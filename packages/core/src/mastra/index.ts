@@ -7,14 +7,14 @@ import { isDurableAgentLike } from '../agent/types';
 import type { AgentController } from '../agent-controller';
 import { BackgroundTaskManager } from '../background-tasks';
 import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
-import type { BundlerConfig } from '../bundler/types';
+import type { BundlerConfig } from '../bundler';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
 import { AgentChannels } from '../channels';
 import type { ChannelProvider, ChannelsResolver } from '../channels';
 import type { Classifier, ClassifierQuestions } from '../classifier';
 import { DatasetsManager } from '../datasets/manager.js';
-import type { MastraDeployer } from '../deployer';
+import type { IDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraScorer } from '../evals';
@@ -402,7 +402,7 @@ export interface Config<
   /**
    * Deployment provider for publishing applications to cloud platforms.
    */
-  deployer?: MastraDeployer;
+  deployer?: IDeployer;
 
   /**
    * Server configuration for HTTP endpoints and middleware.
@@ -860,7 +860,7 @@ export class Mastra<
   #observabilityExplicit = false;
   #onScorerHook?: ReturnType<typeof createOnScorerHook>;
   #tts?: TTTS;
-  #deployer?: MastraDeployer;
+  #deployer?: IDeployer;
   #serverMiddleware: Array<{
     handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
     path: string;
