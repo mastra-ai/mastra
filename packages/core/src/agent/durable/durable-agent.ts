@@ -132,7 +132,7 @@ const unfencedStoresWarned = new WeakSet<WorkflowsStorage | MemoryStorage>();
  * middleware sets them from the authenticated identity so a request body cannot route memory
  * to another user's thread or resource.
  */
-function applyReservedMemoryContextKeys<T extends { requestContext?: RequestContext; memory?: any }>(
+export function applyReservedMemoryContextKeys<T extends { requestContext?: RequestContext; memory?: any }>(
   options: T | undefined,
 ): T | undefined {
   const requestContext = options?.requestContext;
@@ -5860,6 +5860,9 @@ export class DurableAgent<
         controller.abort(reason);
       }
       await this.requestRemoteAbort(runId);
+      // A run parked on a suspension has no steps left to stop; release it so
+      // it is no longer listed as suspended, as the stream abort does.
+      if (agentThreadStreamRuntime.isRunParked(runId, this.getPubSub())) super.abortRunStream(runId);
     };
 
     return {
