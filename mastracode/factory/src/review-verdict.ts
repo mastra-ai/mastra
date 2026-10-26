@@ -1,12 +1,20 @@
 /**
+ * The Platform GitHub proxy prefixes bodies it writes for a session with
+ * `> Opened by @<actor>`, which pushes the skill's verdict off the first line.
+ */
+const ACTOR_ATTRIBUTION_LINE = /^>\s*Opened by\s+\S+$/;
+
+/**
  * Normalizes the first non-empty line of a review body so its `Verdict:` line can be read
  * regardless of the markdown it is wrapped in (`**Verdict:** request changes`, `# Verdict: ...`).
+ * A leading proxy attribution line is skipped.
  */
 export function normalizedVerdictLine(body: string | undefined): string | undefined {
-  const firstLine = body
+  const lines = body
     ?.split('\n')
     .map(line => line.trim())
-    .find(line => line.length > 0);
+    .filter(line => line.length > 0);
+  const firstLine = lines?.[0] && ACTOR_ATTRIBUTION_LINE.test(lines[0]) ? lines[1] : lines?.[0];
   if (!firstLine) return undefined;
   return firstLine
     .replaceAll(/[*_`#>\s]+/g, ' ')
