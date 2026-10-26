@@ -1,4 +1,6 @@
 import { FGADeniedError, MastraFGAPermissions } from '@mastra/core/auth/ee';
+import { Mastra } from '@mastra/core/mastra';
+import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Client } from '@modelcontextprotocol/client';
@@ -138,19 +140,35 @@ function makeTools(probe: Probe) {
   };
 }
 
-describe('MCPServer tasks', () => {
+// Every case runs on both stores a server picks on its own: in memory when standalone, and on
+// Mastra's background tasks when registered on a Mastra instance that has them.
+describe.each([
+  { store: 'in-memory', mastra: false },
+  { store: 'Mastra background tasks', mastra: true },
+])('MCPServer tasks ($store)', ({ mastra: onMastra }) => {
   let served: ServedHTTP | undefined;
+  let mastra: Mastra | undefined;
   const clients: Client[] = [];
 
   afterEach(async () => {
     await Promise.all(clients.splice(0).map(client => client.close()));
     await served?.close();
     served = undefined;
+    await mastra?.shutdown();
+    mastra = undefined;
   });
 
   async function start(tasks: MCPServerConfig['tasks'], extra: Partial<MCPServerConfig> = {}) {
     const probe: Probe = { runs: [], aborted: [], authInfos: [], contexts: [] };
     const server = new MCPServer({ name: 'Tasks', version: '1.0.0', tools: makeTools(probe), tasks, ...extra });
+    if (onMastra && !tasks?.store) {
+      mastra = new Mastra({
+        logger: false,
+        storage: new InMemoryStore(),
+        backgroundTasks: { enabled: true },
+        mcpServers: { tasks: server },
+      });
+    }
     served = await serveHTTP(server, { auth: req => authFor(String(req.headers['x-test-user'] ?? 'alice')) });
     return { probe, server, url: served.url };
   }

@@ -3,8 +3,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MCPToolType } from '@mastra/core/tools';
 import { DEFAULT_TASK_TTL_MS } from '../../shared/tasks';
 import type { MCPDetailedTask } from '../../shared/tasks';
-import { InMemoryMCPTaskStore } from './in-memory-store';
-import type { MCPTaskStore } from './store';
+import type { InMemoryMCPTaskStore } from './in-memory-store';
+import type { MCPTaskAccess, MCPTaskCreateParams, MCPTaskRunOptions, MCPTaskStore, MCPTaskWork } from './store';
 
 /**
  * How a tool answers `tools/call` for a client that declared the Tasks extension.
@@ -68,7 +68,12 @@ export interface MCPServerTasksOptions {
    * idempotent tools: `execute` may run twice. When off, such a task fails as lost. Default `false`.
    */
   recover?: boolean;
-  /** Where tasks are kept. Default an {@link InMemoryMCPTaskStore}, which serves a single instance. */
+  /**
+   * Where tasks are kept. By default, Mastra's background tasks when the server is registered on a
+   * Mastra instance with `backgroundTasks` enabled and storage that supports task expiry, so every
+   * instance sharing that storage serves the same tasks. Otherwise an {@link InMemoryMCPTaskStore},
+   * which serves a single instance.
+   */
   store?: MCPTaskStore;
   /**
    * Decides whether the caller may read, answer or cancel a task. Tasks are always bound to the
@@ -88,9 +93,8 @@ export interface ResolvedToolTaskMode {
 export interface ResolvedTasksConfig {
   /** Whether any tool can answer with a task; gates the capability and the `tasks/*` handlers. */
   enabled: boolean;
-  store: MCPTaskStore;
-  /** The store created here when none was passed in, so the server closes it. */
-  ownedStore?: InMemoryMCPTaskStore;
+  /** The store passed in, if any. */
+  store?: MCPTaskStore;
   required: ReadonlySet<string>;
   authorize?: MCPServerTasksOptions['authorize'];
   modeFor(name: string, toolType: MCPToolType | undefined): ResolvedToolTaskMode;
@@ -181,13 +185,56 @@ export function resolveTasksConfig(
   }
 
   const enabled = defaultMode !== 'off' || [...perTool.values()].some(tool => tool.mode !== 'off');
-  const ownedStore = config.store ? undefined : new InMemoryMCPTaskStore();
   return {
     enabled,
-    store: config.store ?? ownedStore!,
-    ownedStore,
+    store: config.store,
     required,
     authorize: config.authorize,
     modeFor,
   };
+}
+
+/**
+ * Picks the store on first use, once the server knows whether it runs on a Mastra instance with
+ * durable background tasks. `run` follows the `create` it pairs with, so the choice is made by then.
+ */
+export class SelectingMCPTaskStore implements MCPTaskStore {
+  readonly #select: () => Promise<MCPTaskStore>;
+  #selecting?: Promise<MCPTaskStore>;
+  #selected?: MCPTaskStore;
+
+  constructor(select: () => Promise<MCPTaskStore>) {
+    this.#select = select;
+  }
+
+  /** The chosen store, once a task request has made the choice. */
+  get selected(): MCPTaskStore | undefined {
+    return this.#selected;
+  }
+
+  #store(): Promise<MCPTaskStore> {
+    this.#selecting ??= this.#select().then(store => (this.#selected = store));
+    return this.#selecting;
+  }
+
+  async create(params: MCPTaskCreateParams) {
+    return (await this.#store()).create(params);
+  }
+
+  async get(taskId: string, access: MCPTaskAccess) {
+    return (await this.#store()).get(taskId, access);
+  }
+
+  async update(taskId: string, inputResponses: Parameters<MCPTaskStore['update']>[1], access: MCPTaskAccess) {
+    return (await this.#store()).update(taskId, inputResponses, access);
+  }
+
+  async cancel(taskId: string, access: MCPTaskAccess) {
+    return (await this.#store()).cancel(taskId, access);
+  }
+
+  run(taskId: string, work: MCPTaskWork, options?: MCPTaskRunOptions): void {
+    if (!this.#selected) throw new Error(`MCP task "${taskId}" not found`);
+    this.#selected.run(taskId, work, options);
+  }
 }

@@ -86,11 +86,13 @@ import {
   toToolExecutionContext,
 } from './request';
 import type { ContinuationEnvelope } from './request';
-import { resolveTasksConfig } from './tasks/config';
+import { BackgroundTaskMCPTaskStore } from './tasks/background-store';
+import { resolveTasksConfig, SelectingMCPTaskStore } from './tasks/config';
 import type { MCPServerTasksOptions, ResolvedTasksConfig, ResolvedToolTaskMode } from './tasks/config';
 import { emitTaskResults, taskHandleResult } from './tasks/emit';
 import { registerTaskHandlers } from './tasks/handlers';
-import type { MCPTaskAttemptOutcome, MCPTaskRunOptions, MCPTaskWork } from './tasks/store';
+import { InMemoryMCPTaskStore } from './tasks/in-memory-store';
+import type { MCPTaskAttemptOutcome, MCPTaskRunOptions, MCPTaskStore, MCPTaskWork } from './tasks/store';
 import type {
   AppResources,
   MCPAuthInfoToUserMapper,
@@ -259,6 +261,10 @@ export class MCPServer extends MCPServerBase {
   private readonly webhooks?: WebhookDispatcher;
   private readonly legacy: 'reject' | 'stateless';
   private readonly tasks: ResolvedTasksConfig;
+  /** Where tasks are kept: `tasks.store`, or the store picked on first use. */
+  private readonly taskStore: MCPTaskStore;
+  /** Prepared on Mastra registration so its executors exist before the manager recovers rows. */
+  private backgroundTaskStore?: BackgroundTaskMCPTaskStore;
 
   private httpHandler?: McpHttpHandler;
   private nodeHandler?: NodeMcpRequestHandler;
@@ -278,6 +284,7 @@ export class MCPServer extends MCPServerBase {
     this.eventsOptions = config.eventsOptions ?? {};
     this.legacy = config.legacy ?? 'reject';
     this.tasks = resolveTasksConfig(config.tasks, Object.keys(config.tools ?? {}));
+    this.taskStore = this.tasks.store ?? new SelectingMCPTaskStore(() => this.selectTaskStore());
     const webhook = this.eventsOptions.webhook;
     this.eventRegistry = new ServerEventRegistry(config.events, { webhook: webhook !== undefined });
     if (webhook && this.eventRegistry.size > 0) {
@@ -651,7 +658,7 @@ export class MCPServer extends MCPServerBase {
     }
     if (this.tasks.enabled) {
       registerTaskHandlers(server, {
-        store: this.tasks.store,
+        store: this.taskStore,
         authorize: this.tasks.authorize,
         principal: principalOf,
         trace: (instance, method, params, ctx, fn) => this.traceCustomRequest(instance, method, params, ctx, fn),
@@ -1099,12 +1106,12 @@ export class MCPServer extends MCPServerBase {
       requestContext: persisted,
       ...(resume && { resume }),
     };
-    const task = await this.tasks.store.create({
+    const task = await this.taskStore.create({
       ttlMs: taskMode.ttlMs,
       principal: principalOf(ctx, requestContext),
       context,
     });
-    this.tasks.store.run(task.taskId, this.toolTaskWork(context), { initialAttempt });
+    this.taskStore.run(task.taskId, this.toolTaskWork(context), { initialAttempt });
     this.logger.debug(`Tool '${name}' continues as task.`);
     return taskHandleResult(task);
   }
@@ -1552,8 +1559,69 @@ export class MCPServer extends MCPServerBase {
       this.httpHandler = undefined;
       this.nodeHandler = undefined;
     }
-    // Aborts tasks still running; a store passed in by the application is left to it.
-    this.tasks.ownedStore?.close();
+    // Aborts in-memory tasks still running; a store passed in by the application is left to it.
+    // Background-task rows stay in storage for other instances to serve.
+    const selected = this.taskStore instanceof SelectingMCPTaskStore ? this.taskStore.selected : undefined;
+    if (selected instanceof InMemoryMCPTaskStore) selected.close();
+    this.backgroundTaskStore?.close();
+  }
+
+  /** @internal */
+  override __registerMastra(mastra: Parameters<MCPServerBase['__registerMastra']>[0]): void {
+    super.__registerMastra(mastra);
+    // Usually the manager exists by now and has not recovered rows yet: register the executors
+    // synchronously so recovered attempts find them.
+    this.prepareBackgroundTaskStore();
+  }
+
+  /**
+   * Builds the background-task store and registers an executor for every task tool, when tasks
+   * are on, no store was passed in, and Mastra has background tasks.
+   */
+  private prepareBackgroundTaskStore(): BackgroundTaskMCPTaskStore | undefined {
+    if (this.backgroundTaskStore) return this.backgroundTaskStore;
+    if (!this.tasks.enabled || this.tasks.store) return undefined;
+    const manager = this.mastra?.backgroundTaskManager;
+    if (!manager) return undefined;
+    const store = new BackgroundTaskMCPTaskStore({
+      manager,
+      serverId: this.id,
+      workFor: context => this.toolTaskWork(context as unknown as ToolTaskContext),
+      recoverFor: name => this.tasks.modeFor(name, this.convertedTools[name]?.mcp?.toolType).recover,
+      logger: this.logger,
+    });
+    for (const [name, tool] of Object.entries(this.convertedTools)) {
+      if (this.tasks.modeFor(name, tool.mcp?.toolType).mode !== 'off') store.registerTool(name);
+    }
+    this.backgroundTaskStore = store;
+    return store;
+  }
+
+  /**
+   * Mastra's background tasks when the storage keeps per-row expiry (so a task's TTL, not the
+   * global cleanup, decides when it is deleted); an in-memory store otherwise.
+   */
+  private async selectTaskStore(): Promise<MCPTaskStore> {
+    const manager = this.mastra?.backgroundTaskManager;
+    if (manager) {
+      const storage = await manager.getStorage().catch(() => undefined);
+      if (storage?.supportsTaskExpiry === true) {
+        const prepared = this.backgroundTaskStore;
+        const store = this.prepareBackgroundTaskStore()!;
+        if (!prepared) {
+          this.logger.warn(
+            `MCP server '${this.name}' serves tasks from Mastra background tasks that started after it was registered; tasks created before a restart may not have been recovered`,
+          );
+        }
+        return store;
+      }
+      this.logger.warn(
+        `MCP server '${this.name}' keeps tasks in memory: the background tasks storage (${storage?.constructor.name ?? 'unavailable'}) does not support task expiry. Upgrade the storage adapter to serve tasks across instances.`,
+      );
+      this.backgroundTaskStore?.close();
+      this.backgroundTaskStore = undefined;
+    }
+    return new InMemoryMCPTaskStore();
   }
 
   // ---------------------------------------------------------------------------
