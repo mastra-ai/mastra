@@ -316,7 +316,26 @@ describe('GitLab UI routes', () => {
           identifier: 'acme/app#42',
           title: 'Fix routed intake',
           url: 'https://gitlab.com/acme/app/-/issues/42',
-          author: 'grace',
+          author: 'Grace Hopper',
+          authorUsername: 'grace',
+          state: 'opened',
+          stateType: 'unstarted',
+          priority: null,
+          assignee: 'Ada Lovelace',
+          assignees: ['Ada Lovelace'],
+          source: 'acme/app',
+          sourceId,
+          labels: [],
+          commentCount: 0,
+          createdAt: '2026-09-01T00:00:00Z',
+          updatedAt: '2026-09-01T00:00:00Z',
+        },
+        {
+          id: '43',
+          identifier: 'acme/app#43',
+          title: 'Unknown login',
+          url: 'https://gitlab.com/acme/app/-/issues/43',
+          author: 'Grace Hopper',
           state: 'opened',
           stateType: 'unstarted',
           priority: null,
@@ -357,6 +376,8 @@ describe('GitLab UI routes', () => {
         object_attributes: expect.objectContaining({ iid: 42, action: 'open', author: { username: 'grace' } }),
       }),
     }));
+    expect(ingest.mock.calls[0]?.[0].payload.object_attributes.assignees).toBeUndefined();
+    expect(ingest.mock.calls[1]?.[0].payload.object_attributes.author).toBeUndefined();
   });
 
   it('loads details only for a selected GitLab source routed to the caller-owned Factory', async () => {
