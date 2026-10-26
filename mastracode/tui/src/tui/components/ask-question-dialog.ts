@@ -4,13 +4,14 @@
  * Used by the ask_user tool to collect structured answers from the user.
  */
 
-import { Container, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
-import type { Focusable, SelectItem, Component, TUI } from '@earendil-works/pi-tui';
+import { Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, SelectItem, Component, TUI, Input } from '@earendil-works/pi-tui';
 import { theme, getSelectListTheme, getEditorTheme } from '../theme.js';
 import type { AskQuestionSelectionMode } from './ask-question-inline.js';
 import type { MenuChrome, MenuHint } from './menu-chrome.js';
 import { MenuList } from './menu-list.js';
 import { MultilineInput } from './multiline-input.js';
+import { TextInput } from './text-input.js';
 import { WrappingSelectList } from './wrapping-select-list.js';
 
 export interface AskQuestionDialogOptions {
@@ -88,7 +89,7 @@ export class AskQuestionDialogComponent extends Container implements Focusable, 
     this.title = shortQuestion ? options.question.replace(/[:?]$/, '') : (options.title ?? 'Question');
     if (!shortQuestion) {
       for (const line of options.question.split('\n')) {
-        this.addChild(new Text(theme.fg('text', line), 2, 0));
+        this.addChild(new Text(theme.fg('text', line), 0, 0));
       }
       this.addChild(new Spacer(1));
     }
@@ -182,7 +183,7 @@ export class AskQuestionDialogComponent extends Container implements Focusable, 
       };
       this.input = multilineInput;
     } else {
-      this.input = new Input();
+      this.input = new TextInput();
       this.input.onSubmit = (value: string) => {
         const trimmed = value.trim();
         if (trimmed || this.allowEmptyInput) {

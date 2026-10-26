@@ -41,8 +41,7 @@ export class LoginDialogComponent extends Box implements Focusable, MenuChrome {
     providerId: string,
     private onComplete: (success: boolean, message?: string) => void,
   ) {
-    // Content lines up with menu rows in the prompt slot.
-    super(1, 0);
+    super(0, 0);
     this.tui = tui;
 
     const providerInfo = getOAuthProviders().find(p => p.id === providerId);
@@ -88,15 +87,15 @@ export class LoginDialogComponent extends Box implements Focusable, MenuChrome {
   showAuth(url: string, instructions?: string): void {
     this.contentContainer.clear();
 
-    this.contentContainer.addChild(new Text(theme.fg('accent', url)));
+    this.contentContainer.addChild(new Text(theme.fg('accent', url), 0, 0));
 
     const clickHint = process.platform === 'darwin' ? 'Cmd+click to open' : 'Ctrl+click to open';
     const hyperlink = `\x1b]8;;${url}\x07${clickHint}\x1b]8;;\x07`;
-    this.contentContainer.addChild(new Text(theme.fg('muted', hyperlink)));
+    this.contentContainer.addChild(new Text(theme.fg('muted', hyperlink), 0, 0));
 
     if (instructions) {
       this.contentContainer.addChild(new Spacer(1));
-      this.contentContainer.addChild(new Text(theme.fg('warning', instructions)));
+      this.contentContainer.addChild(new Text(theme.fg('warning', instructions), 0, 0));
     }
 
     // Try to open browser. The URL comes from the auth provider, so treat it
@@ -113,9 +112,9 @@ export class LoginDialogComponent extends Box implements Focusable, MenuChrome {
    */
   showPrompt(message: string, placeholder?: string): Promise<string> {
     this.contentContainer.addChild(new Spacer(1));
-    this.contentContainer.addChild(new Text(theme.fg('text', message)));
+    this.contentContainer.addChild(new Text(theme.fg('text', message), 0, 0));
     if (placeholder) {
-      this.contentContainer.addChild(new Text(theme.fg('muted', `e.g., ${placeholder}`)));
+      this.contentContainer.addChild(new Text(theme.fg('muted', `e.g., ${placeholder}`), 0, 0));
     }
     this.contentContainer.addChild(this.input);
 
@@ -138,9 +137,9 @@ export class LoginDialogComponent extends Box implements Focusable, MenuChrome {
     // dialog's bounded height would otherwise clip the trailing prompt.
     this.contentContainer.clear();
     this.contentContainer.addChild(new Spacer(1));
-    this.contentContainer.addChild(new Text(theme.fg('text', message)));
+    this.contentContainer.addChild(new Text(theme.fg('text', message), 0, 0));
     this.contentContainer.addChild(this.input);
-    this.contentContainer.addChild(new Text(theme.fg('muted', '(Escape to keep current, Enter to submit)')));
+    this.contentContainer.addChild(new Text(theme.fg('muted', '(Escape to keep current, Enter to submit)'), 0, 0));
 
     this.input.setValue('');
     // The account name is not a secret — show the typed text (the OAuth
@@ -184,7 +183,7 @@ export class LoginDialogComponent extends Box implements Focusable, MenuChrome {
    * Show progress message
    */
   showProgress(message: string): void {
-    this.contentContainer.addChild(new Text(theme.fg('muted', message)));
+    this.contentContainer.addChild(new Text(theme.fg('muted', message), 0, 0));
     this.tui.requestRender();
   }
 

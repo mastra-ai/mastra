@@ -5,8 +5,8 @@
  * Changes apply immediately — Esc closes the menu.
  */
 
-import { Container, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
-import type { Focusable, SelectItem, SettingItem, TUI } from '@earendil-works/pi-tui';
+import { Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, SelectItem, SettingItem, TUI, Input } from '@earendil-works/pi-tui';
 import type { OMModel } from '@mastra/core/agent-controller';
 import { theme } from '../theme.js';
 import type { Filterable, MenuChrome } from './menu-chrome.js';
@@ -15,6 +15,7 @@ import { MenuList } from './menu-list.js';
 import { ModelSelectorComponent } from './model-selector.js';
 import type { ModelItem } from './model-selector.js';
 import { SettingsMenu } from './settings-menu.js';
+import { TextInput } from './text-input.js';
 
 // =============================================================================
 // Types
@@ -171,13 +172,13 @@ export class ThresholdSubmenu extends Container implements MenuChrome {
     this.onBack = onBack;
 
     // Input for custom value — type a number like 30 for 30k
-    this.addChild(new Text(theme.fg('muted', '  _k tokens (type a number, e.g. 30 for 30k):'), 0, 0));
-    this.input = new Input();
+    this.addChild(new Text(theme.fg('muted', '_k tokens (type a number, e.g. 30 for 30k):'), 0, 0));
+    this.input = new TextInput();
     this.addChild(this.input);
     this.addChild(new Spacer(1));
 
     // Preset list
-    this.addChild(new Text(theme.fg('muted', '  Or pick a preset:'), 0, 0));
+    this.addChild(new Text(theme.fg('muted', 'Or pick a preset:'), 0, 0));
 
     const items: SelectItem[] = presets.map(p => ({
       value: String(p),
@@ -199,7 +200,7 @@ export class ThresholdSubmenu extends Container implements MenuChrome {
 
     this.addChild(this.selectList);
     this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('dim', '  ↓ to pick a preset'), 0, 0));
+    this.addChild(new Text(theme.fg('dim', '↓ to pick a preset'), 0, 0));
   }
 
   /** Typing goes to the token input, not to the preset list. */

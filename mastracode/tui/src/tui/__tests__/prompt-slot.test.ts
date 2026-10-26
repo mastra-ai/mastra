@@ -105,14 +105,31 @@ describe('PromptSlot', () => {
     expect(handleInput).toHaveBeenCalledWith('\x7f');
   });
 
-  it('dismisses the loading row on any key and hands that key to the prompt', async () => {
+  it('hands keys typed while a menu loads to the menu once it opens', async () => {
+    vi.useFakeTimers();
+    const { slot, mounted } = setup();
+    let finish!: () => void;
+    slot.showLoadingWhile('think', new Promise<void>(resolve => (finish = resolve)));
+    vi.advanceTimersByTime(150);
+    for (const ch of 'xh') mounted().handleInput!(ch);
+    const onSelect = vi.fn();
+    const menu = list(['Low', 'High', 'Extra high']);
+    menu.onSelect = onSelect;
+    slot.open(menu, { title: 'Thinking level' });
+    await Promise.resolve();
+    expect(plain(mounted().render(60)).some(row => row.includes('→ Extra high'))).toBe(true);
+    mounted().handleInput!('\r');
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ value: 'Extra high' }));
+    finish();
+  });
+
+  it('Ctrl+C on the loading row stops waiting and goes to the prompt', async () => {
     vi.useFakeTimers();
     const { slot, mounted, editor } = setup();
     const typed = vi.fn();
     editor.handleInput = typed;
     slot.showLoadingWhile('models', new Promise(() => {}));
     vi.advanceTimersByTime(150);
-    expect(mounted()).not.toBe(editor);
     mounted().handleInput!('\x03');
     expect(mounted()).toBe(editor);
     expect(typed).toHaveBeenCalledWith('\x03');

@@ -140,14 +140,16 @@ export class MenuFrame implements Component, Focusable {
 
   render(width: number): string[] {
     const chrome = this.component as MenuChrome;
-    const title = lowerFirst((chrome.menuTitle?.() ?? this.chrome.title)?.replace(/:$/, ''));
+    const title = (chrome.menuTitle?.() ?? this.chrome.title)?.replace(/:$/, '');
     const target = this.filterTarget();
     const head: string[] = [];
     if (target) {
-      const field = this.query ? theme.fg('text', this.query) + caret() : caret() + theme.fg('dim', title ?? 'search');
-      head.push(` ${searchIcon()} ${field}`, '');
+      // A list: the title is the search field's placeholder.
+      const placeholder = theme.fg('dim', lowerFirst(title) ?? 'search');
+      head.push(` ${searchIcon()} ${this.query ? theme.fg('text', this.query) + caret() : caret() + placeholder}`, '');
     } else if (title) {
-      head.push(` ${theme.fg('dim', title)}`, '');
+      // A question (a text prompt) or a list without search: the title reads as a heading.
+      head.push(` ${theme.fg('text', title)}`, '');
     }
 
     const body = this.component.render(Math.max(1, width - 1));
@@ -174,14 +176,18 @@ export class MenuFrame implements Component, Focusable {
 
 /** The slot while a menu is still loading: one row, "loading models…", where the search row will be. */
 class LoadingFrame implements Component {
+  /** Keys typed while the menu loads; they go to the menu once it opens. */
+  readonly typedAhead: string[] = [];
+
   constructor(
     private readonly name: string,
-    /** Any key dismisses the row and goes to the prompt (Esc only dismisses it). */
-    private readonly dismiss: (data: string) => void,
+    /** Esc or Ctrl+C: stop waiting (the menu is cancelled when it opens). */
+    private readonly cancel: (data: string) => void,
   ) {}
 
   handleInput(data: string): void {
-    this.dismiss(data);
+    if (matchesKey(data, 'escape') || matchesKey(data, 'ctrl+c')) this.cancel(data);
+    else this.typedAhead.push(data);
   }
 
   invalidate(): void {}
@@ -194,7 +200,7 @@ class LoadingFrame implements Component {
 export class PromptSlot {
   private readonly stack: Component[] = [];
   private loading: LoadingFrame | undefined;
-  /** Set when a key dismissed the loading row: the menu that command opens next is cancelled right away. */
+  /** Set when Esc dismissed the loading row: the menu that command opens next is cancelled right away. */
   private cancelPendingMenu = false;
 
   constructor(
@@ -209,16 +215,20 @@ export class PromptSlot {
 
   /** Opens a menu in the slot, on top of any menu already there. */
   open(component: Component, chrome: PromptSlotChrome = {}): OverlayHandle {
+    const typedAhead = this.loading?.typedAhead ?? [];
     if (this.loading) this.remove(this.loading);
     const frame = new MenuFrame(component, chrome);
     const before = this.mounted();
     this.stack.push(frame);
     this.swap(before, frame);
     if (this.cancelPendingMenu) {
-      // The user pressed a key while this menu was loading: cancel it like Esc, once the caller has
+      // The user pressed Esc while this menu was loading: cancel it like Esc, once the caller has
       // finished setting it up.
       this.cancelPendingMenu = false;
       queueMicrotask(() => frame.handleInput('\x1b'));
+    } else if (typedAhead.length) {
+      // Keys typed while it loaded (a search, Enter) apply to the menu, once the caller has set it up.
+      queueMicrotask(() => typedAhead.forEach(data => frame.handleInput(data)));
     }
     let hidden = false;
     return {
@@ -256,7 +266,7 @@ export class PromptSlot {
       frame = new LoadingFrame(name, data => {
         if (frame) this.remove(frame);
         this.cancelPendingMenu = true;
-        if (!matchesKey(data, 'escape')) this.editor.handleInput?.(data);
+        if (matchesKey(data, 'ctrl+c')) this.editor.handleInput?.(data);
       });
       this.loading = frame;
       this.stack.push(frame);

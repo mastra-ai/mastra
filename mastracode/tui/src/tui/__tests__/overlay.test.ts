@@ -98,7 +98,7 @@ describe('showModalOverlay', () => {
 
     expect(open).not.toHaveBeenCalled();
     const wrapped = tui.showOverlay.mock.calls[0][0] as Component;
-    expect(wrapped.render(60).join('\n')).toContain('select model');
+    expect(wrapped.render(60).join('\n')).toContain('Select model');
   });
 
   it('shows full-screen views as they are, never in the slot', () => {

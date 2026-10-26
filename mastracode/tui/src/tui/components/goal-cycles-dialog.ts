@@ -3,11 +3,12 @@
  * Shows a preconfigured input with the current default value that the user can edit.
  */
 
-import { Box, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
-import type { Focusable } from '@earendil-works/pi-tui';
+import { Box, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, Input } from '@earendil-works/pi-tui';
 
 import { theme } from '../theme.js';
 import type { MenuChrome } from './menu-chrome.js';
+import { TextInput } from './text-input.js';
 
 export interface GoalCyclesDialogOptions {
   defaultValue: number;
@@ -30,13 +31,12 @@ export class GoalCyclesDialogComponent extends Box implements Focusable, MenuChr
   }
 
   constructor(options: GoalCyclesDialogOptions) {
-    // Content lines up with menu rows in the prompt slot.
-    super(2, 0);
+    super(0, 0);
 
     this.onSubmit = options.onSubmit;
     this.onCancel = options.onCancel;
 
-    this.input = new Input();
+    this.input = new TextInput();
     this.input.setValue(String(options.defaultValue));
     this.input.onSubmit = (value: string) => {
       const parsed = parseInt(value.trim(), 10);

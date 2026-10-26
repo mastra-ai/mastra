@@ -36,8 +36,7 @@ export class ApiKeyDialogComponent extends Box implements Focusable, MenuChrome 
   }
 
   constructor(options: ApiKeyDialogOptions) {
-    // Content lines up with menu rows in the prompt slot.
-    super(2, 0);
+    super(0, 0);
 
     this.onSubmit = options.onSubmit;
     this.onCancel = options.onCancel;
