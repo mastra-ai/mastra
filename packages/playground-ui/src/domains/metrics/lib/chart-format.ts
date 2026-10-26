@@ -36,6 +36,12 @@ export function formatAxisCount(value: number) {
   return String(Math.round(value));
 }
 
+/** Compact y-axis ticks for dollars, without trailing zeros: $0, $0.25, $2.5, $5, $1.5K. */
+export function formatAxisUsd(value: number) {
+  // toPrecision drops float noise (0.30000000000000004) without rounding a tick like 0.25.
+  return `$${value >= 1_000 ? formatAxisCount(value) : +value.toPrecision(12)}`;
+}
+
 /** Compact y-axis ticks for durations: 250ms, 1.5s. */
 export function formatAxisDuration(ms: number) {
   if (ms >= 1000) return `${+(ms / 1000).toFixed(1)}s`;

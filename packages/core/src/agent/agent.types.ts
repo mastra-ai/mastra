@@ -136,7 +136,11 @@ export interface DelegationStartResult {
   modifiedPrompt?: string;
   /** Modified instructions for the sub-agent (optional) */
   modifiedInstructions?: string;
-  /** Modified maxSteps for the sub-agent (optional) */
+  /**
+   * The sub-agent's maxSteps budget. Overrides the cap on the model-supplied
+   * `maxSteps` (capped at the sub-agent's `defaultOptions.maxSteps`), so this
+   * can raise the budget as well as lower it.
+   */
   modifiedMaxSteps?: number;
   /**
    * Metadata to attach to the sub-agent thread when it is created for this delegation (optional).
@@ -886,6 +890,13 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * continuation from outside the loop.
    */
   _skipBgTaskWait?: boolean;
+
+  /**
+   * @internal
+   * HTTP observers detach on reader cancellation without aborting durable
+   * execution. In-process readers retain cancel-aborts behavior by default.
+   */
+  _detachObserverOnCancel?: boolean;
 } & Partial<ObservabilityContext>;
 
 /**

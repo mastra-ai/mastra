@@ -1,16 +1,16 @@
-import { createAlibaba } from '@ai-sdk/alibaba-v6';
+import { createAlibaba } from '@ai-sdk/alibaba-v7';
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
-import { createCerebras } from '@ai-sdk/cerebras-v6';
-import { createDeepInfra } from '@ai-sdk/deepinfra-v6';
+import { createCerebras } from '@ai-sdk/cerebras-v7';
+import { createDeepInfra } from '@ai-sdk/deepinfra-v7';
 import { createDeepSeek } from '@ai-sdk/deepseek-v7';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
-import { createGroq } from '@ai-sdk/groq-v6';
+import { createGroq } from '@ai-sdk/groq-v7';
 import { createMistral } from '@ai-sdk/mistral-v6';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
 import { createOpenAI } from '@ai-sdk/openai-v6';
 import { createPerplexity } from '@ai-sdk/perplexity-v6';
-import { createTogetherAI } from '@ai-sdk/togetherai-v6';
-import { createXai } from '@ai-sdk/xai-v6';
+import { createTogetherAI } from '@ai-sdk/togetherai-v7';
+import { createXai } from '@ai-sdk/xai-v7';
 import { createGateway } from '@internal/ai-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v6';
 import { parseModelRouterId } from '../gateway-resolver.js';
@@ -31,6 +31,7 @@ interface ModelsDevModelInfo {
   id: string;
   name?: string;
   status?: string;
+  release_date?: string;
   modalities?: { input?: string[]; output?: string[] };
   attachment?: boolean;
   temperature?: boolean;
@@ -211,6 +212,11 @@ export class ModelsDevGateway extends MastraModelGateway {
         // offer models for *new* selection can hide or mark them.
         const allModels = Object.entries(providerInfo.models);
         const modelIds = allModels.map(([modelId]) => modelId).sort();
+        const modelReleaseDates = Object.fromEntries(
+          allModels.flatMap(([modelId, info]) =>
+            typeof info?.release_date === 'string' && info.release_date ? [[modelId, info.release_date]] : [],
+          ),
+        );
         const deprecatedModelIds = allModels
           .filter(([, modelInfo]) => modelInfo?.status === 'deprecated')
           .map(([modelId]) => modelId)
@@ -277,6 +283,7 @@ export class ModelsDevGateway extends MastraModelGateway {
           apiKeyHeader,
           name: providerInfo.name || providerId.charAt(0).toUpperCase() + providerId.slice(1),
           models: modelIds,
+          ...(Object.keys(modelReleaseDates).length > 0 ? { modelReleaseDates } : {}),
           docUrl: providerInfo.doc, // Include documentation URL if available
           gateway: `models.dev`,
           // Only store npm when it's a non-default SDK (not openai-compatible/gateway) to keep the registry small

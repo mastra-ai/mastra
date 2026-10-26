@@ -19,8 +19,9 @@ test.describe('Agent tool detail page', () => {
       await page.getByRole('button', { name: 'Run' }).click();
 
       await expect(page.getByText('Success')).toBeVisible();
-      await expect(page.locator('pre')).toContainText('"hello": "world"');
-      await expect(page.locator('pre')).toContainText('"thisIsA": "fixture"');
+      const response = page.getByRole('textbox', { name: 'Tool response' });
+      await expect(response).toContainText('"hello": "world"');
+      await expect(response).toContainText('"thisIsA": "fixture"');
     });
   });
 });

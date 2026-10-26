@@ -163,6 +163,27 @@ scenarios run on `'fs'` too. Scenarios whose inputs the file-routing model canno
 dynamic-function `instructions`, `sharedAgent`, `workflows`-as-tool, or durable resume/suspension — opt out
 with `{ skip: ['fs'] }` (alongside any engines they already skip).
 
+### Running on the Inngest engine
+
+From the repository root, build the integration and its test dependencies, then install the local Inngest dev server:
+
+```bash
+pnpm turbo build --filter '@mastra/inngest...'
+pnpm --dir workflows/inngest setup:inngest-cli
+```
+
+Run selected shared agent-loop scenarios through the real Inngest dev server:
+
+```bash
+AIMOCK_INNGEST_WORKERS=1 \
+AIMOCK_SCENARIOS='{queued-tool-approval,resumed-tool-output}' \
+pnpm --dir workflows/inngest test:aimock
+```
+
+`test:aimock` selects the `e2e:workflows/inngest:aimock` Vitest project. It starts its own local app and dev servers; no cloud credentials are needed. `AIMOCK_SCENARIOS` accepts scenario filename stems or a brace glob. Without it, the project runs all shared scenarios. `AIMOCK_INNGEST_WORKERS` defaults to four; use one for serial regression runs.
+
+The approval scenarios include an expected-failure pin for duplicate approval output (#27925). Vitest fails if a pinned test unexpectedly passes, so an upstream fix requires updating the pin.
+
 ### Parity mode (`describeParity` / `expectParity`)
 
 `parity.ts` is the opt-in mode for asserting that durable and evented agents behave exactly like a plain

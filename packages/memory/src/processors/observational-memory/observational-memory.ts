@@ -1746,6 +1746,26 @@ export class ObservationalMemory {
   }
 
   /**
+   * @internal Persist the message-level seal flag on a stored message, so a later recovery
+   * still sees it was observed after a reflection drops its id.
+   */
+  async persistMessageSeal(message: MastraDBMessage): Promise<void> {
+    // Seal the stored copy, not the in-memory one, so parts the list hasn't loaded aren't overwritten.
+    const [stored] = (await this.storage.listMessagesById({ messageIds: [message.id] })).messages;
+    if (!stored) return;
+    const metadata = stored.content.metadata ?? {};
+    const mastra = (metadata as { mastra?: Record<string, unknown> }).mastra;
+    await this.storage.updateMessages({
+      messages: [
+        {
+          id: stored.id,
+          content: { ...stored.content, metadata: { ...metadata, mastra: { ...mastra, sealed: true } } },
+        },
+      ],
+    });
+  }
+
+  /**
    * Insert an observation marker into a message.
    * The marker is appended directly to the message's parts array (mutating in place).
    * Also persists the change to storage so markers survive page refresh.

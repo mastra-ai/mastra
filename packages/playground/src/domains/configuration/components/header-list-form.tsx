@@ -44,7 +44,7 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader, showHeadi
             size={headers.length === 0 ? 'md' : 'sm'}
             icon={<Plus />}
           >
-            {headers.length === 0 ? 'Add Header' : 'Add Another Header'}
+            {headers.length === 0 ? 'Add header' : 'Add another header'}
           </Button>
         </div>
       </div>
@@ -77,6 +77,7 @@ const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps
     </Field>
 
     <Button
+      size="icon-md"
       type="button"
       onClick={onRemove}
       aria-label="Remove header"

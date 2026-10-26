@@ -15,7 +15,7 @@ import type {
   ObservabilityDuckDBConfig,
   ObservabilityStorageDuckDB as ObservabilityStorageDuckDBImpl,
 } from './domains/observability/index';
-import { spanQueryFeatures, threadQueryFeatures, timeToFirstChunkFeatures } from './features';
+import { spanAggregateFeatures, spanQueryFeatures, threadQueryFeatures, timeToFirstChunkFeatures } from './features';
 
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
@@ -32,6 +32,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'trace-query',
   'trace-aggregate',
   ...spanQueryFeatures,
+  ...spanAggregateFeatures,
   ...threadQueryFeatures,
   'trace-query-root-duration',
   'trace-query-discovery',
@@ -56,6 +57,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'trace-query',
   'trace-aggregate',
   ...spanQueryFeatures,
+  ...spanAggregateFeatures,
   ...threadQueryFeatures,
   'trace-query-root-duration',
   'trace-query-discovery',
@@ -273,6 +275,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['aggregateTraces']> {
     const delegate = await this.requireDelegate();
     return delegate.aggregateTraces(...args);
+  }
+
+  async aggregateSpans(
+    ...args: Parameters<ObservabilityStoreImpl['aggregateSpans']>
+  ): ReturnType<ObservabilityStoreImpl['aggregateSpans']> {
+    const delegate = await this.requireDelegate();
+    return delegate.aggregateSpans(...args);
   }
 
   async querySpans(

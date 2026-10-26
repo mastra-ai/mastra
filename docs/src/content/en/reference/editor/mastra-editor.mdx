@@ -180,7 +180,7 @@ All namespaces extend a shared CRUD base class, so they expose the same `create`
             name: 'update',
             type: '(input: StorageUpdateAgentInput) => Promise<Agent>',
             description:
-              'Partially update a stored agent. Creates a version from the provided snapshot fields, assigns it to activeVersionId, and invalidates the cache. Set memory to null to disable memory.',
+              'Partially update a stored agent. Creates a version from the provided snapshot fields and invalidates the cache. The new version is an inactive draft unless you pass activeVersionId (and status) explicitly. Set memory to null to disable memory.',
           },
           {
             name: 'delete',

@@ -62,6 +62,7 @@ import { reconcileInterval, reconciliationEnabled } from '../../github/reconcili
 import { buildGithubRoutes } from '../../github/routes.js';
 import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from '../../github/rules.js';
+import type { GitIdentity } from '../../github/sandbox.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -602,6 +603,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.#issueReconcileIntervalMs =
       reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ??
       legacyReconcileIntervalMs;
+  }
+
+  /** Commit authorship follows the Platform App's authoritative writer identity. */
+  get gitIdentity(): GitIdentity | undefined {
+    const login = this.identity.login;
+    return login ? { login } : undefined;
   }
 
   /** GitHub App slug when the deployment explicitly provides it. */

@@ -9,6 +9,7 @@ import type {
 } from '../../run-fencing';
 import { runFencingNotSupportedError } from '../../run-fencing';
 import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
+import type { WorkflowStepStartGuard, WorkflowStepCompletionGuard } from '../../workflow-step-guard';
 import { StorageDomain } from '../base';
 
 export abstract class WorkflowsStorage extends StorageDomain {
@@ -20,6 +21,11 @@ export abstract class WorkflowsStorage extends StorageDomain {
   }
 
   abstract supportsConcurrentUpdates(): boolean;
+
+  /** Atomic occurrence checks for evented step writes and replay-safe continuation. */
+  supportsWorkflowStepGuards(): boolean {
+    return false;
+  }
 
   /**
    * Whether this adapter implements run ownership: the claim/renew/release
@@ -115,6 +121,8 @@ export abstract class WorkflowsStorage extends StorageDomain {
      */
     state?: Record<string, any>;
     fence?: RunFence;
+    startGuard?: WorkflowStepStartGuard;
+    completionGuard?: WorkflowStepCompletionGuard;
   }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
   abstract updateWorkflowState({

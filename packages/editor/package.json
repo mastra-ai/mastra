@@ -1,7 +1,8 @@
 {
   "name": "@mastra/editor",
-  "version": "0.16.4-alpha.7",
+  "version": "0.16.5-alpha.1",
   "description": "Mastra Editor for agent management and instantiation",
+  "license": "Apache-2.0",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -94,9 +95,9 @@
     "@mastra/hono": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "hono": "^4.13.7",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"

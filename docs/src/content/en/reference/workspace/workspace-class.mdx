@@ -315,7 +315,7 @@ Read records are scoped to the filesystem they were read from, identified by the
 
 ### Tool hooks
 
-Set `tools.hooks` to run logic before and after every enabled workspace tool call. Hooks run after name remapping, so the context includes both the exposed `toolName` and the original `workspaceToolName`.
+Set `tools.hooks` to run logic before and after every enabled workspace tool call. Hooks run after name remapping and receive both the exposed `toolName` and the original `workspaceToolName` in their context.
 
 ```typescript {6-14}
 import { Workspace } from '@mastra/core/workspace'
@@ -745,8 +745,9 @@ Added when a filesystem is configured:
 | `mastra_workspace_file_stat` | Get metadata about a file or directory including size, type, and modification time. |
 | `mastra_workspace_mkdir` | Create a directory. Creates parent directories automatically if they don't exist. |
 | `mastra_workspace_grep` | Search file contents using regex patterns. Supports glob filtering, context lines, and case-insensitive search. Applies `.gitignore` files the same way as `list_files` and skips `node_modules` unless the search path is inside it. |
+| `mastra_workspace_apply_patch` | Create, update, move, and delete several files in one call using a patch. Opt-in: only added when `tools[WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH].enabled` is set. The top-level `tools.enabled` doesn't enable it. The tool checks every hunk before writing and leaves all files unchanged if any hunk fails to match. |
 
-With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [runtime-defined filesystem](/docs/sandbox/filesystem#filesystems-per-user-or-thread), write tools are always included and read-only is enforced at runtime.
+With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`, `apply_patch`) are excluded when the filesystem is in read-only mode. With a [runtime-defined filesystem](/docs/sandbox/filesystem#filesystems-per-user-or-thread), write tools are always included and read-only is enforced at runtime.
 
 The `read_file` tool accepts `mediaTypes` and `maxMediaBytes` options to control which mime types are surfaced to the model as native media parts and how large those files can be:
 

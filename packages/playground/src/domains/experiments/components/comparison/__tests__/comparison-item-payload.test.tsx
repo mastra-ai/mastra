@@ -31,7 +31,8 @@ describe('ComparisonItemPayload', () => {
     render(<ComparisonItemPayload label="Ground truth" value={{ answer: 'Paris' }} />);
 
     const region = screen.getByRole('region', { name: 'Ground truth' });
-    expect(region.querySelector('pre')?.textContent).toBe('{\n  "answer": "Paris"\n}');
+    const lines = Array.from(region.querySelectorAll('.cm-line'), line => line.textContent);
+    expect(lines.join('\n')).toBe('{\n  "answer": "Paris"\n}');
   });
 
   it('renders nothing when there is no payload', () => {

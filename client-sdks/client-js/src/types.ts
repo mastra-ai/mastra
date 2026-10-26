@@ -675,6 +675,21 @@ export type McpServerToolListResponse = GeneratedResponse<'GET /mcp/:serverId/to
  */
 export type McpToolExecuteResponse = RouteResponse<'POST /mcp/:serverId/tools/:toolId/execute'>;
 
+/** Event types an MCP server declares, plus whether test emit is served (experimental). */
+export type McpServerEventListResponse = GeneratedResponse<'GET /mcp/:serverId/events'>;
+
+/** One declared MCP server event type (experimental). */
+export type McpServerEventInfo = McpServerEventListResponse['events'][number];
+
+/** Result of polling an MCP server event type (experimental). */
+export type McpServerEventPollResponse = GeneratedResponse<'POST /mcp/:serverId/events/:eventName/poll'>;
+
+/** One occurrence of an MCP server event (experimental). */
+export type McpServerEventOccurrence = McpServerEventPollResponse['events'][number];
+
+/** A frame yielded by `streamMcpServerEvent` (experimental). */
+export type McpServerEventStreamFrame = GeneratedResponse<'POST /mcp/:serverId/events/:eventName/stream'>;
+
 /**
  * Client version of ScoreRowData with dates serialized as strings (from JSON)
  */

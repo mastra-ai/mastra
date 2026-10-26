@@ -38,7 +38,7 @@
     "kimi-k2.6"
   ],
   "reasoning": {
-    "kimi-k2.5": [
+    "gemini-2.5-flash": [
       {
         "type": "toggle"
       },
@@ -47,7 +47,22 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek-v4-pro": [
+    "grok-4.3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-3.1-pro-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "claude-opus-4-7": [
       {
         "type": "toggle"
       },
@@ -65,16 +80,7 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "grok-4.3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "kimi-k2.6": [
+    "deepseek-v4-pro": [
       {
         "type": "toggle"
       },
@@ -92,19 +98,13 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "gemini-2.5-flash": [
+    "kimi-k2.5": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gemini-3.1-pro-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "deepseek-v4-flash": [
@@ -116,7 +116,7 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-opus-4-7": [
+    "kimi-k2.6": [
       {
         "type": "toggle"
       },

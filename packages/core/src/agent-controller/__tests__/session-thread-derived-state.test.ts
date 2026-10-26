@@ -1609,6 +1609,7 @@ describe('AgentController thread-derived session state', () => {
       address,
       requestContext: expect.anything(),
       resumeData: { action: 'approved' },
+      modeId: 'build',
     });
     expect(resumeToolCall.mock.calls[0]![0].requestContext?.get('controller')).toMatchObject({
       threadId: sourceThread.id,

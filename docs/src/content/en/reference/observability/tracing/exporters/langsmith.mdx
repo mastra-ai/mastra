@@ -165,7 +165,8 @@ function withLangsmithMetadata(metadata: LangSmithMetadataInput): TracingOptions
   {
     name: 'sessionId',
     type: 'string',
-    description: 'Session ID for grouping related traces',
+    description:
+      'Session ID for grouping related traces into a LangSmith Thread. Defaults to `sessionId`, then `threadId`, from span metadata',
     required: false,
   },
   {
