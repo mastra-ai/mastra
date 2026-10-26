@@ -1,0 +1,33 @@
+{
+  "name": "template-factory-self-hosted",
+  "version": "1.0.0",
+  "description": "A self-hosted, agent-powered software delivery environment built on Mastra.",
+  "main": "src/mastra/index.ts",
+  "private": true,
+  "scripts": {
+    "dev": "mastra factory dev",
+    "build": "mastra build",
+    "start": "mastra start",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/auth-workos": "latest",
+    "@mastra/core": "latest",
+    "@mastra/factory": "latest",
+    "@mastra/pg": "latest",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "mastra": "latest",
+    "typescript": "^6.0.3"
+  }
+}
