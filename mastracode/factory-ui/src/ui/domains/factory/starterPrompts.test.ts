@@ -187,6 +187,19 @@ describe('starterPrompts', () => {
     expect(listed(plan.prompt)).toEqual(['Card triaged-bug', 'Card labelled-bug']);
   });
 
+  it('plans one bug picked from every open bug, with the oldest as examples', () => {
+    const bugs = Array.from({ length: 7 }, (_, index) =>
+      card(`bug-${index}`, { stages: ['triage'], triageType: 'bug', createdAt: daysAgo(10 - index) }),
+    );
+
+    const plan = promptFor('bug', bugs);
+
+    expect(plan.title).toBe('Plan a fix for one of 7 open bugs');
+    expect(plan.prompt).toContain('of the 7 open bugs');
+    expect(plan.prompt).not.toContain('Leave the other');
+    expect(listed(plan.prompt)).toEqual(['Card bug-0', 'Card bug-1', 'Card bug-2', 'Card bug-3', 'Card bug-4']);
+  });
+
   it('recaps the cards that reached Done in the last seven days and are still there', () => {
     const recap = promptFor('shipped', [
       done('inside-the-week', 6.9),

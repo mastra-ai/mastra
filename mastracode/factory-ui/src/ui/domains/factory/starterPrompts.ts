@@ -142,10 +142,14 @@ function bug(cards: readonly WorkItem[]) {
     )
     .sort((a, b) => openedAt(a) - openedAt(b));
   if (unplanned.length === 0) return undefined;
-  const title =
-    unplanned.length === 1 ? 'Plan a fix for the open bug' : `Plan a fix for one of ${unplanned.length} open bugs`;
-  return starter('bug', title, unplanned.map(label), {
-    lead: 'Pick the highest-impact bug below and draft a plan to fix it:',
+  if (unplanned.length === 1) {
+    return starter('bug', 'Plan a fix for the open bug', unplanned.map(label), {
+      lead: 'Draft a plan to fix this bug:',
+    });
+  }
+  return starter('bug', `Plan a fix for one of ${unplanned.length} open bugs`, unplanned.map(label), {
+    lead: `Pick the highest-impact of the ${unplanned.length} open bugs nobody has planned yet and draft a plan to fix it. The oldest:`,
+    scope: 'examples',
   });
 }
 
