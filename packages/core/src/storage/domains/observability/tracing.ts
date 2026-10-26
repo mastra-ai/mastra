@@ -471,7 +471,7 @@ export function extractBranchSpans<
 // Lightweight Span & Trace Schemas (for timeline rendering)
 // ============================================================================
 
-/** Maximum generated preview length, before the trailing `…`. Supplied previews have no cap. */
+/** Maximum preview length, before the trailing `…`, including supplied previews. */
 export const PREVIEW_MAX_LENGTH = 100;
 
 /** @deprecated Use {@link PREVIEW_MAX_LENGTH}. */
@@ -620,7 +620,7 @@ function previewOfJson(json: string | null | undefined, maxLength: number): stri
 
 /**
  * The preview a store writes for one payload: an upstream preview when the span record carries
- * a nonblank one, otherwise one built from the payload. Both are capped the same way, at
+ * a string (including an intentionally empty one), otherwise one built from the payload. Both are capped the same way, at
  * {@link PREVIEW_MAX_LENGTH} characters plus `…`, so an exporter can't store an unbounded preview.
  * `''` means there is nothing to preview.
  */
@@ -629,7 +629,8 @@ export function buildStoredPreview(
   value: unknown,
   serialized?: string | null,
 ): string {
-  return (upstream ? truncatePreview(upstream) : null) ?? buildPreview(value, serialized) ?? '';
+  if (upstream != null) return truncatePreview(upstream) ?? '';
+  return buildPreview(value, serialized) ?? '';
 }
 
 /**

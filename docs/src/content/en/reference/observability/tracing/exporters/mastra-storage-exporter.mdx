@@ -17,6 +17,46 @@ Persists traces to Mastra's configured storage with automatic batching and retry
 
 :::
 
+## Span previews
+
+`MastraStorageExporter` and [MastraPlatformExporter](/reference/observability/tracing/exporters/mastra-platform-exporter) use the same formatter for `inputPreview`, `outputPreview`, and `errorPreview`. Previews are generated after span output processors, including redaction, and after the exporter's `customSpanFormatter`. Full payloads remain available separately.
+
+Each preview contains up to 100 characters plus an ellipsis when truncated. Truncation preserves Unicode surrogate pairs. An explicitly supplied string takes precedence, including `""` for an intentionally empty preview. `null` and `undefined` request generation. Whitespace-only supplied strings become `""` without falling back to the payload.
+
+### Input and output selection
+
+| Span | Input preview | Output preview |
+| - | - | - |
+| Agent run | Latest user message, otherwise latest non-system message | Structured result, response text, tool calls, or generated-file count |
+| Resumed agent run | Resume data and tool name, when recorded | Same result formatting as a fresh run |
+| Model generation | Latest user message from the messages envelope | Structured result, text, tool calls, files, or reasoning text |
+| Model step and inference | Latest non-system message with its role | Structured result, text, or tool-call names |
+| Model chunk | Recorded input | Text/delta, tool-call data, or file label for recognized chunk shapes |
+| MCP tool or server request | Request payload | Structured content, text content blocks, or nontext labels |
+| Processor phase | Messages, request error, tool name, or stream content as appropriate | Recorded configuration/message changes or stream content/chunk count |
+| Scorer run | Evaluated response | Score and reason |
+| Classifier evaluation | Questions | Answers |
+| Embedding | Text or bounded text-batch summary | Recorded vector dimensions |
+| Vector operation, reranking, graph traversal | Request payload; query for reranking | Recorded returned-result count |
+
+Recorded interruption or tripwire output takes precedence over normal agent/model results. For example, a suspended output can preview as `Suspended: awaiting approval (refund)`. This describes the individual span; it doesn't select the current outcome of a resumed trace.
+
+Processor formatting uses `processorPhase`, including when a processor emits a memory or skill span. Other span types and unrecognized shapes use text/message fields or compact JSON. This includes caller-defined tool arguments, workflow data, mappings, and operations without a specialized writer. Generic JSON previews have bounded traversal and represent circular or deeply nested values with labels.
+
+Message previews read AI SDK v4–v7 core/model and UI messages, Mastra stored messages, and string messages. They select answer text ahead of reasoning when both are present, and summarize tool calls and results by tool name. Message previews summarize recognized nontext content with labels such as `[image]`, `[audio]`, or `[file]`. They don't include encoded binary content. A span without a recorded output, such as a client-tool marker, receives an empty output preview.
+
+### Error selection
+
+`errorPreview` uses the recorded error's message, prefixed by a non-generic error name when available. For example: `TimeoutError: Order service timed out`. If the message is missing, the formatter tries the error name, ID, domain, and category. Plain-string errors are also supported.
+
+Stack traces and error details aren't included. Missing or unrecognized errors produce `""`. Suspension, tripwire output, and failed-looking tool results don't produce an error preview unless the span also records an error. Output and error previews remain independent, so a partial result can appear alongside its error.
+
+### Storage behavior
+
+Generated previews are refreshed for each exported snapshot. An empty preview at span start doesn't suppress later output or errors. Storage preserves explicit empty strings; stored `NULL` remains the marker for missing previews that may need legacy fallback. Query responses may represent stored empty previews as `null` without regenerating them.
+
+Use the updated `@mastra/core` alongside `@mastra/observability` to preserve intentionally empty previews. Earlier core versions can regenerate them from the payload. Platform ingestion must also preserve upstream empty strings when deploying this exporter behavior.
+
 ## Constructor
 
 ```typescript oxfmt:false
