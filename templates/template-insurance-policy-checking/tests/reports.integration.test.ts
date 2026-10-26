@@ -837,7 +837,21 @@ describe('Immutable review drafts across real workflow, database, file and HTTP 
     const artifactPath = join(runtime.reportRepository.root, publication.artifactId + '-' + publication.artifact!.hash);
     const backup = artifactPath + '-backup';
     await rename(artifactPath, backup);
-    expect((await fetch(link)).status).toBe(409);
+    const missing = await fetch(link);
+    expect(missing.status).toBe(409);
+    expect(await missing.json()).toMatchObject({
+      ok: false,
+      code: 'ARTIFACT_UNAVAILABLE',
+      nextAction: 'Check private storage and restore the paired database and files before retrying.',
+    });
+    // A request header cannot grant trust to an unrelated framework error response.
+    const rejected = await fetch(studio.url + '/api/agents/missing-agent/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Insurance-Safe-Failure': '1' },
+      body: JSON.stringify({ messages: [] }),
+    });
+    expect(rejected.status).toBeGreaterThanOrEqual(400);
+    expect(await rejected.json()).toMatchObject({ code: 'REQUEST_REJECTED' });
     await symlink(backup, artifactPath);
     expect((await fetch(link)).status).toBe(409);
     await unlink(artifactPath);

@@ -99,7 +99,10 @@ export function createLocalServer(
                 });
               } catch (error) {
                 const failure = safeFailure(error);
-                return Response.json(failure, { status: failure.status ?? 503 });
+                return Response.json(failure, {
+                  status: failure.status ?? 503,
+                  headers: { 'X-Insurance-Safe-Failure': '1' },
+                });
               }
             },
           }),
@@ -127,6 +130,11 @@ export function createLocalServer(
             );
           }
           await next();
+          // Only the artifact handler marks responses after sanitizing them with safeFailure.
+          if (context.res.headers.get('X-Insurance-Safe-Failure') === '1') {
+            context.res.headers.delete('X-Insurance-Safe-Failure');
+            return;
+          }
           // Stream errors from provider/runtime boundaries must not expose provider bodies or stacks.
           const contentType = context.res.headers.get('content-type') ?? '';
           if (contentType.includes('text/event-stream') && context.res.body) {
