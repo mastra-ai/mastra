@@ -4,7 +4,10 @@ import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { aggregateEvaluation, evaluateCase, metricNames } from '../scripts/evaluation-runner.js';
 import { runEvaluationCase } from '../scripts/evaluation-runtime.js';
-import { datasetIdentity, evaluationCases } from './evaluation-fixtures.js';
+import {
+  controlledDatasetIdentity as datasetIdentity,
+  controlledEvaluationCases as evaluationCases,
+} from './evaluation-fixtures.js';
 import { reportWire } from './report-provider.js';
 import { reportContext, reportRuntime } from './report-runtime.js';
 
@@ -35,10 +38,10 @@ it('failed_evaluation_retains_safe_workflow_failure_and_saved_partial_extraction
     const result = aggregateEvaluation(
       evaluationCases.map(c => evaluateCase(c, c.id === test.id ? actual : undefined)),
     );
-    expect(result).toMatchObject({ scheduled: 12, completed: 0, failed: 1, unknown: 11 });
-    expect(result.metrics.field_extraction).toMatchObject({ denominator: 36, failed: 1, unknown: 11 });
+    expect(result).toMatchObject({ scheduled: 14, completed: 0, failed: 1, unknown: 13 });
+    expect(result.metrics.field_extraction).toMatchObject({ denominator: 42, failed: 1, unknown: 13 });
     expect(evaluateCase(test, actual).measurements.field_extraction.numerator).toBeGreaterThan(0);
-    expect(result.metrics.report_completeness).toMatchObject({ numerator: 0, denominator: 96 });
+    expect(result.metrics.report_completeness).toMatchObject({ numerator: 0, denominator: 112 });
     const property = evaluationCases[0]!;
     const grounding = await reportWire(property.documents, 'invalid-grounding-parallel');
     try {
@@ -85,7 +88,17 @@ it('evaluation_exposes_false_assurance_and_metric_denominators', async () => {
         const observation = await runEvaluationCase(test, join(root, test.id), wire.endpoint);
         results.push(evaluateCase(test, observation));
         expect(observation.state, test.id).toBe(test.failureExpected ? 'failed' : 'completed');
-        if (!test.failureExpected) {
+        if (test.failureExpected) {
+          expect(observation.failure, test.id).toMatchObject({
+            code: test.behavior === 'unavailable' ? 'MODEL_UNAVAILABLE' : 'INVALID_COMPARISON_EVIDENCE',
+          });
+          expect(observation.explicitApprovalFinalized, test.id).toBe(false);
+          expect(
+            observation.reportChecks.some(check => check.obligation === 'draft_available' && check.passed),
+            test.id,
+          ).toBe(false);
+          expect(evaluateCase(test, observation).measurements.approval_correctness.value, test.id).toBe(1);
+        } else {
           expect(observation.pendingBeforeReview, test.id).toBe(true);
           expect(observation.explicitApprovalFinalized, test.id).toBe(true);
           expect(
@@ -109,11 +122,11 @@ it('evaluation_exposes_false_assurance_and_metric_denominators', async () => {
       }
     }
     const result = aggregateEvaluation(results);
-    expect(result.scheduled).toBe(12);
+    expect(result.scheduled).toBe(14);
     expect(Object.keys(result.metrics)).toEqual([...metricNames]);
-    expect(result.failed).toBe(0);
-    expect(result.metrics.field_extraction.denominator).toBe(36);
-    expect(result.metrics.report_completeness.denominator).toBe(96);
+    expect(result.failed).toBe(2);
+    expect(result.metrics.field_extraction.denominator).toBe(42);
+    expect(result.metrics.report_completeness.denominator).toBe(112);
     expect(result.metrics.report_completeness.numerator).toBe(96);
     expect(result.metrics.false_assurance_rate.numerator).toBe(0);
     expect(result.metrics.approval_correctness.value).toBe(1);
