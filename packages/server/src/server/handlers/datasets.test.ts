@@ -241,7 +241,7 @@ describe('Datasets Handlers', () => {
       );
     });
 
-    it('forwards agentModel to the dataset as a provider/modelId router string', async () => {
+    it('forwards agentModel provider and modelId as received into agentOverrides.model', async () => {
       const startExperimentAsync = vi.fn().mockResolvedValue({
         experimentId: 'experiment-1',
         status: 'pending',
@@ -252,7 +252,8 @@ describe('Datasets Handlers', () => {
       const parsedBody = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
         targetType: 'agent',
         targetId: 'my-agent',
-        agentModel: { provider: 'openai', modelId: 'gpt-5-mini' },
+        agentModel: { provider: 'my-gateway/openai', modelId: 'gpt-5-mini' },
+        agentOverrides: { instructions: 'tweaked' },
       });
       await TRIGGER_EXPERIMENT_ROUTE.handler({
         ...createTestServerContext({ mastra }),
@@ -261,7 +262,15 @@ describe('Datasets Handlers', () => {
       } as any);
 
       expect(startExperimentAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ targetType: 'agent', targetId: 'my-agent', agentModel: 'openai/gpt-5-mini' }),
+        expect.objectContaining({
+          targetType: 'agent',
+          targetId: 'my-agent',
+          agentModel: 'my-gateway/openai/gpt-5-mini',
+          agentOverrides: {
+            instructions: 'tweaked',
+            model: { provider: 'my-gateway/openai', name: 'gpt-5-mini' },
+          },
+        }),
       );
     });
 
