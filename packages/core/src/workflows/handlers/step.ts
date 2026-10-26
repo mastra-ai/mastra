@@ -15,9 +15,10 @@ import type { ObservabilityContext, Span } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
-import { INHERITABLE_STATE_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
+import { PARENT_STATE_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import { buildStepResultAccessors } from '../run-journal';
+import type { ParentStateLink, RunJournal } from '../run-journal';
 import type { Step, SuspendOptions } from '../step';
 import type {
   ExecutionContext,
@@ -70,6 +71,20 @@ export interface ExecuteStepParams extends ObservabilityContext {
   entryDescription?: string;
   /** Authored graph entry metadata to attach to the step span (e.g. mapping steps) */
   entryMetadata?: Record<string, any>;
+}
+
+/**
+ * Inside a parallel, branch or foreach block, a sibling can change the parent's stored state while
+ * the nested run is paused, so the nested run copies its state when it pauses. In exchange it can
+ * start from a stored state its siblings have already changed: nothing is stored over it while the
+ * block runs.
+ */
+function parentStateLink(journal: RunJournal, executionContext: ExecutionContext): ParentStateLink {
+  const inBlock = executionContext.executionPath.length > 1 || executionContext.foreachIndex !== undefined;
+  return {
+    inheritableState: state => journal.inheritableState(state, { exact: !inBlock }),
+    copyStateOnPause: inBlock,
+  };
 }
 
 export async function executeStep(
@@ -528,9 +543,7 @@ export async function executeStep(
             : undefined,
         [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
-        // Read when the nested run starts (start or time travel), with the state it starts from.
-        [INHERITABLE_STATE_SYMBOL]:
-          isNestedWorkflow && journal ? (state: unknown) => journal.inheritableState(state) : undefined,
+        [PARENT_STATE_SYMBOL]: isNestedWorkflow && journal ? parentStateLink(journal, executionContext) : undefined,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
         outputWriter,

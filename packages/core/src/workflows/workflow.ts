@@ -69,7 +69,7 @@ import type { Tool } from '../tools/tool';
 import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { INHERITABLE_STATE_SYMBOL, PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
+import { PARENT_STATE_SYMBOL, PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
 import { withoutAuthToken } from './evented/helpers';
@@ -77,6 +77,7 @@ import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
+import type { ParentStateLink } from './run-journal';
 import { createRunStorage } from './run-storage';
 import type { RunStorage } from './run-storage';
 import { validateCron } from './scheduler/cron';
@@ -3142,7 +3143,7 @@ export class Workflow<
     timeTravel,
     parentWorkflow,
     [PUBSUB_SYMBOL]: pubsub,
-    [INHERITABLE_STATE_SYMBOL]: inheritableState,
+    [PARENT_STATE_SYMBOL]: parentState,
     mastra,
     requestContext,
     abort,
@@ -3182,7 +3183,7 @@ export class Workflow<
       forEachIndex?: number;
     };
     [PUBSUB_SYMBOL]: PubSub;
-    [INHERITABLE_STATE_SYMBOL]?: (state: unknown) => Record<string, unknown> | undefined;
+    [PARENT_STATE_SYMBOL]?: ParentStateLink;
     mastra: Mastra;
     requestContext?: RequestContext<TRequestContext>;
     engine: DefaultEngineType;
@@ -3250,18 +3251,20 @@ export class Workflow<
     const useSharedPubsub = !!this.#options?.sharePubsub;
     const nestedPubsub = useSharedPubsub ? pubsub : undefined;
     // Nothing may await between this and createRun(), which takes it synchronously.
+    // Only storage v2 stores a nested run's state as its changes to the parent's.
+    const linkedState = this.#options.storageVersion === 2 ? parentState : undefined;
     this.#nestedRunStart =
       !restart && !isResume
         ? {
             input: inputData,
             state,
-            // Only storage v2 stores a nested run's state as its changes to the parent's.
-            inheritedState: this.#options.storageVersion === 2 ? inheritableState?.(state) : undefined,
+            inheritedState: linkedState?.inheritableState(state),
           }
         : undefined;
     const run = isResume
       ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub, parentWorkflow })
       : await this.createRun({ runId, resourceId, pubsub: nestedPubsub, parentWorkflow });
+    run.copyStateOnPause = !!linkedState?.copyStateOnPause;
     const nestedAbortCb = () => {
       abort();
     };
@@ -3863,6 +3866,12 @@ export class Run<
    */
   inheritedState?: Record<string, unknown>;
   /**
+   * A storage v2 nested run inside its parent's parallel, branch or foreach block: it stores its
+   * full state when it pauses (`RunJournal`'s `copyStateOnPause`). Set by its parent's step.
+   * @internal
+   */
+  copyStateOnPause = false;
+  /**
    * The store calls this run makes, for its `storageVersion`.
    * @internal
    */
@@ -4305,6 +4314,7 @@ export class Run<
       perStep,
       storageVersion: this.storageVersion,
       inheritedState,
+      copyStateOnPause: this.copyStateOnPause,
     });
 
     this.workflowRunStatus = result.status;
@@ -5403,6 +5413,7 @@ export class Run<
         perStep: params.perStep,
         storageVersion: this.storageVersion,
         statePatchBytes: this.runStorage.statePatchBytes(snapshot),
+        copyStateOnPause: this.copyStateOnPause,
       })
       .then(async result => {
         if (!params.isVNext && result.status !== 'suspended') {
@@ -5587,6 +5598,7 @@ export class Run<
       workflowSpan,
       storageVersion: this.storageVersion,
       statePatchBytes: this.runStorage.statePatchBytes(snapshot),
+      copyStateOnPause: this.copyStateOnPause,
     });
 
     this.workflowRunStatus = result.status;
@@ -5726,6 +5738,7 @@ export class Run<
       perStep,
       storageVersion: this.storageVersion,
       inheritedState,
+      copyStateOnPause: this.copyStateOnPause,
     });
 
     this.workflowRunStatus = result.status;

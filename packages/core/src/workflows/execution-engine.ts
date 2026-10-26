@@ -256,5 +256,7 @@ export abstract class ExecutionEngine extends MastraBase {
     statePatchBytes?: number;
     /** For a storage v2 nested start or time travel, the parent's stored state it starts from. @internal */
     inheritedState?: Record<string, unknown>;
+    /** For a storage v2 nested run, `RunJournal`'s `copyStateOnPause`. @internal */
+    copyStateOnPause?: boolean;
   }): Promise<TOutput>;
 }

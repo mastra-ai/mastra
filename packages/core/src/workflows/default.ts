@@ -785,6 +785,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     statePatchBytes?: number;
     /** @internal */
     inheritedState?: Record<string, unknown>;
+    /** @internal */
+    copyStateOnPause?: boolean;
     /** Trace IDs for creating child spans in durable execution */
     tracingIds?: {
       traceId: string;
@@ -841,6 +843,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         state: resume ? initialState : restart?.state,
         statePatchBytes: params.statePatchBytes,
         inheritedState: params.inheritedState,
+        copyStateOnPause: params.copyStateOnPause,
       });
       this.#journals.set(runId, journal);
     }

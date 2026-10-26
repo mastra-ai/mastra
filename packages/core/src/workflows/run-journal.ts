@@ -35,6 +35,18 @@ export function isStepResultStub(value: unknown): boolean {
 }
 
 /**
+ * What a storage v2 parent hands a nested workflow step about its state.
+ *
+ * @internal
+ */
+export type ParentStateLink = {
+  /** The parent's stored state for a nested run that starts from `state`; undefined when it stores a full copy. */
+  inheritableState: (state: unknown) => Record<string, unknown> | undefined;
+  /** The step is inside a parallel, branch or foreach block (`RunJournal`'s `copyStateOnPause`). */
+  copyStateOnPause: boolean;
+};
+
+/**
  * Tracks what a storage-v2 run has written, so each engine write sends only the
  * step results that changed (and the state's changes) instead of the whole snapshot.
  * It also lets the engine drop stored results from memory (`evict`) and read them back
@@ -70,6 +82,9 @@ export class RunJournal {
   /** JSON size of the patches stored after the latest full state. */
   #patchBytes: number;
   #needsCheckpoint: boolean;
+  readonly #copyStateOnPause: boolean;
+  /** This journal stored a full state that later writes build on, so the stored state no longer reads the parent's. */
+  #ownsState = false;
   /** Store writes sent and not yet settled, and whether one of them is a boundary write. */
   #inFlight = 0;
   #boundaryInFlight = false;
@@ -83,6 +98,12 @@ export class RunJournal {
    * @param inheritedState For a nested run that starts from its parent's stored state (the parent
    * journal's `inheritableState`): the checkpoint stores only the changes to it, and the store reads
    * the parent's state as the base.
+   * @param copyStateOnPause For a nested run inside a parallel, branch or foreach block: a write
+   * that pauses the run (`suspended`, `paused`) stores the full state. A sibling can change the
+   * parent's stored state while the run is paused, and the run's patches only rebuild its state on
+   * the base they were diffed against. While the run is running, the parent writes nothing, because
+   * the engine makes no boundary write while a block's steps run. Once the full state is stored, later
+   * writes build on it, so a pause stores it again only if this journal has not stored one yet.
    */
   constructor({
     store,
@@ -92,6 +113,7 @@ export class RunJournal {
     state,
     statePatchBytes,
     inheritedState,
+    copyStateOnPause,
   }: {
     store: WorkflowsStorage | undefined;
     workflowName: string;
@@ -100,10 +122,12 @@ export class RunJournal {
     state?: unknown;
     statePatchBytes?: number;
     inheritedState?: Record<string, unknown>;
+    copyStateOnPause?: boolean;
   }) {
     this.store = store;
     this.workflowName = workflowName;
     this.runId = runId;
+    this.#copyStateOnPause = !!copyStateOnPause;
     this.#needsCheckpoint = !seed;
     this.#written = new Map(seed ? Object.entries(seed) : []);
     // The checkpoint replaces the stored state, so without an inherited base it writes the full state.
@@ -112,13 +136,18 @@ export class RunJournal {
   }
 
   /**
-   * The stored state, when it is exactly `state`: a nested run starting from `state` can then store
-   * only its changes to it. Undefined when `state` has changes not yet stored (a skipped write, or a
-   * parallel step's `setState` merged since the last write). The object is shared and never edited.
+   * The stored state, for a nested run starting from `state` to store only its changes to. The
+   * object is shared and never edited.
+   *
+   * The changes `state` has that are not stored yet (a skipped write, a block step's `setState`)
+   * become part of the nested run's changes. With `exact`, there must be none: a nested step outside
+   * a block keeps this base while it is paused, and the write that pauses this run then stores those
+   * changes merged with the nested run's state. A key the nested run's `stateSchema` dropped would
+   * come back when its state is rebuilt on that, since its patches only delete what the base had.
    */
-  inheritableState(state: unknown): Record<string, unknown> | undefined {
+  inheritableState(state: unknown, { exact }: { exact: boolean }): Record<string, unknown> | undefined {
     const written = this.#writtenState;
-    if (written === undefined) return undefined;
+    if (written === undefined || !exact) return written;
     return diffState(written, normalizeState(state).state).length ? undefined : written;
   }
 
@@ -203,7 +232,8 @@ export class RunJournal {
     let statePatch: StatePatchOp[] | undefined;
     if (boundary) {
       const next = normalizeState(value);
-      if (writtenState === undefined) {
+      const pausing = snapshot.status === 'suspended' || snapshot.status === 'paused';
+      if (writtenState === undefined || (pausing && this.#copyStateOnPause && !this.#ownsState)) {
         state = next.state;
       } else {
         const ops = diffState(writtenState, next.state);
@@ -243,6 +273,9 @@ export class RunJournal {
     }
     this.#writtenState = writtenState;
     this.#patchBytes = patchBytes;
+    // A checkpoint without the full state replaces every stored entry, so the run reads its parent's state again.
+    if (state) this.#ownsState = true;
+    else if (checkpoint) this.#ownsState = false;
   }
 
   /**

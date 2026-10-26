@@ -1075,15 +1075,29 @@ describe('storage v2 stores the same runs as v1', () => {
 /** Records, per storage v2 write, whether it sent the full state, a patch or neither, and its JSON size. */
 function recordStateSends(storage: InstanceType<typeof MockStore>) {
   const store = storage.stores.workflows!;
-  const sends: { workflowName: string; runId: string; checkpoint: boolean; state: string; bytes: number }[] = [];
+  const sends: {
+    workflowName: string;
+    runId: string;
+    status: string;
+    checkpoint: boolean;
+    state: string;
+    bytes: number;
+  }[] = [];
   const record = (
     checkpoint: boolean,
-    args: { workflowName: string; runId: string; state?: unknown; statePatch?: unknown },
+    args: {
+      workflowName: string;
+      runId: string;
+      header: { status: string };
+      state?: unknown;
+      statePatch?: unknown;
+    },
   ) => {
     const sent = args.state ?? args.statePatch;
     sends.push({
       workflowName: args.workflowName,
       runId: args.runId,
+      status: args.header.status,
       checkpoint,
       state: args.state !== undefined ? 'full' : args.statePatch !== undefined ? 'patch' : 'none',
       bytes: sent === undefined ? 0 : JSON.stringify(sent).length,
@@ -1242,7 +1256,7 @@ describe('storage v2 nested runs', () => {
     });
   });
 
-  describe('copies the state into a nested run whose parent has not stored the state it starts from', () => {
+  describe('copies the state into a nested run outside a block whose parent has not stored the state it starts from', () => {
     const inner = () =>
       createWorkflow({
         id: 'inner',
@@ -1270,27 +1284,8 @@ describe('storage v2 nested runs', () => {
             .then(appendItem('before'))
             .then(inner())
             .commit(),
-        inputData: { n: 0 },
         checkpoints: [['full', 'full']],
         state: [PAD, 'before:0', 'inner-add:1'],
-      },
-      'a foreach iteration merged its state first': {
-        build: () =>
-          createWorkflow({
-            id: 'outer',
-            inputSchema: z.array(num),
-            outputSchema: z.array(num),
-            stateSchema: items,
-            options: { storageVersion: 2 },
-          })
-            .foreach(inner())
-            .commit(),
-        inputData: [{ n: 0 }, { n: 1 }],
-        checkpoints: [
-          ['none', 'none'],
-          ['full', 'full'],
-        ],
-        state: [PAD, 'inner-add:0', 'inner-add:1'],
       },
       'the parent is on storage v1': {
         build: () =>
@@ -1304,13 +1299,12 @@ describe('storage v2 nested runs', () => {
             .then(appendItem('before'))
             .then(inner())
             .commit(),
-        inputData: { n: 0 },
         checkpoints: [['full', 'full']],
         state: [PAD, 'before:0', 'inner-add:1'],
       },
     };
 
-    it.each(Object.entries(cases))('when %s', async (_, { build, inputData, checkpoints, state }) => {
+    it.each(Object.entries(cases))('when %s', async (_, { build, checkpoints, state }) => {
       const storage = new MockStore();
       const sends = recordStateSends(storage);
       const outer = build();
@@ -1318,13 +1312,273 @@ describe('storage v2 nested runs', () => {
       const result = await (
         await outer.createRun({ runId: 'run-1' })
       ).start({
-        inputData: inputData as any,
+        inputData: { n: 0 },
         initialState: { items: [PAD] },
         outputOptions: { includeState: true },
       });
       expect(result.status).toBe('success');
       expect(innerCheckpoints(sends)).toEqual(checkpoints);
       expect(result.state).toEqual({ items: state });
+    });
+  });
+
+  describe('a nested run inside a parallel, branch or foreach block', () => {
+    const withExtra = z.object({ items: z.array(z.string()), extra: z.string().optional() });
+
+    /** Appends `<id>-a`, then `<id>-wait` (suspending first with `suspends`), then `<id>-b`. */
+    const appender = (id: string, storageVersion: 1 | 2, { suspends = true } = {}) =>
+      createWorkflow({ id, inputSchema: num, outputSchema: num, stateSchema: items, options: { storageVersion } })
+        .then(appendItem(`${id}-a`))
+        .then(appendItem(`${id}-wait`, { suspends }))
+        .then(appendItem(`${id}-b`))
+        .commit();
+
+    const outerOf = (storageVersion: 1 | 2) =>
+      createWorkflow({
+        id: 'outer',
+        inputSchema: num,
+        outputSchema: z.any(),
+        stateSchema: items,
+        options: { storageVersion },
+      });
+    const foreachOuter = (storageVersion: 1 | 2) =>
+      createWorkflow({
+        id: 'outer',
+        inputSchema: z.array(num),
+        outputSchema: z.any(),
+        stateSchema: items,
+        options: { storageVersion },
+      });
+    /**
+     * Adds `extra` to the state, then stores no running write, so the nested run after it starts
+     * from a state with a key the parent has not stored. The nested run's state schema drops it.
+     */
+    const extraOuter = (storageVersion: 1 | 2) =>
+      createWorkflow({
+        id: 'outer',
+        inputSchema: num,
+        outputSchema: z.any(),
+        stateSchema: withExtra,
+        options: {
+          storageVersion,
+          shouldPersistSnapshot: ({ stepResults, workflowStatus }) =>
+            workflowStatus !== 'running' || stepResults['add-extra']?.status !== 'success',
+        },
+      }).then(
+        createStep({
+          id: 'add-extra',
+          inputSchema: num,
+          outputSchema: num,
+          stateSchema: withExtra,
+          execute: async ({ inputData, state, setState }) => {
+            await setState({ ...state, extra: 'x' });
+            return inputData;
+          },
+        }),
+      );
+
+    /** Resumes in order, or `first`/`last`: the first or last suspended foreach iteration, until none is left. */
+    type Resumes = { step: string | string[] }[] | 'first' | 'last';
+    const scenarios: Record<
+      string,
+      { build: (storageVersion: 1 | 2) => AnyWorkflow; inputData: unknown; resumes: Resumes }
+    > = {
+      'a foreach over a nested run that does not suspend': {
+        build: v =>
+          foreachOuter(v)
+            .foreach(appender('inner', v, { suspends: false }))
+            .commit(),
+        inputData: [{ n: 0 }, { n: 10 }, { n: 20 }],
+        resumes: [],
+      },
+      'a foreach, one at a time, over a nested run that suspends': {
+        build: v => foreachOuter(v).foreach(appender('inner', v)).commit(),
+        inputData: [{ n: 0 }, { n: 10 }, { n: 20 }],
+        resumes: 'first',
+      },
+      'a foreach, two at a time, over a nested run that suspends': {
+        build: v => foreachOuter(v).foreach(appender('inner', v), { concurrency: 2 }).commit(),
+        inputData: [{ n: 0 }, { n: 10 }, { n: 20 }],
+        resumes: 'first',
+      },
+      'a foreach, three at a time, over a nested run that suspends, resumed last first': {
+        build: v => foreachOuter(v).foreach(appender('inner', v), { concurrency: 3 }).commit(),
+        inputData: [{ n: 0 }, { n: 10 }, { n: 20 }],
+        resumes: 'last',
+      },
+      'a parallel of two nested runs that suspend, resumed one at a time': {
+        build: v =>
+          outerOf(v)
+            .parallel([appender('inner', v), appender('inner2', v)])
+            .commit(),
+        inputData: { n: 0 },
+        resumes: [{ step: ['inner', 'inner-wait'] }, { step: ['inner2', 'inner2-wait'] }],
+      },
+      'a parallel of a step and a nested run that suspends': {
+        build: v =>
+          outerOf(v)
+            .parallel([appendItem('plain'), appender('inner', v)])
+            .commit(),
+        inputData: { n: 0 },
+        resumes: [{ step: ['inner', 'inner-wait'] }],
+      },
+      'a parallel of a step and a nested run that both suspend, the step resumed first': {
+        build: v =>
+          outerOf(v)
+            .parallel([appendItem('plain', { suspends: true }), appender('inner', v)])
+            .commit(),
+        inputData: { n: 0 },
+        resumes: [{ step: 'plain' }, { step: ['inner', 'inner-wait'] }],
+      },
+      'a branch with two true conditions over nested runs that suspend, resumed last first': {
+        build: v =>
+          outerOf(v)
+            .branch([
+              [async () => true, appender('inner', v)],
+              [async () => true, appender('inner2', v)],
+            ])
+            .commit(),
+        inputData: { n: 0 },
+        resumes: [{ step: ['inner2', 'inner2-wait'] }, { step: ['inner', 'inner-wait'] }],
+      },
+      'a nested run in a parallel whose state schema drops a key the parent has not stored': {
+        build: v =>
+          extraOuter(v)
+            .parallel([appender('inner', v) as any])
+            .commit(),
+        inputData: { n: 0 },
+        resumes: [{ step: ['inner', 'inner-wait'] }],
+      },
+      // Outside a block, a nested run keeps building on the parent's stored state while it is paused.
+      'a dowhile over a nested run that suspends': {
+        build: v =>
+          outerOf(v)
+            .dowhile(appender('inner', v), async ({ inputData }) => inputData.n < 9)
+            .commit(),
+        inputData: { n: 0 },
+        resumes: [
+          { step: ['inner', 'inner-wait'] },
+          { step: ['inner', 'inner-wait'] },
+          { step: ['inner', 'inner-wait'] },
+        ],
+      },
+      'a nested step whose state schema drops a key the parent has not stored': {
+        build: v =>
+          extraOuter(v)
+            .then(appender('inner', v) as any)
+            .commit(),
+        inputData: { n: 0 },
+        resumes: [{ step: ['inner', 'inner-wait'] }],
+      },
+    };
+
+    /**
+     * Every stored run's status and state, keyed by workflow and foreach index (a foreach iteration's
+     * nested run id is random). Finished nested runs are left out: v2 reads one as its parent's
+     * current state plus the nested run's changes.
+     */
+    async function storedByPosition(storage: InstanceType<typeof MockStore>, storageVersion: 1 | 2) {
+      const store = storage.stores.workflows!;
+      const db = (store as any).db;
+      const rows: { workflow_name: string; run_id: string }[] = [
+        ...db.workflows.values(),
+        ...db.workflowRunHeaders.values(),
+      ];
+      const states: Record<string, unknown> = {};
+      for (const { workflow_name, run_id } of rows) {
+        const snapshot = await store.loadWorkflowSnapshot({
+          workflowName: workflow_name,
+          runId: run_id,
+          storageVersion,
+        });
+        const parent = snapshot?.parentWorkflow;
+        if (parent && snapshot.status === 'success') continue;
+        const key = parent?.foreachIndex === undefined ? workflow_name : `${workflow_name}[${parent.foreachIndex}]`;
+        states[key] = { status: snapshot?.status, state: snapshot?.value };
+      }
+      return states;
+    }
+
+    /** The result and every stored run after the start and after each resume. */
+    async function drive(
+      storageVersion: 1 | 2,
+      { build, inputData, resumes }: (typeof scenarios)[string],
+      storage = new MockStore(),
+    ) {
+      const outer = build(storageVersion);
+      new Mastra({ logger: false, storage, workflows: { outer } });
+      const run = await outer.createRun({ runId: 'run-1' });
+      const outputOptions = { includeState: true };
+      let result: any = await run.start({ inputData, initialState: { items: [PAD] }, outputOptions });
+      const seen = [
+        { status: result.status, state: result.state, stored: await storedByPosition(storage, storageVersion) },
+      ];
+      const queue = Array.isArray(resumes) ? [...resumes] : [];
+      for (let guard = 0; result.status === 'suspended' && guard < 10; guard++) {
+        let next: { step: string | string[]; forEachIndex?: number } | undefined = queue.shift();
+        if (!Array.isArray(resumes)) {
+          const snapshot = await storage.stores.workflows!.loadWorkflowSnapshot({
+            workflowName: 'outer',
+            runId: 'run-1',
+            storageVersion,
+          });
+          const iterations = (snapshot!.context.inner as any).suspendPayload.__workflow_meta.foreachOutput as any[];
+          const suspended = (entry: any) => entry?.status === 'suspended';
+          const forEachIndex =
+            resumes === 'first' ? iterations.findIndex(suspended) : iterations.findLastIndex(suspended);
+          next = { step: ['inner', 'inner-wait'], forEachIndex };
+        }
+        if (!next) break;
+        result = await run.resume({ ...next, resumeData: true, outputOptions });
+        seen.push({
+          status: result.status,
+          state: result.state,
+          stored: await storedByPosition(storage, storageVersion),
+        });
+      }
+      expect(result.status).toBe('success');
+      return seen;
+    }
+
+    it.each(Object.entries(scenarios))('stores the same state as v1: %s', async (_, scenario) => {
+      expect(await drive(2, scenario)).toEqual(await drive(1, scenario));
+    });
+
+    /** What each nested run's writes sent as state, by the run's status, in write order. */
+    async function nestedSends(scenario: string) {
+      const storage = new MockStore();
+      const sends = recordStateSends(storage);
+      await drive(2, scenarios[scenario]!, storage);
+      const byRun: Record<string, string[]> = {};
+      for (const { workflowName, runId, status, state } of sends) {
+        if (workflowName === 'outer') continue;
+        (byRun[`${workflowName}/${runId}`] ??= []).push(`${status} ${state}`);
+      }
+      return Object.values(byRun);
+    }
+
+    it("builds on the parent's stored state, and stores its full state once when it pauses", async () => {
+      const [inner, inner2] = await nestedSends('a parallel of two nested runs that suspend, resumed one at a time');
+      const suspended = ['pending none', 'running none', 'running none', 'running patch', 'running none'];
+      const resumed = ['running none', 'running patch', 'running none', 'running patch', 'success none'];
+      expect(inner).toEqual([...suspended, 'suspended full', 'suspended none', ...resumed]);
+      expect(inner2).toEqual(inner);
+    });
+
+    it("builds a foreach iteration on the parent's stored state and the earlier iterations' changes", async () => {
+      const runs = await nestedSends('a foreach over a nested run that does not suspend');
+      const ran = ['running none', 'running patch', 'running none', 'running patch', 'running none', 'running patch'];
+      expect(runs).toEqual([
+        ['pending none', 'running none', ...ran, 'success none'],
+        ['pending none', 'running patch', ...ran, 'success none'],
+        ['pending none', 'running patch', ...ran, 'success none'],
+      ]);
+    });
+
+    it('stores no full state for a nested step outside a block when it pauses', async () => {
+      const [inner] = await nestedSends('a dowhile over a nested run that suspends');
+      expect(inner).toContain('suspended none');
+      expect(inner!.filter(sent => sent.endsWith('full'))).toEqual([]);
     });
   });
 
