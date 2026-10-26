@@ -119,6 +119,8 @@ When auth is enabled, requests to Mastra's built-in routes require authenticatio
 If your Better Auth setup uses cookies, configure the client to send credentials. For cross-origin requests (e.g. Next.js on `:3000` calling Mastra on `:4111`), enable CORS credentials on the Mastra server:
 
 ```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   server: {
     auth: mastraAuth,

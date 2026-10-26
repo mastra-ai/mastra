@@ -73,24 +73,6 @@
         "type": "toggle"
       }
     ],
-    "upstage/solar-pro4": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "upstage/solar-pro2": [
-      {
-        "type": "effort",
-        "values": ["minimal", "high"]
-      }
-    ],
-    "upstage/solar-pro3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "thinkingmachines/inkling": [
       {
         "type": "effort",
@@ -103,15 +85,24 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
       }
     ],
+    "sakana/fugu-ultra": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh"]
+      }
+    ],
     "meta/muse-spark-1.2-contributor": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "poolside/laguna-xs-2.1": [
+    "qwen/qwen-plus": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "qwen/qwen3.6-flash": [
@@ -123,6 +114,22 @@
       }
     ],
     "qwen/qwen-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.5-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.6-plus": [
       {
         "type": "toggle"
       },
@@ -154,30 +161,6 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.6-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen3.5-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "qwen/qwen3.5-397b-a17b": [
       {
         "type": "toggle"
@@ -186,10 +169,27 @@
         "type": "budget_tokens"
       }
     ],
-    "sakana/fugu-ultra": [
+    "upstage/solar-pro2": [
       {
         "type": "effort",
-        "values": ["high", "xhigh"]
+        "values": ["minimal", "high"]
+      }
+    ],
+    "upstage/solar-pro4": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "upstage/solar-pro3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "poolside/laguna-xs-2.1": [
+      {
+        "type": "toggle"
       }
     ]
   }
