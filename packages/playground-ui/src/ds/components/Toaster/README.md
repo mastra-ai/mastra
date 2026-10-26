@@ -37,22 +37,7 @@ Use `variant="neutral"` for gray surfaces and neutral text across all notificati
 
 Loading uses the existing Mastra BrandLoader. When a promise settles, its existing lines and dots merge into a check for success or an × for failure over 200ms in the same fixed icon slot. The color settles with the shape rather than changing abruptly. Promise completion uses a 200ms translated, clipped reveal rather than animating layout height or scaling text. The result description and primary action fade in with the same timing. Reduced motion shows the final card immediately. Caller-provided loading icons opt out of both morphs. A caller-provided success or error icon opts out only for that outcome. Reduced motion disables the pulse and completes the shape change immediately. The wrapper measures unscaled card content and supplies heights and offsets to Sonner's existing stack animations. This keeps card bounds and gaps correct when a toast is updated behind another card, resized or expanded. Removed cards retain their last offset during dismissal. Sonner continues to own ordering, animations, swipe gestures, timers and callbacks. Only genuinely long messages scroll, inside a compact viewport with a pinned heading, subtle divider and thin themed scrollbar. Dismissal and native footer actions stay accessible. Short messages and footer links remain unclipped and non-scrollable.
 
-## Structured errors and duration
-
-The shared error helper accepts a title, cause and next step. Its options are the same Sonner options as existing toast calls, including a custom action and duration in milliseconds.
-
-```tsx
-import { errorToast, ErrorNotice } from '@mastra/playground-ui/utils/error-message';
-
-const message = {
-  title: 'Couldn’t save settings',
-  why: 'The registry didn’t respond.',
-  fix: 'Try saving again.',
-};
-
-errorToast(message, { duration: 8000 });
-<ErrorNotice message={message} />;
-```
+## Duration
 
 Ordinary toasts use `duration` directly. Promise toasts use `options.duration`: loading stays visible until the operation settles, then the success or error gets that full duration. Hovering pauses the native dismissal timer. `Infinity` keeps a toast open until it is dismissed. The default remains five seconds.
 
@@ -68,4 +53,4 @@ toast.promise({
 });
 ```
 
-Existing `toast.error(message, options)`, string arrays, React-node actions, promise callbacks, IDs and import paths remain supported. Structured errors are an additive API, not a required callsite migration.
+Existing `toast.error(message, options)`, string arrays, React-node actions, promise callbacks, IDs and import paths remain supported.
