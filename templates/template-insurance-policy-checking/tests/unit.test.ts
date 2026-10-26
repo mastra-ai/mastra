@@ -9,6 +9,7 @@ import { insuranceConfiguration, insuranceConfigurationSchema } from '../src/mas
 import {
   applicationConfigurationSchema,
   clarifySchema,
+  canonicalJson,
   hashBytes,
   sourceBundleSchema,
 } from '../src/mastra/domain/case-contracts.js';
@@ -315,4 +316,16 @@ it('accepts the guided first-page revision instruction without broadening review
     'Approve report version 2 and confirm every finding',
   ])
     expect(parseNaturalReview(text)).toBeNull();
+});
+
+it('keeps snapshot hashes stable when optional object fields are undefined', () => {
+  const snapshot = {
+    version: 1,
+    revisionNote: undefined,
+    reviewHistory: [{ reason: null, approvalId: undefined }],
+  };
+  const serialized = canonicalJson(snapshot);
+  expect(JSON.parse(serialized)).toEqual(JSON.parse(JSON.stringify(snapshot)));
+  expect(hashBytes(serialized)).toBe(hashBytes(canonicalJson(JSON.parse(JSON.stringify(snapshot)))));
+  expect(serialized).toContain('"reason":null');
 });
