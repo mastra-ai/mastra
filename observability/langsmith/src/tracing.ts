@@ -399,6 +399,18 @@ export class LangSmithExporter extends TrackingExporter<
     return merged;
   }
 
+  /**
+   * LangSmith groups runs into a Thread only by `session_id` / `thread_id` metadata and
+   * needs it on every run of the trace. Mastra sets `threadId` on the agent run span
+   * only, so child spans take the session their parent run was built with.
+   */
+  private findSessionId(span: AnyExportedSpan, traceData: LangSmithTraceData): string | undefined {
+    const own = span.metadata?.sessionId ?? span.metadata?.threadId;
+    if (typeof own === 'string' && own) return own;
+    const inherited = span.isRootSpan ? undefined : traceData.getParent({ span })?.metadata?.session_id;
+    return typeof inherited === 'string' && inherited ? inherited : undefined;
+  }
+
   private buildRunTreePayload(
     span: AnyExportedSpan,
     traceData: LangSmithTraceData,
@@ -429,9 +441,11 @@ export class LangSmithExporter extends TrackingExporter<
       payload.project_name = projectName;
     }
 
-    // Add session info to metadata if provided via vendor metadata
-    if (vendorMetadata?.sessionId) {
-      payload.metadata.session_id = vendorMetadata.sessionId;
+    // Explicit vendor sessionId wins; otherwise the Mastra conversation thread, so turns
+    // on one memory thread land in one LangSmith Thread without extra setup.
+    const sessionId = vendorMetadata?.sessionId ?? this.findSessionId(span, traceData);
+    if (sessionId) {
+      payload.metadata.session_id = sessionId;
     }
     if (vendorMetadata?.sessionName) {
       payload.metadata.session_name = vendorMetadata.sessionName;
