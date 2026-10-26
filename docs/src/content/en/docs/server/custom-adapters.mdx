@@ -55,7 +55,7 @@ These type parameters ensure type safety throughout your adapter implementation 
 
 ## Required methods
 
-You must implement these six abstract methods. Each handles a specific part of the request lifecycle, from attaching context to sending responses.
+You must implement these seven abstract methods. Each handles a specific part of the request lifecycle, from attaching context to sending responses.
 
 ### `registerContextMiddleware()`
 
@@ -115,6 +115,35 @@ registerAuthMiddleware(): void {
     if (!allowed) {
       return res.status(403).json({ error: 'Forbidden' });
     }
+    next();
+  });
+}
+```
+
+### `registerHttpLoggingMiddleware()`
+
+Register request logging middleware. `init()` calls this after the context, auth, and user middleware. Return early when request logging isn't enabled in `this.httpLoggingConfig`, and skip paths that `this.shouldLogRequest()` excludes. If your framework doesn't support request logging, implement this method as a no-op.
+
+```typescript oxfmt:false
+registerHttpLoggingMiddleware(): void {
+  if (!this.httpLoggingConfig?.enabled) return;
+
+  this.app.use('*', async (req, res, next) => {
+    if (!this.shouldLogRequest(req.path)) {
+      return next();
+    }
+
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      const level = this.httpLoggingConfig?.level || 'info';
+      this.logger[level](`${req.method} ${req.path} ${res.statusCode} ${duration}ms`, {
+        method: req.method,
+        path: req.path,
+        status: res.statusCode,
+        duration: `${duration}ms`,
+      });
+    });
     next();
   });
 }
@@ -339,6 +368,11 @@ export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse
     const authConfig = this.mastra.getServer()?.auth
     if (!authConfig) return
     // ... implement auth middleware
+  }
+
+  registerHttpLoggingMiddleware(): void {
+    if (!this.httpLoggingConfig?.enabled) return
+    // ... implement request logging
   }
 
   async registerRoute(

@@ -46,8 +46,22 @@ export const mastra = new Mastra({
     name: 'auth',
     type: 'Auth',
     description:
-      'Your Better Auth instance created via betterAuth({ ... }). This is required and must be properly configured with a supported database provider.',
-    isOptional: false,
+      "Your Better Auth instance created via betterAuth({ ... }), configured with a supported database provider. Optional when `secret` is provided, in which case the provider builds its own instance in `init()` on the host's auth database and owns its schema migrations.",
+    isOptional: true,
+  },
+  {
+    name: 'secret',
+    type: 'string',
+    description:
+      'Secret used to sign sessions for the instance the provider builds itself. Required when `auth` is omitted. Ignored when `auth` is provided.',
+    isOptional: true,
+  },
+  {
+    name: 'signUpEnabled',
+    type: 'boolean',
+    description: 'Whether new users can register via sign-up. Set to `false` to disable public registration.',
+    isOptional: true,
+    defaultValue: 'true',
   },
   {
     name: 'name',
@@ -84,12 +98,12 @@ The `BetterAuthUser` type contains the session and user information returned by 
 
 ```typescript
 interface BetterAuthUser {
-  session: Session
+  session: Session & { activeOrganizationId?: string | null }
   user: User
 }
 ```
 
-- `session`: The Better Auth session object containing session metadata
+- `session`: The Better Auth session object containing session metadata. `activeOrganizationId` comes from the organization plugin, which the provider registers
 - `user`: The authenticated user object with user details
 
 The `Session` and `User` types are exported by the Better Auth package.
