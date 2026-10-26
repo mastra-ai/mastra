@@ -27,6 +27,22 @@ function card(id: string, stages: string[], board = 'work') {
 }
 
 describe('the new session page', () => {
+  it('asks the signed-in person, by first name, what to ship', async () => {
+    stubDraftRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({
+          authenticated: true,
+          authEnabled: true,
+          user: { userId: 'user-1', name: ' Dustin Moskovitz ' },
+        }),
+      ),
+    );
+    renderDraft();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'What should we ship, Dustin?' })).toBeInTheDocument();
+  });
+
   it('previews a starter prompt in the composer while it is hovered, gives my draft back after, and sends it on click', async () => {
     const route = stubDraftRoute();
     const user = userEvent.setup();

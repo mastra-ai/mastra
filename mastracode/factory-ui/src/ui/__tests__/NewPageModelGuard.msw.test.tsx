@@ -56,7 +56,7 @@ describe('NewPage default-model guard', () => {
       '/factories/fp-1/settings/models#factory-defaults',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'What do you want to work on?' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'What should we ship?' })).not.toBeInTheDocument();
   });
 
   it('renders a usable composer while the guard resolves, then swaps in the guard', async () => {
@@ -74,7 +74,7 @@ describe('NewPage default-model guard', () => {
 
     renderNewPage();
 
-    expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'What should we ship?' })).toBeInTheDocument();
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();
 
     releaseProject();
@@ -94,7 +94,7 @@ describe('NewPage default-model guard', () => {
     expect(
       screen.queryByRole('heading', { name: 'No default model configured for this Factory' }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'What should we ship?' })).toBeInTheDocument();
   });
 
   it('fails open with a visible error when the factory project fetch errors', async () => {

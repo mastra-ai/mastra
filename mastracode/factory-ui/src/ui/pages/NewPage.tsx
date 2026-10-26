@@ -7,6 +7,7 @@ import { Link, useLocation, useParams } from 'react-router';
 
 import { FolderIcon } from '../ui/icons';
 import { useFactoryQuery } from '../../hooks/useFactories';
+import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
 import { useDefaultModelQuery } from '../../hooks/use-default-model';
 import { useProvidersQuery } from '../../hooks/use-providers';
@@ -151,6 +152,8 @@ function DraftStart({
   missingDefaultModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
 }) {
+  const firstName = useFactoryAuth().data?.user?.name?.trim().split(/\s+/)[0];
+
   if (activeFactory && missingDefaultModel) {
     return (
       <section className={draftStartClass} aria-label="Model setup required">
@@ -170,7 +173,7 @@ function DraftStart({
   return (
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
       <Txt as="h1" variant="title" tone="ink" id="draft-start-heading" className="m-0">
-        What do you want to work on?
+        {firstName ? `What should we ship, ${firstName}?` : 'What should we ship?'}
       </Txt>
       {configurationError && (
         <Notice variant="destructive">Failed to load session configuration: {configurationError.message}</Notice>
