@@ -570,6 +570,8 @@ By default, `ResponseCache` looks up `MASTRA_RESOURCE_ID_KEY` on the request con
 Override explicitly when you need a different scope:
 
 ```typescript title="src/mastra/agents/scoped-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
 new Agent({
   id: 'processors-agent',
   inputProcessors: [
@@ -972,6 +974,7 @@ Processors can request that the LLM retry its response with feedback. This is us
 
 ```typescript title="src/mastra/processors/quality-checker.ts"
 import type { Processor } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent'
 
 export class QualityChecker implements Processor {
   id = 'quality-checker'
