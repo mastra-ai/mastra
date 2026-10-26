@@ -70,6 +70,8 @@ export const storedPhaseInputSchema = z
       .optional(),
     /** Card conditions under which the exit tool is approved without a person. */
     autoApproveWhen: intakeRouteWhenSchema.nullable().optional(),
+    /** Only people move cards into this phase; an agent's move into it is refused. */
+    manualEntry: z.boolean().optional(),
   })
   .strict()
   .superRefine((phase, ctx) => {

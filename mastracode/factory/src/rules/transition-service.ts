@@ -439,6 +439,15 @@ export class FactoryTransitionService {
         `The ${board.title} board does not allow moving from ${fromStage} to ${request.stage}. ${nextStagesReason}`,
       );
     }
+    if (request.actor.type === 'agent' && fromStage !== request.stage && board.entersManually(request.stage)) {
+      const phase = board.phases[request.stage]?.title ?? request.stage;
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'approval_required',
+        `Only a person moves a card into ${phase}. Leave it in ${board.phases[fromStage]?.title ?? fromStage}; a maintainer moves it on from the Factory UI.`,
+      );
+    }
 
     // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
     const humanMove = request.actor.type === 'human' && fromStage !== request.stage && request.cause !== 'run_start';

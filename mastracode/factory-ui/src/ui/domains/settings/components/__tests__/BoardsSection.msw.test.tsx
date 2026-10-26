@@ -141,6 +141,21 @@ describe('BoardsSection', () => {
     });
   });
 
+  it('keeps a phase for people when its switch is on', async () => {
+    const saved = stub();
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(<BoardsSection factoryId="fp-1" />);
+
+    const building = await screen.findByRole('group', { name: /Building/ });
+    const peopleOnly = within(building).getByRole('switch', { name: /Only people move cards into/ });
+    expect(peopleOnly).not.toBeChecked();
+    await user.click(peopleOnly);
+    await user.click(screen.getAllByRole('button', { name: 'Save' })[0]);
+    await waitForMutationsIdle(client);
+
+    expect(saved[0].config.boards[0].phases[2]).toMatchObject({ key: 'execute', manualEntry: true });
+  });
+
   it('offers the runners the server has, including the app’s own', async () => {
     const saved = stub();
     const user = userEvent.setup();

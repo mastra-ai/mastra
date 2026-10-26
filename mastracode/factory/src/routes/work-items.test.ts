@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { defaultProjectBoardConfig } from '../boards/templates/work.js';
+import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -191,7 +192,7 @@ describe('stored board config', () => {
     expect(stored.boards[0]!.id).not.toBe('');
     expect(stored.intakeRoutes.map(route => [route.boardKey, route.phaseKey])).toEqual([
       ['work', 'triage'],
-      ['work', null],
+      ['work', 'triage'],
     ]);
   });
 
@@ -2254,7 +2255,12 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     // finishes it (triage → planning), then a human approves planning into done.
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ sessions: run }));
     const { workItem } = await created.json();
-    const service = new FactoryTransitionService({ configVersion: 'factory-config-v1', storage: seed.workItems });
+    // Work's Planning is people-only; this fixture lets the triage agent hand the card on itself.
+    const service = new FactoryTransitionService({
+      configVersion: 'factory-config-v1',
+      storage: seed.workItems,
+      boards: createLifecycleTestRegistry({}),
+    });
     const move = (stage: 'triage' | 'planning', expectedRevision: number, identity: string, actor: FactoryRuleActor) =>
       service.transition({
         orgId: 'org1',

@@ -32,6 +32,8 @@ export const workBoardTemplate = {
       kind: 'working',
       runner: { type: 'agent', agentId: 'factory-plan', skill: 'factory-plan', context: 'plan' },
       exitTool: 'submit_plan',
+      // Triage runs on its own; a person decides what gets planned.
+      manualEntry: true,
     },
     { key: 'execute', name: 'Building', kind: 'working', runner: { type: 'workflow', workflowId: 'factory-build' } },
     { key: 'review', name: 'Review', kind: 'working', runner: REVIEW },
@@ -74,7 +76,7 @@ export const workBoardTemplate = {
   ],
 } as const satisfies StoredBoardInput;
 
-/** What a project gets when it has no stored boards: the Work board, PRs into Triage, everything else into Intake. */
+/** What a project gets when it has no stored boards: the Work board, with pull requests and issues arriving in Triage. */
 export const defaultProjectBoardConfig = {
   boards: [workBoardTemplate],
   intakeRoutes: [
@@ -83,6 +85,7 @@ export const defaultProjectBoardConfig = {
       boardKey: 'work',
       phaseKey: 'triage',
     },
-    { boardKey: 'work' },
+    // Issues start in Triage so triage runs on arrival; a repository bound to another board still wins.
+    { boardKey: 'work', phaseKey: 'triage' },
   ],
 } as const satisfies ProjectBoardConfigInput;

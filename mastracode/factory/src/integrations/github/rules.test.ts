@@ -3414,13 +3414,13 @@ describe('GithubRules label routes', () => {
       expect(decision?.decision).toMatchObject({ board: 'release', stage: 'queued' });
     });
 
-    it('sends an issue no route matches to the stored fallback route', async () => {
+    it('sends an issue no route matches to the stored fallback route, Work › Triage', async () => {
       const { service, workItems, project } = await setupStored(true, 'release');
       const ingress = issueOpened('fallback-open');
       (ingress.payload.issue as Record<string, unknown>).labels = [{ name: 'bug' }];
       await expect(service.ingest(ingress)).resolves.toEqual({ status: 'committed' });
       const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
-      expect(decision?.decision).toMatchObject({ board: 'work', stage: 'intake' });
+      expect(decision?.decision).toMatchObject({ board: 'work', stage: 'triage' });
     });
   });
 

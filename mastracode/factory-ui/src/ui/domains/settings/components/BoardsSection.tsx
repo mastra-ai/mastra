@@ -477,6 +477,18 @@ function PhaseEditor({
           )}
         </div>
 
+        <label className="flex items-center gap-2">
+          <Switch
+            aria-label={`Only people move cards into ${phase.name}`}
+            checked={phase.manualEntry === true}
+            disabled={disabled}
+            onCheckedChange={manualEntry => onChange({ manualEntry })}
+          />
+          <Txt as="span" variant="caption" className="text-muted-foreground">
+            Only people move cards here; agents leave the card where it is
+          </Txt>
+        </label>
+
         {phase.kind === 'working' && phase.exitTool && (
           <div className="flex flex-col gap-1">
             <Txt as="span" variant="caption" className="text-muted-foreground">

@@ -19,6 +19,7 @@ export interface CompilableBoard {
     readonly runner?: StoredPhaseRunner | null;
     readonly nextPhases?: readonly string[] | null;
     readonly exitTool?: string | null;
+    readonly manualEntry?: boolean;
   }[];
 }
 
@@ -166,6 +167,7 @@ export function compileStoredBoard(
       title: phase.name,
       // A phase grants the Factory tools its runner works with; a context name grants none.
       factoryTools: runner?.factoryTools ?? [],
+      ...(phase.manualEntry ? { manualEntry: true } : {}),
       outcomes: Object.fromEntries(targets.map(target => [target, target])),
       ...(runner?.onEnter ? { onEnter: runner.onEnter } : {}),
       ...(runner?.onExit ? { onExit: runner.onExit } : {}),
@@ -174,7 +176,13 @@ export function compileStoredBoard(
       phases[phase.key] = { ...base, kind: 'working', role: runner.role };
     } else if (phase.kind === 'working') {
       if (runner) options.warn?.(`Board '${board.key}' phase '${phase.key}' runner '${runner.id}' has no context.`);
-      phases[phase.key] = { title: phase.name, outcomes: base.outcomes, factoryTools: [], kind: 'resting' };
+      phases[phase.key] = {
+        title: phase.name,
+        outcomes: base.outcomes,
+        factoryTools: [],
+        ...(phase.manualEntry ? { manualEntry: true } : {}),
+        kind: 'resting',
+      };
       continue;
     } else {
       phases[phase.key] = { ...base, kind: phase.kind };

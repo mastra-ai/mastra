@@ -66,6 +66,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('BoardsStorage o
     // Null is kept: the phase runs in the card's main context.
     expect(work!.phases.find(phase => phase.key === 'review')!.runner).toMatchObject({ context: null });
     expect(work!.phases.every(phase => phase.nextPhases === null)).toBe(true);
+    // Planning is people-only; every other phase takes agents.
+    expect(work!.phases.filter(phase => phase.manualEntry).map(phase => phase.key)).toEqual(['planning']);
     expect(work!.eventRoutes.map(route => [route.event, route.toPhaseKey])).toEqual(
       workBoardTemplate.eventRoutes.map(route => [route.event, route.toPhaseKey]),
     );
@@ -80,7 +82,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('BoardsStorage o
         phaseKey: 'triage',
         enabled: true,
       },
-      { when: null, boardKey: 'work', phaseKey: null, enabled: true },
+      { when: null, boardKey: 'work', phaseKey: 'triage', enabled: true },
     ]);
     expect(await boards.getConfig(scope)).toEqual(saved);
   });

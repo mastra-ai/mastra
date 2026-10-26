@@ -19,6 +19,8 @@ export function createLifecycleTestRegistry(handlers: BoardDefinition<string, st
           stage,
           {
             ...phase,
+            // Fixtures drive handlers through agent moves, so Planning takes agents here.
+            manualEntry: false,
             onEnter: {
               ...phase.onEnter,
               ...Object.fromEntries(
