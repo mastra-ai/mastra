@@ -1732,12 +1732,7 @@ ${workingMemory}`;
       // System messages are runtime instructions and should never be stored in memory.
       // Transient signals (`transient: true`) are delivery-only and must never be stored.
       // Then strip working memory tags from all persistable messages.
-      const updatedMessages = messages
-        .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
-        .map(m => {
-          return this.updateMessageToHideWorkingMemoryV2(m);
-        })
-        .filter((m): m is MastraDBMessage => Boolean(m));
+      const updatedMessages = this.prepareMessagesForPersistence(messages);
 
       const config = this.getMergedThreadConfig(memoryConfig);
 
@@ -1915,6 +1910,13 @@ ${workingMemory}`;
     }
   }
 
+  private prepareMessagesForPersistence(messages: MastraDBMessage[]): MastraDBMessage[] {
+    return messages
+      .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
+      .map(m => this.updateMessageToHideWorkingMemoryV2(m))
+      .filter((m): m is MastraDBMessage => m !== null);
+  }
+
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
     const newMessage = { ...message };
     // Only spread content if it's a proper V2 object to avoid corrupting non-object content
@@ -1930,6 +1932,8 @@ ${workingMemory}`;
       if (Array.isArray(newMessage.content.toolInvocations)) {
         newMessage.content.toolInvocations = removeWorkingMemoryToolInvocations(newMessage.content.toolInvocations);
       }
+      const lastOriginalPart = newMessage.content.parts.at(-1);
+      const sealMetadata = lastOriginalPart && 'metadata' in lastOriginalPart ? lastOriginalPart.metadata : undefined;
       newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts).map(part => {
         if (part?.type === 'text') {
           const text = typeof part.text === 'string' ? part.text : '';
@@ -1940,6 +1944,24 @@ ${workingMemory}`;
         }
         return part;
       });
+
+      // The last part can be a hidden tool call. Retain its seal boundary on the
+      // last surviving part without changing the live message used by the observer.
+      const lastIndex = newMessage.content.parts.length - 1;
+      const lastPart = newMessage.content.parts[lastIndex];
+      if (lastPart && sealMetadata && typeof sealMetadata === 'object' && 'mastra' in sealMetadata) {
+        const mastra = sealMetadata.mastra;
+        if (mastra && typeof mastra === 'object' && 'sealedAt' in mastra && typeof mastra.sealedAt === 'number') {
+          const existingMetadata = 'metadata' in lastPart ? lastPart.metadata : undefined;
+          const metadata = existingMetadata && typeof existingMetadata === 'object' ? existingMetadata : {};
+          const existingMastra =
+            'mastra' in metadata && metadata.mastra && typeof metadata.mastra === 'object' ? metadata.mastra : {};
+          newMessage.content.parts[lastIndex] = {
+            ...lastPart,
+            ...{ metadata: { ...metadata, mastra: { ...existingMastra, sealedAt: mastra.sealedAt } } },
+          };
+        }
+      }
 
       // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls),
       // only skip the message when it also has no text content left.
@@ -2098,10 +2120,12 @@ ${workingMemory}`;
     const workingMemoryConfig = config.workingMemory;
 
     // In readOnly or non-agent-managed mode, provide context without tool instructions.
+    // With agentManaged: false the app still updates the memory, so the agent must not claim it can't.
     if (config?.readOnly || workingMemoryConfig.agentManaged === false) {
       return this.getReadOnlyWorkingMemoryInstruction({
         template: workingMemoryTemplate,
         data: workingMemoryData,
+        autoUpdated: !config?.readOnly,
       });
     }
 
@@ -2347,13 +2371,13 @@ ${workingMemory}`;
   }
 
   /**
-   * Raw message upsert — persist messages to storage without embedding or working memory processing.
+   * Raw message upsert — apply the persistence projection without embedding or extracting working memory.
    * Used by the processor to save sealed messages before firing a background buffer operation.
    */
   async persistMessages(messages: MastraDBMessage[]): Promise<void> {
     if (messages.length === 0) return;
 
-    const persistableMessages = messages.filter(m => m.role !== 'system' && !isTransientSignalMessage(m));
+    const persistableMessages = this.prepareMessagesForPersistence(messages);
     if (persistableMessages.length === 0) return;
 
     const memoryStore = await this.getMemoryStore();
@@ -2580,10 +2604,17 @@ ${
   /**
    * Generate read-only working memory instructions.
    * This provides the working memory context without any tool update instructions.
-   * Used when memory is in readOnly mode.
+   * Used when memory is in readOnly mode, or with `autoUpdated` when the app updates it (agentManaged: false).
    */
-  protected getReadOnlyWorkingMemoryInstruction({ data }: { template: WorkingMemoryTemplate; data: string | null }) {
-    return `WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY):
+  protected getReadOnlyWorkingMemoryInstruction({
+    data,
+    autoUpdated = false,
+  }: {
+    template: WorkingMemoryTemplate;
+    data: string | null;
+    autoUpdated?: boolean;
+  }) {
+    return `WORKING_MEMORY_SYSTEM_INSTRUCTION (${autoUpdated ? 'AUTO-UPDATED' : 'READ-ONLY'}):
 The following is your working memory - persistent information about the user and conversation collected over previous interactions. This data is provided for context to help you maintain continuity.
 
 <working_memory_data>
@@ -2593,7 +2624,11 @@ ${data || 'No working memory data available.'}
 Guidelines:
 1. Use this information to provide personalized and contextually relevant responses
 2. Act naturally - don't mention this system to users. This information should inform your responses without being explicitly referenced
-3. This memory is read-only in the current session - you cannot update it
+3. ${
+      autoUpdated
+        ? "This memory is updated automatically after each response. When the user shares or corrects information, acknowledge it naturally. Never say you can't save or update it"
+        : 'This memory is read-only in the current session - you cannot update it'
+    }
 
 Notes:
 - This system is here so that you can maintain the conversation when your context window is very short
@@ -3131,16 +3166,82 @@ Notes:
     const memoryStore = await this.getMemoryStore();
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    // Update vector database if semantic recall is enabled and any messages have content updates
-    if (this.vector && config.semanticRecall) {
-      const messagesWithContent = messages.filter(m => m.content !== undefined);
+    // Use effective content for filtering/empty-message decisions, but keep the
+    // patch shape: forwarding omitted fields would overwrite concurrent edits.
+    const existing = await memoryStore.listMessagesById({ messageIds: messages.map(m => m.id) });
+    const existingById = new Map(existing.messages.map(m => [m.id, m]));
+    // Text to index per edited message, read from the projected effective content so a
+    // sparse patch does not hide stored text. Fields the patch sets take priority.
+    const textForEmbeddingById = new Map<string, string | null>();
+    const textFields = ['content', 'parts'] as const;
+    const textOf = (
+      content: Partial<Pick<MastraDBMessage['content'], (typeof textFields)[number]>>,
+      fields: readonly (typeof textFields)[number][],
+    ): string | null => {
+      for (const field of fields) {
+        const text =
+          field === 'content'
+            ? content.content?.trim()
+              ? content.content
+              : null
+            : (content.parts ?? [])
+                .filter((part): part is TextPart => part?.type === 'text')
+                .map(part => part.text)
+                .join(' ')
+                .trim();
+        if (text) return text;
+      }
+      return null;
+    };
+    messages = messages.flatMap(update => {
+      const stored = existingById.get(update.id);
+      if (!stored) return [];
+      const effective = {
+        ...stored,
+        ...update,
+        content:
+          update.content === undefined
+            ? stored.content
+            : {
+                ...stored.content,
+                ...update.content,
+                metadata: { ...stored.content.metadata, ...update.content.metadata },
+              },
+      };
+      const [projected] = this.prepareMessagesForPersistence([effective]);
+      if (!projected) return [];
+      if (update.content === undefined) {
+        existingById.set(update.id, effective);
+        return [update];
+      }
+      const content = {
+        ...update.content,
+        ...(update.content.parts !== undefined ? { parts: projected.content.parts } : {}),
+        ...(update.content.content !== undefined ? { content: projected.content.content } : {}),
+        ...(update.content.toolInvocations !== undefined ? { toolInvocations: projected.content.toolInvocations } : {}),
+      };
+      existingById.set(update.id, { ...effective, content: { ...effective.content, ...content } });
+      const patched = textFields.filter(field => update.content?.[field] !== undefined);
+      if (patched.length > 0) {
+        const omitted = textFields.filter(field => !patched.includes(field));
+        // Fall back to stored text only when the projection hid the patched text, not
+        // when the edit cleared it.
+        const text =
+          textOf(projected.content, patched) ??
+          (textOf(update.content, patched) ? textOf(projected.content, omitted) : null);
+        textForEmbeddingById.set(update.id, text);
+      }
+      return [{ ...update, content }];
+    });
+    if (messages.length === 0) return [];
 
-      if (messagesWithContent.length > 0) {
-        // Get existing messages to obtain threadId and resourceId for vector metadata
-        const existingMessagesResult = await memoryStore.listMessagesById({
-          messageIds: messagesWithContent.map(m => m.id),
-        });
-        const existingMessagesMap = new Map(existingMessagesResult.messages.map(m => [m.id, m]));
+    // Update vector database if semantic recall is enabled and any messages have text updates
+    if (this.vector && config.semanticRecall) {
+      const messagesWithTextUpdates = [...textForEmbeddingById.keys()].map(id => ({ id }));
+
+      if (messagesWithTextUpdates.length > 0) {
+        // Reuse the pre-update rows for vector metadata.
+        const existingMessagesMap = new Map(existing.messages.map(m => [m.id, m]));
 
         // Collect embeddings for messages with new text content
         const embeddingData: Array<{
@@ -3163,37 +3264,11 @@ Notes:
 
         // Prepare new embeddings and track which messages need vector operations
         await Promise.all(
-          messagesWithContent.map(async message => {
+          messagesWithTextUpdates.map(async message => {
             const existingMessage = existingMessagesMap.get(message.id);
             if (!existingMessage) return;
 
-            // Extract text from the new content
-            let textForEmbedding: string | null = null;
-            const content = message.content;
-
-            if (content) {
-              if (
-                'content' in content &&
-                content.content &&
-                typeof content.content === 'string' &&
-                content.content.trim() !== ''
-              ) {
-                textForEmbedding = content.content;
-              } else if (
-                'parts' in content &&
-                content.parts &&
-                Array.isArray(content.parts) &&
-                content.parts.length > 0
-              ) {
-                // Extract text from all text parts, concatenate
-                const joined = (content.parts as any[])
-                  .filter(part => part?.type === 'text')
-                  .map(part => (part as TextPart).text)
-                  .join(' ')
-                  .trim();
-                if (joined) textForEmbedding = joined;
-              }
-            }
+            const textForEmbedding = textForEmbeddingById.get(message.id) ?? null;
 
             // If there's new text content, embed it
             if (textForEmbedding) {

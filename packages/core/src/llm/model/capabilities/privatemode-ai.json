@@ -36,10 +36,9 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "glm-latest": [
+    "kimi-latest": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "glm-5.3-flash": [
@@ -54,20 +53,21 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k2.6": [
+    "glm-latest": [
       {
-        "type": "toggle"
-      }
-    ],
-    "kimi-latest": [
-      {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "glm-flash-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k2.6": [
+      {
+        "type": "toggle"
       }
     ]
   }

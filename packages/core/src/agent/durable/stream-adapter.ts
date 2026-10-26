@@ -157,6 +157,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   messageId: string;
   /** Tool calls emitted before a resumed stream segment started. */
   initialToolCalls?: ToolCallChunk[];
+  /** Text the run streamed before the suspension a resumed stream segment continues. */
+  resumedText?: { priorText: string; stepText: string };
   /** Model information for the output */
   model: {
     modelId: string | undefined;
@@ -305,6 +307,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     runId,
     messageId,
     initialToolCalls,
+    resumedText,
     model,
     threadId,
     resourceId,
@@ -551,6 +554,13 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             lastErrorStack = typeof errPayload?.error?.stack === 'string' ? errPayload.error.stack : undefined;
             lastErrorName = typeof errPayload?.error?.name === 'string' ? errPayload.error.name : undefined;
             lastErrorCause = errPayload?.error ?? errPayload;
+          }
+          if ((chunk as any).type === 'step-finish') {
+            const metadata = (chunk as any).payload?.metadata;
+            // A JSON-serializing pubsub delivers the response timestamp as an ISO string.
+            if (typeof metadata?.timestamp === 'string') {
+              metadata.timestamp = new Date(metadata.timestamp);
+            }
           }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
           const delivery = onChunkDelivery.then(() => onChunk?.(chunk as ChunkType<OUTPUT>));
@@ -917,6 +927,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     messageList,
     messageId,
     initialToolCalls,
+    resumedText,
     finishUsageIsTotal: true,
     options: {
       runId,

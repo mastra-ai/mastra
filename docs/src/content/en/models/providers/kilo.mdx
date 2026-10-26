@@ -102,8 +102,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 943718,
-    "inputCost": 0.07,
-    "outputCost": 0.5
+    "inputCost": 0.02,
+    "outputCost": 1
   },
   {
     "model": "kilo/~deepseek/deepseek-pro-latest",
@@ -162,8 +162,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 943718,
-    "inputCost": 0.238,
-    "outputCost": 16
+    "inputCost": 0.214,
+    "outputCost": 20
   },
   {
     "model": "kilo/~openai/gpt-astra-latest",
@@ -257,9 +257,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 943718,
-    "inputCost": 0.0052,
-    "outputCost": 0.1985
+    "maxOutput": 131072,
+    "inputCost": 0.0413,
+    "outputCost": 0.0758
   },
   {
     "model": "kilo/~z-ai/glm-latest",
@@ -270,7 +270,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 943718,
-    "inputCost": 0.079,
+    "inputCost": 0.0699,
     "outputCost": 1.4
   },
   {
@@ -1450,6 +1450,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
+    "model": "kilo/liquid/lfm-2.5-2.6b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.35,
+    "outputCost": 0.5
+  },
+  {
     "model": "kilo/liquid/lfm-2.5-2.6b:free",
     "imageInput": false,
     "audioInput": false,
@@ -1540,8 +1552,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 80000,
-    "maxOutput": 72000,
+    "contextWindow": 131072,
+    "maxOutput": 117964,
     "inputCost": 0.05,
     "outputCost": 0.33
   },
@@ -1768,8 +1780,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 198000,
-    "maxOutput": 32768,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
     "inputCost": 0.27,
     "outputCost": 0.95
   },
@@ -2158,6 +2170,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
+    "model": "kilo/moonshotai/kimi-k3.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 943718,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "kilo/morph/morph-v3-fast",
     "imageInput": false,
     "audioInput": false,
@@ -2346,8 +2370,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 235929,
-    "inputCost": 0.1,
-    "outputCost": 0.4
+    "inputCost": 0.06,
+    "outputCost": 0.35
   },
   {
     "model": "kilo/nvidia/nemotron-3.5-super-vl:free",
@@ -2360,18 +2384,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
-  },
-  {
-    "model": "kilo/openai/gpt-3.5-turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 16385,
-    "maxOutput": 4096,
-    "inputCost": 0.5,
-    "outputCost": 1.5
   },
   {
     "model": "kilo/openai/gpt-3.5-turbo-0613",
@@ -2396,18 +2408,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 4096,
     "inputCost": 3,
     "outputCost": 4
-  },
-  {
-    "model": "kilo/openai/gpt-3.5-turbo-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 4095,
-    "maxOutput": 3685,
-    "inputCost": 1.5,
-    "outputCost": 2
   },
   {
     "model": "kilo/openai/gpt-4",
@@ -2465,7 +2465,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 1047576,
-    "maxOutput": 32768,
+    "maxOutput": 942818,
     "inputCost": 0.1,
     "outputCost": 0.4
   },
@@ -3426,7 +3426,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 235929,
-    "inputCost": 0.09,
+    "inputCost": 0.1,
     "outputCost": 0.3
   },
   {
@@ -3653,7 +3653,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 65536,
+    "maxOutput": 81920,
     "inputCost": 0.45,
     "outputCost": 2.7
   },
@@ -4410,7 +4410,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.1,
+    "inputCost": 0.14,
     "outputCost": 0.28
   },
   {
@@ -4600,8 +4600,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 943718,
+    "contextWindow": 1048575,
+    "maxOutput": 943717,
     "inputCost": 0.15,
     "outputCost": 0.5
   },
@@ -4651,6 +4651,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -4668,6 +4670,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

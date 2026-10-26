@@ -431,8 +431,8 @@ export interface DurableToolCallInput {
   toolCallId: string;
   /** Name of the tool to execute */
   toolName: string;
-  /** Arguments for the tool */
-  args: Record<string, unknown>;
+  /** Arguments for the tool; absent when the model's JSON could not be parsed. */
+  args?: Record<string, unknown>;
   /** Provider-specific metadata */
   providerMetadata?: SharedV2ProviderMetadata;
   /** Whether the tool was already executed by the provider */
@@ -622,6 +622,12 @@ export interface AgentStreamEvent<T = unknown> {
   producedAt?: number;
   /** Claim generation of the execution that published the event. See {@link Event.generation}. */
   generation?: number;
+  /**
+   * Position of this event in its run topic's log. Only present on events read
+   * back from the topic; it is stripped before an event reaches an `observe()`
+   * consumer.
+   */
+  index?: number;
   /**
    * The `chunk` event's chunk already ran through the run's output processors
    * before it was published, so the stream consumer must not run them again.
@@ -893,6 +899,12 @@ export interface RunRegistryEntry {
    * allowing them.
    */
   requireToolApproval?: RequireToolApproval;
+  /**
+   * Per-call delegation config (`onDelegationStart`, `onDelegationComplete`,
+   * `messageFilter`, ...). Closures, so in-process only. A warm resume that
+   * rebuilds tools reuses it when the resume call supplies no `delegation`.
+   */
+  delegation?: AgentExecutionOptions['delegation'];
   /**
    * Signal drain closure. When the durable agent inherits `sendSignal()` from
    * its wrapped `Agent`, signals are queued in `AgentThreadStreamRuntime`. This

@@ -840,16 +840,20 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     switch (chunk.type) {
-      case 'response-metadata':
+      case 'response-metadata': {
+        // Providers may split metadata across several chunks (e.g. id first, modelId later),
+        // so keep earlier values for fields a chunk omits.
+        const previous = runState.state.responseMetadata;
         runState.setState({
           responseMetadata: {
-            id: chunk.payload.id,
-            timestamp: chunk.payload.timestamp,
-            modelId: chunk.payload.modelId,
-            headers: chunk.payload.headers,
+            id: chunk.payload.id ?? previous?.id,
+            timestamp: chunk.payload.timestamp ?? previous?.timestamp,
+            modelId: chunk.payload.modelId ?? previous?.modelId,
+            headers: chunk.payload.headers ?? previous?.headers,
           },
         });
         break;
+      }
 
       case 'tool-call-input-streaming-start': {
         const tool = toolInputStartToolDef || resolveDirectOrIdTool(chunk.payload.toolName);
@@ -2936,6 +2940,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             return currentMessageId;
           },
         });
+
+        // A processor cancelled by the run's abort rejects, which the runner reports as no retry.
+        if (options?.abortSignal?.aborted) {
+          cleanupProviderToolSpans(true);
+          await options.onAbort?.({
+            steps: inputData?.output?.steps ?? [],
+            text: runState.state.partialText,
+          });
+          await settleEagerWorkOnAbort(controller);
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+          return bailFromExecution('abort');
+        }
 
         if (errorResult.retry && canRetryError) {
           apiErrorRetryResult = errorResult;

@@ -58,16 +58,21 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
-    "qwen/qwen3.5-122b-a10b": [
+    "minimax/minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "minimax/minimax-m2.5": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "qwen/qwen3.5-9b": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "qwen/qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
       }
     ],
     "qwen/qwen3.8-flash-next": [
@@ -82,36 +87,19 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "qwen/qwen3.5-9b": [
+    "qwen/qwen3.5-122b-a10b": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "minimax/minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "minimax/minimax-m2.5": [
+    "qwen/qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "xhigh"]
       }
     ],
-    "deepseek/deepseek-v3.2": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek/deepseek-r1-0528": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4.1-flash": [
+    "z-ai/glm-5.2": [
       {
         "type": "toggle"
       },
@@ -120,7 +108,50 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "z-ai/glm-5-turbo": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai/glm-5": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "z-ai/glm-5v-turbo": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },
@@ -138,7 +169,13 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro-0813": [
+    "deepseek/deepseek-r1-0528": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "toggle"
       },
@@ -147,50 +184,13 @@
         "values": ["high", "max"]
       }
     ],
-    "z-ai/glm-5-turbo": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "z-ai/glm-5.3-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "z-ai/glm-5v-turbo": [
-      {
-        "type": "toggle"
-      },
+    "deepseek/deepseek-v3.2": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "z-ai/glm-5": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "z-ai/glm-5.3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "z-ai/glm-5.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "z-ai/glm-5.2": [
+    "deepseek/deepseek-v4-pro-0813": [
       {
         "type": "toggle"
       },
