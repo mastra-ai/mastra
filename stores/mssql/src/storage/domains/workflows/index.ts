@@ -37,7 +37,14 @@ import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/co
 import sql from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
-import { assertRunFence, claimTransaction, DB_NOW_MS, inTransaction, withRunFence } from '../../db/run-fencing';
+import {
+  assertRunFence,
+  claimTransaction,
+  DB_NOW_MS,
+  inTransaction,
+  retryWriteRace,
+  withRunFence,
+} from '../../db/run-fencing';
 import type { Queryable } from '../../db/run-fencing';
 import { getSchemaName, getTableName } from '../utils';
 
@@ -547,21 +554,24 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           ? ' AND 1 = 0'
           : ` AND JSON_VALUE(target.[snapshot], '$.status') IN (${expectedStatuses.map((_, i) => `@expectedStatus${i}`).join(', ')})`;
     try {
-      return await withRunFence(
-        this.pool,
-        this.#runOwnersTable,
-        resolveRunFence(this, fence, runId),
-        'persistWorkflowSnapshot',
-        async q => {
-          const request = q.request();
-          request.input('workflow_name', workflowName);
-          request.input('run_id', runId);
-          request.input('resourceId', resourceId);
-          request.input('snapshot', JSON.stringify(snapshot));
-          request.input('createdAt', sql.DateTime2, new Date(now));
-          request.input('updatedAt', sql.DateTime2, new Date(now));
-          expectedStatuses?.forEach((status, i) => request.input(`expectedStatus${i}`, status));
-          const mergeSql = `MERGE INTO ${table} AS target
+      // Two first writes of a run can both take `WHEN NOT MATCHED`; the loser
+      // gets a duplicate key (or a deadlock) and its retry takes `WHEN MATCHED`.
+      return await retryWriteRace(() =>
+        withRunFence(
+          this.pool,
+          this.#runOwnersTable,
+          resolveRunFence(this, fence, runId),
+          'persistWorkflowSnapshot',
+          async q => {
+            const request = q.request();
+            request.input('workflow_name', workflowName);
+            request.input('run_id', runId);
+            request.input('resourceId', resourceId);
+            request.input('snapshot', JSON.stringify(snapshot));
+            request.input('createdAt', sql.DateTime2, new Date(now));
+            request.input('updatedAt', sql.DateTime2, new Date(now));
+            expectedStatuses?.forEach((status, i) => request.input(`expectedStatus${i}`, status));
+            const mergeSql = `MERGE INTO ${table} AS target
             USING (SELECT @workflow_name AS workflow_name, @run_id AS run_id) AS src
             ON target.workflow_name = src.workflow_name AND target.run_id = src.run_id
             WHEN MATCHED${guard} THEN UPDATE SET
@@ -570,9 +580,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
               [updatedAt] = @updatedAt
             WHEN NOT MATCHED THEN INSERT (workflow_name, run_id, resourceId, snapshot, [createdAt], [updatedAt])
               VALUES (@workflow_name, @run_id, @resourceId, @snapshot, @createdAt, @updatedAt);`;
-          const result = await request.query(mergeSql);
-          return (result.rowsAffected[0] ?? 0) > 0;
-        },
+            const result = await request.query(mergeSql);
+            return (result.rowsAffected[0] ?? 0) > 0;
+          },
+        ),
       );
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
