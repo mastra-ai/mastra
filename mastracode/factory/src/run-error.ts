@@ -1,11 +1,18 @@
 import { PROVIDER_AUTH_REQUIRED_ERROR } from '@mastra/code-sdk/auth/provider-auth-error';
-import type { MastraErrorPart } from '@mastra/core/agent/message-list';
 import { classifyProviderError, providerErrorReason } from '@mastra/core/error';
 
-interface RunErrorDescription {
+export type RunErrorRecovery = 'credentials' | 'model';
+
+export interface RunErrorDescription {
   title: string;
   message: string;
-  recovery?: 'credentials';
+  recovery?: RunErrorRecovery;
+}
+
+/** A live error, a wire error or a saved error part: classification reads whatever provider facts it carries. */
+export interface RunErrorIdentity {
+  name: string;
+  message: string;
 }
 
 const PROVIDER_ERROR_NAMES = new Set(['AI_APICallError', 'APICallError']);
@@ -13,7 +20,7 @@ const UNEXPECTED_ERROR = 'An unexpected error stopped the run. Copy the error de
 const NO_REASON_AVAILABLE =
   'The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.';
 
-export function describeRunError(error: MastraErrorPart['error']): RunErrorDescription {
+export function describeRunError(error: RunErrorIdentity): RunErrorDescription {
   if (error.name === PROVIDER_AUTH_REQUIRED_ERROR) {
     return { title: 'Provider sign-in required', message: error.message, recovery: 'credentials' };
   }
@@ -21,23 +28,30 @@ export function describeRunError(error: MastraErrorPart['error']): RunErrorDescr
     case 'quota':
       return {
         title: 'Provider quota exhausted',
-        message: 'Check the provider account’s billing or usage allowance before continuing.',
+        message: 'Check the provider account’s billing or usage allowance, or use another credential.',
+        recovery: 'credentials',
       };
     case 'auth':
       return {
         title: 'Provider access failed',
         message: 'Review the credentials and model access configured for this session.',
+        recovery: 'credentials',
       };
     case 'context_overflow':
       return {
         title: 'Conversation exceeds the model’s limit',
         message: 'Choose a model with a larger context window or start a new session with a shorter prompt.',
+        recovery: 'model',
       };
-    case 'model_rejected':
+    case 'model_rejected': {
+      const reason = providerErrorReason(error);
+      const next = 'Choose another model for this session.';
       return {
-        title: 'Model configuration rejected',
-        message: 'Choose another model or use the Thinking control in the composer to adjust this session’s settings.',
+        title: 'Model not available',
+        message: reason ? `${reason.replace(/\.?$/, '.')} ${next}` : `The provider rejected this model. ${next}`,
+        recovery: 'model',
       };
+    }
     case 'tool_history_rejected':
       return {
         title: 'Conversation history rejected',
@@ -66,7 +80,7 @@ export function describeRunError(error: MastraErrorPart['error']): RunErrorDescr
   }
 }
 
-function describeUnclassifiedError(error: MastraErrorPart['error']): RunErrorDescription {
+function describeUnclassifiedError(error: RunErrorIdentity): RunErrorDescription {
   const message = providerErrorReason(error) ?? (error.message || UNEXPECTED_ERROR);
   return { title: PROVIDER_ERROR_NAMES.has(error.name) ? 'Model request failed' : 'Run stopped', message };
 }

@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { IntegrationTools } from '../integrations/base.js';
+import { factorySessionUrl } from '../session-url.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
@@ -123,12 +124,7 @@ export async function createReviewSourceTool(options: {
   const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
   if (!item) return {};
 
-  const sessionUrl = buildSessionUrl({
-    uiOrigin: options.uiOrigin,
-    factoryProjectId: binding.factoryProjectId,
-    sessionId: binding.sessionId,
-    threadId: binding.threadId,
-  });
+  const sessionUrl = factorySessionUrl(options.uiOrigin, binding);
   const triggeredBy = readPullRequestAuthor(item);
   const reviewTarget = readReviewTarget(item);
   const boundRepository = readBoundRepository(item);
@@ -147,16 +143,6 @@ export async function createReviewSourceTool(options: {
       execute: async (): Promise<ReviewSourceOutput> => output,
     }),
   };
-}
-
-function buildSessionUrl(input: {
-  uiOrigin: string;
-  factoryProjectId: string;
-  sessionId: string;
-  threadId: string;
-}): string {
-  const origin = input.uiOrigin.replace(/\/+$/, '');
-  return `${origin}/factories/${encodeURIComponent(input.factoryProjectId)}/workspaces/${encodeURIComponent(input.sessionId)}/threads/${encodeURIComponent(input.threadId)}`;
 }
 
 function readReviewTarget(item: WorkItemRow): ReviewSourceOutput['reviewTarget'] {

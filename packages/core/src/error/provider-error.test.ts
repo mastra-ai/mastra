@@ -224,6 +224,15 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     'model_rejected',
   ],
   [
+    'Codex model the ChatGPT plan does not include',
+    apiError(
+      400,
+      'Bad Request',
+      JSON.stringify({ detail: "The 'gpt-5.5' model is not supported when using Codex with a ChatGPT account." }),
+    ),
+    'model_rejected',
+  ],
+  [
     'tool call without its result',
     { name: 'AI_APICallError', message: 'No tool output found for function call call_123.' },
     'tool_history_rejected',

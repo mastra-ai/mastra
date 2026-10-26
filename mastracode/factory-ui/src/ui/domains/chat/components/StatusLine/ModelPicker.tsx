@@ -56,7 +56,7 @@ function canSwitchModel({
   return sessionEnabled;
 }
 
-export function ModelPicker() {
+export function ModelPicker({ triggerLabel }: { triggerLabel?: string } = {}) {
   const chatSession = useChatSessionContext();
   const { kind, modelLockedReason } = chatSession;
   const { status } = useChatConnection();
@@ -71,6 +71,8 @@ export function ModelPicker() {
   const selectedModelId = pendingModelId ?? activeModelId;
   const busy = Boolean(pendingModelId);
   const providerGroups = groupByProvider(modelsQuery.data ?? []);
+
+  if (triggerLabel && !(canSwitchModel(chatSession) && modelsQuery.data?.length)) return null;
 
   if (!selectedModelId && (isLoading || status === 'connecting')) {
     return <Skeleton aria-label="Loading model" className="h-3.5 w-24" />;
@@ -156,74 +158,82 @@ export function ModelPicker() {
   };
   const modelMenuLocked = busy || modelsQuery.isPending || scopeLoading;
 
+  const picker = (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        type="button"
+        disabled={modelMenuLocked}
+        aria-label={triggerLabel ?? (notConfigured ? `Session model, ${label} is not configured` : 'Session model')}
+        aria-busy={modelMenuLocked}
+        className={
+          triggerLabel
+            ? cn(buttonVariants({ variant: 'link' }), 'text-foreground')
+            : cn(
+                buttonVariants({ variant: 'ghost', size: 'sm' }),
+                notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',
+              )
+        }
+        title={selectedModelId}
+      >
+        <span className="max-w-48 truncate">
+          {triggerLabel ?? label}
+          {!triggerLabel && notConfigured ? ' · not configured' : null}
+        </span>
+        <ChevronDown aria-hidden size={12} />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-0">
+        <Command loop>
+          <CommandInput placeholder="Search models…" />
+          <CommandList className="max-h-80">
+            <CommandEmpty>No matching model.</CommandEmpty>
+            {providerGroups.map(([provider, models]) => (
+              <CommandGroup
+                key={provider}
+                heading={provider}
+                className="[&_[cmdk-group-heading]]:text-placeholder [&_[cmdk-group-heading]]:font-normal [&_[cmdk-group-heading]]:tracking-normal [&_[cmdk-group-heading]]:normal-case"
+              >
+                {models.map(model => (
+                  <CommandItem
+                    key={model.id}
+                    value={model.id}
+                    keywords={[model.provider, model.modelName, formatModelName(model.id)]}
+                    title={model.id}
+                    onSelect={() => pickModel(model.id)}
+                  >
+                    <span className="truncate">{model.modelName}</span>
+                    {model.id === defaultModelId ? (
+                      <Badge variant="blue" size="xs">
+                        Default
+                      </Badge>
+                    ) : null}
+                    {model.id === selectedModelId ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+            {canReset ? <CommandSeparator /> : null}
+            {canReset && defaultModelId ? (
+              <CommandGroup>
+                <CommandItem
+                  value="action:reset"
+                  keywords={['reset', 'default', 'model']}
+                  onSelect={() => pickModel(defaultModelId)}
+                >
+                  <RotateCcw aria-hidden />
+                  <span>Reset to your default</span>
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
+          </CommandList>
+          {organizationScoped && factoryId ? <ModelScopeFooter factoryId={factoryId} /> : null}
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+  if (triggerLabel) return picker;
   return (
     <ModelThinkingGroup modelId={activeModelId} switchingModel={busy}>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          type="button"
-          disabled={modelMenuLocked}
-          aria-label={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
-          aria-busy={modelMenuLocked}
-          className={cn(
-            buttonVariants({ variant: 'ghost', size: 'sm' }),
-            notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',
-          )}
-          title={selectedModelId}
-        >
-          <span className="max-w-48 truncate">
-            {label}
-            {notConfigured ? ' · not configured' : null}
-          </span>
-          <ChevronDown aria-hidden size={12} />
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-80 p-0">
-          <Command loop>
-            <CommandInput placeholder="Search models…" />
-            <CommandList className="max-h-80">
-              <CommandEmpty>No matching model.</CommandEmpty>
-              {providerGroups.map(([provider, models]) => (
-                <CommandGroup
-                  key={provider}
-                  heading={provider}
-                  className="[&_[cmdk-group-heading]]:text-placeholder [&_[cmdk-group-heading]]:font-normal [&_[cmdk-group-heading]]:tracking-normal [&_[cmdk-group-heading]]:normal-case"
-                >
-                  {models.map(model => (
-                    <CommandItem
-                      key={model.id}
-                      value={model.id}
-                      keywords={[model.provider, model.modelName, formatModelName(model.id)]}
-                      title={model.id}
-                      onSelect={() => pickModel(model.id)}
-                    >
-                      <span className="truncate">{model.modelName}</span>
-                      {model.id === defaultModelId ? (
-                        <Badge variant="blue" size="xs">
-                          Default
-                        </Badge>
-                      ) : null}
-                      {model.id === selectedModelId ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ))}
-              {canReset ? <CommandSeparator /> : null}
-              {canReset && defaultModelId ? (
-                <CommandGroup>
-                  <CommandItem
-                    value="action:reset"
-                    keywords={['reset', 'default', 'model']}
-                    onSelect={() => pickModel(defaultModelId)}
-                  >
-                    <RotateCcw aria-hidden />
-                    <span>Reset to your default</span>
-                  </CommandItem>
-                </CommandGroup>
-              ) : null}
-            </CommandList>
-            {organizationScoped && factoryId ? <ModelScopeFooter factoryId={factoryId} /> : null}
-          </Command>
-        </PopoverContent>
-      </Popover>
+      {picker}
     </ModelThinkingGroup>
   );
 }

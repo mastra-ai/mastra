@@ -98,6 +98,22 @@ describe('SlackIntegration.channels', () => {
     expect(status('{"description":"raw string"}')).toBe('is working...');
   });
 
+  it('explains a failed run with a card that names what went wrong', () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+    const formatError = integration.channels(ctxWith()).adapters.slack.formatError;
+
+    const posted = formatError?.(new Error('Request timed out.'), {});
+
+    expect(JSON.stringify(posted)).toContain('Request timed out');
+  });
+
+  it('keeps a caller-supplied error formatter', () => {
+    const custom = vi.fn(() => 'custom');
+    const integration = new SlackIntegration({ signingSecret: 'secret', adapterOptions: { formatError: custom } });
+
+    expect(integration.channels(ctxWith()).adapters.slack.formatError).toBe(custom);
+  });
+
   it('defaults streaming when an explicit undefined value is provided', () => {
     const integration = new SlackIntegration({
       signingSecret: 'secret',

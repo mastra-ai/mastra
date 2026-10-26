@@ -45,7 +45,7 @@ const CONTEXT_OVERFLOW = [
   /reduce the length of the (?:messages|prompt|input)/i,
 ];
 const MODEL_REJECTED =
-  /model_not_found|model not found|no[_ ]?such[_ ]?model|not_found_error|invalid[_ ]model|unsupported[_ ]parameter|unsupported[_ ]value/i;
+  /model_not_found|model not found|no[_ ]?such[_ ]?model|not_found_error|invalid[_ ]model|unsupported[_ ]model|\bmodel\b[^.]{0,40}\bis not supported\b|unsupported[_ ]parameter|unsupported[_ ]value/i;
 const TOOL_HISTORY_REJECTED =
   /no tool output found for (?:function|tool) call|tool_call_ids.*(?:response|respond)|tool_use.*tool_result/i;
 const INVALID_REQUEST_CODE = /invalid_request_error|invalid_prompt/i;
