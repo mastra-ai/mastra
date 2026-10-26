@@ -18,6 +18,7 @@ import {
   DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
   formatToolResultForObserver,
   resolveToolResultValue,
+  toolErrorTextToString,
 } from './tool-result-helpers';
 
 /**
@@ -1207,11 +1208,12 @@ function formatObserverMessage(
             const hasResult =
               resultWithoutAttachments !== undefined &&
               (typeof resultWithoutAttachments !== 'string' || resultWithoutAttachments.trim().length > 0);
+            const errorText = toolErrorTextToString(inv.errorText);
             const body = inv.isError
               ? hasResult
                 ? formatToolResultForObserver(resultWithoutAttachments, { maxTokens: maxToolResultTokens })
-                : inv.errorText?.trim()
-                  ? inv.errorText
+                : errorText.trim()
+                  ? errorText
                   : 'Tool execution failed'
               : hasResult
                 ? formatToolResultForObserver(resultWithoutAttachments, { maxTokens: maxToolResultTokens })
@@ -1229,9 +1231,10 @@ function formatObserverMessage(
         if (exchange?.terminal?.occurrence === occurrence && !toolFormatting.emittedOutcomes.has(inv.toolCallId)) {
           toolFormatting.emittedOutcomes.add(inv.toolCallId);
           if (inv.state === 'output-error') {
+            const errorText = toolErrorTextToString(inv.errorText);
             pushLine(
               `Tool Error ${inv.toolName}`,
-              maybeTruncate(inv.errorText?.trim() ? inv.errorText : 'Tool execution failed', maxLen),
+              maybeTruncate(errorText.trim() ? errorText : 'Tool execution failed', maxLen),
               partCreatedAt,
               { tool: true },
             );

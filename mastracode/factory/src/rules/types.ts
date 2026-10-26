@@ -350,7 +350,10 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   reviewRequest?: { reviewer: string; factoryReviewer: boolean };
   /** Present when a PR comment uses Factory's exact review command. */
   reviewCommand?: { command: 'review' | 're-review'; target: string };
-  /** Present on `pullRequestReviewSubmitted`: the review that was just posted. */
+  /**
+   * Present on `pullRequestReviewSubmitted`: the review that was just posted, or a
+   * request-changes review whose body was edited to a new Factory verdict.
+   */
   review?: { id: number; state: string; url: string; author?: string; body?: string };
 }
 
