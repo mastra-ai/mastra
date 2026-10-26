@@ -970,17 +970,6 @@ export class AgentChannels {
             this.log('debug', 'No mapped channel thread for stop request', logContext);
             return;
           }
-          // Stop controls show to everyone in a shared thread; only whoever started
-          // the conversation may stop it. Threads with no recorded originator
-          // (created before it was stamped) can't be stopped from chat.
-          const originatorId = thread.metadata?.[ORIGINATOR_KEY];
-          if (typeof originatorId !== 'string' || !event.userId || event.userId !== originatorId) {
-            this.log('info', 'Ignoring stop request: only the thread originator may stop its runs', {
-              ...logContext,
-              originatorId,
-            });
-            return;
-          }
           const stopped = await this.dispatchStop({ thread });
           this.log('info', stopped ? 'Stopped run from chat' : 'No active run to stop', logContext);
         } catch (err) {
@@ -1496,7 +1485,6 @@ export class AgentChannels {
               requestContext,
             })
         : undefined,
-      originatorId: message.author.isMe ? undefined : message.author.userId,
       mastra,
     });
 
@@ -2312,7 +2300,6 @@ export class AgentChannels {
     platform,
     resourceId,
     threadId,
-    originatorId,
     mastra,
   }: {
     externalThreadId: string;
@@ -2330,8 +2317,6 @@ export class AgentChannels {
      * Omitted: a random UUID.
      */
     threadId?: (resolvedResourceId: string, defaultThreadId: string) => string | Promise<string>;
-    /** Platform user id of whoever started the conversation; only they may stop its runs. */
-    originatorId?: string;
     mastra: Mastra;
   }): Promise<StorageThreadType> {
     const {
@@ -2370,7 +2355,7 @@ export class AgentChannels {
         resourceId: resolvedResourceId,
         createdAt: new Date(),
         updatedAt: new Date(),
-        metadata: originatorId ? { ...metadata, [ORIGINATOR_KEY]: originatorId } : metadata,
+        metadata,
       },
     });
   }
@@ -2560,7 +2545,6 @@ export class AgentChannels {
 
 const LAST_SENDER_KEY = 'channel_lastSender';
 const IS_DM_KEY = 'channel_isDM';
-const ORIGINATOR_KEY = 'channel_originatorId';
 
 interface LastSender {
   author: Message['author'];

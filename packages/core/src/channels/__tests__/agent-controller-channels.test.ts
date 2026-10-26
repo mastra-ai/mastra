@@ -1582,14 +1582,14 @@ function createHangingModel() {
   return { model, aborted };
 }
 
-function stopEvent(adapter: any, threadId: string, userId = 'user-1') {
+function stopEvent(adapter: any, threadId: string) {
   return {
     adapter,
     channelId: threadId.split(':')[0],
     streamingMessageTs: [],
     threadId,
     threadTs: threadId.split(':')[1],
-    userId,
+    userId: 'user-1',
   };
 }
 
@@ -1612,30 +1612,6 @@ describe('AgentControllerChannels native stop', () => {
 
     await waitFor(() => aborted.mock.calls.length > 0, { what: 'model stream aborted' });
     await waitFor(() => !session.run.isRunning(), { what: 'run stopped' });
-  }, 30_000);
-
-  it('ignores a stop click from someone other than the thread originator', async () => {
-    const { model, aborted } = createHangingModel();
-    const { adapter, controller, mastra, channels } = await createSetup({ model });
-    const chatThread = createChatThread(adapter, 'chan-1:t-1');
-
-    await (channels as any).processChatMessage(
-      chatThread,
-      createMessage('m-1', 'long task'),
-      mastra,
-      new RequestContext(),
-    );
-    const session = (await controller.getSession('channel:chan-1:t-1'))!;
-    await waitFor(() => session.run.isRunning() && model.doStreamCalls.length > 0, { what: 'run in flight' });
-
-    await channels.sdk!.processAgentSessionStopped(stopEvent(adapter, 'chan-1:t-1', 'user-2') as any);
-    await new Promise(resolve => setTimeout(resolve, 200));
-
-    expect(aborted).not.toHaveBeenCalled();
-    expect(session.run.isRunning()).toBe(true);
-
-    channels.sdk!.processAgentSessionStopped(stopEvent(adapter, 'chan-1:t-1') as any);
-    await waitFor(() => aborted.mock.calls.length > 0, { what: 'model stream aborted' });
   }, 30_000);
 
   it('does not create a session when stop is clicked in an unmapped thread', async () => {
