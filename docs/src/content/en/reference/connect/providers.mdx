@@ -9,7 +9,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-This page documents generated toolsets for 23 providers (930 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for 24 providers (948 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -30,6 +30,7 @@ MCP providers (Attio, Canva, Clay, Neon, Render, Robinhood, and Sanity) serve th
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/incident-io.svg" /> [incident.io](#incidentio) | `incident-io` | 66 |
 | <ProviderLogo slug="jira" /> [Jira](#jira) | `jira` | 38 |
 | <ProviderLogo slug="linear" /> [Linear](#linear) | `linear` | 46 |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/microsoft-powerpoint.svg" /> [Microsoft PowerPoint](#microsoft-powerpoint) | `microsoft-powerpoint` | 18 |
 | <ProviderLogo slug="microsoftteams" /> [Microsoft Teams](#microsoft-teams) | `microsoft-teams` | 25 |
 | <ProviderLogo slug="notion" mono /> [Notion](#notion) | `notion` | 44 |
 | [OneDrive](#onedrive) | `one-drive` | 20 |
@@ -665,6 +666,31 @@ Provider ID: `linear` · 46 tools
 | `linear_update_issue_label` | Update an existing Linear issue label. |
 | `linear_update_issue_relation` | Update fields on an existing Linear issue relation. |
 | `linear_update_project` | Update an existing Linear project. |
+
+## Microsoft PowerPoint
+
+Provider ID: `microsoft-powerpoint` · 18 tools
+
+| Tool | Description |
+| - | - |
+| `microsoft_powerpoint_copy_presentation` | Copy a presentation to a (possibly different) folder, optionally renaming it. |
+| `microsoft_powerpoint_create_presentation` | Upload a new .pptx presentation to a drive folder. |
+| `microsoft_powerpoint_create_sharing_link` | Create a sharing link for a presentation. |
+| `microsoft_powerpoint_delete_presentation` | Delete a presentation. |
+| `microsoft_powerpoint_get_presentation` | Retrieve driveItem metadata for a presentation |
+| `microsoft_powerpoint_get_presentation_as_pdf` | Download a presentation converted to PDF |
+| `microsoft_powerpoint_get_presentation_content` | Download the raw .pptx content of a presentation. |
+| `microsoft_powerpoint_get_site_drive` | Get the default document library (drive) for a SharePoint site. |
+| `microsoft_powerpoint_get_user_drive` | Get the connected user's OneDrive, or another user's drive when userId is provided. |
+| `microsoft_powerpoint_list_presentation_permissions` | List sharing permissions on a presentation. |
+| `microsoft_powerpoint_list_presentation_thumbnails` | Get thumbnail image URLs for a presentation. |
+| `microsoft_powerpoint_list_presentation_versions` | List the version history of a presentation. |
+| `microsoft_powerpoint_list_presentations` | List/search .pptx files within a drive |
+| `microsoft_powerpoint_list_sites` | Search/list SharePoint sites accessible to the app. |
+| `microsoft_powerpoint_list_users` | List/search tenant users, to resolve a user id for personal OneDrive access. |
+| `microsoft_powerpoint_move_presentation` | Move a presentation to a different folder. |
+| `microsoft_powerpoint_update_presentation_content` | Replace the content of an existing presentation. |
+| `microsoft_powerpoint_update_presentation_metadata` | Rename a presentation or update its description, without touching content |
 
 ## Microsoft Teams
 
