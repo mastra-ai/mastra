@@ -84,7 +84,7 @@ import type {
 } from '@mastra/core/stream';
 import type { CoreTool } from '@mastra/core/tools';
 import { deepMerge, rebindProcessorTools } from '@mastra/core/utils';
-import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
+import type { ShouldPersistSnapshotFn, Workflow, WorkflowRunState } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 
@@ -964,6 +964,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       if (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) return false;
       const threadId: string | undefined = workflowInput.state?.threadId;
       const resourceId: string | undefined = workflowInput.state?.resourceId;
+      const context = {} as WorkflowRunState['context'];
+      context.input = { agentId: workflowInput.agentId, state: { threadId, resourceId } };
       await workflowsStore.persistWorkflowSnapshot({
         workflowName,
         runId,
@@ -972,7 +974,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           runId,
           status: 'running',
           value: {},
-          context: { input: { agentId: workflowInput.agentId, state: { threadId, resourceId } } },
+          context,
           serializedStepGraph: [],
           activePaths: [],
           activeStepsPath: {},

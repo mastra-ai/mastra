@@ -20,6 +20,7 @@ import { SimpleAuth } from '@mastra/core/server';
 import { createHonoServer } from '@mastra/deployer/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { InngestDurableStepIds } from '../durable-agent/create-inngest-agentic-workflow';
 import { INNGEST_PORT, startConnectInngestDevServer, stopInngestDevServer } from './durable-agent.test.utils';
 import { ABORT_HTTP_TOOL_MS, buildAbortHttpAgent } from './fixtures/abort-http-agent';
 
@@ -31,6 +32,7 @@ const DB_URL = `file:${DB_PATH}`;
 const OUT_DIR = mkdtempSync(path.join(tmpdir(), 'abort-http-out-'));
 const WORKER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'abort-http-worker.ts');
 const OWNER = 'user-a';
+const LOOP_WORKFLOW = InngestDurableStepIds.AGENTIC_LOOP;
 
 let mock: LLMock;
 let devServer: ChildProcess | null = null;
@@ -71,14 +73,24 @@ const modelCalls = () => mock.getRequests().filter(entry => entry.path.includes(
 async function startRunMidTool() {
   rmSync(path.join(OUT_DIR, 'tool-started'), { force: true });
   const threadId = `thread-${crypto.randomUUID()}`;
+  const callbacks = { aborted: false, finished: false };
   const res = await driver.durableAgent.stream([{ role: 'user', content: 'Wait, then reply.' }], {
     memory: { thread: threadId, resource: OWNER },
     maxSteps: 3,
+    onAbort: () => {
+      callbacks.aborted = true;
+    },
+    onFinish: () => {
+      callbacks.finished = true;
+    },
   });
-  const chunkTypes: string[] = [];
   const consumed = (async () => {
     try {
-      for await (const chunk of res.output.fullStream) chunkTypes.push((chunk as { type: string }).type);
+      for await (const _chunk of res.output.fullStream) {
+        // Drain the stream until the run ends.
+      }
+    } catch {
+      // The abort path may error the stream after firing onAbort.
     } finally {
       res.cleanup?.();
     }
@@ -87,7 +99,7 @@ async function startRunMidTool() {
     timeout: 60_000,
     interval: 200,
   });
-  return { runId: res.runId, chunkTypes, consumed };
+  return { runId: res.runId, callbacks, finishReason: res.output.finishReason, consumed };
 }
 
 describe('Inngest durable agent run abort over HTTP (real Inngest dev server)', () => {
@@ -149,30 +161,70 @@ describe('Inngest durable agent run abort over HTTP (real Inngest dev server)', 
   });
 
   it('aborts a run mid-tool and stops it before the next model call', async () => {
-    const { runId, chunkTypes, consumed } = await startRunMidTool();
+    const { runId, callbacks, finishReason, consumed } = await startRunMidTool();
 
     const res = await app.request(`/api/agents/${AGENT_ID}/runs/${runId}/abort`, asUser('token-a'));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ aborted: true });
 
     await consumed;
-    expect(chunkTypes.at(-1)).toBe('abort');
-    expect(chunkTypes).not.toContain('finish');
+    // An aborted run ends through onAbort, never onFinish.
+    expect(callbacks.aborted).toBe(true);
+    expect(callbacks.finished).toBe(false);
+    await expect(finishReason).resolves.toBe('aborted');
     // Give an un-aborted run time to finish the tool and make its second call.
     await new Promise(r => setTimeout(r, ABORT_HTTP_TOOL_MS + 2_000));
     expect(modelCalls()).toBe(1);
   });
 
   it('rejects an abort from a caller that does not own the run', async () => {
-    const { runId, chunkTypes, consumed } = await startRunMidTool();
+    const { runId, callbacks, finishReason, consumed } = await startRunMidTool();
 
     const res = await app.request(`/api/agents/${AGENT_ID}/runs/${runId}/abort`, asUser('token-b'));
     expect(res.status).toBe(403);
 
     // The run is untouched and completes normally.
     await consumed;
-    expect(chunkTypes).toContain('finish');
-    expect(chunkTypes).not.toContain('abort');
+    expect(callbacks.finished).toBe(true);
+    expect(callbacks.aborted).toBe(false);
+    await expect(finishReason).resolves.toBe('stop');
     expect(modelCalls()).toBe(2);
+
+    // The engine's terminal row replaces the provisional running row and keeps the ownership fields.
+    const workflows = await driver.storage.getStore('workflows');
+    await vi.waitFor(
+      async () => {
+        const run = await workflows!.getWorkflowRunById({ workflowName: LOOP_WORKFLOW, runId });
+        expect(run?.resourceId).toBe(OWNER);
+        const snapshot = typeof run?.snapshot === 'string' ? JSON.parse(run.snapshot) : run?.snapshot;
+        expect(snapshot?.status).toBe('success');
+        expect(snapshot?.context?.input?.agentId).toBe(AGENT_ID);
+        expect(snapshot?.context?.input?.state?.resourceId).toBe(OWNER);
+      },
+      { timeout: 15_000, interval: 250 },
+    );
+  });
+
+  it('removes the running row when the run cannot be triggered', async () => {
+    // Fail only the trigger event; the dev server and its realtime stream stay up.
+    const send = vi.spyOn(driver.inngest, 'send').mockRejectedValueOnce(new Error('inngest send failed'));
+    const res = await driver.durableAgent.stream([{ role: 'user', content: 'Wait, then reply.' }], {
+      memory: { thread: `thread-${crypto.randomUUID()}`, resource: OWNER },
+    });
+    const chunkTypes: string[] = [];
+    try {
+      for await (const chunk of res.output.fullStream) chunkTypes.push((chunk as { type: string }).type);
+    } catch {
+      // The trigger failure may surface as a stream error.
+    } finally {
+      res.cleanup?.();
+    }
+    expect(send).toHaveBeenCalledTimes(1);
+    send.mockRestore();
+    expect(chunkTypes).toContain('error');
+
+    const workflows = await driver.storage.getStore('workflows');
+    expect(await workflows!.loadWorkflowSnapshot({ workflowName: LOOP_WORKFLOW, runId: res.runId })).toBeNull();
+    expect(modelCalls()).toBe(0);
   });
 });
