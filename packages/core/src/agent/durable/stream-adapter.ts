@@ -50,6 +50,9 @@ const STREAM_ENDING_EVENT_TYPES = new Set<string>([
   AgentStreamEventTypes.ABORT,
 ]);
 
+/** How long `waitForEventDelivery` waits for already-published frames to reach the reader. */
+const LOGGED_EVENT_DELIVERY_TIMEOUT_MS = 10_000;
+
 /**
  * Decides which run-stream events a reader keeps once another execution may
  * have taken the run over. Events tagged with a generation older than the
@@ -287,7 +290,10 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    * so other readers of the run are unaffected.
    */
   fail: (error: Error) => Promise<void>;
-  /** Wait for pubsub events already delivered to this adapter to finish processing. */
+  /**
+   * Wait until this adapter has received every event the run's log held when
+   * called (bounded), then for those deliveries to finish processing.
+   */
   waitForEventDelivery: () => Promise<void>;
   /** Accepted deliveries, including hidden ownership markers, for observation reconciliation. */
   readonly activityVersion: number;
@@ -826,6 +832,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // life of the subscription. Track deliveries because in-process pubsub invokes
   // callbacks synchronously but does not await their promises.
   const inFlightDeliveries = new Set<Promise<void>>();
+  // The next log index this reader expects, when it reads the run's log in
+  // index order (replay or numeric offset). Live-tailing readers do not track it.
+  let nextLogIndex: number | undefined =
+    offset === undefined ? 0 : offset !== 'latest' && pubsub.supportsOffsets ? offset : undefined;
+  const logIndexWaiters = new Set<() => void>();
+  const releaseLogIndexWaiters = () => {
+    for (const release of [...logIndexWaiters]) release();
+  };
   const ackingHandleEvent = withAck(handleEvent);
   const subscribedCallback: EventCallback = (event, ack, nack) => {
     const delivery = Promise.resolve(ackingHandleEvent(event, ack, nack));
@@ -835,9 +849,50 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         inFlightDeliveries.delete(delivery);
       })
       .catch(() => {});
+    if (nextLogIndex !== undefined && typeof event.index === 'number' && event.index >= nextLogIndex) {
+      nextLogIndex = event.index + 1;
+      releaseLogIndexWaiters();
+    }
     return delivery;
   };
+  // A transport can hand already-published frames to this reader late: Redis
+  // Streams redelivers a resumed reader's retained backlog ahead of the frames
+  // published since. Wait until every frame the log held when called has
+  // reached this reader, bounded in case the transport never delivers it.
+  const waitForLoggedEvents = async () => {
+    if (nextLogIndex === undefined || !isSubscribed) return;
+    const topic = AGENT_STREAM_TOPIC(runId);
+    let target = -1;
+    try {
+      for (const event of await pubsub.getHistory(topic, nextLogIndex)) {
+        if (typeof event.index === 'number' && event.index > target) target = event.index;
+      }
+    } catch (error) {
+      logError(`[DurableAgentStream] Failed to read ${topic} history:`, error);
+      return;
+    }
+    const reached = () => cancelled || nextLogIndex === undefined || nextLogIndex > target;
+    if (reached()) return;
+    await new Promise<void>(resolve => {
+      const timer = setTimeout(() => {
+        const message = `[DurableAgentStream] ${topic} frames through index ${target} did not arrive within ${LOGGED_EVENT_DELIVERY_TIMEOUT_MS}ms; closing without them`;
+        if (logger) logger.warn(message);
+        else console.warn(message);
+        done();
+      }, LOGGED_EVENT_DELIVERY_TIMEOUT_MS);
+      const check = () => {
+        if (reached()) done();
+      };
+      const done = () => {
+        clearTimeout(timer);
+        logIndexWaiters.delete(check);
+        resolve();
+      };
+      logIndexWaiters.add(check);
+    });
+  };
   const waitForEventDelivery = async () => {
+    await waitForLoggedEvents();
     while (inFlightDeliveries.size > 0) {
       await Promise.allSettled([...inFlightDeliveries]);
     }
@@ -899,6 +954,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   const cleanup = () => {
     markTerminated();
     cancelled = true;
+    releaseLogIndexWaiters();
     if (isSubscribed) {
       isSubscribed = false;
       const topic = AGENT_STREAM_TOPIC(runId);
