@@ -1254,10 +1254,7 @@ export class AgentThreadStreamRuntime {
     else this.#abortAgentRunStream(state, runId);
   }
 
-  /**
-   * Both callers run in detached async callbacks (lease renewal, a pubsub handler), so an agent without
-   * `abortRunStream`, or one whose abort throws, must not escape as an unhandled rejection.
-   */
+  /** Guard the detached lease-loss callback; awaited control events must reject so the backend can retry. */
   #abortAgentRunStream(state: AgentThreadRuntimeState, runId: string): void {
     try {
       state.threadRunsById.get(runId)?.agent.abortRunStream(runId);
@@ -1495,7 +1492,7 @@ export class AgentThreadStreamRuntime {
             this.abortRun(data.runId, resolvedPubSub);
           } else {
             // Durable runs own their controller outside the thread runtime.
-            this.#abortAgentRunStream(state, data.runId);
+            state.threadRunsById.get(data.runId)?.agent.abortRunStream(data.runId);
           }
           if (clearPendingSignals) this.#notifyThreadEvents(state);
         }
