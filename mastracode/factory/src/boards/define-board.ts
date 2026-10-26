@@ -1,3 +1,5 @@
+import { evaluateRuleGroup } from '../rules/rule-group.js';
+import type { RuleFacts, RuleGroup } from '../rules/rule-group.js';
 import {
   FACTORY_GITHUB_EVENTS,
   FACTORY_GITLAB_EVENTS,
@@ -98,10 +100,11 @@ type BoardPhaseBase<PhaseId extends string> = {
   readonly title: string;
   /** Defaults to `review` for a working phase seating `review`, so code boards that do keep it. */
   readonly factoryTools?: readonly FactoryPhaseTool[];
-  /** Only people move cards into this phase; an agent's request to is refused. */
-  readonly manualEntry?: boolean;
-  /** Its runs start without anyone approving them, even with the project's auto-run off. */
-  readonly autoStart?: boolean;
+  /**
+   * Its runs start without anyone approving them, even with the project's auto-run
+   * off, for cards this matches; a group with no conditions matches every card.
+   */
+  readonly autoStartWhen?: RuleGroup;
   readonly next?: PhaseId;
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
   readonly onEnter?: ReadonlyBoardPhaseHandlers;
@@ -149,10 +152,12 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   phaseForRole(role: string): PhaseId | undefined;
   /** Factory tools the phase grants; empty for unknown phases. */
   toolsForPhase(phase: string): readonly FactoryPhaseTool[];
-  /** Whether only people move cards into the phase. */
-  entersManually(phase: string): boolean;
-  /** Whether the phase's runs start without anyone approving them. */
-  startsAutomatically(phase: string): boolean;
+  /**
+   * Whether the phase's runs start without anyone approving them, for a card with
+   * these facts (`cardRuleFacts`). A phase with a start condition never starts on
+   * its own without facts to test.
+   */
+  startsAutomatically(phase: string, facts?: RuleFacts): boolean;
 }
 
 type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>> = {
@@ -319,8 +324,7 @@ export function defineBoard<
           kind: phase.kind,
           ...(phase.kind === 'working' ? { role: phase.role } : {}),
           ...(phase.factoryTools ? { factoryTools: Object.freeze([...phase.factoryTools]) } : {}),
-          ...(phase.manualEntry ? { manualEntry: true } : {}),
-          ...(phase.autoStart ? { autoStart: true } : {}),
+          ...(phase.autoStartWhen ? { autoStartWhen: phase.autoStartWhen } : {}),
           ...(phase.next !== undefined ? { next: phase.next } : {}),
           ...(phase.outcomes ? { outcomes: Object.freeze({ ...phase.outcomes }) } : {}),
           ...(phase.onEnter ? { onEnter: Object.freeze({ ...phase.onEnter }) } : {}),
@@ -392,10 +396,12 @@ export function defineBoard<
     roleForPhase: (phase: string) => roles.get(phase),
     phaseForRole: (role: string) => phaseByRole.get(role),
     toolsForPhase: (phase: string) => phaseTools.get(phase) ?? [],
-    entersManually: (phase: string) =>
-      (phases[phase as PhaseId] as BoardPhaseDefinition<PhaseId> | undefined)?.manualEntry === true,
-    startsAutomatically: (phase: string) =>
-      kinds.get(phase) === 'working' &&
-      (phases[phase as PhaseId] as BoardPhaseDefinition<PhaseId> | undefined)?.autoStart === true,
+    startsAutomatically: (phase: string, facts?: RuleFacts) => {
+      const definition = phases[phase as PhaseId] as BoardPhaseDefinition<PhaseId> | undefined;
+      const rule = kinds.get(phase) === 'working' ? definition?.autoStartWhen : undefined;
+      if (!rule) return false;
+      if (rule.conditions.length === 0) return true;
+      return facts !== undefined && evaluateRuleGroup(rule, facts);
+    },
   });
 }

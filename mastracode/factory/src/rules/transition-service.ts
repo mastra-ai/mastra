@@ -1,4 +1,4 @@
-import { phaseAutoApproves } from '../boards/auto-approve.js';
+import { cardRuleFacts, phaseAutoApproves } from '../boards/auto-approve.js';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry, FactoryPhaseTool } from '../boards/index.js';
 import type { BoardResolver } from '../boards/resolver.js';
@@ -184,9 +184,10 @@ function transitionConsent(working: boolean, humanMove: boolean): 'arm' | 'disar
   return humanMove ? 'arm' : undefined;
 }
 
-// An event arriving as data (GitHub, sweeps) never pre-approves the runs its transition queues.
-function bearsConsent(actor: FactoryRuleActor): boolean {
-  return actor.type === 'human' || actor.type === 'agent';
+// An event arriving as data (GitHub, sweeps) never pre-approves the runs its transition queues,
+// and an agent's move does not pre-approve runs its target phase's start rule holds for a person.
+function bearsConsent(actor: FactoryRuleActor, heldForPerson: boolean): boolean {
+  return actor.type === 'human' || (actor.type === 'agent' && !heldForPerson);
 }
 
 // Rides the transition's own revision-checked commit, so a stale or rejected commit flips nothing.
@@ -194,9 +195,10 @@ function consentEffect(
   request: FactoryTransitionRequest,
   working: boolean,
   humanMove: boolean,
+  heldForPerson: boolean,
 ): TransitionConsentOptions {
   const autonomy = transitionConsent(working, humanMove);
-  return bearsConsent(request.actor) ? { autonomy, consentedBy: actorId(request.actor) } : { autonomy };
+  return bearsConsent(request.actor, heldForPerson) ? { autonomy, consentedBy: actorId(request.actor) } : { autonomy };
 }
 
 type RunStartDecision = Extract<FactoryCommitDecision, { type: 'invokeSkill' | 'sendMessage' }>;
@@ -439,15 +441,6 @@ export class FactoryTransitionService {
         `The ${board.title} board does not allow moving from ${fromStage} to ${request.stage}. ${nextStagesReason}`,
       );
     }
-    if (request.actor.type === 'agent' && fromStage !== request.stage && board.entersManually(request.stage)) {
-      const phase = board.phases[request.stage]?.title ?? request.stage;
-      return this.#commitRejection(
-        request,
-        transitionId,
-        'approval_required',
-        `Only a person moves a card into ${phase}. Leave it in ${board.phases[fromStage]?.title ?? fromStage}; a maintainer moves it on from the Factory UI.`,
-      );
-    }
 
     // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
     const humanMove = request.actor.type === 'human' && fromStage !== request.stage && request.cause !== 'run_start';
@@ -604,7 +597,17 @@ export class FactoryTransitionService {
       transitionId,
       evaluation,
       evaluation.outcome === 'accepted'
-        ? { ...consentEffect(request, entersWorking, humanMove), ...evaluation.intents }
+        ? {
+            ...consentEffect(
+              request,
+              entersWorking,
+              humanMove,
+              // The phase starts its runs only for cards its rule matches; the rest wait for a person.
+              board.phases[request.stage]?.autoStartWhen !== undefined &&
+                !board.startsAutomatically(request.stage, cardRuleFacts(item)),
+            ),
+            ...evaluation.intents,
+          }
         : {},
       boards,
     );

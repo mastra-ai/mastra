@@ -406,7 +406,7 @@ function PhaseEditor({
                       ...(kind === 'resting' ? { runner: null } : {}),
                       exitTool: null,
                       autoApproveWhen: null,
-                      autoStart: false,
+                      autoStartWhen: null,
                     },
               );
             }}
@@ -483,27 +483,18 @@ function PhaseEditor({
           )}
         </div>
 
-        <label className="flex items-center gap-2">
-          <Switch
-            aria-label={`Only people move cards into ${phase.name}`}
-            checked={phase.manualEntry === true}
-            disabled={disabled}
-            onCheckedChange={manualEntry => onChange({ manualEntry })}
-          />
-          <Txt as="span" variant="caption" className="text-muted-foreground">
-            Only people move cards here; agents leave the card where it is
-          </Txt>
-        </label>
         {phase.kind === 'working' && (
           <label className="flex items-center gap-2">
             <Switch
               aria-label={`${phase.name} starts on its own`}
-              checked={phase.autoStart === true}
+              checked={Boolean(phase.autoStartWhen)}
               disabled={disabled}
-              onCheckedChange={autoStart => onChange({ autoStart })}
+              onCheckedChange={on => onChange({ autoStartWhen: on ? { operator: 'AND', conditions: [] } : null })}
             />
             <Txt as="span" variant="caption" className="text-muted-foreground">
-              Starts on its own, without anyone approving the run
+              {phase.autoStartWhen?.conditions.length
+                ? 'Starts on its own for cards its start rule matches'
+                : 'Starts on its own, without anyone approving the run'}
             </Txt>
           </label>
         )}

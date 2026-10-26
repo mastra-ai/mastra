@@ -117,7 +117,11 @@ export function ruleGroupSchema(fields: readonly [string, ...string[]]): z.ZodTy
     return z
       .object({
         operator: z.enum(['AND', 'OR']),
-        conditions: z.array(member).min(1).max(MAX_CONDITIONS_PER_GROUP),
+        // Only the outermost group may be empty: it matches every card.
+        conditions: z
+          .array(member)
+          .min(depth === 1 ? 0 : 1)
+          .max(MAX_CONDITIONS_PER_GROUP),
       })
       .strict() as z.ZodType<RuleGroup>;
   };
@@ -184,9 +188,12 @@ function evaluateCondition(condition: RuleCondition, facts: RuleFacts): boolean 
   }
 }
 
-/** True when `facts` satisfy `group`. A `null`/absent group matches everything (a fallback route). */
+/**
+ * True when `facts` satisfy `group`. A `null`/absent group, or one with no
+ * conditions, matches everything (a fallback route, a phase that always starts).
+ */
 export function evaluateRuleGroup(group: RuleGroup | null | undefined, facts: RuleFacts): boolean {
-  if (!group) return true;
+  if (!group || group.conditions.length === 0) return true;
   const results = group.conditions.map(member =>
     isGroup(member) ? evaluateRuleGroup(member, facts) : evaluateCondition(member, facts),
   );

@@ -181,7 +181,6 @@ Post the same handoff as your final conversation message. Take the current stage
 
 - When the current stage is **Intake** or **Triage**, make the terminal `factory_transition_work_item` call with `triageType` set to the exact `Type` from the handoff.
 - Confirmed bugs with `Route: Plan fix` request `stage: "planning"`. Issues that should be closed request `stage: "done"` with the close rationale.
-- When the `factory-phase` signal says only a person moves a card into Planning, a `Route: Plan fix` bug requests its current Intake/Triage stage instead, like a feature: the classification is recorded and a maintainer moves it to Planning.
 - Features and every other non-bug classification use `Route: Await approval` and request their current Intake/Triage stage. This records the classification without advancing; stop until a maintainer moves the card or starts the next run from the Factory UI.
 - When the item is already in **Planning** or a later stage, this is a webhook-driven refresh: use `Route: No transition / refresh`, update the source-specific handoff, but do **not** request a stage transition. Report the updated verdict and stop.
 

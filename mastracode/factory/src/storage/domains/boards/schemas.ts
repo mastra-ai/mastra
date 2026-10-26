@@ -58,8 +58,7 @@ export const FACTORY_BOARD_PHASES_SCHEMA: CollectionSchema = {
     next_phases: { type: 'json', nullable: true },
     exit_tool: { type: 'text', nullable: true },
     auto_approve_when: { type: 'json', nullable: true },
-    manual_entry: { type: 'boolean', default: false },
-    auto_start: { type: 'boolean', default: false },
+    auto_start_when: { type: 'json', nullable: true },
   },
   uniqueIndexes: [
     {

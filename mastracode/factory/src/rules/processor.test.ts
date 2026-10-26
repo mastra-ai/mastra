@@ -512,9 +512,7 @@ describe('FactoryPhaseStateProcessor', () => {
     });
     expect(signal?.contents).toContain('Factory work phase: Building (execute)');
     expect(signal?.contents).toContain('Config: rules-v1');
-    expect(signal?.contents).toContain(
-      'Only a person moves a card into: Planning (planning). Do not request those phases.',
-    );
+    expect(signal?.contents).not.toContain('Only a person moves');
   });
 
   describe('board-owned tool-result rules', () => {

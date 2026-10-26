@@ -96,7 +96,8 @@ describe('stored board validation', () => {
   });
 
   it('lets only a working phase start on its own', () => {
-    expect(messages(storedBoardInputSchema.safeParse(board([{ ...open, autoStart: true }, closed])))).toContain(
+    const always = { operator: 'AND' as const, conditions: [] };
+    expect(messages(storedBoardInputSchema.safeParse(board([{ ...open, autoStartWhen: always }, closed])))).toContain(
       'Only a working phase starts a runner.',
     );
   });

@@ -71,9 +71,8 @@ export const storedPhaseInputSchema = z
     /** Card conditions under which the exit tool is approved without a person. */
     autoApproveWhen: intakeRouteWhenSchema.nullable().optional(),
     /** Only people move cards into this phase; an agent's move into it is refused. */
-    manualEntry: z.boolean().optional(),
     /** The runner starts without anyone approving it, even with the project's auto-run off. */
-    autoStart: z.boolean().optional(),
+    autoStartWhen: intakeRouteWhenSchema.nullable().optional(),
   })
   .strict()
   .superRefine((phase, ctx) => {
@@ -83,8 +82,8 @@ export const storedPhaseInputSchema = z
     if (phase.kind !== 'working' && phase.exitTool) {
       ctx.addIssue({ code: 'custom', path: ['exitTool'], message: 'Only a working phase has an exit tool.' });
     }
-    if (phase.kind !== 'working' && phase.autoStart) {
-      ctx.addIssue({ code: 'custom', path: ['autoStart'], message: 'Only a working phase starts a runner.' });
+    if (phase.kind !== 'working' && phase.autoStartWhen) {
+      ctx.addIssue({ code: 'custom', path: ['autoStartWhen'], message: 'Only a working phase starts a runner.' });
     }
     if (phase.autoApproveWhen && !phase.exitTool) {
       ctx.addIssue({ code: 'custom', path: ['autoApproveWhen'], message: 'Auto-approval needs an exit tool.' });

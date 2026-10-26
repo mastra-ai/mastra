@@ -1,3 +1,4 @@
+import type { RuleGroup } from '../rules/rule-group.js';
 import type { FactoryRuleSource, FactoryStageRuleContext } from '../rules/types.js';
 import type { StoredPhaseKind, StoredPhaseRunner } from '../storage/domains/boards/validation.js';
 import { defineBoard } from './define-board.js';
@@ -19,8 +20,7 @@ export interface CompilableBoard {
     readonly runner?: StoredPhaseRunner | null;
     readonly nextPhases?: readonly string[] | null;
     readonly exitTool?: string | null;
-    readonly manualEntry?: boolean;
-    readonly autoStart?: boolean;
+    readonly autoStartWhen?: RuleGroup | null;
   }[];
 }
 
@@ -168,8 +168,7 @@ export function compileStoredBoard(
       title: phase.name,
       // A phase grants the Factory tools its runner works with; a context name grants none.
       factoryTools: runner?.factoryTools ?? [],
-      ...(phase.manualEntry ? { manualEntry: true } : {}),
-      ...(phase.autoStart ? { autoStart: true } : {}),
+      ...(phase.autoStartWhen ? { autoStartWhen: phase.autoStartWhen } : {}),
       outcomes: Object.fromEntries(targets.map(target => [target, target])),
       ...(runner?.onEnter ? { onEnter: runner.onEnter } : {}),
       ...(runner?.onExit ? { onExit: runner.onExit } : {}),
@@ -182,7 +181,6 @@ export function compileStoredBoard(
         title: phase.name,
         outcomes: base.outcomes,
         factoryTools: [],
-        ...(phase.manualEntry ? { manualEntry: true } : {}),
         kind: 'resting',
       };
       continue;

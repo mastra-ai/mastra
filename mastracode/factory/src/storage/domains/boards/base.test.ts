@@ -66,10 +66,21 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('BoardsStorage o
     // Null is kept: the phase runs in the card's main context.
     expect(work!.phases.find(phase => phase.key === 'review')!.runner).toMatchObject({ context: null });
     expect(work!.phases.every(phase => phase.nextPhases === null)).toBe(true);
-    // Planning is people-only; every other phase takes agents.
-    expect(work!.phases.filter(phase => phase.manualEntry).map(phase => phase.key)).toEqual(['planning']);
-    // Triage and Review start on their own.
-    expect(work!.phases.filter(phase => phase.autoStart).map(phase => phase.key)).toEqual(['triage', 'review']);
+    // Triage and Review start on their own; Planning only for cards its rule matches.
+    expect(work!.phases.filter(phase => phase.autoStartWhen).map(phase => phase.key)).toEqual([
+      'triage',
+      'planning',
+      'review',
+    ]);
+    expect(work!.phases.map(phase => [phase.key, phase.autoStartWhen])).toContainEqual([
+      'planning',
+      { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort: low' }] },
+    ]);
+    expect(work!.phases.find(phase => phase.key === 'triage')!.autoStartWhen).toEqual({
+      operator: 'AND',
+      conditions: [],
+    });
+    expect(work!.phases.find(phase => phase.key === 'execute')!.autoStartWhen).toBeNull();
     expect(work!.eventRoutes.map(route => [route.event, route.toPhaseKey])).toEqual(
       workBoardTemplate.eventRoutes.map(route => [route.event, route.toPhaseKey]),
     );

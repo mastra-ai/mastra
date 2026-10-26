@@ -441,13 +441,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const linkedText = linked.length
       ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`
       : '';
-    const installed = boards.get(board);
-    const phaseLabel = installed?.phases[stage]?.title ?? stage;
-    const manualPhases = installed
-      ? Object.entries(installed.phases)
-          .filter(([key]) => installed.entersManually(key))
-          .map(([key, phase]) => `${phase.title} (${key})`)
-      : [];
+    const phaseLabel = boards.get(board)?.phases[stage]?.title ?? stage;
     const runtime =
       value.modelId && value.thinkingLevel ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : null;
     const snapshotContents =
@@ -459,9 +453,6 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         : '') +
       (board === 'work' && stage === 'intake'
         ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
-        : '') +
-      (manualPhases.length
-        ? `Only a person moves a card into: ${escapeText(manualPhases.join(', '))}. Do not request those phases.\n`
         : '') +
       `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
     const isDelta = hasBase && prior?.status === 'active';

@@ -101,6 +101,8 @@ describe('evaluateRuleGroup', () => {
   it('matches everything when there is no condition, for fallback routes', () => {
     expect(evaluateRuleGroup(null, {})).toBe(true);
     expect(evaluateRuleGroup(undefined, pullRequest)).toBe(true);
+    expect(evaluateRuleGroup({ operator: 'AND', conditions: [] }, pullRequest)).toBe(true);
+    expect(evaluateRuleGroup({ operator: 'OR', conditions: [] }, {})).toBe(true);
   });
 });
 
@@ -111,6 +113,11 @@ describe('rule group schemas', () => {
     const depth3 = all(any(all(leaf)));
     expect(intakeRouteWhenSchema.safeParse(depth3).success).toBe(true);
     expect(intakeRouteWhenSchema.safeParse(all(any(all(any(leaf))))).success).toBe(false);
+  });
+
+  it('lets only the outermost group be empty, meaning every card', () => {
+    expect(intakeRouteWhenSchema.safeParse({ operator: 'AND', conditions: [] }).success).toBe(true);
+    expect(intakeRouteWhenSchema.safeParse(all({ operator: 'OR', conditions: [] })).success).toBe(false);
   });
 
   it('only allows fields the route type can see', () => {
@@ -136,6 +143,5 @@ describe('rule group schemas', () => {
     expect(
       intakeRouteWhenSchema.safeParse(all({ field: 'item.title', operator: 'greater_than', value: 'a' })).success,
     ).toBe(false);
-    expect(intakeRouteWhenSchema.safeParse({ operator: 'AND', conditions: [] }).success).toBe(false);
   });
 });

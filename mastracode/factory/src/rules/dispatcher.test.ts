@@ -3369,12 +3369,13 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
-  it('starts Triage and Review on their own with automatic runs off, and asks before Planning', async () => {
+  it('starts Triage and Review on their own with automatic runs off, and Planning only for a low-effort card', async () => {
     const outcomes: Record<string, string | undefined> = {};
-    for (const [stage, skillName] of [
-      ['triage', 'factory-triage'],
-      ['review', 'factory-self-review'],
-      ['planning', 'factory-plan'],
+    for (const [stage, skillName, labels] of [
+      ['triage', 'factory-triage', []],
+      ['review', 'factory-self-review', []],
+      ['planning', 'factory-plan', ['effort: high']],
+      ['planning', 'factory-plan', ['effort: low']],
     ] as const) {
       const storage = (await createFactoryStorageForTests()).workItems;
       const { item, transitionService } = await queueDecision(
@@ -3382,6 +3383,12 @@ describe('FactoryDecisionDispatcher', () => {
         { type: 'invokeSkill', role: 'work', skillName, idempotencyKey: `auto-${stage}` },
         { stage },
       );
+      await storage.update({
+        orgId: 'org-1',
+        id: item.id,
+        userId: 'user-1',
+        patch: { metadata: { authorTrusted: true, labels: [...labels] } },
+      });
       await bindWorkRun(storage, item.id);
       const { controller } = createSession();
       const dispatcher = new FactoryDecisionDispatcher({
@@ -3392,11 +3399,16 @@ describe('FactoryDecisionDispatcher', () => {
         isAutoRunEnabled: async () => false,
       });
       await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
-      outcomes[stage] = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(
-        row => row.idempotencyKey === `auto-${stage}`,
-      )?.status;
+      outcomes[labels.length ? `${stage} (${labels[0]})` : stage] = (
+        await storage.listDeferredDecisions('org-1', PROJECT_ID)
+      ).find(row => row.idempotencyKey === `auto-${stage}`)?.status;
     }
-    expect(outcomes).toEqual({ triage: 'succeeded', review: 'succeeded', planning: 'proposed' });
+    expect(outcomes).toEqual({
+      triage: 'succeeded',
+      review: 'succeeded',
+      'planning (effort: high)': 'proposed',
+      'planning (effort: low)': 'succeeded',
+    });
   });
 
   it('still asks before reviewing a card an outsider wrote, even in Review', async () => {
@@ -3857,7 +3869,8 @@ describe('FactoryDecisionDispatcher', () => {
           title: 'Outside report',
           stages: ['triage'],
           sessions: {},
-          metadata: { authorTrusted: false },
+          // Low effort: Planning's start rule lets the agent's move approve the plan.
+          metadata: { authorTrusted: false, labels: ['effort: low'] },
         },
       })
     ).item;

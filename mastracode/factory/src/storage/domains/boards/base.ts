@@ -30,10 +30,11 @@ export interface StoredPhase {
   exitTool: string | null;
   /** When it matches the card, the exit tool's approval is given without a person. */
   autoApproveWhen: RuleGroup | null;
-  /** Only people move cards into this phase; agents leave them where they are. */
-  manualEntry: boolean;
-  /** The phase's runner starts without anyone approving it, even with the project's auto-run off. */
-  autoStart: boolean;
+  /**
+   * The phase's runs start without anyone approving them for cards this matches:
+   * no conditions matches every card, null starts none.
+   */
+  autoStartWhen: RuleGroup | null;
 }
 
 export interface StoredEventRoute {
@@ -116,8 +117,7 @@ interface PhaseRow extends Record<string, unknown> {
   next_phases: string[] | null;
   exit_tool?: string | null;
   auto_approve_when?: RuleGroup | null;
-  manual_entry?: boolean | null;
-  auto_start?: boolean | null;
+  auto_start_when?: RuleGroup | null;
 }
 
 interface IntakeRouteRow extends Record<string, unknown> {
@@ -228,8 +228,7 @@ export class BoardsStorage extends FactoryStorageDomain {
                 nextPhases: phase.next_phases,
                 exitTool: phase.exit_tool ?? null,
                 autoApproveWhen: phase.auto_approve_when ?? null,
-                manualEntry: phase.manual_entry === true,
-                autoStart: phase.auto_start === true,
+                autoStartWhen: phase.auto_start_when ?? null,
               })),
             eventRoutes: eventRoutes
               .filter(route => route.board_key === board.key)
@@ -341,8 +340,7 @@ export class BoardsStorage extends FactoryStorageDomain {
               next_phases: phase.nextPhases ?? null,
               exit_tool: phase.exitTool ?? null,
               auto_approve_when: phase.autoApproveWhen ?? null,
-              manual_entry: phase.manualEntry ?? false,
-              auto_start: phase.autoStart ?? false,
+              auto_start_when: phase.autoStartWhen ?? null,
             });
           }
           for (const [position, route] of (board.eventRoutes ?? []).entries()) {

@@ -3,7 +3,7 @@ import type { AgentController, AgentControllerEventListener, Session } from '@ma
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import { phaseAutoApproves } from '../boards/auto-approve.js';
+import { cardRuleFacts, phaseAutoApproves } from '../boards/auto-approve.js';
 import {
   boardForWorkItem,
   createBoardRegistry,
@@ -563,18 +563,16 @@ function reviewsFactoryAuthoredCode(
   return decision.type === 'invokeSkill' && decision.role === 'review';
 }
 
-// A phase that starts on its own needs no one's go-ahead for its runs, whether the card
-// just moved there (a transition) or its runner was invoked there (a skill run).
-function startsInAutoPhase(
-  boards: BoardRegistry,
-  item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
-  decision: FactoryCommitDecision,
-): boolean {
+// A phase that starts on its own — for this card, when its start rule has a condition —
+// needs no one's go-ahead for its runs, whether the card just moved there (a transition)
+// or its runner was invoked there (a skill run).
+function startsInAutoPhase(boards: BoardRegistry, item: WorkItemRow, decision: FactoryCommitDecision): boolean {
+  const facts = cardRuleFacts(item);
   if (decision.type === 'transition') {
-    return boards.get(currentBoardId(decision.board))?.startsAutomatically(decision.stage) === true;
+    return boards.get(currentBoardId(decision.board))?.startsAutomatically(decision.stage, facts) === true;
   }
   if (decision.type !== 'invokeSkill' || item.stages.length !== 1) return false;
-  return boards.get(boardForWorkItem(item))?.startsAutomatically(item.stages[0]!) === true;
+  return boards.get(boardForWorkItem(item))?.startsAutomatically(item.stages[0]!, facts) === true;
 }
 
 function leaseIdentity(
