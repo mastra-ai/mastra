@@ -29,6 +29,7 @@ import {
   moveNoClobberCommand,
   siblingTempPath,
 } from './file-commands';
+import { getMimeType } from './mime-type';
 
 /** One entry as E2B's envd files API reports it (`EntryInfo`), reduced to the fields used here. */
 export interface FilesApiEntry {
@@ -300,6 +301,9 @@ export abstract class FilesApiFilesystem extends MastraFilesystem {
         size: info.type === 'dir' ? 0 : info.size,
         createdAt: modifiedAt,
         modifiedAt,
+        // envd reports no MIME type. Infer it from the name like LocalFilesystem:
+        // read_file decides media, binary or text from it.
+        ...(info.type !== 'dir' && { mimeType: getMimeType(abs) }),
       };
     });
   }
