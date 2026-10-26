@@ -1202,7 +1202,7 @@ When you register the [`MastraEditor`](/reference/editor/mastra-editor), the `ed
 
 When a field is owned by Studio, TypeScript rejects it in code: `instructions` with `editor: { instructions: true }` and `tools` with `editor: { tools: true }` are type errors. An agent whose instructions are owned by Studio fails closed until a stored version with instructions is published.
 
-The agent's `id` and `name` always come from code. Models also remain code-owned unless you set `model: true`. Model ownership supports static fallback arrays whose entries have immutable IDs; function-valued model configuration can't be overridden through Editor. See [Editor](/docs/studio/editor) for usage.
+The agent's `id` and `name` always come from code. Models also remain code-owned unless you set `model: true`. Model ownership supports static fallback arrays whose entries have immutable IDs. Function-valued model configuration can't be overridden through Editor. See [Editor](/docs/studio/editor) for usage.
 
 ## Returns
 
