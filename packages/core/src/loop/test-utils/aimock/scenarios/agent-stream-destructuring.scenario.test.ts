@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest';
-import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  describeForAllEngines,
+  isDurableEngineVariant,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 
 /**
  * The stream result's properties and methods must keep working after being
@@ -10,6 +15,7 @@ import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from 
  */
 describeForAllEngines('AIMock loop scenario: stream result destructuring', engine => {
   const getMock = useLoopScenarioAimock();
+  const isDurableEngine = isDurableEngineVariant(engine);
 
   it('resolves destructured stream properties and methods', async () => {
     const llm = getMock();
@@ -34,7 +40,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
     expect(await usage).toBeDefined();
     expect(await toolCalls).toEqual([]);
     expect(await finishReason).toBe('stop');
-    expect((await request)?.body).toBeDefined();
+    expect((await request)?.body).toEqual(isDurableEngine ? undefined : expect.anything());
     expect(llm.getRequests()).toHaveLength(1);
   });
 });

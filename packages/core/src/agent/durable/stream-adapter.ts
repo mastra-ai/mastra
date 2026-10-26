@@ -701,7 +701,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
                 usage: normalizeUsage(data.output?.usage),
                 totalUsage: normalizeUsage(data.output?.usage),
                 warnings: data.stepResult?.warnings ?? [],
-                request: await output.request,
+                request: { body: undefined },
                 response: steps.at(-1)?.response ?? {},
                 reasoningText: undefined,
                 providerMetadata: undefined,
