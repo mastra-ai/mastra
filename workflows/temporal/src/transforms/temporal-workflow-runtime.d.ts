@@ -11,6 +11,8 @@ export interface WorkflowExecutionResult {
   result: unknown;
   state: unknown;
   steps: Record<string, unknown>;
+  /** Present when the run started with `recordStepMeta` on a Worker that records it. */
+  stepMeta?: Record<string, { startedAt: number; endedAt: number }>;
 }
 
 export type StepEntry = {
@@ -30,6 +32,7 @@ export type WorkflowRuntime = ((startArgs?: {
   resourceId?: string;
   inputData?: unknown;
   initialState?: unknown;
+  recordStepMeta?: boolean;
 }) => Promise<WorkflowExecutionResult>) & {
   then(stepId: string): WorkflowRuntime;
   thenWorkflow(workflowType: string): WorkflowRuntime;
@@ -56,6 +59,7 @@ export class TemporalExecutionEngine {
     graph: { id: string; steps: unknown[] };
     input?: unknown;
     initialState?: unknown;
+    recordStepMeta?: boolean;
   }): Promise<WorkflowExecutionResult>;
 }
 
