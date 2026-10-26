@@ -12,7 +12,6 @@ dependencies updates:
   - Updated dependency [`local-pkg@^1.2.1` ↗︎](https://www.npmjs.com/package/local-pkg/v/1.2.1) (from `^1.1.2`, in `dependencies`)
   - Updated dependency [`posthog-node@^5.57.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.57.1) (from `^5.46.1`, in `dependencies`)
   - Updated dependency [`semver@^7.8.5` ↗︎](https://www.npmjs.com/package/semver/v/7.8.5) (from `^7.7.4`, in `dependencies`)
-  - Updated dependency `yocto-spinner@npm:@socketregistry/yocto-spinner@^1.0.25` (from `^1.1.0`, in `dependencies`)
   - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
   - Updated dependency [`@types/semver@^7.8.0` ↗︎](https://www.npmjs.com/package/@types/semver/v/7.8.0) (from `^7.7.1`, in `devDependencies`)
   - Updated dependency [`memfs@^4.80.0` ↗︎](https://www.npmjs.com/package/memfs/v/4.80.0) (from `^4.56.11`, in `devDependencies`)

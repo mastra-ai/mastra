@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@grpc/grpc-js": "1.14.5",
+    "@grpc/grpc-js": "^1.14.5",
     "dockerode": "^4.0.12",
     "tar-stream": "^3.2.2"
   },

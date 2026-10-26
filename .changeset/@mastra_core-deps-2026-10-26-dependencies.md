@@ -5,7 +5,7 @@ dependencies updates:
   - Updated dependency [`chat@^4.43.0` ↗︎](https://www.npmjs.com/package/chat/v/4.43.0) (from `^4.37.0`, in `dependencies`)
   - Updated dependency [`dotenv@^17.4.2` ↗︎](https://www.npmjs.com/package/dotenv/v/17.4.2) (from `^17.3.1`, in `dependencies`)
   - Updated dependency [`fastq@^1.20.3` ↗︎](https://www.npmjs.com/package/fastq/v/1.20.3) (from `^1.20.1`, in `dependencies`)
-  - Updated dependency [`hono@4.13.13` ↗︎](https://www.npmjs.com/package/hono/v/4.13.13) (from `^4.13.7`, in `dependencies`)
+  - Updated dependency [`hono@^4.13.13` ↗︎](https://www.npmjs.com/package/hono/v/4.13.13) (from `^4.13.7`, in `dependencies`)
   - Updated dependency [`hono-openapi@^1.5.0` ↗︎](https://www.npmjs.com/package/hono-openapi/v/1.5.0) (from `^1.3.1`, in `dependencies`)
   - Updated dependency [`ignore@^7.0.14` ↗︎](https://www.npmjs.com/package/ignore/v/7.0.14) (from `^7.0.5`, in `dependencies`)
   - Updated dependency [`lru-cache@^11.5.3` ↗︎](https://www.npmjs.com/package/lru-cache/v/11.5.3) (from `^11.2.7`, in `dependencies`)

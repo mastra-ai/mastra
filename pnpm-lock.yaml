@@ -551,7 +551,7 @@ importers:
   auth/auth0:
     dependencies:
       jose:
-        specifier: 6.2.12
+        specifier: ^6.2.12
         version: 6.2.12
     devDependencies:
       '@internal/auth':
@@ -733,7 +733,7 @@ importers:
   auth/google:
     dependencies:
       jose:
-        specifier: 6.2.12
+        specifier: ^6.2.12
         version: 6.2.12
       lru-cache:
         specifier: ^11.5.3
@@ -770,7 +770,7 @@ importers:
   auth/neon:
     dependencies:
       jose:
-        specifier: 6.2.12
+        specifier: ^6.2.12
         version: 6.2.12
     devDependencies:
       '@internal/lint':
@@ -807,7 +807,7 @@ importers:
         specifier: 4.13.13
         version: 4.13.13
       jose:
-        specifier: 6.2.12
+        specifier: ^6.2.12
         version: 6.2.12
       lru-cache:
         specifier: ^11.5.3
@@ -1304,7 +1304,7 @@ importers:
         specifier: ^1.0.8
         version: 1.0.8
       jose:
-        specifier: 6.2.12
+        specifier: ^6.2.12
         version: 6.2.12
       json-schema:
         specifier: ^0.4.0
@@ -1986,7 +1986,7 @@ importers:
   e2e-tests/client-js/_test-utils:
     dependencies:
       '@hono/node-server':
-        specifier: 2.1.3
+        specifier: ^2.1.3
         version: 2.1.3(hono@4.13.13)
       '@internal/ai-sdk-v5':
         specifier: workspace:*
@@ -2013,7 +2013,7 @@ importers:
         specifier: ^7.2.0
         version: 7.2.0
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
       vitest:
         specifier: 'catalog:'
@@ -2137,8 +2137,8 @@ importers:
         specifier: ^2.0.5
         version: 2.0.5
       '@ai-sdk/provider-utils':
-        specifier: 3.0.40
-        version: 3.0.40(zod@3.25.76)
+        specifier: ^3.0.40
+        version: 3.0.41(zod@3.25.76)
       '@huggingface/hub':
         specifier: ^0.15.2
         version: 0.15.2
@@ -2433,7 +2433,7 @@ importers:
         specifier: ^2.1.0
         version: 2.1.0
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
       posthog-node:
         specifier: ^5.57.1
@@ -3451,7 +3451,7 @@ importers:
         version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
     optionalDependencies:
       '@grpc/grpc-js':
-        specifier: 1.14.5
+        specifier: ^1.14.5
         version: 1.14.5
       '@opentelemetry/exporter-logs-otlp-grpc':
         specifier: ^0.221.0
@@ -4521,7 +4521,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
       prettier:
         specifier: 3.9.5
@@ -4596,7 +4596,7 @@ importers:
         specifier: ^1.20.3
         version: 1.20.3
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
       hono-openapi:
         specifier: ^1.5.0
@@ -4918,7 +4918,7 @@ importers:
         specifier: ^4.14.3
         version: 4.14.3
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
       local-pkg:
         specifier: ^1.2.1
@@ -4943,7 +4943,7 @@ importers:
         version: 2.9.1
     devDependencies:
       '@hono/node-server':
-        specifier: 2.1.3
+        specifier: ^2.1.3
         version: 2.1.3(hono@4.13.13)
       '@hono/standard-validator':
         specifier: ^0.3.0
@@ -5034,7 +5034,7 @@ importers:
         version: link:../schema-compat
     devDependencies:
       '@hono/node-server':
-        specifier: 2.1.3
+        specifier: ^2.1.3
         version: 2.1.3(hono@4.13.13)
       '@internal/ai-sdk-v4':
         specifier: workspace:*
@@ -5061,7 +5061,7 @@ importers:
         specifier: 22.19.15
         version: 22.19.15
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
       tsdown:
         specifier: 0.23.1
@@ -5357,7 +5357,7 @@ importers:
         version: 4.6.7
     devDependencies:
       '@hono/node-server':
-        specifier: 2.1.3
+        specifier: ^2.1.3
         version: 2.1.3(hono@4.13.13)
       '@internal/lint':
         specifier: workspace:*
@@ -5384,7 +5384,7 @@ importers:
         specifier: ^10.1.0
         version: 10.1.0
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
       tsdown:
         specifier: 0.23.1
@@ -5409,7 +5409,7 @@ importers:
         version: 4.6.7
     devDependencies:
       '@hono/node-server':
-        specifier: 2.1.3
+        specifier: ^2.1.3
         version: 2.1.3(hono@4.13.13)
       '@internal/lint':
         specifier: workspace:*
@@ -5439,7 +5439,7 @@ importers:
         specifier: ^10.1.0
         version: 10.1.0
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
       tsdown:
         specifier: 0.23.1
@@ -6212,7 +6212,7 @@ importers:
   packages/server:
     dependencies:
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
     devDependencies:
       '@ai-sdk/openai':
@@ -6293,15 +6293,9 @@ importers:
       '@google-cloud/pubsub':
         specifier: ^5.3.1
         version: 5.3.1(supports-color@10.2.2)
-      '@inngest/realtime':
-        specifier: ^0.4.7
-        version: 0.4.7(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.3.0(supports-color@10.2.2))(fastify@5.12.7)(hono@4.13.13)(koa@3.2.1)(react@19.3.1)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
-      inngest:
-        specifier: ^4.2.2
-        version: 4.3.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.3.0(supports-color@10.2.2))(fastify@5.12.7)(hono@4.13.13)(koa@3.2.1)(react@19.3.1)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -6703,7 +6697,7 @@ importers:
         specifier: ^1.46.0
         version: 1.46.0(vitest@4.1.12)
       '@hono/node-server':
-        specifier: 2.1.3
+        specifier: ^2.1.3
         version: 2.1.3(hono@4.13.13)
       '@hono/swagger-ui':
         specifier: ^0.5.3
@@ -6742,7 +6736,7 @@ importers:
         specifier: ^8.18.2
         version: 8.18.2
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
       tsdown:
         specifier: 0.23.1
@@ -6836,7 +6830,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/server
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
     devDependencies:
       '@ai-sdk/openai':
@@ -6931,7 +6925,7 @@ importers:
         version: link:../../packages/server
     devDependencies:
       '@hono/node-server':
-        specifier: 2.1.3
+        specifier: ^2.1.3
         version: 2.1.3(hono@4.13.13)
       '@internal/lint':
         specifier: workspace:*
@@ -6949,7 +6943,7 @@ importers:
         specifier: 22.19.15
         version: 22.19.15
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
       tsdown:
         specifier: 0.23.1
@@ -7016,7 +7010,7 @@ importers:
         specifier: 22.19.15
         version: 22.19.15
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
       tsdown:
         specifier: 0.23.1
@@ -7469,7 +7463,7 @@ importers:
   stores/duckdb:
     dependencies:
       '@duckdb/node-api':
-        specifier: 1.5.2-r.2
+        specifier: ^1.5.2-r.2
         version: 1.5.2-r.2
     devDependencies:
       '@internal/lint':
@@ -9226,7 +9220,7 @@ importers:
         specifier: ^1.46.0
         version: 1.46.0(vitest@4.1.12)
       '@hono/node-server':
-        specifier: 2.1.3
+        specifier: ^2.1.3
         version: 2.1.3(hono@4.13.13)
       '@internal/core':
         specifier: workspace:*
@@ -9292,7 +9286,7 @@ importers:
         specifier: 7.1.0
         version: 7.1.0
       hono:
-        specifier: 4.13.13
+        specifier: ^4.13.13
         version: 4.13.13
       inngest-cli:
         specifier: ^1.49.0
@@ -9728,7 +9722,7 @@ importers:
   workspaces/docker:
     dependencies:
       '@grpc/grpc-js':
-        specifier: 1.14.5
+        specifier: ^1.14.5
         version: 1.14.5
       dockerode:
         specifier: ^4.0.12
@@ -15299,13 +15293,6 @@ packages:
 
   '@inngest/ai@0.1.7':
     resolution: {integrity: sha512-5xWatW441jacGf9czKEZdgAmkvoy7GS2tp7X8GSbdGeRXzjisHR6vM+q8DQbv6rqRsmQoCQ5iShh34MguELvUQ==}
-
-  '@inngest/realtime@0.4.7':
-    resolution: {integrity: sha512-CtmQFXlhtR0DHOJ5KngTSsk5lJXgr+Ro25HaAtdZjvDJjzo9tS0ut5e5SpGClUZkSBqdvpIKw8VBLonJ5j1JqQ==}
-    deprecated: This package is deprecated. Realtime functionality is now built into the inngest package.
-    peerDependencies:
-      react: '>=18.0.0'
-      zod: 4.6.7
 
   '@inquirer/ansi@1.0.2':
     resolution: {integrity: sha512-S8qNSZiYzFd0wAcyG5AXCvUHC5Sr7xpZ9wZ2py9XR88jUz8wooStVx5M6dRzczbBWjic9NP7+rY0Xi7qqK/aMQ==}
@@ -23802,10 +23789,6 @@ packages:
   content-type@1.0.5:
     resolution: {integrity: sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA==}
     engines: {node: '>= 0.6'}
-
-  content-type@2.0.0:
-    resolution: {integrity: sha512-j/O/d7GcZCyNl7/hwZAb606rzqkyvaDctLmckbxLzHvFBzTJHuGEdodATcP3yIRoDrLHkIATJuvzbFlp/ki2cQ==}
-    engines: {node: '>=18'}
 
   content-type@2.1.0:
     resolution: {integrity: sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag==}
@@ -33267,22 +33250,22 @@ snapshots:
       secure-json-parse: 2.7.0
       zod: 4.6.7
 
-  '@ai-sdk/provider-utils@3.0.40(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.5
-      '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.8
-      undici: 8.12.2
-      zod: 3.25.76
-
   '@ai-sdk/provider-utils@3.0.40(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.8
+      eventsource-parser: 3.1.1
       undici: 8.12.2
       zod: 4.6.7
     optional: true
+
+  '@ai-sdk/provider-utils@3.0.41(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.5
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.1.1
+      undici: 8.12.2
+      zod: 3.25.76
 
   '@ai-sdk/provider-utils@3.0.41(zod@4.6.7)':
     dependencies:
@@ -33296,7 +33279,7 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.8
+      eventsource-parser: 3.1.1
       undici: 8.12.2
       zod: 3.25.76
 
@@ -33304,7 +33287,7 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.8
+      eventsource-parser: 3.1.1
       undici: 8.12.2
       zod: 4.6.7
 
@@ -39473,28 +39456,6 @@ snapshots:
     dependencies:
       '@types/node': 22.19.15
       typescript: 5.9.3
-
-  '@inngest/realtime@0.4.7(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.3.0(supports-color@10.2.2))(fastify@5.12.7)(hono@4.13.13)(koa@3.2.1)(react@19.3.1)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      debug: 4.4.3(supports-color@10.2.2)
-      inngest: 4.3.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.3.0(supports-color@10.2.2))(fastify@5.12.7)(hono@4.13.13)(koa@3.2.1)(react@19.3.1)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
-      react: 19.3.1
-      zod: 4.6.7
-    transitivePeerDependencies:
-      - '@opentelemetry/core'
-      - '@sveltejs/kit'
-      - '@vercel/node'
-      - aws-lambda
-      - encoding
-      - express
-      - fastify
-      - h3
-      - hono
-      - koa
-      - next
-      - supports-color
-      - typescript
 
   '@inquirer/ansi@1.0.2': {}
 
@@ -48702,8 +48663,6 @@ snapshots:
 
   content-type@1.0.5: {}
 
-  content-type@2.0.0: {}
-
   content-type@2.1.0: {}
 
   content-type@3.1.1: {}
@@ -50264,7 +50223,7 @@ snapshots:
 
   eventsource@4.1.0:
     dependencies:
-      eventsource-parser: 3.0.8
+      eventsource-parser: 3.1.1
 
   exact-mirror@0.2.7(@sinclair/typebox@0.34.52):
     optionalDependencies:
@@ -50442,7 +50401,7 @@ snapshots:
       accepts: 2.0.0
       body-parser: 2.4.0(patch_hash=7d9c103b0e037f8eb979d4cddbfabb13eedde34858ca1168365d426ff8175aa2)(supports-color@10.2.2)
       content-disposition: 2.0.1
-      content-type: 2.0.0
+      content-type: 2.1.0
       cookie: 1.1.1
       cookie-signature: 1.2.2
       debug: 4.4.3(supports-color@10.2.2)
@@ -50459,7 +50418,7 @@ snapshots:
       once: 1.4.0
       parseurl: 1.3.3
       proxy-addr: 2.0.8
-      qs: 6.16.0
+      qs: 6.16.1
       range-parser: 1.3.0
       router: 2.2.0(supports-color@10.2.2)
       send: 1.2.1(supports-color@10.2.2)
@@ -58771,7 +58730,7 @@ snapshots:
 
   type-is@2.1.0:
     dependencies:
-      content-type: 2.0.0
+      content-type: 2.1.0
       media-typer: 1.1.0
       mime-types: 3.0.2
 

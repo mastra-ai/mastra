@@ -30,7 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "jose": "6.2.12",
+    "jose": "^6.2.12",
     "lru-cache": "^11.5.3"
   },
   "devDependencies": {

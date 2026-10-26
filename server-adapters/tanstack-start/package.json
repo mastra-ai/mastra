@@ -35,7 +35,7 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.19.15",
-    "hono": "4.13.13",
+    "hono": "^4.13.13",
     "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

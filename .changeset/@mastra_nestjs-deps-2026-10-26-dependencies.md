@@ -3,7 +3,7 @@
 ---
 dependencies updates:
   - Updated dependency [`@fastify/busboy@^3.2.4` ↗︎](https://www.npmjs.com/package/@fastify/busboy/v/3.2.4) (from `^3.2.2`, in `dependencies`)
-  - Updated dependency [`hono@4.13.13` ↗︎](https://www.npmjs.com/package/hono/v/4.13.13) (from `^4.13.7`, in `dependencies`)
+  - Updated dependency [`hono@^4.13.13` ↗︎](https://www.npmjs.com/package/hono/v/4.13.13) (from `^4.13.7`, in `dependencies`)
   - Updated dependency [`@ai-sdk/openai@^2.0.136` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/2.0.136) (from `^2.0.135`, in `devDependencies`)
   - Updated dependency [`@nestjs/common@^12.2.0` ↗︎](https://www.npmjs.com/package/@nestjs/common/v/12.2.0) (from `^12.1.0`, in `devDependencies`)
   - Updated dependency [`@nestjs/core@^12.2.0` ↗︎](https://www.npmjs.com/package/@nestjs/core/v/12.2.0) (from `^12.1.0`, in `devDependencies`)

@@ -71,7 +71,7 @@
     "@octokit/rest": "^22.0.1",
     "chat": "^4.43.0",
     "fetch-to-node": "^2.1.0",
-    "hono": "4.13.13",
+    "hono": "^4.13.13",
     "posthog-node": "^5.57.1",
     "zod": "catalog:"
   },

@@ -71,7 +71,7 @@
     "serve-handler": "^6.1.7",
     "strip-json-comments": "^5.0.3",
     "tinyglobby": "^0.2.17",
-    "yocto-spinner": "npm:@socketregistry/yocto-spinner@^1.0.25"
+    "yocto-spinner": "^1.1.0"
   },
   "devDependencies": {
     "@commander-js/extra-typings": "^14.0.0",

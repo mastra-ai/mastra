@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@hono/node-server": "2.1.3",
+    "@hono/node-server": "^2.1.3",
     "@internal/ai-sdk-v5": "workspace:*",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -18,7 +18,7 @@
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "get-port": "^7.2.0",
-    "hono": "4.13.13",
+    "hono": "^4.13.13",
     "vitest": "catalog:"
   },
   "peerDependencies": {

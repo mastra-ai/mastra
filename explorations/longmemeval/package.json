@@ -31,7 +31,7 @@
     "@ai-sdk/google": "^2.0.106",
     "@ai-sdk/openai": "^2.0.136",
     "@ai-sdk/provider": "^2.0.5",
-    "@ai-sdk/provider-utils": "3.0.40",
+    "@ai-sdk/provider-utils": "^3.0.40",
     "@huggingface/hub": "^0.15.2",
     "@mastra/core": "workspace:*",
     "@mastra/fastembed": "workspace:*",
