@@ -1,10 +1,12 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { Agent } from '../agent/agent';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { SchedulerWorker } from '../worker/workers/scheduler-worker';
+import { createStep, createWorkflow } from '../workflows';
 
 const SCHEDULER_WAKE_TOPIC = 'scheduler';
 const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
@@ -625,4 +627,41 @@ describe('Agent schedules — scheduler integration', () => {
 
     expect(mastra.scheduler).toBeUndefined();
   });
+});
+
+describe('Declarative schedules registered after the scheduler is sleeping', () => {
+  it('fires a workflow added via addWorkflow() without waiting out the sleep cap', async () => {
+    const noop = createStep({
+      id: 'noop',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async () => ({}),
+    });
+    const scheduled = (id: string, cron: string) =>
+      createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.object({}), schedule: { cron } })
+        .then(noop)
+        .commit();
+
+    const storage = new MockStore();
+    const mastra = track(
+      new Mastra({
+        logger: false,
+        storage,
+        // Yearly cadence: the scheduler starts, then sleeps for the full
+        // default 10-minute cap because nothing is due sooner.
+        workflows: { yearly: scheduled('yearly', '0 0 1 1 *') },
+        notifications: { dispatch: { enabled: false } },
+      }),
+    );
+    await mastra.startWorkers();
+    await waitForScheduler(mastra);
+
+    mastra.addWorkflow(scheduled('every-second', '* * * * * *'), 'every-second');
+
+    const schedulesStore = (await storage.getStore('schedules'))!;
+    const findRow = async () => (await schedulesStore.listSchedules()).find(r => r.id.startsWith('wf_every-second'));
+    await waitUntil(async () => !!(await findRow()));
+    const initial = (await findRow())!;
+    await waitUntil(async () => (await findRow())!.nextFireAt !== initial.nextFireAt);
+  }, 10_000);
 });

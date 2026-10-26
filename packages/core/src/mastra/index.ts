@@ -3143,6 +3143,9 @@ export class Mastra<
           if (!schedulesStore) return;
           await this.registerDeclarativeSchedules(schedulesStore);
         } while (this.#fsScheduleSyncRerun);
+        // Rows were written straight to storage; wake a sleeping scheduler so it
+        // re-reads the earliest nextFireAt instead of waiting out its cap.
+        await this.__publishSchedulerWake('declarative-sync');
       } catch (error) {
         this.#logger?.error('Failed to register schedules for late-registered agent', {
           agentId: agent.id,
@@ -5609,6 +5612,7 @@ export class Mastra<
             const schedulesStore = await this.#storage?.getStore('schedules');
             if (!schedulesStore) return;
             await this.registerDeclarativeSchedules(schedulesStore);
+            await this.__publishSchedulerWake('declarative-sync');
           } catch (error) {
             this.#logger?.error('Failed to register declarative schedule for workflow', {
               workflowId: workflow.id,
@@ -5942,6 +5946,7 @@ export class Mastra<
         const schedulesStore = await this.#storage?.getStore('schedules');
         if (schedulesStore) {
           await this.registerDeclarativeSchedules(schedulesStore);
+          await this.__publishSchedulerWake('declarative-sync');
         }
       } catch (error) {
         this.#logger?.error('Failed to synchronize declarative schedules after dynamic workflow registration', {
