@@ -27,7 +27,6 @@ import {
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
-import type { CodeSkillSource } from '../skills/code-skills.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { BoardsStorage } from '../storage/domains/boards/base.js';
@@ -139,8 +138,6 @@ export interface FactoryApiRoutesDeps {
   boardDefaults?: ProjectBoardConfigInput;
   /** Runner ids a stored phase may name; the board settings screen lists them. */
   boardRunners?: BoardRunnerRegistry;
-  /** Skills passed to `MastraFactory({ skills })`, listed in the skills catalog. */
-  codeSkills?: CodeSkillSource;
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
@@ -790,7 +787,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       controller: deps.controller,
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
-      ...(deps.codeSkills ? { codeSkills: deps.codeSkills } : {}),
     }).routes(),
     ...sourceControlSessionRoutes,
     ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),

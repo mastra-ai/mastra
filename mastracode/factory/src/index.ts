@@ -15,7 +15,6 @@ export type {
 } from './boards/index.js';
 export { MastraFactory } from './factory.js';
 export { waitForPendingFilesystemCapture } from './session/filesystem-capture.js';
-export type { FactorySkill } from './skills/code-skills.js';
 export type {
   MastraArgs,
   MastraFactoryConfig,

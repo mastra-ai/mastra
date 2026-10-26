@@ -56,7 +56,6 @@ import {
   setSessionEnvironmentNote,
 } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
-import type { CodeSkillSource } from './skills/code-skills.js';
 import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
@@ -145,8 +144,6 @@ export async function rescanFactorySkills(skills: NonNullable<Workspace['skills'
 export class FactorySkillSource implements SkillSource {
   readonly #bundledSource = new LocalSkillSource({ basePath: BUNDLED_FACTORY_SKILLS_PATH });
   readonly #localSource: LocalSkillSource | undefined;
-  /** Top layer first: code skills, then the app's `factory-skills/` folder, then the bundled skills. */
-  readonly #layers: SkillSource[];
   readonly #fallbackSkillRoots: Set<string>;
 
   constructor(
@@ -155,15 +152,8 @@ export class FactorySkillSource implements SkillSource {
     localSkillsPath: string | undefined = resolveLocalFactorySkillsPath(),
     /** Evaluated per call because a session's bound role changes across stages. */
     readonly isReviewSession: () => Promise<boolean> = () => Promise.resolve(true),
-    /** Skills passed to `MastraFactory({ skills })`; they win over every other layer. */
-    readonly codeSkills?: CodeSkillSource,
   ) {
     this.#localSource = localSkillsPath ? new LocalSkillSource({ basePath: localSkillsPath }) : undefined;
-    this.#layers = [
-      ...(codeSkills ? [codeSkills] : []),
-      ...(this.#localSource ? [this.#localSource] : []),
-      this.#bundledSource,
-    ];
     this.#fallbackSkillRoots = new Set(fallbackSkillRoots.map(skillPath => path.normalize(skillPath)));
   }
 
@@ -183,11 +173,9 @@ export class FactorySkillSource implements SkillSource {
     return !(await this.isReviewSession());
   }
 
-  /** Pick the layer serving this mount-relative path: the highest layer that has the entry. */
-  async #layerFor(relativePath: string): Promise<SkillSource> {
-    for (const layer of this.#layers) {
-      if (await layer.exists(relativePath)) return layer;
-    }
+  /** Pick the layer serving this mount-relative path: local wins when it has the entry. */
+  async #layerFor(relativePath: string): Promise<LocalSkillSource> {
+    if (this.#localSource && (await this.#localSource.exists(relativePath))) return this.#localSource;
     return this.#bundledSource;
   }
 
@@ -195,10 +183,8 @@ export class FactorySkillSource implements SkillSource {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.exists(skillPath);
     const relative = this.#factoryPath(skillPath);
     if (await this.#isHiddenReviewPath(relative)) return false;
-    for (const layer of this.#layers) {
-      if (await layer.exists(relative)) return true;
-    }
-    return false;
+    if (this.#localSource && (await this.#localSource.exists(relative))) return true;
+    return this.#bundledSource.exists(relative);
   }
 
   async stat(skillPath: string): Promise<SkillSourceStat> {
@@ -219,14 +205,19 @@ export class FactorySkillSource implements SkillSource {
     if (this.#isFactoryPath(skillPath)) {
       const relative = this.#factoryPath(skillPath);
       if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
-      const present = (
-        await Promise.all(this.#layers.map(async layer => ((await layer.exists(relative)) ? layer : undefined)))
-      ).filter((layer): layer is SkillSource => layer !== undefined);
-      if (present.length === 0) throw skillSourceEnoent(skillPath);
-      const listings = await Promise.all(present.map(layer => layer.readdir(relative)));
+      const [bundledExists, localExists] = await Promise.all([
+        this.#bundledSource.exists(relative),
+        this.#localSource?.exists(relative) ?? Promise.resolve(false),
+      ]);
+      if (!bundledExists && !localExists) throw skillSourceEnoent(skillPath);
+      const [bundledEntries, localEntries] = await Promise.all([
+        bundledExists ? this.#bundledSource.readdir(relative) : [],
+        localExists ? this.#localSource!.readdir(relative) : [],
+      ]);
       const merged = new Map<string, SkillSourceEntry>();
-      // Lowest layer first, so higher layers override names.
-      for (const entries of listings.reverse()) for (const entry of entries) merged.set(entry.name, entry);
+      for (const entry of bundledEntries) merged.set(entry.name, entry);
+      // Local entries override bundled names.
+      for (const entry of localEntries) merged.set(entry.name, entry);
       const entries = [...merged.values()];
       if (relative !== '' || (await this.isReviewSession())) return entries;
       return entries.filter(entry => !REVIEW_ONLY_FACTORY_SKILLS.has(entry.name));
@@ -240,12 +231,12 @@ export class FactorySkillSource implements SkillSource {
   }
 
   /**
-   * Names the Factory mount serves: bundled, code and the app's local skills.
+   * Names the Factory mount serves: bundled skills plus the app's local skills.
    * Repository skills with these names are hidden so they cannot collide with
    * Factory's copy. Recomputed per scan so skill refreshes pick up local changes.
    */
   async #reservedNames(): Promise<Set<string>> {
-    const reserved = new Set([...FACTORY_SKILL_NAMES, ...(this.codeSkills?.names ?? [])]);
+    const reserved = new Set(FACTORY_SKILL_NAMES);
     if (!this.#localSource) return reserved;
     try {
       for (const entry of await this.#localSource.readdir('')) {
@@ -310,21 +301,12 @@ class UnmaterializedAwareSkillSource implements SkillSource {
   }
 }
 
-function createFactorySkillExtension(
-  isReviewSession: () => Promise<boolean>,
-  codeSkills: CodeSkillSource | undefined,
-): WorkspaceSkillExtension {
+function createFactorySkillExtension(isReviewSession: () => Promise<boolean>): WorkspaceSkillExtension {
   return {
     id: 'web-factory',
     paths: [FACTORY_SKILLS_MOUNT],
     createSource: (fallback, fallbackSkillRoots) =>
-      new FactorySkillSource(
-        fallback,
-        fallbackSkillRoots,
-        resolveLocalFactorySkillsPath(),
-        isReviewSession,
-        codeSkills,
-      ),
+      new FactorySkillSource(fallback, fallbackSkillRoots, resolveLocalFactorySkillsPath(), isReviewSession),
   };
 }
 
@@ -356,8 +338,6 @@ export interface WorkspaceSourceControlProvider {
 }
 
 export interface CreateWorkspaceFactoryOptions {
-  /** Skills written in code (`MastraFactory({ skills })`), served above the app's and the bundled Factory skills. */
-  skills?: CodeSkillSource;
   /** The normalized factory sandbox constructing one sandbox per session. */
   sandbox?: FactorySandbox;
   /** Defaults to `'lazy'`. */
@@ -956,10 +936,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     };
     const effectiveSkillExtension =
       skillExtension ??
-      createFactorySkillExtension(
-        (): Promise<boolean> => (skillReviewChecks.get(workspaceId) ?? isReviewSession)(),
-        options.skills,
-      );
+      createFactorySkillExtension((): Promise<boolean> => (skillReviewChecks.get(workspaceId) ?? isReviewSession)());
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId: string = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
