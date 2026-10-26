@@ -22,5 +22,6 @@ describe('Sparkline', () => {
     const drawn = points(container);
     expect(drawn).toHaveLength(2);
     expect(drawn[0][1]).toBe(drawn[1][1]);
+    expect(drawn[1][0]).toBeGreaterThan(drawn[0][0]);
   });
 });

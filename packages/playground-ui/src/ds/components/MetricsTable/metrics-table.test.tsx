@@ -95,6 +95,28 @@ describe('MetricsTable', () => {
     expect(onRowClick).toHaveBeenCalledTimes(3);
   });
 
+  it('leaves clicks and keys on a control inside a cell to that control', () => {
+    const onRowClick = vi.fn();
+    render(
+      <MetricsTable
+        columns={[{ id: 'name', header: 'Model', cell: r => <a href={`#${r.name}`}>{r.name}</a> }]}
+        rows={rows}
+        getRowKey={r => r.name}
+        onRowClick={onRowClick}
+      />,
+    );
+    const link = screen.getByRole('link', { name: 'gpt-5' });
+
+    fireEvent.click(link);
+    const enter = fireEvent.keyDown(link, { key: 'Enter' });
+    expect(enter).toBe(true);
+    expect(onRowClick).not.toHaveBeenCalled();
+
+    // The row's own padding still counts as the row.
+    fireEvent.click(screen.getAllByRole('row')[1]);
+    expect(onRowClick).toHaveBeenCalledWith(rows[0]);
+  });
+
   it('shows the empty message when there are no rows', () => {
     render(<MetricsTable columns={columns} rows={[]} getRowKey={r => r.name} empty="Nothing in this range." />);
     expect(screen.getByText('Nothing in this range.')).toBeDefined();

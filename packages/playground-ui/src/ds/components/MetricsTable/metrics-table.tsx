@@ -1,6 +1,6 @@
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import { useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, MouseEvent } from 'react';
 import type { MetricsTableColumn, MetricsTableProps, MetricsTableSort } from './metrics-table-types';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
 import { cn } from '@/lib/utils';
@@ -23,6 +23,15 @@ function nextSort<Row>(current: MetricsTableSort | undefined, column: MetricsTab
   if (current?.column !== column.id) return { column: column.id, direction: column.firstDirection ?? 'desc' };
   return { column: column.id, direction: current.direction === 'desc' ? 'asc' : 'desc' };
 }
+
+/** Controls a cell can hold; their own clicks and keys don't count as the row's. */
+const CONTROLS = 'a, button, input, select, textarea, label, [role="button"], [role="link"], [contenteditable]';
+
+/** Whether an event started on a control inside the row rather than on the row itself. */
+const fromControl = (event: MouseEvent | KeyboardEvent) => {
+  const control = event.target instanceof Element ? event.target.closest(CONTROLS) : null;
+  return control !== null && event.currentTarget.contains(control);
+};
 
 const ARIA_SORT = { asc: 'ascending', desc: 'descending' } as const;
 const SORT_ICON = { asc: ArrowUpIcon, desc: ArrowDownIcon };
@@ -112,7 +121,12 @@ export function MetricsTable<Row>({
           })}
         </div>
         {shown.map(row => {
+          const onClick = (e: MouseEvent) => {
+            if (!fromControl(e)) onRowClick?.(row);
+          };
           const onKeyDown = (e: KeyboardEvent) => {
+            // Only while the row itself has focus, so a cell's link or input keeps its keys.
+            if (e.target !== e.currentTarget) return;
             if (e.key !== 'Enter' && e.key !== ' ') return;
             // Space would also scroll the page.
             e.preventDefault();
@@ -124,7 +138,7 @@ export function MetricsTable<Row>({
               role="row"
               tabIndex={onRowClick ? 0 : undefined}
               title={rowTitle?.(row)}
-              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              onClick={onRowClick ? onClick : undefined}
               onKeyDown={onRowClick ? onKeyDown : undefined}
               onMouseEnter={onRowHover ? () => onRowHover(row) : undefined}
               onMouseLeave={onRowHover ? () => onRowHover(undefined) : undefined}
