@@ -5,13 +5,8 @@ import { canonicalJson, hashBytes, type OperationContext } from '../domain/case-
 import { naturalReviewRequest } from '../domain/conversation-commands.js';
 import { IntakeError, isDatabaseBusy } from '../domain/operation-errors.js';
 import type { ReviewReceipt } from '../domain/review-contracts.js';
-import {
-  actionableFindings,
-  approvalSchema,
-  reviewRequestSchema,
-  type Approval,
-  type ReviewEvent,
-} from '../domain/review-contracts.js';
+import { approvalSchema, reviewRequestSchema, type Approval, type ReviewEvent } from '../domain/review-contracts.js';
+import { FinalizationRepository } from './finalization-repository.js';
 import type { ReportRepository } from './report-repository.js';
 
 export class ReviewRepository {
@@ -282,25 +277,7 @@ export class ReviewRepository {
             sql: 'INSERT INTO insurance_approvals(id,report_id,case_id,data) VALUES(?,?,?,?)',
             args: [approval.id, request.reportId, record.id, JSON.stringify(approval)],
           });
-          const stages = [
-            'reportOutput',
-            ...(actionableFindings(publication.snapshot, approval).length ? ['correctionOutput'] : []),
-          ] as const;
-          const finalization = {
-            id: randomUUID(),
-            reportId: request.reportId,
-            caseId: record.id,
-            approvalId: approval.id,
-            state: 'PREPARED',
-            artifacts: stages.map(stage => ({
-              id: randomUUID(),
-              operationId: randomUUID(),
-              stage,
-              providerId: providers[stage as keyof typeof providers],
-              descriptor: null,
-            })),
-            failure: null,
-          };
+          const finalization = FinalizationRepository.reservation(publication.snapshot, approval);
           await transaction.execute({
             sql: 'INSERT INTO insurance_finalizations(id,approval_id,report_id,case_id,data) VALUES(?,?,?,?,?)',
             args: [finalization.id, approval.id, request.reportId, record.id, JSON.stringify(finalization)],

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { canonicalJson, outputArtifactSchema, type OperationContext } from '../domain/case-contracts.js';
 import { IntakeError, safeFailure } from '../domain/operation-errors.js';
+import type { ReportSnapshot } from '../domain/report-contracts.js';
 import type { FinalArtifact, Finalization } from '../domain/output-contracts.js';
 import { actionableFindings, type Approval } from '../domain/review-contracts.js';
 import { artifactBytes, stageArtifact } from './artifact-storage.js';
@@ -48,30 +49,34 @@ export class FinalizationRepository {
     await this.reports.bytes(publication);
     return { publication, approval, record };
   }
+  /** Reserve the same approved output stages and immutable artifact identities in either publication path. */
+  static reservation(snapshot: ReportSnapshot, approval: Approval): Finalization {
+    const stages: ('reportOutput' | 'correctionOutput')[] = [
+      'reportOutput',
+      ...(actionableFindings(snapshot, approval).length ? ['correctionOutput' as const] : []),
+    ];
+    return {
+      id: randomUUID(),
+      reportId: snapshot.id,
+      caseId: snapshot.caseId,
+      approvalId: approval.id,
+      state: 'PREPARED',
+      artifacts: stages.map(stage => ({
+        id: randomUUID(),
+        operationId: randomUUID(),
+        stage,
+        providerId: approval.providers[stage],
+        descriptor: null,
+      })),
+      failure: null,
+    };
+  }
   async prepare(context: OperationContext, reportId: string) {
     return this.reports.reconciliation.transaction(async transaction => {
       const { publication, approval } = await this.authority(context, reportId);
       const existing = await this.get(context, reportId);
       if (existing) return existing;
-      const stages: ('reportOutput' | 'correctionOutput')[] = [
-        'reportOutput',
-        ...(actionableFindings(publication.snapshot, approval).length ? ['correctionOutput' as const] : []),
-      ];
-      const result: Finalization = {
-        id: randomUUID(),
-        reportId,
-        caseId: publication.snapshot.caseId,
-        approvalId: approval.id,
-        state: 'PREPARED',
-        artifacts: stages.map(stage => ({
-          id: randomUUID(),
-          operationId: randomUUID(),
-          stage,
-          providerId: approval.providers[stage],
-          descriptor: null,
-        })),
-        failure: null,
-      };
+      const result = FinalizationRepository.reservation(publication.snapshot, approval);
       await transaction.execute({
         sql: 'INSERT INTO insurance_finalizations(id,approval_id,report_id,case_id,data) VALUES(?,?,?,?,?)',
         args: [result.id, approval.id, reportId, result.caseId, JSON.stringify(result)],
