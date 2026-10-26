@@ -15,6 +15,8 @@ import { createStep, createWorkflow } from '.';
 // run (and its ancestors) to catch a cancel whose broadcast it could not hear.
 // A failed read must not be treated as "not cancelled": the step event is
 // retried, and if the read keeps failing the run settles as failed.
+// The re-check runs only when the broadcast may have been missed; a failing
+// control subscribe is one such case and keeps it on every delivery.
 const transports: Array<[string, () => Promise<{ pubsub: PubSub; close: () => Promise<void> }>]> = [
   ['EventEmitterPubSub', async () => ({ pubsub: new EventEmitterPubSub(), close: async () => {} })],
   [
@@ -72,6 +74,13 @@ describe.each(transports)('evented workflow: pre-step cancel check read failure 
         throw new Error('storage unavailable');
       }
       return load(args);
+    });
+    // The re-check only runs while the control subscription cannot deliver
+    // aborts; keep it failing so every delivery of the step event re-checks.
+    const subscribe = pubsub.subscribe.bind(pubsub);
+    vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, cb, options) => {
+      if (topic === 'workflow.control') throw new Error('control subscribe unavailable');
+      return subscribe(topic, cb, options);
     });
     const proto = WorkflowEventProcessor.prototype as any;
     const check = proto.abortRunsCanceledInStorage;

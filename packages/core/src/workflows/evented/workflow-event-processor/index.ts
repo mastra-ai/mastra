@@ -163,8 +163,22 @@ export class WorkflowEventProcessor extends EventProcessor {
   private parentChildRelationships: Map<string, string> = new Map();
   // This processor's single ungrouped subscription to WORKFLOW_CONTROL_TOPIC,
   // opened on its first step and held for the processor's lifetime. See
-  // ensureControlSubscription.
-  private controlSubscription?: { pubsub: PubSub; ready: Promise<boolean> };
+  // ensureControlSubscription. `state`: 'pending' while subscribe() is in
+  // flight, 'ready' once it resolved, 'checked' once a step started after it
+  // was ready (from then on every abort is either delivered or recorded in
+  // missedControlAborts).
+  private controlSubscription?: {
+    pubsub: PubSub;
+    ready: Promise<boolean>;
+    state: 'pending' | 'ready' | 'checked';
+  };
+  // Runs whose broadcast abort arrived while this processor had no step of
+  // them in flight — possibly because a step's event was already past the
+  // dispatch guard's state load but not yet retained. Drained by the next step
+  // of the run, which then re-checks storage. Bounded: most entries are for runs
+  // this processor never executes.
+  private missedControlAborts: Set<string> = new Set();
+  private static readonly MAX_MISSED_CONTROL_ABORTS = 1024;
   // Number of in-flight steps on this processor per run (counting a nested
   // step against its ancestor runs too). See retainRunsForStep.
   private stepRunRefs: Map<string, number> = new Map();
@@ -361,7 +375,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Every processor hears every broadcast abort; only one executing a step
     // of this run (or of a nested run) has something to abort. Leaving other
     // controllers alone keeps a stale aborted one from outliving the run here.
-    if (!this.stepRunRefs.has(runId)) return;
+    if (!this.stepRunRefs.has(runId)) {
+      this.missedControlAborts.delete(runId);
+      this.missedControlAborts.add(runId);
+      if (this.missedControlAborts.size > WorkflowEventProcessor.MAX_MISSED_CONTROL_ABORTS) {
+        this.missedControlAborts.delete(this.missedControlAborts.values().next().value!);
+      }
+      return;
+    }
     const own = this.abortControllers.get(runId);
     if (own && !own.signal.aborted) this.cancelHandledControllers.add(own);
     const visit = (id: string) => {
@@ -390,11 +411,16 @@ export class WorkflowEventProcessor extends EventProcessor {
    * belong to runs this processor was not executing; the window before it is
    * ready is covered by {@link abortRunsCanceledInStorage}.
    *
-   * A failed subscribe is not fatal — the step runs without remote cancel
-   * propagation (the behaviour before this topic existed) and the next step
-   * retries.
+   * A failed subscribe is not fatal — the step falls back to the storage
+   * re-check and the next step retries the subscribe.
+   *
+   * @returns Whether the step must re-check storage for a persisted cancel:
+   * a broadcast published while the subscribe was in flight, or before it
+   * failed, is never delivered. Steps that waited on the subscribe and the
+   * first step after it is ready check; later steps rely on the broadcast and
+   * {@link missedControlAborts}.
    */
-  private async ensureControlSubscription(): Promise<void> {
+  private async ensureControlSubscription(): Promise<boolean> {
     const pubsub = this.mastra.pubsub;
     if (this.controlSubscription?.pubsub !== pubsub) {
       const cb: EventCallback = (event, ack) => {
@@ -414,16 +440,27 @@ export class WorkflowEventProcessor extends EventProcessor {
           return false;
         },
       );
-      this.controlSubscription = { pubsub, ready };
+      const subscription = { pubsub, ready, state: 'pending' as 'pending' | 'ready' | 'checked' };
+      void ready.then(ok => {
+        if (ok && subscription.state === 'pending') subscription.state = 'ready';
+      });
+      this.controlSubscription = subscription;
     }
-    await this.controlSubscription.ready;
+    const subscription = this.controlSubscription;
+    if (subscription.state === 'checked') return false;
+    const waited = subscription.state === 'pending';
+    if (!(await subscription.ready)) return true;
+    if (!waited) subscription.state = 'checked';
+    return true;
   }
 
   /**
    * Abort the step's runs if a cancel was persisted for any of them (`runIds`:
    * the step's run and its ancestors) before this processor could hear its
    * broadcast — between the dispatch guard's state load and the step's
-   * controller being registered, or before the control subscription was ready.
+   * controller being registered (recorded in {@link missedControlAborts}), or
+   * before the control subscription was ready. Only called in those windows:
+   * each call is a full snapshot read per run.
    * `EventedRun.cancel` persists `canceled` before publishing `workflow.cancel`,
    * so the processor handling that event finalizes the run, as with a
    * broadcast abort.
@@ -2698,8 +2735,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
       releaseControl = this.retainRunsForStep(controlRuns.map(r => r.runId));
       try {
-        await this.ensureControlSubscription();
-        await this.abortRunsCanceledInStorage(controlRuns);
+        let recheck = await this.ensureControlSubscription();
+        for (const { runId: id } of controlRuns) {
+          if (this.missedControlAborts.delete(id)) recheck = true;
+        }
+        if (recheck) await this.abortRunsCanceledInStorage(controlRuns);
       } catch (err) {
         releaseControl();
         throw err;

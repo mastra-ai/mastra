@@ -32,6 +32,10 @@ function createBlocker() {
     state.calls++;
     if (state.calls > 1) return;
     markEntered();
+    if (abortSignal.aborted) {
+      state.aborted = true;
+      return;
+    }
     await new Promise<void>(resolve => {
       const timer = setTimeout(resolve, SETTLE_TIMEOUT_MS * 2);
       abortSignal.addEventListener(
@@ -410,6 +414,142 @@ describe('evented workflow cancel with workers on both replicas', () => {
       },
       { timeout: SETTLE_TIMEOUT_MS },
     );
+  });
+
+  /**
+   * Pinned topology over one EventEmitterPubSub: 'other' runs every step, the owner handles every
+   * other event (so it consumes workflow.cancel and finalizes). `gate` delays the step-run handling
+   * on 'other' after the dispatch guard's state load; `gateControlSubscribe` delays its subscribe to
+   * workflow.control. Both resolve when released.
+   */
+  async function setupPinnedCancel(opts: { gateStepRun?: boolean; gateControlSubscribe?: boolean }) {
+    const storage = new MockStore();
+    const pubsub = new EventEmitterPubSub();
+    const holder: { current?: Blocker } = {};
+    const block = async (abortSignal: AbortSignal) => {
+      await holder.current?.block(abortSignal);
+    };
+    const workflows = [0, 1].map(() => buildBothWorkflow(false, block));
+    const [owner, other] = workflows.map(
+      workflow => new Mastra({ logger: false, storage, pubsub, workflows: { [WORKFLOW_ID]: workflow } }),
+    );
+    cleanups.push(
+      () => owner!.stopWorkers(),
+      () => other!.stopWorkers(),
+    );
+
+    const processors = new Map<Mastra, any>();
+    const handle = WorkflowEventProcessor.prototype.handle;
+    vi.spyOn(WorkflowEventProcessor.prototype, 'handle').mockImplementation(function (this: any, event) {
+      processors.set(this.mastra, this);
+      const target = processors.get(event.type === 'workflow.step.run' ? other! : owner!) ?? this;
+      return handle.call(target, event);
+    });
+
+    const ends = new Map<string, number>();
+    const publish = pubsub.publish.bind(pubsub);
+    vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event, ...rest) => {
+      if (topic === 'workflows' && event.type === 'workflow.end')
+        ends.set(event.runId, (ends.get(event.runId) ?? 0) + 1);
+      return (publish as any)(topic, event, ...rest);
+    });
+
+    const gate = { armed: false, release: () => {}, reached: Promise.resolve() };
+    const arm = () => {
+      let reach!: () => void;
+      gate.reached = new Promise<void>(resolve => (reach = resolve));
+      const released = new Promise<void>(resolve => (gate.release = resolve));
+      gate.armed = true;
+      return async () => {
+        gate.armed = false;
+        reach();
+        await released;
+      };
+    };
+
+    if (opts.gateControlSubscribe) {
+      const wait = arm();
+      const subscribe = pubsub.subscribe.bind(pubsub);
+      vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, cb, options) => {
+        if (topic === 'workflow.control' && gate.armed) await wait();
+        return subscribe(topic, cb, options);
+      });
+    }
+    const armStepRun = () => arm();
+    let stepRunWait: (() => Promise<void>) | undefined;
+    if (opts.gateStepRun) {
+      const stepRun = WorkflowEventProcessor.prototype['processWorkflowStepRun'];
+      vi.spyOn(WorkflowEventProcessor.prototype as any, 'processWorkflowStepRun').mockImplementation(async function (
+        this: any,
+        args: any,
+      ) {
+        if (stepRunWait) {
+          const wait = stepRunWait;
+          stepRunWait = undefined;
+          await wait();
+        }
+        return stepRun.call(this, args);
+      });
+    }
+
+    await owner!.startWorkers();
+    await other!.startWorkers();
+    return {
+      workflow: workflows[0]!,
+      holder,
+      ends,
+      gate,
+      gateNextStepRun: () => (stepRunWait = armStepRun()),
+      stepProcessor: () => processors.get(other!),
+    };
+  }
+
+  async function cancelWhileGated(setup: Awaited<ReturnType<typeof setupPinnedCancel>>) {
+    const blocker = createBlocker();
+    setup.holder.current = blocker;
+    const run = await setup.workflow.createRun();
+    const resultPromise = run.start({ inputData: { count: 0 } });
+    await setup.gate.reached;
+    await run.cancel();
+    const result = await withTimeout(resultPromise);
+    expect(result === 'timed out' ? result : result.status).toBe('canceled');
+    setup.gate.release();
+    await vi.waitFor(() => expect(blocker.state.aborted).toBe(true), { timeout: SETTLE_TIMEOUT_MS });
+    await vi.waitFor(() => expect([...setup.stepProcessor().stepRunRefs.keys()]).toEqual([]), {
+      timeout: SETTLE_TIMEOUT_MS,
+    });
+    expect(setup.ends.get(run.runId)).toBe(1);
+    const stored = await setup.workflow.getWorkflowRunById(run.runId);
+    expect(stored?.status).toBe('canceled');
+  }
+
+  // The abort broadcast is published while the step's processor is still subscribing to
+  // workflow.control (`startFrom: 'latest'`), so it never reaches it; the storage re-check must.
+  it('aborts a step whose processor was not yet subscribed to workflow.control when the run was canceled', async () => {
+    const setup = await setupPinnedCancel({ gateControlSubscribe: true });
+    await cancelWhileGated(setup);
+  });
+
+  // The subscription is long established, but the abort lands after the dispatch guard loaded the
+  // run's state and before the step retained the run, so the processor had no step of it to abort.
+  it('aborts a step whose cancel arrived after its dispatch check but before the step was retained', async () => {
+    const setup = await setupPinnedCancel({ gateStepRun: true });
+    // Two plain runs: the first waits on the subscribe, the second is the first after it is ready.
+    for (let i = 0; i < 2; i++) {
+      const result = await withTimeout((await setup.workflow.createRun()).start({ inputData: { count: 0 } }));
+      expect(result === 'timed out' ? result : result.status).toBe('success');
+    }
+    expect(setup.stepProcessor().controlSubscription.state).toBe('checked');
+
+    const recheck = vi.spyOn(setup.stepProcessor(), 'abortRunsCanceledInStorage');
+    const plain = await withTimeout((await setup.workflow.createRun()).start({ inputData: { count: 0 } }));
+    expect(plain === 'timed out' ? plain : plain.status).toBe('success');
+    // Steady state: no storage re-check for an uncancelled step.
+    expect(recheck).not.toHaveBeenCalled();
+
+    setup.gateNextStepRun();
+    await cancelWhileGated(setup);
+    expect(recheck).toHaveBeenCalledTimes(1);
   });
 
   describe.each(PUBSUBS)('$name', pubsubFactory => {
