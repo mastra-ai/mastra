@@ -181,5 +181,6 @@ describeForAllEngines('AIMock loop scenario: savePerStep across tool steps', eng
     const { messages } = await memory.recall({ threadId, resourceId });
     expect(messages.find(message => message.role === 'user')).toBeDefined();
     expect(assistantMessages(messages).flatMap(toolResultIds)).toContain('call_first');
+    expect(assistantMessages(messages).flatMap(toolResultIds)).toContain('call_second');
   });
 });
