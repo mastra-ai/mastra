@@ -79,7 +79,6 @@ export function NoticeRoot({
           size="icon-sm"
           className="absolute end-2 top-2 before:absolute before:-inset-2"
           tooltip="Dismiss notice"
-          aria-label="Dismiss notice"
           onClick={onDismiss}
         >
           <XIcon />

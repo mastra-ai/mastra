@@ -2,7 +2,8 @@
   --notice-subtle: var(--card);
   --notice-edge: transparent;
   --notice-ink: var(--foreground);
-  --notice-fill: color-mix(in oklab, var(--notice-subtle) 35%, var(--card));
+  --notice-tint: 35%;
+  --notice-fill: color-mix(in oklab, var(--notice-subtle) var(--notice-tint), var(--card));
   --notice-semantic-rim: inset 0 0 0 0 transparent;
   --notice-shadow:
     var(--notice-semantic-rim), var(--elevation-lip), inset 0 0 0 1px var(--surface-rim), var(--elevation-raised);
@@ -38,5 +39,5 @@ html.light :where([data-slot='notice'], .mastra-toaster [data-sonner-toast]) {
 
 html:not(.light)
   :where([data-slot='notice'][data-tone='success'], .mastra-toaster [data-sonner-toast][data-type='success']) {
-  --notice-fill: #141815;
+  --notice-tint: 30%;
 }

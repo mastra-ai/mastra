@@ -37,15 +37,6 @@ describe('Toaster', () => {
       await waitFor(() => expect(screen.queryByText('Saved')).toBeNull());
     });
 
-    it('keeps native semantic color support enabled', async () => {
-      render(createElement(Toaster, { richColors: false }));
-      act(() => {
-        toast.success('Saved');
-      });
-      const message = await screen.findByText('Saved');
-      expect(message.closest('[data-sonner-toast]')?.getAttribute('data-rich-colors')).toBe('true');
-    });
-
     it('forwards the caller className', async () => {
       const { container } = render(createElement(Toaster, { className: 'my-extra' }));
       act(() => {

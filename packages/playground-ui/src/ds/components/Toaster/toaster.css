@@ -1,25 +1,15 @@
-@import '../ds/components/Notice/notice-material.css';
+@import '../Notice/notice-material.css';
 
 [data-sonner-toaster][data-sonner-theme].mastra-toaster {
   --normal-bg: var(--card);
   --normal-text: var(--foreground);
   --normal-border: var(--surface-rim);
-  --success-bg: color-mix(in oklab, var(--success-subtle) 35%, var(--card));
-  --success-text: var(--success-subtle-foreground);
-  --success-border: var(--surface-rim);
-  --error-bg: color-mix(in oklab, var(--destructive-subtle) 35%, var(--card));
-  --error-text: var(--destructive-subtle-foreground);
-  --error-border: var(--surface-rim);
-  --warning-bg: color-mix(in oklab, var(--warning-subtle) 35%, var(--card));
-  --warning-text: var(--warning-subtle-foreground);
-  --warning-border: var(--surface-rim);
-  --info-bg: color-mix(in oklab, var(--info-subtle) 35%, var(--card));
-  --info-text: var(--info-subtle-foreground);
-  --info-border: var(--surface-rim);
+  --toast-settle-ease: cubic-bezier(0.645, 0.045, 0.355, 1);
   --border-radius: var(--radius-lg);
   font-family: var(--font-sans);
 }
 
+/* Sonner measures scaled cards and misses height changes; toast-stack-layout.ts supplies these. */
 [data-sonner-toaster].mastra-toaster[data-mastra-measured] {
   --front-toast-height: var(--mastra-front-height) !important;
 }
@@ -47,7 +37,7 @@
   )
   > [data-sonner-toast][data-front='false'] {
   transition:
-    transform var(--duration-normal) cubic-bezier(0.645, 0.045, 0.355, 1),
+    transform var(--duration-normal) var(--toast-settle-ease),
     opacity 400ms,
     height 400ms,
     box-shadow var(--duration-normal);
@@ -235,35 +225,13 @@
 }
 
 .mastra-toaster .toast-promise-loader {
-  --toast-morph-ease: cubic-bezier(0.645, 0.045, 0.355, 1);
   color: inherit;
 }
 
 .mastra-toaster .toast-promise-loader :is(circle, line) {
-  transform-box: view-box;
   transition:
-    transform var(--duration-normal) var(--toast-morph-ease),
-    opacity var(--duration-normal) var(--toast-morph-ease);
-}
-
-.mastra-toaster .toast-promise-loader .brand-loader-b1 {
-  transform-origin: 4.498px 16.192px;
-}
-
-.mastra-toaster .toast-promise-loader :is(.brand-loader-b2, .brand-loader-ln23) {
-  transform-origin: 10.387px 4.498px;
-}
-
-.mastra-toaster .toast-promise-loader :is(.brand-loader-b3, .brand-loader-ln34) {
-  transform-origin: 16.899px 16.192px;
-}
-
-.mastra-toaster .toast-promise-loader :is(.brand-loader-b4, .brand-loader-ln45) {
-  transform-origin: 22.815px 4.56px;
-}
-
-.mastra-toaster .toast-promise-loader .brand-loader-b5 {
-  transform-origin: 28.57px 16.192px;
+    transform var(--duration-normal) var(--toast-settle-ease),
+    opacity var(--duration-normal) var(--toast-settle-ease);
 }
 
 .mastra-toaster [data-promise='true'][data-type='success']:has(.toast-promise-success) .sonner-loader,
@@ -281,77 +249,18 @@
 
 .mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success,
 .mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error {
-  animation: toast-promise-complete-color var(--duration-normal) var(--toast-morph-ease);
+  animation: toast-promise-complete-color var(--duration-normal) var(--toast-settle-ease);
 }
 
-.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success :is(circle, line),
+.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success :is(circle, line) {
+  animation: none;
+  transform: var(--brand-loader-check);
+}
+
 .mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error :is(circle, line) {
   animation: none;
-}
-
-.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-b1 {
-  transform: translate(3.502px, -6.192px) scale(0);
-}
-
-.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-b2 {
-  transform: translate(-2.387px, 5.502px) scale(0.256);
-}
-
-.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-ln23 {
-  transform: translate(-2.387px, 5.502px) rotate(45deg) scaleX(0.633944) rotate(-60.888deg);
-}
-
-.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-b3 {
-  transform: translate(-2.899px, -0.192px) scale(0.256);
-}
-
-.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-ln34 {
-  transform: translate(-2.899px, -0.192px) rotate(-45deg) scaleX(1.300426) rotate(63.042deg);
-}
-
-.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-b4 {
-  transform: translate(3.185px, -0.56px) scale(0.256);
-}
-
-.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-ln45 {
-  transform: translate(3.185px, -0.56px) scale(0);
-}
-
-.mastra-toaster [data-promise='true'][data-type='success'] .toast-promise-success .brand-loader-b5 {
-  transform: translate(-2.57px, -12.192px) scale(0);
-}
-
-.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-b1 {
-  transform: translate(12.502px, -5.692px) scale(0);
-}
-
-.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-b2 {
-  transform: translate(-0.387px, -0.998px) scale(0.256);
-}
-
-.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-ln23 {
-  transform: translate(-0.387px, -0.998px) rotate(45deg) scaleX(1.479202) rotate(-60.888deg);
-}
-
-.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-b3 {
-  transform: translate(7.101px, 1.308px) scale(0.256);
-}
-
-.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-ln34 {
-  opacity: 0;
-  transform: translate(7.101px, 1.308px) rotate(-90deg) scaleX(1.072797) rotate(63.042deg);
-}
-
-.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-b4 {
-  transform: translate(1.185px, -1.06px) scale(0.256);
-}
-
-.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-ln45 {
-  transform: translate(1.185px, -1.06px) rotate(135deg) scaleX(1.525604) rotate(-63.676deg);
-}
-
-.mastra-toaster [data-promise='true'][data-type='error'] .toast-promise-error .brand-loader-b5 {
-  transform: translate(-18.57px, 1.308px) scale(0.256);
+  opacity: var(--brand-loader-cross-opacity, 1);
+  transform: var(--brand-loader-cross);
 }
 
 @keyframes toast-promise-complete-color {
