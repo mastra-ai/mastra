@@ -159,16 +159,14 @@ export class D1DB extends MastraBase {
           const results = result.results || [];
           return results;
         }
+      } else if (first) {
+        result = await statement.first();
+        if (!result) return null;
+        return result;
       } else {
-        if (first) {
-          result = await statement.first();
-          if (!result) return null;
-          return result;
-        } else {
-          result = await statement.all();
-          const results = result.results || [];
-          return results;
-        }
+        result = await statement.all();
+        const results = result.results || [];
+        return results;
       }
     } catch (error) {
       throw new MastraError(

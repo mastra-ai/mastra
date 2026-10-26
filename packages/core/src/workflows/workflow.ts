@@ -1178,6 +1178,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // Pass-through data that should flow to the next processor in a chain
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
+        agent,
         lateSignalSink,
         phase,
         runId: agentRunId,
@@ -1846,6 +1847,36 @@ type RequireAgentInput<TPrev> = [TPrev] extends [{ prompt: string }]
       readonly expectedInput: { prompt: string };
       readonly receivedPrevOutput: TPrev;
     };
+
+/**
+ * Expected shape of one step passed to `.parallel()`. Distributes over unions so a
+ * non-tuple array of different steps is checked step by step. Input follows the
+ * `.then()` rule: the previous output only has to satisfy the step's input.
+ */
+type ParallelStepCheck<TStep, TState, TPrevSchema, TEngineType, TRequestContext> =
+  TStep extends Step<
+    string,
+    infer S,
+    infer TStepInput,
+    infer O,
+    any, // Don't infer TResume - causes issues with heterogeneous tuples
+    any, // Don't infer TSuspend - causes issues with heterogeneous tuples
+    TEngineType,
+    infer TStepRC
+  >
+    ? Step<
+        string,
+        SubsetOf<S, TState>,
+        TPrevSchema extends TStepInput ? TStepInput : TPrevSchema,
+        O,
+        any,
+        any,
+        TEngineType,
+        // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
+        // declare one matching the workflow's TRequestContext. Mismatched schemas error.
+        unknown extends TStepRC ? unknown : TRequestContext
+      >
+    : `Error: Expected Step with state schema that is a subset of workflow state`;
 
 export class Workflow<
   TEngineType = DefaultEngineType,
@@ -2608,31 +2639,15 @@ export class Workflow<
   }
 
   // TODO: make typing better here
-  parallel<TParallelSteps extends readonly Step<string, any, TPrevSchema, any, any, any, TEngineType, any>[]>(
+  parallel<TParallelSteps extends readonly Step<string, any, any, any, any, any, TEngineType, any>[]>(
     steps: TParallelSteps & {
-      [K in keyof TParallelSteps]: TParallelSteps[K] extends Step<
-        string,
-        infer S,
+      [K in keyof TParallelSteps]: ParallelStepCheck<
+        TParallelSteps[K],
+        TState,
         TPrevSchema,
-        infer O,
-        any, // Don't infer TResume - causes issues with heterogeneous tuples
-        any, // Don't infer TSuspend - causes issues with heterogeneous tuples
         TEngineType,
-        infer TStepRC
-      >
-        ? Step<
-            string,
-            SubsetOf<S, TState>,
-            TPrevSchema,
-            O,
-            any,
-            any,
-            TEngineType,
-            // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
-            // declare one matching the workflow's TRequestContext. Mismatched schemas error.
-            unknown extends TStepRC ? unknown : TRequestContext
-          >
-        : `Error: Expected Step with state schema that is a subset of workflow state`;
+        TRequestContext
+      >;
     },
     options?: StepFlowEntryOptions,
   ) {

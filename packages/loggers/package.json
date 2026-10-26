@@ -72,14 +72,14 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "pino": "^10.3.1",
+    "pino": "^10.4.0",
     "pino-pretty": "^13.2.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.5",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "tsdown": "0.23.1",
