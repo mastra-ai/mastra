@@ -166,6 +166,14 @@ function buildEstimateKey(kind: string, text: string): string {
   return `${kind}:${payloadHash}`;
 }
 
+/**
+ * `errorText` is typed as a string, but persisted or imported history can hold a structured
+ * error object. Serialize it for counting so one such row cannot abort token accounting.
+ */
+function normalizeErrorTextForTokenCounting(errorText: unknown): string {
+  return errorText == null ? '' : serializeToolResultForTokenCounting(errorText);
+}
+
 function resolveEstimatorId(): string {
   return 'tokenx';
 }
@@ -1818,9 +1826,10 @@ export class TokenCounter {
             overheadDelta -= 12;
           }
         } else {
+          const errorText = normalizeErrorTextForTokenCounting(invocation.errorText);
           const fallback = invocation.isError
-            ? invocation.errorText?.trim()
-              ? invocation.errorText
+            ? errorText.trim()
+              ? errorText
               : 'Tool execution failed'
             : '[empty result]';
           tokens += this.readOrPersistPartEstimate(
@@ -1852,7 +1861,8 @@ export class TokenCounter {
         const signature = this.countToolCallSignature(part, invocation);
         tokens += signature.tokens;
         overheadDelta += signature.overheadDelta;
-        const errorMessage = invocation.errorText?.trim() ? invocation.errorText : 'Tool execution failed';
+        const errorText = normalizeErrorTextForTokenCounting(invocation.errorText);
+        const errorMessage = errorText.trim() ? errorText : 'Tool execution failed';
         tokens += this.readOrPersistPartEstimate(part, 'tool-result-error', errorMessage);
         return { tokens, overheadDelta, extraMessageDelta };
       }
