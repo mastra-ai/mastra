@@ -150,6 +150,7 @@ function hasDeleteFilter(filter: TaskFilter): boolean {
 }
 
 export class BackgroundTasksConvex extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   #db: ConvexDB;
 
   constructor(config: ConvexDomainConfig) {

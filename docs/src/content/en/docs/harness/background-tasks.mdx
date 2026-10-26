@@ -433,7 +433,7 @@ Code other than agents can run tasks through the manager. For example, an MCP se
 
 Non-agent owners usually register a static executor with `registerStaticExecutor()` so any process can run or recover their tasks. They can also set these optional task fields:
 
-- `expiresAt`: When cleanup deletes the task. Once a task completes, fails, is cancelled, or times out, cleanup deletes it after `expiresAt` passes instead of using `completedTtlMs` or `failedTtlMs`. Cleanup never deletes a pending, running, or suspended task, so cancel expired work first.
+- `expiresAt`: When cleanup deletes the task. Once a task completes, fails, is cancelled, or times out, cleanup deletes it after `expiresAt` passes instead of using `completedTtlMs` or `failedTtlMs`. Cleanup only runs when you set the `cleanup` option, and it never deletes a pending, running, or suspended task, so cancel expired work first. It also needs a storage adapter version that supports `expiresAt`; older adapters keep using the global retention settings.
 - `metadata`: JSON stored with the task. The manager doesn't read it.
 
 ```typescript

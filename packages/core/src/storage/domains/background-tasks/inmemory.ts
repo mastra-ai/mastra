@@ -9,6 +9,7 @@ import type { InMemoryDB } from '../inmemory-db';
 import { BackgroundTasksStorage } from './base';
 
 export class BackgroundTasksInMemory extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   private db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {

@@ -70,6 +70,7 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
 }
 
 export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   /**
    * Completed/failed task records accumulate. Anchored on `completedAt`, which
    * is NULL while a task is in-flight (pending/running/suspended) — so `completedAt

@@ -91,6 +91,7 @@ function fromElectroRecord(data: Record<string, any>): BackgroundTask {
 }
 
 export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   private service: Service<Record<string, any>>;
 
   constructor(config: DynamoDBDomainConfig) {

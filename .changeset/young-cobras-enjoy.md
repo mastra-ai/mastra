@@ -13,3 +13,5 @@
 ---
 
 Added storage for the optional background task fields `expiresAt` and `metadata`, plus filtering by `expiresAt`. Existing tables and collections gain the new fields automatically when the store initializes, and existing tasks keep using the global retention settings. Requires the matching `@mastra/core` release.
+
+Convex users must redeploy their Convex schema after upgrading, because the adapter now writes the `expiresAt` and `metadata` fields.

@@ -92,6 +92,7 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
 }
 
 export class BackgroundTasksPG extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   #db: PgDB;
   #schema: string;
   #skipDefaultIndexes?: boolean;

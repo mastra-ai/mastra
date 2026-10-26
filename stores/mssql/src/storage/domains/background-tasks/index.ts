@@ -71,6 +71,7 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
 }
 
 export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   public pool: ConnectionPool;
   private db: MssqlDB;
   private schema?: string;

@@ -68,6 +68,7 @@ function fromStorageRecord(record: Record<string, any>): BackgroundTask {
 }
 
 export class BackgroundTasksUpstash extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   private client: Redis;
   #db: UpstashDB;
 

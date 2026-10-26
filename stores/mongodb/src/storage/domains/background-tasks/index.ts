@@ -70,6 +70,7 @@ function fromDoc(doc: Record<string, any>): BackgroundTask {
 }
 
 export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   #connector: MongoDBConnector;
   #skipDefaultIndexes?: boolean;
   #indexes?: MongoDBIndexConfig[];

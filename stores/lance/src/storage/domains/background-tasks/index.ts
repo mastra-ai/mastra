@@ -102,6 +102,7 @@ function escapeStr(val: string): string {
 }
 
 export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   private client: Connection;
   #db: LanceDB;
 

@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
-import { MockStore } from '../storage';
+import { MastraCompositeStore, MockStore } from '../storage';
+import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
+import { InMemoryDB } from '../storage/domains/inmemory-db';
 import { BackgroundTaskManager } from './manager';
-import type { BackgroundTaskManagerConfig, TaskContext } from './types';
+import type { BackgroundTask, BackgroundTaskManagerConfig, TaskContext, TaskFilter } from './types';
 
 // Background tasks owned by something other than an agent (for example an MCP
 // server, with `agentId: 'mcp-server:<id>'`) need their own retention, their
@@ -24,10 +26,21 @@ function gate() {
   return { promise, release };
 }
 
-async function makeManager(config: Omit<BackgroundTaskManagerConfig, 'enabled'>) {
-  const mastra = new Mastra({ logger: false, storage });
+// Delivers each event after a delay, like a networked broker, so a published
+// event is not handled before `publish()` returns.
+class DelayedPubSub extends EventEmitterPubSub {
+  override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
+    setTimeout(() => void super.publish(...args), 50);
+  }
+}
+
+async function makeManager(
+  config: Omit<BackgroundTaskManagerConfig, 'enabled'>,
+  pubsub: EventEmitterPubSub = new EventEmitterPubSub(),
+  mastraStorage: MastraCompositeStore = storage,
+) {
+  const mastra = new Mastra({ logger: false, storage: mastraStorage });
   await mastra.startWorkers();
-  const pubsub = new EventEmitterPubSub();
   const mgr = new BackgroundTaskManager({ enabled: true, recoverStaleTasksOnStart: false, ...config });
   mgr.__registerMastra(mastra);
   await mgr.init(pubsub);
@@ -53,6 +66,46 @@ const payload = (agentId: string, toolCallId: string, extra: Record<string, unkn
   runId: `run-${toolCallId}`,
   ...extra,
 });
+
+function foreignRunningRow(id = 'other-worker-task'): BackgroundTask {
+  return {
+    id,
+    status: 'running',
+    toolName: 'remote',
+    toolCallId: id,
+    args: {},
+    agentId: 'agent-elsewhere',
+    runId: id,
+    retryCount: 0,
+    maxRetries: 0,
+    timeoutMs: 60_000,
+    createdAt: new Date(),
+    startedAt: new Date(),
+  };
+}
+
+// Mimics an adapter released before `expiresAt` existed: it inherits
+// `supportsTaskExpiry: false`, ignores `hasExpiresAt`, and treats an unknown
+// `dateFilterBy` as `createdAt` (what pg/libsql/mysql/mssql/d1/mongodb/spanner
+// did on main).
+class PreExpiryAdapter extends BackgroundTasksInMemory {
+  override readonly supportsTaskExpiry = false;
+  readonly deleteFilters: TaskFilter[] = [];
+
+  override async listTasks(filter: TaskFilter) {
+    const { hasExpiresAt: _ignored, ...rest } = filter;
+    const known = ['startedAt', 'suspendedAt', 'completedAt'];
+    return super.listTasks({
+      ...rest,
+      dateFilterBy: rest.dateFilterBy && known.includes(rest.dateFilterBy) ? rest.dateFilterBy : 'createdAt',
+    });
+  }
+
+  override async deleteTasks(filter: TaskFilter) {
+    this.deleteFilters.push(filter);
+    return super.deleteTasks(filter);
+  }
+}
 
 describe('BackgroundTaskManager: non-agent owners', () => {
   describe('cleanup honours per-row expiresAt', () => {
@@ -122,6 +175,46 @@ describe('BackgroundTaskManager: non-agent owners', () => {
 
       expect((await mgr.getTask(task.id))?.status).toBe('suspended');
     });
+    // Both tests go through a composite store handed to Mastra, the same path
+    // the manager uses in an app, so the capability flag must survive it.
+    const composite = (backgroundTasks: BackgroundTasksInMemory) =>
+      new MastraCompositeStore({ id: 'composite', default: new MockStore(), domains: { backgroundTasks } });
+
+    it('falls back to global-TTL cleanup on an adapter without expiry support', async () => {
+      const old = new PreExpiryAdapter({ db: new InMemoryDB() });
+      const mgr = await makeManager({}, undefined, composite(old));
+      const now = new Date();
+      await old.createTask({ ...foreignRunningRow('fresh'), status: 'completed', completedAt: now });
+
+      await mgr.cleanup();
+
+      expect(await old.getTask('fresh')).not.toBeNull();
+      expect(old.deleteFilters.some(f => f.dateFilterBy === 'expiresAt' || 'hasExpiresAt' in f)).toBe(false);
+    });
+
+    it('honours expiresAt when the adapter comes from a composite store', async () => {
+      const domain = new BackgroundTasksInMemory({ db: new InMemoryDB() });
+      const mgr = await makeManager({ cleanup: { completedTtlMs: 1_000 } }, undefined, composite(domain));
+      const now = Date.now();
+      const old = new Date(now - 60_000);
+      await domain.createTask({
+        ...foreignRunningRow('kept'),
+        status: 'completed',
+        completedAt: old,
+        expiresAt: new Date(now + 60_000),
+      });
+      await domain.createTask({
+        ...foreignRunningRow('expired'),
+        status: 'completed',
+        completedAt: new Date(now),
+        expiresAt: new Date(now - 1_000),
+      });
+
+      await mgr.cleanup();
+
+      expect(await domain.getTask('kept')).not.toBeNull();
+      expect(await domain.getTask('expired')).toBeNull();
+    });
   });
 
   describe('perOwnerConcurrency', () => {
@@ -190,6 +283,31 @@ describe('BackgroundTaskManager: non-agent owners', () => {
 
       await vi.waitFor(async () => expect((await mgr.listTasks({ status: 'running' })).total).toBe(2));
       expect((await mgr.getTask(results[2]!.task.id))?.status).toBe('pending');
+      g.release();
+    });
+    it('rejects owner limits that are not positive finite numbers', () => {
+      for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+        expect(
+          () => new BackgroundTaskManager({ enabled: true, perOwnerConcurrency: { 'mcp-server:ops': bad } }),
+        ).toThrow(/perOwnerConcurrency/);
+      }
+    });
+
+    it('ignores inherited object keys when looking up an owner limit', async () => {
+      const mgr = await makeManager({
+        globalConcurrency: 10,
+        perAgentConcurrency: 1,
+        perOwnerConcurrency: { 'mcp-server:ops': 3 },
+      });
+      const g = gate();
+      const slow = ctx(async () => {
+        await g.promise;
+        return 'ok';
+      });
+      const [first, second] = await Promise.all(['c1', 'c2'].map(id => mgr.enqueue(payload('constructor', id), slow)));
+
+      await vi.waitFor(async () => expect((await mgr.getTask(first!.task.id))?.status).toBe('running'));
+      expect((await mgr.getTask(second!.task.id))?.status).toBe('pending');
       g.release();
     });
   });
@@ -301,6 +419,80 @@ describe('BackgroundTaskManager: non-agent owners', () => {
         async () =>
           expect(await mgr.getTask(task.id)).toMatchObject({ status: 'completed', result: { answer: 'yes' } }),
         { timeout: 4_000, interval: 100 },
+      );
+    });
+    it('drops a queued resume once another worker has resumed the task and it suspended again', async () => {
+      const a = await makeManager({ globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: 3_000 });
+      const b = await makeManager({ globalConcurrency: 10, perAgentConcurrency: 10, leaseDurationMs: 3_000 });
+      const executor = {
+        execute: async (_args: any, opts?: any) => {
+          if (!opts?.resumeData) return opts?.suspend?.({ question: 1 });
+          if (opts.resumeData.from === 'b') return opts.suspend?.({ question: 2 });
+          return opts.resumeData;
+        },
+      };
+      a.registerStaticExecutor('mcp-server:ops:ask', executor);
+      b.registerStaticExecutor('mcp-server:ops:ask', executor);
+      const { task } = await a.enqueue({ ...payload('mcp-server:ops', 'ask'), toolName: 'mcp-server:ops:ask' });
+      await vi.waitFor(async () => expect((await a.getTask(task.id))?.status).toBe('suspended'));
+      const firstSuspension = (await a.getTask(task.id))!.suspendedAt!.getTime();
+
+      const store = (await storage.getStore('backgroundTasks'))!;
+      await store.createTask(foreignRunningRow());
+      await a.resume(task.id, { from: 'a-stale' }, { onNoSlot: 'queue' });
+
+      await b.resume(task.id, { from: 'b' });
+      await vi.waitFor(async () => {
+        const t = await b.getTask(task.id);
+        expect(t?.status).toBe('suspended');
+        expect(t?.suspendedAt?.getTime()).not.toBe(firstSuspension);
+      });
+
+      await store.updateTask('other-worker-task', { status: 'completed', completedAt: new Date() });
+      // Give a's heartbeat (~1s) a few chances to drain.
+      await new Promise(resolve => setTimeout(resolve, 2_500));
+
+      expect(await a.getTask(task.id)).toMatchObject({ status: 'suspended', suspendPayload: { question: 2 } });
+    });
+
+    it('does not admit more queued portable resumes than there are free slots', async () => {
+      const mgr = await makeManager(
+        { globalConcurrency: 1, perAgentConcurrency: 5, leaseDurationMs: 3_000 },
+        new DelayedPubSub(),
+      );
+      const g = gate();
+      mgr.registerStaticExecutor('mcp-server:ops:ask', {
+        execute: async (_args, opts) => {
+          if (!opts?.resumeData) return opts?.suspend?.({ needs: 'input' });
+          await g.promise;
+          return opts.resumeData;
+        },
+      });
+      const tasks = [];
+      for (const id of ['q1', 'q2']) {
+        const { task } = await mgr.enqueue({ ...payload('mcp-server:ops', id), toolName: 'mcp-server:ops:ask' });
+        await vi.waitFor(async () => expect((await mgr.getTask(task.id))?.status).toBe('suspended'));
+        tasks.push(task);
+      }
+
+      const store = (await storage.getStore('backgroundTasks'))!;
+      await store.createTask(foreignRunningRow());
+      for (const task of tasks) await mgr.resume(task.id, { ok: true }, { onNoSlot: 'queue' });
+      await store.updateTask('other-worker-task', { status: 'completed', completedAt: new Date() });
+
+      await vi.waitFor(async () => expect((await mgr.listTasks({ status: 'running' })).total).toBe(1), {
+        timeout: 4_000,
+      });
+      await new Promise(resolve => setTimeout(resolve, 2_500));
+      expect((await mgr.listTasks({ status: 'running' })).total).toBe(1);
+      expect((await mgr.listTasks({ status: 'suspended' })).total).toBe(1);
+
+      g.release();
+      await vi.waitFor(
+        async () => {
+          for (const task of tasks) expect((await mgr.getTask(task.id))?.status).toBe('completed');
+        },
+        { timeout: 6_000 },
       );
     });
   });

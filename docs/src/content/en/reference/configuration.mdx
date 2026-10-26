@@ -165,7 +165,8 @@ export const mastra = new Mastra({
     name: 'cleanup',
     type: 'CleanupConfig',
     isOptional: true,
-    description: 'Controls how long task records are kept and how often the cleanup process runs.',
+    description:
+      'Controls how long task records are kept and how often the cleanup process runs. Cleanup only runs when this option is set, including deletion of tasks whose `expiresAt` has passed.',
     properties: [
       {
         parameters: [
@@ -175,7 +176,7 @@ export const mastra = new Mastra({
             isOptional: true,
             defaultValue: '3600000',
             description:
-              'How long to keep completed task records, in milliseconds. Default: 1 hour. Does not apply to tasks that set their own `expiresAt`; those are deleted once `expiresAt` passes.',
+              'How long to keep completed task records, in milliseconds. Default: 1 hour. Does not apply to tasks that set their own `expiresAt`; cleanup deletes those once `expiresAt` passes.',
           },
           {
             name: 'failedTtlMs',

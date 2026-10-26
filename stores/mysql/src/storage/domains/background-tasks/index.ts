@@ -60,6 +60,7 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
 }
 
 export class BackgroundTasksMySQL extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   private pool: Pool;
   private operations: StoreOperationsMySQL;
   #skipDefaultIndexes?: boolean;

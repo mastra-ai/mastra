@@ -178,8 +178,8 @@ export interface TaskFilter {
   dateFilterBy?: TaskDateColumn;
   /** `true` matches only rows with `expiresAt` set; `false` only rows without it. */
   hasExpiresAt?: boolean;
-  /** Column to sort by. Default: 'createdAt' */
-  orderBy?: TaskDateColumn;
+  /** Column to sort by. Default: 'createdAt'. Sorting by `expiresAt` is not supported. */
+  orderBy?: Exclude<TaskDateColumn, 'expiresAt'>;
   orderDirection?: 'asc' | 'desc';
   /** Page number (0-indexed). Used with perPage for pagination. */
   page?: number;

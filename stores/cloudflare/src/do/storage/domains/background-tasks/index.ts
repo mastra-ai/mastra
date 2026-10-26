@@ -71,6 +71,7 @@ function dateColumnName(col: TaskDateColumn): string {
 }
 
 export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   #db: DODB;
 
   constructor(config: DODomainConfig) {

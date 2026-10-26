@@ -12,6 +12,15 @@ import { StorageDomain } from '../base';
  * Handles persistence of task state — creation, status updates, querying, and cleanup.
  */
 export abstract class BackgroundTasksStorage extends StorageDomain {
+  /**
+   * Whether this adapter stores `expiresAt`/`metadata` and honours the
+   * `hasExpiresAt` filter and `dateFilterBy: 'expiresAt'`. Adapters written
+   * before these fields existed inherit `false`, and cleanup then falls back
+   * to the global TTLs only, because those adapters would ignore the new
+   * filters and match every finished row.
+   */
+  readonly supportsTaskExpiry: boolean = false;
+
   constructor() {
     super({
       component: 'STORAGE',

@@ -104,6 +104,7 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
 }
 
 export class BackgroundTasksSpanner extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   private database: Database;
   private db: SpannerDB;
   private skipDefaultIndexes?: boolean;

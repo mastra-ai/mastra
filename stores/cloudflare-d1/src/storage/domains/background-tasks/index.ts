@@ -56,6 +56,7 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
 }
 
 export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   #db: D1DB;
 
   constructor(config: D1DomainConfig) {
