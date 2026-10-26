@@ -130,6 +130,9 @@ export async function main() {
   const generatedCount = redirects.length - config.redirects.length
 
   const output = {
+    $schema: 'https://openapi.vercel.sh/vercel.json',
+    // docs dependencies use pnpm `catalog:` versions, which only pnpm can resolve
+    installCommand: 'pnpm install --frozen-lockfile',
     headers: HEADERS,
     redirects,
   }

@@ -42,6 +42,7 @@ export default defineConfig({
   ],
   rules: {
     'no-dupe-keys': 'error',
+    'no-useless-return': 'error',
     'no-lonely-if': 'error',
     'no-extra-boolean-cast': 'error',
     'no-useless-catch': 'error',

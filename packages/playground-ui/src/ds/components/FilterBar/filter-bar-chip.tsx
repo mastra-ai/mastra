@@ -242,7 +242,7 @@ export function FilterBarChip({
           event.preventDefault();
           ctx.removeItem(item.id);
           ctx.focusAfterRemove(index);
-          return;
+          break;
         default:
       }
     },

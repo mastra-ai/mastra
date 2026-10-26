@@ -600,6 +600,7 @@ export async function createNetworkLoop({
           inputProcessors: [],
           logger: agent.getMastraInstance()?.getLogger() || noopLogger,
           agentName: agent.name,
+          agent,
         })
       : null;
 

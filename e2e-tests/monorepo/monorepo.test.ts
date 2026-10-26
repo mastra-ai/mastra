@@ -2171,6 +2171,7 @@ assert.equal(subpathOnlyValue, 'c');`,
           const outputRoot = join(appDir, '.mastra', 'output');
 
           await removeOutputDir(isolatedFixturePath);
+          await expect(readFile(join(appDir, '.npmrc'), 'utf-8')).rejects.toMatchObject({ code: 'ENOENT' });
           const skipBuild = await execa(pkgManager, ['build'], {
             cwd: appDir,
             env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
@@ -2180,6 +2181,7 @@ assert.equal(subpathOnlyValue, 'c');`,
 
           expect(skipBuild.exitCode).toBe(0);
           expect(skipOutput).toContain('Skipping dependency installation (MASTRA_BUILD_SKIP_INSTALL set)');
+          await expect(readFile(join(outputRoot, '.npmrc'), 'utf-8')).rejects.toMatchObject({ code: 'ENOENT' });
           // No dependencies installed and no lockfile generated anywhere in the build output.
           expect(await findInDir(outputRoot, 'node_modules')).toBe(false);
           expect(await findInDir(outputRoot, 'package-lock.json')).toBe(false);

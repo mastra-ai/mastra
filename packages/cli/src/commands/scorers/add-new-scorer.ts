@@ -151,5 +151,4 @@ async function showInteractivePrompt(providedCustomDir?: string) {
   if (containsSuccessfulWrites) {
     showSuccessNote();
   }
-  return;
 }

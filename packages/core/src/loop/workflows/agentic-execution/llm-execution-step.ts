@@ -3,7 +3,7 @@ import { isAbortError } from '@ai-sdk/provider-utils-v6';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
-import type { StructuredOutputOptions } from '../../../agent';
+import type { Agent, StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { isDownloadAssetsError } from '../../../agent/message-list/prompt/download-assets';
 import { createSignal } from '../../../agent/signals';
@@ -184,6 +184,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   outputProcessors?: OutputProcessorOrWorkflow[];
   processorStates?: Map<string, ProcessorState>;
   agentId?: string;
+  agent?: Agent<any, any, any, any>;
   processorRetryCount?: number;
   outputWriter?: (chunk: ChunkType, options?: { messageId?: string }) => Promise<void> | void;
   requestContext?: RequestContext;
@@ -542,6 +543,7 @@ async function processOutputStream<OUTPUT = undefined>({
   outputProcessors,
   processorStates,
   agentId,
+  agent,
   processorRetryCount,
   outputWriter,
   requestContext,
@@ -568,6 +570,7 @@ async function processOutputStream<OUTPUT = undefined>({
       outputProcessors: outputProcessors ?? [],
       logger: logger || new ConsoleLogger({ level: 'error' }),
       agentName: agentId || 'unknown',
+      agent,
       processorStates,
     });
     return toolResultProcessorRunner;
@@ -1249,6 +1252,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   hasConfiguredErrorProcessors,
   logger,
   agentId,
+  agent,
   downloadRetries,
   downloadConcurrency,
   processorStates,
@@ -1689,6 +1693,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             outputProcessors: [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            agent,
             processorStates,
           });
 
@@ -1926,6 +1931,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors: [],
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          agent,
           processorStates,
         });
         const requestStepWriter: ProcessorStreamWriter | undefined = outputWriter
@@ -2186,6 +2192,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // Stream processors run per step, so their spans belong under the step span.
             tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
             processorStates,
+            agent,
             requestContext,
             abortSignal: options?.abortSignal,
           },
@@ -2250,6 +2257,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             outputProcessors,
             processorStates,
             agentId,
+            agent,
             processorRetryCount: inputData.processorRetryCount,
             outputWriter,
             requestContext,
@@ -2629,6 +2637,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               errorProcessors: errorProcessors || [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
               agentName: agentId || 'unknown',
+              agent,
               processorStates,
             });
 
@@ -2910,6 +2919,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           errorProcessors: errorProcessors || [],
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          agent,
           processorStates,
         });
 
@@ -3088,6 +3098,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               errorProcessors: errorProcessors || [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
               agentName: agentId || 'unknown',
+              agent,
               processorStates,
             });
 
@@ -3160,6 +3171,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors,
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          agent,
           processorStates,
         });
 
