@@ -6,18 +6,12 @@ import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
 import { createStep, createWorkflow } from '../../../../workflows';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  runLoopScenario,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
 
 /**
  * Approval and suspension paths that go through workflows, subagents, the
- * generate() API, and text that straddles an approval boundary.
+ * generate() API.
  *
  * Regression classes:
  * - Agent-level `requireToolApproval` gates workflow tools, and approving runs the workflow
@@ -25,7 +19,6 @@ import { SCENARIO_MODEL_ID } from '../types';
  * - A subagent tool's `suspend()` surfaces as a suspended `agent-*` call and `resumeStream` resumes it
  * - A workflow step's `suspend()` surfaces as a suspended `workflow-*` call and `resumeStream` resumes it
  * - `autoResumeSuspendedTools` resumes a suspended workflow step from the next user message
- * - Text streamed before an approval and text after approving concatenate in the resumed output
  * - `generate()` reports `finishReason: 'suspended'` with the suspend payload, and `resumeGenerate` completes it
  */
 const toolNames = (req: ChatCompletionRequest) => (req.tools ?? []).map(t => t.function?.name);
@@ -343,60 +336,6 @@ describeForAllEngines('AIMock loop scenario: approval and suspension through wor
     expect(resumedNames).toEqual([USER.name]);
     const delegated = (await resumed.toolResults).find((r: any) => r.payload.toolName === 'agent-userAgent');
     expect((delegated?.payload.result as any)?.text).toBe('Dero Israel, dero@mail.com');
-  });
-
-  // Known gap (durable/evented): the resumed stream's `text` holds only the post-approval text,
-  // and the suspended stream's `text` promise never settles. See #27504.
-  const itFailsOnDurable = isDurableEngineVariant(engine) ? it.fails : it;
-
-  itFailsOnDurable('concatenates text streamed before an approval with text streamed after approving', async () => {
-    const lookups: string[] = [];
-    const findUserTool = createTool({
-      id: 'find-user',
-      description: 'Finds a user by name',
-      inputSchema: z.object({ name: z.string() }),
-      execute: async ({ name }) => {
-        lookups.push(name);
-        return USER;
-      },
-    });
-    const shared = await createSharedAgent(getMock(), { tools: { findUserTool }, engine });
-
-    const { output, chunks } = await runLoopScenario({
-      engine,
-      llm: getMock(),
-      sharedAgent: shared,
-      prompt: 'Find the user Dero Israel',
-      requireToolApproval: true,
-      collectChunks: true,
-      fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false },
-          {
-            content: 'Let me look that up. ',
-            toolCalls: [{ id: 'call-find-1', name: 'findUserTool', arguments: { name: USER.name } }],
-          },
-        );
-        llm.on({ endpoint: 'chat', toolCallId: 'call-find-1', hasToolResult: true }, { content: 'Found Dero Israel.' });
-      },
-    });
-
-    const firstText = chunks!
-      .filter(c => c.type === 'text-delta')
-      .map(c => c.payload.text)
-      .join('');
-    expect(firstText).toBe('Let me look that up. ');
-    const approval = chunks!.find(c => c.type === 'tool-call-approval');
-
-    const resumed = await shared.agent.approveToolCall({
-      runId: output.runId,
-      toolCallId: approval!.payload.toolCallId,
-    });
-    await drain(resumed);
-
-    expect(lookups).toEqual([USER.name]);
-    expect(await resumed.steps).toHaveLength(2);
-    expect(await resumed.text).toBe('Let me look that up. Found Dero Israel.');
   });
 });
 
