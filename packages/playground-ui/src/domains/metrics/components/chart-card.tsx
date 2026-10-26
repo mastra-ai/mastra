@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { Maximize2Icon } from 'lucide-react';
+import type { ElementType, ReactNode } from 'react';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsCardTitleMenuProps } from '@/ds/components/MetricsCard';
 import { cn } from '@/lib/utils';
@@ -12,6 +13,13 @@ export type ChartCardProps = {
    */
   variant?: 'default' | 'compact';
   title: string;
+  /**
+   * Makes the title a link, marked by an expand icon, to a fuller view of the chart (e.g. the
+   * chart in an explorer). Ignored with `titleMenu`.
+   */
+  href?: string;
+  /** Renders `href` links, e.g. the app's router link. Default `a`. */
+  LinkComponent?: ElementType;
   /** Makes the title a dropdown of the card's views (e.g. by model, by provider). */
   titleMenu?: Omit<MetricsCardTitleMenuProps<string>, 'title' | 'className'>;
   /** Compact cards: the card's total, right of the title in the same type. */
@@ -38,6 +46,8 @@ export type ChartCardProps = {
 export function ChartCard({
   variant = 'default',
   title,
+  href,
+  LinkComponent,
   titleMenu,
   total,
   isLoading = false,
@@ -54,7 +64,14 @@ export function ChartCard({
   return (
     <MetricsCard className={cn('min-h-0! min-w-0!', compact && 'h-84', className)}>
       <MetricsCard.TopBar>
-        <ChartCardHeading title={title} description={description} titleMenu={titleMenu} compact={compact} />
+        <ChartCardHeading
+          title={title}
+          href={href}
+          LinkComponent={LinkComponent}
+          description={description}
+          titleMenu={titleMenu}
+          compact={compact}
+        />
         {actions && <MetricsCard.Actions reveal="hover">{actions}</MetricsCard.Actions>}
         {compact && total !== undefined && <MetricsCard.Total value={total} isLoading={isLoading} className={fade} />}
         {!compact && summary && <div className={cn('order-last flex w-24 shrink-0 justify-end', fade)}>{summary}</div>}
@@ -72,14 +89,29 @@ export function ChartCard({
 /** The title: a view menu, a lone compact title, or the default title, each with the description on default cards. */
 function ChartCardHeading({
   title,
+  href,
+  LinkComponent,
   description,
   titleMenu,
   compact,
-}: Pick<ChartCardProps, 'title' | 'description' | 'titleMenu'> & { compact: boolean }) {
+}: Pick<ChartCardProps, 'title' | 'href' | 'LinkComponent' | 'description' | 'titleMenu'> & { compact: boolean }) {
   if (titleMenu) {
     return (
       <div className="flex flex-col">
         <MetricsCard.TitleMenu title={title} {...titleMenu} />
+        {!compact && description && <MetricsCard.Description>{description}</MetricsCard.Description>}
+      </div>
+    );
+  }
+  if (href) {
+    const Heading = compact ? 'h3' : 'h2';
+    return (
+      <div className="flex flex-col items-start">
+        <Heading>
+          <ChartCardTitleLink href={href} LinkComponent={LinkComponent} medium={compact}>
+            {title}
+          </ChartCardTitleLink>
+        </Heading>
         {!compact && description && <MetricsCard.Description>{description}</MetricsCard.Description>}
       </div>
     );
@@ -92,4 +124,32 @@ function ChartCardHeading({
     );
   }
   return <MetricsCard.TitleAndDescription title={title} description={description} />;
+}
+
+/** The title as a link to a fuller view, with an expand icon after it; hover fills its own box, not the row. */
+function ChartCardTitleLink({
+  href,
+  LinkComponent,
+  medium,
+  children,
+}: {
+  href: string;
+  LinkComponent?: ElementType;
+  medium: boolean;
+  children: string;
+}) {
+  const Anchor = LinkComponent ?? 'a';
+  return (
+    <Anchor
+      href={href}
+      className={cn(
+        '-mx-1.5 -my-0.5 inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-body text-foreground hover:bg-fill-subtle',
+        'focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-border-focus focus-visible:outline-solid',
+        medium && 'font-medium',
+      )}
+    >
+      {children}
+      <Maximize2Icon aria-hidden className="size-3.5 text-muted-foreground" />
+    </Anchor>
+  );
 }
