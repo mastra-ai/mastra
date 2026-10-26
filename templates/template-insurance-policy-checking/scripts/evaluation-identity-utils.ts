@@ -20,7 +20,6 @@ export async function evaluatedSourceIdentity() {
       'pdfjs-dist',
       'pdfkit',
       'zod',
-      'libsql',
       '@libsql/client',
     ].map(name => 'node_modules/' + name + '/package.json'),
     'tests/report-runtime.ts',

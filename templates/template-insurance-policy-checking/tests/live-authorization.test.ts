@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm, copyFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import { evaluatedSourceIdentity } from '../scripts/evaluation-identity-utils.js';
@@ -76,6 +77,36 @@ it('paid_evaluation_requires_explicit_frozen_authority_and_durable_aggregate_res
         },
       ),
     ).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('requires --config and --output') });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('binds evaluation identity without relying on hoisted transitive packages', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'insurance isolated install '));
+  try {
+    for (const directory of ['src', 'scripts', 'tests'])
+      await cp(resolve(directory), join(root, directory), { recursive: true });
+    await copyFile('package.json', join(root, 'package.json'));
+    const manifest = JSON.parse(await readFile('package.json', 'utf8'));
+    for (const name of Object.keys(manifest.dependencies)) {
+      const destination = join(root, 'node_modules', name, 'package.json');
+      await mkdir(dirname(destination), { recursive: true });
+      await copyFile(resolve('node_modules', name, 'package.json'), destination);
+    }
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      [
+        '--import',
+        resolve('tests/source-loader.mjs'),
+        '--input-type=module',
+        '-e',
+        `import { evaluatedSourceIdentity } from ${JSON.stringify(pathToFileURL(resolve('scripts/evaluation-identity-utils.ts')).href)};
+       console.log(JSON.stringify(await evaluatedSourceIdentity()));`,
+      ],
+      { cwd: root },
+    );
+    expect(JSON.parse(stdout)).toEqual(await evaluatedSourceIdentity());
   } finally {
     await rm(root, { recursive: true, force: true });
   }
