@@ -1,4 +1,4 @@
-import { buildPreview, PREVIEW_MAX_LENGTH } from '../storage/domains/observability/tracing';
+import { PREVIEW_MAX_LENGTH, truncatePreview } from './preview-text';
 import type { AnyExportedSpan } from './types/tracing';
 import { SpanType } from './types/tracing';
 
@@ -10,7 +10,7 @@ const record = (value: unknown): RecordValue | undefined =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as RecordValue) : undefined;
 const text = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() ? value.trim() : undefined;
-const limit = (value: string): string => buildPreview(value) ?? '';
+const limit = (value: string): string => truncatePreview(value) ?? '';
 
 /** Only serialize enough JSON for a preview. Never walk an entire embedding, message history,
  * or tool result just to return 100 characters. Cycles/deep values remain readable. */
@@ -79,9 +79,19 @@ function generic(value: unknown): string {
   if (value == null) return '';
   if (typeof value === 'string') return limit(value);
   const data = record(value);
-  if (data?.__isCreatedSignal === true) return buildPreview(value) ?? '';
+  if (data?.__isCreatedSignal === true) return signalPreview(data);
   const content = text(data?.text) ?? text(data?.message);
   return content ? limit(content) : jsonPreview(value);
+}
+
+/** Created signals are caller input, rather than messages with a role. */
+function signalPreview(signal: RecordValue): string {
+  const content = messageContent(signal.contents);
+  if (signal.type === 'user' || signal.type === 'user-message') return content;
+  const tagName = text(signal.tagName);
+  const skillName = text(record(signal.attributes)?.name);
+  const label = tagName === 'skill' && skillName ? `Skill ${skillName}` : (tagName ?? text(signal.type) ?? 'signal');
+  return limit(content ? `${label}: ${content}` : label);
 }
 
 /** Content parts are deliberately shallow: never serialize binary data or an entire tool result. */

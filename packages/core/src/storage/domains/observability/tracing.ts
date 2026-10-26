@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
+import { PREVIEW_MAX_LENGTH, truncatePreview } from '../../../observability/preview-text';
 import { SpanType } from '../../../observability/types';
 import type { SpanInput, SpanOutput, SpanTypeMap } from '../../../observability/types';
 import {
@@ -471,8 +472,7 @@ export function extractBranchSpans<
 // Lightweight Span & Trace Schemas (for timeline rendering)
 // ============================================================================
 
-/** Maximum preview length, before the trailing `…`, including supplied previews. */
-export const PREVIEW_MAX_LENGTH = 100;
+export { PREVIEW_MAX_LENGTH } from '../../../observability/preview-text';
 
 /** @deprecated Use {@link PREVIEW_MAX_LENGTH}. */
 export const INPUT_PREVIEW_MAX_LENGTH = PREVIEW_MAX_LENGTH;
@@ -482,15 +482,6 @@ const outputPreviewField = z.string().describe('Short text preview of the span o
 const errorPreviewField = z.string().describe('Short text preview of the span error');
 
 type PreviewMessage = { role?: unknown; content?: unknown };
-
-function truncatePreview(text: string, maxLength = PREVIEW_MAX_LENGTH): string | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  if (trimmed.length <= maxLength) return trimmed;
-  // Never end on half of a surrogate pair.
-  const end = maxLength > 0 && /[\uD800-\uDBFF]/.test(trimmed[maxLength - 1]!) ? maxLength - 1 : maxLength;
-  return `${trimmed.slice(0, end)}…`;
-}
 
 function isMessage(value: unknown): value is PreviewMessage {
   return value != null && typeof value === 'object' && typeof (value as PreviewMessage).role === 'string';

@@ -132,6 +132,25 @@ describe('span previews', () => {
     ).toBe('Check my order');
   });
 
+  it.each([
+    [{ type: 'user', contents: [{ type: 'text', text: 'Find my order' }] }, 'Find my order'],
+    [{ type: 'user-message', contents: '' }, ''],
+    [
+      { type: 'system', tagName: 'skill', attributes: { name: 'orders' }, contents: 'Look up shipping status' },
+      'Skill orders: Look up shipping status',
+    ],
+    [{ type: 'system', tagName: 'skill', attributes: { name: 'orders' }, contents: '' }, 'Skill orders'],
+    [{ type: 'system', tagName: 'notice', contents: 'Order updated' }, 'notice: Order updated'],
+    [{ type: 'system', contents: 'Order updated' }, 'system: Order updated'],
+    [{ contents: 'Order updated' }, 'signal: Order updated'],
+    [
+      { type: 'system', tagName: 'skill', attributes: { name: 'orders' }, contents: 'x'.repeat(150) },
+      'Skill orders: ' + 'x'.repeat(86) + '…',
+    ],
+  ])('formats created agent signals without relying on storage: %j', (signal, expected) => {
+    expect(buildSpanPreviews(span({ input: { __isCreatedSignal: true, ...signal } })).inputPreview).toBe(expected);
+  });
+
   it('finds useful content beyond empty parts and long tool histories', () => {
     const input = [
       {
