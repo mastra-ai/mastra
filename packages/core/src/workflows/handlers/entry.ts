@@ -403,6 +403,7 @@ export async function executeEntry(
       executionContext: {
         workflowId,
         runId,
+        parentWorkflow: executionContext.parentWorkflow,
         executionPath: [...executionContext.executionPath, idx!],
         stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
         suspendedPaths: executionContext.suspendedPaths,
@@ -475,6 +476,7 @@ export async function executeEntry(
       executionContext: {
         workflowId,
         runId,
+        parentWorkflow: executionContext.parentWorkflow,
         executionPath: [...executionContext.executionPath, idx!],
         stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
         suspendedPaths: executionContext.suspendedPaths,

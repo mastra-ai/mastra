@@ -80,6 +80,9 @@ export class RunJournal {
    * context). Without it, the first boundary write is a checkpoint that replaces whatever is stored.
    * @param state The state already in storage, with `seed`.
    * @param statePatchBytes What the store reported for `state` (`StoredWorkflowRun.statePatchBytes`).
+   * @param inheritedState For a nested run that starts from its parent's stored state (the parent
+   * journal's `inheritableState`): the checkpoint stores only the changes to it, and the store reads
+   * the parent's state as the base.
    */
   constructor({
     store,
@@ -88,6 +91,7 @@ export class RunJournal {
     seed,
     state,
     statePatchBytes,
+    inheritedState,
   }: {
     store: WorkflowsStorage | undefined;
     workflowName: string;
@@ -95,14 +99,27 @@ export class RunJournal {
     seed?: Record<string, unknown>;
     state?: unknown;
     statePatchBytes?: number;
+    inheritedState?: Record<string, unknown>;
   }) {
     this.store = store;
     this.workflowName = workflowName;
     this.runId = runId;
     this.#needsCheckpoint = !seed;
     this.#written = new Map(seed ? Object.entries(seed) : []);
-    this.#writtenState = state === undefined ? undefined : normalizeState(state).state;
+    // The checkpoint replaces the stored state, so without an inherited base it writes the full state.
+    this.#writtenState = inheritedState ?? (seed && state !== undefined ? normalizeState(state).state : undefined);
     this.#patchBytes = statePatchBytes ?? 0;
+  }
+
+  /**
+   * The stored state, when it is exactly `state`: a nested run starting from `state` can then store
+   * only its changes to it. Undefined when `state` has changes not yet stored (a skipped write, or a
+   * parallel step's `setState` merged since the last write). The object is shared and never edited.
+   */
+  inheritableState(state: unknown): Record<string, unknown> | undefined {
+    const written = this.#writtenState;
+    if (written === undefined) return undefined;
+    return diffState(written, normalizeState(state).state).length ? undefined : written;
   }
 
   /**
@@ -186,7 +203,7 @@ export class RunJournal {
     let statePatch: StatePatchOp[] | undefined;
     if (boundary) {
       const next = normalizeState(value);
-      if (checkpoint || writtenState === undefined) {
+      if (writtenState === undefined) {
         state = next.state;
       } else {
         const ops = diffState(writtenState, next.state);

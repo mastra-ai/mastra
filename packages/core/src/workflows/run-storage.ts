@@ -19,8 +19,12 @@ export interface RunStorage {
   loadForResume(opts: { wait: boolean }): Promise<WorkflowRunState | null>;
   /** Fully materialized, for restart and time travel. */
   loadFull(): Promise<WorkflowRunState | null>;
-  /** The pending/waiting snapshot written before the engine runs. */
-  writeInitial(snapshot: WorkflowRunState, resourceId?: string): Promise<void>;
+  /**
+   * The pending/waiting snapshot written before the engine runs. With `inheritsState` (a storage v2
+   * nested run starting from its parent's stored state), the state isn't stored: the parent's is
+   * read in its place.
+   */
+  writeInitial(snapshot: WorkflowRunState, resourceId?: string, opts?: { inheritsState?: boolean }): Promise<void>;
   /** After a claim: has nothing been written to the run since `claimed` was loaded? */
   isClaimUnused(claimed: WorkflowRunState, resumedStepId: string): Promise<boolean>;
   /** What the store reported for the state of a snapshot loaded by `loadForResume` or `loadFull`. */
@@ -200,7 +204,11 @@ class RunStorageV2 implements RunStorage {
     return snapshot;
   }
 
-  async writeInitial(snapshot: WorkflowRunState, resourceId?: string): Promise<void> {
+  async writeInitial(
+    snapshot: WorkflowRunState,
+    resourceId?: string,
+    { inheritsState = false }: { inheritsState?: boolean } = {},
+  ): Promise<void> {
     const store = await this.#getStore();
     const { context, value, ...header } = snapshot;
     await store?.writeWorkflowRunCheckpoint({
@@ -209,7 +217,7 @@ class RunStorageV2 implements RunStorage {
       resourceId,
       header,
       steps: context,
-      state: value,
+      state: inheritsState ? undefined : value,
     });
   }
 

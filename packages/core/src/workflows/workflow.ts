@@ -69,7 +69,7 @@ import type { Tool } from '../tools/tool';
 import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
+import { INHERITABLE_STATE_SYMBOL, PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
 import { withoutAuthToken } from './evented/helpers';
@@ -1848,7 +1848,7 @@ export class Workflow<
   public origin: 'code' | 'dynamic' = 'code';
   public isInternal = false;
   /** Handed from execute() to the createRun() call right after it; see createRun. */
-  #nestedRunStart?: { input: TInput; state: TState };
+  #nestedRunStart?: { input: TInput; state: TState; inheritedState?: Record<string, unknown> };
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
@@ -3090,9 +3090,12 @@ export class Workflow<
           ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
           : initialSnapshot,
         options?.resourceId,
+        // The parent's stored state is exactly that state, so the store reads it as the base.
+        { inheritsState: !!nestedRunStart?.inheritedState },
       );
     }
 
+    run.inheritedState = nestedRunStart?.inheritedState;
     return run;
   }
 
@@ -3139,6 +3142,7 @@ export class Workflow<
     timeTravel,
     parentWorkflow,
     [PUBSUB_SYMBOL]: pubsub,
+    [INHERITABLE_STATE_SYMBOL]: inheritableState,
     mastra,
     requestContext,
     abort,
@@ -3178,6 +3182,7 @@ export class Workflow<
       forEachIndex?: number;
     };
     [PUBSUB_SYMBOL]: PubSub;
+    [INHERITABLE_STATE_SYMBOL]?: (state: unknown) => Record<string, unknown> | undefined;
     mastra: Mastra;
     requestContext?: RequestContext<TRequestContext>;
     engine: DefaultEngineType;
@@ -3245,7 +3250,15 @@ export class Workflow<
     const useSharedPubsub = !!this.#options?.sharePubsub;
     const nestedPubsub = useSharedPubsub ? pubsub : undefined;
     // Nothing may await between this and createRun(), which takes it synchronously.
-    this.#nestedRunStart = !restart && !isResume ? { input: inputData, state } : undefined;
+    this.#nestedRunStart =
+      !restart && !isResume
+        ? {
+            input: inputData,
+            state,
+            // Only storage v2 stores a nested run's state as its changes to the parent's.
+            inheritedState: this.#options.storageVersion === 2 ? inheritableState?.(state) : undefined,
+          }
+        : undefined;
     const run = isResume
       ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub, parentWorkflow })
       : await this.createRun({ runId, resourceId, pubsub: nestedPubsub, parentWorkflow });
@@ -3843,6 +3856,13 @@ export class Run<
   readonly storageVersion: 1 | 2;
 
   /**
+   * For the next start or time travel of a storage v2 nested run: its parent's stored state, which
+   * the run starts from and stores only its changes to. Set by `createRun`, taken by `_start` and
+   * `_timeTravel`.
+   * @internal
+   */
+  inheritedState?: Record<string, unknown>;
+  /**
    * The store calls this run makes, for its `storageVersion`.
    * @internal
    */
@@ -4176,6 +4196,8 @@ export class Run<
     onDispatched?: () => void,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
+    const inheritedState = this.inheritedState;
+    this.inheritedState = undefined;
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
@@ -4282,6 +4304,7 @@ export class Run<
       outputOptions,
       perStep,
       storageVersion: this.storageVersion,
+      inheritedState,
     });
 
     this.workflowRunStatus = result.status;
@@ -5615,6 +5638,8 @@ export class Run<
     actor?: ActorSignal;
   } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
+    const inheritedState = this.inheritedState;
+    this.inheritedState = undefined;
     if (!stepParam || (Array.isArray(stepParam) && stepParam.length === 0)) {
       throw new Error('Step is required and must be a valid step or array of steps');
     }
@@ -5700,6 +5725,7 @@ export class Run<
       outputOptions,
       perStep,
       storageVersion: this.storageVersion,
+      inheritedState,
     });
 
     this.workflowRunStatus = result.status;

@@ -479,6 +479,8 @@ describe('storageVersion per run', () => {
 const num = z.object({ n: z.number() });
 const marks = z.object({ marked: z.number().optional() });
 const items = z.object({ items: z.array(z.string()) });
+/** A first item that keeps one appended item's patch smaller than the state, so nested runs keep inheriting it. */
+const PAD = '.'.repeat(512);
 
 function addOne(id: string, onRun?: (ctx: { setState: (state: z.infer<typeof marks>) => Promise<void> }) => unknown) {
   return createStep({
@@ -491,6 +493,49 @@ function addOne(id: string, onRun?: (ctx: { setState: (state: z.infer<typeof mar
       return { n: inputData.n + 1 };
     },
   });
+}
+
+/** Appends `<id>:<n>` to `state.items` after `onRun`; with `suspends`, only once resumed. */
+function appendItem(id: string, { suspends = false, onRun }: { suspends?: boolean; onRun?: () => unknown } = {}) {
+  return createStep({
+    id,
+    inputSchema: num,
+    outputSchema: num,
+    stateSchema: items,
+    resumeSchema: z.boolean(),
+    execute: async ({ inputData, state, setState, resumeData, suspend }) => {
+      if (suspends && resumeData === undefined) return suspend({});
+      await onRun?.();
+      await setState({ items: [...state.items, `${id}:${inputData.n}`] });
+      return { n: inputData.n + 1 };
+    },
+  });
+}
+
+/** `outer` appends, then runs `inner`, which appends, suspends until resumed, and appends again. */
+function suspendingNested(storageVersion: 1 | 2) {
+  const inner = createWorkflow({
+    id: 'inner',
+    inputSchema: num,
+    outputSchema: num,
+    stateSchema: items,
+    options: { storageVersion },
+  })
+    .then(appendItem('inner-a'))
+    .then(appendItem('inner-wait', { suspends: true }))
+    .then(appendItem('inner-b'))
+    .commit();
+  const outer = createWorkflow({
+    id: 'outer',
+    inputSchema: num,
+    outputSchema: num,
+    stateSchema: items,
+    options: { storageVersion },
+  })
+    .then(appendItem('before'))
+    .then(inner)
+    .commit();
+  return { outer, inner };
 }
 
 /** Records each storage v2 write's changes, and returns a run's stored entries. */
@@ -759,6 +804,9 @@ type Scenario = {
 const startOnly: Scenario['drive'] = async (workflow, runId) =>
   (await workflow.createRun({ runId })).start({ inputData: { n: 0 }, initialState: {} });
 
+const startWithItems: Scenario['drive'] = async (workflow, runId) =>
+  (await workflow.createRun({ runId })).start({ inputData: { n: 0 }, initialState: { items: [PAD] } });
+
 /** Runs a scenario on one storage version and returns its result plus every run it stored. */
 async function runAndReadBack(storageVersion: 1 | 2, { build, drive }: Scenario) {
   const storage = new MockStore();
@@ -849,6 +897,97 @@ const scenarios: Record<string, Scenario> = {
     },
     drive: startOnly,
   },
+  'nested workflow in a dowhile, appending to the state': {
+    build: storageVersion => {
+      const inner = createWorkflow({
+        id: 'inner',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        options: { storageVersion },
+      })
+        .then(appendItem('inner-add'))
+        .commit();
+      return createWorkflow({
+        id: 'outer',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        options: { storageVersion },
+      })
+        .then(appendItem('before'))
+        .dowhile(inner, async ({ inputData }) => inputData.n < 4)
+        .commit();
+    },
+    drive: startWithItems,
+  },
+  'a suspended nested workflow': {
+    build: storageVersion => suspendingNested(storageVersion).outer,
+    drive: startWithItems,
+  },
+  'a nested workflow resumed through its parent': {
+    build: storageVersion => suspendingNested(storageVersion).outer,
+    drive: async (workflow, runId) => {
+      await startWithItems(workflow, runId);
+      return (await workflow.createRun({ runId })).resume({ step: ['inner', 'inner-wait'], resumeData: true });
+    },
+  },
+  'time travel into a nested step': {
+    build: storageVersion => {
+      const inner = createWorkflow({
+        id: 'inner',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        options: { storageVersion },
+      })
+        .then(appendItem('inner-a'))
+        .then(appendItem('inner-b'))
+        .commit();
+      return createWorkflow({
+        id: 'outer',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        options: { storageVersion },
+      })
+        .then(appendItem('before'))
+        .then(inner)
+        .commit();
+    },
+    drive: async (workflow, runId) => {
+      await startWithItems(workflow, runId);
+      return (await workflow.createRun({ runId })).timeTravel({ step: ['inner', 'inner-b'], inputData: { n: 10 } });
+    },
+  },
+  "a nested workflow whose state schema strips and defaults the parent's keys": {
+    build: storageVersion => {
+      const inner = createWorkflow({
+        id: 'inner',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: z.object({ items: z.array(z.string()), innerOnly: z.string().default('default') }),
+        options: { storageVersion },
+      })
+        .then(appendItem('inner-add'))
+        .commit();
+      return createWorkflow({
+        id: 'outer',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: z.object({ items: z.array(z.string()), outerOnly: z.string() }),
+        options: { storageVersion },
+      })
+        .then(appendItem('before'))
+        .then(inner as any)
+        .commit();
+    },
+    drive: async (workflow, runId) =>
+      (await workflow.createRun({ runId })).start({
+        inputData: { n: 0 },
+        initialState: { items: [PAD], outerOnly: 'o' },
+      }),
+  },
   'suspend and resume': {
     build: storageVersion => gateWorkflow(storageVersion),
     drive: async (workflow, runId) => {
@@ -931,6 +1070,386 @@ describe('storage v2 stores the same runs as v1', () => {
       expect(v2).toEqual(v1);
     });
   }
+});
+
+/** Records, per storage v2 write, whether it sent the full state, a patch or neither, and its JSON size. */
+function recordStateSends(storage: InstanceType<typeof MockStore>) {
+  const store = storage.stores.workflows!;
+  const sends: { workflowName: string; runId: string; checkpoint: boolean; state: string; bytes: number }[] = [];
+  const record = (
+    checkpoint: boolean,
+    args: { workflowName: string; runId: string; state?: unknown; statePatch?: unknown },
+  ) => {
+    const sent = args.state ?? args.statePatch;
+    sends.push({
+      workflowName: args.workflowName,
+      runId: args.runId,
+      checkpoint,
+      state: args.state !== undefined ? 'full' : args.statePatch !== undefined ? 'patch' : 'none',
+      bytes: sent === undefined ? 0 : JSON.stringify(sent).length,
+    });
+  };
+  const checkpoint = store.writeWorkflowRunCheckpoint.bind(store);
+  store.writeWorkflowRunCheckpoint = async args => (record(true, args), checkpoint(args));
+  const append = store.appendWorkflowRunEntries.bind(store);
+  store.appendWorkflowRunEntries = async args => (record(false, args), append(args));
+  return sends;
+}
+
+/** What each nested run's checkpoints sent as state, in write order. */
+function innerCheckpoints(sends: ReturnType<typeof recordStateSends>) {
+  const byRun = new Map<string, string[]>();
+  for (const { workflowName, runId, checkpoint, state } of sends) {
+    if (workflowName !== 'inner' || !checkpoint) continue;
+    byRun.set(runId, [...(byRun.get(runId) ?? []), state]);
+  }
+  return [...byRun.values()];
+}
+
+/** Every stored run's status and state. */
+async function storedStates(storage: InstanceType<typeof MockStore>, storageVersion: 1 | 2) {
+  const store = storage.stores.workflows!;
+  const db = (store as any).db;
+  const rows: { workflow_name: string; run_id: string }[] = [
+    ...db.workflows.values(),
+    ...db.workflowRunHeaders.values(),
+  ];
+  const states: Record<string, unknown> = {};
+  for (const { workflow_name, run_id } of rows) {
+    const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow_name, runId: run_id, storageVersion });
+    states[`${workflow_name}/${run_id}`] = { status: snapshot?.status, state: snapshot?.value };
+  }
+  return states;
+}
+
+describe('storage v2 nested runs', () => {
+  it("stores a nested run's state as changes to its parent's, so a loop over it stores bytes linear in the state", async () => {
+    async function nestedLoop(iterations: number) {
+      const storage = new MockStore();
+      const sends = recordStateSends(storage);
+      const append = createStep({
+        id: 'append',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        execute: async ({ inputData, state, setState }) => {
+          await setState({ items: [...state.items, String(inputData.n % 10).repeat(1024)] });
+          return { n: inputData.n + 1 };
+        },
+      });
+      const inner = createWorkflow({
+        id: 'inner',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        options: { storageVersion: 2 },
+      })
+        .then(append)
+        .commit();
+      const outer = createWorkflow({
+        id: 'outer',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        options: { storageVersion: 2 },
+      })
+        .dowhile(inner, async ({ inputData }) => inputData.n < iterations)
+        .commit();
+      new Mastra({ logger: false, storage, workflows: { outer } });
+
+      const run = await outer.createRun();
+      expect((await run.start({ inputData: { n: 0 }, initialState: { items: [] } })).status).toBe('success');
+      const store = storage.stores.workflows!;
+      const load = (workflowName: string) =>
+        store.loadWorkflowRun({ workflowName, runId: run.runId, successfulSteps: 'full' });
+      const [outerRun, innerRun] = await Promise.all([load('outer'), load('inner')]);
+      expect(outerRun!.state.items).toHaveLength(iterations);
+      expect(innerRun!.state).toEqual(outerRun!.state);
+      return {
+        innerCheckpoints: innerCheckpoints(sends),
+        sent: sends.reduce((sum, { bytes }) => sum + bytes, 0),
+        final: JSON.stringify(outerRun!.state).length,
+      };
+    }
+
+    for (const iterations of [4, 8, 16]) {
+      const { innerCheckpoints, sent, final } = await nestedLoop(iterations);
+      // Every iteration re-checkpoints the nested run, which reuses the parent's run id.
+      expect(innerCheckpoints).toEqual([Array(iterations + 1).fill('none')]);
+      // Copying the state into every iteration's checkpoint would send about iterations / 2 times the final state.
+      expect(sent).toBeLessThanOrEqual(2.5 * final);
+    }
+  });
+
+  describe.each(['restart', 'restartAllActiveWorkflowRuns'] as const)('a nested run that died mid-step', how => {
+    it(`rebuilds its state from the parent's stored state on ${how}, as v1 does`, async () => {
+      const build = (storageVersion: 1 | 2, died?: () => void) => {
+        const inner = createWorkflow({
+          id: 'inner',
+          inputSchema: num,
+          outputSchema: num,
+          stateSchema: items,
+          options: { storageVersion },
+        })
+          .then(appendItem('inner-a'))
+          .then(
+            appendItem('inner-b', {
+              onRun: died && (() => (died(), new Promise(() => {}))),
+            }),
+          )
+          .commit();
+        return createWorkflow({
+          id: 'outer',
+          inputSchema: num,
+          outputSchema: num,
+          stateSchema: items,
+          options: { storageVersion },
+        })
+          .then(appendItem('before'))
+          .then(inner)
+          .commit();
+      };
+
+      const dieAndRestart = async (storageVersion: 1 | 2) => {
+        const storage = new MockStore();
+        const store = storage.stores.workflows!;
+        const persist = store.persistWorkflowSnapshot.bind(store);
+        store.persistWorkflowSnapshot = args => persist({ ...args, snapshot: cloneRunData(args.snapshot) });
+
+        let died = false;
+        const first = build(storageVersion, () => (died = true));
+        new Mastra({ logger: false, storage, workflows: { outer: first } });
+        void (await first.createRun({ runId: 'run-1' })).start({ inputData: { n: 0 }, initialState: { items: [PAD] } });
+        await vi.waitFor(() => expect(died).toBe(true));
+
+        const second = build(storageVersion);
+        new Mastra({ logger: false, storage, workflows: { outer: second } });
+        if (how === 'restart') {
+          expect((await (await second.createRun({ runId: 'run-1' })).restart()).status).toBe('success');
+        } else {
+          await second.restartAllActiveWorkflowRuns();
+        }
+        return storedStates(storage, storageVersion);
+      };
+
+      const v1 = await dieAndRestart(1);
+      const state = { items: [PAD, 'before:0', 'inner-a:1', 'inner-b:2'] };
+      expect(v1).toEqual({
+        'outer/run-1': { status: 'success', state },
+        'inner/run-1': { status: 'success', state },
+      });
+      expect(await dieAndRestart(2)).toEqual(v1);
+    });
+  });
+
+  describe('copies the state into a nested run whose parent has not stored the state it starts from', () => {
+    const inner = () =>
+      createWorkflow({
+        id: 'inner',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        options: { storageVersion: 2 },
+      })
+        .then(appendItem('inner-add'))
+        .commit();
+    const cases = {
+      'the parent skipped its latest write': {
+        build: () =>
+          createWorkflow({
+            id: 'outer',
+            inputSchema: num,
+            outputSchema: num,
+            stateSchema: items,
+            options: {
+              storageVersion: 2,
+              shouldPersistSnapshot: ({ stepResults }) =>
+                stepResults.before?.status !== 'success' || stepResults.inner !== undefined,
+            },
+          })
+            .then(appendItem('before'))
+            .then(inner())
+            .commit(),
+        inputData: { n: 0 },
+        checkpoints: [['full', 'full']],
+        state: [PAD, 'before:0', 'inner-add:1'],
+      },
+      'a foreach iteration merged its state first': {
+        build: () =>
+          createWorkflow({
+            id: 'outer',
+            inputSchema: z.array(num),
+            outputSchema: z.array(num),
+            stateSchema: items,
+            options: { storageVersion: 2 },
+          })
+            .foreach(inner())
+            .commit(),
+        inputData: [{ n: 0 }, { n: 1 }],
+        checkpoints: [
+          ['none', 'none'],
+          ['full', 'full'],
+        ],
+        state: [PAD, 'inner-add:0', 'inner-add:1'],
+      },
+      'the parent is on storage v1': {
+        build: () =>
+          createWorkflow({
+            id: 'outer',
+            inputSchema: num,
+            outputSchema: num,
+            stateSchema: items,
+            options: { storageVersion: 1 },
+          })
+            .then(appendItem('before'))
+            .then(inner())
+            .commit(),
+        inputData: { n: 0 },
+        checkpoints: [['full', 'full']],
+        state: [PAD, 'before:0', 'inner-add:1'],
+      },
+    };
+
+    it.each(Object.entries(cases))('when %s', async (_, { build, inputData, checkpoints, state }) => {
+      const storage = new MockStore();
+      const sends = recordStateSends(storage);
+      const outer = build();
+      new Mastra({ logger: false, storage, workflows: { outer } });
+      const result = await (
+        await outer.createRun({ runId: 'run-1' })
+      ).start({
+        inputData: inputData as any,
+        initialState: { items: [PAD] },
+        outputOptions: { includeState: true },
+      });
+      expect(result.status).toBe('success');
+      expect(innerCheckpoints(sends)).toEqual(checkpoints);
+      expect(result.state).toEqual({ items: state });
+    });
+  });
+
+  describe('keeps the parent of a nested run stored while it runs a step', () => {
+    const cases = {
+      'in a parallel': { branch: false, resumes: false },
+      'in a branch': { branch: true, resumes: false },
+      'in a parallel, once resumed': { branch: false, resumes: true },
+      'in a branch, once resumed': { branch: true, resumes: true },
+    };
+
+    it.each(Object.entries(cases))('%s', async (_, { branch, resumes }) => {
+      const storedWhileRunning = async (storageVersion: 1 | 2) => {
+        const storage = new MockStore();
+        let stored: unknown;
+        const peek = createStep({
+          id: 'peek',
+          inputSchema: num,
+          outputSchema: num,
+          stateSchema: items,
+          resumeSchema: z.boolean(),
+          execute: async ({ inputData, resumeData, suspend }) => {
+            if (resumes && resumeData === undefined) return suspend({});
+            const run = await storage.stores.workflows!.loadWorkflowSnapshot({
+              workflowName: 'inner',
+              runId: 'run-1',
+              storageVersion,
+            });
+            stored = { parentWorkflow: run?.parentWorkflow, state: run?.value };
+            return inputData;
+          },
+        });
+        const inner = createWorkflow({
+          id: 'inner',
+          inputSchema: num,
+          outputSchema: z.any(),
+          stateSchema: items,
+          options: { storageVersion },
+        });
+        (branch ? inner.branch([[async () => true, peek]]) : inner.parallel([peek])).commit();
+        const outer = createWorkflow({
+          id: 'outer',
+          inputSchema: num,
+          outputSchema: z.any(),
+          stateSchema: items,
+          options: { storageVersion },
+        })
+          .then(appendItem('before'))
+          .then(inner)
+          .commit();
+        new Mastra({ logger: false, storage, workflows: { outer } });
+        const run = await outer.createRun({ runId: 'run-1' });
+        let result = await run.start({ inputData: { n: 0 }, initialState: { items: [PAD] } });
+        if (resumes) result = await run.resume({ step: ['inner', 'peek'], resumeData: true });
+        expect(result.status).toBe('success');
+        return stored;
+      };
+
+      const v1 = await storedWhileRunning(1);
+      expect(v1).toEqual({
+        parentWorkflow: expect.objectContaining({ workflowId: 'outer', runId: 'run-1', stepId: 'inner' }),
+        state: { items: [PAD, 'before:0'] },
+      });
+      expect(await storedWhileRunning(2)).toEqual(v1);
+    });
+  });
+
+  it('resumes a suspended nested run directly with the same state as v1', async () => {
+    const resumeDirectly = async (storageVersion: 1 | 2) => {
+      const storage = new MockStore();
+      const { outer, inner } = suspendingNested(storageVersion);
+      new Mastra({ logger: false, storage, workflows: { outer, inner } });
+      await (await outer.createRun({ runId: 'run-1' })).start({ inputData: { n: 0 }, initialState: { items: [PAD] } });
+      const resumed = await (
+        await inner.createRun({ runId: 'run-1' })
+      ).resume({
+        step: 'inner-wait',
+        resumeData: true,
+      });
+      return { status: resumed.status, stored: await storedStates(storage, storageVersion) };
+    };
+
+    const v1 = await resumeDirectly(1);
+    expect(v1.status).toBe('success');
+    expect(await resumeDirectly(2)).toEqual(v1);
+  });
+
+  it("reads a finished nested run as its parent's current state plus the nested run's changes", async () => {
+    const run = async (storageVersion: 1 | 2) => {
+      const storage = new MockStore();
+      const inner = createWorkflow({
+        id: 'inner',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        options: { storageVersion },
+      })
+        .then(appendItem('inner-add'))
+        .commit();
+      const outer = createWorkflow({
+        id: 'outer',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        options: { storageVersion },
+      })
+        .then(appendItem('before'))
+        .then(inner)
+        .then(appendItem('after'))
+        .commit();
+      new Mastra({ logger: false, storage, workflows: { outer } });
+      await (await outer.createRun({ runId: 'run-1' })).start({ inputData: { n: 0 }, initialState: { items: [PAD] } });
+      return storedStates(storage, storageVersion);
+    };
+
+    // v1 copies the state into the nested run; v2 stores the nested run's changes on top of the parent's state.
+    expect((await run(1))['inner/run-1']).toEqual({
+      status: 'success',
+      state: { items: [PAD, 'before:0', 'inner-add:1'] },
+    });
+    expect((await run(2))['inner/run-1']).toEqual({
+      status: 'success',
+      state: { items: [PAD, 'before:0', 'inner-add:1', 'after:2'] },
+    });
+  });
 });
 
 /** Records the step ids of each `loadWorkflowRunSteps` call. */
