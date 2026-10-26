@@ -37,10 +37,10 @@ Optionally run `npm run prepare:use-cases` in your terminal to generate sample P
 ## Customization
 
 Override the model with `POLICY_EXTRACTION_MODEL=gpt-6.1-sol` or the built-in budget with `POLICY_PROCESSING_BUDGET=./processing-budget-example.json` in `.env`.
-Adjust limits and token prices in [processing-budget-example.json](./processing-budget-example.json), then restart Studio; both overrides are optional.
+Adjust limits and token prices in [processing-budget-example.json](https://github.com/mastra-ai/mastra/blob/main/templates/template-insurance-policy-checking/processing-budget-example.json), then restart Studio; both overrides are optional.
 
 ## About Mastra templates
 
 This is an official Mastra template. Official templates live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are synchronized to standalone repositories.
 
-[Want to contribute?](./CONTRIBUTING.md)
+[Want to contribute?](https://github.com/mastra-ai/mastra/blob/main/templates/template-insurance-policy-checking/CONTRIBUTING.md)
