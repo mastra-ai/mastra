@@ -51,7 +51,6 @@ Configure Claude Agent SDK through `sdkOptions`.
 
 ```typescript title="src/mastra/agents/claude-sdk-agent.ts"
 import { ClaudeSDKAgent } from '@mastra/claude'
-import { Mastra } from '@mastra/core'
 
 export const claudeSDKAgent = new ClaudeSDKAgent({
   id: 'claude-sdk-agent',
@@ -74,7 +73,6 @@ Create a tool with the Claude Agent SDK's `tool()` helper, add it to a server, t
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { ClaudeSDKAgent } from '@mastra/claude'
 import { z } from 'zod'
-import { Mastra } from '@mastra/core'
 
 const getTemperature = tool(
   'get_temperature',
@@ -132,7 +130,6 @@ Configure Cursor Agent SDK through `sdkOptions`.
 
 ```typescript title="src/mastra/agents/cursor-sdk-agent.ts"
 import { CursorSDKAgent } from '@mastra/cursor'
-import { Mastra } from '@mastra/core'
 
 export const cursorSDKAgent = new CursorSDKAgent({
   id: 'cursor-sdk-agent',
@@ -159,7 +156,6 @@ If your app already creates a Cursor SDK agent, pass that agent to `CursorSDKAge
 ```typescript title="src/mastra/agents/cursor-sdk-agent.ts"
 import { Agent as CursorAgent } from '@cursor/sdk'
 import { CursorSDKAgent } from '@mastra/cursor'
-import { Mastra } from '@mastra/core'
 
 const cursorAgent = CursorAgent.create({
   apiKey: process.env.CURSOR_API_KEY,
@@ -186,7 +182,6 @@ Cursor Agent SDK tools are configured with Cursor SDK options. Pass Model Contex
 ```typescript title="src/mastra/agents/cursor-sdk-agent.ts"
 import { CursorSDKAgent } from '@mastra/cursor'
 import { mcpServers } from '../mcp/cursor'
-import { Mastra } from '@mastra/core'
 
 export const cursorSDKAgent = new CursorSDKAgent({
   id: 'cursor-sdk-agent',
@@ -229,7 +224,6 @@ Configure OpenAI Agents SDK through `sdkOptions`. `OpenAISDKAgent` creates the O
 
 ```typescript title="src/mastra/agents/openai-sdk-agent.ts"
 import { OpenAISDKAgent } from '@mastra/openai'
-import { Mastra } from '@mastra/core'
 
 export const openaiSDKAgent = new OpenAISDKAgent({
   id: 'openai-sdk-agent',
@@ -250,7 +244,6 @@ If your app already creates an OpenAI SDK agent, pass that agent to `OpenAISDKAg
 ```typescript title="src/mastra/agents/openai-sdk-agent.ts"
 import { Agent as OpenAIAgent } from '@openai/agents'
 import { OpenAISDKAgent } from '@mastra/openai'
-import { Mastra } from '@mastra/core'
 
 const sdkAgent = new OpenAIAgent({
   name: 'Repository assistant',
@@ -274,7 +267,6 @@ OpenAI Agents SDK tools are configured with OpenAI SDK options. Create tools wit
 import { tool } from '@openai/agents'
 import { OpenAISDKAgent } from '@mastra/openai'
 import { z } from 'zod'
-import { Mastra } from '@mastra/core'
 
 const getTemperature = tool({
   name: 'get_temperature',
