@@ -40,6 +40,17 @@ export interface LangSmithExporterConfig extends ClientConfig, TrackingExporterC
 const DEFAULT_RUN_ID_CACHE_MAX_ENTRIES = 10_000;
 /** Waits between LangSmith lookups for a trace another process exported (ingestion takes ~5-8 s). */
 const SCORE_LOOKUP_RETRY_DELAYS_MS = [2_000, 3_000, 5_000];
+/** Mastra trace ids are hex (`isValidTraceId` in @mastra/observability); anything else cannot match a run. */
+const HEX_TRACE_ID = /^[0-9a-f]{1,32}$/i;
+
+/** The first root run of a Mastra trace and the LangSmith project it lives in. */
+interface RootRun {
+  runId: string;
+  /** Project the root was posted to by this process; resolved to an id only when a score needs it. */
+  projectName?: string;
+  /** Project id read back from LangSmith when the root was found there. */
+  sessionId?: string;
+}
 
 /** UUID v5 namespace for Mastra → LangSmith run ids. Changing it orphans existing runs from future scores. */
 const RUN_ID_NAMESPACE = Buffer.from('a6f3c3f06b0e4a1e9f4c7e1b2d3c4f5a', 'hex');
@@ -96,19 +107,21 @@ export class LangSmithExporter extends TrackingExporter<
   #client: Client | undefined;
 
   /**
-   * Maps a Mastra trace id to the run id of the first root span this process exported
-   * for it. Only a fast path for trace-level scores: a miss falls back to asking
-   * LangSmith for the root run tagged with that `mastra_trace_id`.
+   * Maps a Mastra trace id to the first root run this process exported for it, and the
+   * project it went to. A fast path for scores: a trace-level score on a miss falls back
+   * to asking LangSmith for the root run tagged with that `mastra_trace_id`.
    *
    * Bounded LRU keyed by Mastra trace id — entries are evicted oldest-first when
    * size exceeds `#runIdCacheMaxEntries` so the cache cannot grow without bound.
    */
-  #rootRunIdByTraceId = new Map<string, string>();
+  #rootRunByTraceId = new Map<string, RootRun>();
   /** Manual-mode client flushes, chained so an overlapping flush waits for the earlier upload */
   #manualFlushChain: Promise<void> = Promise.resolve();
   #runIdCacheMaxEntries: number;
-  /** Configured LangSmith project (session) id: `createFeedback` requires it and run queries are scoped to it. */
-  #feedbackSessionId?: Promise<string | undefined>;
+  /** Project runs go to unless `withLangsmithMetadata({ projectName })` says otherwise. */
+  #defaultProjectName: string;
+  /** LangSmith project (session) ids by name: `createFeedback` requires one and run queries are scoped to one. */
+  #projectIdByName = new Map<string, Promise<string | undefined>>();
 
   constructor(config: LangSmithExporterConfig = {}) {
     // Resolve env vars BEFORE calling super (config is readonly in base class)
@@ -120,6 +133,8 @@ export class LangSmithExporter extends TrackingExporter<
     });
 
     this.#runIdCacheMaxEntries = Math.max(1, config.runIdCacheMaxEntries ?? DEFAULT_RUN_ID_CACHE_MAX_ENTRIES);
+    this.#defaultProjectName =
+      config.projectName ?? process.env.LANGSMITH_PROJECT ?? process.env.LANGCHAIN_PROJECT ?? 'default';
 
     if (!apiKey) {
       this.setDisabled(`Missing required credentials (apiKey: ${!!apiKey})`);
@@ -129,24 +144,24 @@ export class LangSmithExporter extends TrackingExporter<
     this.#client = config.client ?? new Client(this.config);
   }
 
-  /** Look up the root run id for a Mastra trace id, refreshing its LRU position on hit. */
-  #getRootRunId(traceId: string): string | undefined {
-    const runId = this.#rootRunIdByTraceId.get(traceId);
-    if (runId === undefined) return undefined;
+  /** Look up the root run for a Mastra trace id, refreshing its LRU position on hit. */
+  #getRootRun(traceId: string): RootRun | undefined {
+    const root = this.#rootRunByTraceId.get(traceId);
+    if (root === undefined) return undefined;
     // Re-insert to mark as most-recently-used (Map preserves insertion order).
-    this.#rootRunIdByTraceId.delete(traceId);
-    this.#rootRunIdByTraceId.set(traceId, runId);
-    return runId;
+    this.#rootRunByTraceId.delete(traceId);
+    this.#rootRunByTraceId.set(traceId, root);
+    return root;
   }
 
   /** Remember the first root run of a Mastra trace, evicting oldest entries when full. */
-  #rememberRootRunId(traceId: string, runId: string): void {
-    if (this.#rootRunIdByTraceId.has(traceId)) return;
-    this.#rootRunIdByTraceId.set(traceId, runId);
-    while (this.#rootRunIdByTraceId.size > this.#runIdCacheMaxEntries) {
-      const oldest = this.#rootRunIdByTraceId.keys().next().value;
+  #rememberRootRun(traceId: string, root: RootRun): void {
+    if (this.#rootRunByTraceId.has(traceId)) return;
+    this.#rootRunByTraceId.set(traceId, root);
+    while (this.#rootRunByTraceId.size > this.#runIdCacheMaxEntries) {
+      const oldest = this.#rootRunByTraceId.keys().next().value;
       if (oldest === undefined) break;
-      this.#rootRunIdByTraceId.delete(oldest);
+      this.#rootRunByTraceId.delete(oldest);
     }
   }
 
@@ -187,7 +202,7 @@ export class LangSmithExporter extends TrackingExporter<
     try {
       await this.#flushClient();
     } finally {
-      this.#rootRunIdByTraceId.clear();
+      this.#rootRunByTraceId.clear();
     }
   }
 
@@ -195,11 +210,15 @@ export class LangSmithExporter extends TrackingExporter<
     if (!this.#client) return;
 
     const { score } = event;
-    const langsmithRunId = score.spanId
-      ? langsmithRunIdFor(score.spanId)
+    // A span-level score only needs the trace's root to know which project the run is in.
+    const root = score.spanId
+      ? score.traceId
+        ? this.#getRootRun(score.traceId)
+        : undefined
       : score.traceId
-        ? await this.#resolveRootRunId(score.traceId)
+        ? await this.#resolveRootRun(score.traceId)
         : undefined;
+    const langsmithRunId = score.spanId ? langsmithRunIdFor(score.spanId) : root?.runId;
     if (!langsmithRunId) {
       this.logger.warn(
         'LangSmith exporter: dropping score; no LangSmith run found for the target ' +
@@ -214,7 +233,7 @@ export class LangSmithExporter extends TrackingExporter<
     }
 
     const key = score.scorerName ?? score.scorerId;
-    const sessionId = await this.#getFeedbackSessionId();
+    const sessionId = root?.sessionId ?? (await this.#getProjectId(root?.projectName ?? this.#defaultProjectName));
 
     try {
       await this.#client.createFeedback(langsmithRunId, key, {
@@ -244,19 +263,20 @@ export class LangSmithExporter extends TrackingExporter<
 
   /**
    * A trace-level score goes to the trace's first root run. This process remembers the
-   * roots it exported; otherwise LangSmith is asked for root runs tagged with the Mastra
-   * trace id, and the earliest one wins.
+   * roots it exported; otherwise LangSmith is asked for the earliest root run tagged with
+   * the Mastra trace id.
    */
-  async #resolveRootRunId(traceId: string): Promise<string | undefined> {
-    const known = this.#getRootRunId(traceId);
+  async #resolveRootRun(traceId: string): Promise<RootRun | undefined> {
+    const known = this.#getRootRun(traceId);
     if (known) return known;
+    if (!HEX_TRACE_ID.test(traceId)) return undefined;
 
     // LangSmith makes posted runs queryable a few seconds later, so a score that
     // arrives right after another process exported the trace has to wait for it.
     for (let attempt = 0; ; attempt++) {
       const found = await this.#findRootRun(traceId);
       if (found) {
-        this.#rememberRootRunId(traceId, found);
+        this.#rememberRootRun(traceId, found);
         return found;
       }
       const delay = SCORE_LOOKUP_RETRY_DELAYS_MS[attempt];
@@ -265,48 +285,44 @@ export class LangSmithExporter extends TrackingExporter<
     }
   }
 
-  async #findRootRun(traceId: string): Promise<string | undefined> {
+  async #findRootRun(traceId: string): Promise<RootRun | undefined> {
     // LangSmith only queries runs inside a project, so traces routed to another
     // project with `withLangsmithMetadata({ projectName })` are found by this process only.
-    const projectId = await this.#getFeedbackSessionId();
+    const projectId = await this.#getProjectId(this.#defaultProjectName);
     if (!projectId) return undefined;
 
-    let earliest: { id: string; start_time: number } | undefined;
     try {
       const runs = this.#client!.listRuns({
         projectId,
         isRoot: true,
         filter: `has(metadata, '${JSON.stringify({ mastra_trace_id: traceId })}')`,
-        select: ['id', 'start_time'],
-        limit: 10,
+        select: ['id', 'session_id'],
+        order: 'asc',
+        limit: 1,
       });
       for await (const run of runs) {
-        const startTime = new Date(run.start_time ?? 0).getTime();
-        if (!earliest || startTime < earliest.start_time) earliest = { id: run.id, start_time: startTime };
+        return { runId: run.id, sessionId: run.session_id };
       }
     } catch (err) {
       this.logger.debug('LangSmith exporter: root run lookup failed', { traceId, error: err });
     }
-    return earliest?.id;
+    return undefined;
   }
 
-  #getFeedbackSessionId(): Promise<string | undefined> {
-    if (!this.#feedbackSessionId) {
-      const projectName =
-        this.config.projectName ?? process.env.LANGSMITH_PROJECT ?? process.env.LANGCHAIN_PROJECT ?? 'default';
-      this.#feedbackSessionId = Promise.resolve()
+  #getProjectId(projectName: string): Promise<string | undefined> {
+    let projectId = this.#projectIdByName.get(projectName);
+    if (!projectId) {
+      projectId = Promise.resolve()
         .then(() => this.#client!.readProject({ projectName }))
         .then(project => project.id)
         .catch(err => {
-          this.logger.debug('LangSmith exporter: could not resolve the project id for feedback', {
-            projectName,
-            error: err,
-          });
-          this.#feedbackSessionId = undefined;
+          this.logger.debug('LangSmith exporter: could not resolve the project id', { projectName, error: err });
+          this.#projectIdByName.delete(projectName);
           return undefined;
         });
+      this.#projectIdByName.set(projectName, projectId);
     }
-    return this.#feedbackSessionId;
+    return projectId;
   }
 
   protected override skipBuildRootTask = true;
@@ -338,7 +354,9 @@ export class LangSmithExporter extends TrackingExporter<
     };
 
     const langSmithSpan = span.isRootSpan ? new RunTree(payload) : parent!.createChild(payload);
-    if (span.isRootSpan) this.#rememberRootRunId(span.traceId, runId);
+    if (span.isRootSpan) {
+      this.#rememberRootRun(span.traceId, { runId, projectName: payload.project_name ?? this.#defaultProjectName });
+    }
 
     await langSmithSpan.postRun();
     return langSmithSpan;
