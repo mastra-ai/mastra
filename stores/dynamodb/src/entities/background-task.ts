@@ -123,6 +123,16 @@ export const backgroundTaskEntity = new Entity({
       type: 'string',
       required: false,
     },
+    // Owner-defined retention deadline — see BackgroundTask.expiresAt
+    expiresAtIso: {
+      type: 'string',
+      required: false,
+    },
+    metadata: {
+      type: 'string',
+      required: false,
+      ...jsonSetGet,
+    },
   },
   indexes: {
     primary: {

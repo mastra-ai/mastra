@@ -65,6 +65,8 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
         ? row.leaseExpiresAt
         : new Date(row.leaseExpiresAt)
       : undefined,
+    expiresAt: row.expiresAt ? (row.expiresAt instanceof Date ? row.expiresAt : new Date(row.expiresAt)) : undefined,
+    metadata: parseJson(row.metadata),
   };
 }
 
@@ -104,7 +106,7 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
     await this.db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt', 'expiresAt', 'metadata'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -191,6 +193,8 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
         completedAt: task.completedAt?.toISOString() ?? null,
         ownerId: task.ownerId ?? null,
         leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
+        expiresAt: task.expiresAt?.toISOString() ?? null,
+        metadata: serializeJson(task.metadata),
       },
     });
   }
@@ -243,6 +247,14 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
     if ('leaseExpiresAt' in update) {
       setClauses.push(`[leaseExpiresAt] = @p${idx}`);
       params[`p${idx++}`] = update.leaseExpiresAt?.toISOString() ?? null;
+    }
+    if ('expiresAt' in update) {
+      setClauses.push(`[expiresAt] = @p${idx}`);
+      params[`p${idx++}`] = update.expiresAt?.toISOString() ?? null;
+    }
+    if ('metadata' in update) {
+      setClauses.push(`[metadata] = @p${idx}`);
+      params[`p${idx++}`] = serializeJson(update.metadata);
     }
 
     if (setClauses.length === 0) return false;
@@ -339,7 +351,12 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
           ? '[suspendedAt]'
           : filter.dateFilterBy === 'completedAt'
             ? '[completedAt]'
-            : '[createdAt]';
+            : filter.dateFilterBy === 'expiresAt'
+              ? '[expiresAt]'
+              : '[createdAt]';
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(filter.hasExpiresAt ? '[expiresAt] IS NOT NULL' : '[expiresAt] IS NULL');
+    }
     if (filter.fromDate) {
       params[`p${idx}`] = filter.fromDate.toISOString();
       conditions.push(`${dateCol} >= @p${idx++}`);
@@ -418,7 +435,12 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
           ? '[suspendedAt]'
           : filter.dateFilterBy === 'completedAt'
             ? '[completedAt]'
-            : '[createdAt]';
+            : filter.dateFilterBy === 'expiresAt'
+              ? '[expiresAt]'
+              : '[createdAt]';
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(filter.hasExpiresAt ? '[expiresAt] IS NOT NULL' : '[expiresAt] IS NULL');
+    }
     if (filter.fromDate) {
       params[`p${idx}`] = filter.fromDate.toISOString();
       conditions.push(`${dateCol} >= @p${idx++}`);

@@ -1,6 +1,7 @@
 import type {
   BackgroundTask,
   BackgroundTaskStatus,
+  TaskDateColumn,
   TaskFilter,
   TaskListResult,
   UpdateBackgroundTask,
@@ -60,10 +61,12 @@ function rowToTask(row: Record<string, unknown>): BackgroundTask {
     completedAt: asDate(row.completedAt),
     ownerId: row.ownerId != null ? String(row.ownerId) : undefined,
     leaseExpiresAt: asDate(row.leaseExpiresAt),
+    expiresAt: asDate(row.expiresAt),
+    metadata: parseJson(row.metadata),
   };
 }
 
-function dateColumnName(col: 'createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt'): string {
+function dateColumnName(col: TaskDateColumn): string {
   return col;
 }
 
@@ -83,7 +86,7 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
     await this.#db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt', 'expiresAt', 'metadata'],
     });
   }
 
@@ -117,6 +120,8 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
           completedAt: task.completedAt?.toISOString() ?? null,
           ownerId: task.ownerId ?? null,
           leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
+          expiresAt: task.expiresAt?.toISOString() ?? null,
+          metadata: serializeJson(task.metadata) ?? null,
         },
       });
     } catch (error) {
@@ -178,6 +183,14 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
     if ('leaseExpiresAt' in update) {
       columns.push('leaseExpiresAt');
       values.push(update.leaseExpiresAt?.toISOString() ?? null);
+    }
+    if ('expiresAt' in update) {
+      columns.push('expiresAt');
+      values.push(update.expiresAt?.toISOString() ?? null);
+    }
+    if ('metadata' in update) {
+      columns.push('metadata');
+      values.push(serializeJson(update.metadata) ?? null);
     }
 
     if (columns.length === 0) return false;
@@ -254,6 +267,9 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
         if (filter.toolCallId) builder.whereAnd('tool_call_id = ?', filter.toolCallId);
         if (filter.runId) builder.whereAnd('run_id = ?', filter.runId);
 
+        if (filter.hasExpiresAt !== undefined) {
+          builder.whereAnd(filter.hasExpiresAt ? 'expiresAt IS NOT NULL' : 'expiresAt IS NULL');
+        }
         const dateCol = dateColumnName(filter.dateFilterBy ?? 'createdAt');
         if (filter.fromDate) builder.whereAnd(`${dateCol} >= ?`, filter.fromDate.toISOString());
         if (filter.toDate) builder.whereAnd(`${dateCol} < ?`, filter.toDate.toISOString());
@@ -342,6 +358,9 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
       if (filter.toolCallId) query.whereAnd('tool_call_id = ?', filter.toolCallId);
       if (filter.runId) query.whereAnd('run_id = ?', filter.runId);
 
+      if (filter.hasExpiresAt !== undefined) {
+        query.whereAnd(filter.hasExpiresAt ? 'expiresAt IS NOT NULL' : 'expiresAt IS NULL');
+      }
       const dateCol = dateColumnName(filter.dateFilterBy ?? 'createdAt');
       if (filter.fromDate) query.whereAnd(`${dateCol} >= ?`, filter.fromDate.toISOString());
       if (filter.toDate) query.whereAnd(`${dateCol} < ?`, filter.toDate.toISOString());

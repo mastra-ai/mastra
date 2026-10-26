@@ -1,10 +1,10 @@
 ---
-title: "Reference: Mastra class | Core"
-description: "The Mastra class is the central orchestrator in any Mastra application, managing agents, workflows, storage, logging, observability, and more."
+title: 'Reference: Mastra class | Core'
+description: 'The Mastra class is the central orchestrator in any Mastra application, managing agents, workflows, storage, logging, observability, and more.'
 packages:
-  - "@mastra/core"
-  - "@mastra/libsql"
-  - "@mastra/loggers"
+  - '@mastra/core'
+  - '@mastra/libsql'
+  - '@mastra/loggers'
 ---
 
 # Mastra class
@@ -333,6 +333,13 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: '5',
             description: 'Max concurrent tasks per agent.',
+          },
+          {
+            name: 'perOwnerConcurrency',
+            type: 'Record<string, number>',
+            isOptional: true,
+            description:
+              'Per-owner overrides of `perAgentConcurrency`, keyed by `agentId`. Overridden owners still count toward `globalConcurrency`.',
           },
           {
             name: 'backpressure',

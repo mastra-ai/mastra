@@ -6,6 +6,7 @@ import type {
   BackgroundTaskManagerConfig,
   BackgroundTaskStatus,
   EnqueueResult,
+  ResumeOptions,
   TaskContext,
   TaskFilter,
   TaskPayload,
@@ -79,6 +80,9 @@ export class BackgroundTaskManager {
   // recoverable once its owner stops renewing the lease.
   private localReservations = new Map<string, string>();
   private localPendingTaskIds = new Set<string>();
+  // Resumes requested with `onNoSlot: 'queue'` while no slot was free, keyed by
+  // task ID. The rows stay `suspended`; `drainPending()` publishes them first.
+  private localPendingResumes = new Map<string, { resumeData: unknown }>();
   private drainingPending = false;
 
   // Task IDs this manager currently holds an execution lease for. Populated on
@@ -384,6 +388,8 @@ export class BackgroundTaskManager {
       maxRetries: payload.maxRetries ?? this.config.defaultRetries?.maxRetries ?? 0,
       timeoutMs: payload.timeoutMs ?? this.config.defaultTimeoutMs,
       createdAt: new Date(),
+      ...(payload.expiresAt ? { expiresAt: payload.expiresAt } : {}),
+      ...(payload.metadata ? { metadata: payload.metadata } : {}),
     };
 
     // Register per-task context if provided
@@ -476,6 +482,7 @@ export class BackgroundTaskManager {
         continue;
       }
       this.ownedLeases.delete(taskId);
+      this.localPendingResumes.delete(taskId);
 
       if (previousStatus === 'pending') {
         this.localPendingTaskIds.delete(taskId);
@@ -540,7 +547,7 @@ export class BackgroundTaskManager {
    * `resumeData` is forwarded to the tool's `execute` options on the
    * resumed run.
    */
-  async resume(taskId: string, resumeData?: unknown): Promise<BackgroundTask> {
+  async resume(taskId: string, resumeData?: unknown, options?: ResumeOptions): Promise<BackgroundTask> {
     if (this.shuttingDown) {
       throw new Error('BackgroundTaskManager is shutting down, cannot resume tasks');
     }
@@ -562,13 +569,26 @@ export class BackgroundTaskManager {
     const isProcessAffine = this.taskContexts.has(taskId);
     const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
     if (!canRun) {
-      // Resume sits outside the queue/fallback-sync paths — there's no
-      // synchronous caller to fall back to, and silently leaving the task
+      if (options?.onNoSlot === 'queue') {
+        // The row stays `suspended` until a slot frees and `drainPending()`
+        // publishes the resume. Only this process holds the queued resume, so
+        // if it exits first the task is still a resumable suspended row.
+        this.localPendingResumes.set(taskId, { resumeData });
+        return task;
+      }
+      // By default resume sits outside the queue/fallback-sync paths — there's
+      // no synchronous caller to fall back to, and silently leaving the task
       // suspended hides the failure from the caller. Throw and let the
       // caller retry once a slot frees.
       throw new Error(`Concurrency limit reached, cannot resume task "${taskId}" — retry once a slot is available`);
     }
 
+    this.localPendingResumes.delete(taskId);
+    await this.#publishResume(taskId, resumeData, isProcessAffine);
+    return task;
+  }
+
+  async #publishResume(taskId: string, resumeData: unknown, isProcessAffine: boolean): Promise<void> {
     // Resume publishes directly (not via dispatch()), so it needs its own
     // lazy worker start for the library-mode process-restart case.
     await this.#ensureExecutionWorkersStarted();
@@ -586,8 +606,6 @@ export class BackgroundTaskManager {
       if (isProcessAffine) this.releaseLocalSlot(taskId);
       throw error;
     }
-
-    return task;
   }
 
   /**
@@ -659,14 +677,25 @@ export class BackgroundTaskManager {
     const now = Date.now();
 
     const storage = await this.getStorage();
+    // Rows with their own `expiresAt` are retained until that deadline instead
+    // of the global TTLs. Only terminal rows are deleted, so a live row is never
+    // removed from under its lease owner.
+    await storage.deleteTasks({
+      status: ['completed', 'failed', 'cancelled', 'timed_out'],
+      toDate: new Date(now),
+      dateFilterBy: 'expiresAt',
+    });
+
     await storage.deleteTasks({
       status: ['completed'],
+      hasExpiresAt: false,
       toDate: new Date(now - completedTtlMs),
       dateFilterBy: 'completedAt',
     });
 
     await storage.deleteTasks({
       status: ['failed', 'cancelled', 'timed_out'],
+      hasExpiresAt: false,
       toDate: new Date(now - failedTtlMs),
       dateFilterBy: 'completedAt',
     });
@@ -1035,6 +1064,7 @@ export class BackgroundTaskManager {
     this.taskContexts.clear();
     this.localReservations.clear();
     this.localPendingTaskIds.clear();
+    this.localPendingResumes.clear();
     this.staticExecutors.clear();
 
     // Stop renewing leases and hand back the ones still held so another worker
@@ -1835,6 +1865,9 @@ export class BackgroundTaskManager {
     const intervalMs = Math.max(1_000, Math.floor(this.config.leaseDurationMs / 3));
     this.heartbeatInterval = setInterval(() => {
       void this.#renewOwnedLeases();
+      // Storage-wide admission can be freed by another process, which never
+      // triggers a local drain. Retry queued resumes on each tick.
+      if (this.localPendingResumes.size > 0) void this.drainPending();
     }, intervalMs);
     // Never keep the process alive just to renew leases.
     this.heartbeatInterval.unref?.();
@@ -1848,10 +1881,14 @@ export class BackgroundTaskManager {
     for (const agentId of this.localReservations.values()) {
       if (agentId === task.agentId) agentRunning++;
     }
-    if (agentRunning >= this.config.perAgentConcurrency) return false;
+    if (agentRunning >= this.#ownerLimit(task.agentId)) return false;
 
     this.localReservations.set(task.id, task.agentId);
     return true;
+  }
+
+  #ownerLimit(agentId: string): number {
+    return this.config.perOwnerConcurrency?.[agentId] ?? this.config.perAgentConcurrency;
   }
 
   private releaseLocalSlot(taskId: string): void {
@@ -1866,7 +1903,7 @@ export class BackgroundTaskManager {
     }
 
     const agentRunning = await storage.getRunningCountByAgent(agentId);
-    if (agentRunning >= this.config.perAgentConcurrency) {
+    if (agentRunning >= this.#ownerLimit(agentId)) {
       return false;
     }
 
@@ -1879,6 +1916,28 @@ export class BackgroundTaskManager {
 
     try {
       const storage = await this.getStorage();
+      // Queued resumes go first: they continue work that already started.
+      for (const [taskId, { resumeData }] of [...this.localPendingResumes]) {
+        const task = await storage.getTask(taskId);
+        if (!task || task.status !== 'suspended') {
+          this.localPendingResumes.delete(taskId);
+          continue;
+        }
+
+        const isProcessAffine = this.taskContexts.has(taskId);
+        const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
+        if (!canRun) continue;
+
+        this.localPendingResumes.delete(taskId);
+        try {
+          await this.#publishResume(taskId, resumeData, isProcessAffine);
+        } catch (error) {
+          this.localPendingResumes.set(taskId, { resumeData });
+          this.#mastra?.getLogger?.()?.warn(`background-task resume failed while draining ${taskId}:`, error as any);
+          return;
+        }
+      }
+
       for (const taskId of [...this.localPendingTaskIds]) {
         const task = await storage.getTask(taskId);
         if (!task || task.status !== 'pending') {

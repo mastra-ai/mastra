@@ -31,6 +31,8 @@ type StoredTask = {
   completedAt: string | null;
   ownerId?: string | null;
   leaseExpiresAt?: string | null;
+  expiresAt?: string | null;
+  metadata?: string | null;
 };
 
 type StoredTaskPatch = Partial<Omit<StoredTask, 'id' | 'createdAt'>>;
@@ -67,6 +69,8 @@ function toStored(task: BackgroundTask): StoredTask {
     completedAt: task.completedAt?.toISOString() ?? null,
     ownerId: task.ownerId ?? null,
     leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
+    expiresAt: task.expiresAt?.toISOString() ?? null,
+    metadata: serializeJson(task.metadata),
   };
 }
 
@@ -84,6 +88,8 @@ function toStoredPatch(update: UpdateBackgroundTask): StoredTaskPatch {
   if ('completedAt' in update) patch.completedAt = update.completedAt?.toISOString() ?? null;
   if ('ownerId' in update) patch.ownerId = update.ownerId ?? null;
   if ('leaseExpiresAt' in update) patch.leaseExpiresAt = update.leaseExpiresAt?.toISOString() ?? null;
+  if ('expiresAt' in update) patch.expiresAt = update.expiresAt?.toISOString() ?? null;
+  if ('metadata' in update) patch.metadata = serializeJson(update.metadata);
   return patch;
 }
 
@@ -123,6 +129,8 @@ function fromStored(stored: StoredTask | Record<string, any>): BackgroundTask {
     completedAt: record.completedAt ? new Date(record.completedAt) : undefined,
     ownerId: record.ownerId ?? undefined,
     leaseExpiresAt: record.leaseExpiresAt ? new Date(record.leaseExpiresAt) : undefined,
+    expiresAt: record.expiresAt ? new Date(record.expiresAt) : undefined,
+    metadata: parseJson(record.metadata),
   };
 }
 
@@ -135,6 +143,7 @@ function hasDeleteFilter(filter: TaskFilter): boolean {
     filter.toolName ||
     filter.toolCallId ||
     filter.runId ||
+    filter.hasExpiresAt !== undefined ||
     filter.fromDate ||
     filter.toDate,
   );
@@ -218,6 +227,9 @@ export class BackgroundTasksConvex extends BackgroundTasksStorage {
     if (filter.toolName) tasks = tasks.filter(t => t.toolName === filter.toolName);
     if (filter.toolCallId) tasks = tasks.filter(t => t.toolCallId === filter.toolCallId);
     if (filter.runId) tasks = tasks.filter(t => t.runId === filter.runId);
+    if (filter.hasExpiresAt !== undefined) {
+      tasks = tasks.filter(t => (t.expiresAt != null) === filter.hasExpiresAt);
+    }
     // Date range filtering
     const dateCol = filter.dateFilterBy ?? 'createdAt';
     if (filter.fromDate) {

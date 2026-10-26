@@ -74,6 +74,9 @@ export class BackgroundTasksInMemory extends BackgroundTasksStorage {
     if (filter.runId) {
       tasks = tasks.filter(t => t.runId === filter.runId);
     }
+    if (filter.hasExpiresAt !== undefined) {
+      tasks = tasks.filter(t => (t.expiresAt != null) === filter.hasExpiresAt);
+    }
 
     // Date range filtering
     const dateCol = filter.dateFilterBy ?? 'createdAt';

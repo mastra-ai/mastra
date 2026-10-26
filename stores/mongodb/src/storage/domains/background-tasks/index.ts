@@ -36,6 +36,8 @@ function toDoc(task: BackgroundTask): Record<string, any> {
     completedAt: task.completedAt?.toISOString() ?? null,
     ownerId: task.ownerId ?? null,
     leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
+    expiresAt: task.expiresAt?.toISOString() ?? null,
+    metadata: task.metadata ?? null,
   };
 }
 
@@ -62,6 +64,8 @@ function fromDoc(doc: Record<string, any>): BackgroundTask {
     completedAt: doc.completedAt ? new Date(doc.completedAt) : undefined,
     ownerId: doc.ownerId ?? undefined,
     leaseExpiresAt: doc.leaseExpiresAt ? new Date(doc.leaseExpiresAt) : undefined,
+    expiresAt: doc.expiresAt ? new Date(doc.expiresAt) : undefined,
+    metadata: doc.metadata ?? undefined,
   };
 }
 
@@ -175,6 +179,8 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     if ('completedAt' in update) $set.completedAt = update.completedAt?.toISOString() ?? null;
     if ('ownerId' in update) $set.ownerId = update.ownerId ?? null;
     if ('leaseExpiresAt' in update) $set.leaseExpiresAt = update.leaseExpiresAt?.toISOString() ?? null;
+    if ('expiresAt' in update) $set.expiresAt = update.expiresAt?.toISOString() ?? null;
+    if ('metadata' in update) $set.metadata = update.metadata ?? null;
 
     if (Object.keys($set).length === 0) return false;
 
@@ -217,7 +223,13 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
           ? 'suspendedAt'
           : filter.dateFilterBy === 'completedAt'
             ? 'completedAt'
-            : 'createdAt';
+            : filter.dateFilterBy === 'expiresAt'
+              ? 'expiresAt'
+              : 'createdAt';
+    if (filter.hasExpiresAt !== undefined) {
+      // `null` also matches documents written before the field existed.
+      query.expiresAt = filter.hasExpiresAt ? { $ne: null } : { $eq: null };
+    }
     if (filter.fromDate) {
       query[dateCol] = { ...(query[dateCol] || {}), $gte: filter.fromDate.toISOString() };
     }
@@ -271,7 +283,13 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
           ? 'suspendedAt'
           : filter.dateFilterBy === 'completedAt'
             ? 'completedAt'
-            : 'createdAt';
+            : filter.dateFilterBy === 'expiresAt'
+              ? 'expiresAt'
+              : 'createdAt';
+    if (filter.hasExpiresAt !== undefined) {
+      // `null` also matches documents written before the field existed.
+      query.expiresAt = filter.hasExpiresAt ? { $ne: null } : { $eq: null };
+    }
     if (filter.fromDate) {
       query[dateCol] = { ...(query[dateCol] || {}), $gte: filter.fromDate.toISOString() };
     }
