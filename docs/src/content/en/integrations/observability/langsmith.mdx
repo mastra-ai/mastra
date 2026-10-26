@@ -182,7 +182,7 @@ All fields are optional. The helper merges with any existing metadata, so you ca
 
 ## Conversation threads
 
-LangSmith groups runs into a [Thread](https://docs.langchain.com/langsmith/threads) using the `session_id` metadata key. The exporter sets it on every run of a trace from the first value it finds: an explicit `withLangsmithMetadata({ sessionId })`, then `sessionId` in span metadata, then the Mastra memory `threadId`. Child runs inherit the session from their parent run.
+LangSmith groups runs into a [Thread](https://docs.langchain.com/langsmith/threads) using the `session_id` metadata key. The exporter sets it on every run of a trace. The root run takes the first value it finds: an explicit `withLangsmithMetadata({ sessionId })`, then `sessionId` in span metadata, then the Mastra memory `threadId`. Child runs take the session of their parent run, so a delegated sub-agent stays in the conversation's Thread even though it runs on its own derived thread.
 
 Agents with memory set `threadId` on each run, so turns on the same memory thread appear as one Thread in LangSmith without extra configuration:
 

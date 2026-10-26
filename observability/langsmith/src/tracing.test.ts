@@ -1642,6 +1642,33 @@ describe('TestLangSmithExporter', () => {
       );
     });
 
+    it('keeps a delegated sub-agent, which runs on a derived thread, in the conversation Thread', async () => {
+      // Sub-agents get `${threadId}-${uuid}` as their own thread; the chain must still
+      // carry the root session. Real RunTrees keep the metadata they were built with.
+      const keepMetadata = function (cfg: any) {
+        return { ...mockRunTree, metadata: cfg.metadata };
+      };
+      MockRunTreeClass.mockImplementation(keepMetadata);
+      mockRunTree.createChild.mockImplementation(keepMetadata);
+
+      const child = (id: string, parentSpanId: string, type: SpanType, metadata?: Record<string, any>) => ({
+        ...createMockSpan({ id, name: id, type, isRoot: false, attributes: {}, metadata, traceId: 'supervisor' }),
+        parentSpanId,
+      });
+      const chain = [
+        agentRun('supervisor', { runId: 'r1', threadId: 'thread-123' }),
+        child('delegate', 'supervisor', SpanType.TOOL_CALL),
+        child('sub-agent', 'delegate', SpanType.AGENT_RUN, { runId: 'r2', threadId: 'thread-123-6f1c' }),
+        child('sub-llm', 'sub-agent', SpanType.MODEL_GENERATION),
+      ];
+      for (const exportedSpan of chain) {
+        await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan });
+      }
+
+      const sessions = mockRunTree.createChild.mock.calls.map(([cfg]: any[]) => cfg.metadata.session_id);
+      expect(sessions).toEqual(['thread-123', 'thread-123', 'thread-123']);
+    });
+
     it('lets an explicit withLangsmithMetadata sessionId win over the memory thread', async () => {
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
