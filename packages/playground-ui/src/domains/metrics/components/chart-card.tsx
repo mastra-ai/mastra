@@ -3,6 +3,9 @@ import type { ElementType, ReactNode } from 'react';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsCardTitleMenuProps } from '@/ds/components/MetricsCard';
 import type { LinkComponentProps } from '@/lib/framework';
+
+/** What `LinkComponent` gets: anchor props, with `href` always set. */
+type ChartCardLinkProps = LinkComponentProps & { href: string };
 import { cn } from '@/lib/utils';
 
 export type ChartCardProps = {
@@ -20,7 +23,7 @@ export type ChartCardProps = {
    */
   href?: string;
   /** Renders `href` links, e.g. the app's router link; it gets anchor props. Default `a`. */
-  LinkComponent?: ElementType<LinkComponentProps>;
+  LinkComponent?: ElementType<ChartCardLinkProps>;
   /** Makes the title a dropdown of the card's views (e.g. by model, by provider). */
   titleMenu?: Omit<MetricsCardTitleMenuProps<string>, 'title' | 'className'>;
   /** Compact cards: the card's total, right of the title in the same type. */
@@ -135,7 +138,7 @@ function ChartCardTitleLink({
   children,
 }: {
   href: string;
-  LinkComponent?: ElementType<LinkComponentProps>;
+  LinkComponent?: ElementType<ChartCardLinkProps>;
   medium: boolean;
   children: string;
 }) {
