@@ -5,7 +5,11 @@ import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
 import { estimateTokenCount } from 'tokenx';
 
 import { measureImageBuffer } from './measure-image-buffer';
-import { resolveToolResultValue, serializeToolResultForTokenCounting } from './tool-result-helpers';
+import {
+  resolveToolResultValue,
+  serializeToolResultForTokenCounting,
+  toolErrorTextToString,
+} from './tool-result-helpers';
 
 type TokenEstimateCacheEntry = {
   v: number;
@@ -164,14 +168,6 @@ function ensureMessageMastraMetadata(message: MastraDBMessage): NonNullable<Mast
 function buildEstimateKey(kind: string, text: string): string {
   const payloadHash = createHash('sha256').update(text).digest('hex');
   return `${kind}:${payloadHash}`;
-}
-
-/**
- * `errorText` is typed as a string, but persisted or imported history can hold a structured
- * error object. Serialize it for counting so one such row cannot abort token accounting.
- */
-function normalizeErrorTextForTokenCounting(errorText: unknown): string {
-  return errorText == null ? '' : serializeToolResultForTokenCounting(errorText);
 }
 
 function resolveEstimatorId(): string {
@@ -1826,7 +1822,7 @@ export class TokenCounter {
             overheadDelta -= 12;
           }
         } else {
-          const errorText = normalizeErrorTextForTokenCounting(invocation.errorText);
+          const errorText = toolErrorTextToString(invocation.errorText);
           const fallback = invocation.isError
             ? errorText.trim()
               ? errorText
@@ -1861,7 +1857,7 @@ export class TokenCounter {
         const signature = this.countToolCallSignature(part, invocation);
         tokens += signature.tokens;
         overheadDelta += signature.overheadDelta;
-        const errorText = normalizeErrorTextForTokenCounting(invocation.errorText);
+        const errorText = toolErrorTextToString(invocation.errorText);
         const errorMessage = errorText.trim() ? errorText : 'Tool execution failed';
         tokens += this.readOrPersistPartEstimate(part, 'tool-result-error', errorMessage);
         return { tokens, overheadDelta, extraMessageDelta };
