@@ -76,6 +76,27 @@ function agentRunner(phaseKey: string, runner: Extract<StoredPhaseRunner, { type
 }
 
 /**
+ * A stored agent runner that names a code runner runs that code, activating the stored skill
+ * wherever the code would activate its own.
+ */
+function withSkill(runner: BoardRunner, skill: string | undefined): BoardRunner {
+  if (!skill || !runner.skill || skill === runner.skill || !runner.onEnter) return runner;
+  const own = runner.skill;
+  const onEnter = Object.fromEntries(
+    Object.entries(runner.onEnter).map(([source, handler]) => [
+      source,
+      async (context: FactoryStageRuleContext) => {
+        const decision = await handler?.(context);
+        return decision?.type === 'invokeSkill' && decision.skillName === own
+          ? { ...decision, skillName: skill }
+          : decision;
+      },
+    ]),
+  );
+  return { ...runner, skill, onEnter };
+}
+
+/**
  * Turns a stored board into the `BoardDefinition` the runtime runs. A phase
  * without `nextPhases` may move to any phase; one with it may move only there.
  * A working phase whose runner is not registered (or has no seat role) runs
@@ -92,8 +113,9 @@ export function compileStoredBoard(
 
   for (const [index, phase] of board.phases.entries()) {
     let runner: BoardRunner | undefined;
-    if (phase.runner?.type === 'agent' && !runners.has(phase.runner.agentId)) {
-      runner = agentRunner(phase.key, phase.runner);
+    if (phase.runner?.type === 'agent') {
+      const code = runners.get(phase.runner.agentId);
+      runner = code ? withSkill(code, phase.runner.skill) : agentRunner(phase.key, phase.runner);
     } else if (phase.runner) {
       const id = runnerId(phase.runner);
       runner = runners.get(id);

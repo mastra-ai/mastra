@@ -193,4 +193,34 @@ describe('compileStoredBoard', () => {
       prompt: 'Add notes.\n\nWork item: Fix login (https://x/1)',
     });
   });
+
+  it('runs a default phase agent with the skill stored on it, keeping its built-in gating', async () => {
+    const edited = {
+      ...workBoardTemplate,
+      phases: workBoardTemplate.phases.map(phase =>
+        phase.key === 'planning' || phase.key === 'triage'
+          ? { ...phase, runner: { ...phase.runner!, skill: 'our-planner' } }
+          : phase,
+      ),
+    };
+    const board = compileStoredBoard(edited, builtInRunners);
+    const card = { ingress: { id: 'in-1' }, board: 'work', item: { title: 'Fix login', url: 'https://x/1' } };
+    expect(await board.rules.planning?.issue?.onEnter?.(card as never)).toMatchObject({
+      type: 'invokeSkill',
+      role: 'plan',
+      skillName: 'our-planner',
+      arguments: 'Work item (https://x/1)',
+    });
+    // Triage still decides on its own when a pull request goes straight to Review.
+    const pullRequest = { ...card, item: { ...card.item, metadata: { autoStartCandidate: true } } };
+    expect(await board.rules.triage?.pullRequest?.onEnter?.(pullRequest as never)).toEqual({
+      type: 'transition',
+      idempotencyKey: 'in-1:start-review',
+      board: 'work',
+      stage: 'review',
+    });
+    expect(
+      await board.rules.triage?.pullRequest?.onEnter?.({ ...card, item: { ...card.item, metadata: {} } } as never),
+    ).toBeUndefined();
+  });
 });

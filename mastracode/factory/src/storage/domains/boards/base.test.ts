@@ -58,8 +58,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('BoardsStorage o
     expect(work!.key).toBe('work');
     expect(work!.phases.map(phase => phase.key)).toEqual(workBoardTemplate.phases.map(phase => phase.key));
     expect(work!.phases.find(phase => phase.key === 'triage')!.runner).toEqual({
-      type: 'workflow',
-      workflowId: 'factory-triage',
+      type: 'agent',
+      agentId: 'factory-triage',
+      skill: 'factory-triage',
+      seat: 'triage',
     });
     expect(work!.phases.every(phase => phase.nextPhases === null)).toBe(true);
     expect(work!.eventRoutes.map(route => [route.event, route.toPhaseKey])).toEqual(

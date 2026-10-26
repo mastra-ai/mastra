@@ -263,6 +263,8 @@ function completeIssue(context: FactoryStageRuleContext) {
 export interface BoardRunner {
   readonly id: string;
   readonly role?: string;
+  /** The skill the runner activates; a stored agent runner naming this runner can swap it for another. */
+  readonly skill?: string;
   readonly onEnter?: ReadonlyBoardPhaseHandlers;
   readonly onExit?: ReadonlyBoardPhaseHandlers;
   readonly tools?: Readonly<Record<string, BoardToolRule>>;
@@ -287,6 +289,7 @@ function triagePullRequest(context: FactoryStageRuleContext) {
 const triageRunner: BoardRunner = {
   id: 'factory-triage',
   role: 'triage',
+  skill: 'factory-triage',
   onEnter: {
     pullRequest: triagePullRequest,
     gitlabPullRequest: triagePullRequest,
@@ -301,6 +304,7 @@ const triageRunner: BoardRunner = {
 const planRunner: BoardRunner = {
   id: 'factory-plan',
   role: 'plan',
+  skill: 'factory-plan',
   onEnter: {
     issue: planWorkItem,
     gitlabIssue: planWorkItem,
@@ -331,6 +335,7 @@ const buildRunner: BoardRunner = {
 const reviewRunner: BoardRunner = {
   id: 'factory-review',
   role: 'work',
+  skill: 'factory-review',
   onEnter: {
     // A pull request's own card is reviewed by an independent reviewer in its review seat.
     pullRequest: reviewPullRequest,
@@ -347,6 +352,7 @@ const reviewRunner: BoardRunner = {
 
 const completeRunner: BoardRunner = {
   id: 'factory-complete',
+  skill: 'factory-complete-issue',
   onEnter: { issue: completeIssue },
 };
 
