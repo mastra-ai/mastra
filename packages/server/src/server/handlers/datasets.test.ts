@@ -341,6 +341,57 @@ describe('Datasets Handlers', () => {
       });
     });
 
+    describe('Scenario: experiment read endpoints return the recorded agentOverrides', () => {
+      it('returns metadata.agentOverrides from every experiment GET route', async () => {
+        // Given an experiment triggered over HTTP with agentOverrides
+        const agent = new Agent({
+          id: 'eval-agent',
+          name: 'eval-agent',
+          instructions: 'code instructions',
+          model: createMockModel({ mockText: 'answer' }),
+        });
+        mastra = new Mastra({ logger: false, storage: mockStorage, agents: { 'eval-agent': agent } });
+        const dataset = await mastra.datasets.create({ name: 'Read overrides DS' });
+        await dataset.addItem({ input: 'hello' });
+        const agentOverrides = {
+          instructions: 'tweaked',
+          defaultOptions: { modelSettings: { temperature: 0.1 }, maxSteps: 2 },
+        };
+        const body = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
+          targetType: 'agent',
+          targetId: 'eval-agent',
+          agentOverrides,
+        });
+        const { experimentId } = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          ...body,
+        } as any)) as any;
+        await vi.waitFor(async () => {
+          expect((await dataset.getExperiment({ experimentId }))?.status).toBe('completed');
+        });
+
+        // When I read it back through each GET route (serialized as the HTTP body would be)
+        const asJson = (value: unknown) => JSON.parse(JSON.stringify(value));
+        const ctx = createTestServerContext({ mastra });
+        const byId = asJson(await GET_ANY_EXPERIMENT_ROUTE.handler({ ...ctx, experimentId } as any));
+        const byDataset = asJson(
+          await GET_EXPERIMENT_ROUTE.handler({ ...ctx, datasetId: dataset.id, experimentId } as any),
+        );
+        const all = asJson(await LIST_ALL_EXPERIMENTS_ROUTE.handler({ ...ctx, page: 0, perPage: 10 } as any));
+        const ofDataset = asJson(
+          await LIST_EXPERIMENTS_ROUTE.handler({ ...ctx, datasetId: dataset.id, page: 0, perPage: 10 } as any),
+        );
+
+        // Then every response carries metadata.agentOverrides as recorded
+        const expected = { agentOverrides };
+        expect(byId.metadata).toEqual(expected);
+        expect(byDataset.metadata).toEqual(expected);
+        expect(all.experiments.find((e: any) => e.id === experimentId).metadata).toEqual(expected);
+        expect(ofDataset.experiments.find((e: any) => e.id === experimentId).metadata).toEqual(expected);
+      });
+    });
+
     describe('Scenario Outline: invalid agentOverrides bodies are rejected', () => {
       const parse = (body: Record<string, unknown>) => TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse(body);
       const agent = { targetType: 'agent', targetId: 'a' };
