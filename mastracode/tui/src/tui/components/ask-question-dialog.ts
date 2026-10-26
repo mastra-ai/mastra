@@ -4,10 +4,12 @@
  * Used by the ask_user tool to collect structured answers from the user.
  */
 
-import { Box, getKeybindings, Input, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, Component, TUI } from '@earendil-works/pi-tui';
 import { theme, getSelectListTheme, getEditorTheme } from '../theme.js';
 import type { AskQuestionSelectionMode } from './ask-question-inline.js';
+import type { MenuChrome, MenuHint } from './menu-chrome.js';
+import { MenuList } from './menu-list.js';
 import { MultilineInput } from './multiline-input.js';
 import { WrappingSelectList } from './wrapping-select-list.js';
 
@@ -37,10 +39,11 @@ export interface AskQuestionDialogOptions {
   onCancel: () => void;
 }
 
-export class AskQuestionDialogComponent extends Box implements Focusable {
+export class AskQuestionDialogComponent extends Container implements Focusable, MenuChrome {
   private static readonly CUSTOM_RESPONSE_VALUE = '__custom_response__';
 
-  private selectList?: SelectList | WrappingSelectList;
+  private selectList?: MenuList | WrappingSelectList;
+  private readonly title: string;
   private input?: Input | MultilineInput;
   private tui?: TUI;
   private multiline = false;
@@ -66,7 +69,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   }
 
   constructor(options: AskQuestionDialogOptions) {
-    super(2, 1, text => theme.bg('overlayBg', text));
+    super();
 
     this.onSubmit = options.onSubmit;
     this.onSubmitMulti = options.onSubmitMulti;
@@ -79,15 +82,16 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     this.allowCustomResponse = options.allowCustomResponse ?? true;
     this.selectedOptionLabel = options.selectedOptionLabel;
 
-    // Title
-    this.addChild(new Text(theme.bold(theme.fg('accent', options.title ?? 'Question')), 0, 0));
-    this.addChild(new Spacer(1));
-
-    // Question text (may be multi-line)
-    for (const line of options.question.split('\n')) {
-      this.addChild(new Text(theme.fg('text', line), 0, 0));
+    // A short one-line question is the menu's title (its search placeholder); otherwise the title is
+    // shown there and the question above the options.
+    const shortQuestion = !options.title && !options.question.includes('\n') && options.question.length <= 70;
+    this.title = shortQuestion ? options.question.replace(/[:?]$/, '') : (options.title ?? 'Question');
+    if (!shortQuestion) {
+      for (const line of options.question.split('\n')) {
+        this.addChild(new Text(theme.fg('text', line), 2, 0));
+      }
+      this.addChild(new Spacer(1));
     }
-    this.addChild(new Spacer(1));
 
     if (options.options && options.options.length > 0) {
       this.buildSelectMode(options.options);
@@ -97,20 +101,16 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   }
 
   private buildSelectMode(opts: Array<{ label: string; description?: string }>): void {
-    const items: SelectItem[] = opts.map(opt => ({
-      value: opt.label,
-      label: opt.description ? `  ${opt.label}  ${theme.fg('dim', opt.description)}` : `  ${opt.label}`,
-    }));
+    const items: SelectItem[] = opts.map(opt => ({ value: opt.label, label: opt.label, description: opt.description }));
 
     // "Custom response..." only applies to single-select: it switches to free-text.
     if (this.allowCustomResponse && !this.multiSelect) {
       items.push({
         value: AskQuestionDialogComponent.CUSTOM_RESPONSE_VALUE,
-        label: `  ${theme.fg('dim', '✎ Custom response...')}`,
+        label: theme.fg('dim', '✎ Custom response...'),
       });
     }
 
-    let hintText: string;
     if (this.multiSelect) {
       const list = new WrappingSelectList(items, Math.min(items.length, 8), getSelectListTheme(), true);
       list.onConfirmMulti = (selected: SelectItem[]) => {
@@ -123,9 +123,8 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
       };
       list.onCancel = this.onCancel;
       this.selectList = list;
-      hintText = '  Space to toggle · Enter to confirm · Esc to skip';
     } else {
-      const list = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
+      const list = new MenuList(items, Math.min(items.length, 8));
       const selectedIndex = items.findIndex(item => item.value === this.selectedOptionLabel);
       if (selectedIndex >= 0) list.setSelectedIndex(selectedIndex);
       list.onSelect = (item: SelectItem) => {
@@ -137,19 +136,24 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
       };
       list.onCancel = this.onCancel;
       this.selectList = list;
-      hintText = '  ↑↓ to navigate · Enter to select · Esc to skip';
     }
 
-    this.modeChildren = [];
     const selectChild = this.selectList as Component;
     this.addChild(selectChild);
-    this.modeChildren.push(selectChild);
-    const spacer = new Spacer(1);
-    this.addChild(spacer);
-    this.modeChildren.push(spacer);
-    const hint = new Text(theme.fg('dim', hintText), 0, 0);
-    this.addChild(hint);
-    this.modeChildren.push(hint);
+    this.modeChildren = [selectChild];
+  }
+
+  /** Backspace never skips the question (Esc does). */
+  readonly menuKeepsBackspace = true;
+
+  menuTitle(): string {
+    return this.title;
+  }
+
+  menuHints(): readonly MenuHint[] {
+    if (this.selectList instanceof WrappingSelectList) return [{ key: 'space', label: 'toggle' }];
+    if (this.input && this.useMultiline()) return [{ key: 'shift+enter', label: 'new line' }];
+    return [];
   }
 
   /** Whether this prompt should render a multiline editor (vs a single-line input). */
@@ -182,19 +186,8 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
       };
     }
 
-    this.modeChildren = [];
-    const inputChild = this.input;
-    this.addChild(inputChild);
-    this.modeChildren.push(inputChild);
-    const spacer = new Spacer(1);
-    this.addChild(spacer);
-    this.modeChildren.push(spacer);
-    const hintText = this.useMultiline()
-      ? '  Enter to submit · Shift+Enter for new line · \\+Enter for new line · Esc to skip'
-      : '  Enter to submit · Esc to skip';
-    const hint = new Text(theme.fg('dim', hintText), 0, 0);
-    this.addChild(hint);
-    this.modeChildren.push(hint);
+    this.addChild(this.input);
+    this.modeChildren = [this.input];
 
     if (this.defaultValue) {
       (this.input as Input).setValue?.(this.defaultValue);

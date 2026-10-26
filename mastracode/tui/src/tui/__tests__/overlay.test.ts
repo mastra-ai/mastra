@@ -41,7 +41,9 @@ describe('showModalOverlay', () => {
     showModalOverlay(tui, component, { maxHeight: '80%' });
 
     const wrapped = tui.showOverlay.mock.calls[0][0] as Component;
-    expect(wrapped.render(20)).toHaveLength(30);
+    const output = wrapped.render(20);
+    expect(output.length).toBeGreaterThanOrEqual(30);
+    expect(output.some(line => line.replace(/\x1b\[[0-9;]*m/g, '').includes('line 29'))).toBe(true);
   });
 
   it('caps minimum height to the configured max height', () => {
@@ -69,6 +71,47 @@ describe('showModalOverlay', () => {
     const wrapped = tui.showOverlay.mock.calls[0][0] as Component;
     const output = wrapped.render(20);
     expect(output[0]).not.toContain('hello');
-    expect(output[4]).toContain('hello');
+    expect(output.findIndex(line => line.includes('hello'))).toBeGreaterThanOrEqual(4);
+  });
+
+  it('opens in the prompt slot when the TUI has one, with its title', () => {
+    const tui = createTui(40, 120);
+    const open = vi.fn(() => ({}));
+    tui.promptSlot = { open };
+    tui.hasPopup = () => false;
+    const component: Component = { render: () => ['hello'], invalidate: vi.fn() };
+
+    showModalOverlay(tui, component, { title: 'Select thread' });
+
+    expect(open).toHaveBeenCalledWith(component, { title: 'Select thread', hints: undefined });
+    expect(tui.showOverlay).not.toHaveBeenCalled();
+  });
+
+  it('opens as a pop-up while a pop-up such as the full-screen setup is open', () => {
+    const tui = createTui(40, 120);
+    const open = vi.fn(() => ({}));
+    tui.promptSlot = { open };
+    tui.hasPopup = () => true;
+    const component: Component = { render: () => ['hello'], invalidate: vi.fn() };
+
+    showModalOverlay(tui, component, { title: 'Select model' });
+
+    expect(open).not.toHaveBeenCalled();
+    const wrapped = tui.showOverlay.mock.calls[0][0] as Component;
+    expect(wrapped.render(60).join('\n')).toContain('select model');
+  });
+
+  it('shows full-screen views as they are, never in the slot', () => {
+    const tui = createTui(40, 120);
+    const open = vi.fn(() => ({}));
+    tui.promptSlot = { open };
+    tui.hasPopup = () => false;
+    const component: Component = { render: () => ['hello'], invalidate: vi.fn() };
+
+    showModalOverlay(tui, component, { fullscreen: true, minHeightPercent: 0 });
+
+    expect(open).not.toHaveBeenCalled();
+    const wrapped = tui.showOverlay.mock.calls[0][0] as Component;
+    expect(wrapped.render(60)[0]).toBe('hello');
   });
 });

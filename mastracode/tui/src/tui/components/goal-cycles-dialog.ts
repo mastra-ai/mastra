@@ -7,6 +7,7 @@ import { Box, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui
 import type { Focusable } from '@earendil-works/pi-tui';
 
 import { theme } from '../theme.js';
+import type { MenuChrome } from './menu-chrome.js';
 
 export interface GoalCyclesDialogOptions {
   defaultValue: number;
@@ -14,7 +15,7 @@ export interface GoalCyclesDialogOptions {
   onCancel: () => void;
 }
 
-export class GoalCyclesDialogComponent extends Box implements Focusable {
+export class GoalCyclesDialogComponent extends Box implements Focusable, MenuChrome {
   private input: Input;
   private onSubmit: (maxCycles: number) => void;
   private onCancel: () => void;
@@ -29,15 +30,11 @@ export class GoalCyclesDialogComponent extends Box implements Focusable {
   }
 
   constructor(options: GoalCyclesDialogOptions) {
-    super(2, 1, text => theme.bg('overlayBg', text));
+    // Content lines up with menu rows in the prompt slot.
+    super(2, 0);
 
     this.onSubmit = options.onSubmit;
     this.onCancel = options.onCancel;
-
-    this.addChild(new Text(theme.bold(theme.fg('accent', 'Max Attempts')), 0, 0));
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('text', 'How many attempts before pausing the goal?'), 0, 0));
-    this.addChild(new Spacer(1));
 
     this.input = new Input();
     this.input.setValue(String(options.defaultValue));
@@ -50,8 +47,10 @@ export class GoalCyclesDialogComponent extends Box implements Focusable {
       }
     };
     this.addChild(this.input);
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('dim', '  Enter to confirm · Esc to cancel'), 0, 0));
+  }
+
+  menuTitle(): string {
+    return 'How many attempts before pausing the goal?';
   }
 
   handleInput(data: string): void {

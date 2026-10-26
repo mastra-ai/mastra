@@ -3,13 +3,14 @@
  * Lists known providers with their key status and allows adding, updating, or removing keys.
  */
 
-import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import { getCredentialProviderId } from '@mastra/code-sdk/providers/model-ids';
 
 import { ApiKeyDialogComponent } from '../components/api-key-dialog.js';
+import { MenuList } from '../components/menu-list.js';
 import { showModalOverlay } from '../overlay.js';
-import { getSelectListTheme, theme } from '../theme.js';
+import { theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
 interface ProviderInfo {
@@ -70,7 +71,8 @@ function statusLabel(info: ProviderInfo): string {
 function buildItems(providers: ProviderInfo[]): SelectItem[] {
   return providers.map(info => ({
     value: info.provider,
-    label: `  ${info.provider}  ${statusLabel(info)}${info.envVar ? theme.fg('dim', `  ${info.envVar}`) : ''}`,
+    label: info.provider,
+    description: `${statusLabel(info)}${info.envVar ? theme.fg('dim', `  ${info.envVar}`) : ''}`,
   }));
 }
 
@@ -84,9 +86,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
   }
 
   return new Promise<void>(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', 'API Keys')), 0, 0));
-    container.addChild(new Spacer(1));
+    const container = new Container();
 
     const detailText = new Text('', 0, 0);
 
@@ -112,10 +112,10 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
 
     // Build a SelectList with all event handlers wired up.
     // Called on initial render and again after save/remove to refresh status labels.
-    let selectList: SelectList;
-    const buildSelectList = (): SelectList => {
+    let selectList: MenuList;
+    const buildSelectList = (): MenuList => {
       const items = buildItems(providers);
-      const list = new SelectList(items, Math.min(items.length, 15), getSelectListTheme());
+      const list = new MenuList(items, Math.min(items.length, 15));
 
       list.onSelect = (item: SelectItem) => {
         const info = providers.find(p => p.provider === item.value);
@@ -134,10 +134,9 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
         updateDetail(item.value);
       };
 
-      // Handle Delete key to remove stored keys
+      // Delete (or Backspace on an empty search, the Mac delete key) removes a stored key
       const originalHandleInput = list.handleInput.bind(list);
       list.handleInput = async (data: string) => {
-        // Delete or Backspace
         if (data === '\x7f' || data === '\x1b[3~') {
           const info = providers.find(p => p.provider === currentSelection);
           if (info?.source === 'stored' && ctx.authStorage) {
@@ -170,16 +169,12 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
         providers.findIndex(p => p.provider === currentSelection),
       );
       container.clear();
-      container.addChild(new Text(theme.bold(theme.fg('accent', 'API Keys')), 0, 0));
-      container.addChild(new Spacer(1));
       selectList = buildSelectList();
       selectList.setSelectedIndex(selectedIdx);
       currentSelection = providers[selectedIdx]?.provider ?? providers[0]!.provider;
       container.addChild(selectList);
       container.addChild(new Spacer(1));
       container.addChild(detailText);
-      container.addChild(new Spacer(1));
-      container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter add/update · Delete remove · Esc close'), 0, 0));
       updateDetail(currentSelection);
       ctx.state.ui.requestRender();
     };
@@ -212,13 +207,13 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
     container.addChild(selectList);
     container.addChild(new Spacer(1));
     container.addChild(detailText);
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter add/update · Delete remove · Esc close'), 0, 0));
 
     updateDetail(providers[0]!.provider);
 
-    const modal = container as Box & { handleInput: (data: string) => void };
-    modal.handleInput = (data: string) => selectList.handleInput(data);
-    showModalOverlay(ctx.state.ui, modal, { maxHeight: '75%' });
+    const modal = Object.assign(container, {
+      handleInput: (data: string) => selectList.handleInput(data),
+      menuKeepsBackspace: true,
+    });
+    showModalOverlay(ctx.state.ui, modal, { title: 'API keys', hints: [{ key: 'delete', label: 'remove' }] });
   });
 }

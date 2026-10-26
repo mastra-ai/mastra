@@ -260,6 +260,8 @@ export class CustomEditor extends Editor {
     const contentLines: string[] = [];
     const scrollIndicators: string[] = [];
     let isTop = true;
+    // Lines after the bottom border are the autocomplete suggestions.
+    let suggestionsStart = -1;
     for (const line of editorLines) {
       const stripped = line.replace(ANSI_STRIP_RE, '');
       if (stripped.length > 0 && stripped[0] === '─') {
@@ -271,10 +273,12 @@ export class CustomEditor extends Editor {
           scrollIndicators.push(b(stripped));
           continue;
         }
+        suggestionsStart = contentLines.length;
         continue;
       }
       contentLines.push(line);
     }
+    const hasSuggestions = suggestionsStart > 0 && suggestionsStart < contentLines.length;
 
     const result: string[] = [];
     const textColorOpen = `\x1b[38;2;${parseHex(theme.getTheme().text).join(';')}m`;
@@ -297,10 +301,13 @@ export class CustomEditor extends Editor {
       }
     }
 
+    // Suggestions use the menus' columns (cursor under the prompt glyph), one blank row below the input.
     const rows = contentLines.map((content, i) => {
       const line = `${textColorOpen}${content}${textColorClose}`;
-      return i === 0 ? ` ${prompt} ${line}` : `${' '.repeat(promptWidth)}${line}`;
+      if (i === 0) return ` ${prompt} ${line}`;
+      return hasSuggestions && i >= suggestionsStart ? ` ${line}` : `${' '.repeat(promptWidth)}${line}`;
     });
+    if (hasSuggestions) rows.splice(suggestionsStart, 0, '');
     // The shade fades to the terminal background on the right, starting a little darker than the
     // sent-message panel (step 2).
     result.push(...fadePanel(rows, width, 1.5));

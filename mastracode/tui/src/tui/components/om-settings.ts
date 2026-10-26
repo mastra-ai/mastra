@@ -1,17 +1,19 @@
 /**
- * Observational Memory settings component.
- * Uses pi-tui's SettingsList for a clean settings UI with
- * threshold configuration and model selection submenus.
+ * Observational Memory settings menu (/om): threshold configuration and
+ * model selection submenus.
  *
- * Changes apply immediately — Esc closes the panel.
+ * Changes apply immediately — Esc closes the menu.
  */
 
-import { Box, Container, getKeybindings, Input, SelectList, SettingsList, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, SettingItem, TUI } from '@earendil-works/pi-tui';
 import type { OMModel } from '@mastra/core/agent-controller';
-import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
+import { theme } from '../theme.js';
+import type { Filterable, MenuChrome } from './menu-chrome.js';
+import { MenuList } from './menu-list.js';
 import { ModelSelectorComponent } from './model-selector.js';
 import type { ModelItem } from './model-selector.js';
+import { SettingsMenu } from './settings-menu.js';
 
 // =============================================================================
 // Types
@@ -149,9 +151,9 @@ function parseTokenInput(input: string): number | null {
 // Threshold Input Submenu
 // =============================================================================
 
-export class ThresholdSubmenu extends Container {
+export class ThresholdSubmenu extends Container implements MenuChrome {
   private input: Input;
-  private selectList: SelectList;
+  private selectList: MenuList;
   private onDone: (value: number) => void;
   private onBack: () => void;
   private inInputMode = true;
@@ -167,9 +169,6 @@ export class ThresholdSubmenu extends Container {
     this.onDone = onDone;
     this.onBack = onBack;
 
-    this.addChild(new Text(theme.bold(theme.fg('accent', title)), 0, 0));
-    this.addChild(new Spacer(1));
-
     // Input for custom value — type a number like 30 for 30k
     this.addChild(new Text(theme.fg('muted', '  _k tokens (type a number, e.g. 30 for 30k):'), 0, 0));
     this.input = new Input();
@@ -181,10 +180,10 @@ export class ThresholdSubmenu extends Container {
 
     const items: SelectItem[] = presets.map(p => ({
       value: String(p),
-      label: `  ${formatTokens(p)} tokens`,
+      label: `${formatTokens(p)} tokens`,
     }));
 
-    this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
+    this.selectList = new MenuList(items, Math.min(items.length, 8));
 
     // Pre-select current value
     const currentIndex = presets.indexOf(currentValue);
@@ -199,7 +198,12 @@ export class ThresholdSubmenu extends Container {
 
     this.addChild(this.selectList);
     this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('dim', '  Enter to confirm · ↓ for presets · Esc to go back'), 0, 0));
+    this.addChild(new Text(theme.fg('dim', '  ↓ to pick a preset'), 0, 0));
+  }
+
+  /** Typing goes to the token input, not to the preset list. */
+  menuFilterTarget(): Filterable | undefined {
+    return undefined;
   }
 
   handleInput(data: string): void {
@@ -241,7 +245,7 @@ export class ThresholdSubmenu extends Container {
 // Boolean Submenu
 // =============================================================================
 
-class BooleanSubmenu extends SelectList {
+class BooleanSubmenu extends MenuList {
   constructor(
     currentValue: boolean,
     onSelect: (value: boolean) => void,
@@ -249,10 +253,10 @@ class BooleanSubmenu extends SelectList {
     labels?: BooleanSubmenuLabels,
   ) {
     const items: SelectItem[] = [
-      { value: 'on', label: `  ${labels?.onLabel ?? 'On'}`, description: labels?.onDescription ?? '' },
-      { value: 'off', label: `  ${labels?.offLabel ?? 'Off'}`, description: labels?.offDescription ?? '' },
+      { value: 'on', label: `${labels?.onLabel ?? 'On'}`, description: labels?.onDescription ?? '' },
+      { value: 'off', label: `${labels?.offLabel ?? 'Off'}`, description: labels?.offDescription ?? '' },
     ];
-    super(items, items.length, getSelectListTheme());
+    super(items, items.length);
 
     this.setSelectedIndex(currentValue ? 0 : 1);
 
@@ -267,8 +271,8 @@ class BooleanSubmenu extends SelectList {
 // OM Settings Component
 // =============================================================================
 
-export class OMSettingsComponent extends Box implements Focusable {
-  private settingsList: SettingsList;
+export class OMSettingsComponent extends Container implements Focusable, MenuChrome {
+  private settingsList: SettingsMenu;
 
   // Focusable implementation
   private _focused = false;
@@ -280,11 +284,7 @@ export class OMSettingsComponent extends Box implements Focusable {
   }
 
   constructor(config: OMSettingsConfig, callbacks: OMSettingsCallbacks, models: ModelItem[], tui: TUI) {
-    super(2, 1, (text: string) => theme.bg('overlayBg', text));
-
-    // Title
-    this.addChild(new Text(theme.bold(theme.fg('accent', 'Observational Memory Settings')), 0, 0));
-    this.addChild(new Spacer(1));
+    super();
 
     // Build settings items
     const items: SettingItem[] = [
@@ -403,11 +403,11 @@ export class OMSettingsComponent extends Box implements Focusable {
         currentValue: formatAttachmentValue(config.observeAttachments),
         submenu: (_currentValue, done) => {
           const items: SelectItem[] = [
-            { value: 'auto', label: '  Auto', description: 'Use model capabilities to decide' },
-            { value: 'on', label: '  On', description: 'Always forward attachments' },
-            { value: 'off', label: '  Off', description: 'Drop attachments (placeholder text only)' },
+            { value: 'auto', label: 'Auto', description: 'Use model capabilities to decide' },
+            { value: 'on', label: 'On', description: 'Always forward attachments' },
+            { value: 'off', label: 'Off', description: 'Drop attachments (placeholder text only)' },
           ];
-          const list = new SelectList(items, items.length, getSelectListTheme());
+          const list = new MenuList(items, items.length);
           const currentIndex = config.observeAttachments === 'auto' ? 0 : config.observeAttachments ? 1 : 2;
           list.setSelectedIndex(currentIndex);
           list.onSelect = async (item: SelectItem) => {
@@ -426,10 +426,9 @@ export class OMSettingsComponent extends Box implements Focusable {
       },
     ];
 
-    this.settingsList = new SettingsList(
+    this.settingsList = new SettingsMenu(
       items,
       11,
-      getSettingsListTheme(),
       (_id, _newValue) => {
         // All changes handled via submenu callbacks
       },
@@ -437,6 +436,12 @@ export class OMSettingsComponent extends Box implements Focusable {
     );
 
     this.addChild(this.settingsList);
+  }
+
+  /** "observational memory › observer model" while a setting's submenu is open. */
+  menuTitle(): string | undefined {
+    const open = this.settingsList.openSubmenuLabel();
+    return open ? `observational memory › ${open.toLowerCase()}` : undefined;
   }
 
   handleInput(data: string): void {

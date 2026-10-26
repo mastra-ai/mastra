@@ -8,8 +8,15 @@ import { getOAuthProviders } from '@mastra/code-sdk/auth/index';
 import { openUrlInBrowser } from '@mastra/code-sdk/utils/open-url';
 import { theme } from '../theme.js';
 import { MaskedInput } from './masked-input.js';
+import type { MenuChrome } from './menu-chrome.js';
 
-export class LoginDialogComponent extends Box implements Focusable {
+export class LoginDialogComponent extends Box implements Focusable, MenuChrome {
+  private readonly providerName: string;
+
+  menuTitle(): string {
+    return `Login to ${this.providerName}`;
+  }
+
   private contentContainer: Container;
   private input: MaskedInput;
   private tui: TUI;
@@ -34,16 +41,12 @@ export class LoginDialogComponent extends Box implements Focusable {
     providerId: string,
     private onComplete: (success: boolean, message?: string) => void,
   ) {
-    // Box with padding and background
-    super(2, 1, text => theme.bg('overlayBg', text));
+    // Content lines up with menu rows in the prompt slot.
+    super(1, 0);
     this.tui = tui;
 
     const providerInfo = getOAuthProviders().find(p => p.id === providerId);
-    const providerName = providerInfo?.name || providerId;
-
-    // Title
-    this.addChild(new Text(theme.fg('warning', `Login to ${providerName}`)));
-    this.addChild(new Spacer(1));
+    this.providerName = providerInfo?.name || providerId;
 
     // Dynamic content area
     this.contentContainer = new Container();
@@ -115,7 +118,6 @@ export class LoginDialogComponent extends Box implements Focusable {
       this.contentContainer.addChild(new Text(theme.fg('muted', `e.g., ${placeholder}`)));
     }
     this.contentContainer.addChild(this.input);
-    this.contentContainer.addChild(new Text(theme.fg('muted', '(Escape to cancel, Enter to submit)')));
 
     this.input.setValue('');
     this.tui.requestRender();

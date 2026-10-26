@@ -14,6 +14,7 @@ import type {
 
 import { theme } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
+import type { MenuChrome, MenuHint } from './menu-chrome.js';
 
 export type KnowledgeBrowserSection = 'scopes' | 'nodes' | 'activity';
 type Detail = { type: 'node'; value: KnowledgeInspectorNodeDetail };
@@ -94,7 +95,15 @@ function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export class KnowledgeBrowserComponent implements Component, Focusable {
+export class KnowledgeBrowserComponent implements Component, Focusable, MenuChrome {
+  menuHints(): readonly MenuHint[] {
+    return [
+      { key: 'tab', label: 'sections' },
+      { key: 'j/k', label: 'select' },
+      { key: 'backspace', label: 'back' },
+    ];
+  }
+
   private readonly tui: TUI;
   private readonly inspector: KnowledgeInspector;
   private readonly onClose: () => void;
@@ -582,7 +591,6 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     else if (this.section === 'activity') lines.push(...this.renderActivity(contentWidth));
     else lines.push(...this.renderRecordList(contentWidth));
     if (this.loading) lines.push('', theme.fg('muted', 'Loading…'));
-    lines.push('', theme.fg('dim', 'Tab sections · ↑↓/jk select · Enter open · Backspace back · Esc close'));
     return lines.map(line => truncateAnsi(line, contentWidth));
   }
 }

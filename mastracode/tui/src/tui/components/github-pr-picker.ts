@@ -1,7 +1,10 @@
-import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
+import { Box, Container, fuzzyFilter, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { displayModeColor, getContrastText, mastra, theme } from '../theme.js';
+import { ListWindow } from './list-window.js';
+import type { Filterable, MenuChrome, MenuHint } from './menu-chrome.js';
+import { menuRow } from './menu-list.js';
 
 export interface GithubPRPickerItem {
   owner?: string;
@@ -65,8 +68,9 @@ function formatUpdatedAt(value: string | undefined): string | undefined {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
 }
 
-export class GithubPRPickerDialog extends Box implements Focusable {
-  private searchInput!: Input;
+export class GithubPRPickerDialog extends Box implements Focusable, Filterable, MenuChrome {
+  private query = '';
+  private readonly window = new ListWindow();
   private listContainer!: Container;
   private viewTabs!: Text;
   private currentView: PRView = 'mine';
@@ -91,11 +95,10 @@ export class GithubPRPickerDialog extends Box implements Focusable {
 
   set focused(value: boolean) {
     this._focused = value;
-    this.searchInput.focused = value;
   }
 
   constructor(options: GithubPRPickerOptions) {
-    super(4, 1, text => theme.bg('overlayBg', text));
+    super(0, 0);
     this.tui = options.tui;
     this.title = options.title ?? 'Select GitHub PRs';
     this.myPullRequests = options.pullRequests;
@@ -117,9 +120,8 @@ export class GithubPRPickerDialog extends Box implements Focusable {
     this.errorMessage = input.errorMessage ?? '';
     this.loadingMessage = '';
     this.isLoading = false;
-    this.filteredPullRequests = this.getViewPullRequests(this.currentView);
     this.renderViewTabs();
-    this.updateList();
+    this.filterPullRequests(this.query);
     this.tui.requestRender();
   }
 
@@ -140,23 +142,9 @@ export class GithubPRPickerDialog extends Box implements Focusable {
   }
 
   private buildUI(): void {
-    this.addChild(new Text(theme.bold(theme.fg('accent', this.title)), 0, 0));
-    this.addChild(new Spacer(1));
-    this.viewTabs = new Text('', 0, 0);
+    this.viewTabs = new Text('', 2, 0);
     this.renderViewTabs();
     this.addChild(this.viewTabs);
-    this.addChild(new Spacer(1));
-    this.addChild(
-      new Text(
-        theme.fg('muted', 'Type to search · Tab switch view · ↑↓ navigate · Space toggle · Enter confirm · Esc cancel'),
-        0,
-        0,
-      ),
-    );
-    this.addChild(new Spacer(1));
-    this.searchInput = new Input();
-    this.searchInput.onSubmit = () => this.confirmSelection();
-    this.addChild(this.searchInput);
     this.addChild(new Spacer(1));
     this.listContainer = new Container();
     this.addChild(this.listContainer);
@@ -177,10 +165,30 @@ export class GithubPRPickerDialog extends Box implements Focusable {
   private cycleView(): void {
     this.currentView = this.currentView === 'mine' ? 'search' : 'mine';
     this.highlightedIndex = 0;
-    this.searchInput.setValue('');
-    this.filteredPullRequests = this.getViewPullRequests(this.currentView);
     this.renderViewTabs();
-    this.updateList();
+    this.filterPullRequests(this.query);
+    this.tui.requestRender();
+  }
+
+  menuTitle(): string {
+    return this.title;
+  }
+
+  menuHints(): readonly MenuHint[] {
+    return [
+      { key: 'tab', label: 'switch view' },
+      { key: 'space', label: 'toggle' },
+    ];
+  }
+
+  menuFilterTarget(): Filterable {
+    return this;
+  }
+
+  setFilter(query: string): void {
+    this.query = query;
+    if (this.isLoading) return;
+    this.filterPullRequests(query);
     this.tui.requestRender();
   }
 
@@ -234,18 +242,14 @@ export class GithubPRPickerDialog extends Box implements Focusable {
   private updateList(): void {
     this.listContainer.clear();
     if (this.isLoading && this.loadingMessage) {
-      this.listContainer.addChild(new Text(theme.fg('accent', this.loadingMessage), 0, 0));
+      this.listContainer.addChild(new Text(theme.fg('accent', this.loadingMessage), 2, 0));
       return;
     }
-    if (this.errorMessage) this.listContainer.addChild(new Text(theme.fg('error', this.errorMessage), 0, 0));
+    if (this.errorMessage) this.listContainer.addChild(new Text(theme.fg('error', this.errorMessage), 2, 0));
 
     const totalItems = this.filteredPullRequests.length;
     const maxVisible = 12;
-    const startIndex = Math.max(
-      0,
-      Math.min(this.highlightedIndex - Math.floor(maxVisible / 2), totalItems - maxVisible),
-    );
-    const endIndex = Math.min(startIndex + maxVisible, totalItems);
+    const { startIndex, endIndex } = this.window.range(this.highlightedIndex, totalItems, maxVisible);
 
     for (let i = startIndex; i < endIndex; i++) {
       const item = this.filteredPullRequests[i];
@@ -264,12 +268,12 @@ export class GithubPRPickerDialog extends Box implements Focusable {
         .filter(Boolean)
         .join(' · ');
       const subscribedMark = isSubscribed ? theme.fg('success', ' ●') : '';
-      const line = `${isHighlighted ? theme.fg('accent', '→') : ' '} [${checkMark}] ${id}${title}${meta ? theme.fg('muted', ` (${meta})`) : ''}${subscribedMark}`;
-      this.listContainer.addChild(new Text(line, 0, 0));
+      const details = `${meta ? theme.fg('muted', `(${meta})`) : ''}${subscribedMark}`;
+      this.listContainer.addChild(new Text(menuRow(isHighlighted, `[${checkMark}] ${id}${title}`, details), 0, 0));
     }
 
-    if (startIndex > 0 || endIndex < totalItems) {
-      this.listContainer.addChild(new Text(theme.fg('muted', `(${this.highlightedIndex + 1}/${totalItems})`), 0, 0));
+    if (totalItems > maxVisible) {
+      this.listContainer.addChild(new Text(theme.fg('dim', `(${this.highlightedIndex + 1}/${totalItems})`), 2, 0));
     }
     if (totalItems === 0) {
       this.listContainer.addChild(
@@ -278,14 +282,14 @@ export class GithubPRPickerDialog extends Box implements Focusable {
             'muted',
             this.errorMessage ? 'No PRs loaded. You can still use /github owner/repo#123.' : 'No matching PRs',
           ),
-          0,
+          2,
           0,
         ),
       );
     }
     const selectedCount = this.getSelectedPullRequests().length;
     if (selectedCount > 0) {
-      this.listContainer.addChild(new Text(theme.fg('accent', `\n${selectedCount} selected - Enter to confirm`), 0, 0));
+      this.listContainer.addChild(new Text(theme.fg('accent', `\n${selectedCount} selected - Enter to confirm`), 2, 0));
     }
   }
 
@@ -327,8 +331,5 @@ export class GithubPRPickerDialog extends Box implements Focusable {
       this.confirmSelection();
       return;
     }
-    this.searchInput.handleInput(keyData);
-    this.filterPullRequests(this.searchInput.getValue());
-    this.tui.requestRender();
   }
 }

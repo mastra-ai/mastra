@@ -138,8 +138,7 @@ describe('handleMcpCommand', () => {
       }),
     );
     expect(showModalOverlayMock).toHaveBeenCalledWith(ctx.state.ui, expect.objectContaining({ focused: true }), {
-      widthPercent: 0.8,
-      maxHeight: '70%',
+      title: 'Manage MCP servers',
     });
 
     const options = selectorConstructorMock.mock.calls[0]![0] as {

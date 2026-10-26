@@ -8,6 +8,7 @@ import { Box, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable } from '@earendil-works/pi-tui';
 import { theme } from '../theme.js';
 import { MaskedInput } from './masked-input.js';
+import type { MenuChrome } from './menu-chrome.js';
 
 export interface ApiKeyDialogOptions {
   /** Provider name shown in the title (e.g., "Google") */
@@ -20,7 +21,7 @@ export interface ApiKeyDialogOptions {
   onCancel: () => void;
 }
 
-export class ApiKeyDialogComponent extends Box implements Focusable {
+export class ApiKeyDialogComponent extends Box implements Focusable, MenuChrome {
   private input: MaskedInput;
   private onSubmit: (key: string) => void;
   private onCancel: () => void;
@@ -35,14 +36,11 @@ export class ApiKeyDialogComponent extends Box implements Focusable {
   }
 
   constructor(options: ApiKeyDialogOptions) {
-    super(2, 1, text => theme.bg('overlayBg', text));
+    // Content lines up with menu rows in the prompt slot.
+    super(2, 0);
 
     this.onSubmit = options.onSubmit;
     this.onCancel = options.onCancel;
-
-    // Title
-    this.addChild(new Text(theme.bold(theme.fg('accent', `API Key Required`)), 0, 0));
-    this.addChild(new Spacer(1));
 
     // Description
     this.addChild(new Text(theme.fg('text', `Enter an API key for ${options.providerName}:`), 0, 0));
@@ -62,10 +60,10 @@ export class ApiKeyDialogComponent extends Box implements Focusable {
       }
     };
     this.addChild(this.input);
-    this.addChild(new Spacer(1));
+  }
 
-    // Hints
-    this.addChild(new Text(theme.fg('dim', '  Enter to submit · Esc to cancel'), 0, 0));
+  menuTitle(): string {
+    return 'API key required';
   }
 
   handleInput(data: string): void {

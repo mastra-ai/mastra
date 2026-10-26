@@ -26,6 +26,7 @@ vi.mock('@earendil-works/pi-tui', () => {
   }
   return {
     Box,
+    Container: Box,
     Text,
     Spacer,
     SelectList,
@@ -33,6 +34,15 @@ vi.mock('@earendil-works/pi-tui', () => {
       (key === 'escape' && data === '\x1b') || (key === 'ctrl+c' && data === '\x03'),
   };
 });
+
+vi.mock('../../components/menu-list.js', () => ({
+  MenuList: class {
+    onSelect?: (item: any) => void;
+    onCancel?: () => void;
+    constructor(public items: any[]) {}
+  },
+  menuNote: (text: string) => ({ text }),
+}));
 
 const overlay = vi.hoisted(() => ({ showModalOverlay: vi.fn() }));
 vi.mock('../../overlay.js', () => ({ showModalOverlay: overlay.showModalOverlay }));
@@ -106,8 +116,8 @@ describe('handlePluginsCommand', () => {
     expect(list.items.map((item: any) => item.value)).toEqual(['__install__', 'project:acme.foo']);
     expect(list.items[1].label).toContain('Foo Tools');
     expect(list.items[1].label).toContain('acme.foo');
-    expect(list.items[1].label).toContain('project');
-    expect(list.items[1].label).toContain('active');
+    expect(list.items[1].description).toContain('project');
+    expect(list.items[1].description).toContain('active');
   });
 
   it('configures plugin string and boolean settings from the detail view', async () => {
@@ -460,8 +470,7 @@ describe('handlePluginsCommand', () => {
       options: [{ label: 'global' }, { label: 'project' }],
     });
     const progress = overlay.showModalOverlay.mock.calls[1]?.[1] as any;
-    expect(progress.children.map((child: any) => child.text).join('\n')).toContain('Installing GitHub plugin');
-    expect(progress.children.map((child: any) => child.text).join('\n')).toContain('Press Esc or Ctrl-C to cancel.');
+    expect(overlay.showModalOverlay.mock.calls[1]?.[2]).toEqual({ title: 'Installing GitHub plugin' });
     expect(progress.children.map((child: any) => child.text).join('\n')).toContain('Waiting for clone output...');
     expect(progressOverlay.focus).toHaveBeenCalledTimes(1);
     expect(ctx.state.ui.requestRender).toHaveBeenCalled();
