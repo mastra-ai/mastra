@@ -104,7 +104,7 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Type**       | <bug\|feature request\|docs\|question/support\|maintenance\|duplicate\|resolved\|invalid\|spam\|out-of-scope\|other> — <one-sentence classification>            |
 | **Route**      | <Plan fix\|Await approval\|Ask author for info\|Close as duplicate/resolved/invalid/spam/out-of-scope\|Answer provided / close\|No transition / refresh\|Other> |
-| **Severity**   | <🔴 critical\|🟠 high\|🟡 medium\|🟢 low> — <short reason>                                                                                                      |
+| **Severity**   | <critical\|high\|medium\|low> — <short reason>                                                                                                                  |
 | **Confidence** | <high\|medium\|low> — <short reason>                                                                                                                            |
 | **Effort**     | <low\|medium\|high> — <short implementation-scope reason>                                                                                                       |
 | **Impact**     | <low\|medium\|high> — <short user/business-consequence reason>                                                                                                  |
@@ -129,10 +129,10 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 
 Severity guide:
 
-- 🔴 critical — security issue, data loss, outage, or core path unusable.
-- 🟠 high — serious regression or common workflow blocked.
-- 🟡 medium — actionable bug/docs gap/behavior confusion with limited scope.
-- 🟢 low — minor issue, support question, duplicate, invalid, spam, or unclear report.
+- critical — security issue, data loss, outage, or core path unusable.
+- high — serious regression or common workflow blocked.
+- medium — actionable bug/docs gap/behavior confusion with limited scope.
+- low — minor issue, support question, duplicate, invalid, spam, or unclear report.
 
 Effort guide:
 
@@ -163,8 +163,8 @@ After a GitHub comment is posted or updated, reconcile the labels before the ter
 - Add `status: auto-triaged` for every GitHub issue: `gh issue edit "$ISSUE" --add-label "status: auto-triaged"`.
 - Remove `status: needs triage` whenever it is present, including when Phase 1 added it: `gh issue edit "$ISSUE" --remove-label "status: needs triage"`.
 - Add `status: needs approval` when `Route: Await approval`, or when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject: `gh issue edit "$ISSUE" --add-label "status: needs approval"`.
-- Add the selected `effort:<level>` and `impact:<level>` labels from the handoff.
-- Remove only conflicting alternatives from these explicit labels: `effort:low`, `effort:medium`, `effort:high`, `impact:low`, `impact:medium`, and `impact:high`. On every initial run and refresh, keep exactly the selected effort label and exactly the selected impact label.
+- Add the selected `effort:<level>`, `impact:<level>`, and `severity:<level>` labels from the handoff. Create the severity label first if it does not exist yet: `gh label create "severity:<level>" --description "Triage severity: <level>" 2>/dev/null || true`.
+- Remove only conflicting alternatives from these explicit labels: `effort:low`, `effort:medium`, `effort:high`, `impact:low`, `impact:medium`, `impact:high`, `severity:critical`, `severity:high`, `severity:medium`, and `severity:low`. On every initial run and refresh, keep exactly the selected effort label, exactly the selected impact label, and exactly the selected severity label. Confidence is never a label.
 - Add the domain labels selected in Phase 4 in `mastra-ai/mastra`; never remove one. Create any that does not exist yet, leaving existing labels untouched. Skip when none was selected:
 
   ```bash
