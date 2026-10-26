@@ -207,11 +207,13 @@ const WORK_BOARD_REQUIRED_KINDS: Readonly<Record<string, 'resting' | 'working' |
   canceled: 'terminal',
 };
 const WORK_BOARD_REQUIRED_MOVES: Readonly<Record<string, readonly string[]>> = {
-  intake: ['triage', 'done', 'canceled'],
+  // Cards filed past Intake (a review request, a route to Review) are created in Intake, then moved.
+  intake: ['triage', 'review', 'done', 'canceled'],
   triage: ['intake', 'planning', 'review', 'done', 'canceled'],
   planning: ['execute', 'done', 'canceled'],
   execute: ['review', 'done', 'canceled'],
-  review: ['execute', 'done', 'canceled'],
+  // Self-review parks a card in Intake once it hits the round limit.
+  review: ['intake', 'execute', 'done', 'canceled'],
   done: ['review'],
   canceled: ['review'],
 };

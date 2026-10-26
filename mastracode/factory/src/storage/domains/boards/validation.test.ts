@@ -48,7 +48,9 @@ describe('stored board validation', () => {
               ? { ...phase, kind: 'resting' as const, runner: undefined, exitTool: undefined }
               : phase.key === 'triage'
                 ? { ...phase, nextPhases: ['intake'] }
-                : phase,
+                : phase.key === 'intake'
+                  ? { ...phase, nextPhases: ['triage', 'done', 'canceled'] }
+                  : phase,
           ),
         },
       ],
@@ -58,6 +60,7 @@ describe('stored board validation', () => {
       expect.arrayContaining([
         "Work's review phase must stay working.",
         "Work's triage phase must allow moving to planning, review, done, canceled; Factory moves cards there itself.",
+        "Work's intake phase must allow moving to review; Factory moves cards there itself.",
       ]),
     );
   });
