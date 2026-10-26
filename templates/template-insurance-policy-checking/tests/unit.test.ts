@@ -107,14 +107,22 @@ describe('Intake contract invariants', () => {
         profiles: [...insuranceConfiguration.profiles, ...insuranceConfiguration.profiles],
       }).success,
     ).toBe(false);
-    expect(
-      insuranceConfigurationSchema.safeParse({
-        ...insuranceConfiguration,
-        profiles: [
-          { ...insuranceConfiguration.profiles[0], rules: [{ id: '', description: 'Invalid empty rule identifier' }] },
-        ],
-      }).success,
-    ).toBe(false);
+    const validRule = {
+      id: 'building-limit',
+      description: 'Check the building limit',
+      category: 'limit',
+      key: 'building',
+      requirement: 'required',
+    };
+    const withRule = (id: string) => ({
+      ...insuranceConfiguration,
+      profiles: [{ ...insuranceConfiguration.profiles[0], rules: [{ ...validRule, id }] }],
+    });
+    expect(insuranceConfigurationSchema.safeParse(withRule(validRule.id)).success).toBe(true);
+    const invalidRule = insuranceConfigurationSchema.safeParse(withRule(''));
+    expect(invalidRule.success).toBe(false);
+    if (!invalidRule.success)
+      expect(invalidRule.error.issues.map(issue => issue.path)).toEqual([['profiles', 0, 'rules', 0, 'id']]);
   });
   it('allows controlled providers only on the test-mode loopback boundary', () => {
     expect(resolveControlledProviderEndpoint({ NODE_ENV: 'production' })).toBeUndefined();
