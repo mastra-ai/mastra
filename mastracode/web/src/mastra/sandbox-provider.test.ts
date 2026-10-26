@@ -22,8 +22,9 @@ vi.mock('@mastra/factory', async importOriginal => {
  * — the entry must stay a single self-contained file. These tests boot the
  * real entry and create session sandboxes from that host object directly.
  *
- * Provider precedence: forced local > Platform (the factory picks the sandbox)
- * > E2B > Local.
+ * Provider precedence: Platform > E2B > Local. Template *definitions* are
+ * covered by `@mastra/platform-workspace` repo-template tests; here we pin
+ * which provider is selected and what session context is forwarded.
  */
 describe('entry host sandbox (src/mastra/index.ts)', () => {
   beforeEach(() => {
@@ -80,28 +81,48 @@ describe('entry host sandbox (src/mastra/index.ts)', () => {
       host.create({ getRepositoryAccess: undefined, ...ctx }, {});
   }
 
-  /** Boots the entry and returns the `sandbox` it handed the factory. */
-  async function importHostSandbox() {
-    await import('./index.js');
-    expect(factoryConfigs).toHaveLength(1);
-    return factoryConfigs[0]?.sandbox;
-  }
+  it('prefers PlatformSandbox over direct E2B and forwards session context', { timeout: 60_000 }, async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_platform');
+    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
+    vi.stubEnv('E2B_API_KEY', 'direct-e2b-must-not-win');
+    const callback = await importSandboxCallback();
+
+    const sandbox = callback({
+      sessionId: 'session-1',
+      repoFullName: 'acme/widgets',
+      setupCommand: 'pnpm install',
+      getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/widgets.git' }),
+    });
+
+    // `vi.resetModules()` reloads the entry's module graph, so provider classes
+    // have a fresh identity — assert on the stable `provider` discriminator.
+    expect(sandbox).toMatchObject({ provider: 'platform' });
+    expect(sandbox).toMatchObject({ id: 'session-1' });
+    // Session setup is not the callback's job: factory attaches it to the
+    // returned sandbox with setOnStart, so no onStart forwarding happens here.
+    expect((sandbox as unknown as { _onStart?: unknown })._onStart).toBeUndefined();
+    // A repo-backed session carries a lazy template resolver; no work happens
+    // until start().
+    expect((sandbox as unknown as { _template?: unknown })._template).toBeDefined();
+  });
 
   it.each([
-    ['jwt_platform', ''],
-    ['', 'sk_secret'],
+    ['', 'sk_secret', 'sk_secret'],
+    ['jwt_platform', 'sk_secret', 'jwt_platform'],
+    ['  ', ' sk_secret ', 'sk_secret'],
   ])(
-    'leaves the sandbox to the factory with access token %j and secret key %j, even with E2B configured',
+    'selects PlatformSandbox with access token %j and secret key %j',
     { timeout: 60_000 },
-    async (token, key) => {
+    async (token, key, expected) => {
       vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', token);
       vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', key);
       vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
-      vi.stubEnv('E2B_API_KEY', 'direct-e2b-must-not-win');
+      vi.stubEnv('E2B_API_KEY', 'direct-e2b');
+      const callback = await importSandboxCallback();
 
-      // The factory installs its own: local under `mastra dev`, Platform in
-      // built deployments (covered by @mastra/factory's prepare tests).
-      expect(await importHostSandbox()).toBeUndefined();
+      const sandbox = callback({ sessionId: 'session-sk', repoFullName: 'acme/widgets' });
+
+      expect(sandbox).toMatchObject({ provider: 'platform', _client: { accessToken: expected } });
     },
   );
 
@@ -111,6 +132,22 @@ describe('entry host sandbox (src/mastra/index.ts)', () => {
 
     expect(callback({ sessionId: 'session-no-env' })).toMatchObject({ provider: 'local' });
   });
+
+  it.each(['e2b', 'railway'])(
+    'preserves the PlatformSandbox %s backend selection',
+    { timeout: 60_000 },
+    async provider => {
+      vi.stubEnv('SANDBOX_PROVIDER', provider);
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+      vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
+      const callback = await importSandboxCallback();
+
+      expect(callback({ sessionId: 'session-platform-backend' })).toMatchObject({
+        provider: 'platform',
+        _client: { sandboxProvider: provider },
+      });
+    },
+  );
 
   it('honors the local override even with all cloud credentials configured', { timeout: 60_000 }, async () => {
     vi.stubEnv('FACTORY_SANDBOX_PROVIDER', 'local');
